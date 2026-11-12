@@ -63,6 +63,35 @@ describe('getGoalJudgeTools', () => {
     }
   });
 
+  it("keeps the agent's background shell settings on the shared workspace", async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-goal-judge-tools-'));
+    try {
+      const { getDynamicWorkspace, getGoalJudgeTools } = await import('../workspace.js');
+      const { createBackgroundProcessNotices } = await import('../background-processes.js');
+      const notices = createBackgroundProcessNotices({
+        delivery: { deliver: async () => {}, flush: async () => {} },
+        getSession: async () => undefined,
+      });
+      const requestContext = createRequestContext(tempDir) as any;
+      const workspace = await getDynamicWorkspace({
+        requestContext,
+        backgroundToolsEnabled: true,
+        backgroundProcesses: notices,
+      });
+      // The agent's workspace is registered once per project and reused by the judge.
+      const mastra = { getWorkspaceById: () => workspace } as any;
+
+      await getGoalJudgeTools({ requestContext, mastra });
+
+      expect(workspace.getToolsConfig()?.mastra_workspace_execute_command?.backgroundProcesses).toEqual({
+        abortSignal: null,
+        onExit: notices.onExit,
+      });
+    } finally {
+      await fs.rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
   it('returns undefined when no project path can be resolved (keeps judge text-only)', async () => {
     const { getGoalJudgeTools } = await import('../workspace.js');
     // Empty controller state → getDynamicWorkspace throws → resolver returns undefined.

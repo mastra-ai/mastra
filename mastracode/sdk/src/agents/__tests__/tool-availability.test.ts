@@ -1,5 +1,7 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { describe, expect, it } from 'vitest';
+import { createBackgroundProcessNotices } from '../background-processes.js';
 import { createMastraCodeWorkspaceTools } from '../tool-availability.js';
 
 const BACKGROUND_ELIGIBLE_WORKSPACE_TOOLS = [
@@ -37,6 +39,40 @@ describe('MastraCode workspace tool background policy', () => {
         defaultDisposition: 'foreground',
       });
     }
+  });
+
+  it.each([false, true])('reports background shell exits only when background tools are on (%s)', enabled => {
+    const notices = createBackgroundProcessNotices({
+      delivery: { deliver: async () => {}, flush: async () => {} },
+      getSession: async () => undefined,
+    });
+    const shell = createMastraCodeWorkspaceTools(enabled, undefined, notices)[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND];
+
+    if (enabled) {
+      // `abortSignal: null` keeps Esc from killing processes that outlive the run.
+      expect(shell?.backgroundProcesses).toEqual({ abortSignal: null, onExit: notices.onExit });
+    } else {
+      expect(shell?.backgroundProcesses).toBeUndefined();
+    }
+  });
+
+  it('still refuses plan-mode writes outside the plans directory when shell exit notices are on', async () => {
+    const notices = createBackgroundProcessNotices({
+      delivery: { deliver: async () => {}, flush: async () => {} },
+      getSession: async () => undefined,
+    });
+    const { hooks } = createMastraCodeWorkspaceTools(true, undefined, notices);
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/repo' }) } } });
+
+    const result = await hooks!.beforeToolCall!({
+      toolName: 'write_file',
+      workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+      input: { path: '/repo/src/index.ts' },
+      context: { requestContext },
+    });
+
+    expect(result).toMatchObject({ proceed: false });
   });
 
   it('keeps mutating, process, and stateful workspace tools foreground-only when enabled', () => {

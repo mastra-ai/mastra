@@ -2,9 +2,9 @@ import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from './background-completion-events.js';
-import { createBackgroundCompletionCallbacks } from './background-completion.js';
+import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './background-completion.js';
 
-function createTask(status: BackgroundTask['status']): BackgroundTask {
+function createTask(status: BackgroundTask['status'], overrides: Partial<BackgroundTask> = {}): BackgroundTask {
   return {
     id: 'task-1',
     status,
@@ -20,92 +20,137 @@ function createTask(status: BackgroundTask['status']): BackgroundTask {
     maxRetries: 0,
     timeoutMs: 300_000,
     createdAt: new Date('2026-07-27T00:00:00.000Z'),
+    ...overrides,
   };
 }
 
-function createHarness(accepted = Promise.resolve({ accepted: true as const })) {
-  const sendSignalToThread = vi.fn(() => ({ accepted }));
+function createSession({ resourceId = 'resource-1', currentThreadId = 'other-thread' } = {}) {
+  const accepted = () => ({ accepted: Promise.resolve({ accepted: true as const }) });
+  const sendSignal = vi.fn(accepted);
+  const sendSignalToThread = vi.fn(accepted);
   const session = {
+    sendSignal,
     sendSignalToThread,
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getResourceId: () => resourceId },
+    thread: { getId: () => currentThreadId },
   } as unknown as Session<unknown>;
-  const getSession = vi.fn(async (sessionId: string) => (sessionId === 'resource-1' ? session : undefined));
+  return { session, sendSignal, sendSignalToThread };
+}
+
+function createHarness(session?: Session<unknown>) {
+  const sessions = new Map<string, Session<unknown>>(session ? [['resource-1', session]] : []);
+  const getSession = vi.fn(async (sessionId: string) => sessions.get(sessionId));
+  const delivery = createBackgroundNoticeDelivery(() => ({ getSession }));
   const events = createBackgroundCompletionEvents();
-  const callbacks = createBackgroundCompletionCallbacks(() => ({ getSession }), events);
-  return { accepted, callbacks, events, getSession, sendSignalToThread };
+  const callbacks = createBackgroundCompletionCallbacks(delivery, events, {
+    subagents: [{ id: 'explore', name: 'Explore' }],
+  });
+  return { callbacks, delivery, events, getSession, sessions };
+}
+
+function sentContents(spy: ReturnType<typeof vi.fn>): string {
+  return (spy.mock.calls[0]?.[0] as { contents: string }).contents;
 }
 
 describe('createBackgroundCompletionCallbacks', () => {
   it.each([
-    ['completed', 'onTaskComplete', 'low'],
-    ['failed', 'onTaskFailed', 'high'],
-    ['cancelled', 'onTaskCancelled', 'low'],
+    ['completed', 'onTaskComplete', 'low', 'Background mastra_expert call finished.'],
+    ['failed', 'onTaskFailed', 'high', 'Background mastra_expert call failed.'],
+    ['cancelled', 'onTaskCancelled', 'low', 'Background mastra_expert call was cancelled.'],
   ] as const)(
-    'persists one stable %s completion card without duplicating the tool result',
-    async (status, callback, priority) => {
-      const { callbacks, getSession, sendSignalToThread } = createHarness();
+    'tells the thread a %s task ended and where its result is, without copying it',
+    async (status, callback, priority, opening) => {
+      const { session, sendSignalToThread } = createSession();
+      const { callbacks } = createHarness(session);
 
       await callbacks[callback]?.(createTask(status));
 
-      expect(getSession).toHaveBeenCalledWith('resource-1');
-      expect(sendSignalToThread).toHaveBeenCalledWith(
-        {
-          id: `background-task:task-1:${status}`,
-          type: 'notification',
-          tagName: 'notification',
-          contents: `mastra_expert ${status} in background`,
-          attributes: {
-            source: 'background-work',
-            kind: `background-task-${status}`,
-            priority,
-            status,
-          },
-          metadata: {
-            backgroundCompletion: {
-              eventId: `background-task:task-1:${status}`,
-              taskId: 'task-1',
-              originRunId: 'run-1',
-              originToolCallId: 'call-1',
-              toolName: 'mastra_expert',
-              status,
-            },
-          },
-        },
-        { resourceId: 'resource-1', threadId: 'thread-1' },
-      );
+      expect(sendSignalToThread).toHaveBeenCalledOnce();
+      const [signal, target] = sendSignalToThread.mock.calls[0] as unknown as [Record<string, any>, unknown];
+      expect(target).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+      expect(signal.id).toBe(`background-task:task-1:${status}`);
+      expect(signal.contents).toContain(opening);
+      expect(signal.contents).toContain('call-1');
+      expect(signal.contents).not.toContain('secret-token');
+      expect(signal.attributes).toMatchObject({ source: 'background-work', priority, status });
+      expect(signal.metadata.backgroundCompletion).toMatchObject({
+        eventId: `background-task:task-1:${status}`,
+        taskId: 'task-1',
+        originToolCallId: 'call-1',
+        status,
+        title: 'mastra_expert',
+      });
     },
   );
 
-  it('publishes one process-local event after persisting the origin-thread card', async () => {
-    const { callbacks, events, sendSignalToThread } = createHarness();
-    const listener = vi.fn();
-    events.subscribe(listener);
+  it('names a background subagent by its definition and task', async () => {
+    const { session, sendSignalToThread } = createSession();
+    const { callbacks } = createHarness(session);
 
-    await callbacks.onTaskComplete?.(createTask('completed'));
+    await callbacks.onTaskComplete?.(
+      createTask('completed', {
+        toolName: 'subagent',
+        args: { agentType: 'explore', task: 'Find the auth middleware\nand list its callers' },
+      }),
+    );
 
-    expect(sendSignalToThread).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledWith({
-      id: 'background-task:task-1:completed',
-      taskId: 'task-1',
-      originRunId: 'run-1',
-      originToolCallId: 'call-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      toolName: 'mastra_expert',
-      status: 'completed',
+    expect(sentContents(sendSignalToThread)).toContain('Background Explore subagent finished.');
+    expect(sendSignalToThread.mock.calls[0]?.[0]).toMatchObject({
+      metadata: { backgroundCompletion: { title: 'Explore', summary: 'Find the auth middleware' } },
     });
   });
 
-  it('publishes the process-local event and preserves a persistence failure', async () => {
+  it('says a task orphaned by a crash was interrupted by a restart', async () => {
+    const { session, sendSignalToThread } = createSession();
+    const { callbacks } = createHarness(session);
+
+    await callbacks.onTaskFailed?.(
+      createTask('failed', { error: { message: 'Worker process terminated before task completed' } }),
+    );
+
+    expect(sentContents(sendSignalToThread)).toContain('was interrupted by a restart');
+    expect(sendSignalToThread.mock.calls[0]?.[0]).toMatchObject({
+      metadata: { backgroundCompletion: { interrupted: true } },
+    });
+  });
+
+  it('wakes the agent when the task finishes on the thread the session is on', async () => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    const { callbacks } = createHarness(session);
+
+    await callbacks.onTaskComplete?.(createTask('completed'));
+
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: 'background-task:task-1:completed' }), {
+      ifIdle: { behavior: 'wake' },
+    });
+  });
+
+  it('holds notices that arrive before any session exists and delivers them once one does', async () => {
+    const { callbacks, delivery, sessions } = createHarness();
+
+    await callbacks.onTaskFailed?.(
+      createTask('failed', { error: { message: 'Worker process terminated before task completed' } }),
+    );
+    const { session, sendSignalToThread } = createSession();
+    sessions.set('resource-1', session);
+    await delivery.flush();
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledOnce();
+    expect(sentContents(sendSignalToThread)).toContain('interrupted by a restart');
+  });
+
+  it('publishes the process-local event after delivery, even when delivery fails', async () => {
     const persistenceError = new Error('signal persistence failed');
-    const { callbacks, events, sendSignalToThread } = createHarness(Promise.reject(persistenceError));
+    const { session, sendSignalToThread } = createSession();
+    sendSignalToThread.mockReturnValue({ accepted: Promise.reject(persistenceError) });
+    const { callbacks, events } = createHarness(session);
     const listener = vi.fn();
     events.subscribe(listener);
 
     await expect(callbacks.onTaskComplete?.(createTask('completed'))).rejects.toBe(persistenceError);
 
-    expect(sendSignalToThread).toHaveBeenCalledOnce();
-    expect(listener).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith({
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
@@ -131,63 +176,55 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(getSession).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
+});
+
+describe('createBackgroundNoticeDelivery routing', () => {
+  const target = { resourceId: 'resource-1', threadId: 'thread-1' };
+  const signal = { id: 'n-1', type: 'notification' as const, contents: 'done' };
 
   it('delivers to the session addressed by the thread id when sessions share a resource', async () => {
-    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
-    const run = { sendSignalToThread, identity: { getResourceId: () => 'resource-1' } } as unknown as Session<unknown>;
-    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'thread-1' ? run : undefined));
-    const callbacks = createBackgroundCompletionCallbacks(() => ({ getSession }));
+    const { session, sendSignalToThread } = createSession();
+    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'thread-1' ? session : undefined));
 
-    await callbacks.onTaskComplete?.(createTask('completed'));
+    await createBackgroundNoticeDelivery(() => ({ getSession })).deliver(target, signal);
 
     expect(getSession).toHaveBeenCalledWith('thread-1');
     expect(sendSignalToThread).toHaveBeenCalledTimes(1);
   });
 
   it('skips a session addressed by the thread id that works on another resource', async () => {
-    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
-    const other = {
-      sendSignalToThread,
-      identity: { getResourceId: () => 'resource-2' },
-    } as unknown as Session<unknown>;
-    const callbacks = createBackgroundCompletionCallbacks(() => ({ getSession: async () => other }));
+    const { session, sendSignalToThread } = createSession({ resourceId: 'resource-2' });
 
-    await callbacks.onTaskComplete?.(createTask('completed'));
+    await createBackgroundNoticeDelivery(() => ({ getSession: async () => session })).deliver(target, signal);
 
     expect(sendSignalToThread).not.toHaveBeenCalled();
   });
 
   it('delivers to a live session that switched to the task resource after it was created', async () => {
-    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
     // Created as 'resource-0', then switched with `/resource`: still registered under 'resource-0'.
-    const switched = {
-      sendSignalToThread,
-      identity: { getResourceId: () => 'resource-1' },
-      thread: { getId: () => 'thread-1' },
-    } as unknown as Session<unknown>;
-    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'resource-0' ? switched : undefined));
-    const callbacks = createBackgroundCompletionCallbacks(() => ({ getSession, listLiveSessions: () => [switched] }));
+    const { session, sendSignal } = createSession({ currentThreadId: 'thread-1' });
+    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'resource-0' ? session : undefined));
 
-    await callbacks.onTaskComplete?.(createTask('completed'));
+    await createBackgroundNoticeDelivery(() => ({ getSession, listLiveSessions: () => [session] })).deliver(
+      target,
+      signal,
+    );
 
-    expect(sendSignalToThread).toHaveBeenCalledTimes(1);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
   });
 
   it('never borrows another live session on the shared resource', async () => {
-    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true as const }) }));
-    const neighbour = (thread: string) =>
-      ({
-        sendSignalToThread,
-        identity: { getResourceId: () => 'resource-1' },
-        thread: { getId: () => thread },
-      }) as unknown as Session<unknown>;
-    const callbacks = createBackgroundCompletionCallbacks(() => ({
+    const a = createSession({ currentThreadId: 'run-a' });
+    const b = createSession({ currentThreadId: 'run-b' });
+
+    await createBackgroundNoticeDelivery(() => ({
       getSession: async () => undefined,
-      listLiveSessions: () => [neighbour('run-a'), neighbour('run-b')],
-    }));
+      listLiveSessions: () => [a.session, b.session],
+    })).deliver(target, signal);
 
-    await callbacks.onTaskComplete?.(createTask('completed'));
-
-    expect(sendSignalToThread).not.toHaveBeenCalled();
+    for (const { sendSignal, sendSignalToThread } of [a, b]) {
+      expect(sendSignal).not.toHaveBeenCalled();
+      expect(sendSignalToThread).not.toHaveBeenCalled();
+    }
   });
 });

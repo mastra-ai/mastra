@@ -41,6 +41,17 @@ describe('buildToolGuidance task tools', () => {
   });
 });
 
+describe('buildToolGuidance background work', () => {
+  it.each([false, true])('describes background shells and subagents only when they are on (%s)', backgroundTools => {
+    const guidance = buildToolGuidance('build', { backgroundTools });
+
+    expect(guidance.includes('**Background work**')).toBe(backgroundTools);
+    expect(guidance.includes('Do not poll')).toBe(backgroundTools);
+    // The parallel-only rule would forbid the single backgrounded subagent the background guidance suggests.
+    expect(guidance.includes('multiple subagents in parallel')).toBe(!backgroundTools);
+  });
+});
+
 describe('buildToolGuidance knowledge tools', () => {
   it('does not advertise Subconscious or ask_memory guidance', () => {
     const guidance = buildToolGuidance('build');

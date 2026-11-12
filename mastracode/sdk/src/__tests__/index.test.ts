@@ -839,6 +839,7 @@ describe('createMastraCode', () => {
 
     const disabled = await createMastraCode();
     expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks).toBeUndefined();
+    expect(controllerConstructorMock.mock.calls[0]![0].subagentBackground).toBeUndefined();
     expect(disabled.backgroundCompletionEvents).toBeUndefined();
 
     controllerConstructorMock.mockClear();
@@ -848,7 +849,10 @@ describe('createMastraCode', () => {
     });
 
     const enabled = await createMastraCode();
-    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
+    const controllerConfig = controllerConstructorMock.mock.calls[0]![0];
+    expect(controllerConfig.backgroundTasks).toMatchObject({ enabled: true, recoverStaleTasksOnStart: true });
+    // Background subagents run until they finish: no timeout and no retry of a half-done task.
+    expect(controllerConfig.subagentBackground).toMatchObject({ enabled: true, timeoutMs: 0, maxRetries: 0 });
     expect(enabled.backgroundCompletionEvents).toBeDefined();
   });
 
@@ -908,7 +912,7 @@ describe('createMastraCode', () => {
     expect(enabled.mastraArgs.backgroundTasks).toEqual(
       expect.objectContaining({
         enabled: true,
-        recoverStaleTasksOnStart: false,
+        recoverStaleTasksOnStart: true,
         onTaskComplete: expect.any(Function),
         onTaskFailed: expect.any(Function),
         onTaskCancelled: expect.any(Function),

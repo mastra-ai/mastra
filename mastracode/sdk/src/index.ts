@@ -56,7 +56,8 @@ import { createSessionThreadAdvertisement } from './agent-connections/session-ad
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
-import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
+import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './agents/background-completion.js';
+import { createBackgroundProcessNotices } from './agents/background-processes.js';
 import {
   hasCredentialStoreProvider,
   setCredentialLogger,
@@ -1402,6 +1403,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         planApprovalStartsGoal: config?.planApprovalStartsGoal,
         plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
+        backgroundTools: backgroundToolsEnabled,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1796,24 +1798,41 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  const backgroundNotices = backgroundToolsEnabled ? createBackgroundNoticeDelivery(() => sessionRouter) : undefined;
+  // One instance per process: the workspace is registered once per project and
+  // reused, so its exit callback must not close over a single session.
+  const backgroundProcesses = backgroundNotices
+    ? createBackgroundProcessNotices({
+        delivery: backgroundNotices,
+        events: backgroundCompletionEvents,
+        getSession: sessionId => controller.getSession(sessionId),
+      })
+    : undefined;
+  const backgroundTaskCallbacks = backgroundNotices
+    ? createBackgroundCompletionCallbacks(backgroundNotices, backgroundCompletionEvents, { subagents })
+    : undefined;
   // Used when the host passes no `workspace`. Its plan-mode write guard must
   // allow the same plans directory the prompts tell the agent to write to.
+  // A host-provided workspace gets no background process notices.
   const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
-    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir, backgroundProcesses });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
-    ...(backgroundToolsEnabled
+    ...(backgroundTaskCallbacks
       ? {
           backgroundTasks: {
             enabled: true,
-            recoverStaleTasksOnStart: false,
+            // Subagents orphaned by a crash end as failed and say so in their thread.
+            recoverStaleTasksOnStart: true,
             // The completion callbacks signal the task's session; core's own signal would run outside it.
             notifyAgentOnFinish: false,
-            ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
+            ...backgroundTaskCallbacks,
           },
+          // Background subagents have no time limit, like background shells.
+          subagentBackground: { enabled: true, defaultDisposition: 'foreground', timeoutMs: 0, maxRetries: 0 },
         }
       : {}),
     observability,
@@ -1893,6 +1912,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   controller.onSessionCreated(session => {
     liveSessions.add(session);
+    // Notices from startup recovery arrive before any session exists.
+    void backgroundNotices?.flush();
   });
   controller.onSessionDeleted(session => {
     liveSessions.delete(session);
@@ -1995,6 +2016,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     githubSignals,
     backgroundToolsEnabled,
     backgroundCompletionEvents,
+    /** Background shell exit notices; also reads and kills shells for the user without posting a notice. */
+    backgroundProcesses,
+    /** Background task completion callbacks, shared by the controller and a server-owned Mastra. */
+    backgroundTaskCallbacks,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
@@ -2307,16 +2332,7 @@ export async function prepareAgentControllerMount(
   finalize: () => Promise<void>;
 }> {
   const base = await createMastraCodeAgentController(config);
-  const {
-    controller,
-    storage,
-    authStorage,
-    projectPath,
-    codeAgent,
-    mcpManager,
-    backgroundToolsEnabled,
-    backgroundCompletionEvents,
-  } = base;
+  const { controller, storage, authStorage, projectPath, codeAgent, mcpManager, backgroundTaskCallbacks } = base;
   const controllerId = config?.controllerId ?? controller.id;
   const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
   const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
@@ -2334,14 +2350,14 @@ export async function prepareAgentControllerMount(
     // Only hand over an Observability that exports somewhere. A disabled one would
     // stop the host from wiring its own, e.g. the platform deploy's exporter.
     ...(base.observabilityExports ? { observability: base.observability } : {}),
-    ...(backgroundToolsEnabled
+    ...(backgroundTaskCallbacks
       ? {
           backgroundTasks: {
             enabled: true,
-            recoverStaleTasksOnStart: false,
+            recoverStaleTasksOnStart: true,
             // The completion callbacks signal the task's session; core's own signal would run outside it.
             notifyAgentOnFinish: false,
-            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
+            ...backgroundTaskCallbacks,
           },
         }
       : {}),

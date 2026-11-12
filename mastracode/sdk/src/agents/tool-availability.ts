@@ -2,6 +2,7 @@ import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { WorkspaceToolHookContext, WorkspaceToolsConfig } from '@mastra/core/workspace';
 import { MC_TOOLS, TOOL_NAME_OVERRIDES } from '../tool-names.js';
 import { getLocalPlansRelativeDir, isPlanFilePath } from '../utils/plans.js';
+import type { BackgroundProcessNotices } from './background-processes.js';
 
 const PLAN_MODE_WRITE_TOOL_NAMES = new Set<string>([
   WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
@@ -99,14 +100,20 @@ const BACKGROUND_TOOL_CONFIG = { enabled: true, defaultDisposition: 'foreground'
 export function createMastraCodeWorkspaceTools(
   backgroundToolsEnabled = false,
   plansDir?: string,
+  backgroundProcesses?: BackgroundProcessNotices,
 ): WorkspaceToolsConfig {
   const background = backgroundToolsEnabled ? BACKGROUND_TOOL_CONFIG : undefined;
+  const processNotices = backgroundToolsEnabled ? backgroundProcesses : undefined;
+  const guardPlanFiles = createPlanModePlanFileWriteGuard(plansDir);
   return {
     ...TOOL_NAME_OVERRIDES,
     // The TUI shows this description in place of the raw command.
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
       ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND],
       requireDescription: true,
+      // Background shells outlive the run that started them: Esc must not
+      // kill them, and their exit is reported back to the thread.
+      ...(processNotices ? { backgroundProcesses: { abortSignal: null, onExit: processNotices.onExit } } : {}),
     },
     [WORKSPACE_TOOLS.FILESYSTEM.READ_FILE]: {
       ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE],
@@ -128,9 +135,16 @@ export function createMastraCodeWorkspaceTools(
       ...TOOL_NAME_OVERRIDES[WORKSPACE_TOOLS.LSP.LSP_INSPECT],
       ...(background ? { background } : {}),
     },
-    hooks: {
-      beforeToolCall: createPlanModePlanFileWriteGuard(plansDir),
-    },
+    hooks: processNotices
+      ? {
+          beforeToolCall: async hookContext => {
+            const blocked = guardPlanFiles(hookContext);
+            if (blocked) return blocked;
+            await processNotices.beforeToolCall(hookContext);
+          },
+          afterToolCall: hookContext => processNotices.afterToolCall(hookContext),
+        }
+      : { beforeToolCall: guardPlanFiles },
   };
 }
 

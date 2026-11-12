@@ -13,6 +13,8 @@ interface ToolGuidanceOptions {
   /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
   hasWebExtract?: boolean;
   hasSubagents?: boolean;
+  /** Background shells and subagents are on (`backgroundTools.enabled`). */
+  backgroundTools?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
   /** Workspace-relative directory where plan mode can write plans. */
@@ -257,10 +259,22 @@ ${patchToolGuidance}
   // --- Subagent tool (all modes) ---
 
   if (options.hasSubagents !== false && !denied.has('subagent')) {
+    const when = options.backgroundTools
+      ? `- Run a subagent in the background (\`_background: { disposition: "deferred" }\`) when its task is independent of what you do next, and keep working. Run it in the foreground when you need its answer before you can continue.`
+      : `- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.`;
     sections.push(`
 **subagent** — Delegate a focused task to a specialized subagent
-- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.
+${when}
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
+  }
+
+  if (options.backgroundTools) {
+    const shellLine = denied.has(MC_TOOLS.EXECUTE_COMMAND)
+      ? ''
+      : `\n- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.`;
+    sections.push(`
+**Background work**${shellLine}
+- You get a notification when a background command exits or a background task finishes. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`);
   }
 
   return sections.join('\n');
