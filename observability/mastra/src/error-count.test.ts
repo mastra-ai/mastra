@@ -53,6 +53,21 @@ describe('originating error counts', () => {
     expect(spans.map(span => span.exportSpan()?.errorCount)).toEqual([3, 3]);
   });
 
+  it('does not attribute an excluded child failure to its visible parent', () => {
+    const obs = new DefaultObservabilityInstance({
+      name: 'excluded-errors',
+      serviceName: 'test',
+      exporters: [],
+      excludeSpanTypes: [SpanType.TOOL_CALL],
+    });
+    const parent = obs.startSpan({ name: 'agent', type: SpanType.AGENT_RUN });
+    const child = parent.createChildSpan({ name: 'excluded tool', type: SpanType.TOOL_CALL });
+    const failure = new Error('tool failed');
+    child.error({ error: failure });
+    parent.error({ error: new Error('forwarded', { cause: failure }) });
+    expect(parent.exportSpan()?.errorCount).toBe(0);
+  });
+
   it('allows an independent failure to reference an earlier cause', () => {
     const obs = tracing();
     const span = obs.startSpan({ name: 'agent', type: SpanType.AGENT_RUN });

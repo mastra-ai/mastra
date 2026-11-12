@@ -267,14 +267,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   private errorOccurrenceIds?: Set<string>;
 
   public recordError(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void {
-    // Excluded spans cannot own a count that exporters never receive.
-    if (this.isExcluded || this.isEvent || this.endTime) return;
+    if (this.isEvent || this.endTime) return;
     if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
       this.localErrorCount = undefined;
       return;
     }
     const id = coreObservability.claimSpanError?.(error, this.traceId, this.id, options);
-    if (id === undefined || this.errorOccurrenceIds?.has(id)) return;
+    // Preserve excluded origins so visible ancestors never claim their failures.
+    if (this.isExcluded || id === undefined || this.errorOccurrenceIds?.has(id)) return;
     (this.errorOccurrenceIds ??= new Set()).add(id);
     if (this.localErrorCount !== undefined) this.localErrorCount++;
   }
