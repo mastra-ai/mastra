@@ -846,6 +846,7 @@ export class AgentController<TState = {}> {
       }
     }
 
+    session.setParkedApprovalsRequestContext(requestContext);
     await this.#notifySessionCreated(session);
     // A run may have parked on approval before this process (or a session-created
     // hook) installed the rule that allows or denies it.

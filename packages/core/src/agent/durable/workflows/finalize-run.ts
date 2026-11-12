@@ -31,6 +31,7 @@ import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
+import { toLiveStructuredOutputSchema } from '../structured-output-null-transform';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 import { hydrateMessageListState } from './shared/message-list-state';
@@ -207,7 +208,11 @@ export async function runDurableFinishSideEffects({
   const structuredOutput = initData.options?.structuredOutput;
   const structuredOutputText = resolveOutputText(messageList);
   const liveStructuredOutput = registryEntry?.structuredOutput;
-  const structuredOutputSchema = liveStructuredOutput?.schema ?? structuredOutput?.schema;
+  const structuredOutputSchema =
+    liveStructuredOutput?.schema ??
+    (structuredOutput?.schema
+      ? toLiveStructuredOutputSchema(structuredOutput.schema, structuredOutput.nullToUndefined)
+      : undefined);
   let structuredOutputChunks: ChunkType[] | undefined;
   // The structuring model reads tool calls and results too, so a tool-only answer still qualifies.
   const structuringParts = structuredOutput?.hasStructuringModel ? responseStreamParts(messageList) : undefined;
