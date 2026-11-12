@@ -1953,16 +1953,17 @@ export class EventedRun<
   #restartable: boolean;
 
   /**
-   * Marks `runId` (this run, or the parent run a nested resume also claims)
-   * live before this caller makes it `running` in storage, so a booting
-   * instance's sweep does not restart it before a worker picks up its first
-   * step. Marking it after the claim would leave the run `running` with no
-   * live key for one storage round trip; a claim that loses only leaves a key
-   * that lapses one lease TTL later. `restartable` is whether the sweep
-   * restarts runs of `runId`'s workflow; nothing is written when it does not.
+   * Marks this run, and the parent a nested run continues, live before this
+   * caller makes them `running` in storage or publishes the event that drives
+   * them, so a booting instance's sweep does not restart them before a worker
+   * picks up that event. Marking after the claim would leave the run `running`
+   * with no live key for one storage round trip; a claim that loses only
+   * leaves a key that lapses one lease TTL later. Each run is marked only when
+   * the sweep restarts runs of its workflow. Ancestors above the parent are
+   * marked once a worker handles the event, which carries the whole chain.
    */
-  async #markLive(runId = this.runId, restartable = this.#restartable): Promise<void> {
-    if (!restartable || !this.mastra) {
+  async #markLive(): Promise<void> {
+    if (!this.mastra) {
       return;
     }
 
@@ -1971,7 +1972,15 @@ export class EventedRun<
       return;
     }
 
-    await markRunLive({ scope: this.mastra, store, runId, logger: this.mastra.getLogger() });
+    const runs = [
+      { runId: this.runId, restartable: this.#restartable },
+      ...(this.parentWorkflow ? [{ runId: this.parentWorkflow.runId, restartable: this.#parentRestartable() }] : []),
+    ];
+    for (const { runId, restartable } of runs) {
+      if (restartable) {
+        await markRunLive({ scope: this.mastra, store, runId, logger: this.mastra.getLogger() });
+      }
+    }
   }
 
   /**
@@ -2002,26 +2011,33 @@ export class EventedRun<
   }
 
   /**
-   * Evented runs hold no run lease while they execute: the workers running
-   * their steps hold step leases and keep the run's liveness key fresh.
-   * `restart()` is refused while that key, or the key of a nested run a
-   * running step drives, is live. Otherwise it takes a short lease so that of
-   * several concurrent restarts (one per booting replica) a single one
-   * publishes.
+   * Evented runs hold no run lease while they execute: the workers handling
+   * their events keep the run's liveness key fresh, and a nested run keeps its
+   * ancestors' keys fresh too. `restart()` is refused while the run's key is
+   * live. Otherwise it takes a short lease so that of several concurrent
+   * restarts (one per booting replica) a single one publishes, and marks the
+   * run live before the restart is published.
    */
   protected override async claimRestartOwnership(
-    snapshot: WorkflowRunState,
+    _snapshot: WorkflowRunState,
   ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
     // The run's steps take no leases, so there is no liveness to check.
     if (!this.#restartable) {
       return { release: async () => {} };
     }
 
-    return claimEventedRestart({
+    const claim = await claimEventedRestart({
       store: await this.mastra?.getStorage()?.getStore('workflows'),
       runId: this.runId,
-      snapshot,
     });
+
+    // The restart event can sit in the broker for a while: a live key keeps other instances from
+    // restarting the run again before a worker takes the event up.
+    if ('release' in claim) {
+      await this.#markLive();
+    }
+
+    return claim;
   }
 
   private completeWorkflowTracing(
@@ -2812,9 +2828,7 @@ export class EventedRun<
     if (this.parentWorkflow) {
       let claimedParent;
       try {
-        // The parent's suspended step result hides this run from the restart check's walk into
-        // nested runs, so the parent needs its own live key once it is `running` again.
-        await this.#markLive(this.parentWorkflow.runId, this.#parentRestartable());
+        // The child's claim above already marked the parent live, before this flips it to `running`.
         claimedParent = await workflowsStore.updateWorkflowState({
           workflowName: this.parentWorkflow.workflowId,
           runId: this.parentWorkflow.runId,

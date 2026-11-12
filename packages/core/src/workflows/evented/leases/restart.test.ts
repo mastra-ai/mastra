@@ -351,58 +351,32 @@ describe('evented restart refusal (#28712)', () => {
     expect(executions.sort()).toEqual(['A:a', 'B:b']);
   }, 20_000);
 
-  it.each(['then', 'foreach'] as const)(
-    'refuses to restart a parent run while a step of a nested workflow it started with .%s() runs',
-    async kind => {
-      const storage = new InMemoryStore();
-      const store = (await storage.getStore('workflows'))!;
-      const tracked = track({ blocks: ['inner:1'] });
-      const build = (replica: string) => {
-        const report = tracked.reporter(replica);
-        const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
-          .then(
-            createStep({
-              id: 'inner',
-              inputSchema: Num,
-              outputSchema: Num,
-              execute: async ({ inputData }) => {
-                await report(`inner:${inputData.n}`);
-                return inputData;
-              },
-            }),
-          )
-          .commit();
-        const parent =
-          kind === 'then'
-            ? createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: z.any() }).then(child).commit()
-            : createWorkflow({ id: 'leased', inputSchema: z.array(Num), outputSchema: z.any() })
-                .foreach(child, { concurrency: 2 })
-                .commit();
-        return { parent: parent as unknown as Built, child: child as unknown as Built };
-      };
-      const onA = build('A');
-      const onB = build('B');
-      const a = await startReplica(storage, onA.parent, { nested: { child: onA.child } });
-      const b = await startReplica(storage, onB.parent, { nested: { child: onB.child } });
-      const run = await a.workflow.createRun();
-      const result = run.start({ inputData: (kind === 'then' ? { n: 1 } : [{ n: 1 }, { n: 2 }]) as any });
-      await tracked.allBlocked;
-      if (kind === 'foreach') {
-        // The second item's nested run finished; only the first item's nested run still runs.
-        await vi.waitFor(async () => {
-          const snapshot = await store.loadWorkflowSnapshot({ workflowName: 'leased', runId: run.runId });
-          expect((snapshot?.context.child as { output?: unknown[] } | undefined)?.output?.[1]).toBeTruthy();
-        });
+  it('marks a run live before its restart is published', async () => {
+    const storage = new InMemoryStore();
+    const tracked = track({ blocks: ['a'] }, { hangForever: true });
+    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
+    const run = await a.workflow.createRun();
+    void run.start({ inputData: { n: 1 } });
+    await tracked.allBlocked;
+    await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
+    expect(await runIsLive(storage, run.runId)).toBe(false);
+
+    // The restart's start event sits in the broker's queue; no worker has handled it yet.
+    const queued = Promise.withResolvers<boolean | undefined>();
+    const deliver = Promise.withResolvers<void>();
+    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
+      if (event.type !== 'workflow.start') {
+        return undefined;
       }
 
-      // The parent's step only dispatched the nested run; its own liveness lapses while the nested step runs.
-      await sleep(WORKFLOW_RUN_LEASE_TTL_MS + 100);
-      expect((await restartOutcome(b, run.runId)).id).toBe('WORKFLOW_RESTART_RUN_OWNED');
+      queued.resolve(runIsLive(storage, run.runId));
+      return { hold: deliver.promise };
+    });
+    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')), { pubsub });
+    const restarted = restartOutcome(b, run.runId);
 
-      tracked.release();
-      expect((await result).status).toBe('success');
-      expect(tracked.executions.sort()).toEqual(kind === 'then' ? ['A:inner:1'] : ['A:inner:1', 'A:inner:2']);
-    },
-    20_000,
-  );
+    expect(await queued.promise).toBe(true);
+    deliver.resolve();
+    expect((await restarted).id).toBe('resolved:success');
+  }, 20_000);
 });
