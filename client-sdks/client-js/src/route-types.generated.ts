@@ -242,12 +242,12 @@ type InputShared_Auxiliary_809 = {
   children?: InputShared_Auxiliary_809[] | undefined;
 };
 
-type Shared_Auxiliary_795 = {
+type Shared_Auxiliary_799 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_795[] | undefined;
+  children?: Shared_Auxiliary_799[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4512,7 +4512,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_795[] | undefined;
+  files?: Shared_Auxiliary_799[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -15273,6 +15273,77 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
 }
 
 // ============================================================================
+// Route: ALL /mcp
+// ============================================================================
+export type AllMcp_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface AllMcp_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: AllMcp_Request;
+  response: unknown;
+  responseType: 'mcp-http';
+}
+
+// ============================================================================
+// Route: GET /mcp/builtin
+// ============================================================================
+export type GetMcpBuiltin_Response =
+  | {
+      enabled: false;
+      /** 'config': server.mcp.enabled is false. 'production-without-auth': not under mastra dev and no server.auth */
+      disabledReason: 'config' | 'production-without-auth';
+    }
+  | {
+      enabled: true;
+      /** Endpoint path including the API prefix, e.g. /api/mcp */
+      path: string;
+      /** Whether @mastra/mcp is installed; the endpoint answers 501 without it */
+      mcpPackageInstalled: boolean;
+      /** Configured toolsets this server can serve */
+      toolsets: (
+        | 'agents'
+        | 'workflows'
+        | 'tools'
+        | 'memory'
+        | 'observability'
+        | 'observability_analytics'
+        | 'stored_agents'
+      )[];
+      readOnly: boolean;
+      auth:
+        | {
+            type: 'open';
+            /** Open because of the mastra dev default, not server.mcp.enabled: true */
+            devOnly: boolean;
+          }
+        | {
+            type: 'protected';
+            provider: string | null;
+          };
+    };
+
+export type GetMcpBuiltin_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMcpBuiltin_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetMcpBuiltin_Request;
+  response: GetMcpBuiltin_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /mcp/v0/servers
 // ============================================================================
 export type GetMcpV0Servers_QueryParams = {
@@ -25707,6 +25778,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
+  'ALL /mcp': AllMcp_RouteContract;
+  'GET /mcp/builtin': GetMcpBuiltin_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -26446,6 +26519,9 @@ export interface Client {
   '/logs/transports': {
     GET: GetLogsTransports_RouteContract;
   };
+  '/mcp': {
+    ALL: AllMcp_RouteContract;
+  };
   '/mcp/:serverId/events': {
     GET: GetMcpServerIdEvents_RouteContract;
   };
@@ -26493,6 +26569,9 @@ export interface Client {
   };
   '/mcp/:serverId/tools/:toolId/execute': {
     POST: PostMcpServerIdToolsToolIdExecute_RouteContract;
+  };
+  '/mcp/builtin': {
+    GET: GetMcpBuiltin_RouteContract;
   };
   '/mcp/v0/servers': {
     GET: GetMcpV0Servers_RouteContract;

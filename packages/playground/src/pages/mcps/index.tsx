@@ -8,6 +8,7 @@ import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-
 import { useMCPServers } from '@mastra/react/hooks/mcps';
 import { useState } from 'react';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { BuiltinMcpServerSection } from '@/domains/mcps/components/builtin-mcp-server/builtin-mcp-server-card';
 import { McpServersList } from '@/domains/mcps/components/mcps-list/mcps-list';
 import type { McpServersSort } from '@/domains/mcps/components/mcps-list/mcps-list';
 import { NoMCPServersInfo } from '@/domains/mcps/components/mcps-list/no-mcp-servers-info';
@@ -56,7 +57,10 @@ const MCPs = () => {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">MCP Servers</h1>
-        <NoMCPServersInfo />
+        <div className="flex flex-col gap-6">
+          <BuiltinMcpServerSection />
+          <NoMCPServersInfo />
+        </div>
       </PageLayout>
     );
   }
@@ -75,13 +79,16 @@ const MCPs = () => {
       }
     >
       <h1 className="sr-only">MCP Servers</h1>
-      <McpServersList
-        mcpServers={mcpServers}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+      <div className="flex flex-col gap-6">
+        <BuiltinMcpServerSection />
+        <McpServersList
+          mcpServers={mcpServers}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </div>
     </PageLayout>
   );
 };
