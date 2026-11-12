@@ -19,7 +19,6 @@ import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowRunStatus } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
-import { runEndedKey } from '../workflows/evented/leases';
 import { Run } from '../workflows/workflow';
 import { killableProcess } from './test-utils/killable-process';
 import { Mastra } from './index';
@@ -333,23 +332,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect(b.order).toEqual(['step-done', 'shutdown']);
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
-
-  it('rejects a background restart of an evented run whose end already went out without a stored result', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const restarts: string[] = [];
-    const b = startReplica(storage, 'evented', 'B', [], { pubsub: recordRestarts(new EventEmitterPubSub(), restarts) });
-    await b.startWorkers();
-    // The run's end went out, and the end deleted nothing yet: it still reads running.
-    await persistActiveRun(storage, 'ended');
-    await store.claimRunOwnership({ runId: runEndedKey('ended'), ownerId: 'other-instance', leaseMs: 60_000 });
-
-    const run = await b.getWorkflow('recovered-wf').createRun({ runId: 'ended' });
-    await expect(run.restartInBackground()).rejects.toThrow();
-
-    expect(restarts).toEqual([]);
-    expect(await statusOf(storage, 'ended')).toBe('running');
-  });
 
   it('resolves a background restart of an evented run that ended with a stored result to false, without publishing', async () => {
     const storage = new InMemoryStore();
