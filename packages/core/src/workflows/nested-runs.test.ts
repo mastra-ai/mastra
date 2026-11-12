@@ -15,6 +15,9 @@ import type { AnyWorkflow } from './workflow';
 
 // These tests leave runs as a crash does, written just now; a zero grace lets recovery restart them at once.
 const stopped = { workflowGraceMs: 0 };
+/** Boots a Mastra instance with `workflows` on `storage` and runs its recovery pass. */
+const recover = (storage: MockStore, workflows: Record<string, AnyWorkflow>) =>
+  new Mastra({ logger: false, storage, workflows, recovery: stopped }).restartAllActiveWorkflowRuns();
 
 const num = z.object({ n: z.number() });
 const items = z.object({ items: z.array(z.string()) });
@@ -87,7 +90,7 @@ describe('restarting a nested run whose process died', () => {
     await vi.waitFor(() => expect(died).toBe(true));
     await expireRunLeases(storage);
 
-    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
+    await recover(storage, build());
 
     expect(innerBRuns).toBe(1);
     const state = { items: ['before:0', 'inner-a:1', 'inner-b:2'] };
@@ -140,13 +143,13 @@ describe('restarting a nested run whose process died', () => {
 
     // The parent re-drives the item that was running, under a new nested run id; the crash's
     // nested run is left behind.
-    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
+    await recover(storage, build());
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).toContain('running');
 
     // The next boot no longer sees an active parent, so the leftover run must not be executed.
     await expireRunLeases(storage);
-    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
+    await recover(storage, build());
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).not.toContain('running');
     expect(await innerStatuses()).toContain('canceled');
@@ -194,7 +197,7 @@ describe('restarting a nested run whose process died', () => {
     await expireRunLeases(storage);
 
     // The parent finishes and leaves the crash's nested run behind.
-    await new Mastra({ logger: false, storage, workflows: build(), recovery: stopped }).restartAllActiveWorkflowRuns();
+    await recover(storage, build());
     expect(calls).toEqual([0, 1, 1, 2]);
     expect(await innerStatuses()).toContain('running');
 
@@ -299,7 +302,7 @@ describe('restarting a nested run whose process died', () => {
     // The Mastra-level sweep is a separate loop over every active run, so its cache is its own.
     const lookups = vi.spyOn(store, 'loadWorkflowRunStatus');
     const third = build(calls);
-    await new Mastra({ logger: false, storage, workflows: third, recovery: stopped }).restartAllActiveWorkflowRuns();
+    await recover(storage, third);
 
     const parentLookups = lookups.mock.calls.filter(([args]) => args.workflowName === 'outer');
     expect(parentLookups).toHaveLength(1);
@@ -311,12 +314,7 @@ describe('restarting a nested run whose process died', () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('suspended');
 
     // A suspended parent waits for its child, so the child is the only way forward (#25979).
-    await new Mastra({
-      logger: false,
-      storage,
-      workflows: build(calls),
-      recovery: stopped,
-    }).restartAllActiveWorkflowRuns();
+    await recover(storage, build(calls));
 
     expect(calls.length).toBeGreaterThan(2);
     expect(await innerStatuses()).not.toContain('canceled');
@@ -372,12 +370,7 @@ describe('restarting a nested run whose process died', () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
     await storage.stores.workflows!.deleteWorkflowRunById({ workflowName: 'outer', runId: 'run-1' });
 
-    await new Mastra({
-      logger: false,
-      storage,
-      workflows: build(calls),
-      recovery: stopped,
-    }).restartAllActiveWorkflowRuns();
+    await recover(storage, build(calls));
 
     // Nothing is left that could collect the run, so the sweep is its only way forward.
     expect(calls.length).toBeGreaterThan(2);
