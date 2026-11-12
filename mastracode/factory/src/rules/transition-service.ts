@@ -196,6 +196,13 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
   }
 }
 
+/** A route can send a card to another board's phase of the same name: still a move. */
+function changesBoard(item: Card | undefined, result: FactoryTransitionResult): boolean {
+  return (
+    result.status === 'accepted' && result.board !== undefined && !!item && result.board !== boardForWorkItem(item)
+  );
+}
+
 function isStale(result: FactoryTransitionResult): result is FactoryTransitionResultRejected {
   return result.status === 'rejected' && result.code === 'stale';
 }
@@ -450,7 +457,7 @@ export class FactoryTransitionService {
     if (!onTransitionCommitted || result.status !== 'accepted') return;
     // Board-neutral: `currentStage` only knows the built-in rule stages.
     const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.stage === fromStage) return;
+    if (result.stage === fromStage && !changesBoard(item, result)) return;
     // Inside the chain so a synchronous throw is isolated the same way an async rejection is.
     void Promise.resolve()
       .then(() =>
@@ -477,7 +484,8 @@ export class FactoryTransitionService {
     // Board-neutral, like the stage notification: `currentStage` only knows the
     // built-in rule stages and would drop custom-board phases.
     const from = item && item.stages.length === 1 ? item.stages[0] : undefined;
-    if (result.status === 'accepted' && result.stage === from && !request.reenter) return;
+    if (result.status === 'accepted' && result.stage === from && !changesBoard(item, result) && !request.reenter)
+      return;
     const outcome =
       result.status === 'accepted'
         ? {
@@ -660,7 +668,8 @@ export class FactoryTransitionService {
     };
 
     // The coordinator's own self-move at run start would otherwise inject a second run's kickoff.
-    const humanMove = request.actor.type === 'human' && fromStage !== toStage && request.cause !== 'run_start';
+    const humanMove =
+      request.actor.type === 'human' && (fromStage !== toStage || toBoard !== board) && request.cause !== 'run_start';
     // The board, not the phase name, says whether a seat is engaged on either side of this move.
     const entersWorking = toBoard.isWorking(toStage);
     const seatRole = toBoard.roleForPhase(toStage);

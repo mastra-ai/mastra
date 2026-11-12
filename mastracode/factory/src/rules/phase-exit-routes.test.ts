@@ -298,6 +298,46 @@ describe('phase-exit routes', () => {
     expect(fetchIssue).not.toHaveBeenCalled();
   });
 
+  it("records a route's move to another board's phase of the same name", async () => {
+    const { seeded, scope, route, move, get } = await setup();
+    const inboxCard = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: scope.factoryProjectId,
+        input: {
+          board: 'shipyard',
+          externalSource: { integrationId: 'native', type: 'task', externalId: 'native:inbox-card' },
+          title: 'Write the intro',
+          stages: ['inbox'],
+          sessions: {},
+          metadata: {},
+        },
+      })
+    ).item;
+    await route({
+      when: null,
+      from: { boardKey: 'shipyard', phaseKey: 'inbox' },
+      target: { boardKey: 'docs', phaseKey: 'inbox' },
+    });
+
+    const result = await move(inboxCard.id, 'shipyard', 'triage');
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'inbox', board: 'docs' });
+    expect((await get(inboxCard.id)).board).toBe('docs');
+    const audit = await seeded.audit.list({
+      orgId: 'org-1',
+      factoryProjectId: scope.factoryProjectId,
+      actions: ['factory.work_item.stage_moved'],
+    });
+    expect(audit.events.find(row => row.targets.some(target => target.id === inboxCard.id))?.metadata).toMatchObject({
+      from: 'inbox',
+      to: 'inbox',
+      fromBoard: 'shipyard',
+      toBoard: 'docs',
+    });
+  });
+
   it('does not route a card leaving a phase that is terminal by now', async () => {
     const { github, card, route, move, get, fetchIssue } = await setup();
     // Saved before a board edit made the phase terminal: saving refuses a terminal `from` today.
