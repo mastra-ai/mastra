@@ -5398,11 +5398,12 @@ export class Run<
    * published to the workers instead of when the run finishes, as
    * `startAsync()` does for `start()`. Nothing waits for the run's result
    * afterwards: no finish subscription is kept, and `shutdown()` does not wait
-   * for the run. On an engine that runs the restart in the caller, it resolves
-   * when the run finishes.
+   * for the run.
    *
    * Resolves to whether the restart was published: `false` when the run had
-   * already finished, and the restart only returned its stored result. Rejects
+   * already finished, and the restart only returned its stored result. On an
+   * engine that runs the restart in the caller, it resolves `false` once the
+   * run finishes, as the restart returns the run's result. Rejects
    * when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`), fails before it
    * is published, or finds the run ended without a stored result. The recovery
    * pass uses it for evented runs, which workers drive.
