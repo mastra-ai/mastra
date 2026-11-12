@@ -1,6 +1,7 @@
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createNodeServer } from '../index';
+import { serverShutdownBudgetMs } from '../shutdown-budget';
 
 const { serveMock } = vi.hoisted(() => ({
   serveMock: vi.fn(),
@@ -267,6 +268,23 @@ describe('createNodeServer graceful shutdown', () => {
 
     expect(logger.warn).toHaveBeenCalledWith('Mastra shutdown timed out; forcing exit', { timeoutMs: 8500 });
     expect(fakeServer.closeAllConnections).not.toHaveBeenCalled();
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  // `mastra dev` waits serverShutdownBudgetMs() before it kills the server, so the server's own bounds must fit in it.
+  it('exits right at serverShutdownBudgetMs() when the HTTP drain and mastra.shutdown() both hang', async () => {
+    vi.useFakeTimers();
+    shutdownMock.mockImplementation(() => new Promise<void>(() => {}));
+    (mockMastra.getServer as ReturnType<typeof vi.fn>).mockReturnValue({ drainTimeout: 2000 });
+    await createNodeServer(mockMastra, { tools: {} });
+
+    process.emit('SIGTERM', 'SIGTERM');
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(serverShutdownBudgetMs(2000) - 1);
+    expect(exitSpy).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(1);
+    await flushMicrotasks();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
