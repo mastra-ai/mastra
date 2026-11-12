@@ -317,15 +317,27 @@ export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
   return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
 }
 
-/** One view of a board. Changing the view keeps the phases shown until the new ones answer. */
+/**
+ * One view of a board. Changing the view keeps the phases shown until the new ones answer. A view
+ * the tab read while `openCard` was closed may hold it below what its phases list: that read is
+ * not shown over the open card. The view is read for the card instead, and the card stays on the
+ * page until the answer says where it is.
+ */
 export function useBoardPhasesQuery(
   factoryProjectId: string | undefined,
   request: BoardPhasesRequest,
   openCard?: string,
 ) {
   const { baseUrl } = useApiConfig();
+  const held = useQueryClient().getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
+  const heldWithoutOpenCard = openCard !== undefined && held?.workItems.every(card => card.id !== openCard);
   return useQuery({
-    ...boardPhasesQueryOptions(baseUrl, factoryProjectId, request, openCard),
+    ...boardPhasesQueryOptions(
+      baseUrl,
+      factoryProjectId,
+      heldWithoutOpenCard ? { ...request, item: openCard } : request,
+      openCard,
+    ),
     placeholderData: keepPreviousData,
   });
 }

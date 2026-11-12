@@ -1,4 +1,4 @@
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -72,7 +72,9 @@ function openLargeBoard(count: number, stageOf: (index: number) => string = () =
   const refresh = () => act(() => client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) }));
   /** Leaves the link for the board's plain address. */
   const dropLink = () => act(() => router.navigate(boardPath));
-  return { project, asked, refresh, dropLink };
+  /** Shows the board at another query of its address: another order, search or filter. */
+  const show = (query: string) => act(() => router.navigate(`${boardPath}${query}`));
+  return { project, asked, refresh, dropLink, show };
 }
 
 const cardIds = (from: number, to: number) =>
@@ -207,5 +209,31 @@ describe('The board of a large project', () => {
     expect(await screen.findByRole('article', { name: 'Renamed task' })).toBeInTheDocument();
     expect(screen.queryByRole('article', { name: 'Large task 249' })).not.toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
+  });
+
+  it('keeps a card open, with what is typed in it, when the order changes to one the page holds that lists the card deeper', async () => {
+    const { asked, show } = openLargeBoard(120, undefined, '?sort=created-newest');
+    const user = userEvent.setup();
+    expect(await screen.findByRole('article', { name: 'Large task 119' })).toBeInTheDocument();
+    await show('?sort=created-oldest');
+    await user.click(await screen.findByText('Large task 0'));
+    const panel = await screen.findByRole('dialog', { name: 'Large task 0' });
+    await user.click(within(panel).getByRole('button', { name: 'Add a description' }));
+    await user.type(within(panel).getByRole('textbox', { name: 'Description' }), 'Half a thought');
+
+    // The newest order is one the page holds, read when no card was open: its fifty cards end far above this one.
+    await show('?sort=created-newest');
+
+    expect(await screen.findByRole('article', { name: 'Large task 119' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        asked.listings
+          .at(-1)
+          ?.getAll('sort')
+          .concat(asked.listings.at(-1)?.getAll('item') ?? []),
+      ).toEqual(['created-newest', largeCardId(0)]),
+    );
+    expect(screen.getByRole('dialog', { name: 'Large task 0' })).toBe(panel);
+    expect(within(panel).getByRole('textbox', { name: 'Description' })).toHaveValue('Half a thought');
   });
 });
