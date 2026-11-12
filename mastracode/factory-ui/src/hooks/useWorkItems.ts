@@ -175,10 +175,13 @@ async function readBoardPhases(
   // Read again: the cards held carry the changes made here while the server answered.
   const held = heldCards(client, factoryProjectId, versions);
   const cards = new Map<string, WorkItem>();
+  // A card the server holds no body of was deleted since the listing: no phase shows it, and the
+  // older body the tab holds is not it.
+  const deleted = new Set(stale.filter(id => !read.has(id)));
   for (const id of versions.keys()) {
+    if (deleted.has(id)) continue;
     const body = read.get(id);
     const card = body ? replaceEqualDeep(held.get(id), body) : held.get(id);
-    // A card deleted since the listing has no body: no phase shows it.
     if (card) cards.set(id, card);
   }
   const answered = answer.item;

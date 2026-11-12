@@ -408,6 +408,26 @@ describe('useBoardPhasesQuery', () => {
     expect(result.current.data?.boardTotal).toBe(1);
   });
 
+  it('drops a card deleted between the listing that names its new body and the read of that body, not showing the body it held', async () => {
+    const project = serveProject([card(1), card(2)]);
+    const { result, client } = renderHookWithProviders(() => useBoardPhasesQuery(PROJECT_ID, VIEW));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2', 'Card 1']));
+
+    // The listing names the renamed card; it is deleted before the tab reads its body.
+    project.cards = [card(1), card(2, 'Renamed')];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
+        project.cardReads.push(new URL(request.url).searchParams.getAll('workItemId'));
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(project.cardReads).toEqual([[cardId(2)]]));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1']));
+    expect(result.current.data?.workItems.map(held => held.id)).toEqual([cardId(1)]);
+  });
+
   it('lists a phase deeper by downloading only the cards past the ones it holds', async () => {
     const project = serveProject(Array.from({ length: 60 }, (_, index) => card(index + 1)));
     const { result, rerender } = renderHookWithProviders(
