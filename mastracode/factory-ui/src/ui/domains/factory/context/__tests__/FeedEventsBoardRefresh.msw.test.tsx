@@ -13,8 +13,8 @@ import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResour
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
 import {
   useSessionWorkItemsQuery,
+  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
-  useWorkItemsQuery,
   workItemActivityQueryOptions,
   workItemStartersQueryOptions,
 } from '../../../../../hooks/useWorkItems';
@@ -61,8 +61,9 @@ function inner({ children }: { children: React.ReactNode }) {
 }
 
 function watchBoard() {
+  const cards = useSidebarWorkItemsQuery(PROJECT_ID);
   return {
-    cards: useWorkItemsQuery(PROJECT_ID),
+    cards: { isSuccess: cards.isSuccess, data: cards.data?.workItems },
     decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
     running: useActiveRunResourceIds(AGENT_CONTROLLER_ID),
     move: useTransitionWorkItemMutation(PROJECT_ID),
@@ -277,7 +278,7 @@ describe('FeedEventsProvider, on the board', () => {
     server.use(stream.handler);
     const { requests, board } = boardEndpoints();
     const client = createQueryClient();
-    client.setQueryData(queryKeys.workItems(PROJECT_ID), boardSnapshot('Fix login'));
+    client.setQueryData(queryKeys.workItemsWithSessions(PROJECT_ID), boardSnapshot('Fix login'));
     board.title = 'Fix logout';
 
     const rendered = await renderConnectedBoard(stream, client);
@@ -445,9 +446,12 @@ describe('FeedEventsProvider, on a session page', () => {
         return HttpResponse.json(snapshot);
       }),
     );
-    // The sidebar reads the whole board on a session page; the header reads the session's cards.
+    // The sidebar reads every card holding a session; the header reads the session's cards.
     const rendered = renderHookWithProviders(
-      () => ({ board: useWorkItemsQuery(PROJECT_ID), session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1') }),
+      () => ({
+        board: useSidebarWorkItemsQuery(PROJECT_ID),
+        session: useSessionWorkItemsQuery(PROJECT_ID, 'session-1'),
+      }),
       { inner },
     );
     await waitFor(() => expect(stream.open).toBe(true));

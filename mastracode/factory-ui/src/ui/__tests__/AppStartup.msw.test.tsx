@@ -10,6 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog';
+import { answerWorkItemColumns, answerWorkItemFilterOptions } from '../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -21,6 +22,7 @@ const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 const PROJECTS_URL = `${TEST_BASE_URL}/web/factory/projects`;
 const linkedFactory = { ...factory, repositories: [listedRepository('project-repo-1', 'octo/app')] };
 const emptyFactory = { ...factory, repositories: [] };
+const BOARDS = [...builtinBoardCatalog.boards, releaseBoard];
 
 // Requests keyed by another response or by state a component resolves, so
 // they go out once the page that reads them renders.
@@ -33,7 +35,7 @@ const STARTED_BY_THE_PAGE = [
   /^GET \/web\/config\/models\b/,
   // The board's issue and pull request lists: keyed by its repositories and intake settings.
   /^GET \/web\/github\/projects\/[^/]+\/(issues|prs)\b/,
-  // The board's recent activity: keyed by the people on its cards.
+  // The board's recent activity: keyed by the people the filter options name.
   /^GET \/web\/factory\/projects\/[^/]+\/audit\b/,
 ];
 // Settings sections load their own data once they render; only their code starts early.
@@ -44,9 +46,14 @@ const REREAD_ONCE_THE_FEED_CONNECTS = [
   /^GET \/api\/agent-controller\/code\/active-runs$/,
 ];
 const CARDS_URL = 'GET /web/factory/projects/factory-1/work-items';
-// A page that shows the board shares that one read with the sidebar; any other asks only for the cards holding a session.
-const THE_BOARD = [CARDS_URL];
+// Any page asks for the cards holding a session, which its sidebar marks.
 const WITH_SESSIONS = [`${CARDS_URL}?scope=sessions`];
+// A board asks for its own columns, with the cards they list, and for what its filters offer: never for every card.
+const boardOf = (view: string) => [
+  ...WITH_SESSIONS,
+  `${CARDS_URL}/columns?${view}&cards=true`,
+  `${CARDS_URL}/filter-options`,
+];
 // A draft also asks the server for what its starters count and when cards came in and shipped, from a week back.
 const WITH_SESSIONS_AND_COUNTS = [...WITH_SESSIONS, `${CARDS_URL}/starters`, `${CARDS_URL}/activity?since=`];
 
@@ -66,8 +73,13 @@ function renderApp(
       HttpResponse.json({ models, fallbackModelId: models[0]?.id ?? null }),
     ),
     http.get(PROJECTS_URL, projects),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, () =>
-      HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, () => HttpResponse.json({ boards: BOARDS })),
+    // Answered here, not by the ambient handlers: those ask who is signed in, which this suite holds back.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items/columns`, ({ request }) =>
+      answerWorkItemColumns(request, { workItems: [], boards: BOARDS, userId: 'user-1' }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items/filter-options`, () =>
+      answerWorkItemFilterOptions([]),
     ),
     // No ambient handler: the sidebar's sessions, the chat's permissions, the
     // composer's model defaults and the board's intake.
@@ -128,10 +140,18 @@ function returnToTab() {
 
 describe('Opening Factory', () => {
   it.each([
-    { page: 'Work', path: '/factories/factory-1/work', cards: THE_BOARD },
-    // The retired Review board's links open Work, so they load what Work needs.
-    { page: 'Work from a Review board link', path: '/factories/factory-1/review', cards: THE_BOARD },
-    { page: 'a custom board', path: '/factories/factory-1/boards/release', cards: THE_BOARD },
+    { page: 'Work', path: '/factories/factory-1/work', cards: boardOf('board=work&sort=recent') },
+    // The retired Review board's links open Work on its pull requests, so they load what that view needs.
+    {
+      page: 'Work from a Review board link',
+      path: '/factories/factory-1/review',
+      cards: boardOf('board=work&sort=recent&source=pull-request'),
+    },
+    {
+      page: 'a custom board',
+      path: '/factories/factory-1/boards/release',
+      cards: boardOf('board=release&sort=recent'),
+    },
     { page: 'Rules', path: '/factories/factory-1/rules?group=failed', cards: WITH_SESSIONS },
     { page: 'a new session', path: '/factories/factory-1/new', cards: WITH_SESSIONS },
     {
@@ -145,7 +165,7 @@ describe('Opening Factory', () => {
       page: 'Work before a repository is linked',
       path: '/factories/factory-1/work',
       listed: emptyFactory,
-      cards: THE_BOARD,
+      cards: boardOf('board=work&sort=recent'),
     },
   ])('loads everything $page needs during the sign-in check, once each', async ({ path, listed, models, cards }) => {
     const { requests, markSignInAnswered } = recordRequests();
@@ -190,7 +210,13 @@ describe('Opening Factory', () => {
       cards,
     );
     const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
-    expect(unread, 'queries started for the page but never read by it').toEqual([]);
+    // A board without a repository shows how to link one instead of its columns. Its reads left
+    // with the Factory list, before anything could say so, rather than a round trip later on every board.
+    const boardHidden = listed === emptyFactory;
+    expect(
+      unread.filter(hash => !(boardHidden && /"columns"|"filter-options"/.test(hash))),
+      'queries started for the page but never read by it',
+    ).toEqual([]);
   });
 
   it('loads the Factory list during the sign-in check from a link without a Factory', async () => {

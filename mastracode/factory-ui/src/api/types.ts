@@ -28,6 +28,28 @@ export type CreateBoardBody = z.input<typeof FACTORY_ROUTE_CONTRACTS.boardCreate
 export type WorkItemStarters = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema>;
 export type WorkItemActivity = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema>;
 export type WorkItemListResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema>;
+export type WorkItemColumnsResponse = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemColumns.responseSchema>;
+export type WorkItemFilterOptions = z.infer<typeof FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema>;
+type WorkItemColumnsQuery = z.output<typeof FACTORY_ROUTE_CONTRACTS.workItemColumns.querySchema>;
+export type WorkItemColumnsSort = WorkItemColumnsQuery['sort'];
+/** The filters of a board view: each is sent once per picked value. */
+export type WorkItemColumnsFilter = {
+  [Field in keyof WorkItemColumnsQuery]-?: WorkItemColumnsQuery[Field] extends Set<string> ? Field : never;
+}[keyof WorkItemColumnsQuery];
+
+/** What the columns read is asked: one view of a board, and how deep each of its columns is listed. */
+export interface WorkItemColumnsRequest {
+  board: string;
+  sort: WorkItemColumnsSort;
+  /** Empty searches nothing. */
+  q: string;
+  /** The picked values of each filter, sorted. A filter that picks nothing is left out. */
+  filters: Partial<Record<WorkItemColumnsFilter, readonly string[]>>;
+  /** How many cards a column lists, for the columns listed deeper than the server's first page. */
+  windows: Readonly<Record<string, number>>;
+  /** A card to list in every column that holds it, however deep it is there. */
+  item?: string;
+}
 
 import type {
   CustomProviderInfo,

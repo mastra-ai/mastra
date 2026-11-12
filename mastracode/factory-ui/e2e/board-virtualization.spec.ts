@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
-import { largeBoard, largeCandidatePage } from '../src/ui/__tests__/fixtures/largeBoard';
+import { largeBoard, largeCandidatePage, largeCardId } from '../src/ui/__tests__/fixtures/largeBoard';
 import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
@@ -44,6 +44,8 @@ test.describe('Factory board virtualization', () => {
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
       http.get('*/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
       http.get('*/api/agent-controller/code/sessions/fp-1/permissions', () => HttpResponse.json({ permissions: [] })),
+      // The feed sends nothing here: the board is read once and scrolled.
+      http.get('*/web/factory/projects/fp-1/feed-events', () => new HttpResponse(null, { status: 404 })),
     );
     await page.route(
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
@@ -86,7 +88,7 @@ test.describe('Factory board virtualization', () => {
         }),
       ),
     );
-    await page.goto('/factories/fp-1/work?item=large-1');
+    await page.goto(`/factories/fp-1/work?item=${largeCardId(1)}`);
     const halos = page.getByTestId('work-item-card').locator('.session-wick');
     await expect(halos).toHaveCount(2);
 
@@ -228,10 +230,15 @@ test.describe('Factory board virtualization', () => {
           const scroll = page
             .getByTestId('board-column-triage')
             .locator('xpath=ancestor::*[contains(concat(" ", normalize-space(@class), " "), " overflow-auto ")][1]');
-          await scroll.evaluate(element => {
-            element.scrollTop = element.scrollHeight;
-          });
-          await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible();
+          // The column lists itself deeper each time its end scrolls into view, down to its last card.
+          await expect(async () => {
+            await scroll.evaluate(element => {
+              element.scrollTop = element.scrollHeight;
+            });
+            await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeVisible({
+              timeout: 2_000,
+            });
+          }).toPass({ timeout: 25_000 });
           await expect(page.getByRole('article', { name: 'Large task 1999', exact: true })).toHaveCount(0);
           expect(await cards.count()).toBeLessThan(40);
           const bounds = await cards.evaluateAll(elements =>
@@ -291,7 +298,7 @@ test.describe('Factory board virtualization', () => {
               HttpResponse.json({ workItems: largeBoard(count) }),
             ),
           );
-          await page.goto('/factories/fp-1/work?item=large-0');
+          await page.goto(`/factories/fp-1/work?item=${largeCardId(0)}`);
           await expect(page.getByRole('article', { name: 'Large task 0', exact: true })).toBeInViewport();
           await expect(page.getByRole('button', { name: 'Details for Large task 0', exact: true })).toBeFocused();
           expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);

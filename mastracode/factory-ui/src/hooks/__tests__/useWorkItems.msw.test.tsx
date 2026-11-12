@@ -1,25 +1,29 @@
-import { boardCheck } from '@mastra/factory/work-items/board-check';
-import { useMutation } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import { answerWorkItemColumns } from '../../../e2e/ui/board-reads';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, waitForMutationsIdle, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
+import type { WorkItemColumnsRequest } from '../../api/types';
 import type { BoardSnapshot, WorkItem } from '../../ui/domains/factory/services/workItems';
 import {
+  useBoardColumnsQuery,
   useDeleteWorkItemMutation,
-  useParkedSessions,
   useSessionWorkItemsQuery,
+  useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-  useWorkItemsQuery,
 } from '../useWorkItems';
+import type { BoardColumnsSnapshot } from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
+
+/** The board the paged reads list: the two phases these cards sit in. */
+const BOARD = { id: 'work', phases: [{ id: 'intake' }, { id: 'execute' }] };
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -185,7 +189,7 @@ describe('useTransitionWorkItemMutation', () => {
 });
 
 describe('useDeleteWorkItemMutation', () => {
-  it('drops the deleted card and its session marker from the board read', async () => {
+  it('drops the deleted card and its session marker from the cards the sidebar reads', async () => {
     let deleted = false;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
@@ -202,17 +206,18 @@ describe('useDeleteWorkItemMutation', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => ({
-      parked: useParkedSessions(PROJECT_ID),
+      cards: useSidebarWorkItemsQuery(PROJECT_ID),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
-    await waitFor(() => expect(result.current.parked.has('session-1')).toBe(true));
+    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual(['session-1']));
 
     act(() => {
       result.current.remove.mutate(ITEM_ID);
     });
+    await waitFor(() => expect(result.current.cards.data?.workItems).toEqual([]));
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(result.current.parked.has('session-1')).toBe(false));
+    await waitFor(() => expect(result.current.cards.data?.parkedSessionIds).toEqual([]));
   });
 });
 
@@ -302,207 +307,239 @@ describe('useSessionWorkItemsQuery', () => {
       ),
     );
 
-    const { result } = renderHookWithProviders(() => ({
-      board: useWorkItemsQuery(PROJECT_ID),
+    const { result, client } = renderHookWithProviders(() => ({
       session: useSessionWorkItemsQuery(PROJECT_ID, SESSION_ID),
       create: useUpsertWorkItemMutation(PROJECT_ID),
     }));
-    await waitFor(() => expect(result.current.board.data).toHaveLength(1));
     await waitFor(() => expect(result.current.session.data).toHaveLength(1));
 
     act(() => {
       result.current.create.mutate({ source: 'github-issue', sourceKey: 'github-issue:2', title: 'New card' });
     });
-    await waitFor(() => expect(result.current.board.data?.map(card => card.id)).toEqual(['item-2', ITEM_ID]));
+    await waitForMutationsIdle(client);
+    expect(result.current.create.isSuccess).toBe(true);
     expect(result.current.session.data?.map(card => card.id)).toEqual([ITEM_ID]);
   });
 });
 
-describe('useWorkItemsQuery', () => {
-  const card = (id: string, title = id) => ({
+describe('useBoardColumnsQuery', () => {
+  const cardId = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
+  /** A card on the wire; a write stamps it, here with a day per version. */
+  const card = (number: number, title = `Card ${number}`, version = 1) => ({
     ...wireItem,
-    id,
+    id: cardId(number),
     title,
-    createdAt: `2026-07-0${id}T00:00:00.000Z`,
-    // A write stamps the card, here with a day per title.
-    changedAt: `2026-08-${String(10 + title.length)}T00:00:00.000Z`,
+    createdAt: new Date(Date.UTC(2026, 0, 1, 0, number)).toISOString(),
+    changedAt: `2026-08-${String(10 + version)}T00:00:00.000Z`,
   });
-  /** What moved, as the server answers it for the board it lists. */
-  const moved = (workItems: object[], removedIds: string[], listed: Parameters<typeof boardCheck>[0]) => ({
-    workItems,
-    removedIds,
-    check: boardCheck(listed),
-  });
-  const titles = (cards: { title: string }[] | undefined) => cards?.map(item => item.title);
-  /** Answers the board reads in turn, and records the `since` each one sent. */
-  function serveBoard(...answers: unknown[]) {
-    const sinces: Array<string | null> = [];
+  const VIEW: WorkItemColumnsRequest = { board: 'work', sort: 'recent', q: '', filters: {}, windows: {} };
+
+  /** Serves the project's paged reads from `project.cards`, and records what the tab asked for. */
+  function serveProject(cards: Array<typeof wireItem & { changedAt: string }>) {
+    const project = { cards, listings: new Array<URLSearchParams>(), cardReads: new Array<string[]>() };
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, async ({ request }) => {
-        sinces.push(new URL(request.url).searchParams.get('since'));
-        return HttpResponse.json((await answers[sinces.length - 1]) as object);
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/columns`, ({ request }) => {
+        project.listings.push(new URL(request.url).searchParams);
+        return answerWorkItemColumns(request, { workItems: project.cards, boards: [BOARD], userId: 'user-1' });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
+        const ids = new URL(request.url).searchParams.getAll('workItemId');
+        project.cardReads.push(ids);
+        return HttpResponse.json({ workItems: project.cards.filter(listed => ids.includes(listed.id)) });
       }),
     );
-    return sinces;
+    return project;
   }
   /** What a feed frame does to the board. */
   const refresh = (client: QueryClient) => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
+  const column = (snapshot: BoardColumnsSnapshot | undefined, stage: string) =>
+    snapshot?.columns.find(listed => listed.stage === stage);
+  const titles = (snapshot: BoardColumnsSnapshot | undefined) =>
+    column(snapshot, 'execute')?.ids.map(id => snapshot?.workItems.find(held => held.id === id)?.title);
 
-  it('reads the board whole, then merges what moved since its cursor into the cards it holds', async () => {
-    const sinces = serveBoard(
-      { workItems: [card('5'), card('4'), card('2'), card('1')], cursor: 'first' },
-      {
-        ...moved(
-          [card('4', 'Renamed'), card('3'), card('6')],
-          ['5'],
-          [card('6'), card('4', 'Renamed'), card('3'), card('2'), card('1')],
-        ),
-        cursor: 'second',
-      },
-    );
-    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['5', '4', '2', '1']));
-    const unchanged = result.current.data!.slice(2);
+  it('reads a board it holds no card of in one request, then downloads nothing while nothing changes', async () => {
+    const project = serveProject([card(1), card(2)]);
+    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2', 'Card 1']));
+    const snapshot = result.current.data;
 
     await act(() => refresh(client));
 
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['6', 'Renamed', '3', '2', '1']));
-    expect(sinces).toEqual([null, 'first']);
-    // Each sits where another card did: sharing by position would have rebuilt them.
-    expect(result.current.data![3]).toBe(unchanged[0]);
-    expect(result.current.data![4]).toBe(unchanged[1]);
+    expect(project.listings.map(asked => asked.get('cards'))).toEqual(['true', null]);
+    expect(project.cardReads).toEqual([]);
+    // Nothing changed: whatever renders the board has nothing to render again.
+    expect(result.current.data).toBe(snapshot);
   });
 
-  it('takes a whole board whenever the server sends one, as one that ignores `since` does', async () => {
-    const sinces = serveBoard(
-      { workItems: [card('1')], cursor: 'first' },
-      { workItems: [card('2'), card('1')] },
-      { workItems: [card('2'), card('1')] },
-    );
-    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['1']));
+  it('downloads only the cards that changed or appeared, and keeps every other card the object it held', async () => {
+    const project = serveProject([card(1), card(2), card(3)]);
+    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 3', 'Card 2', 'Card 1']));
+    const held = (number: number) => result.current.data?.workItems.find(item => item.id === cardId(number));
+    const [first, third] = [held(1), held(3)];
 
+    project.cards = [card(1), card(2, 'Renamed', 2), card(3), card(4)];
     await act(() => refresh(client));
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['2', '1']));
-    const cards = result.current.data;
-    await act(() => refresh(client));
-    await waitForMutationsIdle(client);
 
-    expect(sinces).toEqual([null, 'first', null]);
-    expect(result.current.data).toBe(cards);
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 4', 'Card 3', 'Renamed', 'Card 1']));
+    expect(project.cardReads.map(ids => ids.toSorted())).toEqual([[cardId(2), cardId(4)]]);
+    expect(held(1)).toBe(first);
+    expect(held(3)).toBe(third);
+    expect(column(result.current.data, 'execute')?.total).toBe(4);
   });
 
-  it.each([
-    ['an edit', [card('1', 'Renamed')]],
-    ['a card', [card('2'), card('1')]],
-    ['a removal', []],
-  ])('reads the board whole once when the server lists %s it was never sent', async (_missed, listed) => {
-    const sinces = serveBoard(
-      { workItems: [card('1')], cursor: 'first' },
-      { ...moved([], [], listed), cursor: 'second' },
-      { workItems: listed, cursor: 'third' },
-      { ...moved([], [], listed), cursor: 'third' },
-    );
-    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
-    await waitFor(() => expect(titles(result.current.data)).toEqual(['1']));
+  it('stops listing a card the server no longer holds, without asking for any card', async () => {
+    const project = serveProject([card(1), card(2)]);
+    const { result, client } = renderHookWithProviders(() => useBoardColumnsQuery(PROJECT_ID, VIEW));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2', 'Card 1']));
 
-    await act(() => refresh(client));
-    await waitFor(() => expect(titles(result.current.data)).toEqual(titles(listed)));
+    project.cards = [card(1)];
     await act(() => refresh(client));
 
-    expect(sinces).toEqual([null, 'first', null, 'third']);
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1']));
+    expect(project.cardReads).toEqual([]);
+    expect(result.current.data?.boardTotal).toBe(1);
   });
 
-  it('reads the board whole while a mutation that writes no card is pending', async () => {
-    const sinces = serveBoard(
-      { workItems: [card('1')], cursor: 'first' },
-      { ...moved([], [], [card('1', 'Renamed')]), cursor: 'second' },
-      { workItems: [card('1', 'Renamed')], cursor: 'third' },
+  it('lists a column deeper by downloading only the cards past the ones it holds', async () => {
+    const project = serveProject(Array.from({ length: 60 }, (_, index) => card(index + 1)));
+    const { result, rerender } = renderHookWithProviders(
+      (windows: WorkItemColumnsRequest['windows']) => useBoardColumnsQuery(PROJECT_ID, { ...VIEW, windows }),
+      { initialProps: VIEW.windows },
     );
-    const { result, client } = renderHookWithProviders(() => ({
-      cards: useWorkItemsQuery(PROJECT_ID),
-      other: useMutation({ mutationFn: () => new Promise<void>(() => {}) }),
-    }));
-    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['1']));
-    act(() => result.current.other.mutate());
-    await waitFor(() => expect(client.isMutating()).toBe(1));
+    await waitFor(() => expect(column(result.current.data, 'execute')).toMatchObject({ total: 60 }));
+    expect(column(result.current.data, 'execute')?.ids).toHaveLength(50);
 
-    await act(() => refresh(client));
+    rerender({ execute: 100 });
+    // The column keeps its cards while the deeper listing loads.
+    expect(column(result.current.data, 'execute')?.ids).toHaveLength(50);
 
-    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['Renamed']));
-    expect(sinces).toEqual([null, 'first', null]);
+    await waitFor(() => expect(column(result.current.data, 'execute')?.ids).toHaveLength(60));
+    expect(project.listings.at(-1)?.getAll('window')).toEqual(['execute:100']);
+    expect(project.listings.at(-1)?.has('cards')).toBe(false);
+    expect(project.cardReads).toHaveLength(1);
+    expect(project.cardReads[0]?.toSorted()).toEqual(Array.from({ length: 10 }, (_, index) => cardId(index + 1)));
   });
 
-  it('keeps a change the server has not answered through a merge, and drops it once the server refuses', async () => {
-    let refuse!: () => void;
-    let answerLate!: (answer: object) => void;
-    const refusal = new Promise<void>(resolve => (refuse = resolve));
-    const lateAnswer = new Promise<object>(resolve => (answerLate = resolve));
-    const nothingMoved = moved([], [], [card('2'), card('1')]);
-    const sinces = serveBoard(
-      { workItems: [card('2'), card('1')], cursor: 'first' },
-      { ...nothingMoved, cursor: 'second' },
-      lateAnswer,
-      { workItems: [card('2'), card('1')], cursor: 'fourth' },
+  it('asks the server for another view of a board it holds, and downloads no card it already has', async () => {
+    const project = serveProject([card(1, 'Fix login'), card(2, 'Ship billing')]);
+    const { result, rerender } = renderHookWithProviders(
+      (q: string) => useBoardColumnsQuery(PROJECT_ID, { ...VIEW, q }),
+      { initialProps: '' },
     );
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Ship billing', 'Fix login']));
+
+    rerender('login');
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Fix login']));
+    expect(project.listings.at(-1)?.get('q')).toBe('login');
+    expect(project.cardReads).toEqual([]);
+    expect(result.current.data).toMatchObject({ matchingTotal: 1, boardTotal: 2 });
+  });
+
+  it('keeps the open card listed when newer cards push it past the ones its column lists, and reads nothing to open it', async () => {
+    const project = serveProject(Array.from({ length: 50 }, (_, index) => card(index + 1)));
+    const { result, rerender, client } = renderHookWithProviders(
+      (openCard: string | undefined) => useBoardColumnsQuery(PROJECT_ID, VIEW, openCard),
+      { initialProps: undefined },
+    );
+    await waitFor(() => expect(column(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1)));
+
+    rerender(cardId(1));
+    expect(project.listings).toHaveLength(1);
+
+    project.cards = [...project.cards, card(51), card(52)];
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(column(result.current.data, 'execute')?.total).toBe(52));
+    expect(project.listings.at(-1)?.get('item')).toBe(cardId(1));
+    expect(column(result.current.data, 'execute')?.ids.at(-1)).toBe(cardId(1));
+
+    // Closed, the card is listed like any other: the column goes back to its first cards.
+    rerender(undefined);
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(column(result.current.data, 'execute')?.ids).toHaveLength(50));
+    expect(project.listings.at(-1)?.has('item')).toBe(false);
+    expect(column(result.current.data, 'execute')?.ids).not.toContain(cardId(1));
+  });
+
+  it('keeps a change the server has not answered through a refresh, and drops it once the server refuses', async () => {
+    let refuse = () => {};
+    const refusal = new Promise<void>(resolve => {
+      refuse = resolve;
+    });
+    serveProject([card(1), card(2)]);
     server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/work-items/1`, async () => {
+      http.patch(`${TEST_BASE_URL}/web/factory/work-items/${cardId(1)}`, async () => {
         await refusal;
         return HttpResponse.json({ error: 'refused' }, { status: 409 });
       }),
     );
     const { result, client } = renderHookWithProviders(() => ({
-      cards: useWorkItemsQuery(PROJECT_ID),
+      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
       update: useUpdateWorkItemMutation(PROJECT_ID),
     }));
-    const parent = () => result.current.cards.data?.[1]?.parentWorkItemId;
-    await waitFor(() => expect(result.current.cards.data).toHaveLength(2));
+    const parent = () => result.current.board.data?.workItems.find(item => item.id === cardId(1))?.parentWorkItemId;
+    await waitFor(() => expect(result.current.board.data?.workItems).toHaveLength(2));
 
-    act(() => result.current.update.mutate({ id: '1', patch: { parentWorkItemId: '2' } }));
-    await waitFor(() => expect(parent()).toBe('2'));
+    act(() => result.current.update.mutate({ id: cardId(1), patch: { parentWorkItemId: cardId(2) } }));
+    await waitFor(() => expect(parent()).toBe(cardId(2)));
     await act(() => refresh(client));
-    expect(sinces).toEqual([null, 'first']);
-    expect(parent()).toBe('2');
+    expect(parent()).toBe(cardId(2));
 
-    // The refusal lands while a read is out: its answer must not bring the change back.
-    act(() => void refresh(client));
-    await waitFor(() => expect(sinces).toHaveLength(3));
     refuse();
-    await waitFor(() => expect(result.current.update.isError).toBe(true));
-    answerLate({ ...nothingMoved, cursor: 'third' });
     await waitForMutationsIdle(client);
-
     expect(parent()).toBeNull();
-    expect(sinces).toEqual([null, 'first', 'second', null]);
   });
 
-  it('does not take a card being deleted here for a drifted board', async () => {
-    let finish!: () => void;
-    const finished = new Promise<void>(resolve => (finish = resolve));
-    const sinces = serveBoard(
-      { workItems: [card('2'), card('1')], cursor: 'first' },
-      { ...moved([], [], [card('2'), card('1')]), cursor: 'second' },
-      { ...moved([], ['1'], [card('2')]), cursor: 'third' },
-    );
+  it('takes a deleted card out of its column and its counts before the server answers', async () => {
+    let finish = () => {};
+    const finished = new Promise<void>(resolve => {
+      finish = resolve;
+    });
+    const project = serveProject([card(1), card(2)]);
     server.use(
-      http.delete(`${TEST_BASE_URL}/web/factory/work-items/1`, async () => {
+      http.delete(`${TEST_BASE_URL}/web/factory/work-items/${cardId(1)}`, async () => {
         await finished;
+        project.cards = [card(2)];
         return HttpResponse.json({ ok: true });
       }),
     );
     const { result, client } = renderHookWithProviders(() => ({
-      cards: useWorkItemsQuery(PROJECT_ID),
+      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
       remove: useDeleteWorkItemMutation(PROJECT_ID),
     }));
-    await waitFor(() => expect(result.current.cards.data).toHaveLength(2));
+    await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 2', 'Card 1']));
 
-    act(() => result.current.remove.mutate('1'));
-    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['2']));
-    await act(() => refresh(client));
+    act(() => result.current.remove.mutate(cardId(1)));
+
+    await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 2']));
+    expect(result.current.board.data).toMatchObject({ matchingTotal: 1, boardTotal: 1 });
+    expect(column(result.current.board.data, 'execute')?.total).toBe(1);
     finish();
     await waitForMutationsIdle(client);
+    expect(titles(result.current.board.data)).toEqual(['Card 2']);
+  });
 
-    expect(titles(result.current.cards.data)).toEqual(['2']);
-    expect(sinces).toEqual([null, 'first', 'second']);
+  it('shows a card created here on top of its column and counts it, without reading the board again', async () => {
+    const project = serveProject([card(1)]);
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItem: { ...card(2, 'New card'), stages: ['intake'] } }),
+      ),
+    );
+    const { result, client } = renderHookWithProviders(() => ({
+      board: useBoardColumnsQuery(PROJECT_ID, VIEW),
+      create: useUpsertWorkItemMutation(PROJECT_ID),
+    }));
+    await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Card 1']));
+
+    act(() => result.current.create.mutate({ source: 'manual', sourceKey: null, title: 'New card' }));
+    await waitForMutationsIdle(client);
+
+    expect(column(result.current.board.data, 'intake')).toEqual({ stage: 'intake', total: 1, ids: [cardId(2)] });
+    expect(result.current.board.data).toMatchObject({ matchingTotal: 2, boardTotal: 2 });
+    expect(project.listings).toHaveLength(1);
   });
 });

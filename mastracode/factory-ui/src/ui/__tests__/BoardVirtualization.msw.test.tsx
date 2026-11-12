@@ -11,7 +11,7 @@ import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
 import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
-import { largeBoard, largeCandidatePage } from './fixtures/largeBoard';
+import { largeBoard, largeCandidatePage, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const ITEM_COUNT = 250;
@@ -81,7 +81,7 @@ describe('Large factory boards', () => {
   );
 
   it('given a deep link to the last issue, shows and focuses it without mounting all preceding issues', async () => {
-    renderBoard('?item=large-0');
+    renderBoard(`?item=${largeCardId(0)}`);
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Details for Large task 0' })).toHaveFocus();
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
@@ -93,13 +93,13 @@ describe('Large factory boards', () => {
     onTestFinished(() => {
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
-    const { router } = renderBoard('?item=large-100');
+    const { router } = renderBoard(`?item=${largeCardId(100)}`);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Details for Large task 100' })).toHaveFocus());
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
     fireEvent.scroll(viewport(), { target: { scrollTop: 0 } });
     const scrollTo = vi.spyOn(viewport(), 'scrollTo');
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=large-100&sort=created-oldest`));
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=${largeCardId(100)}&sort=created-oldest`));
 
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(scrollTo).not.toHaveBeenCalled();
@@ -107,13 +107,13 @@ describe('Large factory boards', () => {
     expect(viewport().scrollTop).toBe(0);
   });
 
-  it('given an offscreen issue, finds it by searching the full dataset', async () => {
+  it('given an issue the board has not loaded, finds it by searching the full dataset', async () => {
     const { router } = renderBoard();
     await screen.findByLabelText('Large task 249');
-    expect(screen.queryByLabelText('Large task 0')).not.toBeInTheDocument();
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=Large+task+0`));
-    expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
-    expect(screen.getAllByTestId('work-item-card')).toHaveLength(1);
+    expect(screen.queryByLabelText('Large task 137')).not.toBeInTheDocument();
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=task+137`));
+    expect(await screen.findByLabelText('Large task 137')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));
   });
 
   it('given open details, scrolling keeps the card and its description draft alive', async () => {

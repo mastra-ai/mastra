@@ -12,8 +12,8 @@ import { BoardList, BoardListGroup } from '../../domains/factory/components/Boar
 import { PhaseExitTool } from '../../domains/factory/components/PhaseExitTool';
 import type { PhaseExitToolInfo } from '../../domains/factory/components/PhaseExitTool';
 import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCardContext';
+import type { BoardOpenCard } from '../../domains/factory/context/BoardOpenCardContext';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
-import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
@@ -33,17 +33,18 @@ export function BoardStages({
   layout,
   stages: stageViews,
   totalTaskCount,
+  openCard,
   onDrop,
   toolbar,
 }: {
   layout: BoardLayout;
   stages: BoardStageView[];
   totalTaskCount: number;
+  openCard: BoardOpenCard;
   onDrop: (payload: DragPayload, stage: string) => void;
   toolbar: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const openCard = useOpenCardState();
   return (
     <BoardScrollContext value={scrollRef}>
       <BoardOpenCardContext value={openCard}>

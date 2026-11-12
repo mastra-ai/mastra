@@ -1,5 +1,13 @@
-import { BOARD_SORTS } from './boardOrder';
-import type { BoardSort } from './boardOrder';
+import type { WorkItemColumnsSort } from '../../../api/types';
+
+/** The orders the server lists a column in. */
+export type BoardSort = WorkItemColumnsSort;
+export const BOARD_SORTS = [
+  'recent',
+  'recent-mine',
+  'created-newest',
+  'created-oldest',
+] as const satisfies readonly BoardSort[];
 
 export const BOARD_SORT_QUERY = 'sort';
 

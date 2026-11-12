@@ -9,7 +9,6 @@ import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspa
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
-import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
 import { buildFactorySessionRow, buildUserSessionRow, oneRowPerCard } from '../services/sessionRows';
 import type { OneRowPerCardOptions, SessionListRow } from '../services/sessionRows';
 import { sessionWorkItemIndex } from '../services/sessionWorkItems';
@@ -29,7 +28,7 @@ export function useSessionListRows(
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname));
+  const sessionCards = useSidebarWorkItemsQuery(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const viewer = useFactoryAuth().data?.user;

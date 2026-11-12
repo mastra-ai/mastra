@@ -1,7 +1,7 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
-import { boardCheck } from '@mastra/factory/work-items/board-check';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
+  keepPreviousData,
   queryOptions,
   replaceEqualDeep,
   skipToken,
@@ -13,12 +13,16 @@ import {
 
 import { useApiConfig } from '../api/config';
 import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
+import type { WorkItemColumnsRequest } from '../api/types';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
+import { itemBoard } from '../ui/domains/factory/boardStages';
 import {
   createWorkItem,
   deleteWorkItem,
   fetchWorkItemActivity,
+  fetchWorkItemColumns,
+  fetchWorkItemFilterOptions,
   fetchWorkItemStarters,
   listWorkItems,
   transitionWorkItem,
@@ -61,68 +65,191 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
   );
 }
 
-// Module-level so React Query can cache each derived value instead of
-// rebuilding it (and, for the set, breaking referential equality) per render.
+// Module-level so React Query can cache the derived value instead of rebuilding it per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
-const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
-const NO_SESSIONS: ReadonlySet<string> = new Set();
 
-/**
- * Reads the board: whole the first time, then only what moved since the cursor of the board
- * held, merged into the board held when the answer arrives. That board carries the changes
- * made here that the server has not answered and none it refused. A card the answer leaves
- * equal stays the object held, so nothing showing it renders again.
- */
-async function readBoard(
-  baseUrl: string,
-  factoryProjectId: string,
-  signal: AbortSignal,
-  client: QueryClient,
-  whole = false,
-): Promise<BoardSnapshot> {
-  const held = () => client.getQueryData<BoardSnapshot>(queryKeys.workItems(factoryProjectId));
-  const since = whole ? undefined : held()?.cursor;
-  const only = since ? { since } : undefined;
-  const { removedIds, check, ...read } = await listWorkItems(baseUrl, factoryProjectId, signal, only);
-  const board = held();
-  const byId = new Map(board?.workItems.map(card => [card.id, card]));
-  let cards = read.workItems.map(card => replaceEqualDeep(byId.get(card.id), card));
-  if (removedIds) {
-    for (const card of cards) byId.set(card.id, card);
-    for (const id of removedIds) byId.delete(id);
-    cards = [...byId.values()];
-    // What moved fits only the board its cursor names, and leaves the board the server checks
-    // once every card written here is answered. Otherwise this copy drifted: read it whole.
-    const writing = client.isMutating({ mutationKey: cardWriteMutationKey(factoryProjectId) });
-    if (board?.cursor !== since || (check !== boardCheck(cards) && !writing)) {
-      return readBoard(baseUrl, factoryProjectId, signal, client, true);
-    }
-    // The order a whole read lists them in: newest first, then by id.
-    cards.sort((a, b) => (a.createdAt + a.id < b.createdAt + b.id ? 1 : -1));
-  }
-  if (!board) return { ...read, workItems: cards };
-  const same = cards.length === board.workItems.length && cards.every((card, i) => card === board.workItems[i]);
-  return same ? replaceEqualDeep(board, { ...read, workItems: board.workItems }) : { ...read, workItems: cards };
-}
-
-/**
- * The board: its cards and the sessions parked on them. `scope` narrows it to the cards holding a
- * session, with the cards related to them.
- */
-export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined, scope?: 'sessions') {
+/** The cards holding a session, with the cards related to them, and the sessions parked on them. */
+export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
-    queryKey: scope ? queryKeys.workItemsWithSessions(factoryProjectId) : queryKeys.workItems(factoryProjectId),
+    queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
     queryFn: factoryProjectId
-      ? ({ signal, client }) =>
-          scope
-            ? listWorkItems(baseUrl, factoryProjectId, signal, { scope })
-            : readBoard(baseUrl, factoryProjectId, signal, client)
+      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { scope: 'sessions' })
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
-    // `readBoard` shares cards by id. React Query shares by index, which would rebuild every card
-    // after an added or removed one.
-    structuralSharing: !!scope,
+  });
+}
+
+/** A column of a board view: the cards it lists, in the view's order, of the `total` that match. */
+export interface BoardColumn {
+  stage: string;
+  total: number;
+  ids: string[];
+}
+
+/**
+ * One view of a board as of one read: which cards each column lists, how many match, and in
+ * `workItems` the body of every listed card and of the cards related to them.
+ */
+export interface BoardColumnsSnapshot extends BoardSnapshot {
+  columns: BoardColumn[];
+  /** How many of the board's cards match the view's search and filters. */
+  matchingTotal: number;
+  /** How many cards the board holds, whatever the view. */
+  boardTotal: number;
+}
+
+/** The most ids one `workItemId` read may name. */
+const CARDS_PER_READ = 100;
+
+/** The cards among `ids` the server still holds, read by id. */
+async function readCards(baseUrl: string, factoryProjectId: string, ids: string[], signal: AbortSignal) {
+  const reads: Promise<BoardSnapshot>[] = [];
+  for (let start = 0; start < ids.length; start += CARDS_PER_READ) {
+    const workItemId = ids.slice(start, start + CARDS_PER_READ);
+    reads.push(listWorkItems(baseUrl, factoryProjectId, signal, { workItemId }));
+  }
+  return (await Promise.all(reads)).flatMap(read => read.workItems);
+}
+
+/**
+ * The card the tab holds for each id of `stamps`, from whichever read cached it. Where several
+ * reads hold a card, the one last changed when its stamp says wins.
+ */
+function heldCards(client: QueryClient, factoryProjectId: string, stamps: ReadonlyMap<string, string | null>) {
+  const held = new Map<string, WorkItem>();
+  const snapshots = client.getQueriesData<BoardSnapshot>({ queryKey: queryKeys.workItems(factoryProjectId) });
+  for (const [, snapshot] of snapshots) {
+    for (const card of snapshot?.workItems ?? []) {
+      const stamp = stamps.get(card.id);
+      if (stamp === undefined) continue;
+      const holder = held.get(card.id);
+      if (!holder || ((card.changedAt ?? null) === stamp && (holder.changedAt ?? null) !== stamp)) {
+        held.set(card.id, card);
+      }
+    }
+  }
+  return held;
+}
+
+/**
+ * Reads one view of a board. The server names the cards of each column with the moment each last
+ * changed; only the cards the tab does not hold as of that moment are downloaded, by id. The first
+ * read of a board holds none, so it asks for the bodies with the listing. A card the read leaves
+ * equal stays the object held, so nothing showing it renders again, and a read that changes
+ * nothing answers the snapshot held. `openCard` is listed in place of the card the view names.
+ */
+async function readBoardColumns(
+  baseUrl: string,
+  factoryProjectId: string,
+  request: WorkItemColumnsRequest,
+  openCard: string | undefined,
+  signal: AbortSignal,
+  client: QueryClient,
+): Promise<BoardColumnsSnapshot> {
+  const boardHeld = client
+    .getQueriesData<BoardColumnsSnapshot>({ queryKey: queryKeys.boardColumns(factoryProjectId, request.board) })
+    .some(([, snapshot]) => snapshot !== undefined);
+  const asked = openCard ? { ...request, item: openCard } : request;
+  const answer = await fetchWorkItemColumns(baseUrl, factoryProjectId, asked, !boardHeld, signal);
+  const stamps = new Map(
+    [...answer.columns.flatMap(column => column.cards), ...answer.related].map(card => [card.id, card.changedAt]),
+  );
+  const read = new Map(answer.workItems?.map(card => [card.id, card]));
+  const heldAtAnswer = heldCards(client, factoryProjectId, stamps);
+  const stale = [...stamps].flatMap(([id, stamp]) => {
+    const held = heldAtAnswer.get(id);
+    return read.has(id) || (held && (held.changedAt ?? null) === stamp) ? [] : [id];
+  });
+  if (stale.length > 0) {
+    for (const card of await readCards(baseUrl, factoryProjectId, stale, signal)) {
+      if (stamps.has(card.id)) read.set(card.id, card);
+    }
+  }
+  // Read again: the cards held carry the changes made here while the server answered.
+  const held = heldCards(client, factoryProjectId, stamps);
+  const cards = new Map<string, WorkItem>();
+  for (const id of stamps.keys()) {
+    const body = read.get(id);
+    const card = body ? replaceEqualDeep(held.get(id), body) : held.get(id);
+    // A card deleted since the listing has no body: no column shows it.
+    if (card) cards.set(id, card);
+  }
+  const listing = {
+    columns: answer.columns.map(column => ({
+      stage: column.stage,
+      total: column.total,
+      ids: column.cards.flatMap(({ id }) => (cards.has(id) ? [id] : [])),
+    })),
+    matchingTotal: answer.matchingTotal,
+    boardTotal: answer.boardTotal,
+    runningSessionIds: answer.runningSessionIds,
+    parkedSessionIds: answer.parkedSessionIds,
+  };
+  const workItems = [...cards.values()];
+  const previous = client.getQueryData<BoardColumnsSnapshot>(queryKeys.workItemColumns(factoryProjectId, request));
+  if (!previous) return { ...listing, workItems };
+  const { workItems: previousCards, ...previousListing } = previous;
+  const sameCards =
+    workItems.length === previousCards.length && workItems.every((card, i) => card === previousCards[i]);
+  const sharedListing = replaceEqualDeep(previousListing, listing);
+  if (sameCards && sharedListing === previousListing) return previous;
+  return { ...sharedListing, workItems: sameCards ? previousCards : workItems };
+}
+
+/**
+ * One view of a board: its columns, and the cards they list. `openCard` is the card whose details
+ * the page holds open: every read lists it however deep its column holds it, so a refresh or a new
+ * order never takes it off the page. It stays out of the key, because the view is the same with a
+ * card open: opening or closing one reads nothing.
+ */
+export function boardColumnsQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  request: WorkItemColumnsRequest,
+  openCard?: string,
+) {
+  return queryOptions({
+    queryKey: queryKeys.workItemColumns(factoryProjectId, request),
+    queryFn: factoryProjectId
+      ? ({ signal, client }) => readBoardColumns(baseUrl, factoryProjectId, request, openCard, signal, client)
+      : skipToken,
+    // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
+    refetchOnWindowFocus: true,
+    // `readBoardColumns` shares cards by id. React Query shares by index, which would rebuild
+    // every card after an added or removed one.
+    structuralSharing: false,
+  });
+}
+
+/** The labels and people the project's cards can be filtered by. */
+export function workItemFilterOptionsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.workItemFilterOptions(factoryProjectId),
+    queryFn: factoryProjectId
+      ? ({ signal }) => fetchWorkItemFilterOptions(baseUrl, factoryProjectId, signal)
+      : skipToken,
+    // Refreshed with the board, by the feed provider and on return to a hidden tab.
+    refetchOnWindowFocus: true,
+  });
+}
+
+/** Which cards are filed from `sources`, with the sources the answer covers. */
+export interface FiledFromAnswer extends BoardSnapshot {
+  sources: readonly string[];
+}
+
+/** The cards filed from any of `sources`: source ids or URLs, at most a hundred. */
+export function filedFromQueryOptions(baseUrl: string, factoryProjectId: string | undefined, sources: string[]) {
+  return queryOptions({
+    queryKey: queryKeys.workItemsFiledFrom(factoryProjectId, sources),
+    queryFn:
+      factoryProjectId && sources.length > 0
+        ? async ({ signal }): Promise<FiledFromAnswer> => ({
+            ...(await listWorkItems(baseUrl, factoryProjectId, signal, { source: sources })),
+            sources,
+          })
+        : skipToken,
   });
 }
 
@@ -153,12 +280,6 @@ export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: 
   });
 }
 
-/** The org's persisted work items (kanban cards) for a project. */
-export function useWorkItemsQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
-}
-
 /**
  * The cards holding one session, with the cards related to them: what a session page reads
  * instead of the board.
@@ -177,32 +298,71 @@ export function useSessionWorkItemsQuery(factoryProjectId: string | undefined, s
   });
 }
 
-/**
- * The cards the sidebar marks its sessions with. A page that loads the board shares that read;
- * any other asks only for the cards holding a session.
- */
-export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined, boardOnPage: boolean) {
+/** The cards the sidebar marks its sessions with: the ones holding a session, with the cards related to them. */
+export function useSidebarWorkItemsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const queryClient = useQueryClient();
-  const board = boardQueryOptions(baseUrl, factoryProjectId);
-  const withSessions = boardQueryOptions(baseUrl, factoryProjectId, 'sessions');
+  return useQuery(sessionCardsQueryOptions(baseUrl, factoryProjectId));
+}
+
+/** One view of a board. Changing the view keeps the columns shown until the new ones answer. */
+export function useBoardColumnsQuery(
+  factoryProjectId: string | undefined,
+  request: WorkItemColumnsRequest,
+  openCard?: string,
+) {
+  const { baseUrl } = useApiConfig();
   return useQuery({
-    ...(boardOnPage ? board : withSessions),
-    // Moving between the two keeps the other list's marks until this one answers.
-    placeholderData: () => queryClient.getQueryData((boardOnPage ? withSessions : board).queryKey),
+    ...boardColumnsQueryOptions(baseUrl, factoryProjectId, request, openCard),
+    placeholderData: keepPreviousData,
   });
 }
 
-/** Sessions parked on a plan or a question, read with the cards so a card and its marker agree. */
-export function useParkedSessions(factoryProjectId: string | undefined): ReadonlySet<string> {
+/** The labels and people the board's filter menus offer. */
+export function useWorkItemFilterOptionsQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
-  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
-  return data ?? NO_SESSIONS;
+  return useQuery(workItemFilterOptionsQueryOptions(baseUrl, factoryProjectId));
+}
+
+/** The snapshot listing `item` on top of the columns it sits in, where it does not list it yet. */
+function withCardOnTop(snapshot: BoardColumnsSnapshot, item: WorkItem): BoardColumnsSnapshot {
+  if (snapshot.columns.some(column => column.ids.includes(item.id))) return snapshot;
+  const sitsInAColumn = snapshot.columns.some(column => item.stages.includes(column.stage));
+  return {
+    ...snapshot,
+    workItems: [item, ...snapshot.workItems.filter(card => card.id !== item.id)],
+    // A card in no column of its board shows in the first one, where cards start.
+    columns: snapshot.columns.map((column, index) =>
+      (sitsInAColumn ? item.stages.includes(column.stage) : index === 0)
+        ? { ...column, ids: [item.id, ...column.ids], total: column.total + 1 }
+        : column,
+    ),
+    matchingTotal: snapshot.matchingTotal + 1,
+    boardTotal: snapshot.boardTotal + 1,
+  };
+}
+
+/** The cached cards without the card `id`, which the columns that listed it no longer count. */
+function withoutCard(cached: BoardSnapshot | BoardColumnsSnapshot, id: string): BoardSnapshot | BoardColumnsSnapshot {
+  const workItems = cached.workItems.filter(card => card.id !== id);
+  if (!('columns' in cached) || !cached.columns.some(column => column.ids.includes(id))) {
+    return { ...cached, workItems };
+  }
+  return {
+    ...cached,
+    workItems,
+    columns: cached.columns.map(column =>
+      column.ids.includes(id)
+        ? { ...column, ids: column.ids.filter(listed => listed !== id), total: column.total - 1 }
+        : column,
+    ),
+    matchingTotal: cached.matchingTotal - 1,
+    boardTotal: cached.boardTotal - 1,
+  };
 }
 
 /**
  * Materialize a work item (the server upserts on `sourceKey`, so acting twice
- * on the same issue reuses the card). The list cache is patched in place.
+ * on the same issue reuses the card). The cached cards are patched in place.
  */
 export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
@@ -212,11 +372,22 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
-      const boardKey = queryKeys.workItems(factoryProjectId);
-      // A session's cards take the saved card only where they hold it; a new card joins the board alone.
-      patchCards(queryClient, boardKey, cards => cards.map(card => (card.id === item.id ? item : card)));
-      queryClient.setQueryData<BoardSnapshot>(boardKey, board =>
-        board ? { ...board, workItems: [item, ...board.workItems.filter(card => card.id !== item.id)] } : undefined,
+      // A session's cards take the saved card only where they hold it; a new card joins its board alone.
+      patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
+        cards.map(card => (card.id === item.id ? item : card)),
+      );
+      queryClient.setQueriesData<BoardColumnsSnapshot>(
+        { queryKey: queryKeys.boardColumns(factoryProjectId, itemBoard(item)) },
+        snapshot => snapshot && withCardOnTop(snapshot, item),
+      );
+      // Whoever asked which cards are filed from this one's source learns of it without asking again.
+      queryClient.setQueriesData<FiledFromAnswer>(
+        { queryKey: queryKeys.workItemsFiledFromAny(factoryProjectId) },
+        answer => {
+          const filedFromAsked = answer?.sources.some(source => source === item.sourceKey || source === item.url);
+          if (!answer || !filedFromAsked || answer.workItems.some(card => card.id === item.id)) return answer;
+          return { ...answer, workItems: [item, ...answer.workItems] };
+        },
       );
     },
   });
@@ -298,9 +469,6 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       }),
     onMutate: async ({ item, stage, reenter = false }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
-      const previousItem = queryClient
-        .getQueryData<BoardSnapshot>(listKey)
-        ?.workItems.find(candidate => candidate.id === item.id);
       const enteredAt = new Date().toISOString();
       const actor = currentUserId ?? 'factory:optimistic';
       patchCards(queryClient, listKey, cards =>
@@ -314,15 +482,14 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
             : candidate,
         ),
       );
-      return { previousItem, enteredAt, actor };
+      return { enteredAt, actor };
     },
-    onError: (_error, variables, context) => {
-      const previousItem = context?.previousItem;
-      if (!previousItem) return;
+    // The card the move was asked of is the one held before it: every read holds cards by revision.
+    onError: (_error, variables) => {
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          return previousItem;
+          return variables.item;
         }),
       );
     },
@@ -330,9 +497,9 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
       patchCards(queryClient, listKey, cards =>
         cards.map(item => {
           if (item.id !== variables.item.id || item.revision !== variables.item.revision) return item;
-          if (result.status === 'rejected') return context?.previousItem ?? item;
+          if (result.status === 'rejected') return variables.item;
           if (result.revision <= item.revision) return item;
-          const previousItem = context?.previousItem ?? variables.item;
+          const previousItem = variables.item;
           return {
             ...item,
             stages: [result.stage],
@@ -344,6 +511,8 @@ export function useTransitionWorkItemMutation(factoryProjectId: string | undefin
               variables.reenter ?? false,
             ),
             revision: result.revision,
+            // The server changed more of the card than its stage: the next read downloads it whatever its stamp.
+            changedAt: undefined,
           };
         }),
       );
@@ -394,7 +563,10 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });
       const previous = queryClient.getQueriesData<BoardSnapshot>({ queryKey: listKey });
-      patchCards(queryClient, listKey, cards => cards.filter(item => item.id !== id));
+      queryClient.setQueriesData<BoardSnapshot | BoardColumnsSnapshot>(
+        { queryKey: listKey },
+        cached => cached && withoutCard(cached, id),
+      );
       return { previous };
     },
     onError: (_err, _id, context) => {
