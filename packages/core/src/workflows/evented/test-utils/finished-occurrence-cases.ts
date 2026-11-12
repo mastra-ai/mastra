@@ -329,18 +329,22 @@ export function describeFinishedOccurrenceCases({
       expect((await storedRun(run.runId))?.status).toBe('success');
     }, 20_000);
 
-    it('does not run a step again when a restart read the run just before the step saved its result', async () => {
-      const executions: string[] = [];
-      const build = (replica: string) =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
-          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
-          .commit();
-      // The first step finished on A, but its step end sits in the broker's queue for longer than a lease TTL.
+    /**
+     * Runs `build` on replica A until the step at `path` finished and its step
+     * end sits in A's broker queue past a lease TTL, then restarts the run on
+     * replica B, which reads that step as running. B's restart message for the
+     * step, the one `isRestartMessage` picks, is held back and returned.
+     * `deliverStepEnd` lets A's step end through.
+     */
+    async function restartWhileStepEndQueued(
+      build: (replica: string) => Built,
+      path: number[],
+      isRestartMessage: (event: Event) => boolean,
+    ) {
       const stepEndQueued = deferred<void>();
       const deliverStepEnd = deferred<void>();
       const a = await startReplica(build('A'), event => {
-        if (event.type !== 'workflow.step.end' || !samePath(event, [0])) {
+        if (event.type !== 'workflow.step.end' || !samePath(event, path)) {
           return undefined;
         }
 
@@ -355,22 +359,36 @@ export function describeFinishedOccurrenceCases({
         .poll(async () => (await store.getRunOwnership({ runId: runLivenessKey(run.runId) }))?.live, { timeout: 5_000 })
         .toBe(false);
 
-      // B's restart reads the first step as running. Its message for that step is held back in turn.
       const restartMessage = deferred<Event>();
       const b = await startReplica(build('B'), event => {
-        if (event.type !== 'workflow.step.run' || !samePath(event, [0]) || !event.data.restart) {
+        if (event.type !== 'workflow.step.run' || !samePath(event, path) || !isRestartMessage(event)) {
           return undefined;
         }
 
-        restartMessage.resolve(structuredClone(event));
+        restartMessage.resolve(copyEvent(event));
         return 'drop';
       });
       // B's own pubsub never sees the run end, so the restart only settles if it throws.
       void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartMessage.reject);
       const held = await restartMessage.promise;
+      return { b, run, held, deliverStepEnd: () => deliverStepEnd.resolve() };
+    }
+
+    it('does not run a step again when a restart read the run just before the step saved its result', async () => {
+      const executions: string[] = [];
+      const build = (replica: string) =>
+        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+          .commit();
+      const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
+        build,
+        [0],
+        event => !!event.data.restart,
+      );
 
       // A's step end is delivered and A finishes the run before B's message arrives.
-      deliverStepEnd.resolve();
+      deliverStepEnd();
       await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
       const before = b.published.length;
       expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
@@ -409,47 +427,18 @@ export function describeFinishedOccurrenceCases({
           .then(work('d', report))
           .commit();
       };
-      // Branch b finished on A, but its step end sits in the broker's queue for longer than a lease TTL.
-      const stepEndQueued = deferred<void>();
-      const deliverStepEnd = deferred<void>();
-      const a = await startReplica(build('A'), event => {
-        if (event.type !== 'workflow.step.end' || !samePath(event, [0, 1])) {
-          return undefined;
-        }
-
-        stepEndQueued.resolve();
-        return deliverStepEnd.promise;
-      });
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      startInBackground(run, { n: 1 });
-      await stepEndQueued.promise;
-      const store = (await getStorage().getStore('workflows'))!;
-      await expect
-        .poll(async () => (await store.getRunOwnership({ runId: runLivenessKey(run.runId) }))?.live, { timeout: 5_000 })
-        .toBe(false);
-
-      // B's restart reads branch b as running. Its message for the branch is held back.
-      const restartMessage = deferred<Event>();
-      const b = await startReplica(build('B'), event => {
-        const restart = event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined;
-        if (
-          event.type !== 'workflow.step.run' ||
-          !samePath(event, [0, 1]) ||
-          !restart?.isParallelOrConditionalRestarted
-        ) {
-          return undefined;
-        }
-        restartMessage.resolve(copyEvent(event));
-        return 'drop';
-      });
-      // B's own pubsub never sees the run end, so the restart only settles if it throws.
-      void (await b.workflow.createRun({ runId: run.runId })).restart().catch(restartMessage.reject);
-      const held = await restartMessage.promise;
+      const { b, run, held, deliverStepEnd } = await restartWhileStepEndQueued(
+        build,
+        [0, 1],
+        event =>
+          !!(event.data.restart as { isParallelOrConditionalRestarted?: boolean } | undefined)
+            ?.isParallelOrConditionalRestarted,
+      );
 
       // A's step end for b is delivered and the run ends the parallel, runs c and is in d when B's
       // message arrives. Which replica goes on depends on whether A saved b's result before B's
       // restart handled finished branch a: then B ends the parallel and A's step end is dropped.
-      deliverStepEnd.resolve();
+      deliverStepEnd();
       await dBlocked.promise;
       const before = b.published.length;
       expect(await b.mastra.handleWorkflowEvent(held)).toEqual({ ok: true });
