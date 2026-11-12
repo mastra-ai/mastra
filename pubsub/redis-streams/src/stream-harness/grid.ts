@@ -168,17 +168,57 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     const runId = randomUUID();
     const id = randomUUID();
     const generate = nodes.publisher.frames(
-      { cmd: 'generate', id, scenario: scenario.name, runId },
+      {
+        cmd: 'generate',
+        id,
+        scenario: scenario.name,
+        runId,
+        checkCallback: scenario.name === 'generate-partial-abort',
+      },
       'generate',
       45_000,
     );
-    await sleep(1_300);
+    if (scenario.name === 'generate-partial-abort' && nodes.publisher.opts.engine !== 'plain') {
+      await nodes.publisher.next(e => e.type === 'generate-text-started' && e.id === id);
+    } else {
+      await sleep(1_300);
+    }
     expect(
       nodes.publisher.events.some(e => e.type === 'frames' && e.id === id && e.reader === 'generate'),
       'generate completed before abort; fixture timing did not keep the request in flight',
     ).toBe(false);
     const ack = await httpAbort(nodes.port, AGENT_ID, runId);
     return { ack, generate: await generate };
+  },
+
+  async 'resume-generate-abort'(nodes, scenario) {
+    const runId = randomUUID();
+    const id = randomUUID();
+    const generate = nodes.publisher.frames(
+      { cmd: 'generate', id, scenario: scenario.name, runId, resume: true },
+      'generate',
+      45_000,
+    );
+    await nodes.publisher.next(e => e.type === 'resume-started' && e.id === id);
+    if (nodes.publisher.opts.engine === 'plain') {
+      // Plain generate uses a non-streaming provider request; no partial tokens are exposed.
+      await sleep(1_300);
+    } else {
+      await nodes.publisher.next(e => e.type === 'generate-text-started' && e.id === id);
+    }
+    expect(
+      nodes.publisher.events.some(e => e.type === 'frames' && e.id === id && e.reader === 'generate'),
+      'resumeGenerate completed before abort',
+    ).toBe(false);
+    const ack = await httpAbort(nodes.port, AGENT_ID, runId);
+    const result = await generate;
+    if (process.env.STREAM_HARNESS_VERBOSE) {
+      console.log(
+        'resume abort output',
+        nodes.publisher.events.filter(e => e.type === 'abort-output' && e.id === id),
+      );
+    }
+    return { ack, generate: result };
   },
 
   /** One turn; 4s after it ends (both processes clean up after 2s), list the run's keys. */

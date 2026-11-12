@@ -42,7 +42,15 @@ export interface Scenario {
  * - `generate-abort`: as `abort`, for a run started with `generate()`.
  * - `key-cleanup`: one turn, then the run's keys are listed once its cleanup has passed.
  */
-export type Flow = 'turn' | 'approval' | 'reuse' | 'observer-cleanup' | 'abort' | 'generate-abort' | 'key-cleanup';
+export type Flow =
+  | 'turn'
+  | 'approval'
+  | 'reuse'
+  | 'observer-cleanup'
+  | 'abort'
+  | 'generate-abort'
+  | 'resume-generate-abort'
+  | 'key-cleanup';
 
 export const readersOf = (scenario: Scenario): readonly ReaderName[] => scenario.readers ?? READERS;
 
@@ -167,6 +175,36 @@ export const SCENARIOS: Record<string, Scenario> = {
     flow: 'generate-abort',
     readers: ['ack', 'generate'],
   },
+  'generate-partial-abort': {
+    name: 'generate-partial-abort',
+    prompt: `${marker('generate-partial-abort')} Talk slowly.`,
+    script: llm =>
+      llm.on(
+        { endpoint: 'chat', predicate: hasMarker('generate-partial-abort') },
+        { content: LONG_ANSWER },
+        { ...CRAWL, nonStreamingTimingAllProviders: true },
+      ),
+    flow: 'generate-abort',
+    readers: ['ack', 'generate'],
+  },
+  'resume-generate-abort': {
+    name: 'resume-generate-abort',
+    prompt: `${marker('resume-generate-abort')} Look up harness, then talk slowly.`,
+    script: llm => {
+      llm.on(
+        { endpoint: 'chat', predicate: beforeTool('resume-generate-abort') },
+        { toolCalls: [{ id: 'call-resume-generate-abort', name: 'lookup', arguments: '{"query":"harness"}' }] },
+        SLOW,
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: afterTool('resume-generate-abort') },
+        { content: LONG_ANSWER },
+        { ...CRAWL, nonStreamingTimingAllProviders: true },
+      );
+    },
+    flow: 'resume-generate-abort',
+    readers: ['ack', 'generate'],
+  },
   /** Both processes clean a finished run up after 2s; keys are listed 4s after the turn. */
   'key-cleanup': {
     name: 'key-cleanup',
@@ -187,7 +225,16 @@ export const ABORT_ANSWER = LONG_ANSWER;
  */
 export const SCENARIO_GROUPS = {
   chunks: ['structured-output', 'structured-invalid', 'tool-throws', 'tool-undefined', 'input-tripwire'],
-  lifecycle: ['tool-approval', 'run-id-reuse', 'observer-cleanup', 'abort', 'generate-abort', 'key-cleanup'],
+  lifecycle: [
+    'tool-approval',
+    'run-id-reuse',
+    'observer-cleanup',
+    'abort',
+    'generate-abort',
+    'generate-partial-abort',
+    'resume-generate-abort',
+    'key-cleanup',
+  ],
 } as const satisfies Record<string, readonly string[]>;
 export type ScenarioGroup = keyof typeof SCENARIO_GROUPS;
 export const SCENARIO_NAMES: string[] = Object.values(SCENARIO_GROUPS).flat();

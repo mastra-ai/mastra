@@ -71,6 +71,14 @@ export const BASELINES: Record<string, string> = {
 export const FACT_BASELINES: Record<string, Partial<Record<ReaderName, string>>> = {
   abort: { ack: 'ack[status=200 aborted=true]' },
   'generate-abort': { ack: 'ack[status=200 aborted=true]', generate: 'generate[finish=aborted text=empty]' },
+  'generate-partial-abort': {
+    ack: 'ack[status=200 aborted=true]',
+    generate: 'generate[finish=aborted text=empty callback=empty calls=1 matches=true]',
+  },
+  'resume-generate-abort': {
+    ack: 'ack[status=200 aborted=true]',
+    generate: 'generate[finish=aborted text=empty callback=empty calls=1 matches=true]',
+  },
   'key-cleanup': { keys: '(memory)' },
 };
 
@@ -292,6 +300,32 @@ const EVENTED_KEYS =
   'key[:scheduler ttl=hours],key[:workflow.control ttl=hours],key[:workflows ttl=hours],key[:workflows-finish ttl=hours]';
 
 export const OBSERVATIONS: readonly Observation[] = [
+  obs(
+    'generate-partial-abort',
+    DURABLE,
+    ['generate'],
+    'generate[finish=aborted text=cut callback=cut calls=1 matches=true]',
+    {
+      ticket: 'COR-1405',
+      cause: 'engine',
+      evidence:
+        `${MAIN}, agent/durable/durable-agent.ts:4837-4848: durable generate collects a streaming result, ` +
+        'so abort after its first text callback retains a partial prefix. Plain generate uses a non-streaming provider request and exposes no prefix before abort.',
+    },
+  ),
+  obs(
+    'resume-generate-abort',
+    DURABLE,
+    ['generate'],
+    'generate[finish=aborted text=empty callback=cut calls=1 matches=false]',
+    {
+      ticket: 'COR-1405',
+      cause: 'engine',
+      evidence:
+        `${MAIN}, agent/durable/durable-agent.ts:5129-5152: resumeGenerate drains resume().output.getFullOutput(). ` +
+        'Aborting after the first text callback returns empty output text despite a nonempty onAbort text prefix.',
+    },
+  ),
   // Lifecycle: original and resume streams are separate captures, never concatenated.
   obs('tool-approval', ['plain', ...DURABLE], ['live-resume'], APPROVAL_TAIL, SUSPENSION_BOUNDARY),
   obs('tool-approval', PLAIN, ['observe-mid', 'observe-0', 'http-observe'], APPROVAL_FULL, SUSPENSION_BOUNDARY),

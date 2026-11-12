@@ -316,11 +316,48 @@ async function main() {
     async generate(cmd) {
       const scenario = getScenario(cmd.scenario);
       let shape: string;
+      let abortedText: string | undefined;
+      let abortCalls = 0;
+      let sawText = false;
+      const options = {
+        runId: cmd.runId,
+        maxSteps: 5,
+        onChunk: (chunk: any) => {
+          if (!sawText && chunk.type === 'text-delta' && chunk.payload?.text) {
+            sawText = true;
+            emit({ type: 'generate-text-started', id: cmd.id, runId: cmd.runId });
+          }
+        },
+        onAbort: (event: any) => {
+          abortCalls++;
+          abortedText = String(event.text ?? '');
+        },
+      };
       try {
-        const result = await registered.generate(scenario.prompt, { runId: cmd.runId, maxSteps: 5 });
-        const text = String(result?.text ?? '');
-        const whole = text === ABORT_ANSWER ? 'whole' : text ? 'cut' : 'empty';
-        shape = `finish=${result?.finishReason ?? '-'} text=${whole}`;
+        if (cmd.resume) {
+          const suspended = await registered.generate(scenario.prompt, { runId: cmd.runId, maxSteps: 5 });
+          if (suspended.finishReason !== 'suspended') throw new Error('generate did not suspend for approval');
+          emit({ type: 'resume-started', id: cmd.id, runId: cmd.runId });
+          const result = await registered.resumeGenerate(
+            { approved: true },
+            { ...options, toolCallId: suspended.suspendPayload?.toolCallId },
+          );
+          const text = String(result?.text ?? '');
+          const classify = (value: string | undefined) =>
+            value === undefined ? 'missing' : value === ABORT_ANSWER ? 'whole' : value ? 'cut' : 'empty';
+          shape = `finish=${result?.finishReason ?? '-'} text=${classify(text)} callback=${classify(abortedText)} calls=${abortCalls} matches=${text === abortedText}`;
+          emit({ type: 'abort-output', id: cmd.id, runId: cmd.runId, text, abortedText });
+        } else {
+          const result = await registered.generate(scenario.prompt, options);
+          const text = String(result?.text ?? '');
+          const whole = text === ABORT_ANSWER ? 'whole' : text ? 'cut' : 'empty';
+          shape = `finish=${result?.finishReason ?? '-'} text=${whole}`;
+          if (cmd.checkCallback) {
+            const callback = abortedText === undefined ? 'missing' : abortedText ? 'cut' : 'empty';
+            shape += ` callback=${callback} calls=${abortCalls} matches=${text === abortedText}`;
+            emit({ type: 'abort-output', id: cmd.id, runId: cmd.runId, text, abortedText });
+          }
+        }
       } catch (error: any) {
         shape = `threw ${error?.name ?? typeof error}`;
       }
