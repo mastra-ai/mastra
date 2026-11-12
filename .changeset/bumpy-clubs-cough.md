@@ -27,7 +27,7 @@ Runs of an instance that calls `shutdown()` stay with it until `shutdown()` fini
 
 **Duplicate step deliveries**
 
-Concurrent `restart()` calls on one run restart it once. A step whose event is delivered again while an instance runs it waits for that instance instead of running beside it. If that instance stops, another instance runs the step once its runs can be restarted, as described above. Workflows with `autoRestartActiveRuns: false` are unchanged. This needs a storage adapter with run-ownership support.
+Concurrent `restart()` calls on one run restart it once. A step whose event is delivered again while an instance runs it waits for that instance instead of running beside it. If that instance stops, the waiting delivery runs the step once the stopped instance's claim on it expires, `MASTRA_AGENT_THREAD_LEASE_TTL_MS` after it last renewed it. Workflows with `autoRestartActiveRuns: false` are unchanged. This needs a storage adapter with run-ownership support.
 
 **Storage growth**
 
