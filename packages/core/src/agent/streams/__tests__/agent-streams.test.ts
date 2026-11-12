@@ -147,7 +147,7 @@ describe('Agent durable resumable streams option', () => {
     await result.output.consumeStream();
     await waitForFinish(pubsub, result.runId);
     expect(durable.cache).toBeNull();
-    expect(agent.__getStreamBus()).toBeUndefined();
+    expect(agent.__getStreamBus()).toBe(durable.__getStreamBus());
   });
 
   it('keeps the run owner while the run is replayable and drops it once the topic is cleared', async () => {
