@@ -186,8 +186,12 @@ describe('factory_list_audit_events', () => {
         { at: 8, ...agent('session:private'), metadata: {} },
         { at: 9, ...agent('session:run-session'), metadata: {} },
         { at: 10, ...agent('session:shared'), metadata: {} },
+        { at: 11, ...agent('session:bound-private'), metadata: {} },
       ],
-      bindings: [{ threadId: 'run-thread', sessionId: 'run-session' }],
+      bindings: [
+        { threadId: 'run-thread', sessionId: 'run-session' },
+        { threadId: 'bound-thread', sessionId: 'bound-private' },
+      ],
       threads: [
         { id: 'shared-thread', metadata: { factorySessionId: 'shared' } },
         { id: 'private-thread', metadata: { factorySessionId: 'private' } },
@@ -197,6 +201,8 @@ describe('factory_list_audit_events', () => {
         { id: 'shared', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'org' },
         { id: 'private', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'private' },
         { id: 'mine', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-1', visibility: 'private' },
+        { id: 'run-session', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'org' },
+        { id: 'bound-private', orgId: 'org-1', factoryProjectId: 'project-1', userId: 'user-2', visibility: 'private' },
       ],
     });
 

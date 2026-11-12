@@ -181,13 +181,7 @@ function sessionRefs(event: AuditEventRow): string[] {
 function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependencies) {
   const sessions = new Map<string, Promise<boolean>>();
   const threads = new Map<string, Promise<boolean>>();
-  let runs: Promise<{ threads: Set<string>; sessions: Set<string> }> | undefined;
-  // Work item runs are on the board for everyone in the Factory.
-  const boardRuns = () =>
-    (runs ??= deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId).then(bindings => ({
-      threads: new Set(bindings.map(binding => binding.threadId)),
-      sessions: new Set(bindings.map(binding => binding.sessionId)),
-    })));
+  let runThreads: Promise<Set<string>> | undefined;
 
   const sessionVisible = (sessionId: string): Promise<boolean> => {
     let result = sessions.get(sessionId);
@@ -203,7 +197,11 @@ function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
   };
 
   const threadVisible = async (threadId: string): Promise<boolean> => {
-    if ((await boardRuns()).threads.has(threadId)) return true;
+    // Work item runs are on the board for everyone in the Factory.
+    runThreads ??= deps.workItems
+      .listRunBindings(scope.orgId, scope.factoryProjectId)
+      .then(bindings => new Set(bindings.map(binding => binding.threadId)));
+    if ((await runThreads).has(threadId)) return true;
 
     const controller = (await deps.messaging?.())?.controller;
     if (!controller) return false;
@@ -220,14 +218,11 @@ function eventVisibility(scope: FactoryToolScope, deps: FactoryAuditToolDependen
     let result = threads.get(threadId);
     if (!result) {
       // Turns nobody signed in started are recorded as their session's agent: `agent:session:<sessionId>`.
+      // Work item runs are created shared, so the session's own visibility decides.
       const sessionId = threadId.startsWith(SESSION_ACTOR_PREFIX)
         ? threadId.slice(SESSION_ACTOR_PREFIX.length)
         : undefined;
-      result = (
-        sessionId
-          ? boardRuns().then(({ sessions }) => sessions.has(sessionId) || sessionVisible(sessionId))
-          : threadVisible(threadId)
-      ).catch(() => false);
+      result = (sessionId ? sessionVisible(sessionId) : threadVisible(threadId)).catch(() => false);
       threads.set(threadId, result);
     }
     return result;
