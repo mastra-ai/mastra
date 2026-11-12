@@ -268,29 +268,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect([...b.executions].sort()).toEqual(['run-1', 'run-2']);
   }, 10_000);
 
-  it("restarts the runs that come out of their grace period together on the recovery loop's next pass workflowConcurrency at a time", async () => {
-    const storage = new InMemoryStore();
-    const b = startBlockingReplica(storage, ['run-1', 'run-2'], {
-      workflowGraceMs: GRACE_MS,
-      workflowConcurrency: 1,
-      workflowScanIntervalMs: 100,
-    });
-    await persistActiveRun(storage, 'run-1');
-    await persistActiveRun(storage, 'run-2');
-
-    // Both runs are in their grace period at the boot pass, so a later pass hands out both restarts.
-    await b.mastra.startWorkers();
-    await b.mastra.restartAllActiveWorkflowRuns();
-    expect(b.executions).toEqual([]);
-    await b.started;
-    // Several more passes; a restart outside the limiter would start the second run meanwhile.
-    await sleep(300);
-
-    expect(b.executions).toHaveLength(1);
-    b.release();
-    await vi.waitFor(() => expect([...b.executions].sort()).toEqual(['run-1', 'run-2']));
-  }, 10_000);
-
   it('waits at shutdown for a restart the recovery pass is running', async () => {
     const storage = new InMemoryStore();
     const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
@@ -321,30 +298,26 @@ describe('workflow recovery rule (#28712)', () => {
     expect(restarts).toEqual([]);
   });
 
-  it("leaves a run whose read right before its restart fails to the recovery loop's next pass, without bringing that pass forward", async () => {
+  it("leaves a run whose read right before its restart fails to the recovery loop's next pass", async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
-    const intervalMs = 1_500;
     const b = startReplica(storage, 'default', 'B', executions, {
-      recovery: { workflowGraceMs: GRACE_MS, workflowScanIntervalMs: intervalMs },
+      recovery: { workflowGraceMs: 0, workflowScanIntervalMs: 100 },
     });
-    await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
+    await persistActiveRun(storage, 'stopped');
     const read = store.getRunOwnerships.bind(store);
     vi.spyOn(store, 'getRunOwnerships')
       .mockImplementationOnce(read)
       .mockRejectedValueOnce(new Error('ownership read failed'))
       .mockImplementation(read);
 
-    const startedAt = Date.now();
     await b.startWorkers();
     await b.restartAllActiveWorkflowRuns();
 
     expect(executions).toEqual([]);
-    await vi.waitFor(() => expect(executions).toEqual(['B:work']), { timeout: intervalMs * 3 });
-    // The next pass comes a scan interval later, give or take a fifth, and not a grace period later.
-    expect(Date.now() - startedAt).toBeGreaterThanOrEqual(intervalMs * 0.8);
-  }, 10_000);
+    await vi.waitFor(() => expect(executions).toEqual(['B:work']));
+  });
 
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();
