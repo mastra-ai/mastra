@@ -1,5 +1,178 @@
 # @mastra/server
 
+## 1.83.0-alpha.13
+
+### Minor Changes
+
+- Added `GET /api/mcp/builtin`, which describes the built-in MCP server so Studio and other clients can show how to connect to it. It returns whether the server is enabled (and why not), its endpoint path, whether `@mastra/mcp` is installed, the toolsets it serves, read-only mode, and whether it's open or protected by `server.auth` (with the provider name). It needs the `mcp:read` permission and never returns agent, workflow, or tool ids or auth configuration. ([#29932](https://github.com/mastra-ai/mastra/pull/29932))
+
+- Added OAuth discovery to the built-in MCP server. When `server.auth` is configured, MCP clients that get a `401` from `/api/mcp` now receive a `WWW-Authenticate` header pointing at protected-resource metadata served at `/.well-known/oauth-protected-resource`, so they can discover where to sign in. The challenge, the metadata routes, and the audience check below only apply to `/api/mcp`. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+  Set `server.mcp.oauth.resource` to the public URL of the endpoint to also reject tokens issued for a different API:
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      auth: new MastraJwtAuth({
+        jwksUri: 'https://auth.example.com/.well-known/jwks.json',
+        issuer: 'https://auth.example.com/',
+      }),
+      mcp: { oauth: { resource: 'https://my-app.example.com/api/mcp' } },
+    },
+  });
+  ```
+
+  Auth providers that can't check the audience, such as `SimpleAuth` API keys, are still accepted, and a warning is logged at startup. Set `requireAudience: true` to reject them on `/api/mcp`, including inside `CompositeAuth`:
+
+  ```ts
+  mcp: { oauth: { resource: 'https://my-app.example.com/api/mcp', requireAudience: true } },
+  ```
+
+  See the [built-in MCP server docs](https://mastra.ai/docs/server/mcp#oauth-discovery).
+
+- Added a built-in MCP server. MCP clients such as Claude Code, Cursor, and the MCP Inspector can now call your agents, workflows, and tools at `/api/mcp` without defining an `MCPServer`. Every call goes through the matching HTTP route, so validation, auth, RBAC, FGA, and thread or run ownership apply exactly as they do over the HTTP API. ([#29929](https://github.com/mastra-ai/mastra/pull/29929))
+
+  The built-in server needs `@mastra/mcp`, which is an optional peer dependency of `@mastra/server`. Install it to enable the endpoint:
+
+  ```bash
+  npm install @mastra/mcp
+  ```
+
+  Without it, everything else keeps working and `/api/mcp` answers with HTTP 501 and a message that says to install the package.
+
+  The endpoint is served under `mastra dev`, and in production only when `server.auth` is configured. **Apps that already configure `server.auth` get `/api/mcp` by default after upgrading.** To opt out, set `server.mcp.enabled` to `false`:
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      auth,
+      mcp: { enabled: false },
+    },
+  });
+  ```
+
+  The endpoint accepts only `Authorization: Bearer` credentials. Connecting needs the `mcp:read` permission, and seeing or calling tools needs `mcp:execute`. These are the same permission names that guard the routes of `MCPServer` instances you register, so a role granted them for your own MCP servers can also use the built-in one. Each call still needs the permission of its backing route, such as `agents:execute`.
+
+  ```bash
+  claude mcp add --transport http mastra http://localhost:4111/api/mcp
+  ```
+
+  Configure it with `server.mcp`. `include` and `exclude` match a primitive's `id` or the key it is registered under:
+
+  ```ts
+  export const mastra = new Mastra({
+    server: {
+      mcp: {
+        featured: { agents: ['support-agent'] },
+        exclude: { tools: ['delete-account'] },
+      },
+    },
+  });
+  ```
+
+  See the [built-in MCP server docs](https://mastra.ai/docs/server/mcp).
+
+- Added memory, observability, and agent builder tools to the built-in MCP server at `/api/mcp`. MCP clients such as Claude Code can now read and manage threads and Observational Memory, query traces, logs, metrics, scores, and feedback, and create stored agents they can call right away with `call_agent`. ([#29931](https://github.com/mastra-ai/mastra/pull/29931))
+
+  **New toolsets** (on by default, each shown only when the server supports it):
+
+  - `memory`: threads, messages, memory search, and Observational Memory. `get_observations` takes `waitForPending: true` to wait for Observational Memory to finish processing the latest messages, for example right after `call_agent`. These tools use the same ownership checks as the HTTP memory routes. With `mapUserToResourceId`, each caller only sees their own resource.
+  - `observability` and `observability_analytics`: trace and span queries, logs, and `analyze_metrics` / `analyze_scores` / `analyze_feedback`. Tools match what the observability store supports, so stores without trace queries serve `list_traces` instead of `query_traces`. `get_trace` returns the light trace with every span id (`get_span` has a span's input, output, and attributes), and results stay small enough for MCP clients: lists return a note on how to page the rest, and a single item that is still too big has its long values cut.
+  - `stored_agents`: list allowed models and create, read, and update stored agents. New and updated agents are published by default. Unlike the HTTP route, `update_stored_agent` sets `autoPublish: true` unless you pass `false`, so edits made over MCP go live immediately. When the agent builder restricts models, the tools check the model the agent runs (`provider` and `name`, in each conditional variant, with other keys on `model` rejected), models named in `defaultOptions` such as `structuredOutput.model`, enabled fallback models (`modelList`), memory models, input and output processor models, and the default Observational Memory model. The HTTP routes don't apply this check. Anything that would run on a default the allowlist can't check, such as `observationalMemory: true` or a moderation processor without a model, is rejected until an allowed model is set.
+
+  **Upgrading:** if you don't set `server.mcp.toolsets`, these toolsets, including tools that write threads, messages, and stored agents, appear in your MCP server after upgrading. Callers still need the matching permissions. Set `toolsets` to keep the previous set (`['agents', 'workflows', 'tools']`), or set `readOnly: true` to drop write tools.
+
+  Every tool runs through its HTTP route with the same permission and ownership checks. Observability data isn't scoped per user, so anyone with `observability:read` can see all traces. Choose toolsets explicitly to leave it out:
+
+  ```ts
+  new Mastra({
+    server: { mcp: { toolsets: ['agents', 'workflows', 'tools', 'memory', 'stored_agents'] } },
+  });
+  ```
+
+- The auth middleware now stores the authenticated user on the request context, normalized to the `MastraUser` shape by the auth provider's `toMastraUser()`. When an RBAC provider is configured and the provider's user has no role, the primary RBAC role is used. ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+  ```ts
+  import { MASTRA_NORMALIZED_USER_KEY } from '@mastra/core/request-context';
+
+  const user = requestContext.get(MASTRA_NORMALIZED_USER_KEY);
+  // { id: 'user-123', name: 'Ada', email: 'ada@example.com', role: 'admin' }
+  ```
+
+  `@mastra/server` now requires `@mastra/core` 1.83.0 or later.
+
+- Added `authorizeRoute`, `checkRouteRBAC` and `dispatchRoute` to `@mastra/server/server-adapter`. Custom server adapters can now run the same RBAC and fine-grained authorization checks as the built-in adapters with one call, and server code can invoke a built-in route in-process with the same authorization, validation and error responses as an HTTP request to that route. ([#29928](https://github.com/mastra-ai/mastra/pull/29928))
+
+  `dispatchRoute` reuses the user already authenticated into the request context and applies your `server.auth` `rules`, `authorize` and `authorizeUser` hooks to the dispatched route's own path, then schema validation, RBAC, fine-grained authorization and the route handler. It never allows more than the HTTP request would: with auth configured it needs an authenticated user unless the path is declared `public`, it rejects path params a URL could not carry (empty, missing, `.` or `..`), and path params always take precedence over same-named body or query fields.
+
+  ```ts
+  import { SERVER_ROUTES, dispatchRoute } from '@mastra/server/server-adapter';
+
+  const route = SERVER_ROUTES.find(r => r.method === 'POST' && r.path === '/tools/:toolId/execute')!;
+  const outcome = await dispatchRoute(
+    route,
+    { pathParams: { toolId: 'weather' }, body: { data: { city: 'Paris' } } },
+    { mastra, requestContext, abortSignal, request },
+  );
+  if (!outcome.ok) console.log(outcome.status, outcome.body); // e.g. 403 { error: 'Forbidden', ... }
+  ```
+
+  Rules are read against the path the route is served under, and the checks are those of the server adapter that served the request the request context came from, even when several adapters serve the same `Mastra` instance. Outside a request, the only adapter serving the instance is used, or the one serving `routePrefix` when set; `dispatchRoute` refuses rather than pick between several. Adapters that don't extend `MastraServer` can call the new `registerDispatchAdapter` to say where they serve routes, and bind the handle it returns to each request context with `bindDispatchAdapter`.
+
+  The built-in adapters still run route permission checks through `checkRoutePermission`, so a subclass that overrides it keeps working, and the override now also applies to routes run with `dispatchRoute`.
+
+### Patch Changes
+
+- Fixed `GET /api/tools` dropping tools that FGA allows when a tool is registered under a key other than its `id` (for example `tools: { deleteAccountTool }` with `id: 'delete-account'`). FGA still checks the tool by its `id`, as `POST /api/tools/:toolId/execute` does. ([#29929](https://github.com/mastra-ai/mastra/pull/29929))
+
+  If your FGA policies identify tools by the key they are registered under, update them to use the tool's `id`. Until then, those tools are left out of the list.
+
+- Fixed stored agents loaded by several requests at the same time sometimes being treated as code-defined agents. Those copies skipped the stored-agent visibility check, so another user could briefly read or run a private stored agent right after it was created, edited or the server started. ([#29927](https://github.com/mastra-ai/mastra/pull/29927))
+
+- Generate JSON Schema for OpenAPI request parameters and bodies from their accepted inputs, while keeping response schemas based on emitted outputs. Zod v4 schemas with defaults or transformations now expose the correct input/output representations. ([#30187](https://github.com/mastra-ai/mastra/pull/30187))
+
+- Fixed private stored agents being visible to and usable by other users outside `/api/stored/agents`. With auth enabled, the rules from `/api/stored/agents` now apply everywhere an agent is looked up. Admins, owners, users granted access to a specific agent, code-defined agents and setups without auth are unaffected. ([#29927](https://github.com/mastra-ai/mastra/pull/29927))
+
+  **Agent routes**
+
+  - `GET /api/agents` only lists the stored agents you own, public ones, and older agents without an owner.
+  - Every route that looks up an agent by id returns 404 for another user's private stored agent, the same as for a missing agent.
+  - The `/api/memory/*` routes answer for another user's private stored agent exactly as for an agent that doesn't exist. Where a missing agent falls back to Mastra's storage (for example `GET /api/memory/config` returns `{ config: null }`), a hidden one does too, and never reaches the agent's own memory.
+  - Agent version routes (`/api/stored/agents/:agentId/versions/*`) follow the same rules. Reading versions needs read access; creating, activating, restoring or deleting them needs edit access.
+  - Changing or resetting a stored agent's model at runtime (`POST /api/agents/:agentId/model` and `/model/reset`) now needs edit access, because the change applies to everyone using the agent. Before, anyone who could run a public stored agent could swap its model.
+
+  **Lists, workspaces and schedules**
+
+  - Lists that search across agents (for example tools, workspaces and processor details) skip agents you can't see.
+  - The `/api/workspaces/:workspaceId/*` routes treat a private stored agent's workspace as missing for other users. A deleted stored agent's workspace stays hidden, even when its workspace factory registers it after the delete.
+  - Agent schedules follow the visibility of the agent they run. `GET /api/schedules` hides schedules of stored agents you can't see, and reading, updating, pausing, resuming, firing or deleting one of them returns 404. Schedules of a deleted agent are only shown to admins.
+
+  **Cloning**
+
+  `POST /api/agents/:agentId/clone` now makes the caller the owner of the clone and keeps it private, like `POST /api/stored/agents`. The body `authorId` is ignored when auth is enabled, and a signed-in user without an id gets 403.
+
+  ```ts
+  // Before: alice clones her private agent; the clone has no owner and is public
+  await fetch('/api/agents/alice-private/clone', { method: 'POST', body: JSON.stringify({ newId: 'copy' }) });
+  // → { id: 'copy', authorId: null }
+
+  // Before: a body authorId assigns the clone to another user
+  await fetch('/api/agents/shared/clone', {
+    method: 'POST',
+    body: JSON.stringify({ newId: 'copy', authorId: 'alice' }),
+  });
+  // → { id: 'copy', authorId: 'alice' }
+
+  // After: the caller always owns the clone and it stays private
+  // → { id: 'copy', authorId: '<caller>', visibility: 'private' }
+  ```
+
+  If other users relied on calling someone else's private stored agent, the owner needs to make that agent public.
+
+- Updated dependencies [[`4fcc168`](https://github.com/mastra-ai/mastra/commit/4fcc168fa1b65b77e622a3d6d7a88041cd3d0843), [`2770567`](https://github.com/mastra-ai/mastra/commit/27705673f2d33b5094a25cfb538d87d81ad9f2c8), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`4ba2bde`](https://github.com/mastra-ai/mastra/commit/4ba2bdef8973889c664c14ff1e221016c94eb3f4), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`e58a7d5`](https://github.com/mastra-ai/mastra/commit/e58a7d5cd68b8b7b4fc34051eb5593bbbee63f01), [`5ff479a`](https://github.com/mastra-ai/mastra/commit/5ff479a34b6b0151da2699a347f8e680b8d558ae), [`392c7b6`](https://github.com/mastra-ai/mastra/commit/392c7b69d51e19c38eea64098b72567592479cc8), [`834b0d2`](https://github.com/mastra-ai/mastra/commit/834b0d282822d0cc91b73f47c4e546d684c1ede3), [`5251e71`](https://github.com/mastra-ai/mastra/commit/5251e7199e71278ccfde7ca2d33320b3ea681731), [`c0d3bfd`](https://github.com/mastra-ai/mastra/commit/c0d3bfdc43d5c9ded75b7373e0ac943c567e2781), [`0b24f9c`](https://github.com/mastra-ai/mastra/commit/0b24f9cdb0b0835289acbc860c4bb29934845534)]:
+  - @mastra/core@1.83.0-alpha.13
+  - @mastra/mcp@2.9.0-alpha.5
+
 ## 1.83.0-alpha.12
 
 ### Minor Changes
