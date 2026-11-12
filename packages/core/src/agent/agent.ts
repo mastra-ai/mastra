@@ -9229,6 +9229,14 @@ export class Agent<
         resourceId,
       }) ||
       globalThis.crypto.randomUUID();
+
+    // Admit the run before any of its state is set up. A refused run must not open a span
+    // or consume the output processors a resume is holding, or the retry it is told to make
+    // would start without them.
+    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
+      resuming: Boolean(resumeContext?.claim),
+    });
+
     const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
     this.#suspendedRunOutputProcessors.delete(runId);
     if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
@@ -9361,10 +9369,6 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
-
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
-      resuming: Boolean(resumeContext?.claim),
-    });
 
     // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
     // starts the new run on top of the old frames: a reader replaying from the start would

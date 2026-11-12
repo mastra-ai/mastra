@@ -4,7 +4,9 @@
  * on an id another run already holds is refused instead of taking that run over.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
@@ -12,6 +14,8 @@ import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-sc
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, RUN_RECORD_ADMISSION_TIMEOUT_MS } from '../constants';
@@ -58,6 +62,54 @@ describe('run id ownership', () => {
   };
 
   const resource = (id: string) => new RequestContext([[MASTRA_RESOURCE_ID_KEY, id]]);
+
+  // An agent whose first model call asks for a tool that needs approval, so the run
+  // suspends and can be resumed (and refused a resume) with a caller-supplied run id.
+  const makeApprovalAgent = () => {
+    const approveTool = createTool({
+      id: 'needs_approval',
+      description: 'Runs only after a caller approves it.',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ approved: true }),
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        const approved = JSON.stringify(prompt).includes('approved');
+        const chunks = approved
+          ? [
+              { type: 'text-start', id: 't-1' },
+              { type: 'text-delta', id: 't-1', delta: 'Done.' },
+              { type: 'text-end', id: 't-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]
+          : [
+              { type: 'tool-call', toolCallId: 'approval-tc', toolName: 'needsApproval', input: '{}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'approval-resp', modelId: 'mock-model-id', timestamp: new Date(0) },
+            ...chunks,
+          ] as any),
+        };
+      },
+    });
+    return new Agent({
+      id: 'approval-agent',
+      name: 'approval-agent',
+      instructions: 'Call the tool.',
+      model,
+      tools: { needsApproval: approveTool },
+    });
+  };
 
   it('refuses a runId another resource is already running', async () => {
     const pubsub = new RecordingPubSub();
@@ -252,5 +304,82 @@ describe('run id ownership', () => {
         agent.stream('Say hello.', { runId: 'slow-claimed-run', requestContext: resource('tenant-b') }),
       ).rejects.toMatchObject(RUN_ID_CLAIMED);
     });
+
+    // A refused run must leave no half-started trace: the run span is opened only once
+    // the run is admitted, so a refusal opens none.
+    it('opens no run span when a run is refused', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      vi.spyOn(cache, 'get').mockRejectedValue(new Error('Socket closed unexpectedly'));
+
+      const opened: string[] = [];
+      const observabilityUtils = await import('../../../observability/utils');
+      vi.spyOn(observabilityUtils, 'getOrCreateSpan').mockImplementation((opts: any) => {
+        opened.push(opts.type);
+        return undefined;
+      });
+
+      await expect(
+        agent.stream('Say hello.', { runId: 'refused-span-run', requestContext: resource('tenant-a') }),
+      ).rejects.toMatchObject(RECORD_UNAVAILABLE);
+
+      expect(opened).not.toContain('agent_run');
+    });
+
+    // A refusal tells the caller to retry, so the retry must still resume with the output
+    // processors the suspended run was holding.
+    it('keeps the output processors a refused resume is holding, so the retry still gets them', async () => {
+      const retained = { id: 'retained-processor', processOutputResult: async ({ messages }: any) => messages };
+      const agent = makeApprovalAgent();
+      const cache = new InMemoryServerCache();
+      new Mastra({
+        agents: { agent },
+        pubsub: new RecordingPubSub(),
+        cache,
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      const stream = await agent.stream('Approve it.', {
+        runId: 'retained-run',
+        requireToolApproval: true,
+        outputProcessors: [retained],
+        requestContext: resource('tenant-a'),
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const get = cache.get.bind(cache);
+      let cacheDown = true;
+      vi.spyOn(cache, 'get').mockImplementation(async (key: string) => {
+        if (cacheDown && key.includes('agent.run.')) throw new Error('Socket closed unexpectedly');
+        return get(key);
+      });
+
+      await expect(
+        agent.approveToolCall({ runId: 'retained-run', toolCallId, requestContext: resource('tenant-a') }),
+      ).rejects.toMatchObject(RECORD_UNAVAILABLE);
+
+      const overridesSeen: unknown[] = [];
+      const original = (agent as any).listResolvedOutputProcessors.bind(agent);
+      vi.spyOn(agent as any, 'listResolvedOutputProcessors').mockImplementation(async (rc: any, overrides: any) => {
+        overridesSeen.push(overrides);
+        return original(rc, overrides);
+      });
+
+      cacheDown = false;
+      const resumed = await agent.approveToolCall({
+        runId: 'retained-run',
+        toolCallId,
+        requestContext: resource('tenant-a'),
+      });
+      await resumed.consumeStream();
+
+      expect(overridesSeen.some(overrides => Array.isArray(overrides) && overrides.includes(retained))).toBe(true);
+    }, 30000);
   });
 });
