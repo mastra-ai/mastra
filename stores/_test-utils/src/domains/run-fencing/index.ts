@@ -10,7 +10,7 @@ import { isRunFenceConflictError, setRunFenceContext } from '@mastra/core/storag
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from '../memory/data';
 import { createSummaryListingTests } from './summary-listing';
 
@@ -108,6 +108,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
       expect(result.acquired).toBe(true);
       return { runId, ownerId, generation: result.record!.generation };
     };
+    /** Waits until the lease of `runId` reads as no longer live. */
+    const untilLapsed = (runId: string) =>
+      vi.waitFor(async () => expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false), {
+        timeout: 5_000,
+        interval: 20,
+      });
 
     describe('ownership', () => {
       it("claims an unowned run at a generation seeded from the store's clock", async ctx => {
@@ -234,25 +240,22 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const fenceA = await claimed(runId, 'owner-a');
 
         expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: 1 })).renewed).toBe(true);
-        await sleep(SHORT_LEASE_MS * 3);
+        await untilLapsed(runId);
         expect(await workflows.getRunOwnership({ runId })).toMatchObject({
           generation: fenceA.generation,
           ownerId: 'owner-a',
-          live: false,
         });
 
         // Not forced, so this only succeeds because the lease is no longer live.
         const fenceB = await claimed(runId, 'owner-b');
         expect(fenceB.generation).toBe(fenceA.generation + 1);
 
+        // The refused late renew leaves B's full lease in place.
         const late = await workflows.renewRunOwnership({ ...fenceA, leaseMs: 1 });
         expect(late.renewed).toBe(false);
-        await sleep(SHORT_LEASE_MS * 3);
-        expect(await workflows.getRunOwnership({ runId })).toMatchObject({
-          generation: fenceB.generation,
-          ownerId: 'owner-b',
-          live: true,
-        });
+        const afterLate = await workflows.getRunOwnership({ runId });
+        expect(afterLate).toMatchObject({ generation: fenceB.generation, ownerId: 'owner-b', live: true });
+        expect(afterLate!.leaseExpiresAt!.getTime()).toBeGreaterThan(Date.now() + LEASE_MS / 2);
       });
 
       it('release clears the lease and keeps the generation and owner', async ctx => {
@@ -290,10 +293,10 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const expired = await workflows.claimRunOwnership({
           runId: expiredRunId,
           ownerId: 'owner-expired',
-          leaseMs: SHORT_LEASE_MS,
+          leaseMs: 1,
         });
         expect(expired.acquired).toBe(true);
-        await sleep(SHORT_LEASE_MS * 3);
+        await untilLapsed(expiredRunId);
 
         // More ids than the largest chunk an adapter reads at once (MongoDB's 1,000), with claimed
         // runs at the start, in the middle and at the end.
@@ -302,27 +305,12 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         const records = await workflows.getRunOwnerships({ runIds });
 
         expect([...records.keys()].sort()).toEqual([live.runId, released.runId, expiredRunId].sort());
-        expect(records.get(live.runId)).toMatchObject({
-          runId: live.runId,
-          generation: live.generation,
-          ownerId: 'owner-live',
-          live: true,
-        });
-        expect(records.get(live.runId)!.leaseExpiresAt).toBeInstanceOf(Date);
-        expect(records.get(released.runId)).toMatchObject({
-          runId: released.runId,
-          generation: released.generation,
-          ownerId: 'owner-released',
-          leaseExpiresAt: null,
-          live: false,
-        });
-        expect(records.get(expiredRunId)).toMatchObject({
-          runId: expiredRunId,
-          generation: expired.record!.generation,
-          ownerId: 'owner-expired',
-          live: false,
-        });
-        expect(records.get(expiredRunId)!.leaseExpiresAt).toBeInstanceOf(Date);
+        expect([live.runId, released.runId, expiredRunId].map(runId => records.get(runId)?.live)).toEqual([
+          true,
+          false,
+          false,
+        ]);
+        // Every field as the single-run read returns it.
         for (const runId of [live.runId, released.runId, expiredRunId]) {
           expect(records.get(runId)).toEqual(await workflows.getRunOwnership({ runId }));
         }
