@@ -38,9 +38,9 @@ With the setting on, a command the agent starts with `execute_command` and `back
 - a kill when the run that started the command is aborted
 - the sandbox shutting down
 
-The `subagent` tool can run as a background task. It runs until it finishes, without a timeout or retries. When it ends, the agent gets a notification, and the result is in the original tool call. Completions of other background tasks wake an idle agent on the current thread the same way. Tasks a crash or a shutdown interrupted are reported as interrupted, and those notifications are saved to the thread without starting a turn.
+The `subagent` tool can run as a background task. It runs until it finishes, without a timeout or retries. When it ends, the agent gets a notification, and the result is in the original tool call. Completions of other background tasks wake an idle agent on the current thread the same way. Notifications for tasks the user cancelled, and for tasks a crash or a shutdown interrupted, are saved to the thread without starting a turn.
 
-`createMastraCode()` returns `backgroundProcesses` so a host can show and stop running background shells. `read` returns nothing once the shell has exited. Killing a shell through it posts no exit notification:
+`createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it posts no exit notification:
 
 ```ts
 const { backgroundProcesses } = await createMastraCode();
@@ -52,7 +52,7 @@ await backgroundProcesses?.kill(pid);
 Limits:
 
 - Only the default workspace reports exits. A workspace passed as `config.workspace` does not.
-- A shell started by a subagent, plain or forked, reports to the parent thread. Mastra Code checks the thread when the shell starts: if the user has left the parent thread by then, the agent is not told when the shell exits.
+- A shell started by a subagent, plain or forked, reports to the parent thread. Mastra Code checks the thread when the shell starts: if the user has left the parent thread by then, the agent is not told when the shell exits. For a forked subagent, the exit is not reported to its cloned thread either.
 - Notifications that arrive before any session exists, such as tasks a crash left unfinished, wait in memory until a session starts. At most 100 wait at a time, and the oldest are dropped first. They are lost if the process exits first.
 
 ### Plugin background execution

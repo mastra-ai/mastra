@@ -18,8 +18,7 @@ interface Launch {
   command?: string;
   description?: string;
   sandbox?: WorkspaceSandbox;
-  /** The parent thread, for shells started by subagents. Wins over the thread in the exit metadata. */
-  parentTarget?: BackgroundNoticeTarget;
+  route: Route;
 }
 
 interface ToolContextLike {
@@ -36,9 +35,9 @@ export interface BackgroundProcessNotices {
   /** `execute_command` `backgroundProcesses.onExit` callback. */
   onExit(meta: BackgroundProcessExitMeta): Promise<void>;
   /**
-   * Reads a running background process's output without releasing it, so the
-   * agent can still read it with `get_process_output`. Undefined once the
-   * process has exited.
+   * Reads a background process's output without releasing it, so the agent
+   * can still read it with `get_process_output`. An exited process stays
+   * readable until it is released; undefined after that.
    */
   read(pid: string): Promise<ProcessHandle | undefined>;
   /** Kills a background process for the user, without posting an exit notice. False when it was not running. */
@@ -64,28 +63,41 @@ export function parseBackgroundProcessPid(result: unknown): string | undefined {
   return typeof result === 'string' ? result.match(BACKGROUND_PROCESS_RESULT)?.[1] : undefined;
 }
 
+/** Where a shell's exit is reported, decided when the shell starts. */
+type Route =
+  /** The run's own thread, from the exit metadata. */
+  | { kind: 'own' }
+  /** A subagent's shell: the parent thread, or nobody when it is unknown. */
+  | { kind: 'parent'; target?: BackgroundNoticeTarget };
+
 /**
  * Subagents run on a thread of their own: none for a plain subagent, a cloned
- * thread for a forked one. Their shells should report to the parent thread.
- * The subagent's controller context keeps the parent run's `isThreadActive`,
- * which says whether the session is still on the parent thread. Only then is
- * the session's current thread the parent's. This is checked when the shell
- * starts, so a subagent that starts a shell after the user left the parent
- * thread gets no agent notice.
+ * thread for a forked one. Their shells report to the parent thread. The
+ * subagent's controller context keeps the parent run's `isThreadActive`, which
+ * says whether the session is still on the parent thread; only then is the
+ * session's current thread the parent's. A forked subagent whose parent thread
+ * the user has left is recognized by its thread's `forkedSubagent` metadata and
+ * gets no agent notice, rather than one on the hidden cloned thread.
  */
-async function resolveParentThread(
+async function resolveRoute(
   context: ToolContextLike | undefined,
   getSession: (sessionId: string) => Promise<Session<any> | undefined>,
-): Promise<BackgroundNoticeTarget | undefined> {
+): Promise<Route> {
   const controller = context?.requestContext?.get?.('controller') as AgentControllerRequestContext | undefined;
-  if (!controller?.sessionId || !controller.isThreadActive) return undefined;
+  if (!controller?.sessionId || !controller.isThreadActive) return { kind: 'own' };
   const session = await getSession(controller.sessionId);
-  if (!session) return undefined;
+  if (!session) return { kind: 'own' };
   // Read the current thread and the parent check together, after the await,
   // so a thread switch cannot fall between them.
   const currentThreadId = session.thread.getId();
-  if (!currentThreadId || currentThreadId === controller.threadId || !controller.isThreadActive()) return undefined;
-  return { resourceId: session.identity.getResourceId(), threadId: currentThreadId };
+  if (currentThreadId && currentThreadId !== controller.threadId && controller.isThreadActive()) {
+    return { kind: 'parent', target: { resourceId: session.identity.getResourceId(), threadId: currentThreadId } };
+  }
+  if (!controller.threadId || currentThreadId === controller.threadId) return { kind: 'own' };
+  // The session is on another thread: either the user left this run's thread,
+  // or this is a fork whose parent thread the user left.
+  const thread = await session.thread.getById({ threadId: controller.threadId });
+  return thread?.metadata?.forkedSubagent === true ? { kind: 'parent' } : { kind: 'own' };
 }
 
 export function createBackgroundProcessNotices(options: {
@@ -117,7 +129,7 @@ export function createBackgroundProcessNotices(options: {
         command: stringInput(input, 'command'),
         description: stringInput(input, 'description'),
         sandbox: toolContext?.workspace?.sandbox,
-        parentTarget: await resolveParentThread(toolContext, options.getSession).catch(() => undefined),
+        route: await resolveRoute(toolContext, options.getSession).catch((): Route => ({ kind: 'own' })),
       });
     },
 
@@ -137,6 +149,8 @@ export function createBackgroundProcessNotices(options: {
         if (toolCallId) launches.delete(toolCallId);
         return;
       }
+      // A command that ends at once can exit before its call returns; `onExit` already recorded it.
+      if (toolCallId && !launches.has(toolCallId)) return;
       const sandbox = toolContext?.workspace?.sandbox;
       if (sandbox) sandboxes.set(pid, sandbox);
     },
@@ -144,13 +158,14 @@ export function createBackgroundProcessNotices(options: {
     async onExit(meta) {
       const launch = meta.toolCallId ? launches.get(meta.toolCallId) : undefined;
       if (meta.toolCallId) launches.delete(meta.toolCallId);
-      sandboxes.delete(meta.pid);
+      // Kept after the exit: the output stays readable until it is released.
+      if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
       const killedOnPurpose = killed.delete(meta.pid);
       const shuttingDown = SANDBOX_TEARDOWN_STATUSES.has(String(launch?.sandbox?.status));
       const wasKilled = killedOnPurpose || meta.killedByAbort === true || shuttingDown;
-      const target =
-        launch?.parentTarget ??
-        (meta.threadId && meta.resourceId ? { resourceId: meta.resourceId, threadId: meta.threadId } : undefined);
+      const ownTarget =
+        meta.threadId && meta.resourceId ? { resourceId: meta.resourceId, threadId: meta.threadId } : undefined;
+      const target = launch?.route.kind === 'parent' ? launch.route.target : ownTarget;
       const eventId = `background-process:${meta.pid}:${meta.toolCallId ?? meta.runId ?? 'exit'}`;
 
       try {
@@ -211,7 +226,8 @@ export function createBackgroundProcessNotices(options: {
 
     async read(pid) {
       const handle = await sandboxes.get(pid)?.processes?.get(pid, { release: false });
-      if (handle?.exitCode !== undefined) sandboxes.delete(pid);
+      // Gone once released (read with `get_process_output` after it exited, or killed).
+      if (!handle) sandboxes.delete(pid);
       return handle;
     },
 
@@ -219,12 +235,18 @@ export function createBackgroundProcessNotices(options: {
       const sandbox = sandboxes.get(pid);
       if (!sandbox?.processes) return false;
       killed.add(pid);
+      let result: boolean;
       try {
-        return await sandbox.processes.kill(pid);
-      } finally {
+        result = await sandbox.processes.kill(pid);
+      } catch (error) {
+        // The process may still be running; keep it reachable for another try.
         killed.delete(pid);
-        sandboxes.delete(pid);
+        throw error;
       }
+      killed.delete(pid);
+      // Killed, or not found: either way the handle is released.
+      sandboxes.delete(pid);
+      return result;
     },
   };
 }

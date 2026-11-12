@@ -45,6 +45,9 @@ export const MC_TOOLS = {
   AGENT_SIGNAL_SEND: 'agent_signal_send',
 } as const;
 
+/** The AgentController's built-in tool that delegates a task to a subagent. */
+export const SUBAGENT_TOOL_NAME = 'subagent';
+
 /**
  * Workspace tool name remapping config.
  * Maps core workspace tool constants to mastracode's tool names.

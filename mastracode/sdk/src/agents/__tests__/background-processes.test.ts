@@ -152,53 +152,110 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered).toEqual([]);
   });
 
-  describe('shells started by a subagent', () => {
-    function subagentContext(isParentThreadActive: boolean, forkThreadId?: string) {
+  it('keeps an exited shell readable until its output is released', async () => {
+    const { notices, start, tools } = await setup();
+
+    const { pid, exit } = await start(node("console.log('DONE_OUTPUT'); process.exit(2)"));
+    await exit;
+
+    expect(await notices.read(pid)).toMatchObject({ exitCode: 2, stdout: expect.stringContaining('DONE_OUTPUT') });
+    expect(await notices.read(pid)).toMatchObject({ exitCode: 2 });
+    // The agent reading it releases it, as `get_process_output` does after an exit.
+    await tools['get_process_output'].execute({ pid }, { workspace, agent: { toolCallId: 'read-call' } });
+    expect(await notices.read(pid)).toBeUndefined();
+  });
+
+  it('can retry a kill that failed', async () => {
+    const { notices, start } = await setup();
+
+    const { pid, exit } = await start(node('setInterval(() => {}, 1000)'));
+    vi.spyOn(workspace!.sandbox!.processes!, 'kill').mockRejectedValueOnce(new Error('kill not permitted'));
+    await expect(notices.kill(pid)).rejects.toThrow('kill not permitted');
+
+    expect(await notices.kill(pid)).toBe(true);
+    await exit;
+  });
+
+  describe('which thread a shell reports to', () => {
+    /**
+     * The controller context of the run that starts the shell. A plain subagent
+     * has no thread, a forked one has its cloned thread, and both keep the
+     * parent run's `isThreadActive`.
+     */
+    function runContext({
+      controllerThreadId,
+      isThreadActive,
+    }: {
+      controllerThreadId: string | null;
+      isThreadActive: boolean;
+    }) {
       const requestContext = new RequestContext();
-      // A non-forked subagent's controller context has no thread of its own; a
-      // forked one points at the cloned thread. Both keep the parent's `isThreadActive`.
       requestContext.set('controller', {
-        threadId: forkThreadId ?? null,
-        resourceId: forkThreadId ? 'resource-1' : '',
+        threadId: controllerThreadId,
+        resourceId: controllerThreadId ? 'resource-1' : '',
         sessionId: 'session-1',
-        isThreadActive: () => isParentThreadActive,
+        isThreadActive: () => isThreadActive,
       });
-      const agent = forkThreadId
-        ? { toolCallId: 'fork-call', threadId: forkThreadId, resourceId: 'resource-1' }
+      const agent = controllerThreadId
+        ? { toolCallId: 'run-call', threadId: controllerThreadId, resourceId: 'resource-1' }
         : { toolCallId: 'sub-call' };
       return { agent, requestContext };
     }
-    const session = {
-      thread: { getId: () => 'parent-thread' },
-      identity: { getResourceId: () => 'resource-1' },
-    } as unknown as Session<any>;
-
-    it('notify the parent thread', async () => {
-      const { delivered, start } = await setup({ 'session-1': session });
-
-      const { exit } = await start(node('process.exit(0)'), subagentContext(true));
+    function sessionOn(currentThreadId: string) {
+      return {
+        thread: {
+          getId: () => currentThreadId,
+          getById: async ({ threadId }: { threadId: string }) =>
+            threadId === 'fork-thread'
+              ? { id: threadId, metadata: { forkedSubagent: true, parentThreadId: 'parent-thread' } }
+              : { id: threadId, metadata: {} },
+        },
+        identity: { getResourceId: () => 'resource-1' },
+      } as unknown as Session<any>;
+    }
+    async function reportedThreads(currentThreadId: string, context: ReturnType<typeof runContext>) {
+      const { delivered, exits, start } = await setup({ 'session-1': sessionOn(currentThreadId) });
+      const { pid, exit } = await start(node('process.exit(0)'), context);
       await exit;
-
-      expect(delivered.map(notice => notice.target)).toEqual([{ resourceId: 'resource-1', threadId: 'parent-thread' }]);
-    });
-
-    it('notify the parent thread, not the cloned one, when the subagent is forked', async () => {
-      const { delivered, start } = await setup({ 'session-1': session });
-
-      const { exit } = await start(node('process.exit(0)'), subagentContext(true, 'fork-thread'));
-      await exit;
-
-      expect(delivered.map(notice => notice.target)).toEqual([{ resourceId: 'resource-1', threadId: 'parent-thread' }]);
-    });
-
-    it('notify nobody when the session already left the parent thread', async () => {
-      const { delivered, exits, start } = await setup({ 'session-1': session });
-
-      const { pid, exit } = await start(node('process.exit(0)'), subagentContext(false));
-      await exit;
-
+      // Anchor: the exit itself was seen, notice or not.
       expect(exits).toContainEqual(expect.objectContaining({ pid, killed: false }));
-      expect(delivered).toEqual([]);
+      return delivered.map(notice => notice.target.threadId);
+    }
+
+    it.each([
+      [
+        'a plain subagent, parent thread active',
+        'parent-thread',
+        { controllerThreadId: null, isThreadActive: true },
+        ['parent-thread'],
+      ],
+      [
+        'a forked subagent, parent thread active',
+        'parent-thread',
+        { controllerThreadId: 'fork-thread', isThreadActive: true },
+        ['parent-thread'],
+      ],
+      [
+        'a plain subagent after the user left the parent thread',
+        'other-thread',
+        { controllerThreadId: null, isThreadActive: false },
+        [],
+      ],
+      [
+        'a forked subagent after the user left the parent thread',
+        'other-thread',
+        { controllerThreadId: 'fork-thread', isThreadActive: false },
+        [],
+      ],
+      ['the parent agent itself', 'thread-1', { controllerThreadId: 'thread-1', isThreadActive: true }, ['thread-1']],
+      [
+        'the parent agent after the user switched threads',
+        'other-thread',
+        { controllerThreadId: 'thread-1', isThreadActive: false },
+        ['thread-1'],
+      ],
+    ] as const)('%s', async (_case, currentThreadId, run, expected) => {
+      expect(await reportedThreads(currentThreadId, runContext(run))).toEqual(expected);
     });
   });
 });

@@ -1,5 +1,6 @@
 import type { AgentControllerSubagent, Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
+import { SUBAGENT_TOOL_NAME } from '../tool-names.js';
 import type { BackgroundCompletionEvents, BackgroundTaskCompletionEvent } from './background-completion-events.js';
 
 interface BackgroundCompletionRouter<TState = unknown> {
@@ -116,7 +117,7 @@ function describeTask(
   task: BackgroundTask,
   subagents: readonly Pick<AgentControllerSubagent, 'id' | 'name'>[],
 ): { title: string; summary?: string; label: string } {
-  if (task.toolName === 'subagent') {
+  if (task.toolName === SUBAGENT_TOOL_NAME) {
     const agentType = typeof task.args?.agentType === 'string' ? task.args.agentType : undefined;
     const name = subagents.find(subagent => subagent.id === agentType)?.name ?? agentType ?? 'Subagent';
     const summary = typeof task.args?.task === 'string' ? summarize(task.args.task) : undefined;
@@ -160,11 +161,14 @@ export function createBackgroundCompletionCallbacks(
   events?: BackgroundCompletionEvents,
   options: BackgroundCompletionCallbackOptions = {},
 ): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed' | 'onTaskCancelled'> {
+  // The older `(getController, events)` shape stays accepted because this module
+  // is reachable through the package's public `./*` subpath export.
   const notices = typeof delivery === 'function' ? createBackgroundNoticeDelivery(delivery) : delivery;
 
   const deliver = async (task: BackgroundTask, status: TaskStatus) => {
     if (!task.resourceId || !task.threadId) return;
     const eventId = `background-task:${task.id}:${status}`;
+    const { title, summary, label } = describeTask(task, options.subagents ?? []);
     const event: BackgroundTaskCompletionEvent = {
       kind: 'task',
       id: eventId,
@@ -175,8 +179,9 @@ export function createBackgroundCompletionCallbacks(
       threadId: task.threadId,
       toolName: task.toolName,
       status,
+      title,
+      ...(summary ? { summary } : {}),
     };
-    const { title, summary, label } = describeTask(task, options.subagents ?? []);
     const interruption: Interruption | undefined =
       status === 'failed' && task.error?.message === RESTART_FAILURE_MESSAGE
         ? 'restart'
@@ -211,8 +216,9 @@ export function createBackgroundCompletionCallbacks(
             },
           },
         },
-        // Nothing is waiting on an interrupted task; the agent sees the notice on its next turn.
-        { wake: !interruption },
+        // Nothing is waiting on an interrupted task, and the user who cancelled a
+        // task already knows; the agent sees either notice on its next turn.
+        { wake: !interruption && status !== 'cancelled' },
       );
     } finally {
       events?.publish(event);

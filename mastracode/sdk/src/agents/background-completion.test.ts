@@ -85,7 +85,9 @@ describe('createBackgroundCompletionCallbacks', () => {
 
   it('names a background subagent by its definition and task', async () => {
     const { session, sendSignalToThread } = createSession();
-    const { callbacks } = createHarness(session);
+    const { callbacks, events } = createHarness(session);
+    const listener = vi.fn();
+    events.subscribe(listener);
 
     await callbacks.onTaskComplete?.(
       createTask('completed', {
@@ -98,6 +100,10 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(sendSignalToThread.mock.calls[0]?.[0]).toMatchObject({
       metadata: { backgroundCompletion: { title: 'Explore', summary: 'Find the auth middleware' } },
     });
+    // The TUI's activity list names the task from the event, as the card does from the metadata.
+    expect(listener).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'task', title: 'Explore', summary: 'Find the auth middleware' }),
+    );
   });
 
   it('wakes the agent when the task finishes on the thread the session is on', async () => {
@@ -110,6 +116,16 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: 'background-task:task-1:completed' }), {
       ifIdle: { behavior: 'wake' },
     });
+  });
+
+  it('saves the notice for a task the user cancelled without waking the agent', async () => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    const { callbacks } = createHarness(session);
+
+    await callbacks.onTaskCancelled?.(createTask('cancelled'));
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sentContents(sendSignalToThread)).toContain('Background mastra_expert call was cancelled.');
   });
 
   it('keeps a held notice when sending it fails, and sends it once on a later session', async () => {
@@ -147,6 +163,7 @@ describe('createBackgroundCompletionCallbacks', () => {
       threadId: 'thread-1',
       toolName: 'mastra_expert',
       status: 'completed',
+      title: 'mastra_expert',
     });
     expect(sendSignalToThread.mock.invocationCallOrder[0]).toBeLessThan(listener.mock.invocationCallOrder[0]!);
   });

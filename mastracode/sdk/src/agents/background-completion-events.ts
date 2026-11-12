@@ -8,6 +8,10 @@ export interface BackgroundTaskCompletionEvent {
   threadId: string;
   toolName: string;
   status: 'completed' | 'failed' | 'cancelled';
+  /** What people call the task: the subagent's name for subagents, else the tool name. */
+  title?: string;
+  /** The subagent's task, first line. */
+  summary?: string;
 }
 
 /** A background `execute_command` process exited. */
