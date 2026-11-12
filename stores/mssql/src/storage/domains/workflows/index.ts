@@ -52,16 +52,25 @@ const RUN_OWNER_COLUMNS = `[generation], [ownerId], [leaseExpiresAt], ${DB_NOW_M
 const RUN_OWNERSHIP_BATCH_SIZE = 500;
 
 /**
- * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status`, `timestamp`, and
- * for a nested run `parentWorkflow` with only its `workflowId` and `runId`. Only these paths are
- * read, so `context` is never sent. FOR JSON PATH leaves out NULL values, and with them
- * `parentWorkflow` when the run isn't nested.
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
+ * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty.
+ * Only these paths are read, so `context` is never sent. OPENJSON parses each snapshot once, and
+ * FOR JSON PATH leaves out NULL values. A snapshot that isn't valid JSON lists as `{}`, since
+ * OPENJSON would fail the whole listing on it. `TOP (1)` keeps a JSON array, which OPENJSON
+ * returns one row per element for, to one object.
  */
-const SUMMARY_SNAPSHOT_SQL = `(SELECT JSON_VALUE([snapshot], '$.status') AS [status],
-    TRY_CAST(JSON_VALUE([snapshot], '$.timestamp') AS BIGINT) AS [timestamp],
-    JSON_VALUE([snapshot], '$.parentWorkflow.workflowId') AS [parentWorkflow.workflowId],
-    JSON_VALUE([snapshot], '$.parentWorkflow.runId') AS [parentWorkflow.runId]
-  FOR JSON PATH, WITHOUT_ARRAY_WRAPPER)`;
+const SUMMARY_SNAPSHOT_SQL = `COALESCE(CASE WHEN ISJSON([snapshot]) = 1 THEN (
+    SELECT TOP (1) s.[status],
+      TRY_CAST(s.[timestamp] AS BIGINT) AS [timestamp],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[workflowId] END AS [parentWorkflow.workflowId],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[runId] END AS [parentWorkflow.runId]
+    FROM OPENJSON([snapshot]) WITH (
+      [status] NVARCHAR(MAX) '$.status',
+      [timestamp] NVARCHAR(64) '$.timestamp',
+      [workflowId] NVARCHAR(MAX) '$.parentWorkflow.workflowId',
+      [runId] NVARCHAR(MAX) '$.parentWorkflow.runId'
+    ) AS s
+    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END, '{}')`;
 
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   // The driver returns BIGINT columns as strings.
@@ -82,6 +91,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private needsConnect: boolean;
   private skipDefaultIndexes?: boolean;
   private indexes?: CreateIndexOptions[];
+  /** Set once the snapshot table is seen with a `resourceId` column, which is never dropped. */
+  #hasResourceIdColumn = false;
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
@@ -359,6 +370,15 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         error,
       );
     }
+  }
+
+  /** Whether the snapshot table has `resourceId`, which tables created before it existed lack. */
+  async #resourceIdColumnExists(): Promise<boolean> {
+    if (!this.#hasResourceIdColumn) {
+      this.#hasResourceIdColumn = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+    }
+
+    return this.#hasResourceIdColumn;
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -811,6 +831,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -836,8 +860,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
-        if (hasResourceId) {
+        if (await this.#resourceIdColumnExists()) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
@@ -876,11 +899,9 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
 
       let columns = '*';
       if (summary) {
-        // Legacy snapshot tables may lack resourceId.
-        const resourceIdColumn = (await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId'))
-          ? '[resourceId]'
-          : 'NULL AS [resourceId]';
-        columns = `[workflow_name], [run_id], ${resourceIdColumn}, ${SUMMARY_SNAPSHOT_SQL} AS [snapshot], [createdAt], [updatedAt]`;
+        // A table without resourceId lists without it, as `SELECT *` lists it.
+        const resourceIdColumn = (await this.#resourceIdColumnExists()) ? '[resourceId], ' : '';
+        columns = `[workflow_name], [run_id], ${resourceIdColumn}${SUMMARY_SNAPSHOT_SQL} AS [snapshot], [createdAt], [updatedAt]`;
       }
 
       let query = `SELECT ${columns} FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
