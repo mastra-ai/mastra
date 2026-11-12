@@ -496,6 +496,41 @@ describe('workflow recovery rule (#28712)', () => {
     expect(executions).toHaveLength(1);
   });
 
+  it('keeps one finish listener for an evented run restarted again before it finishes', async () => {
+    const storage = new InMemoryStore();
+    const inner = new EventEmitterPubSub();
+    // The workers never get the restarts, as when a broker holds them: the run never finishes.
+    const pubsub: PubSub = new Proxy(inner, {
+      get(target, prop) {
+        if (prop === 'publish') {
+          return (topic: string, event: Event, options?: { localOnly?: boolean }) =>
+            topic === 'workflows' && event.type === 'workflow.start'
+              ? Promise.resolve()
+              : target.publish(topic, event, options);
+        }
+
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub });
+    await b.startWorkers();
+    await persistActiveRun(storage, 'stuck');
+    const subscribe = vi.spyOn(inner, 'subscribe');
+    const unsubscribe = vi.spyOn(inner, 'unsubscribe');
+    const finishListeners = () =>
+      subscribe.mock.calls.filter(([topic]) => topic === 'workflows-finish').length -
+      unsubscribe.mock.calls.filter(([topic]) => topic === 'workflows-finish').length;
+
+    const workflow = b.getWorkflow('recovered-wf');
+    expect(await (await workflow.createRun({ runId: 'stuck' })).restartInBackground()).toBe(true);
+    // The liveness the first restart wrote lapses, so the run can be restarted again.
+    await sleep(700);
+    expect(await (await workflow.createRun({ runId: 'stuck' })).restartInBackground()).toBe(true);
+
+    expect(finishListeners()).toBe(1);
+  });
+
   it('does not keep shutdown waiting for a restarted evented run', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];

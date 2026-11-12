@@ -24,6 +24,8 @@ import { getStepId } from './workflow-event-processor/utils';
 
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
+  /** The outcome each detached restart's run settles to, by run ID, until that run settles. */
+  readonly #detachedSettles = new Map<string, Promise<unknown>>();
 
   constructor({
     mastra,
@@ -396,12 +398,32 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // run's lifecycle callbacks and trace span still get its outcome when it ends.
     if (params.detachAfterDispatch) {
       releaseTracking();
-      void resultPromise
-        .then(resultData => this.#settleExecution<TOutput>(params, resultData))
-        .then(
-          result => params.onDetachedSettled?.({ result }),
-          error => params.onDetachedSettled?.({ error }),
-        );
+      // One listener per run: a run restarted again before it finished shares the first listener's outcome,
+      // so restarts of a run that never finishes don't add one each.
+      let settled = this.#detachedSettles.get(params.runId) as Promise<TOutput> | undefined;
+      if (settled) {
+        stopWatchingLoss?.();
+        try {
+          await pubsub.unsubscribe('workflows-finish', finishCb);
+        } catch (error) {
+          this.mastra?.getLogger()?.error('Failed to unsubscribe from workflows-finish:', error);
+        }
+      } else {
+        const ownSettled = resultPromise.then(resultData => this.#settleExecution<TOutput>(params, resultData));
+        settled = ownSettled;
+        this.#detachedSettles.set(params.runId, ownSettled);
+        const forget = () => {
+          if (this.#detachedSettles.get(params.runId) === ownSettled) {
+            this.#detachedSettles.delete(params.runId);
+          }
+        };
+        void ownSettled.then(forget, forget);
+      }
+
+      void settled.then(
+        result => params.onDetachedSettled?.({ result }),
+        error => params.onDetachedSettled?.({ error }),
+      );
       return undefined as TOutput;
     }
 
