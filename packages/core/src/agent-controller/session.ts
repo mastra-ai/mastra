@@ -6115,7 +6115,6 @@ export class Session<TState = unknown> {
     const matches: Array<{ agent: Agent; runId: string; toolName: string }> = [];
     const perPage = 100;
     const maxPages = 10;
-    let scanComplete = true;
     scan: for (const agent of this.machinery.getAgents?.() ?? [this.machinery.getAgent()]) {
       if (typeof agent.listSuspendedRuns !== 'function') continue;
       for (let page = 0; page < maxPages; page++) {
@@ -6135,10 +6134,9 @@ export class Session<TState = unknown> {
           }
         }
         if ((page + 1) * perPage >= result.total) break;
-        if (page === maxPages - 1) scanComplete = false;
       }
     }
-    if (!scanComplete || matches.length !== 1) return;
+    if (matches.length !== 1) return;
     // Another request may have restored it while this one was reading storage.
     if (this.suspensions.resolveAddress({ toolCallId, runId })) return;
     const match = matches[0]!;
