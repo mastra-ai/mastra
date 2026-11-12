@@ -646,21 +646,23 @@ function backgroundWorkRoutes(options: SourceControlSessionRoutesOptions): ApiRo
         const access = await readableSession(loose(c));
         if ('response' in access) return access.response;
         const taskId = c.req.param('taskId');
-        const manager = options.controller?.getMastra()?.backgroundTaskManager;
-        // A task on another resource reads as missing, so its existence is not disclosed.
-        const task = await manager?.getTask(taskId);
-        if (!manager || !task || task.resourceId !== access.resourceId) {
-          return c.json({ error: 'Background task not found' }, 404);
-        }
+        const { controller } = options;
+        const manager = controller?.getMastra()?.backgroundTaskManager;
+        const notFound = () => c.json({ error: 'Background task not found' }, 404);
+        if (!controller || !manager) return notFound();
         try {
+          // Sessions share their Factory's or owner's resource, so only a task on one of this session's
+          // own threads is its to stop. Any other reads as missing, so its existence is not disclosed.
+          const task = await manager.getTask(taskId);
+          if (!task?.threadId || task.resourceId !== access.resourceId) return notFound();
+          const threads = await listFactorySessionThreads(controller, access.session, options.workItems);
+          if (!threads.some(thread => thread.id === task.threadId)) return notFound();
           await manager.cancel(taskId);
           const cancelled = await manager.getTask(taskId);
-          if (!cancelled) return c.json({ error: 'Background task not found' }, 404);
-          return c.json(cancelled);
+          return cancelled ? c.json(cancelled) : notFound();
         } catch (error) {
-          if (error instanceof Error && error.message.startsWith('Task not found')) {
-            return c.json({ error: 'Background task not found' }, 404);
-          }
+          // Deleted between the read above and the cancel.
+          if (error instanceof Error && error.message.startsWith('Task not found')) return notFound();
           return failed(loose(c), 'Failed to cancel a background task', access.session.sessionId, error);
         }
       },

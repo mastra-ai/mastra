@@ -1830,4 +1830,116 @@ describe('session background work', () => {
     expect(server.exitCode).toBeDefined();
     expect(own.exitCode).toBeUndefined();
   });
+
+  it("keeps a private session's background commands to its owner", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-private-background-work';
+    const row = await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-private-background-work',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const root = await mkdtemp(join(tmpdir(), 'factory-private-background-work-'));
+    const { sandbox } = getSessionSandbox(
+      row.id,
+      'rhys-group1/factory-gitlab-primary',
+      () => new LocalSandbox({ workingDirectory: root }),
+    );
+    onTestFinished(async () => {
+      evictSessionSandbox(row.id);
+      await sandbox.destroy?.();
+      await rm(root, { recursive: true, force: true });
+    });
+    await sandbox.start?.();
+    const server = await sandbox.processes!.spawn(`node -e "setInterval(() => {}, 1000)"`, {
+      metadata: { toolCallId: 'call-1', threadId: sessionId },
+    });
+    const viewers: Record<string, Viewer> = { owner: user, teammate: { workosId: 'user-2', organizationId: 'org-1' } };
+    const app = buildApp([sourceControl], seed, undefined, undefined, headers => viewers[headers.get('x-viewer')!]!);
+    const as = (viewer: string, path: string, init: RequestInit = {}) =>
+      app.request(`/web/user-sessions/${sessionId}/background/processes${path}`, {
+        ...init,
+        headers: { 'x-viewer': viewer },
+      });
+
+    expect((await as('teammate', '')).status).toBe(404);
+    expect((await as('teammate', `/${server.pid}/kill`, { method: 'POST' })).status).toBe(404);
+    expect(server.exitCode).toBeUndefined();
+    const listed = (await (await as('owner', '')).json()) as { processes: Array<{ pid: string }> };
+    expect(listed.processes.map(p => p.pid)).toEqual([server.pid]);
+  });
+
+  describe('cancelling a background task', () => {
+    type Task = { id: string; threadId: string; resourceId: string; status: string };
+
+    async function seedTasks() {
+      const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+      for (const sessionId of ['factory-tasks-a', 'factory-tasks-b']) {
+        await sourceControl.sessions.create({
+          sessionId,
+          projectRepositoryId: projectRepository.id,
+          orgId: 'org-1',
+          userId: 'user-1',
+          branch: `user/session-${sessionId}`,
+          baseBranch: 'main',
+          visibility: 'org',
+        });
+      }
+      const controller = await startOwnershipController('factory-background-tasks');
+      // Both shared sessions run on their Factory's resource, so their tasks share it too.
+      for (const id of ['factory-tasks-a', 'factory-tasks-b']) {
+        await controller.createSession({ id, resourceId: project.id, threadId: id, ownerId: 'user-1' });
+      }
+      const tasks = new Map<string, Task>(
+        [
+          { id: 'task-a', threadId: 'factory-tasks-a', resourceId: project.id, status: 'running' },
+          { id: 'task-b', threadId: 'factory-tasks-b', resourceId: project.id, status: 'running' },
+          { id: 'task-done', threadId: 'factory-tasks-a', resourceId: project.id, status: 'completed' },
+        ].map(task => [task.id, task]),
+      );
+      // The manager's own cancel: a no-op on a task that already ended.
+      const backgroundTaskManager = {
+        getTask: async (id: string) => tasks.get(id) ?? null,
+        cancel: async (id: string) => {
+          const task = tasks.get(id)!;
+          if (task.status === 'running') task.status = 'cancelled';
+        },
+      };
+      vi.spyOn(controller, 'getMastra').mockReturnValue({ backgroundTaskManager } as never);
+      const viewers: Record<string, Viewer> = {
+        teammate: { workosId: 'user-2', organizationId: 'org-1' },
+        outsider: { workosId: 'user-3', organizationId: 'org-2' },
+      };
+      const app = buildApp([sourceControl], seed, controller, noRuns, headers => viewers[headers.get('x-viewer')!]!);
+      const cancel = (viewer: string, taskId: string) =>
+        app.request(`/web/user-sessions/factory-tasks-a/background/tasks/${taskId}/cancel`, {
+          method: 'POST',
+          headers: { 'x-viewer': viewer },
+        });
+      return { tasks, cancel };
+    }
+
+    it("lets a teammate cancel the session's own task, never another session's on the same Factory", async () => {
+      const { tasks, cancel } = await seedTasks();
+
+      expect((await cancel('teammate', 'task-b')).status).toBe(404);
+      expect(tasks.get('task-b')!.status).toBe('running');
+      expect((await cancel('outsider', 'task-a')).status).toBe(404);
+      expect(tasks.get('task-a')!.status).toBe('running');
+
+      const cancelled = await cancel('teammate', 'task-a');
+      await expect(cancelled.json()).resolves.toMatchObject({ id: 'task-a', status: 'cancelled' });
+    });
+
+    it('returns a task that already ended unchanged', async () => {
+      const { cancel } = await seedTasks();
+
+      const response = await cancel('teammate', 'task-done');
+      await expect(response.json()).resolves.toMatchObject({ id: 'task-done', status: 'completed' });
+    });
+  });
 });

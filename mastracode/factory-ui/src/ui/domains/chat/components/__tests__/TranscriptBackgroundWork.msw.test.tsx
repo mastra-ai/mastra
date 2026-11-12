@@ -1,14 +1,14 @@
 import type { SandboxProcess } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { createInitialTranscript } from '../../services/transcript';
 import type { TimelineEntry } from '../../services/transcript';
 import { BackgroundWorkPanel } from '../background/BackgroundWorkPanel';
@@ -148,5 +148,44 @@ describe('Transcript background commands', () => {
     await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Stop command' }));
     await waitFor(() => expect(killed).toEqual(['4242']));
     await waitFor(() => expect(screen.queryByRole('region', { name: 'Background work' })).not.toBeInTheDocument());
+  });
+
+  it('reads the sandbox only once a call started a background command, and stops polling once nothing runs', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    let reads = 0;
+    let processes = [running('4242', 'dev')];
+    server.use(
+      http.get(PROCESSES_URL, () => {
+        reads += 1;
+        return HttpResponse.json({ processes });
+      }),
+    );
+    const foreground = createInitialTranscript({ messages: [assistant('turn', [lint])] }).entries;
+    const { client, rerender } = renderChat(foreground);
+    await waitForMutationsIdle(client);
+    expect(reads).toBe(0);
+
+    const launched = createInitialTranscript({ messages: [assistant('turn', [lint, devServer])] }).entries;
+    rerender(
+      <MemoryRouter>
+        <BackgroundWorkProvider baseUrl={TEST_BASE_URL} sessionId={SESSION_ID} threadId={SESSION_ID} entries={launched}>
+          <TranscriptEntries entries={launched} onApprove={() => {}} onRespond={() => {}} />
+        </BackgroundWorkProvider>
+      </MemoryRouter>,
+    );
+    await vi.waitFor(() => expect(reads).toBe(1));
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(reads).toBe(2));
+
+    // Stopped outside the chat: the next read finds nothing running, and the reads stop.
+    processes = [];
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+    await vi.waitFor(() => expect(reads).toBe(3));
+    await act(async () => vi.advanceTimersByTimeAsync(30_000));
+    await waitForMutationsIdle(client);
+    expect(reads).toBe(3);
   });
 });

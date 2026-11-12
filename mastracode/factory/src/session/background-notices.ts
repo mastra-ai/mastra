@@ -1,86 +1,47 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
-import { findSessionForThread } from '@mastra/code-sdk/agents/background-completion';
-import type {
-  BackgroundNoticeDelivery,
-  BackgroundNoticeSignal,
-  BackgroundNoticeTarget,
-} from '@mastra/code-sdk/agents/background-completion';
+import { createBackgroundNoticeDelivery } from '@mastra/code-sdk/agents/background-completion';
+import type { BackgroundNoticeDelivery, BackgroundNoticeTarget } from '@mastra/code-sdk/agents/background-completion';
 import { RequestContext } from '@mastra/core/request-context';
 
-import { prepareSessionRunContext } from '../integrations/subscription-session.js';
-import type { SubscriptionSessionLookup } from '../integrations/subscription-session.js';
-
-/** What a session's agent is told when its project has background commands on, worded like Mastra Code's. */
-export const BACKGROUND_COMMANDS_GUIDANCE = `**Background work**
-- Use \`execute_command\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on. They keep running when the run is stopped.
-- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
-
-// Exits that land while no session runs their thread wait for the next session; past this many the oldest go.
-const MAX_HELD_NOTICES = 100;
-
-type HeldNotice = { target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal; wake: boolean };
-
 /**
- * Delivers background command exit notices to Factory sessions. Like Mastra Code's delivery, it wakes the
- * session when it is on the notice's thread and saves the notice to the thread otherwise. A woken run has no
- * inbound request, so it runs as the session row's owner with that owner's credentials, as other Factory wakes do.
+ * Delivers background command exit notices to Factory sessions, through Mastra Code's delivery. Factory
+ * registers sessions by session id, and a session's other threads only name it in their stamp, so the
+ * session is found the way a wake finds it. A woken run has no inbound request, so it runs as the session
+ * row's owner like every Factory wake; when that owner can't be resolved the notice is saved to the thread.
  */
 export function createFactoryBackgroundNoticeDelivery({
   getController,
-  sessions,
+  resolveWakeSession,
+  prepareWakeRequestContext,
 }: {
   /** Resolved per notice: the controller exists only once the Factory is mounted. */
   getController: () => Pick<MountedMastraCode['controller'], 'getSession'> | undefined;
-  sessions: SubscriptionSessionLookup['sessions'];
+  resolveWakeSession: (target: BackgroundNoticeTarget) => Promise<{ sessionId: string; row: unknown }>;
+  prepareWakeRequestContext: (
+    input: BackgroundNoticeTarget & { requestContext: RequestContext; reportFailure?: boolean },
+  ) => Promise<void>;
 }): BackgroundNoticeDelivery {
-  const held: HeldNotice[] = [];
-  const hold = (notice: HeldNotice) => {
-    held.push(notice);
-    if (held.length > MAX_HELD_NOTICES) held.shift();
-  };
-
-  const wakeContext = async (sessionId: string): Promise<RequestContext | undefined> => {
-    const requestContext = new RequestContext();
-    const prepared = await prepareSessionRunContext(requestContext, sessionId, { sessions }).catch(() => undefined);
-    return prepared === 'prepared' ? requestContext : undefined;
-  };
-
-  const send = async ({ target, signal, wake }: HeldNotice): Promise<boolean> => {
-    const controller = getController();
-    if (!controller) return false;
-    const session = await findSessionForThread(controller, target);
-    if (!session) return false;
-    if (wake && session.thread.getId() === target.threadId) {
-      // Without the owner's identity the run could not resolve credentials or the workspace; save it instead.
-      const requestContext = await wakeContext(session.identity.getId());
-      const woken = requestContext
-        ? await session
-            .sendSignal(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true, requestContext })
-            .accepted.catch(() => undefined)
-        : undefined;
-      if (woken && woken.action !== 'blocked' && woken.action !== 'discard') return true;
-    }
-    await session.sendSignalToThread(signal, target).accepted;
-    return true;
-  };
-
-  return {
-    async deliver(target, signal, options) {
-      const notice = { target, signal, wake: options?.wake ?? true };
-      let sent: boolean;
-      try {
-        sent = await send(notice);
-      } catch (error) {
-        hold(notice);
-        throw error;
-      }
-      if (!sent) hold(notice);
+  return createBackgroundNoticeDelivery(
+    () => ({ getSession: async sessionId => getController()?.getSession(sessionId) }),
+    {
+      resolveSession: async target => {
+        const controller = getController();
+        if (!controller) return undefined;
+        const { sessionId, row } = await resolveWakeSession(target);
+        // No session owns the thread (a forged stamp, a resource it moved off): drop the notice, so junk can't
+        // push real ones out of the held queue. A session that owns it but isn't live gets it once it is.
+        if (!row) return null;
+        return controller.getSession(sessionId);
+      },
+      // Resolves the session a second time: the shared wake preparation stays exactly what every other Factory
+      // wake runs. Its failure report is for runs that were lost; this notice is saved to its thread instead.
+      wakeRequestContext: async (_session, target) => {
+        const requestContext = new RequestContext();
+        return prepareWakeRequestContext({ ...target, requestContext, reportFailure: false }).then(
+          () => requestContext,
+          () => undefined,
+        );
+      },
     },
-    async flush() {
-      for (const notice of held.splice(0)) {
-        const sent = await send(notice).catch(() => false);
-        if (!sent) hold(notice);
-      }
-    },
-  };
+  );
 }

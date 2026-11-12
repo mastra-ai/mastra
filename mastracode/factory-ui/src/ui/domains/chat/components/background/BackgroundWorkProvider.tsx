@@ -88,12 +88,12 @@ export function BackgroundWorkProvider({
   return <BackgroundWorkContext.Provider value={value}>{children}</BackgroundWorkContext.Provider>;
 }
 
-/** The newest output of a running background command, polled while it is on screen. */
+/** The newest output of a background command, polled while it is on screen and still running. */
 export function useBackgroundProcessOutput(work: BackgroundWorkApi, pid: string) {
   return useQuery({
     queryKey: ['background-process-output', work.sessionId, pid] as const,
     queryFn: () => getBackgroundProcessOutput(work.baseUrl, work.sessionId, pid, OUTPUT_TAIL_LINES),
-    refetchInterval: POLL_MS,
+    refetchInterval: query => (query.state.status === 'error' || query.state.data?.running === false ? false : POLL_MS),
   });
 }
 

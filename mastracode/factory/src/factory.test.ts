@@ -1250,25 +1250,6 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
-  it('tells the agent not to poll background commands only in projects that turned them on', async () => {
-    const storage = fakeStorage();
-    const config = await prepareFactory({ storage });
-    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
-    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
-    const instructions = async () => {
-      const context = new RequestContext();
-      const state = { factoryProjectId: project.id, factoryOrgId: 'org-1', untrustedCheckout: false };
-      context.set('controller', { sessionId: 'session-1', threadId: 'session-1', getState: () => state });
-      return (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
-        requestContext: context,
-      });
-    };
-
-    expect(await instructions()).toBeUndefined();
-    await projects.update({ orgId: 'org-1', id: project.id, input: { backgroundToolsEnabled: true } });
-    expect(await instructions()).toContain('Do not poll or sleep');
-  });
-
   it('installs a Web Factory session workspace resolver', async () => {
     const config = await prepareFactory({ storage: fakeStorage() });
     expect(config.workspace).toEqual(expect.any(Function));
@@ -1652,6 +1633,31 @@ describe('MastraFactory.prepare', () => {
       return project;
     }
 
+    it('tells the agent not to poll background commands only in projects that turned them on', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const instructions = (sessionId: string, state: Record<string, unknown>) => {
+        const requestContext = new RequestContext();
+        requestContext.set('controller', { sessionId, getState: () => state });
+        return (config.hostInstructions as (input: { requestContext: RequestContext }) => Promise<unknown>)({
+          requestContext,
+        });
+      };
+
+      // A user session's state names no Factory: its project comes from the session row.
+      expect(await instructions('session-1', {})).toBeUndefined();
+      await storage
+        .getDomain<FactoryProjectsStorage>('projects')
+        .update({ orgId: 'org-1', id: project.id, input: { backgroundToolsEnabled: true } });
+      expect(await instructions('session-1', {})).toContain('Do not poll or sleep');
+      // A work item run's state names its Factory.
+      expect(await instructions('run-1', { factoryProjectId: project.id, factoryOrgId: 'org-1' })).toContain(
+        'Do not poll or sleep',
+      );
+      expect(await instructions('someone-else', {})).toBeUndefined();
+    });
+
     function sessionContext(interactive: boolean) {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
@@ -2017,6 +2023,18 @@ describe('MastraFactory.prepare', () => {
           outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
         }),
       ]);
+
+      // A background notice is saved to its thread instead, so nothing was lost to report.
+      runEndReports.length = 0;
+      await expect(
+        (prepareWake as (args: Parameters<typeof prepareWake>[0] & { reportFailure: boolean }) => Promise<void>)({
+          requestContext: new RequestContext(),
+          resourceId: 'user-2',
+          threadId: 'session-2',
+          reportFailure: false,
+        }),
+      ).rejects.toThrow(message);
+      expect(runEndReports).toEqual([]);
     });
 
     it('keeps the best-effort wake when auth is off', async () => {

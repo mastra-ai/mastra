@@ -84,6 +84,20 @@ describe('Environment settings', () => {
     expect(screen.getByRole('heading', { name: 'Builds' })).toBeInTheDocument();
   });
 
+  it('turns background commands on for the project', async () => {
+    useFactory();
+    const environment = environmentPayload();
+    useEnvironment(environment);
+    const patches = recordPatches({ ...environment, backgroundToolsEnabled: true });
+
+    renderEnvironmentSettings();
+
+    const toggle = await screen.findByRole('switch', { name: 'Background commands' });
+    expect(toggle).not.toBeChecked();
+    await userEvent.click(toggle);
+    await waitFor(() => expect(patches).toEqual([{ backgroundToolsEnabled: true }]));
+  });
+
   it('shows the load failure instead of an empty page', async () => {
     useFactory();
     server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
