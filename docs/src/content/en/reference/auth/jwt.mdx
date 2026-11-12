@@ -41,6 +41,10 @@ export const mastra = new Mastra({
 })
 ```
 
+## User ID
+
+The authenticated user's `id` is the token's `id` claim, or its `sub` claim when the token has no `id`. RBAC looks up roles by this `id`, and it owns the records the user creates unless `mapUserToResourceId` is set. See [user IDs from JWT providers](/docs/guides/authentication-identity#user-ids-from-jwt-providers).
+
 ## Constructor parameters
 
 <PropertiesTable
