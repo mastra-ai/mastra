@@ -840,7 +840,7 @@ const sidebars = {
         {
           type: 'doc',
           id: 'mastra-platform/observability/dashboards',
-          label: 'Custom dashboards',
+          label: 'Dashboards',
         },
         {
           type: 'doc',
