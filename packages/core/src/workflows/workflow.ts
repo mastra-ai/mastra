@@ -5413,14 +5413,18 @@ export class Run<
   /**
    * Takes the storage ownership lease for runs the boot-time recovery sweep could restart, so a
    * sweep on another replica skips this run while this process drives it. Nested runs are covered
-   * by their parent's lease, and runs that never persist a `running` snapshot are never swept.
+   * by their parent's lease unless `nested` is set, and runs that never persist a `running`
+   * snapshot are never swept.
    */
-  async #claimOwnership(force: boolean): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
+  async #claimOwnership(
+    force: boolean,
+    { nested = false }: { nested?: boolean } = {},
+  ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
     const shouldPersistSnapshot =
       this.executionEngine.getRunPersistenceOverride(this.runId) ?? this.executionEngine.options.shouldPersistSnapshot;
     if (
       !this.#recoverable ||
-      this.parentWorkflow ||
+      (this.parentWorkflow && !nested) ||
       !shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })
     ) {
       return { release: async () => {} };
@@ -5814,6 +5818,8 @@ export class Run<
           releaseLease: () => Promise<void>;
         }
       | undefined;
+    // This nested run's own lease, when it could not take its parent's (see below).
+    let ownLease: WorkflowRunOwnership | undefined;
 
     if (this.parentWorkflow && !params.skipParentWorkflowClaim && workflowsStore) {
       const parentWorkflow = this.#getParentWorkflow(this.parentWorkflow);
@@ -5882,6 +5888,22 @@ export class Run<
 
           await releaseClaimIfUnused();
           throw error;
+        }
+      }
+
+      // Without the parent's flip (a store without compare-and-set), the parent stays `suspended`, and
+      // recovery restarts a nested run under a suspended parent on its own once nothing keeps it live.
+      // This run holds its own lease meanwhile instead. A claim that fails only loses that protection.
+      if (!flippedParent) {
+        try {
+          const claim = await this.#claimOwnership(true, { nested: true });
+          if ('release' in claim) {
+            ownLease = claim;
+          }
+        } catch (error) {
+          this.#mastra
+            ?.getLogger()
+            ?.warn(`[Workflow ${this.workflowId}] Failed to claim the lease of nested run ${this.runId}`, error);
         }
       }
 
@@ -5973,7 +5995,7 @@ export class Run<
           storageVersion: this.storageVersion,
           storedState: this.runStorage.storedState(snapshot),
         }),
-      params.takeHeldOwnership?.(),
+      params.takeHeldOwnership?.() ?? ownLease,
     )
       .then(async result => {
         if (!params.isVNext && result.status !== 'suspended') {
