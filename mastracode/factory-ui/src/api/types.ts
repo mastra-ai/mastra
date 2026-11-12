@@ -152,6 +152,8 @@ export interface SaveCustomProviderBody {
   models: string[];
   /** When editing, the id of the provider being replaced. */
   previousId?: string;
+  /** Where to save it: the caller's own providers (the default) or their organization's. */
+  scope?: CustomProviderInfo['scope'];
 }
 
 export interface UpdateOMModelBody {

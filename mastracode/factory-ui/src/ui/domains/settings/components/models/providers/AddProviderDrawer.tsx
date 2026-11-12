@@ -18,6 +18,7 @@ import { useSidePanelDrawer } from '../../../../../lib/hooks/useSidePanelDrawer'
 import { MastraGatewayBilling } from '../../../../workspaces/components/MastraGatewayBilling';
 import {
   CREDENTIAL_LABEL,
+  SCOPE_AUDIENCE,
   SHARED_SOURCE,
   SIGN_IN_EXPIRED_LABEL,
   credentialAt,
@@ -25,12 +26,7 @@ import {
   signInRequest,
 } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
-import { ProviderOptionRow } from './ProviderRows';
-
-const AUDIENCE: Record<CredentialScope, string> = {
-  user: 'Only you can use it.',
-  org: 'Everyone in your organization can use it.',
-};
+import { CustomEndpointIcon, OptionRow, ProviderOptionRow } from './ProviderRows';
 
 const PROVIDER_LIST_CLASS = 'border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border';
 
@@ -46,7 +42,8 @@ function isGateway(provider: ProviderInfo): boolean {
 }
 
 function takesApiKey(provider: ProviderInfo): boolean {
-  return provider.source !== 'deployment' && !isGateway(provider);
+  // Custom endpoints are added through their own form, never by pasting a key.
+  return provider.source !== 'deployment' && !isGateway(provider) && !provider.custom;
 }
 
 function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {
@@ -68,6 +65,7 @@ export function AddProviderDrawer({
   requestScope,
   onOAuthStarted,
   onAddKey,
+  onAddCustomProvider,
   onClose,
 }: {
   open: boolean;
@@ -76,6 +74,7 @@ export function AddProviderDrawer({
   requestScope: CredentialScope | undefined;
   onOAuthStarted: (provider: string, session: OAuthStartResponse) => void;
   onAddKey: (provider: ProviderInfo) => void;
+  onAddCustomProvider: () => void;
   onClose: () => void;
 }) {
   const sidePanel = useSidePanelDrawer();
@@ -124,7 +123,7 @@ export function AddProviderDrawer({
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
           <DrawerDescription>
-            Sign in with a subscription or paste an API key. {AUDIENCE[credentialScope]}
+            Sign in with a subscription or paste an API key. {SCOPE_AUDIENCE[credentialScope]}
           </DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="flex min-h-0 flex-col gap-3">
@@ -178,6 +177,19 @@ export function AddProviderDrawer({
               {keyOnlyCount} more take an API key. Type to find one.
             </Txt>
           )}
+          {/* Outside the searched list: the way out when no provider matches. */}
+          <ul className="border-border shrink-0 rounded-lg border">
+            <OptionRow icon={<CustomEndpointIcon />} title="Custom endpoint" detail="Any OpenAI-compatible API">
+              <Button
+                size="sm"
+                aria-label="Add a custom endpoint"
+                disabled={startingProvider !== undefined}
+                onClick={onAddCustomProvider}
+              >
+                Add
+              </Button>
+            </OptionRow>
+          </ul>
           {startError && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
               {startError.message}

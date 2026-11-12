@@ -112,7 +112,7 @@ describe('useRemoveCustomProvider', () => {
       await waitFor(() => expect(result.current.query.data).toEqual([customProvider]));
 
       await act(async () => {
-        await result.current.remove.mutateAsync({ id: 'my-llm' });
+        await result.current.remove.mutateAsync({ id: 'my-llm', scope: 'user' });
       });
       await waitForMutationsIdle(client);
 

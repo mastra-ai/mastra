@@ -226,7 +226,13 @@ describe('Model provider onboarding', () => {
   });
 
   describe('when creating a custom provider', () => {
-    function registerCustomProviderHandlers() {
+    /** The catalog row the server reports for a custom endpoint saved at each scope. */
+    const savedAt: Record<'org' | 'user', ProviderInfo> = {
+      org: { provider: 'my-llm', source: 'stored-org', orgCredential: 'api_key', orgKey: true, custom: true },
+      user: { provider: 'my-llm', source: 'stored-user', userCredential: 'api_key', custom: true },
+    };
+
+    function registerCustomProviderHandlers(scope: 'org' | 'user') {
       let created = false;
       const provider = {
         id: 'my-llm',
@@ -234,12 +240,11 @@ describe('Model provider onboarding', () => {
         url: 'https://api.example.com/v1',
         hasApiKey: true,
         models: ['model-a'],
+        scope,
       };
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-          HttpResponse.json({
-            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
-          }),
+          HttpResponse.json({ providers: created ? [savedAt[scope]] : [] }),
         ),
         http.get(`${TEST_BASE_URL}/web/config/models`, () =>
           HttpResponse.json({
@@ -254,6 +259,7 @@ describe('Model provider onboarding', () => {
             url: 'https://api.example.com/v1',
             apiKey: 'sk-test',
             models: ['model-a'],
+            scope,
           });
           created = true;
           return HttpResponse.json({ ok: true, provider });
@@ -274,7 +280,7 @@ describe('Model provider onboarding', () => {
 
     it('requires a model before creating a provider during setup', async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers('org');
       renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
       const user = userEvent.setup();
 
@@ -286,9 +292,9 @@ describe('Model provider onboarding', () => {
       expect(await screen.findByText('At least one model is required.')).toBeVisible();
     });
 
-    it('refreshes the catalogs and continues to organization model selection', async () => {
+    it('saves the endpoint for the organization and continues to organization model selection', async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers('org');
       const onComplete = vi.fn<() => void>();
       const { client } = renderWithProviders(
         <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
@@ -306,9 +312,9 @@ describe('Model provider onboarding', () => {
       });
     });
 
-    it('continues to personal model selection with the stored custom provider', async () => {
+    it('saves the endpoint as a personal one and continues to personal model selection', async () => {
       registerAuthHandler();
-      registerCustomProviderHandlers();
+      registerCustomProviderHandlers('user');
       server.use(
         http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
           HttpResponse.json({ modelId: null, thinkingLevel: null }),
@@ -327,6 +333,43 @@ describe('Model provider onboarding', () => {
         modelId: 'my-llm/model-a',
         method: 'api_key',
       });
+    });
+
+    // Personal sessions never run on the organization's endpoints, so the
+    // personal step must not offer one as a connected provider.
+    it("leaves the organization's endpoint out of the personal step", async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [savedAt.org, { provider: 'groq', source: 'none' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+      renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
+
+      const keyProviders = await screen.findByRole('group', { name: 'API key providers' });
+      expect(await within(keyProviders).findByRole('button', { name: 'Groq' })).toBeInTheDocument();
+      expect(within(keyProviders).queryByRole('button', { name: /my-llm/i })).not.toBeInTheDocument();
+    });
+
+    it('tells a member that only an admin can add an organization endpoint', async () => {
+      registerAuthHandler();
+      // The organization already has a provider, so a member gets the picker.
+      const groq: ProviderInfo = { provider: 'groq', source: 'stored-org', orgCredential: 'api_key', orgKey: true };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [groq], orgKeyAdmin: false }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+
+      expect(await screen.findByText('Only organization admins can manage org-wide credentials.')).toBeVisible();
+      expect(screen.queryByPlaceholderText('e.g. my-llm')).not.toBeInTheDocument();
     });
   });
 

@@ -2066,13 +2066,14 @@ describe('MastraFactory.prepare', () => {
       expect(runEndReports).toHaveLength(1);
     });
 
-    it("primes the woken session org's custom providers after resolving its credential policy", async () => {
+    it("primes the woken session owner's custom providers after resolving its credential policy", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
       await seedUserSession(storage);
-      await storage.getDomain<CustomProvidersStorage>('custom-providers').upsert({
-        orgId: 'org-1',
-        userId: 'user-1',
+      // A user session runs on its owner's credentials, so on their own endpoints.
+      await storage.getDomain<CustomProvidersStorage>('custom-providers').create({
+        owner: { orgId: 'org-1', userId: 'user-1' },
+        createdBy: 'user-1',
         input: {
           providerId: 'acme',
           name: 'Acme',

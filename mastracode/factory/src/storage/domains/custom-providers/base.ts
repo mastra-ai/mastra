@@ -1,17 +1,30 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
 import { createPlaintextFactorySecretEncryption } from '../../../secret-encryption.js';
 import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 
 /**
+ * Who a custom provider belongs to: an organization, or one member of it.
+ * The two never mix — a member's providers are invisible to the rest of the
+ * organization, and both can hold a provider with the same name.
+ */
+export interface CustomProviderOwner {
+  orgId: string;
+  /** Set for a member's own providers; absent for the organization's. */
+  userId?: string;
+}
+
+/**
  * A user-defined OpenAI-compatible provider. The DB-backed counterpart of the
- * local `settings.json` `customProviders` entries: org-scoped rows keyed by the
+ * local `settings.json` `customProviders` entries: rows keyed by owner and the
  * derived provider id (name slug), API key stored alongside so a deployed
  * server never reads the shared settings file.
  */
 export interface CustomProviderRecord {
   id: string;
   orgId: string;
+  /** The member who owns the provider, or `null` when the organization does. */
+  userId: string | null;
   createdBy: string;
   /** Stable slug derived from the name (`getCustomProviderId`). */
   providerId: string;
@@ -23,34 +36,73 @@ export interface CustomProviderRecord {
   updatedAt: Date;
 }
 
-export interface UpsertCustomProviderInput {
+export interface CustomProviderInput {
   providerId: string;
   name: string;
   url: string;
+  /** On an edit, omit to keep the saved key. */
   apiKey?: string;
   models: string[];
 }
 
+/**
+ * The outcome of a create or an edit. A refusal leaves storage unchanged:
+ * - `name_taken`: the owner already has a provider with this id.
+ * - `not_found`: the provider being edited no longer exists.
+ * - `api_key_required`: the edit moves a provider with a saved key to another
+ *   host without giving a key, which would send the saved key there.
+ */
+export type CustomProviderWrite =
+  | { saved: CustomProviderRecord }
+  | { refused: 'name_taken' | 'not_found' | 'api_key_required' };
+
+function sameOrigin(left: string, right: string): boolean {
+  try {
+    return new URL(left).origin === new URL(right).origin;
+  } catch {
+    return false;
+  }
+}
+
+const COLUMNS: CollectionSchema['columns'] = {
+  id: { type: 'uuid-pk' },
+  org_id: { type: 'text' },
+  created_by: { type: 'text' },
+  provider_id: { type: 'text' },
+  name: { type: 'text' },
+  url: { type: 'text' },
+  api_key: { type: 'text', nullable: true },
+  models: { type: 'json' },
+  created_at: { type: 'timestamp' },
+  updated_at: { type: 'timestamp' },
+};
+
+/** Providers an organization owns. */
 export const CUSTOM_PROVIDERS_SCHEMA: CollectionSchema = {
   name: 'custom_providers',
-  columns: {
-    id: { type: 'uuid-pk' },
-    org_id: { type: 'text' },
-    created_by: { type: 'text' },
-    provider_id: { type: 'text' },
-    name: { type: 'text' },
-    url: { type: 'text' },
-    api_key: { type: 'text', nullable: true },
-    models: { type: 'json' },
-    created_at: { type: 'timestamp' },
-    updated_at: { type: 'timestamp' },
-  },
+  columns: COLUMNS,
   uniqueIndexes: [{ name: 'custom_providers_org_provider_key', columns: ['org_id', 'provider_id'] }],
 };
+
+/**
+ * Providers one member owns. A separate collection rather than a nullable
+ * `user_id` on `custom_providers`: that collection's unique index covers
+ * `(org_id, provider_id)` and schema evolution cannot drop it, so two members
+ * could never use the same name.
+ */
+export const USER_CUSTOM_PROVIDERS_SCHEMA: CollectionSchema = {
+  name: 'user_custom_providers',
+  columns: { ...COLUMNS, user_id: { type: 'text' } },
+  uniqueIndexes: [{ name: 'user_custom_providers_owner_provider_key', columns: ['org_id', 'user_id', 'provider_id'] }],
+};
+
+const COLLECTIONS = [CUSTOM_PROVIDERS_SCHEMA.name, USER_CUSTOM_PROVIDERS_SCHEMA.name];
 
 interface CustomProviderDbRow extends Record<string, unknown> {
   id: string;
   org_id: string;
+  /** Present on member-owned rows only. */
+  user_id?: string;
   created_by: string;
   provider_id: string;
   name: string;
@@ -61,19 +113,33 @@ interface CustomProviderDbRow extends Record<string, unknown> {
   updated_at: Date;
 }
 
+/** The collection an owner's providers live in, and the columns that identify the owner there. */
+interface OwnerRows {
+  collection: string;
+  where: CollectionWhere;
+}
+
+function ownerRows(owner: CustomProviderOwner): OwnerRows {
+  return owner.userId === undefined
+    ? { collection: CUSTOM_PROVIDERS_SCHEMA.name, where: { org_id: owner.orgId } }
+    : { collection: USER_CUSTOM_PROVIDERS_SCHEMA.name, where: { org_id: owner.orgId, user_id: owner.userId } };
+}
+
 export class CustomProvidersStorage extends FactoryStorageDomain {
   constructor(private readonly encryption: FactorySecretEncryption = createPlaintextFactorySecretEncryption()) {
     super('custom-providers');
   }
 
   async init(): Promise<void> {
-    await this.ensureCollections([CUSTOM_PROVIDERS_SCHEMA]);
-    const rows = await this.ops.findMany<CustomProviderDbRow>('custom_providers', {});
-    await Promise.all(rows.filter(row => row.api_key !== null).map(row => this.#migrateApiKey(row.id)));
+    await this.ensureCollections([CUSTOM_PROVIDERS_SCHEMA, USER_CUSTOM_PROVIDERS_SCHEMA]);
+    for (const collection of COLLECTIONS) {
+      const rows = await this.ops.findMany<CustomProviderDbRow>(collection, {});
+      await Promise.all(rows.filter(row => row.api_key !== null).map(row => this.#migrateApiKey(collection, row.id)));
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
-    await this.ops.deleteMany('custom_providers', {});
+    await Promise.all(COLLECTIONS.map(collection => this.ops.deleteMany(collection, {})));
   }
 
   get #db(): FactoryStorageOps {
@@ -85,6 +151,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     return {
       id: row.id,
       orgId: row.org_id,
+      userId: row.user_id ?? null,
       createdBy: row.created_by,
       providerId: row.provider_id,
       name: row.name,
@@ -108,12 +175,8 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     };
   }
 
-  async #encryptApiKey(apiKey: string | undefined): Promise<string | null> {
-    return apiKey === undefined ? null : this.encryption.encrypt(apiKey);
-  }
-
-  async #migrateApiKey(id: string): Promise<void> {
-    await this.#db.updateAtomic<CustomProviderDbRow>('custom_providers', { id }, async row => {
+  async #migrateApiKey(collection: string, id: string): Promise<void> {
+    await this.#db.updateAtomic<CustomProviderDbRow>(collection, { id }, async row => {
       if (row.api_key === null) return null;
       const decrypted = await this.#decryptApiKey(row.api_key);
       return decrypted.needsReencryption ? { api_key: await this.encryption.encrypt(decrypted.value) } : null;
@@ -121,134 +184,109 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Create or wholesale-replace a provider by `(orgId, providerId)` — mirrors
-   * the settings.json upsert semantics (no key retention: an absent `apiKey`
-   * clears the stored key). `previousProviderId` renames the provider: the
-   * common path is a single atomic in-place update of the old row; renaming
-   * onto an id that already exists overwrites the target first and removes the
-   * old row last, so no interleaving or failure can lose the provider.
+   * Add a provider to the owner's list. Never replaces one: a name the owner
+   * already uses, including one a concurrent create just took, is refused.
    */
-  async upsert({
-    orgId,
-    userId,
+  async create({
+    owner,
+    createdBy,
     input,
-    previousProviderId,
   }: {
-    orgId: string;
-    userId: string;
-    input: UpsertCustomProviderInput;
-    previousProviderId?: string;
-  }): Promise<CustomProviderRecord> {
+    owner: CustomProviderOwner;
+    createdBy: string;
+    input: CustomProviderInput;
+  }): Promise<CustomProviderWrite> {
+    const rows = ownerRows(owner);
     const now = new Date();
-    const encryptedApiKey = await this.#encryptApiKey(input.apiKey);
-    const renameFrom = previousProviderId && previousProviderId !== input.providerId ? previousProviderId : undefined;
-
-    if (renameFrom) {
-      const target = await this.#db.findOne<CustomProviderDbRow>('custom_providers', {
-        org_id: orgId,
-        provider_id: input.providerId,
-      });
-      if (!target) {
-        // In-place rename: one atomic write with no delete/insert gap, so a
-        // failure can never drop the provider (and `created_at`/`created_by`
-        // are preserved). If a concurrent create grabs the new id between the
-        // lookup and this update, the unique index rejects the update and the
-        // old row stays intact — the request fails cleanly and a retry
-        // converges on the rename-onto-existing path below.
-        const renamed = await this.#db.updateAtomic<CustomProviderDbRow>(
-          'custom_providers',
-          { org_id: orgId, provider_id: renameFrom },
-          () => ({
-            provider_id: input.providerId,
-            name: input.name,
-            url: input.url,
-            api_key: encryptedApiKey,
-            models: input.models,
-            updated_at: now,
-          }),
-        );
-        if (renamed) return this.#toRecord(renamed);
-        // Old row already gone — fall through to a plain create of the new id.
-      }
-      // Rename onto an existing id: overwrite the target below, then delete
-      // the old row last — a failure in the gap leaves a redundant duplicate
-      // (recoverable by re-submitting or deleting) instead of losing data.
-    }
-
-    const record = await this.#write({ orgId, userId, input, encryptedApiKey, now });
-    if (renameFrom) {
-      await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: renameFrom });
-    }
-    return record;
-  }
-
-  /**
-   * Update-first, then insert-and-catch-unique-violation (see `queue_health`):
-   * concurrent creates of the same provider both succeed (last write wins on
-   * the single row) instead of one failing on the unique index, and a row
-   * deleted mid-flight is recreated rather than reported as a stale success.
-   */
-  async #write({
-    orgId,
-    userId,
-    input,
-    encryptedApiKey,
-    now,
-  }: {
-    orgId: string;
-    userId: string;
-    input: UpsertCustomProviderInput;
-    encryptedApiKey: string | null;
-    now: Date;
-  }): Promise<CustomProviderRecord> {
-    const updateExisting = () =>
-      this.#db.updateAtomic<CustomProviderDbRow>(
-        'custom_providers',
-        { org_id: orgId, provider_id: input.providerId },
-        () => ({
-          name: input.name,
-          url: input.url,
-          api_key: encryptedApiKey,
-          models: input.models,
-          updated_at: now,
-        }),
-      );
-
-    const updated = await updateExisting();
-    if (updated) return this.#toRecord(updated);
-
     try {
-      const row = await this.#db.insertOne<CustomProviderDbRow>('custom_providers', {
-        org_id: orgId,
-        created_by: userId,
+      const row = await this.#db.insertOne<CustomProviderDbRow>(rows.collection, {
+        ...rows.where,
+        created_by: createdBy,
         provider_id: input.providerId,
         name: input.name,
         url: input.url,
-        api_key: encryptedApiKey,
+        api_key: input.apiKey === undefined ? null : await this.encryption.encrypt(input.apiKey),
         models: input.models,
         created_at: now,
         updated_at: now,
       });
-      return this.#toRecord(row);
+      return { saved: await this.#toRecord(row) };
     } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      // Lost the insert race — apply this write to the winning row.
-      const row = await updateExisting();
-      if (!row) throw error;
-      return this.#toRecord(row);
+      if (error instanceof UniqueViolationError) return { refused: 'name_taken' };
+      throw error;
     }
   }
 
-  async list({ orgId }: { orgId: string }): Promise<CustomProviderRecord[]> {
-    const rows = await this.#db.findMany<CustomProviderDbRow>(
-      'custom_providers',
-      { org_id: orgId },
-      { orderBy: [['name', 'asc']] },
-    );
-    return Promise.all(rows.map(row => this.#toRecord(row)));
+  /**
+   * Edit one of the owner's providers, renaming it when `input.providerId`
+   * differs from `providerId`. One atomic write, so the key decision is made
+   * against the row as it is at that moment: an omitted key keeps the saved
+   * one, but only while the URL stays on the same host.
+   */
+  async update({
+    owner,
+    providerId,
+    input,
+  }: {
+    owner: CustomProviderOwner;
+    providerId: string;
+    input: CustomProviderInput;
+  }): Promise<CustomProviderWrite> {
+    const rows = ownerRows(owner);
+    let keyRequired = false;
+    try {
+      const row = await this.#db.updateAtomic<CustomProviderDbRow>(
+        rows.collection,
+        { ...rows.where, provider_id: providerId },
+        async current => {
+          if (input.apiKey === undefined && current.api_key !== null && !sameOrigin(current.url, input.url)) {
+            keyRequired = true;
+            return null;
+          }
+          return {
+            provider_id: input.providerId,
+            name: input.name,
+            url: input.url,
+            api_key: input.apiKey === undefined ? current.api_key : await this.encryption.encrypt(input.apiKey),
+            models: input.models,
+            updated_at: new Date(),
+          };
+        },
+      );
+      if (!row) return { refused: 'not_found' };
+      if (keyRequired) return { refused: 'api_key_required' };
+      return { saved: await this.#toRecord(row) };
+    } catch (error) {
+      // Renamed onto a name the owner already uses.
+      if (error instanceof UniqueViolationError) return { refused: 'name_taken' };
+      throw error;
+    }
   }
 
-  async delete({ orgId, providerId }: { orgId: string; providerId: string }): Promise<boolean> {
-    return (await this.#db.deleteMany('custom_providers', { org_id: orgId, provider_id: providerId })) > 0;
+  /** The owner's providers, by name. */
+  async list(owner: CustomProviderOwner): Promise<CustomProviderRecord[]> {
+    const rows = ownerRows(owner);
+    const found = await this.#db.findMany<CustomProviderDbRow>(rows.collection, rows.where, {
+      orderBy: [['name', 'asc']],
+    });
+    return Promise.all(found.map(row => this.#toRecord(row)));
+  }
+
+  /**
+   * Every provider in an organization: its own and each member's. For the
+   * model-resolution snapshot, which serves any owner without another query.
+   */
+  async listForOrg(orgId: string): Promise<CustomProviderRecord[]> {
+    const found = await Promise.all(
+      COLLECTIONS.map(collection =>
+        this.#db.findMany<CustomProviderDbRow>(collection, { org_id: orgId }, { orderBy: [['name', 'asc']] }),
+      ),
+    );
+    return Promise.all(found.flat().map(row => this.#toRecord(row)));
+  }
+
+  async delete({ owner, providerId }: { owner: CustomProviderOwner; providerId: string }): Promise<boolean> {
+    const rows = ownerRows(owner);
+    return (await this.#db.deleteMany(rows.collection, { ...rows.where, provider_id: providerId })) > 0;
   }
 }

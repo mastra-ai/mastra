@@ -14,6 +14,7 @@
  * is rejected when auth is enabled and falls back to local otherwise.
  */
 
+import type { CredentialScope as RunCredentialScope } from '@mastra/code-sdk/agents/credential-resolver';
 import { MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
 import { getCredentialProviderId } from '@mastra/code-sdk/providers/model-ids';
 import type { Context } from 'hono';
@@ -23,6 +24,7 @@ import { providerDisplayName } from '../provider-display-name.js';
 import { secretKeyMismatchHint } from '../secret-encryption.js';
 import type {
   CredentialRecord,
+  CredentialScope as StoredCredentialScope,
   LoginSessionKind,
   ModelCredentialsStorage,
 } from '../storage/domains/credentials/base.js';
@@ -106,6 +108,20 @@ const failedInit = new WeakMap<ModelCredentialsStorage, { at: number; error: unk
  */
 export function tenantOrgId(tenant: { orgId?: string; userId: string }): string {
   return tenant.orgId ?? factoryUserOrgId({ id: tenant.userId }) ?? `user:${tenant.userId}`;
+}
+
+/**
+ * Settings save credentials, and custom providers, for the account (`user`)
+ * or its organization (`org`). A run reads one of the two: the organization's
+ * for Factory-scoped work (`factory`), the account's own otherwise.
+ */
+export function storedScopeFor(runScope: RunCredentialScope): StoredCredentialScope {
+  return runScope === 'factory' ? 'org' : 'user';
+}
+
+/** The run credential scope that reads what Settings saved at `storedScope`. */
+export function runScopeFor(storedScope: StoredCredentialScope): RunCredentialScope {
+  return storedScope === 'org' ? 'factory' : 'user';
 }
 
 /**

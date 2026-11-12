@@ -8,6 +8,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { CustomProviderForm } from '../../settings/components/CustomProviderForm';
+import { ORG_SCOPE_MEMBER_REASON } from '../../settings/components/provider-credential';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
 import { MastraGatewayOption } from './MastraGatewayOption';
@@ -169,13 +170,22 @@ export function ModelProviderPicker({
         </TabContent>
         <TabContent value="custom">
           <div className="pt-2">
-            <CustomProviderForm
-              requireModels
-              onSaved={provider => {
-                connection.chooseCustomProvider(provider.id);
-                onPreviewProvider?.(provider.id, 'api_key');
-              }}
-            />
+            {connection.canWriteAtScope ? (
+              <div className="border-border rounded-lg border p-3">
+                <CustomProviderForm
+                  requireModels
+                  scope={connection.credentialScope}
+                  onSaved={provider => {
+                    connection.chooseCustomProvider(provider.id);
+                    onPreviewProvider?.(provider.id, 'api_key');
+                  }}
+                />
+              </div>
+            ) : (
+              <Txt variant="caption" tone="muted">
+                {ORG_SCOPE_MEMBER_REASON}
+              </Txt>
+            )}
           </div>
         </TabContent>
       </Tabs>

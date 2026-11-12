@@ -5,12 +5,12 @@
  * `CustomProvidersSource` synchronously, so this module keeps a small per-org
  * **snapshot** of custom provider rows hydrated from the `custom-providers`
  * domain. Once registered the source is authoritative — the factory never
- * reads `settings.json` custom providers, in either auth mode:
+ * reads `settings.json` custom providers, in either auth mode.
  *
- * - tenant mode: rows are scoped per org (`tenantOrgId`); calls without an
- *   authenticated tenant (boot-time catalog) resolve to an empty list.
- * - no-auth/local mode: rows live under the sentinel `local` org, matching the
- *   custom provider routes.
+ * Whose rows a call sees is decided in one place, {@link customProviderOwner},
+ * which the settings routes and model catalogs use too. Calls without an
+ * authenticated tenant in tenant mode (the boot-time catalog) resolve to an
+ * empty list.
  *
  * Snapshots are primed per request by `createCustomProvidersPrimer` (mounted
  * after the web auth gate) and invalidated on writes via
@@ -18,12 +18,13 @@
  */
 
 import { resolveTenantFromRequestContext } from '@mastra/code-sdk/agents/credential-resolver';
+import type { CredentialScope } from '@mastra/code-sdk/agents/credential-resolver';
 import { setCustomProvidersSource } from '@mastra/code-sdk/agents/custom-provider-source';
 import type { MastraCodeCustomProvider } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
-import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
+import type { CustomProviderOwner, CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import { tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -33,14 +34,37 @@ const SNAPSHOT_TTL_MS = 15_000;
 /** Cap on cached org snapshots; oldest-inserted evicted beyond this. */
 const MAX_CACHED_ORGS = 1000;
 
-/** Sentinel org for no-auth mode — must match the custom provider routes. */
+/** Sentinel org for no-auth mode. */
 const LOCAL_ORG = 'local';
+
+/**
+ * Whose custom providers apply to a tenant at a credential scope, or
+ * `undefined` to fail closed (tenant mode without identity). Model
+ * resolution, the settings routes and the model catalogs all decide through
+ * this function, so what a user sees in Settings is what their models use.
+ *
+ * Scoped exactly like provider credentials: Factory-scoped work uses the
+ * organization's list, personal work the account's own, and the two never
+ * mix. No-auth mode has one shared list.
+ */
+export function customProviderOwner(
+  tenant: { orgId?: string; userId: string; credentialScope?: CredentialScope } | undefined,
+  authEnabled: boolean,
+): CustomProviderOwner | undefined {
+  if (!authEnabled) return { orgId: LOCAL_ORG };
+  if (!tenant) return undefined;
+  const orgId = tenantOrgId(tenant);
+  return tenant.credentialScope === 'factory' ? { orgId } : { orgId, userId: tenant.userId };
+}
 
 class OrgCustomProvidersSnapshot {
   readonly #orgId: string;
   readonly #storage: CustomProvidersStorage;
-  #snapshot: MastraCodeCustomProvider[] = [];
+  #organization: MastraCodeCustomProvider[] = [];
+  #members = new Map<string, MastraCodeCustomProvider[]>();
   #fetchedAt = 0;
+  /** Bumped by every write, so a load that started before it can't count as fresh. */
+  #generation = 0;
   #hydrating: Promise<void> | undefined;
 
   constructor(orgId: string, storage: CustomProvidersStorage) {
@@ -48,33 +72,65 @@ class OrgCustomProvidersSnapshot {
     this.#storage = storage;
   }
 
-  /** Hydrate the snapshot when stale; coalesces concurrent callers. */
-  async ensureFresh(now = Date.now()): Promise<void> {
-    if (now - this.#fetchedAt < SNAPSHOT_TTL_MS) return;
-    this.#hydrating ??= this.#hydrate().finally(() => {
-      this.#hydrating = undefined;
-    });
-    await this.#hydrating;
+  #isStale(): boolean {
+    return Date.now() - this.#fetchedAt >= SNAPSHOT_TTL_MS;
   }
 
+  /**
+   * Hydrate the snapshot when stale; coalesces concurrent callers. Loads again
+   * if a write lands while a load is in flight, so callers never settle for
+   * rows read before that write.
+   */
+  async ensureFresh(): Promise<void> {
+    while (this.#isStale()) {
+      this.#hydrating ??= this.#hydrate().finally(() => {
+        this.#hydrating = undefined;
+      });
+      await this.#hydrating;
+    }
+  }
+
+  /**
+   * After a write: load again on the next read, but keep serving the current
+   * rows meanwhile, so runs already using these providers don't lose them.
+   */
+  markStale(): void {
+    this.#generation += 1;
+    this.#fetchedAt = 0;
+  }
+
+  /**
+   * Loads the organization's providers and every member's in one pass: a
+   * session can run as its owner while another member's request primed the
+   * snapshot, so any owner in the org must be servable without a second query.
+   */
   async #hydrate(): Promise<void> {
+    const generation = this.#generation;
     await this.#storage.ensureReady();
-    const records = await this.#storage.list({ orgId: this.#orgId });
-    this.#snapshot = records.map(record => ({
-      name: record.name,
-      url: record.url,
-      apiKey: record.apiKey ?? undefined,
-      models: record.models,
-    }));
-    this.#fetchedAt = Date.now();
+    const organization: MastraCodeCustomProvider[] = [];
+    const members = new Map<string, MastraCodeCustomProvider[]>();
+    for (const record of await this.#storage.listForOrg(this.#orgId)) {
+      const provider: MastraCodeCustomProvider = {
+        name: record.name,
+        url: record.url,
+        apiKey: record.apiKey ?? undefined,
+        models: record.models,
+      };
+      const owned = record.userId === null ? organization : (members.get(record.userId) ?? []);
+      owned.push(provider);
+      if (record.userId !== null) members.set(record.userId, owned);
+    }
+    this.#organization = organization;
+    this.#members = members;
+    if (generation === this.#generation) this.#fetchedAt = Date.now();
   }
 
   /** Sync by contract; kicks a background re-hydrate when the snapshot is stale. */
-  get(): MastraCodeCustomProvider[] {
-    if (Date.now() - this.#fetchedAt >= SNAPSHOT_TTL_MS) {
+  get(owner: CustomProviderOwner): MastraCodeCustomProvider[] {
+    if (this.#isStale()) {
       void this.ensureFresh().catch(() => {});
     }
-    return this.#snapshot;
+    return owner.userId === undefined ? this.#organization : (this.#members.get(owner.userId) ?? []);
   }
 }
 
@@ -95,15 +151,6 @@ function snapshotFor(orgId: string, storage: CustomProvidersStorage): OrgCustomP
   return snapshot;
 }
 
-/** The org a call resolves to, or `undefined` to fail closed (tenant mode without identity). */
-function orgForTenant(
-  tenant: { orgId?: string; userId: string } | undefined,
-  authEnabled: boolean,
-): string | undefined {
-  if (!authEnabled) return LOCAL_ORG;
-  return tenant ? tenantOrgId(tenant) : undefined;
-}
-
 /**
  * Register the DB-backed custom providers source with the SDK. Called by the
  * factory after storage init with the `custom-providers` domain handle; from
@@ -118,19 +165,21 @@ export function registerCustomProvidersSource({
   authEnabled: boolean;
 }): void {
   registered = { storage, authEnabled };
+  // Snapshots read the storage they were created with.
+  orgSnapshots.clear();
   setCustomProvidersSource(tenant => {
-    const orgId = orgForTenant(tenant, authEnabled);
-    if (!orgId) return [];
-    return snapshotFor(orgId, storage).get();
+    const owner = customProviderOwner(tenant, authEnabled);
+    if (!owner) return [];
+    return snapshotFor(owner.orgId, storage).get(owner);
   });
 }
 
 /**
- * Drop the org's cached snapshot after a custom provider write so the change
- * is visible to the next model call immediately instead of after the TTL.
+ * After a custom provider write, reload the org's snapshot on its next read
+ * instead of after the TTL, so the change reaches the next request at once.
  */
 export function invalidateCustomProvidersSnapshots(tenant: { orgId: string }): void {
-  orgSnapshots.delete(tenant.orgId);
+  orgSnapshots.get(tenant.orgId)?.markStale();
 }
 
 /** Test hook: clear registration and cached org snapshots. */
@@ -156,10 +205,10 @@ export function createCustomProvidersPrimer({
   authEnabled: boolean;
 }): MiddlewareHandler {
   return async (c, next) => {
-    const orgId = orgForTenant(auth.tenant(c), authEnabled);
-    if (orgId) {
+    const owner = customProviderOwner(auth.tenant(c), authEnabled);
+    if (owner) {
       try {
-        await snapshotFor(orgId, storage).ensureFresh();
+        await snapshotFor(owner.orgId, storage).ensureFresh();
       } catch {
         // Fail open: model calls serve the last snapshot (or none).
       }
@@ -176,10 +225,10 @@ export function createCustomProvidersPrimer({
  */
 export async function primeCustomProvidersForRequestContext(requestContext: RequestContext): Promise<void> {
   if (!registered) return;
-  const orgId = orgForTenant(resolveTenantFromRequestContext(requestContext), registered.authEnabled);
-  if (!orgId) return;
+  const owner = customProviderOwner(resolveTenantFromRequestContext(requestContext), registered.authEnabled);
+  if (!owner) return;
   try {
-    await snapshotFor(orgId, registered.storage).ensureFresh();
+    await snapshotFor(owner.orgId, registered.storage).ensureFresh();
   } catch {
     // Fail open: model calls serve the last snapshot (or none).
   }
