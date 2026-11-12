@@ -1,6 +1,9 @@
 import type { Agent } from '../agent';
-import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
+import {
+  abandonDurableAgentExecutions,
+  getActiveDurableAgentWorkflowExecutions,
+  isDurableAgentExecutionDetached,
+} from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -67,7 +70,7 @@ import { metadataEqual, targetsEqual } from '../schedules/row-diff';
 import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
-import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { ApiRoute, Middleware, ServerConfig, ServerConfigInput, StudioConfig } from '../server/types';
 import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
@@ -101,9 +104,16 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import { computeNextFire } from '../workflows/scheduler/cron';
+import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -117,6 +127,14 @@ import type { RunScope } from './run-scope';
 import { createRunScope } from './run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, normalizeConcurrency, runWithConcurrency } from './run-with-concurrency';
 import type { VersionOverrides, VersionSelector } from './types';
+
+function normalizeApiRoutes(routes: NonNullable<ServerConfigInput['apiRoutes']>): ApiRoute[] {
+  return routes.flatMap(route => (Array.isArray(route) ? route : [route]));
+}
+
+function normalizeServerConfig({ apiRoutes, ...server }: ServerConfigInput): ServerConfig {
+  return apiRoutes ? { ...server, apiRoutes: normalizeApiRoutes(apiRoutes) } : server;
+}
 
 /**
  * Creates an error for when a null/undefined value is passed to an add* method.
@@ -409,7 +427,7 @@ export interface Config<
   /**
    * Server configuration for HTTP endpoints and middleware.
    */
-  server?: ServerConfig;
+  server?: ServerConfigInput;
 
   /**
    * Studio-specific authentication and authorization configuration.
@@ -799,6 +817,9 @@ const SCHEDULER_WAKE_EVENT = 'scheduler.wake';
 // Mirrors BackgroundTaskManager's grace period and the deployer's
 // `server.drainTimeout` default.
 const DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS = 5_000;
+// A thread run still executing at shutdown is aborted and gets at least this long to wind down before its thread is
+// handed back, even when the drain budget is already spent. A tool call already executing may still finish after.
+const SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS = 500;
 // Spreads re-checks of durable-agent runs other instances still drove at boot,
 // so replicas that skipped the same run don't all try it at the same instant.
 const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
@@ -850,6 +871,7 @@ export class Mastra<
 > {
   #vectors?: TVectors;
   #agents: TAgents;
+  #toolLoopRegistrations = new WeakMap<ToolLoopAgentLike, Map<string, Agent<any>>>();
   #logger: TLogger;
   #loggerAdapterOptions: LoggerAdapterOptions = { correlation: true, export: true };
   #wiredLoggers = new WeakSet<IMastraLogger>();
@@ -884,8 +906,10 @@ export class Mastra<
   #classifiers?: TClassifiers;
   #tools?: TTools;
   #processors?: TProcessors;
-  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
-    new Map();
+  #processorConfigurations: Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
+  > = new Map();
   #memory?: TMemory;
   #knowledge: TKnowledge;
   #workspace?: Workspace;
@@ -1504,8 +1528,8 @@ export class Mastra<
    * mastra.setServer({ ...mastra.getServer(), auth: new MastraAuthWorkos() });
    * ```
    */
-  public setServer(server: ServerConfig): void {
-    this.#server = server;
+  public setServer(server: ServerConfigInput): void {
+    this.#server = normalizeServerConfig(server);
   }
 
   /**
@@ -1988,7 +2012,7 @@ export class Mastra<
     }
 
     if (config?.server) {
-      this.#server = config.server;
+      this.#server = normalizeServerConfig(config.server);
       this.#serverExplicit = true;
     }
 
@@ -2330,14 +2354,19 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
-        // A declarative cadence can outlive its final occurrence (e.g. a
-        // year-pinned cron that has already passed). Compute the timing before
-        // writing: the row is registered as `completed` rather than skipped, so
-        // the deployment stays self-consistent instead of retrying a doomed
-        // write on every boot.
-        const computeTiming = () => {
-          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
-          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        const runAt = cfg.runAt !== undefined ? toEpochMs(cfg.runAt) : undefined;
+        const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
+        const cron = cfg.cron ?? '';
+        // A one-off whose `runAt` has already passed is recorded as completed
+        // rather than fired, so a fresh deploy never runs a stale one-off. A
+        // declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed): that row is registered as
+        // `completed` rather than skipped, so the deployment stays
+        // self-consistent instead of retrying a doomed write on every boot.
+        const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
+          if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
+          const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' };
         };
 
         if (!existing) {
@@ -2345,8 +2374,10 @@ export class Mastra<
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
-            cron: cfg.cron,
+            cron,
             timezone: cfg.timezone,
+            ...(runAt !== undefined ? { runAt } : {}),
+            ...(endAt !== undefined ? { endAt } : {}),
             status: timing.status,
             nextFireAt: timing.nextFireAt,
             createdAt: now,
@@ -2362,17 +2393,23 @@ export class Mastra<
         // recomputed cadence is the exception: it re-arms a completed row when
         // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== cfg.cron;
+        const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+        const runAtChanged = (existing.runAt ?? undefined) !== runAt;
+        const endAtChanged = (existing.endAt ?? undefined) !== endAt;
 
-        if (cronChanged) patch.cron = cfg.cron;
+        if (cronChanged) patch.cron = cron;
         if (timezoneChanged) patch.timezone = cfg.timezone;
+        // Adapters clear the column when the key is present but undefined.
+        if (runAtChanged) patch.runAt = runAt;
+        if (endAtChanged) patch.endAt = endAt;
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
+        // Any timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule, and re-arm or complete the
+        // row per the recomputed cadence.
+        if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
           const timing = computeTiming();
           patch.nextFireAt = timing.nextFireAt;
           if (timing.status === 'completed') patch.status = 'completed';
@@ -2800,8 +2837,12 @@ export class Mastra<
    *
    * This method allows dynamic registration of agents after the Mastra instance
    * has been created. The agent will be initialized with the current logger.
+   * Re-registering the same instance under the same key is a no-op. Rehydrating
+   * a stored agent under an existing stored-agent key also leaves the original
+   * registration unchanged.
    *
-   * @throws {MastraError} When an agent with the same key already exists
+   * @throws {MastraError} When a different agent with the same key already exists,
+   *   except when both registrations have source 'stored'
    *
    * @example
    * ```typescript
@@ -2829,26 +2870,6 @@ export class Mastra<
       throw createUndefinedPrimitiveError('agent', agent, key);
     }
 
-    // Auto-wrap regular Agents that opted in via AgentConfig.durable.
-    // The wrapped agent then flows into the isDurableAgentLike branch below,
-    // which handles __setMastra, workflow registration, and channel routes.
-    //
-    // Statically importing `createDurableAgent` here is safe because `agent.ts`
-    // imports `Mastra` type-only, so there is no `agent → mastra` runtime edge
-    // to close the init cycle. See the import note in `agent/agent.ts`.
-    //
-    // A standalone durable `Agent` satisfies `isDurableAgentLike` via a
-    // self-referential `.agent` getter (see `Agent#agent`), so we must
-    // discriminate against a real wrapper by checking `agent.agent !== agent`.
-    // Real wrappers (e.g. `DurableAgent`, `InngestAgent`) point `.agent` at a
-    // distinct inner `Agent`; the standalone placeholder points at itself.
-    const isRealDurableWrapper = isDurableAgentLike(agent) && (agent as DurableAgentLike).agent !== (agent as unknown);
-    if (!isRealDurableWrapper && (agent as Agent).durable) {
-      const durableOption = (agent as Agent).durable;
-      const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
-    }
-
     // Handle durable agent wrappers (e.g., InngestAgent)
     // These wrap a regular Agent with execution engine-specific capabilities
     if (isDurableAgentLike(agent)) {
@@ -2856,12 +2877,19 @@ export class Mastra<
       const underlyingAgent = durableAgent.agent;
       const agentKey = key || durableAgent.id;
 
-      // Check if already registered
+      // Only re-registering the same wrapper is idempotent.
       const agents = this.#agents as Record<string, Agent<any>>;
       if (agents[agentKey]) {
-        const logger = this.getLogger();
-        logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
-        return;
+        if (Object.is(agents[agentKey], durableAgent)) {
+          return;
+        }
+        throw new MastraError({
+          id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+          domain: ErrorDomain.MASTRA,
+          category: ErrorCategory.USER,
+          text: `Agent with key ${agentKey} already exists`,
+          details: { status: 409, key: agentKey },
+        });
       }
 
       // Set the Mastra instance on the durable agent for observability
@@ -2930,6 +2958,7 @@ export class Mastra<
                 source: 'agent',
                 agentId: durableAgent.id ?? agentKey,
                 agentName: durableAgent.name,
+                agentSource: underlyingAgent.source,
               });
             }
           })
@@ -2999,16 +3028,35 @@ export class Mastra<
     }
 
     let mastraAgent: Agent<any, any, any>;
-    if (isToolLoopAgentLike(agent)) {
+    const toolLoopInput = isToolLoopAgentLike(agent) ? agent : undefined;
+    if (toolLoopInput) {
       // Pass the config key as the name if the ToolLoopAgent doesn't have an id
-      mastraAgent = toolLoopAgentToMastraAgent(agent, { fallbackName: key });
+      mastraAgent = toolLoopAgentToMastraAgent(toolLoopInput, { fallbackName: key });
     } else {
       mastraAgent = agent as Agent;
     }
     const agentKey = key || mastraAgent.id;
     const agents = this.#agents as Record<string, Agent<any>>;
     if (agents[agentKey]) {
-      return;
+      if (
+        agents[agentKey] === mastraAgent ||
+        (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
+        (agents[agentKey].source === 'stored' && options?.source === 'stored')
+      ) {
+        return;
+      }
+      throw new MastraError({
+        id: 'MASTRA_ADD_AGENT_DUPLICATE_KEY',
+        domain: ErrorDomain.MASTRA,
+        category: ErrorCategory.USER,
+        text: `Agent with key ${agentKey} already exists`,
+        details: { status: 409, key: agentKey },
+      });
+    }
+
+    // Set the source first: registering the agent records it on the agent's processor configurations
+    if (options?.source) {
+      mastraAgent.source = options.source;
     }
 
     // Initialize the agent
@@ -3022,12 +3070,15 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
-    // Set the source if provided
-    if (options?.source) {
-      mastraAgent.source = options.source;
-    }
-
     agents[agentKey] = mastraAgent;
+    if (toolLoopInput) {
+      let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
+      if (!registrations) {
+        registrations = new Map();
+        this.#toolLoopRegistrations.set(toolLoopInput, registrations);
+      }
+      registrations.set(agentKey, mastraAgent);
+    }
 
     // Register configured processor workflows from the agent
     // Use .then() to handle async resolution without blocking the constructor
@@ -3054,6 +3105,7 @@ export class Mastra<
               source: 'agent',
               agentId: mastraAgent.id ?? agentKey,
               agentName: mastraAgent.name,
+              agentSource: mastraAgent.source,
             });
           }
         })
@@ -3463,6 +3515,18 @@ export class Mastra<
     this.setStudio(fsStudio);
   }
 
+  /** Drops an agent's processor configurations; registering the agent again re-adds them. */
+  #removeProcessorConfigurations(agentId: string): void {
+    for (const [processorId, configs] of this.#processorConfigurations) {
+      const remaining = configs.filter(c => c.agentId !== agentId);
+      if (remaining.length === 0) {
+        this.#processorConfigurations.delete(processorId);
+      } else if (remaining.length !== configs.length) {
+        this.#processorConfigurations.set(processorId, remaining);
+      }
+    }
+  }
+
   /**
    * Removes an agent from the Mastra instance by its key or ID.
    * Used when stored agents are updated/deleted to allow fresh data to be loaded.
@@ -3491,6 +3555,7 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
@@ -3505,10 +3570,13 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
 
+    // An agent attached to Mastra without being registered (a sub-agent) still registers processor configurations.
+    this.#removeProcessorConfigurations(keyOrId);
     return false;
   }
 
@@ -3793,7 +3861,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string; agentSource?: DefinitionSource },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
@@ -3818,6 +3886,7 @@ export class Mastra<
       source,
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+      ...(source === 'agent' && metadata?.agentSource ? { agentSource: metadata.agentSource } : {}),
     };
   }
 
@@ -4323,7 +4392,54 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    const runs = activeRuns.runs;
+    const workflowsStore = await this.#storage?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
+    const runs: WorkflowRuns['runs'] = [];
+    for (const run of activeRuns.runs) {
+      const parent = nestedRunParentOf(run.snapshot);
+      if (!parent) {
+        runs.push(run);
+        continue;
+      }
+      // A nested run is collected by its parent's step, so the parent's stored status decides what
+      // restarting it standalone would do: run it twice while the parent drives it, or re-run the
+      // item after the parent already finished it.
+      try {
+        const parentStatus = await parentStatusOf(parent);
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(run);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: run.workflowName,
+            runId: run.runId,
+            expectedStatus: nestedRunStatusOf(run.snapshot),
+            logger: this.#logger,
+          });
+        } else if (recovery === 'skip') {
+          // Nothing is wrong here: the parent can still drive this run. Logged because a nested
+          // run left waiting on a parent that never restarts is otherwise only visible in the
+          // nested workflow's own active runs.
+          this.#logger.debug('Left a nested workflow run for its parent to drive', {
+            workflow: run.workflowName,
+            runId: run.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.#logger.error('Failed to recover nested workflow run', {
+          workflow: run.workflowName,
+          runId: run.runId,
+          error,
+        });
+      }
+    }
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
@@ -5292,8 +5408,15 @@ export class Mastra<
    * @param processor - The processor instance
    * @param agentId - The ID of the agent that uses this processor
    * @param type - Whether this is an input or output processor
+   * @param source - Where the agent is defined. Configurations of stored agents stay marked as stored, so they can
+   *   be told apart from code agents' configurations after the stored agent is gone.
    */
-  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+  public addProcessorConfiguration(
+    processor: Processor,
+    agentId: string,
+    type: 'input' | 'output',
+    source?: DefinitionSource,
+  ): void {
     const processorId = processor.id;
     if (!this.#processorConfigurations.has(processorId)) {
       this.#processorConfigurations.set(processorId, []);
@@ -5301,9 +5424,11 @@ export class Mastra<
     const configs = this.#processorConfigurations.get(processorId)!;
 
     // Check if this exact configuration already exists
-    const exists = configs.some(c => c.agentId === agentId && c.type === type);
-    if (!exists) {
-      configs.push({ processor, agentId, type });
+    const existing = configs.find(c => c.agentId === agentId && c.type === type);
+    if (!existing) {
+      configs.push({ processor, agentId, type, ...(source && { source }) });
+    } else if (source === 'stored') {
+      existing.source = 'stored';
     }
   }
 
@@ -5315,7 +5440,7 @@ export class Mastra<
    */
   public getProcessorConfigurations(
     processorId: string,
-  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }> {
     return this.#processorConfigurations.get(processorId) || [];
   }
 
@@ -5326,7 +5451,7 @@ export class Mastra<
    */
   public listProcessorConfigurations(): Map<
     string,
-    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
   > {
     return this.#processorConfigurations;
   }
@@ -6540,8 +6665,11 @@ export class Mastra<
     if (this.#agents) {
       Object.keys(this.#agents).forEach(key => {
         this.#agents?.[key]?.__setLogger(this.#logger);
+        this.#agents?.[key]?.getChannels()?.__setLogger(this.#logger);
       });
     }
+
+    Object.values(this.#harnesses ?? {}).forEach(controller => controller.getChannels()?.__setLogger(this.#logger));
 
     if (this.#deployer) {
       this.#deployer.__setLogger(this.#logger);
@@ -7559,6 +7687,34 @@ export class Mastra<
   }
 
   /**
+   * Hand back the thread runs this Mastra still holds once its durable executions are abandoned: announce each run's
+   * end, stop its lease renewal and release its thread lease, so another process can take the thread right away.
+   */
+  async #shutdownThreadRuns(deadline: number): Promise<void> {
+    // Agents can carry their own pubsub; thread runs live in a separate runtime state per pubsub.
+    const pubsubs = new Set<PubSub | undefined>([this.pubsub]);
+    for (const agent of Object.values(this.#agents as Record<string, Agent<any>>)) {
+      if (typeof agent?.getPubSub === 'function') pubsubs.add(agent.getPubSub());
+    }
+    const abortGraceMs = Math.max(SHUTDOWN_THREAD_RUN_ABORT_GRACE_MIN_MS, deadline - Date.now());
+    const executesElsewhere = (runId: string) => isDurableAgentExecutionDetached(this, runId);
+    const results = await this.#awaitBounded(
+      Promise.allSettled(
+        [...pubsubs].map(pubsub =>
+          agentThreadStreamRuntime.shutdown(pubsub, this, { abortGraceMs, executesElsewhere }),
+        ),
+      ),
+      abortGraceMs + 1_000,
+      'thread run handback',
+    );
+    results?.forEach(result => {
+      if (result.status === 'rejected') {
+        this.#logger?.error('Handing back thread runs failed during shutdown', { error: result.reason });
+      }
+    });
+  }
+
+  /**
    * Await an already-started promise for at most `timeoutMs`. Returns its value
    * when it settles in time, or `undefined` after logging a warning when the
    * budget is exhausted — the work keeps running in the background so teardown
@@ -7896,6 +8052,17 @@ export class Mastra<
    * reach during the drain. An abandoned durable agent run then stops without
    * writing and is released. It can be recovered only if a checkpoint was
    * persisted.
+   *
+   * Agent thread runs this instance still holds are then handed back. A run
+   * still executing is aborted so it starts no further steps, and other
+   * processes watching its thread see it end; its partial response is not
+   * saved. A run parked on a tool approval or suspension stays parked and
+   * resumable. Either way the thread lease is released right away instead of
+   * at expiry, so another process can use the thread immediately. Release is
+   * best-effort: if an aborted run doesn't stop in time (for example, a tool
+   * call that ignores the abort), or the lease backend doesn't answer or
+   * fails the release, the lease is kept until it expires. Handing runs back can take up to about 1.5 seconds past
+   * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
     const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
@@ -7960,6 +8127,10 @@ export class Mastra<
     // the next boot recovers it right away. Storage must still be open.
     await abandonDurableAgentExecutions(this);
 
+    // Hand back the thread runs this instance still holds: announce each run's end to observers in other
+    // processes and release its thread lease, so the thread is free right away instead of after the lease
+    // lapses. Pubsub must still be open.
+    await this.#shutdownThreadRuns(deadline);
     // The shared BackgroundTaskWorker deliberately delegates manager ownership
     // to Mastra. Stop the manager while workers, pubsub, and storage are still
     // available so it can abort active tasks, preserve retry recovery, and

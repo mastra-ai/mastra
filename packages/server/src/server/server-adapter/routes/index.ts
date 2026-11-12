@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
 import type { FGARouteConfig, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
+import type { ApiRoute, MastraMCPToolset, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
 import type { OpenAPIRoute } from '../openapi-utils';
@@ -83,6 +83,19 @@ export type InferParams<
  */
 export type ResponseType = 'stream' | 'json' | 'datastream-response' | 'mcp-http' | 'mcp-sse';
 
+/**
+ * Opt-in metadata that exposes a route as a tool on the built-in Mastra MCP server.
+ * The tool runs the route in-process, with the same authorization as the HTTP request.
+ */
+export interface RouteMCPConfig {
+  /** Toolset the tool belongs to. */
+  toolset: MastraMCPToolset;
+  /** MCP tool name. */
+  name: string;
+  /** Tool description shown to MCP clients. */
+  description: string;
+}
+
 export type ServerRouteHandler<
   TParams = Record<string, unknown>,
   TResponse = unknown,
@@ -159,6 +172,13 @@ export type ServerRoute<
    */
   fga?: FGARouteConfig;
   onValidationError?: ValidationErrorHook;
+  /** Exposes this route as a tool on the built-in Mastra MCP server. */
+  mcp?: RouteMCPConfig;
+  /**
+   * `'bearer'` accepts credentials only from the `Authorization` header and always uses `server.auth`:
+   * Studio client-type routing, cookies, and the `apiKey` query parameter are ignored.
+   */
+  authTransport?: 'bearer';
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;
 };

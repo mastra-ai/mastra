@@ -163,18 +163,18 @@ function formatSignalName(signalName: TraceSignalName) {
 }
 
 /**
- * "Date · N traces · N themes" line rendered under the timeline in every view
+ * Date, trace-count, and theme-count fields rendered under the timeline in every view
  * mode. Counts come from the charted flow (cohort stage totals), so a drilled
  * flow reports the drilled subset; date-only while the flow is loading.
  */
-export function snapshotSummaryLabel(snapshot: ThemeSnapshot, flow: ThemeFlowResponse | undefined) {
+export function snapshotSummaryParts(snapshot: ThemeSnapshot, flow: ThemeFlowResponse | undefined): readonly string[] {
   const date = snapshot.cutoffAt
     ? formatSnapshotCutoff(snapshot.cutoffAt)
     : formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt);
-  if (!flow) return date;
+  if (!flow) return [date];
 
   const { traceCount, themeCount } = flowCounts(flow);
-  return `${date} · ${traceLabel(traceCount)} · ${themeLabel(themeCount)}`;
+  return [date, traceLabel(traceCount), themeLabel(themeCount)];
 }
 
 function flowCounts(flow: ThemeFlowResponse) {

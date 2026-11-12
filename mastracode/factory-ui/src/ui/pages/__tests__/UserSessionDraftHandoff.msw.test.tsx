@@ -106,7 +106,10 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    await user.click(modelPicker);
+    await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -130,12 +133,15 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
+    const modelPicker = await screen.findByLabelText('Session model');
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    await user.click(modelPicker);
+    await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the Built-in default.')).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Thinking: Medium (Built-in default)' })).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 
@@ -242,6 +248,45 @@ describe('a user session draft on the real thread route', () => {
     await router.navigate(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`);
 
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug'));
+    expect(screen.getByText(/The previous message may not have been sent/)).toBeInTheDocument();
+    expect(route.posted).toEqual([]);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
+  it('keeps what was typed while reopening the thread alongside the prompt it gives back', async () => {
+    let finishCreate = () => {};
+    const createGate = new Promise<void>(resolve => {
+      finishCreate = resolve;
+    });
+    const route = stubDraftRoute({ createGate, defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+    expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();
+
+    await router.navigate(`/factories/${FACTORY_ID}/user/new/${OTHER_DRAFT_SESSION_ID}`);
+    await waitFor(() =>
+      expect(screen.queryByText('fix the login bug', { selector: 'main p' })).not.toBeInTheDocument(),
+    );
+    await router.navigate(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`);
+    const composer = await screen.findByRole('region', { name: 'Thread composer' });
+    await user.type(within(composer).getByRole('textbox', { name: 'Message' }), 'and the logout one');
+    finishCreate();
+
+    await waitFor(() =>
+      expect(within(composer).getByRole('textbox', { name: 'Message' })).toHaveValue(
+        'fix the login bug\n\nand the logout one',
+      ),
+    );
     expect(screen.getByText(/The previous message may not have been sent/)).toBeInTheDocument();
     expect(route.posted).toEqual([]);
 
@@ -367,8 +412,10 @@ describe('a user session draft on the real thread route', () => {
     const modelPicker = await screen.findByLabelText('Session model');
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
+    await screen.findByRole('group', { name: /^Thinking: Medium/ });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -411,8 +458,10 @@ describe('a user session draft on the real thread route', () => {
     const modelPicker = await screen.findByLabelText('Session model');
     await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
-    await user.click(await screen.findByRole('button', { name: /^Thinking: Medium/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4 Mini/ }));
+    await waitFor(() => expect(modelPicker).toBeEnabled());
+    if (modelPicker.getAttribute('aria-expanded') !== 'true') await user.click(modelPicker);
+    await screen.findByRole('group', { name: /^Thinking: Medium/ });
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);

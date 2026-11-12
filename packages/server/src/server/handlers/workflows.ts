@@ -52,6 +52,15 @@ import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, v
 const TERMINAL_RUN_STATUSES: WorkflowRunStatus[] = ['success', 'failed', 'canceled', 'tripwire'];
 
 /**
+ * A run's result with its step results read: a storage v2 result's `steps` is a loader that
+ * reads them from storage, which a response can't carry, so it answers with them as for v1.
+ */
+async function withLoadedSteps<T extends { steps?: unknown }>(result: T): Promise<T> {
+  const steps: unknown = result.steps;
+  return typeof steps === 'function' ? { ...result, steps: await steps() } : result;
+}
+
+/**
  * Runs whose chunks are already being written to the cache in this process,
  * keyed by runId. A run has exactly one writer: without this, two concurrent
  * requests for the same runId each cache every chunk and the replayed history
@@ -112,7 +121,7 @@ export interface WorkflowContext extends Context {
   requestContext?: RequestContext;
 }
 
-async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
+export async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {
@@ -170,6 +179,11 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'list_workflows',
+    description: 'List the workflows you can run, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
@@ -321,6 +335,11 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   summary: 'Get workflow by ID',
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow',
+    description: 'Get details for one workflow, including its input schema and steps.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, workflowId }: any) => {
     try {
@@ -449,6 +468,11 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   description:
     'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow_run',
+    description: 'Get the status and result of a workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
     try {
@@ -709,6 +733,12 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'start_workflow',
+    description:
+      'Run a workflow and wait for it to finish or suspend. Returns the run id and the result, or the suspend payload.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
@@ -735,7 +765,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         );
       }
       const _run = await workflow.createRun({ runId, resourceId: effectiveResourceId });
-      const result = await _run.start({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.start({ ...params, requestContext }));
       return result;
     } catch (error) {
       return handleError(error, 'Error starting async workflow');
@@ -870,6 +900,11 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'resume_workflow_run',
+    description: 'Resume a suspended workflow run with resume data and wait for it to finish or suspend again.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
@@ -898,7 +933,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.resume({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.resume({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1058,7 +1093,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.restart({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.restart({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1237,7 +1272,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
       await validateRunOwnership(run, effectiveResourceId, mastra, requestContext);
 
       const _run = await workflow.createRun({ runId, resourceId: run.resourceId });
-      const result = await _run.timeTravel({ ...params, requestContext });
+      const result = await withLoadedSteps(await _run.timeTravel({ ...params, requestContext }));
 
       return result;
     } catch (error) {
@@ -1360,6 +1395,11 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Cancel workflow run',
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'cancel_workflow_run',
+    description: 'Cancel an in-progress workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {

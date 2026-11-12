@@ -40,7 +40,7 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
     triageType: null,
     acceptedAt: null,
     autonomyArmedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     createdAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
     updatedAt: new Date(Date.UTC(2026, 6, 18, 0, index)),

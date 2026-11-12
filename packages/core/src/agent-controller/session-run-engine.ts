@@ -1610,6 +1610,9 @@ export class SessionRunEngine {
             toolCallId,
             exitCode,
             success: getBoolean(d?.success, exitCode === 0),
+            killed: getBoolean(d?.killed, false),
+            timedOut: getBoolean(d?.timedOut, false),
+            error: getString(d?.error),
           });
         }
         break;
@@ -1950,10 +1953,11 @@ export class SessionRunEngine {
             chunk.type === 'tripwire' ||
             chunk.type === 'tool-call-suspended'
           ) {
-            const suspended =
-              chunk.type === 'tool-call-suspended' ||
-              (streamResult ?? this.finishStreamState(currentRun)).suspended ||
-              undefined;
+            // Finish the stream state before checking the chunk type: it emits the
+            // `message_end` that closes the assistant message, which a turn ending in a
+            // tool suspension needs as much as any other.
+            const finished = streamResult ?? this.finishStreamState(currentRun);
+            const suspended = chunk.type === 'tool-call-suspended' || finished.suspended || undefined;
             const aborted = chunk.type === 'abort';
             // A non-success terminal finish reason (e.g. a `claude-fable-5`
             // content-filter refusal) becomes an explicit error so the

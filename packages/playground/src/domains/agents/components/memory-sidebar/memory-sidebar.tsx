@@ -272,7 +272,7 @@ export function MemorySidebarBody({
               'memory-sidebar-overlay absolute inset-x-0 bottom-0 z-10 box-border flex min-h-0 flex-col overflow-hidden',
               showMemory
                 ? cn(raisedSurfaceStyle, 'top-1 m-1 rounded-xl')
-                : 'state-layer m-1 rounded-xl border border-surface-rim bg-muted',
+                : 'm-1 rounded-xl border border-surface-rim bg-muted state-layer',
             )}
             style={{ height: showMemory ? undefined : collapsedCardSize.height || undefined }}
           >
@@ -312,7 +312,7 @@ export function MemorySidebarBody({
                       icon={Search}
                       tooltip={
                         semanticRecallOn
-                          ? 'Semantic recall is on - retrieves relevant past messages'
+                          ? 'Semantic recall is on and retrieves relevant past messages'
                           : 'Semantic recall is off'
                       }
                       enabled={semanticRecallOn}
@@ -321,7 +321,7 @@ export function MemorySidebarBody({
                       icon={NotebookPen}
                       tooltip={
                         workingMemoryOn
-                          ? 'Working memory is on - persists notes across the conversation'
+                          ? 'Working memory is on and persists notes across the conversation'
                           : 'Working memory is off'
                       }
                       enabled={workingMemoryOn}
@@ -330,7 +330,7 @@ export function MemorySidebarBody({
                       icon={Eye}
                       tooltip={
                         observationalOn
-                          ? 'Observational memory is on - learns from the conversation'
+                          ? 'Observational memory is on and learns from the conversation'
                           : 'Observational memory is off'
                       }
                       enabled={observationalOn}

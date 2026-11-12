@@ -23,7 +23,6 @@ function activityMember(member: StretchMember, part: HostedPart | undefined): Ac
       toolName: tool.toolName,
       args: tool.args,
       status: tool.status,
-      startedAt: tool.createdAt,
       row: <StretchToolRow tool={tool} />,
       body: toolHasBody(tool, command) ? <ToolBody tool={tool} command={command} /> : undefined,
     };
@@ -37,12 +36,8 @@ function activityMember(member: StretchMember, part: HostedPart | undefined): Ac
 
 function callState(member: StretchMember): ActivityCallState[] {
   if (member.kind !== 'tool') return [];
-  const { toolName, args, status, createdAt } = toolFromInvocationPart(
-    member.part,
-    member.runtime,
-    member.messageCreatedAt,
-  );
-  return [{ toolName, args, status, startedAt: createdAt }];
+  const { toolName, args, status } = toolFromInvocationPart(member.part, member.runtime, member.messageCreatedAt);
+  return [{ toolName, args, status }];
 }
 
 /**

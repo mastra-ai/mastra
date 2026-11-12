@@ -12,6 +12,7 @@ import { ChatRunningContext } from '@/domains/chat/context/chat-context';
 import { KnowledgeLinksProvider } from '@/domains/chat/knowledge/knowledge-links';
 import { toolCardKind } from '@/domains/chat/tools/tool-card-kind';
 import { foldsIntoGroup } from '@/domains/chat/tools/tool-groups';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import type { LinkComponentProviderProps } from '@/lib/framework';
 import { LinkComponentProvider } from '@/lib/framework';
 
@@ -181,7 +182,7 @@ describe('Knowledge tool cards', () => {
   describe('when knowledge_read returns part of a page', () => {
     const deployer = { id: 'page-cf', name: 'CloudflareDeployer', scope: 'docs:mastra', key: 'cloudflare-deployer' };
     const at = (line: number) => ({ line });
-    const row = () => screen.getByTestId('knowledge-tool-badge').textContent ?? '';
+    const row = () => within(screen.getByTestId('knowledge-tool-badge'));
 
     it('puts the lines in the collapsed row, so two reads of one page do not look the same', () => {
       const first = renderCard({
@@ -192,14 +193,14 @@ describe('Knowledge tool cards', () => {
           more: ['body: showing lines 60–95 of 133. Read on with from: {"line":96}.'],
         },
       });
-      expect(row()).toContain('CloudflareDeployer · lines 60–95 of 133');
+      expect(row().getByText('CloudflareDeployer: lines 60–95 of 133')).toBeTruthy();
       first.unmount();
       renderCard({
         toolName: 'knowledge_read',
         input: { page: 'docs:mastra#cloudflare-deployer', from: at(120) },
         output: { page: { ...deployer, lines: '120│z', range: { start: at(120), end: at(133) }, lineCount: 133 } },
       });
-      expect(row()).toContain('CloudflareDeployer · lines 120–133 of 133');
+      expect(row().getByText('CloudflareDeployer: lines 120–133 of 133')).toBeTruthy();
     });
 
     it('shows the lines it read, the range and where to read on when opened', () => {
@@ -216,7 +217,7 @@ describe('Knowledge tool cards', () => {
         },
       });
       const body = open();
-      expect(body.textContent).toContain('Lines 60–95 of 133 · continues at line 96');
+      expect(within(body).getByText('Lines 60–95 of 133, continues at line 96')).toBeTruthy();
       expect(body.textContent).toContain('60│first line');
     });
 
@@ -226,7 +227,8 @@ describe('Knowledge tool cards', () => {
         input: { page: 'Refunds' },
         output: { page: { ...refunds, body: 'Short page.' } },
       });
-      expect(row()).not.toContain('·');
+      expect(row().getByText('Refunds')).toBeTruthy();
+      expect(row().queryByText(/lines|overview|section|matches/)).toBeNull();
       expect(open().textContent).toContain('Whole page');
     });
 
@@ -236,7 +238,7 @@ describe('Knowledge tool cards', () => {
         input: { page: 'docs:mastra#cloudflare-deployer' },
         output: { page: { ...deployer, lines: '1│# Cloudflare\n⋯ lines 2–40', lineCount: 400 } },
       });
-      expect(row()).toContain('CloudflareDeployer · overview of 400 lines');
+      expect(row().getByText('CloudflareDeployer: overview of 400 lines')).toBeTruthy();
     });
 
     it('names the terms and context of a match read and the lines each match covers', () => {
@@ -251,7 +253,7 @@ describe('Knowledge tool cards', () => {
           },
         },
       });
-      expect(row()).toContain('CloudflareDeployer · matches "kv" ±2');
+      expect(row().getByText('CloudflareDeployer: matches "kv" ±2')).toBeTruthy();
       const body = open();
       expect(body.textContent).toContain('1 match for "kv" with 2 lines of context: lines 10–16 of 133');
       expect(body.textContent).toContain('10│kv namespace');
@@ -263,7 +265,7 @@ describe('Knowledge tool cards', () => {
         input: { page: 'docs:mastra#cloudflare-deployer', section: 'Setup' },
         output: { page: { ...deployer, lines: '5│x', range: { start: at(5), end: at(12) }, lineCount: 133 } },
       });
-      expect(row()).toContain('section "Setup" · lines 5–12 of 133');
+      expect(row().getByText('CloudflareDeployer: section "Setup", lines 5–12 of 133')).toBeTruthy();
     });
   });
 
@@ -280,7 +282,7 @@ describe('Knowledge tool cards', () => {
         },
         output: { page: { ...refunds, version: 4 } },
       });
-      expect(screen.getByTestId('knowledge-tool-badge').textContent).toContain('Refunds · lines 12–14');
+      expect(within(screen.getByTestId('knowledge-tool-badge')).getByText('Refunds: lines 12–14')).toBeTruthy();
       expect(open().textContent).toContain('Replaced lines 12–14');
     });
   });
@@ -406,6 +408,11 @@ describe('Knowledge tool cards', () => {
         output: { page: refunds },
       });
       const badge = open();
+      const DeleteIcon = agentGlyph('deleting');
+      const expectedIcon = render(<DeleteIcon />)
+        .container.querySelector('[data-part=body]')
+        ?.getAttribute('d');
+      expect(badge.querySelector('[data-part=body]')?.getAttribute('d')).toBe(expectedIcon);
       expect(badge.textContent).toContain('Deleted page');
       expect(badge.textContent).not.toContain('Updated page');
       expect(badge.textContent).toContain('Refunds');

@@ -270,6 +270,25 @@ describe('getSpanOutcome', () => {
       expect(getSpanOutcome(span)?.headline).toBe('The model asked to call 3 tools');
     });
 
+    it('keeps a follow-up user request in the agent run headline', () => {
+      const span = makeSpan({
+        spanType: SpanType.AGENT_RUN,
+        entityName: 'finance-agent',
+        input: [
+          { role: 'user', content: 'Initial question' },
+          { role: 'assistant', content: 'How can I help?' },
+          { role: 'user', content: 'Summarize the invoices' },
+        ],
+        output: { text: 'Here is the invoice summary.' },
+      });
+
+      expect(getSpanOutcome(span)).toMatchObject({
+        headline: 'finance-agent answered “Initial question; Summarize the invoices”',
+        detail: 'Here is the invoice summary.',
+        tone: 'success',
+      });
+    });
+
     it('warns when a model stopped at the token limit', () => {
       const span = makeSpan({
         spanType: SpanType.MODEL_GENERATION,
@@ -285,8 +304,8 @@ describe('getSpanOutcome', () => {
 
     it('previews the arguments and result of a tool call', () => {
       expect(getSpanOutcome({ ...toolCallSpan, entityName: 'getWeather' })).toEqual({
-        headline: 'getWeather ran with city: Paris · units: metric and returned a result',
-        detail: 'temperature: 21 · condition: sunny · humidity: 40',
+        headline: 'getWeather ran with city: Paris, units: metric and returned a result',
+        detail: 'temperature: 21, condition: sunny, humidity: 40',
         tone: 'success',
         evidence: 'output',
       });

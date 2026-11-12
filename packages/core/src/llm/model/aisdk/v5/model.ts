@@ -1,8 +1,43 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
+import { prepareJsonSchemaForOpenAIStrictMode } from '@mastra/schema-compat';
+import { hasFreeFormObject } from '../../free-form-object';
 import type { MastraLanguageModelV2 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
+
+const isAzureOpenAIModel = (provider: string) => provider === 'azure.chat' || provider === 'azure.responses';
+
+/**
+ * Prepares function tool schemas for strict mode when an AI SDK 5 `@ai-sdk/azure` request is strict.
+ *
+ * The v2 Chat and Responses models copy the single `openai.strictJsonSchema` flag into every
+ * function tool's `strict`, so opting into strict structured output also makes every tool strict.
+ * Azure rejects a strict tool schema that leaves keys out of `required` or uses keywords such as
+ * `uniqueItems` (#28593). Native `openai.*` models are left alone: OpenAI accepts constraints that
+ * preparing would move into descriptions.
+ */
+export function prepareAzureStrictToolSchemas(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+  if (!options.tools?.length || options.providerOptions?.openai?.strictJsonSchema !== true) {
+    return options;
+  }
+
+  return {
+    ...options,
+    tools: options.tools.map(tool => {
+      // Preparing a free-form object (`z.record()`) would leave it no allowed keys, so it is sent as before.
+      if (tool.type !== 'function' || hasFreeFormObject(tool.inputSchema)) {
+        return tool;
+      }
+      try {
+        return { ...tool, inputSchema: prepareJsonSchemaForOpenAIStrictMode(tool.inputSchema) };
+      } catch {
+        // Schemas strict mode cannot express (such as conflicting `allOf` branches) are sent as before.
+        return tool;
+      }
+    }),
+  };
+}
 
 /**
  * Strips per-tool `strict` from function tools (V2 providers don't support it)
@@ -10,7 +45,7 @@ type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
  * the OpenAI provider options so the V2 OpenAI provider enables strict mode
  * globally for all tools.
  */
-function applyStrictForV2(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+function applyStrictForV2(options: LanguageModelV2CallOptions, provider: string): LanguageModelV2CallOptions {
   if (!options.tools?.length) {
     return options;
   }
@@ -54,7 +89,7 @@ function applyStrictForV2(options: LanguageModelV2CallOptions): LanguageModelV2C
     }
   }
 
-  return result;
+  return isAzureOpenAIModel(provider) ? prepareAzureStrictToolSchemas(result) : result;
 }
 
 /**
@@ -108,7 +143,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(applyStrictForV2(options));
+    const result = await this.#model.doGenerate(applyStrictForV2(options, this.provider));
 
     return {
       ...result,
@@ -119,7 +154,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(applyStrictForV2(options));
+    return await this.#model.doStream(applyStrictForV2(options, this.provider));
   }
 
   /**

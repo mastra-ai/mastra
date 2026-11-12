@@ -16,6 +16,7 @@ import {
   isDurableEngineVariant,
   useLoopScenarioAimock,
 } from '../aimock-scenario';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 
 const REPLY = 'Scored reply.';
 
@@ -67,5 +68,26 @@ describeForAllEngines('AIMock loop scenario: call-time and defaultOptions scorer
 
     await vi.waitFor(() => expect(runs).toHaveLength(1));
     expect(runs[0]!.runId).toBe(runId);
+  });
+
+  it('saves the score on the agent run span that is stored with the trace', async () => {
+    const llm = getMock();
+    llm.on({ endpoint: 'chat' }, { content: REPLY });
+    const { observability, ended } = captureOutcomeEvents();
+    const { scorer } = recordingScorer('span-target-scorer');
+    const { agent, mastra } = await createSharedAgent(llm, {
+      engine,
+      observability,
+      defaultOptions: scorerDefaults({ spanTarget: { scorer } }),
+    });
+
+    const runId = await streamToEnd(agent);
+
+    const scoresStore = await mastra.getStorage().getStore('scores');
+    await vi.waitFor(async () => {
+      const [agentRun] = ended();
+      const { scores } = await scoresStore.listScoresByRunId({ runId, pagination: { page: 0, perPage: 10 } });
+      expect(scores).toMatchObject([{ traceId: agentRun!.traceId, spanId: agentRun!.id }]);
+    });
   });
 });

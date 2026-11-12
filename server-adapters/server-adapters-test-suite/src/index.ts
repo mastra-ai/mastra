@@ -1,6 +1,7 @@
 export { createRouteAdapterTestSuite } from './route-adapter-test-suite';
 export { createStructuredWakeTestSuite, type StructuredWakeTestConfig } from './structured-wake-test-suite';
 export { createDurableDisconnectTestSuite, type DurableDisconnectTestConfig } from './durable-disconnect-test-suite';
+export { createStreamDisconnectTestSuite, type StreamDisconnectTestConfig } from './stream-disconnect-test-suite';
 export type {
   AdapterTestSuiteConfig,
   AdapterTestContext,
@@ -14,6 +15,11 @@ export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multi
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
 export { createCustomRouteFGATestSuite, type CustomRouteFGATestSuiteConfig } from './custom-route-fga-test-suite';
+export {
+  createRouteDispatchParityTestSuite,
+  type RouteDispatchParityTestSuiteConfig,
+} from './route-dispatch-parity-test-suite';
+export { createBuiltinMCPParityTestSuite, type BuiltinMCPParityTestSuiteConfig } from './builtin-mcp-parity-test-suite';
 
 export {
   createDefaultTestContext,
@@ -23,3 +29,12 @@ export {
   consumeSSEStream,
 } from './test-helpers';
 export { createKnowledgeRoutesTestSuite, type KnowledgeRoutesTestSuiteConfig } from './knowledge-routes-test-suite';
+
+export {
+  createObservabilitySignalWriteTestSuite,
+  type ObservabilitySignalWriteTestConfig,
+} from './observability-signal-write-test-suite';
+export {
+  createCustomRouteDisconnectTestSuite,
+  type CustomRouteDisconnectTestSuiteConfig,
+} from './custom-route-disconnect-test-suite';

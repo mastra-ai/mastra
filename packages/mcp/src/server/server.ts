@@ -20,8 +20,14 @@ import type { Span, TracingContext } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
-import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
+import { createTool, getValidationIssuePaths, isValidationError, validateToolInput } from '@mastra/core/tools';
+import type {
+  InternalCoreTool,
+  MCPToolExecutionContext,
+  MCPToolType,
+  ToolAction,
+  ValidationError,
+} from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { ToolExecuteFGACheck } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
@@ -116,6 +122,7 @@ import {
   isWorkflowTaskContext,
   runErrorMessage,
   runSummary,
+  withLoadedSteps,
 } from './tasks/workflow-runs';
 import type { AnsweredSuspension, WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
 import type {
@@ -129,6 +136,7 @@ import type {
   MCPServerResources,
   MCPServerToolResultOptions,
 } from './types';
+import { matchesUriTemplate } from './uri-template';
 
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
@@ -459,11 +467,13 @@ export class MCPServer extends MCPServerBase {
           mcp: { toolType: 'workflow' },
           execute: async (inputData, context) => {
             const run = await workflow.createRun({ runId: context?.requestContext?.get('runId') });
-            return run.start({
-              inputData,
-              requestContext: context?.requestContext,
-              tracingContext: context?.tracingContext,
-            });
+            return withLoadedSteps(
+              await run.start({
+                inputData,
+                requestContext: context?.requestContext,
+                tracingContext: context?.tracingContext,
+              }),
+            );
           },
         }),
       );
@@ -666,7 +676,7 @@ export class MCPServer extends MCPServerBase {
     return {};
   }
 
-  private createServerInstance(): Server {
+  private createServerInstance(era: 'legacy' | 'modern' = 'modern'): Server {
     const server = new Server(
       {
         name: this.name,
@@ -686,8 +696,9 @@ export class MCPServer extends MCPServerBase {
         requestState: { verify: this.requestStateCodec.verify },
       },
     );
-    // Deprecated session-level log control (SEP-2577): not served.
-    server.removeRequestHandler('logging/setLevel');
+    // Deprecated session-level log control (SEP-2577): not served on 2026-07-28. 2025-era clients
+    // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
+    if (era === 'modern') server.removeRequestHandler('logging/setLevel');
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
@@ -1501,7 +1512,9 @@ export class MCPServer extends MCPServerBase {
     // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
     const input = validateToolInput(workflow.inputSchema, args, name);
     if (input.error) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(input.error, workflow.inputSchema),
+      });
       return errorResult(input.error.message);
     }
     // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
@@ -1523,8 +1536,8 @@ export class MCPServer extends MCPServerBase {
     // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
     const start = (runTracing: TracingContext) => {
       const run = workflow.createRun({ runId: context.runId });
-      const result: Promise<WorkflowRunView> = run.then(started =>
-        started.start({ inputData: input.data, requestContext, tracingContext: runTracing }),
+      const result: Promise<WorkflowRunView> = run.then(async started =>
+        withLoadedSteps(await started.start({ inputData: input.data, requestContext, tracingContext: runTracing })),
       );
       const cancel = () =>
         void run
@@ -1717,14 +1730,16 @@ export class MCPServer extends MCPServerBase {
           .catch(error => this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error })),
     );
     try {
-      view = await run.resume({
-        step: answered.step,
-        resumeData: answer.content ?? {},
-        requestContext,
-        // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
-        // Without a span, core falls back to the trace the run's snapshot recorded.
-        ...(span && { tracingContext: { currentSpan: span } }),
-      });
+      view = await withLoadedSteps(
+        await run.resume({
+          step: answered.step,
+          resumeData: answer.content ?? {},
+          requestContext,
+          // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
+          // Without a span, core falls back to the trace the run's snapshot recorded.
+          ...(span && { tracingContext: { currentSpan: span } }),
+        }),
+      );
     } catch (error) {
       // Resumed already, by another instance or an earlier try of this attempt: follow that.
       if (isResumeClaimLost(error)) return this.watchWorkflowRun(workflow, context, attempt.signal);
@@ -1907,7 +1922,9 @@ export class MCPServer extends MCPServerBase {
 
   private toCallToolResult(name: string, tool: InternalCoreTool, value: unknown): CallToolResult {
     if (isValidationError(value)) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, {
+        issuePaths: getValidationIssuePaths(value, tool.parameters),
+      });
       return errorResult(value.message);
     }
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
@@ -1947,6 +1964,23 @@ export class MCPServer extends MCPServerBase {
       })) ?? []),
     ];
 
+    // A listed resource wins; otherwise the URI may expand one of the caller's own
+    // templates, so a read stays scoped to what that caller was advertised.
+    const findResource = async (
+      uri: string,
+      ctx: ServerContext,
+      requestContext: RequestContext,
+    ): Promise<Resource | undefined> => {
+      const listed = (await listResources(ctx, requestContext)).find(r => r.uri === uri);
+      if (listed || !options?.resourceTemplates) return listed;
+      const templates = await options.resourceTemplates({
+        extra: toToolExecutionContext(ctx, this.name).extra,
+        requestContext,
+      });
+      const template = templates.find(t => matchesUriTemplate(t.uriTemplate, uri));
+      return template && { uri, name: template.name, mimeType: template.mimeType, _meta: template._meta };
+    };
+
     // Providers are re-evaluated with the current request every time; resource
     // lists are scoped per caller and never cached on the shared server.
     this.setTracedHandler(server, 'resources/list', async (_request, ctx, trace) => ({
@@ -1955,7 +1989,7 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'resources/read', async (request, ctx, trace) => {
       const uri = request.params.uri;
-      const resource = (await listResources(ctx, trace.requestContext)).find(r => r.uri === uri);
+      const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
       const html = this.appResourceHtml.get(uri);
@@ -2169,7 +2203,7 @@ export class MCPServer extends MCPServerBase {
 
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
-      this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
+      this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
         legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
@@ -2445,7 +2479,7 @@ export class MCPServer extends MCPServerBase {
             id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
             domain: ErrorDomain.MCP,
             category: ErrorCategory.USER,
-            details: { toolId, args: JSON.stringify(args) },
+            details: { toolId },
           },
           error,
         );

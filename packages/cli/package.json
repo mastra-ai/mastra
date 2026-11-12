@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.38.0-alpha.3",
+  "version": "1.39.0-alpha.14",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -98,7 +98,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

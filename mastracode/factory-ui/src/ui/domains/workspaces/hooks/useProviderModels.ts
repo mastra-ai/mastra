@@ -11,12 +11,14 @@ export interface ProviderModels {
   retry: () => void;
 }
 
-function preferredFactoryModel(providerId: string): string | undefined {
+export function preferredFactoryModel(providerId: string): string | undefined {
   switch (providerId) {
     case 'openai':
       return 'openai/gpt-5.6-sol';
     case 'anthropic':
       return 'anthropic/claude-fable-5';
+    case 'mastra':
+      return 'mastra/anthropic/claude-opus-5.5';
     default:
       return undefined;
   }

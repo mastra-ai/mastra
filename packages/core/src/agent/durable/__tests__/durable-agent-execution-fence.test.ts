@@ -52,6 +52,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -445,7 +446,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         model: model.model as LanguageModelV2,
         memory,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
+      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -885,15 +887,10 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const next = gatedModel('recovered answer');
       next.release();
       const agentB = buildAgent({ model: next.model, storage, memory });
-      if (backend === 'lease') {
-        // A pubsub lease leaves no record of the released run, so its thread
-        // lease marks it live until that lapses once the process exits.
-        const refusal = await agentB.recover(runId).catch(error => error);
-        const refusedBy = Date.now();
-        expect(refusal).toMatchObject({ id: RUN_ACTIVE_ERROR_ID, details: { runId, liveBy: 'thread-lease' } });
-        expect(refusal.details.retryAt).toBeLessThanOrEqual(refusedBy + agentThreadStreamRuntime.threadLeaseTtlMs);
-        vi.spyOn(agentThreadStreamRuntime, 'isRunHoldingThreadLease').mockResolvedValue(false);
-      }
+      // Shutdown released the run's thread lease too, so it no longer marks the run live.
+      expect(await agentThreadStreamRuntime.isRunHoldingThreadLease(durableAgent.pubsub, runId, THREAD, RESOURCE)).toBe(
+        false,
+      );
       const recovered = await agentB.recover(runId);
       const chunks = await drain(recovered.fullStream);
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
@@ -1946,7 +1943,14 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     const workflows = storage.stores.workflows!;
     let segment = 0;
     const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
-    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+    for (const method of [
+      'persistWorkflowSnapshot',
+      'updateWorkflowResults',
+      'updateWorkflowState',
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
       const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
       vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
         writes.push({

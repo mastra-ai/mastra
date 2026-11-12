@@ -20,8 +20,10 @@ export async function requestApi(options: ApiRequestOptions): Promise<unknown> {
     const { queryInput, bodyInput } = splitInput(options.descriptor, options.input);
     const originRoute = options.descriptor.routePlacement === 'origin';
     const baseUrl = originRoute ? new URL(options.baseUrl).origin : options.baseUrl;
-    const apiPrefix = originRoute ? '' : options.apiPrefix;
-    const url = buildUrl(baseUrl, options.descriptor.path, options.pathParams, queryInput, apiPrefix);
+    const url = buildUrl(baseUrl, options.descriptor.path, options.pathParams, queryInput, {
+      apiPrefix: originRoute ? '' : options.apiPrefix,
+      repeatLists: originRoute,
+    });
     const init: RequestInit = {
       method: options.descriptor.method,
       headers: { ...options.headers },
@@ -61,7 +63,7 @@ export function buildUrl(
   path: string,
   pathParams: Record<string, string>,
   input?: Record<string, unknown>,
-  apiPrefix?: string,
+  route: { apiPrefix?: string; repeatLists?: boolean } = {},
 ): string {
   const pathParamNames = new Set<string>();
   const resolvedPath = path.replace(/:([A-Za-z0-9_]+)/g, (_, name: string) => {
@@ -72,7 +74,7 @@ export function buildUrl(
     }
     return encodeURIComponent(value);
   });
-  const url = new URL(joinUrl(baseUrl, resolvedPath, apiPrefix));
+  const url = new URL(joinUrl(baseUrl, resolvedPath, route.apiPrefix));
 
   for (const [key, value] of Object.entries(pathParams)) {
     if (!pathParamNames.has(key)) url.searchParams.set(key, value);
@@ -81,6 +83,17 @@ export function buildUrl(
   if (input) {
     for (const [key, value] of Object.entries(input)) {
       if (value === undefined || value === null) continue;
+      // Origin (Factory) routes read a list as one parameter per value. Mastra API routes parse
+      // object-typed query values from JSON, and some only accept a single-element list in that form.
+      if (
+        route.repeatLists &&
+        Array.isArray(value) &&
+        value.length > 0 &&
+        value.every(item => typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean')
+      ) {
+        for (const item of value) url.searchParams.append(key, String(item));
+        continue;
+      }
       url.searchParams.set(key, typeof value === 'object' ? JSON.stringify(value) : String(value));
     }
   }

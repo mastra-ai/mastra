@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router';
 
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
@@ -18,7 +17,13 @@ export function useBoardRuns({
   refetchItems,
 }: {
   factoryProjectId: string;
-  refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
+  /**
+   * A fresh read of the cards a click can land on. It is given the id of the card clicked, and may
+   * send that card alone: the card is taken as deleted when the read succeeds without it.
+   */
+  refetchItems: (
+    itemId: string,
+  ) => Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }>;
 }) {
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
@@ -63,15 +68,15 @@ export function useBoardRuns({
   // Refetch failures here used to be silent: an expired auth cookie made every
   // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems();
+    const refreshedItems = await refetchItems(itemId);
     if (!refreshedItems.isSuccess) {
       const cause = refreshedItems.error;
-      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
     const item = refreshedItems.data.find(candidate => candidate.id === itemId);
     if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
+      toast.error('This card no longer exists. The board may be out of date.');
       return;
     }
     return item;

@@ -39,8 +39,8 @@ vi.mock('../../auth/storage.js', () => {
 const mockAnthropicOAuthFetch = vi.hoisted(() => vi.fn());
 vi.mock('../../providers/claude-max.js', () => ({
   opencodeClaudeMaxProvider: vi.fn(() => ({ __provider: 'claude-max-oauth' })),
-  claudeCodeMiddleware: { specificationVersion: 'v3', transformParams: vi.fn() },
-  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v3', transformParams: vi.fn() })),
+  claudeCodeMiddleware: { specificationVersion: 'v4', transformParams: vi.fn() },
+  createPromptCacheMiddleware: vi.fn(() => ({ specificationVersion: 'v4', transformParams: vi.fn() })),
   buildAnthropicOAuthFetch: vi.fn(() => mockAnthropicOAuthFetch),
   createAnthropicThinkingMiddleware: vi.fn(() => undefined),
 }));
@@ -1094,6 +1094,23 @@ describe('resolveModel', () => {
         baseUrl: 'https://gateway-api.mastra.ai',
       });
       expect(ModelRouterLanguageModel).not.toHaveBeenCalled();
+    });
+
+    it("routes a Factory tenant's mastra-prefixed model with the tenant's own gateway key", () => {
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: () => undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'mastra-gateway' ? 'msk_tenant_key' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      const result = resolveModel('mastra/anthropic/claude-sonnet-4', { requestContext }) as Record<string, unknown>;
+
+      expect(result.__provider).toBe('mastra-gateway-delegate');
+      expect(result.args).toMatchObject({ providerId: 'anthropic', apiKey: 'msk_tenant_key' });
     });
 
     it('routes explicit mastra-prefixed anthropic OAuth model through custom gateway middleware', () => {

@@ -221,7 +221,6 @@ export function ItemDetailDialog({
         <TextAndIcon>
           <HashIcon /> {getShortId(item.id)}
         </TextAndIcon>
-        |
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">

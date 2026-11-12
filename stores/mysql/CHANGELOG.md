@@ -1,5 +1,67 @@
 # @mastra/mysql
 
+## 0.17.0-alpha.0
+
+### Minor Changes
+
+- Added one-off and bounded schedules for agents and workflows. Pass `runAt` instead of `cron` to fire a schedule once, or pass `endAt` with `cron` to stop a recurring schedule after a given time. Finished schedules use the existing `completed` status when they have no automatic fires remaining. Declarative workflow schedules (`createWorkflow({ schedule })`) accept `runAt` and `endAt` too, and schedule hooks receive `trigger.kind: 'once'` for a scheduled fire of a one-off agent schedule. ([#25131](https://github.com/mastra-ai/mastra/pull/25131))
+
+  **TypeScript compatibility:** `cron` is now optional on schedule records and create/update inputs because one-off schedules use `runAt` instead. Strict consumers that read `schedule.cron` must first check that it is defined.
+
+  ```typescript
+  await mastra.schedules.create({ workflowId: 'send-report', runAt: new Date(Date.now() + 60 * 60 * 1000) });
+  await mastra.schedules.create({ workflowId: 'digest', cron: '0 9 * * *', endAt: new Date('2027-01-01') });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`1689ce3`](https://github.com/mastra-ai/mastra/commit/1689ce38e1d66df6f474acd5db65f46315a02c23), [`067314b`](https://github.com/mastra-ai/mastra/commit/067314bcb3372d763f087a74b79c912c9645ca08), [`38327de`](https://github.com/mastra-ai/mastra/commit/38327de07a169a6d5ce8ab8fc2075caec112d6f3), [`aa49b04`](https://github.com/mastra-ai/mastra/commit/aa49b049d00a90851c3209e6dac1c6f30ddedceb), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`2053c88`](https://github.com/mastra-ai/mastra/commit/2053c881ed7a13c43d3932e1938e2f94ef226b4f), [`4884ee0`](https://github.com/mastra-ai/mastra/commit/4884ee08a067dd82176c57ca54bdfec02eda97ea), [`49e7108`](https://github.com/mastra-ai/mastra/commit/49e71082bd2c36cd20d7f4ba62bb3666e108968b), [`4cfa256`](https://github.com/mastra-ai/mastra/commit/4cfa256801f6b7e909daa5ed5d14c77b9fb24197), [`7f0d2fd`](https://github.com/mastra-ai/mastra/commit/7f0d2fd4b6c304ad851232b5969d96fdb20aa06a), [`b0ef22e`](https://github.com/mastra-ai/mastra/commit/b0ef22e7bfeb309c456d5c54528d579c4ac9e863), [`a169a80`](https://github.com/mastra-ai/mastra/commit/a169a8014cbbfcdeb8c559183c60458540737e74), [`eb683b4`](https://github.com/mastra-ai/mastra/commit/eb683b45fe2ad645ae81c419d405aa2327a053e3)]:
+  - @mastra/core@1.83.0-alpha.9
+
+## 0.16.0
+
+### Minor Changes
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  The Knowledge storage domain now stores Knowledge as pages, notes and pins (schema 4) instead of nodes and records. On startup, the tables of the earlier experimental Knowledge node store (shipped in 1.79.0) are dropped, with any rows in them, and the new tables are created; this also happens if an older process recreates them during a rolling deploy. Memory and other tables are never touched. On MongoDB, Knowledge collections found without a schema version (for example, left by an interrupted first start) are adopted as schema 4 rather than refused. Don't run `dangerouslyReset()` from an older version against a database the new version already uses. Knowledge pages need a `@mastra/core` release that includes them; with an older core, the other storage domains keep working.
+
+- Store Knowledge listing pins. The pins table gets a `kind` column (`page` or `list`) and a `depth` column, and a page now holds one pin per kind. Existing pins become page pins; no reset is needed. ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  **Migration step on first start.** Each store upgrades its pins table once, the first time it starts with this version:
+
+  - LibSQL rebuilds the pins table (SQLite can't drop the old one-pin-per-page constraint in place): it creates the new table, copies every pin across as a page pin, and swaps it in, inside the init transaction.
+  - Postgres and MySQL alter the table in place (add `kind` and `depth`, replace the unique key on the page with one on page and kind).
+  - MongoDB sets `kind: 'page'` on existing pins and replaces the unique index on `pageId` with one on `pageId` and `kind`.
+
+### Patch Changes
+
+- Added persistent model-list editing through the existing agent model reorder and update APIs for agents that opt into Editor ownership. ([#27287](https://github.com/mastra-ai/mastra/pull/27287))
+
+- Knowledge stores can list and count only the child scopes a reader can see, so `knowledge_list` no longer reads every child scope to show the readable ones. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Added `knowledge_list`, a Knowledge read tool that lists the page tree under a starting point, so an agent can see how a scope or section is organized before searching. Each entry has the ref `knowledge_read` accepts, its name and child count; pass `descriptions: true` to add page descriptions. It goes up to 3 levels deep, takes a `limit` and a `cursor` for wide levels, and says when deeper levels were cut off. A result also stops at the same token cap as a `knowledge_read` body; `more` says how many entries were left out and gives the `cursor` that continues exactly where it stopped, at any depth. Scopes the run can't read are left out. `tools: { read: true }` includes it. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  ```ts
+  // Agent tool call
+  knowledge_list({ from: 'docs:acme#guides', depth: 2 });
+  // → { from: { ref: 'docs:acme#guides', name: 'Guides' },
+  //     entries: [{ ref: 'docs:acme#guides/observability', name: 'Observability', depth: 1, children: 2 }, …] }
+  ```
+
+  Knowledge storage adapters gained `countChildPages({ parentIds, read })`, which counts the readable child pages under each parent in one query.
+
+- MySQL now stores the Knowledge page link index, so `countPageLinks()` and `listPageLinks()` work on MySQL Knowledge stores. The new `mastra_knowledge_page_links` table is created on startup without a schema change; links for existing pages fill in on `knowledge.reindexLinks()` or the page's next write. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- `knowledge_search` now finds pages that match any word of the query, not only pages that match every word. Pages with more of the query's words rank higher, so a long question still finds the page that holds most of its words. A page whose name contains the whole query still comes first. When several pages match the same number of words, a word in the name counts more than one in the description, and one in the description more than one in the body. A search uses the first 16 distinct words of the query; repeated words count once. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- Fixed experiment result writes putting plaintext back over a purged dataset item. When a purge committed while a result was being written, the writer could miss the purge marker and overwrite the redacted input, output, ground truth, error and metadata. ([#29106](https://github.com/mastra-ai/mastra/pull/29106))
+
+- Fixed two concurrent Knowledge page creates with the same key failing with a raw duplicate-entry error; the loser now gets a key conflict error, like the other storage adapters. ([#29159](https://github.com/mastra-ai/mastra/pull/29159))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0
+
 ## 0.16.0-alpha.3
 
 ### Minor Changes

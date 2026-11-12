@@ -76,8 +76,10 @@ import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
 import {
   createGitRefReminderReader,
+  createGitRefReminderReaderAsync,
   instructionSourcePaths,
   loadSessionInstructions,
+  loadSessionInstructionsAsync,
   sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { builtinSubagents } from './agents/subagents/index.js';
@@ -89,13 +91,19 @@ import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import {
   AccountRotationProcessor,
   AccountStartNoticeProcessor,
+  isStreamCutAfterResponse,
   MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
-import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
+import {
+  resolveAgentStreamsOff,
+  resolveExperimentalAgent,
+  validateExperimentalAgent,
+  wrapExperimentalAgent,
+} from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
 import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
@@ -342,6 +350,13 @@ export interface MastraCodeConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
+   * Workspace-relative directory agents write plan files into, overriding the
+   * per-session default (`.mastracode/plans`, or `.artifacts/plans` for Factory
+   * project sessions). Prompts and the plan-mode write guard of the default
+   * workspace use it; a custom `workspace` must apply its own guard.
+   */
+  plansDir?: string;
+  /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
    * LibSQL fallback — if the injected store fails, that's a hard error.
@@ -389,6 +404,8 @@ export interface MastraCodeConfig {
   hostInstructions?:
     | string
     | ((ctx: { requestContext: RequestContext }) => string | undefined | Promise<string | undefined>);
+  /** Whether approving a plan starts it as a goal in this host's clients. Set false when plan approval does not start a goal (Factory). Default: true */
+  planApprovalStartsGoal?: boolean;
   /** Commit co-author identity included in coding-agent commit guidance. Unspecified fields use core defaults. */
   coAuthor?: { name?: string; email?: string };
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
@@ -618,12 +635,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
   const experimentalAgent = resolveExperimentalAgent(globalSettings);
+  const agentStreamsOff = resolveAgentStreamsOff();
   const backgroundToolsEnabled = globalSettings.backgroundTools?.enabled ?? false;
   const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
-    process.env['MASTRA_GATEWAY_API_KEY'] ??= storedGatewayKey;
+    // Through AuthStorage, so removeStoredApiKey() can undo the export later.
+    // Like before, a variable already set in the environment wins.
+    authStorage.loadStoredApiKeysIntoEnv({ [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY' });
   }
 
   if (storedGatewayUrl) {
@@ -1235,7 +1255,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
         const projectPath = state?.projectPath ?? project.rootPath;
         const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
-        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        const reader =
+          'supportsAsyncInstructionReaders' in AgentsMDInjector
+            ? createGitRefReminderReaderAsync(primary!, state.baseRef)
+            : createGitRefReminderReader(primary!, state.baseRef);
         if (primary === projectPath) return reader;
         // The base ref covers the session's own checkout only; the other
         // checkouts under the working directory are never read off disk.
@@ -1249,6 +1272,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...reader,
           pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
           isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+          readFile: filePath => {
+            if (outsidePrimary(filePath)) throw new Error(`Not found at ref ${state.baseRef}: ${filePath}`);
+            return reader.readFile(filePath);
+          },
         };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -1258,13 +1285,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // dedup stays consistent on untrusted checkouts and across roots.
         const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
         const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
-        const sources = loadSessionInstructions({
+        const options = {
           workingDir: projectPath,
           instructionRoots: state?.instructionRoots,
           untrustedCheckout: untrusted,
           baseRef: untrusted ? state?.baseRef : undefined,
-        });
-        return instructionSourcePaths(sources, roots);
+        };
+        if (!('supportsAsyncInstructionReaders' in AgentsMDInjector)) {
+          return instructionSourcePaths(loadSessionInstructions(options), roots);
+        }
+        return loadSessionInstructionsAsync(options).then(sources => instructionSourcePaths(sources, roots));
       },
     }),
   ];
@@ -1338,6 +1368,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    ...(agentStreamsOff ? { durable: false } : {}),
     // Workspace is wired per-request at the AgentController level (see
     // `config.workspace` below), so opt out of the factory's default local
     // workspace. An explicit `undefined` is required: the factory only builds a
@@ -1368,6 +1399,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        planApprovalStartsGoal: config?.planApprovalStartsGoal,
+        plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
       });
     },
@@ -1536,6 +1569,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       new CyberRefusalHandler(),
       new StreamErrorRetryProcessor({
         matchers: [
+          // Account rotation owns a stream the provider cut after accepting the
+          // request, with its own per-step budget. The matcher walk stops at the
+          // first match, so this entry claims the cut before the transient
+          // matchers below reach its socket-error cause (or the 504 derived for
+          // a duration-limit frame) and declines with no retries.
+          { match: isStreamCutAfterResponse, maxRetries: 0 },
           { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
           {
             match: isTransientConnectionError,
@@ -1556,7 +1595,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Rotation runs last in the error lane: a transient error reaching here
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
-      // rotate immediately.
+      // rotate immediately, and stream cuts arrive with no retry spent.
       new AccountRotationProcessor({
         credentialStore: authStorage,
         // Same budget core enforces (maxProcessorRetries below): past it, core
@@ -1757,6 +1796,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  // Used when the host passes no `workspace`. Its plan-mode write guard must
+  // allow the same plans directory the prompts tell the agent to write to.
+  const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1806,7 +1849,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ? modelId
         : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, googleVertexGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
+    workspace: config?.workspace ?? defaultWorkspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,

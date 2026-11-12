@@ -65,6 +65,65 @@ describe('presentTool', () => {
     expect(presentTool('fetch_pull_request', undefined).pose).toBe('tool');
   });
 
+  it('draws a file info call as a file read, not as a system notice', () => {
+    expect(presentTool('mastra_workspace_file_stat', { path: 'a.ts' }).pose).toBe('reading');
+  });
+
+  it('recognizes namespaced tools without guessing ambiguous provider operations', () => {
+    expect(presentTool('mcp__workspace__read_file', { path: 'src/a.ts' })).toMatchObject({
+      pose: 'reading',
+      detail: 'src/a.ts',
+    });
+    expect(presentTool('workspace.kill_process', { pid: 42 })).toMatchObject({ pose: 'stopping', detail: '42' });
+    expect(presentTool('mcp__catalog__search', { query: 'refunds' }).pose).toBe('tool');
+    expect(presentTool('provider_delete_file_backup', { path: 'backup' }).pose).toBe('tool');
+    expect(presentTool('constructor', {}).pose).toBe('tool');
+    expect(presentTool('mcp__provider__workflow-delete', {}).pose).toBe('tool');
+    expect(presentTool('provider.agent-disconnect', {}).pose).toBe('tool');
+    expect(presentTool('workflow-provider.delete', {}).pose).toBe('tool');
+    expect(presentTool('agent-provider.delete', {}).pose).toBe('tool');
+  });
+
+  it('distinguishes running a command, reading its output, and stopping it', () => {
+    const poses = ['execute_command', 'get_process_output', 'kill_process'].map(name => presentTool(name, {}).pose);
+    expect(new Set(poses).size).toBe(3);
+  });
+
+  it('shows the action inside a Knowledge tool once its arguments arrive', () => {
+    const calls = [
+      presentTool('knowledge_page', undefined),
+      presentTool('knowledge_page', { op: 'merge', page: 'A', into: 'B' }),
+      presentTool('knowledge_page', { op: 'delete', page: 'A' }),
+    ];
+    expect(new Set(calls.map(call => call.pose)).size).toBe(3);
+    expect(new Set(calls.map(call => call.label)).size).toBe(3);
+    expect(presentTool('knowledge_pin', { op: 'unpin', page: 'A' }).pose).not.toBe(
+      presentTool('knowledge_pin', { op: 'pin', page: 'A' }).pose,
+    );
+  });
+
+  it('does not describe checking a recording as making one', () => {
+    const record = presentTool('browser_record', { action: 'start' });
+    const check = presentTool('browser_record', { action: 'status' });
+    expect(check.pose).not.toBe(record.pose);
+    expect(check.label).not.toBe(record.label);
+  });
+
+  it('recognizes an agent or workflow called as a tool by its name prefix', () => {
+    expect(presentTool('agent-support', { prompt: 'Check refunds' }).pose).toBe('delegating');
+    expect(presentTool('workflow-refund', {}).pose).toBe('workflow');
+  });
+
+  it('distinguishes using a skill, searching for skills, and reading a skill file', () => {
+    const calls = [
+      presentTool('skill', { name: 'Support' }),
+      presentTool('skill_search', { query: 'Refunds' }),
+      presentTool('skill_read', { path: 'support/SKILL.md' }),
+    ];
+    expect(new Set(calls.map(call => call.pose)).size).toBe(3);
+    expect(new Set(calls.map(call => call.label)).size).toBe(3);
+  });
+
   it('prettifies unknown tool names instead of surfacing raw identifiers', () => {
     expect(presentTool('fetch_pull_request', undefined).label).toBe('Fetch pull request');
   });
@@ -99,6 +158,26 @@ describe('toolEdit', () => {
 
   it('reads a written file as its content', () => {
     expect(toolEdit('write_file', { path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
+  });
+
+  it.each(['filesystem_edit_file', 'filesystem_string_replace', 'filesystem_str_replace'])(
+    'keeps the diff from %s visible when ordinary arguments are hidden',
+    toolName => {
+      const args = { file_path: 'src/refunds.ts', old_string: 'return refund();', new_string: '' };
+      expect(toolEdit(toolName, args)).toEqual({
+        path: 'src/refunds.ts',
+        oldText: 'return refund();',
+        newText: '',
+      });
+      expect(hasToolArguments({ toolName, args, hideArguments: true })).toBe(true);
+      expect(presentTool(toolName, args).pose).toBe('tool');
+    },
+  );
+
+  it.each(['filesystem_write_file', 'filesystem_create_file'])('shows the file content written by %s', toolName => {
+    const args = { path: 'src/refunds.ts', content: 'export const refunds = [];\n' };
+    expect(toolEdit(toolName, args)).toEqual({ path: 'src/refunds.ts', content: args.content });
+    expect(presentTool(toolName, args).pose).toBe('tool');
   });
 
   it('leaves other calls to the raw arguments', () => {

@@ -2,8 +2,11 @@ import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ChartCardProps } from '../../metrics/components/chart-card';
 import type { DashboardExpand } from '../widget-kind';
 
-/** What a widget's card shows as its title: `title`, and `titleMenu` with several views or an expand link. */
-export type ViewHeading = Pick<ChartCardProps, 'title' | 'titleMenu' | 'href' | 'LinkComponent'>;
+/**
+ * What a widget's card shows in its top bar: `title`, and `titleMenu` with several views, plus its
+ * actions: the drilldown, the alert, the expand link, then the host's.
+ */
+export type ViewHeading = Pick<ChartCardProps, 'title' | 'titleMenu' | 'dragHandle' | 'onTitleChange' | 'actions'>;
 
 /** Filters a gate can't apply, named as the filter bar names them. */
 const FILTER_NAMES: Record<string, string> = {
@@ -27,7 +30,7 @@ export const viewLabel = (label: string | undefined, index: number) => label?.tr
 /**
  * The card title for the open view: the widget's title for a single view; with several, the open
  * view's label, as a menu of every view (as the metrics cards switch views). With somewhere to
- * expand to, the widget's title links there instead.
+ * expand to, the widget's title stays plain instead, and `ExpandAction` links there.
  */
 export function viewTitle(
   widget: DashboardWidget,
@@ -36,11 +39,9 @@ export function viewTitle(
   onChoose: (index: number) => void,
   expand?: DashboardExpand,
 ): ViewHeading {
-  const href = expand?.href(widget);
-  if (href) {
-    // A link needs a name: a blank title falls back to the first view's label.
-    const title = widget.title?.trim() ? widget.title : viewLabel(views[0]?.label, 0);
-    return { title, href, LinkComponent: expand?.LinkComponent };
+  if (expand?.href(widget)) {
+    // The card and its expand link need a name: a blank title falls back to the first view's label.
+    return { title: widget.title?.trim() ? widget.title : viewLabel(views[0]?.label, 0) };
   }
   if (views.length < 2) return { title: widget.title ?? '' };
   const options = views.map((v, i) => ({ value: viewValue(v.label, i), label: viewLabel(v.label, i) }));

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ring-signals",
-  "version": "0.1.0-alpha.0",
+  "version": "0.1.0",
   "description": "Ring doorbell and camera signal provider for Mastra agents",
   "type": "module",
   "main": "./dist/index.js",

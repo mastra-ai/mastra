@@ -155,7 +155,24 @@ describe('PlatformJiraIntegration discovery', () => {
 
     await expect(reconcile?.()).resolves.toMatchObject({ projects: 1, checked: 1, updated: 1, failed: 0 });
     const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect((item)).toMatchObject({ metadata: {autoStartCandidate: true}, workItem: { metadata: {identifier: 'ENG-42', issueRef: reference, state: 'To Do', stateType: 'unstarted', priority: 'High', project: 'ENG', assignee: 'Ada', author: 'Grace', labels: ['bug'], createdAt: '2026-07-01T00:00:00Z', updatedAt: '2026-07-02T00:00:00Z'} } });
+    expect(item).toMatchObject({
+      metadata: { autoStartCandidate: true },
+      workItem: {
+        metadata: {
+          identifier: 'ENG-42',
+          issueRef: reference,
+          state: 'To Do',
+          stateType: 'unstarted',
+          priority: 'High',
+          project: 'ENG',
+          assignee: 'Ada',
+          author: 'Grace',
+          labels: ['bug'],
+          createdAt: '2026-07-01T00:00:00Z',
+          updatedAt: '2026-07-02T00:00:00Z',
+        },
+      },
+    });
   });
 
   it('constructs without a connection ID and logs initialization without connection details', async () => {
@@ -319,6 +336,34 @@ describe('PlatformJiraIntegration over integrations v2', () => {
       commentCount: 1,
     });
     expect(detail?.comments[0]?.body).toBe('Details');
+  });
+
+  it('does not return an issue from a different project than the reference names', async () => {
+    stubRoutes([
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9?`, () => json(issue('SEC-9', '3'))],
+      [
+        'GET',
+        `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9/comment`,
+        () => json({ comments: [], total: 0 }),
+      ],
+    ]);
+    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'SEC-9', projectId: '2' });
+
+    await expect(integration().intake.getIssue({ connection, issueId: reference })).resolves.toBeNull();
+    await expect(
+      integration().intake.getIssue({ connection, issueId: 'SEC-9', sourceId: encodeSourceId('a1b_beta', '2') }),
+    ).resolves.toBeNull();
+  });
+
+  it('does not return an issue whose reference conflicts with the source scope', async () => {
+    const fetchMock = stubRoutes([]);
+    const sourceId = encodeSourceId('a1b_acme', '1');
+    const otherConnection = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'SEC-9', projectId: '1' });
+    const otherProject = encodeIssueReference({ connectionId: 'a1b_acme', issueId: 'SEC-9', projectId: '3' });
+
+    await expect(integration().intake.getIssue({ connection, issueId: otherConnection, sourceId })).resolves.toBeNull();
+    await expect(integration().intake.getIssue({ connection, issueId: otherProject, sourceId })).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('rejects a connection that was not discovered as active jira', async () => {

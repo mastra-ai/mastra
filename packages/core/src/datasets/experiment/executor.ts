@@ -11,6 +11,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import { loadStepResults } from '../../workflows/run-journal';
 import { agentModelLabel } from './agent-model';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
@@ -615,7 +616,7 @@ async function executeWorkflow(
     }
   }
 
-  return handleWorkflowResult(result);
+  return handleWorkflowResult({ ...result, steps: await loadStepResults(result.steps) });
 }
 
 /**

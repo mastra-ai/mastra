@@ -66,28 +66,28 @@ export function SidebarProvider({
   const safeMin = Math.max(0, Math.min(minWidth, maxWidth));
   const safeMax = Math.max(safeMin, maxWidth);
   const safeCollapsed = Math.max(0, Math.min(collapsedWidth, safeMax));
-  const safeDefault = clamp(defaultWidth, safeMin, safeMax);
   const safeCollapseBelow = collapseBelow ?? safeMin;
 
   const stateStorageKey = storageKey ? `${storageKey}:${SIDEBAR_STATE_KEY}` : SIDEBAR_STATE_KEY;
   const widthStorageKey = storageKey ? `${storageKey}:${SIDEBAR_WIDTH_KEY}` : SIDEBAR_WIDTH_KEY;
 
-  // Read storage during render so the first paint already has the stored width.
+  // Read storage during render so the first paint already has the stored width. The width is kept as stored and only
+  // clamped where it shows: a view that opens with raised bounds must not replace the width the user chose.
   const readInitial = (): InitialSidebarState => {
-    if (typeof window === 'undefined') return { state: defaultState, width: safeDefault };
+    if (typeof window === 'undefined') return { state: defaultState, width: defaultWidth };
     try {
       let nextState: SidebarState = defaultState;
-      let nextWidth = safeDefault;
+      let nextWidth = defaultWidth;
       const storedState = window.localStorage.getItem(stateStorageKey);
       if (storedState === 'collapsed' || storedState === 'default') nextState = storedState;
       const storedWidth = window.localStorage.getItem(widthStorageKey);
       if (storedWidth !== null) {
         const parsed = Number(storedWidth);
-        if (Number.isFinite(parsed)) nextWidth = clamp(parsed, safeMin, safeMax);
+        if (Number.isFinite(parsed)) nextWidth = parsed;
       }
       return { state: nextState, width: nextWidth };
     } catch {
-      return { state: defaultState, width: safeDefault };
+      return { state: defaultState, width: defaultWidth };
     }
   };
   const initialRef = React.useRef<InitialSidebarState | null>(null);
@@ -134,9 +134,12 @@ export function SidebarProvider({
     if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
   }, []);
 
+  // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
+  // width within the current bounds without overwriting it, so the sidebar returns to the user's
+  // width once the bounds relax.
   useIsoLayoutEffect(() => {
-    writeCssVar(state === 'collapsed' ? safeCollapsed : widthRef.current);
-  }, [state, safeCollapsed, writeCssVar]);
+    writeCssVar(state === 'collapsed' ? safeCollapsed : clamp(widthRef.current, safeMin, safeMax));
+  }, [state, safeCollapsed, safeMin, safeMax, writeCssVar]);
 
   const persistState = React.useCallback(
     (next: SidebarState) => {
@@ -216,12 +219,13 @@ export function SidebarProvider({
   }, [disableKeyboardShortcut, toggleSidebar]);
 
   const effectiveState: SidebarState = isMobile ? 'default' : state;
+  const visibleWidth = clamp(width, safeMin, safeMax);
 
   const contextValue = React.useMemo(
     () => ({
       state: effectiveState,
       desktopState: state,
-      width,
+      width: visibleWidth,
       minWidth: safeMin,
       maxWidth: safeMax,
       collapseBelow: safeCollapseBelow,
@@ -238,7 +242,7 @@ export function SidebarProvider({
     [
       effectiveState,
       state,
-      width,
+      visibleWidth,
       safeMin,
       safeMax,
       safeCollapseBelow,
@@ -260,7 +264,7 @@ export function SidebarProvider({
   );
 
   const scopeStyle: SidebarScopeStyle = {
-    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : initial.width}px`,
+    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax)}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,
     display: 'contents',
   };

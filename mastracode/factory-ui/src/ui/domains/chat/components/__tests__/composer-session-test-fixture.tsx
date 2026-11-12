@@ -2,10 +2,12 @@ import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import type { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
+import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Navigate, Outlet, Route, Routes, useLocation, useParams } from 'react-router';
 import { expect } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { OverlaysProvider } from '../../../../lib/overlays';
@@ -16,10 +18,7 @@ import { DraftSessionCreateError } from '../../../workspaces/services/user-sessi
 import { useHandoffPrompt } from '../../hooks/useHandoffPrompt';
 import { failedDraftState } from '../../services/handoffFiles';
 import { useThreadWorkspacePath } from '../../../workspace-viewer/hooks/useThreadWorkspacePath';
-import { ActivityLine } from '../ActivityLine';
-import { Composer } from '../Composer';
-import { TaskPanel } from '../TaskPanel';
-import { Transcript } from '../Transcript';
+import { SessionChatSurface } from '../SessionChatSurface';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -30,7 +29,7 @@ export const FACTORY_ID = 'fp-preparing';
 export const PROJECT_REPOSITORY_ID = 'repo-preparing';
 export const SESSION_ID = '20000000-0000-4000-8000-000000000003';
 
-interface PreparingSession {
+export interface PreparingSession {
   finishWorkspace: () => void;
   /** Push an event down the session stream; resolves once the stream is open. */
   emit: (event: AgentControllerEvent) => Promise<void>;
@@ -44,7 +43,7 @@ interface PreparingSession {
   abortRequests: number;
 }
 
-interface StubPreparingSessionOptions {
+export interface StubPreparingSessionOptions {
   createdSessionTitle?: string;
   tasks?: AgentControllerTaskSnapshot[];
   failDispatch?: boolean;
@@ -106,7 +105,20 @@ export function stubPreparingSession({
       HttpResponse.json({ authenticated: true, user: { userId: 'user-1', email: 'user@example.com' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Preparing' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Preparing',
+            repositories: [
+              listedRepository(PROJECT_REPOSITORY_ID, 'octo/hello', {
+                branch: 'main',
+                sandboxWorkdir: '/workspace/preparing',
+              }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({
@@ -137,24 +149,6 @@ export function stubPreparingSession({
       }
       return HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'conn-1',
-            installationId: 'inst-1',
-            repositories: [
-              {
-                id: PROJECT_REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/preparing',
-                repository: { slug: 'octo/hello', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
       result.sessionLookups += 1;
       return HttpResponse.json({
@@ -269,9 +263,7 @@ function ThreadSurface() {
   return (
     <>
       <Link to="/away">go-away</Link>
-      <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
-      <TaskPanel />
-      <Composer />
+      <SessionChatSurface emptyState={null} composerLabel="Thread composer" />
     </>
   );
 }
@@ -296,6 +288,7 @@ export function renderThread() {
           path="/away"
           element={<Link to={`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`}>go-thread</Link>}
         />
+        <Route path="/factories/:factoryId/settings/:section" element={<LocationProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -303,6 +296,11 @@ export function renderThread() {
 
 function PathnameProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
+}
+
+function LocationProbe() {
+  const { pathname, hash } = useLocation();
+  return <output data-testid="location">{`${pathname}${hash}`}</output>;
 }
 
 /** Shows the route's error notice like `NewPage`, where a failed create returns. */
@@ -378,4 +376,11 @@ export function createdDraftSession(title: string) {
     createdAt: '2026-07-23T00:00:00.000Z',
     updatedAt: '2026-07-23T00:00:00.000Z',
   };
+}
+
+/** Opens the composer's "+" attach menu and picks `file` from Photos. */
+export async function pickImage(user: UserEvent, file: File) {
+  await user.click(screen.getByRole('button', { name: 'Attach images' }));
+  await user.click(await screen.findByRole('menuitem', { name: 'Photos' }));
+  await user.upload(screen.getByLabelText('Photos'), file);
 }

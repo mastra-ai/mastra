@@ -646,16 +646,132 @@ function extractAction(
 
 const DELEGATED_OFFICE_PROVIDER_IDS = new Set(['microsoft-excel', 'microsoft-powerpoint', 'microsoft-word']);
 
-// Nango shares these actions with client-credentials templates. Adapt only the
-// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
-function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
-  if (
-    !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
-    action.candidate.actionSlug !== 'get-user-drive'
-  ) {
-    return action;
+/** Applies `pattern` exactly once, or throws so an upstream template change can't silently drop an override. */
+function replaceOnce(
+  text: string,
+  pattern: RegExp,
+  replacement: string,
+  action: ExtractedAction,
+  what: string,
+): string {
+  const matches = text.match(new RegExp(pattern.source, `${pattern.flags.replace('g', '')}g`));
+  if (matches?.length !== 1) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+    );
+  }
+  return text.replace(pattern, replacement);
+}
+
+/**
+ * The live Fireflies API returns `summary.keywords` as a list of strings and
+ * `speakers[].id` as a number, while the template only accepts strings, so
+ * reading most real transcripts threw a ZodError (#29401). Accept both shapes
+ * from the provider and keep the tool's string output contract, the way the
+ * template already treats `action_items` and sentence `speaker_id`. Drop this
+ * once the upstream template accepts these shapes.
+ */
+function adaptFirefliesGetTranscript(action: ExtractedAction): ExtractedAction {
+  const fail = (what: string): never => {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} (${what}); the upstream template shape changed.`,
+    );
+  };
+  // Keyed by the top-level declaration each rewrite targets. Every key must
+  // match exactly one template statement, so a renamed or removed declaration
+  // fails generation instead of silently dropping part of the override.
+  const statementRewrites: Readonly<Record<string, (statement: string) => string[]>> = {
+    ProviderSummarySchema: statement => [
+      replaceOnce(
+        statement,
+        /(action_items: z\.union\(\[z\.string\(\), z\.array\(z\.string\(\)\)\]\)\.nullish\(\))/,
+        '$1,\n    keywords: z.union([z.string(), z.array(z.string())]).nullish()',
+        action,
+        'summary keywords schema',
+      ),
+    ],
+    SpeakerSchema: statement => [
+      statement,
+      'const ProviderSpeakerSchema = SpeakerSchema.extend({\n    id: z.union([z.string(), z.number()]).nullish()\n});',
+    ],
+    TranscriptSchema: statement => [
+      replaceOnce(
+        statement,
+        /speakers: z\.array\(SpeakerSchema\)\.nullish\(\)/,
+        'speakers: z.array(ProviderSpeakerSchema).nullish()',
+        action,
+        'provider speakers schema',
+      ),
+    ],
+    normalizeActionItems: statement => [
+      statement,
+      "function normalizeKeywords(keywords: string | string[]): string {\n    return Array.isArray(keywords) ? keywords.join(', ') : keywords;\n}",
+      'function normalizeSpeaker(speaker: z.infer<typeof ProviderSpeakerSchema>): z.infer<typeof SpeakerSchema> {\n    return { ...speaker, id: speaker.id != null ? String(speaker.id) : speaker.id };\n}',
+    ],
+  };
+
+  const rewritten = new Map<string, number>();
+  const moduleStatements = action.moduleStatements.flatMap(statement => {
+    const name = /^(?:const|function) (\w+)\b/.exec(statement)?.[1];
+    const rewrite = name !== undefined && Object.hasOwn(statementRewrites, name) ? statementRewrites[name] : undefined;
+    if (name === undefined || !rewrite) return [statement];
+    rewritten.set(name, (rewritten.get(name) ?? 0) + 1);
+    return rewrite(statement);
+  });
+  for (const name of Object.keys(statementRewrites)) {
+    if (rewritten.get(name) !== 1) fail(`${name} declaration`);
   }
 
+  let execBody = replaceOnce(
+    action.execBody,
+    /(action_items:\s*transcript\.summary\.action_items != null\s*\?\s*normalizeActionItems\(transcript\.summary\.action_items\)\s*:\s*transcript\.summary\.action_items)/,
+    '$1,\n                      keywords:\n                          transcript.summary.keywords != null ? normalizeKeywords(transcript.summary.keywords) : transcript.summary.keywords',
+    action,
+    'summary keywords normalization',
+  );
+  execBody = replaceOnce(
+    execBody,
+    /speakers: transcript\.speakers \?\? undefined/,
+    'speakers: transcript.speakers ? transcript.speakers.map(normalizeSpeaker) : undefined',
+    action,
+    'speaker normalization',
+  );
+
+  return { ...action, moduleStatements, execBody };
+}
+
+function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (action.candidate.providerId === 'fireflies' && action.candidate.actionSlug === 'get-transcript') {
+    return adaptFirefliesGetTranscript(action);
+  }
+  if (DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) && action.candidate.actionSlug === 'get-user-drive') {
+    return adaptDelegatedGetUserDrive(action);
+  }
+  if (action.candidate.localId === 'microsoft-excel' && action.candidate.actionSlug === 'delete-workbook') {
+    return bypassSharedLockOnDelete(action);
+  }
+  return action;
+}
+
+// The Excel workbook tools write through sessionless workbook API calls, which leave a shared lock on the
+// file that can last 30 minutes; without this header, deleting a workbook the agent just edited fails with 423.
+// https://learn.microsoft.com/en-us/graph/api/driveitem-delete
+function bypassSharedLockOnDelete(action: ExtractedAction): ExtractedAction {
+  const execBody = action.execBody.replace(
+    /(await platformProxy\.delete\(\{\s*endpoint:[^\n]*\n)/,
+    "$1headers: { Prefer: 'bypass-shared-lock' },\n",
+  );
+  if (execBody === action.execBody) {
+    throw new Error(
+      `Unable to add the shared-lock bypass to ${action.candidate.providerId}/${action.candidate.actionSlug}; the upstream template shape changed.`,
+    );
+  }
+  return { ...action, execBody };
+}
+
+// Nango shares these actions with client-credentials templates. Adapt only the
+// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function adaptDelegatedGetUserDrive(action: ExtractedAction): ExtractedAction {
   let inputSchemaUpdated = false;
   const moduleStatements = action.moduleStatements.map(statement => {
     if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;

@@ -1,8 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { TooltipProvider } from '../Tooltip';
+import { CustomRangeEditor } from './custom-range-editor';
 import { DateTimeRangePicker } from './date-time-range-picker';
 import type { DateRangePreset, DateTimeRangePickerProps } from './date-time-range-picker';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof DateTimeRangePicker> = {
   title: 'Composite/DateTimeRangePicker',
@@ -58,6 +61,20 @@ export const CustomRange: Story = {
 
 export const Disabled: Story = {
   render: () => <DateTimeRangePickerControlled disabled />,
+};
+
+/** The custom range popover body on its own, open, so it can be judged without clicking through. */
+export const RangeEditor: Story = {
+  render: () => (
+    <div className={cn('rounded-xl', overlaySurfaceStyle)}>
+      <CustomRangeEditor
+        dateFrom={new Date(2026, 10, 9)}
+        dateTo={new Date(2026, 10, 17, 23, 59)}
+        onApply={() => {}}
+        onShowPresets={() => {}}
+      />
+    </div>
+  ),
 };
 
 const PERIOD_START = new Date(2026, 9, 11, 10, 28);

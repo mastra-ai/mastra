@@ -13,142 +13,13 @@
  * event is ever published, leaving stream consumers hanging forever.
  */
 import type { PubSub } from '../../events';
+import { isMastraTimeoutError, MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
-import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
+import { subscribeToAbortRequests } from '../streams/abort-transport';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
-/**
- * Ask whichever process is executing `runId` to abort it.
- *
- * Safe to call from a process that is not running the steps, and safe to call
- * when nobody is listening — an unheard request is a no-op, exactly like
- * aborting a run that already finished.
- */
-export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
-  await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
-    type: AgentControlEventTypes.ABORT_REQUEST,
-    runId,
-    data: {},
-  });
-}
-
-/**
- * Topic on which the process executing a run acknowledges abort requests that
- * carried a `requestId`. Kept apart from the control topic so a requester never
- * has to read (or replay) the control history to wait for its own reply.
- */
-const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
-const ABORT_ACK = 'abort-ack';
-
-/** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
-const ABORT_ACK_TIMEOUT_MS = 2_000;
-
-/**
- * Ask whichever process is executing `runId` to abort it, and wait for that
- * process to confirm it applied the request.
- *
- * Resolves `true` only when an executing process acknowledged the abort, and
- * `false` when nobody answered within `timeoutMs` (the run is not executing
- * anywhere, its owner died, or its listener is not installed yet). A publish
- * failure rejects: the caller cannot claim an abort it never sent.
- *
- * @internal Used by `@mastra/server`'s run abort route; not a public API.
- */
-export async function requestAcknowledgedAbort(
-  pubsub: PubSub,
-  runId: string,
-  timeoutMs: number = ABORT_ACK_TIMEOUT_MS,
-): Promise<boolean> {
-  const requestId = globalThis.crypto.randomUUID();
-  const topic = abortAckTopic(runId);
-  let acknowledge!: () => void;
-  const acknowledged = new Promise<boolean>(resolve => {
-    acknowledge = () => resolve(true);
-  });
-  const handler = async (
-    event: { type?: string; data?: { requestId?: string } },
-    ack?: () => Promise<void>,
-  ): Promise<void> => {
-    if (event?.type === ABORT_ACK && event.data?.requestId === requestId) acknowledge();
-    await ack?.();
-  };
-
-  // The deadline bounds the whole exchange: a broker that stalls on subscribe or
-  // publish must not hold the caller open past `timeoutMs`.
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  let timedOut = false;
-  const deadline = new Promise<boolean>(resolve => {
-    timer = setTimeout(() => {
-      timedOut = true;
-      resolve(false);
-    }, timeoutMs);
-  });
-  // Subscribe before publishing so an acknowledgement cannot race past us.
-  const subscribed = pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
-  const exchange = (async () => {
-    await subscribed;
-    await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
-      type: AgentControlEventTypes.ABORT_REQUEST,
-      runId,
-      data: { requestId },
-    });
-    return acknowledged;
-  })();
-  // A setup failure after the deadline has nobody left to report to.
-  exchange.catch(() => {});
-  try {
-    return await Promise.race([exchange, deadline]);
-  } finally {
-    clearTimeout(timer);
-    // Unsubscribe once the subscription settles, even when it lands after the deadline.
-    const cleanup = subscribed
-      .then(() => pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]))
-      .catch(() => {});
-    if (!timedOut) await cleanup;
-  }
-}
-
-/**
- * Listen for abort requests targeting `runId`.
- *
- * @returns An unsubscribe function. Callers must invoke it when the run leaves
- * this process, otherwise the subscription outlives the work it guards.
- */
-export async function subscribeToAbortRequests(
-  pubsub: PubSub,
-  runId: string,
-  onAbortRequested: () => void,
-): Promise<() => Promise<void>> {
-  const topic = AGENT_CONTROL_TOPIC(runId);
-  // Every delivery is acknowledged, including control events this listener
-  // ignores. An ignored delivery is still a delivery, and a durable transport
-  // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
-    if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
-      onAbortRequested();
-      const requestId = event.data?.requestId;
-      if (requestId) {
-        // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
-        // acknowledgement only makes the requester retry; the abort has applied.
-        await pubsub
-          .publish(abortAckTopic(runId), {
-            type: ABORT_ACK,
-            runId,
-            data: { requestId },
-          })
-          .catch(() => {});
-      }
-    }
-    await ack?.();
-  };
-
-  await pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1]);
-
-  return async () => {
-    await pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]);
-  };
-}
+export { publishAbortRequest, requestAcknowledgedAbort, subscribeToAbortRequests } from '../streams/abort-transport';
 
 /**
  * Make the current process responsive to abort requests for `runId`.
@@ -163,7 +34,12 @@ export async function subscribeToAbortRequests(
  * calls this. The subscription is torn down with the registry entry, whether
  * that happens on explicit cleanup or TTL eviction.
  */
-export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, mastra?: Mastra): Promise<void> {
+export async function ensureRemoteAbortListener(
+  pubsub: PubSub,
+  runId: string,
+  mastra?: Mastra,
+  deadline?: RunDeadline,
+): Promise<void> {
   let entry = getRunRegistryEntry(runId, mastra);
 
   if (!entry) {
@@ -177,20 +53,22 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
 
+  // The owner process already has a controller wired to its `abort()`. A worker
+  // rebuilding state from storage has none, so give it one — flipping it is
+  // what actually stops the model call.
+  if (!entry.abortController) giveWorkerController(entry);
+
+  // The deadline's abort request is published once, live. A worker that subscribes after it went
+  // out never hears it, so the run's deadline also travels with the run and is armed here. It is
+  // armed whether or not the subscription below succeeds, and re-armed when a resumed segment
+  // on a warm worker carries a new deadline.
+  syncRunDeadline(entry, deadline);
+
   if (entry.remoteAbortListenerInstalled) return;
 
   // Claim before awaiting: two steps starting concurrently in this process
   // would otherwise both pass the check and install duplicate subscriptions.
   entry.remoteAbortListenerInstalled = true;
-
-  // The owner process already has a controller wired to its `abort()`. A worker
-  // rebuilding state from storage has none, so give it one — flipping it is
-  // what actually stops the model call.
-  if (!entry.abortController) {
-    const controller = new AbortController();
-    entry.abortController = controller;
-    entry.abortSignal = controller.signal;
-  }
 
   let unsubscribe: () => Promise<void>;
   try {
@@ -219,4 +97,104 @@ export async function ensureRemoteAbortListener(pubsub: PubSub, runId: string, m
       void unsubscribe();
     }
   };
+}
+
+/** Controllers this module created for a worker that had none, as opposed to an owner's controller wired to its `abort()`. */
+const workerControllers = new WeakSet<AbortController>();
+
+function giveWorkerController(entry: RunRegistryEntry): void {
+  const controller = new AbortController();
+  workerControllers.add(controller);
+  entry.abortController = controller;
+  entry.abortSignal = controller.signal;
+}
+
+/**
+ * A new segment is starting on a warm worker. If the previous segment's total deadline already
+ * stopped the worker's own controller (e.g. it passed while the run was suspended), the resumed
+ * segment gets a fresh one instead of inheriting that abort. Any other abort is kept.
+ */
+function replaceTimedOutWorkerController(entry: RunRegistryEntry): void {
+  const controller = entry.abortController;
+  if (!controller || !workerControllers.has(controller) || !controller.signal.aborted) return;
+  const reason: unknown = controller.signal.reason;
+  if (!isMastraTimeoutError(reason) || reason.timeoutType !== 'total') return;
+  giveWorkerController(entry);
+}
+
+/** The deadline each entry currently has armed, and the controller it stops, so a later segment can replace it. */
+const armedDeadlines = new WeakMap<
+  RunRegistryEntry,
+  { at: number; controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
+>();
+
+/** Arm the entry's deadline, replacing a timer armed for a different deadline. */
+function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
+  const armed = armedDeadlines.get(entry);
+  if (armed && armed.at !== deadline?.at) replaceTimedOutWorkerController(entry);
+  if (!deadline) {
+    // A segment without a deadline (e.g. resumed without totalMs) must not inherit the last one's.
+    if (armed) {
+      clearTimeout(armed.timer);
+      armedDeadlines.delete(entry);
+    }
+    return;
+  }
+  // A warm resume swaps a fresh controller onto the entry, so the timer is re-armed for it too.
+  if (armed?.at === deadline.at && armed.controller === entry.abortController) return;
+  if (armed) {
+    clearTimeout(armed.timer);
+  } else {
+    const previousCleanup = entry.cleanup;
+    entry.cleanup = () => {
+      try {
+        previousCleanup?.();
+      } finally {
+        clearTimeout(armedDeadlines.get(entry)?.timer);
+        armedDeadlines.delete(entry);
+      }
+    };
+  }
+  const controller = entry.abortController;
+  armedDeadlines.set(entry, { at: deadline.at, controller, timer: armRunDeadline(controller, deadline) });
+}
+
+/**
+ * Request-context key the caller sets to the run's absolute total deadline for one execution
+ * segment (stream or resume), so every worker can stop at it on its own clock.
+ */
+export const RUN_DEADLINE_KEY = '__mastra_runDeadline';
+
+/** The run's total deadline: when it fires (epoch ms) and the budget it enforces. */
+export type RunDeadline = { at: number; timeoutMs: number };
+
+/** The run deadline a step's request context carries, if any. */
+export function readRunDeadline(requestContext?: { get(key: string): unknown }): RunDeadline | undefined {
+  const value = requestContext?.get(RUN_DEADLINE_KEY) as Partial<RunDeadline> | undefined;
+  if (typeof value?.at !== 'number' || typeof value.timeoutMs !== 'number') return undefined;
+  return { at: value.at, timeoutMs: value.timeoutMs };
+}
+
+/**
+ * Abort the controller with the deadline's timeout error now, or when the deadline arrives.
+ * The timer is bound to the controller it was armed for: a warm resume swaps a fresh controller
+ * onto the entry, and the previous segment's timer must not stop the resumed segment.
+ */
+function armRunDeadline(
+  controller: AbortController | undefined,
+  deadline: RunDeadline,
+): ReturnType<typeof setTimeout> | undefined {
+  const expire = () => {
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: deadline.timeoutMs }));
+    }
+  };
+  const remaining = deadline.at - Date.now();
+  if (remaining <= 0) {
+    expire();
+    return undefined;
+  }
+  const timer = setTimeout(expire, remaining);
+  timer.unref?.();
+  return timer;
 }

@@ -48,6 +48,11 @@ export interface WorkflowRun {
   createdAt: Date;
   updatedAt: Date;
   resourceId?: string;
+  /**
+   * Set to 2 for runs stored as a header plus entries. Absent for v1 runs.
+   * @experimental
+   */
+  storageVersion?: 2;
 }
 
 export type PaginationInfo = {
@@ -487,14 +492,11 @@ export type StorageConditionalField<T> = T | StorageConditionalVariant<T>[];
  * Serializable subset of `AgentDurableOption` that can be persisted on a stored
  * agent version snapshot. `cache` and `pubsub` are live runtime objects and are
  * intentionally excluded — they are inherited from the Mastra instance at
- * hydration time. `id`/`name` are excluded because a stored agent's durable
- * wrapper must keep the agent's own id/name to stay addressable.
+ * hydration time. This controls resumable streams, not durable execution.
  */
 export type StorageDurableConfig =
   | boolean
   | {
-      /** Maximum steps for the durable agentic loop. */
-      maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). `0` disables cleanup. */
       cleanupTimeoutMs?: number;
     };

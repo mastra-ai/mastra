@@ -245,13 +245,14 @@ jobs:
           MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-mcp-compat:
+    needs: publish-e2e-registry
     name: E2E MCP compatibility
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
       id-token: write
-    # Builds one package and runs PR-controlled scripts: no Turbo credentials needed here.
+    # Installs from the E2E registry and runs PR-controlled scripts: no Turbo credentials needed here.
 
     steps:
       - name: Checkout repo
@@ -263,16 +264,37 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
-      - name: Build core
-        run: pnpm turbo --filter "@mastra/core" build
+      - name: Install registry setup dependencies
+        working-directory: ./e2e-tests/_local-registry-setup
+        run: pnpm install --frozen-lockfile
 
-      # Packs the built core and installs it into disposable consumers: published
-      # @mastra/mcp 1.x (the compatibility floor for the core MCP contract) and the
-      # core-native suspend/resume fixture.
-      - name: Test packed core against published MCP 1.x and the core-native fixture
+      - name: Download E2E registry artifact
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: e2e-verdaccio-registry
+          path: ${{ runner.temp }}/mastra-e2e-registry
+
+      # Installs core and its workspace dependencies from the E2E registry into disposable
+      # consumers: published @mastra/mcp 1.x (the compatibility floor for the core MCP
+      # contract) and the core-native suspend/resume fixture.
+      - name: Test core against published MCP 1.x and the core-native fixture
         run: pnpm --filter "@mastra/mcp" test:compat
         env:
           PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
+
+      # Regression check: runs `changeset version` on a scratch changeset so core's workspace
+      # dependencies have versions that are not on npmjs yet, as on a version-packages PR, and
+      # re-runs the compat consumers. Rewrites the checkout, so it must stay the last step.
+      - name: Test core against published MCP 1.x in a version-packages state
+        run: pnpm --filter "@mastra/mcp" test:compat:version-packages
+        env:
+          PNPM_CONFIG_MINIMUM_RELEASE_AGE_EXCLUDE: '["@mastra/*", "mastra", "create-mastra"]'
+          MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
+          MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
+          MASTRA_E2E_REGISTRY_PORT: '4873'
 
   e2e-create-mastra:
     needs: publish-e2e-registry

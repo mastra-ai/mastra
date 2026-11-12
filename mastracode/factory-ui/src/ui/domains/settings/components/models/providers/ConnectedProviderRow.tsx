@@ -4,6 +4,7 @@ import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Box, MoreHorizontal } from 'lucide-react';
 
@@ -57,12 +58,15 @@ export function ConnectedProviderRow({
   disabled,
   onUpdateKey,
   onOAuthStarted,
+  variant = 'list',
 }: {
+  /** `list`: an `li` of a `ProviderRows` list. `settings`: a `SettingsItem` in a settings card. */
+  variant?: 'list' | 'settings';
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
   disabled: boolean;
   onUpdateKey: () => void;
-  onOAuthStarted: (provider: string, session: OAuthStartResponse) => void;
+  onOAuthStarted?: (provider: string, session: OAuthStartResponse) => void;
 }) {
   const { provider, status, credential, signInExpired } = connection;
   const displayName = providerDisplayName(provider.provider);
@@ -82,9 +86,9 @@ export function ConnectedProviderRow({
     );
   };
 
-  const signInAgain = () => {
+  const signInAgain = (onStarted: (provider: string, session: OAuthStartResponse) => void) => {
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
-      onSuccess: session => onOAuthStarted(provider.provider, session),
+      onSuccess: session => onStarted(provider.provider, session),
       onError: error => toast.error(error.message || 'Failed to start sign-in'),
     });
   };
@@ -96,28 +100,53 @@ export function ConnectedProviderRow({
     );
   };
 
+  const brandIcon = (
+    <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
+  );
+  const statusText = <Status presentation={pending ?? status} />;
+  const menu = credential ? (
+    <CredentialMenu
+      displayName={displayName}
+      credential={credential}
+      disabled={disabled || pending !== undefined}
+      onSignInAgain={
+        signInExpired && provider.oauth?.supported === true && onOAuthStarted
+          ? () => signInAgain(onOAuthStarted)
+          : undefined
+      }
+      onSignOut={signOut}
+      onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
+      onRemoveKey={removeKey}
+    />
+  ) : undefined;
+
+  if (variant === 'settings') {
+    return (
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            {/* The span keeps each brand icon's own optical size. */}
+            <span className="flex">{brandIcon}</span>
+          </SettingsItemIcon>
+        }
+        title={displayName}
+        description={statusText}
+      >
+        {menu}
+      </SettingsItem>
+    );
+  }
+
   return (
     <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
+      {brandIcon}
       <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
         {displayName}
       </Txt>
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={pending ?? status} />
+        {statusText}
       </Txt>
-      {credential ? (
-        <CredentialMenu
-          displayName={displayName}
-          credential={credential}
-          disabled={disabled || pending !== undefined}
-          onSignInAgain={signInExpired && provider.oauth?.supported === true ? signInAgain : undefined}
-          onSignOut={signOut}
-          onUpdateKey={onUpdateKey}
-          onRemoveKey={removeKey}
-        />
-      ) : (
-        <span aria-hidden="true" className="size-control-sm shrink-0" />
-      )}
+      {menu ?? <span aria-hidden="true" className="size-control-sm shrink-0" />}
     </li>
   );
 }
@@ -136,7 +165,7 @@ function CredentialMenu({
   disabled: boolean;
   onSignInAgain: (() => void) | undefined;
   onSignOut: () => void;
-  onUpdateKey: () => void;
+  onUpdateKey: (() => void) | undefined;
   onRemoveKey: () => void;
 }) {
   return (
@@ -156,7 +185,7 @@ function CredentialMenu({
           </>
         ) : (
           <>
-            <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>
+            {onUpdateKey && <DropdownMenu.Item onClick={onUpdateKey}>Update key</DropdownMenu.Item>}
             <DropdownMenu.Item onClick={onRemoveKey}>Remove key</DropdownMenu.Item>
           </>
         )}

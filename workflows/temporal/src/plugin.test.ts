@@ -51,9 +51,14 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
   await writeFile(
     path.join(temporalWorkflowDir, 'index.js'),
     `
+      export { ApplicationFailure, TemporalFailure, isCancellation } from ${JSON.stringify(import.meta.resolve('@temporalio/workflow'))};
       const getMock = () => globalThis.__temporalWorkflowMock;
+      export const condition = (...args) => getMock().condition(...args);
+      export const defineQuery = (...args) => getMock().defineQuery(...args);
+      export const defineSignal = (...args) => getMock().defineSignal(...args);
       export const executeChild = (...args) => getMock().executeChild(...args);
       export const proxyActivities = (...args) => getMock().proxyActivities(...args);
+      export const setHandler = (...args) => getMock().setHandler(...args);
       export const sleep = (...args) => getMock().sleep(...args);
       export const log = { info: (...args) => getMock().log.info(...args) };
     `,
@@ -244,8 +249,12 @@ describe('Temporal prebuild integration', () => {
     const logInfo = vi.fn();
     let workflowModule: Record<string, unknown>;
     (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+      condition: vi.fn(async () => true),
+      defineQuery: vi.fn((name: string) => name),
+      defineSignal: vi.fn((name: string) => name),
       executeChild,
       proxyActivities,
+      setHandler: vi.fn(),
       sleep,
       log: {
         info: logInfo,
@@ -266,11 +275,14 @@ describe('Temporal prebuild integration', () => {
       result: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       state: undefined,
       steps: {
-        step1: { value: 'test-step1' },
-        'inner-workflow': { value: 'test-step1-inner' },
-        step2: { step2: 'test-step1-inner-step2' },
-        step3: { step3: 'test-step1-inner-step3' },
-        step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        step1: expect.objectContaining({ status: 'success', output: { value: 'test-step1' } }),
+        'inner-workflow': expect.objectContaining({ status: 'success', output: { value: 'test-step1-inner' } }),
+        step2: expect.objectContaining({ status: 'success', output: { step2: 'test-step1-inner-step2' } }),
+        step3: expect.objectContaining({ status: 'success', output: { step3: 'test-step1-inner-step3' } }),
+        step4: expect.objectContaining({
+          status: 'success',
+          output: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
+        }),
       },
     });
     const mappedWorkflow = workflowModule.mappedWorkflow;
@@ -285,7 +297,7 @@ describe('Temporal prebuild integration', () => {
       result: { doubled: 42 },
       state: undefined,
       steps: {
-        'mapping_mapped-workflow_0': { doubled: 42 },
+        'mapping_mapped-workflow_0': expect.objectContaining({ status: 'success', output: { doubled: 42 } }),
       },
     });
 
@@ -354,8 +366,12 @@ describe('Temporal prebuild integration', () => {
 
       let workflows: Record<string, RunWorkflow> = {};
       (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+        condition: async () => true,
+        defineQuery: (name: string) => name,
+        defineSignal: (name: string) => name,
         proxyActivities: () => activities,
         executeChild: (workflowType: string, { args }: { args: [never] }) => workflows[workflowType]!(...args),
+        setHandler: () => {},
         sleep: async () => {},
         log: { info: () => {} },
       };
@@ -369,17 +385,16 @@ describe('Temporal prebuild integration', () => {
 
       // `read` returns a string where `increment` declares a number. Unchecked, the run
       // succeeded with { value: '51' }.
+      // The run fails with the Activity's failure as its cause.
       await expect(workflows.readWorkflow!({ inputData: { text: '5' } })).rejects.toMatchObject({
-        type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
-        nonRetryable: true,
+        cause: { type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED', nonRetryable: true },
       });
       await expect(workflows.incrementWorkflow!({ inputData: { value: 5, note: ' hi ' } })).resolves.toMatchObject({
         result: { value: 6, note: 'hi' },
       });
 
       await expect(workflows.tenantWorkflow!({ inputData: {}, requestContext: {} })).rejects.toMatchObject({
-        type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
-        nonRetryable: true,
+        cause: { type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED', nonRetryable: true },
       });
       await expect(
         workflows.tenantWorkflow!({ inputData: {}, requestContext: { tenantId: 'tenant-1' } }),

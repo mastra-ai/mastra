@@ -11,10 +11,12 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { DebugSection } from './DebugSection';
 import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
+import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
-import { FactorySkillsSection } from './FactorySkillsSection';
+import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -53,13 +55,18 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+    <>
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
-      {section === 'intake' && <IntakeSection />}
+      {section === 'intake' && (
+        <div className="flex flex-col gap-8">
+          <IntakeSection />
+          <IntakeRoutesSection factoryId={factoryId} />
+        </div>
+      )}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && (
         <MemorySettings
@@ -69,7 +76,8 @@ export function SettingsPanel() {
           resourceId={resourceId}
         />
       )}
-      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
+      {section === 'tools' && <ConnectToolsSection />}
+      {section === 'debug' && <DebugSection />}
       {section === 'behavior' && (
         <BehaviorSettings
           settings={settings}
@@ -78,6 +86,6 @@ export function SettingsPanel() {
           setPermissionForCategory={setPermissionForCategory}
         />
       )}
-    </section>
+    </>
   );
 }

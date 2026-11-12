@@ -6,7 +6,7 @@ import { MastraBase } from '@mastra/core/base';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { AnySpan, TracingContext } from '@mastra/core/observability';
-import { createTool, validateToolOutput } from '@mastra/core/tools';
+import { createTool, getValidationIssuePaths, validateToolOutput } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
 import { toStandardSchema } from '@mastra/schema-compat';
 import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
@@ -63,7 +63,7 @@ import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
+import { isReconnectableMCPError, isRecoverableTaskPollError, isUnsentRequestError } from './error-utils';
 import type { DeliveryDriver } from './events/mode';
 import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
@@ -179,6 +179,24 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
       'method' in message &&
       typeof message.method === 'string' &&
       PERSISTENT_REQUEST_METHODS.includes(message.method)
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** Whether a request body is a single JSON-RPC response: the client's reply to a server request. */
+function isJsonRpcResponseBody(body: RequestInit['body']): boolean {
+  if (typeof body !== 'string') return false;
+  try {
+    const message: unknown = JSON.parse(body);
+    return (
+      typeof message === 'object' &&
+      message !== null &&
+      !Array.isArray(message) &&
+      !('method' in message) &&
+      'id' in message &&
+      ('result' in message || 'error' in message)
     );
   } catch {
     return false;
@@ -374,6 +392,56 @@ function runOutsideDatadogTraceScope<T>(callback: () => T): T {
   return scope.activate(null, callback);
 }
 
+const LOGGABLE_ERROR_NAMES = new Set([
+  'Error',
+  'TypeError',
+  'RangeError',
+  'SyntaxError',
+  'AbortError',
+  'TimeoutError',
+  'McpError',
+  'ProtocolError',
+  'SdkError',
+  'SdkHttpError',
+  'SseError',
+  'StreamableHTTPError',
+  'UnauthorizedError',
+  'OAuthError',
+  'UnsupportedProtocolVersionError',
+]);
+
+const LOGGABLE_ERROR_CODES = new Set([
+  'ECONNRESET',
+  'ECONNREFUSED',
+  'ECONNABORTED',
+  'ETIMEDOUT',
+  'ENOTFOUND',
+  'EPIPE',
+  'EAI_AGAIN',
+  'ABORT_ERR',
+  'UND_ERR_SOCKET',
+  'UND_ERR_CONNECT_TIMEOUT',
+  'UND_ERR_HEADERS_TIMEOUT',
+  'UND_ERR_BODY_TIMEOUT',
+]);
+
+/**
+ * Names a tool-call failure for logs without its message: server error text can echo the submitted
+ * arguments back (Issue #29318). The full error still reaches the caller.
+ */
+function errorKind(error: unknown): string {
+  if (error instanceof MastraError) return error.id;
+  if (error instanceof Error) {
+    // `name` and `code` can be set to anything, so only log known names and codes (plus numeric
+    // JSON-RPC codes).
+    const name = LOGGABLE_ERROR_NAMES.has(error.name) ? error.name : 'Error';
+    const code = (error as { code?: unknown }).code;
+    const isKnownCode = typeof code === 'number' || (typeof code === 'string' && LOGGABLE_ERROR_CODES.has(code));
+    return isKnownCode ? `${name} (${code})` : name;
+  }
+  return typeof error;
+}
+
 /**
  * Convert an MCP LoggingLevel to a logger method name that exists in our logger
  */
@@ -429,6 +497,19 @@ export class InternalMastraMCPClient extends MastraBase {
   private clientConnectionOnClose?: () => void;
   private _authState?: MCPServerAuthState;
   private operationContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The requestContext of the tool call whose execution opened the connection. Only the
+   * transport's fetch reads it, so the handshake and the streams the connection keeps open are
+   * sent as that call. Messages arriving on those streams are delivered outside it, so server logs
+   * are not labelled with it and requests their handlers send are not sent as that call.
+   */
+  private connectionContextStore = new AsyncLocalStorage<RequestContext | null>();
+  /**
+   * The connection context of the transport a server message arrived on, as it was when that
+   * transport was created, set while the message is delivered. The transport's fetch reads it only for the client's replies to server requests,
+   * which belong to the connection rather than to the handler that produced them.
+   */
+  private replyContextStore = new AsyncLocalStorage<RequestContext | null>();
   private exitHookUnsubscribe?: () => void;
   private sigTermHandler?: () => void;
   private sigHupHandler?: () => void;
@@ -654,7 +735,7 @@ export class InternalMastraMCPClient extends MastraBase {
     const policyUserFetch =
       userFetch && allowedHosts !== undefined ? wrapFetchWithHostPolicy(userFetch, allowedHosts) : undefined;
     const fetch: FetchLike = (requestUrl: string | URL, init?: RequestInit) => {
-      const requestContext = this.operationContextStore.getStore() ?? null;
+      const requestContext = this.fetchRequestContext(init);
       const executeFetch = (): Promise<Response> => {
         if (allowedHosts === undefined) {
           return userFetch ? userFetch(requestUrl, init, requestContext) : globalThis.fetch(requestUrl, init);
@@ -679,6 +760,7 @@ export class InternalMastraMCPClient extends MastraBase {
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.deliverOutsideConnectionContext(transport);
     this.connectingTransport = transport;
     try {
       this.assertSameLifecycle(generation);
@@ -706,6 +788,64 @@ export class InternalMastraMCPClient extends MastraBase {
     } finally {
       if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
+  }
+
+  /**
+   * Connects as a tool call: the handshake and the streams the connection keeps open reach the
+   * transport's fetch with the call's requestContext, through the connection context. Any enclosing
+   * operation scope is exited first. It would take priority in fetch, and the new streams and stdio
+   * child would deliver every later server message in it.
+   */
+  private connectAsCall<T>(requestContext: RequestContext | null, connect: () => Promise<T>): Promise<T> {
+    return this.operationContextStore.exit(() => this.connectionContextStore.run(requestContext, connect));
+  }
+
+  /**
+   * The requestContext the transport's fetch passes on for an outgoing request. An operation scope
+   * owns its requests, even when its requestContext is null. Outside one, the handshake and the
+   * streams the connection keeps open use the connection context, and a reply to a server request
+   * uses the context of the connection that delivered the request.
+   */
+  private fetchRequestContext(init?: RequestInit): RequestContext | null {
+    const operationContext = this.operationContextStore.getStore();
+    if (operationContext !== undefined) return operationContext;
+    const connectionContext = this.connectionContextStore.getStore();
+    if (connectionContext !== undefined) return connectionContext;
+    const replyContext = this.replyContextStore.getStore();
+    if (replyContext !== undefined && isJsonRpcResponseBody(init?.body)) return replyContext;
+    return null;
+  }
+
+  /**
+   * Delivers every message the server sends outside the connection context, from the handshake on.
+   * A server log, notification or request arriving on a stream the opening call started belongs to
+   * no call, so a request its handler sends must not be sent as that call. The client's reply to a
+   * server request still is, through `replyContextStore`.
+   *
+   * The reply context is the connection context this transport was created in, captured once. Read
+   * at delivery time, it would carry over to a connection that a handler of an older connection's
+   * message opens, such as a `reconnectServer()` from a server log callback.
+   *
+   * The SDK assigns `onmessage` during `connect()` and swaps it while probing the server, so every
+   * assignment is wrapped. A handler that wraps an already wrapped one (`interceptTaskResults`, or
+   * the probe restoring its saved handler) runs with the same reply context.
+   */
+  private deliverOutsideConnectionContext(transport: Transport): void {
+    const replyContext = this.connectionContextStore.getStore() ?? null;
+    let deliver: Transport['onmessage'];
+    Object.defineProperty(transport, 'onmessage', {
+      configurable: true,
+      enumerable: true,
+      get: () => deliver,
+      set: (handler: Transport['onmessage']) => {
+        deliver =
+          handler &&
+          ((message, extra) => {
+            const dispatch = () => handler.call(transport, message, extra);
+            this.connectionContextStore.exit(() => this.replyContextStore.run(replyContext, dispatch));
+          });
+      },
+    });
   }
 
   /**
@@ -1162,7 +1302,12 @@ export class InternalMastraMCPClient extends MastraBase {
       }
 
       this.assertSameLifecycle(generation);
-      await this.connect(generation);
+      // A reconnect inside a tool call opens the connection as that call, like a hydrated tool's
+      // first connect.
+      const callContext = this.operationContextStore.getStore();
+      await (callContext === undefined
+        ? this.connect(generation)
+        : this.connectAsCall(callContext, () => this.connect(generation)));
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;
@@ -1770,13 +1915,15 @@ export class InternalMastraMCPClient extends MastraBase {
             workflow?: ToolSuspendHost;
           },
         ) => {
-          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
-          // first execution is what establishes it. `connect()` is memoised.
-          if (serverMeta.connectFirst) {
-            await this.connect();
-          }
-
           const operationContext = context?.requestContext ?? null;
+
+          // A hydrated tool was rebuilt from cache without ever opening a connection, so the
+          // first execution is what establishes it. The connection context lets a custom fetch
+          // authenticate that handshake, and the streams the connection keeps open, as this call.
+          // `connect()` is memoised: concurrent first calls share the handshake of the first one.
+          if (serverMeta.connectFirst) {
+            await this.connectAsCall(operationContext, () => this.connect());
+          }
 
           return this.operationContextStore.run(operationContext, async () => {
             const suspendHost = context?.agent ?? context?.workflow;
@@ -1817,7 +1964,7 @@ export class InternalMastraMCPClient extends MastraBase {
                 return res && finishToolCall(res);
               }
 
-              this.log('debug', `Executing tool: ${tool.name}`, { toolArgs: input, runId: context?.runId });
+              this.log('debug', `Executing tool: ${tool.name}`, { runId: context?.runId });
               // progressToken spreads last so the Mastra-managed token takes precedence.
               const progressMeta = this.enableProgressTracking
                 ? { progressToken: context?.runId || crypto.randomUUID() }
@@ -1860,7 +2007,7 @@ export class InternalMastraMCPClient extends MastraBase {
               // consumer opted into `'return'`.
               if (res.isError && this.onToolError === 'throw') {
                 const errorText = extractToolErrorText(res.content);
-                this.log('debug', `Tool reported an error: ${tool.name}`, { error: errorText });
+                this.log('debug', `Tool reported an error: ${tool.name}`);
                 throw new MastraError({
                   id: 'MCP_CLIENT_TOOL_EXECUTION_FAILED',
                   domain: ErrorDomain.MCP,
@@ -1890,7 +2037,7 @@ export class InternalMastraMCPClient extends MastraBase {
                   const validation = validateToolOutput(validationSchema, res.structuredContent, tool.name);
                   if (validation.error) {
                     this.log('debug', `Tool output failed schema validation: ${tool.name}`, {
-                      message: validation.error.message,
+                      issuePaths: getValidationIssuePaths(validation.error, validationSchema, 'output'),
                     });
                     return validation.error;
                   }
@@ -1916,9 +2063,39 @@ export class InternalMastraMCPClient extends MastraBase {
                 e instanceof MastraError &&
                 (e.id === 'MCP_CLIENT_TOOL_EXECUTION_FAILED' || e.id.startsWith('MCP_CLIENT_TOOL_TASK_'));
 
+              if (!isToolExecutionError && isReconnectableMCPError(e) && !isUnsentRequestError(e)) {
+                // Closing a transport that is still open would abort healthy calls in flight on
+                // it, so only reconnect when this failure already closed or replaced it.
+                if (annotations?.readOnlyHint === true || annotations?.idempotentHint === true) {
+                  this.log('debug', `Retrying replay-safe tool ${tool.name} after a transport error`, {
+                    error: errorKind(e),
+                  });
+                  // A reconnect already in flight is closing this transport, so wait for its replacement.
+                  if (this.transport !== failedTransport || this.reconnectPromise) {
+                    await this.reconnectAfterTransportFailure(failedTransport, lifecycleGeneration);
+                  }
+                  return await executeToolCall();
+                }
+
+                // The server may already have run the tool, so sending it again could repeat a write.
+                this.log('error', `Lost the connection during tool ${tool.name}; it may have run`, {
+                  error: errorKind(e),
+                });
+                throw new MastraError(
+                  {
+                    id: 'MCP_CLIENT_TOOL_CALL_OUTCOME_UNKNOWN',
+                    domain: ErrorDomain.MCP,
+                    category: ErrorCategory.THIRD_PARTY,
+                    text: `The connection to MCP server "${this.name}" failed before tool "${tool.name}" returned a result. The tool may have run on the server, so it was not called again.`,
+                    details: { toolName: tool.name, serverName: this.name },
+                  },
+                  e,
+                );
+              }
+
               if (!isToolExecutionError && isReconnectableMCPError(e)) {
                 this.log('debug', `Transport error detected for tool ${tool.name}, attempting reconnection...`, {
-                  error: e instanceof Error ? e.message : String(e),
+                  error: errorKind(e),
                 });
 
                 try {
@@ -1927,17 +2104,15 @@ export class InternalMastraMCPClient extends MastraBase {
                   return await executeToolCall();
                 } catch (reconnectError) {
                   this.log('error', `Reconnection or retry failed for tool ${tool.name}`, {
-                    originalError: e instanceof Error ? e.message : String(e),
-                    reconnectError: reconnectError instanceof Error ? reconnectError.stack : String(reconnectError),
-                    toolArgs: input,
+                    originalError: errorKind(e),
+                    reconnectError: errorKind(reconnectError),
                   });
                   throw reconnectError;
                 }
               }
 
               this.log('error', `Error calling tool: ${tool.name}`, {
-                error: e instanceof Error ? e.stack : JSON.stringify(e, null, 2),
-                toolArgs: input,
+                error: errorKind(e),
               });
               throw e;
             }

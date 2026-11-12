@@ -220,6 +220,54 @@ export type StoredResourcesConfig = {
   scope?: StoredResourceScopeConfig;
 };
 
+/** Groups of tools served by the built-in MCP server. */
+export type MastraMCPToolset = 'agents' | 'workflows' | 'tools';
+
+/** Primitive ids (as registered on Mastra) selected per primitive type. */
+export type ServerMCPPrimitiveFilter = {
+  agents?: string[];
+  workflows?: string[];
+  tools?: string[];
+};
+
+export type ServerMCPConfig = {
+  /**
+   * `'dev'` serves the endpoint under `mastra dev`, and in production only when `server.auth` is configured.
+   * `true` always serves it (logs a warning when no auth is configured). `false` never serves it.
+   * @default 'dev'
+   */
+  enabled?: boolean | 'dev';
+  /**
+   * Path of the endpoint, mounted under the API prefix.
+   * @default '/mcp'
+   */
+  path?: string;
+  /**
+   * Toolsets to serve. Clients can narrow this per request with `?toolsets=` or `X-MCP-Toolsets`.
+   * @default ['agents', 'workflows', 'tools']
+   */
+  toolsets?: MastraMCPToolset[];
+  /**
+   * Up to this many visible agents/workflows are listed as an enum on the operation tools' id argument,
+   * and up to this many registered tools are exposed as individual `tool_<id>` tools.
+   * @default 25
+   */
+  enumLimit?: number;
+  /** Agents and workflows that also get a dedicated `agent_<id>` / `workflow_<id>` tool. */
+  featured?: { agents?: string[]; workflows?: string[] };
+  /**
+   * Only serve tools whose backing route is a read operation.
+   * @default false
+   */
+  readOnly?: boolean;
+  /** When set for a primitive type, only these ids are exposed. */
+  include?: ServerMCPPrimitiveFilter;
+  /** Ids that are never exposed. Takes precedence over `include`. */
+  exclude?: ServerMCPPrimitiveFilter;
+  /** Server identity reported to MCP clients. */
+  serverInfo?: { name?: string; version?: string; title?: string; instructions?: string };
+};
+
 export type ServerConfig = {
   /**
    * Port for the server
@@ -306,6 +354,12 @@ export type ServerConfig = {
   middleware?: Middleware | Middleware[];
   /**
    * CORS configuration for the server.
+   *
+   * Without auth the default origin is `'*'`. With `auth` set, the request origin is
+   * reflected instead. `credentials` defaults to `false` unless `auth` is set and
+   * `origin` lists the allowed origins explicitly. An `origin` callback also counts
+   * as explicit, so a callback that returns every request origin lets any site make
+   * cookie-authenticated requests. Restrict the callback or set `credentials: false`.
    * @default { origin: '*', allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'], allowHeaders: ['Content-Type', 'Authorization', 'A2A-Version', 'x-mastra-client-type', 'x-mastra-dev-playground'], exposeHeaders: ['Content-Length', 'X-Requested-With'], credentials: false }
    */
   cors?: CorsOptions | false;
@@ -373,6 +427,13 @@ export type ServerConfig = {
      */
     setRequestAuth?: (req: IncomingMessage, requestContext: RequestContext) => void | Promise<void>;
   };
+
+  /**
+   * Built-in Mastra MCP server, served at `{apiPrefix}{path}` (default `/api/mcp`).
+   * It exposes your agents, workflows, and tools as MCP tools. Every call runs through the same
+   * authentication, permission, and ownership checks as the equivalent HTTP route.
+   */
+  mcp?: ServerMCPConfig;
 
   /**
    * A2A-specific server configuration.
@@ -516,6 +577,14 @@ export type ServerConfig = {
    * ```
    */
   onValidationError?: ValidationErrorHook;
+};
+
+/** A custom API route or a route factory's explicit list of routes. */
+export type ApiRouteInput = ApiRoute | ApiRoute[];
+
+/** Server configuration accepted during Mastra construction and updates. */
+export type ServerConfigInput = Omit<ServerConfig, 'apiRoutes'> & {
+  apiRoutes?: ApiRouteInput[];
 };
 
 /**

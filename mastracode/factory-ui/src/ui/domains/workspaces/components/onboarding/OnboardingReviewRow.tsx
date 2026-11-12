@@ -13,7 +13,7 @@ export function OnboardingReviewRow({
   icon: ReactNode;
   label: string;
   value: string;
-  detail?: string;
+  detail?: ReactNode;
   disabled: boolean;
   onEdit: () => void;
 }) {
