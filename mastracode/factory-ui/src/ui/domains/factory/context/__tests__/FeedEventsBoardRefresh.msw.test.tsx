@@ -517,4 +517,45 @@ describe('FeedEventsProvider, on a draft page', () => {
     await waitFor(() => expect(shown()).toEqual({ untriaged: 2, cards: 2 }));
     await waitForMutationsIdle(rendered.client);
   });
+
+  it('stops asking a server too old to count starters or activity, while frames keep refreshing the rest', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const { requests } = boardEndpoints();
+    const counted = { starters: 0, activity: 0 };
+    server.use(
+      stream.handler,
+      http.get(`${BOARD_URL}/starters`, () => {
+        counted.starters += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+      http.get(`${BOARD_URL}/activity`, () => {
+        counted.activity += 1;
+        return HttpResponse.json({ error: 'not_found' }, { status: 404 });
+      }),
+    );
+    const rendered = renderHookWithProviders(
+      () => ({
+        starters: useQuery(workItemStartersQueryOptions(TEST_BASE_URL, PROJECT_ID)),
+        activity: useQuery(workItemActivityQueryOptions(TEST_BASE_URL, PROJECT_ID, 'week')),
+        decisions: useFactoryDecisionStatus(PROJECT_ID, ['pending', 'leased']),
+      }),
+      { inner },
+    );
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => {
+      expect(rendered.result.current.starters.isError).toBe(true);
+      expect(rendered.result.current.activity.isError).toBe(true);
+    });
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    const before = { ...counted, decisions: requests.decisions };
+
+    for (let frame = 0; frame < 2; frame += 1) {
+      stream.push();
+      await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    }
+
+    expect(requests.decisions).toBe(before.decisions + 2);
+    expect(counted).toEqual({ starters: before.starters, activity: before.activity });
+    await waitForMutationsIdle(rendered.client);
+  });
 });

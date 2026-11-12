@@ -136,12 +136,18 @@ export function workItemStartersQueryOptions(baseUrl: string, factoryProjectId: 
   });
 }
 
+const HOUR_MS = 60 * 60 * 1000;
+
 /** When cards were created and completed over `period`, for the activity band. */
 export function workItemActivityQueryOptions(baseUrl: string, factoryProjectId: string, period: ActivityPeriod) {
   const depth = activityDepth(period);
   return queryOptions({
     queryKey: queryKeys.workItemActivity(factoryProjectId, depth),
-    queryFn: ({ signal }) => fetchWorkItemActivity(baseUrl, factoryProjectId, activityStart(depth, Date.now()), signal),
+    queryFn: ({ signal }) => {
+      // From the hour, so the address repeats and the browser can revalidate it; the band drops what falls before its own start.
+      const since = Math.floor(activityStart(depth, Date.now()) / HOUR_MS) * HOUR_MS;
+      return fetchWorkItemActivity(baseUrl, factoryProjectId, since, signal);
+    },
     // Refreshed with the board, by the feed provider and on return to a hidden tab.
     refetchOnWindowFocus: true,
   });

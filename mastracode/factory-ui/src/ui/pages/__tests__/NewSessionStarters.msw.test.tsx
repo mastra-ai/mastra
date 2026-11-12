@@ -185,7 +185,7 @@ describe('the new session page', () => {
 
   it('asks the server for the counts and dates it shows and for the cards holding a session, never for the whole board', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
-    const now = new Date(2026, 9, 27, 12);
+    const now = new Date(2026, 9, 27, 12, 25);
     vi.setSystemTime(now);
     stubDraftRoute({ starters: { untriaged: 1 }, cards: [{ createdAt: now.toISOString() }] });
     const reads = recordCardReads();
@@ -199,14 +199,64 @@ describe('the new session page', () => {
       ),
     );
 
-    const weekAgo = new Date(2026, 9, 20, 12).toISOString();
-    expect(reads.toSorted()).toEqual(
-      [
-        `${WORK_ITEMS_URL}?scope=sessions`,
-        `${WORK_ITEMS_URL}/starters`,
-        `${WORK_ITEMS_URL}/activity?since=${encodeURIComponent(weekAgo)}`,
-      ].toSorted(),
+    const activityRead = `${WORK_ITEMS_URL}/activity?since=`;
+    expect(reads.map(read => (read.startsWith(activityRead) ? activityRead : read)).toSorted()).toEqual(
+      [`${WORK_ITEMS_URL}?scope=sessions`, `${WORK_ITEMS_URL}/starters`, activityRead].toSorted(),
     );
+    // The browser can only revalidate an address it has asked before: the instant is the hour's, not the millisecond's.
+    const sent = reads.find(read => read.startsWith(activityRead)) ?? '';
+    const since = Date.parse(new URL(sent, TEST_BASE_URL).searchParams.get('since') ?? '');
+    const hourMs = 60 * 60 * 1000;
+    const weekAgo = now.getTime() - 7 * 24 * hourMs;
+    expect(since % hourMs).toBe(0);
+    expect(since).toBeLessThanOrEqual(weekAgo);
+    expect(since).toBeGreaterThan(weekAgo - hourMs);
+  });
+
+  it('keeps the activity and its period menu on screen while a newly chosen month loads, then shows the month', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const now = new Date(2026, 9, 27, 12);
+    vi.setSystemTime(now);
+    const daysAgo = (days: number) => new Date(now.getTime() - days * 24 * 60 * 60 * 1000 - 60 * 60 * 1000);
+    stubDraftRoute({
+      cards: [
+        { createdAt: daysAgo(0).toISOString() },
+        { createdAt: daysAgo(3).toISOString() },
+        { createdAt: daysAgo(20).toISOString() },
+      ],
+    });
+    let answerMonth = () => {};
+    const monthHeld = new Promise<void>(resolve => {
+      answerMonth = resolve;
+    });
+    onTestFinished(answerMonth);
+    server.use(
+      // Holds only the read reaching further back than a week, then lets the route's own handler answer it.
+      http.get(`${TEST_BASE_URL}${WORK_ITEMS_URL}/activity`, async ({ request }) => {
+        const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+        if (since < daysAgo(8).getTime()) await monthHeld;
+      }),
+    );
+    const user = userEvent.setup();
+    renderDraft();
+    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /shipped/ });
+
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() => expect(totals(week)).toHaveAccessibleName('2 came in, 0 agent runs, 0 shipped'));
+
+    await user.click(totals(week));
+    await user.click(within(week).getByRole('button', { name: 'This week' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'This month' }));
+
+    const month = await screen.findByRole('region', { name: 'This month' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    // The same band, not a new one: the menu just used keeps its place and the last seven days stand in.
+    expect(month).toBe(week);
+    expect(within(month).getByRole('button', { name: 'This month' })).toBeInTheDocument();
+    expect(totals(month)).toHaveAccessibleName('2 came in, 0 agent runs, 0 shipped');
+
+    answerMonth();
+    await waitFor(() => expect(totals(month)).toHaveAccessibleName('3 came in, 0 agent runs, 0 shipped'));
   });
 
   it('shows the composer without starters or activity when the server is too old to count them', async () => {
