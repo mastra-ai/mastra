@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@valkey/valkey-glide": "2.5.1"
+    "@valkey/valkey-glide": "2.5.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
