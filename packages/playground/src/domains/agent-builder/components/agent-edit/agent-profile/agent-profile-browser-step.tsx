@@ -1,12 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 
+import { startViewTransition } from '@mastra/playground-ui/lib/view-transition';
 import { ArrowRightIcon } from 'lucide-react';
 import { AgentStepContainer } from './agent-step-container';
 import { Browser } from './browser';
 import { useStreamRunning } from '@/domains/agent-builder/contexts/stream-chat-context';
 import { useWizard } from '@/domains/agent-builder/contexts/wizard-context';
-import { startViewTransition } from '@/lib/routing';
 
 export const AgentProfileBrowserStep = () => {
   const { next } = useWizard();

@@ -1,10 +1,13 @@
 import type { BuilderSettingsResponse, Provider } from '@mastra/client-js';
+import { providerMatches } from '@mastra/playground-ui/domains/llm/hooks/use-filtered-models';
+
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm/hooks/use-filtered-models';
 import { useMemo } from 'react';
 
-import { providerMatches } from './llm/hooks/use-filtered-models';
-import type { ModelInfo } from './llm/hooks/use-filtered-models';
-
-export { useBuilderModelPolicy, useBuilderPickerVisibility } from './agent-builder/hooks/use-builder-settings';
+export {
+  useBuilderModelPolicy,
+  useBuilderPickerVisibility,
+} from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 
 type BuilderModelPolicy = NonNullable<BuilderSettingsResponse['modelPolicy']>;
 

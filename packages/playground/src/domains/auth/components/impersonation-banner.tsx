@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Eye, X } from 'lucide-react';
+import { useRoleImpersonation } from '@mastra/playground-ui/domains/auth/hooks/use-role-impersonation';
 
-import { useRoleImpersonation } from '../hooks/use-role-impersonation';
+import { Eye, X } from 'lucide-react';
 
 /**
  * Banner shown when an admin is previewing the Studio as another role.

@@ -1,12 +1,12 @@
+import { useBuilderPickerVisibility } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { useAllConnections, useAllProviderTools } from '@mastra/react/hooks/tool-providers';
 import { useMemo } from 'react';
-import { useWatch } from 'react-hook-form';
 
+import { useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../schemas';
 import { buildAvailableToolRecords } from '../services/build-available-tool-records';
 import { buildAgentTools } from '../types/agent-tool';
 import type { AgentTool } from '../types/agent-tool';
-import { useBuilderPickerVisibility } from './use-builder-settings';
 
 interface UseAvailableAgentToolsArgs {
   toolsData: Record<string, unknown>;

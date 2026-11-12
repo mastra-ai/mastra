@@ -4,10 +4,10 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { AgentMetadataModelSwitcher } from '@mastra/playground-ui/domains/agents/components/agent-metadata/agent-metadata-model-switcher';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRightIcon, PackageOpenIcon } from 'lucide-react';
 import { Fragment } from 'react';
-import { AgentMetadataModelSwitcher } from '../agents/components/agent-metadata/agent-metadata-model-switcher';
 import { Container } from './shared';
 
 type TemplateFormProps = {

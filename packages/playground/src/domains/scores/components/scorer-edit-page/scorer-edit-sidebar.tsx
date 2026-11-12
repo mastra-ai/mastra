@@ -13,15 +13,15 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { LLMProviders, LLMModels } from '@mastra/playground-ui/domains/llm';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Check, Save } from 'lucide-react';
 import type { RefObject } from 'react';
 import { Controller, useWatch } from 'react-hook-form';
-import type { UseFormReturn } from 'react-hook-form';
 
+import type { UseFormReturn } from 'react-hook-form';
 import type { ScorerFormValues } from './utils/form-validation';
 import { SectionHeader } from '@/domains/cms';
-import { LLMProviders, LLMModels } from '@/domains/llm';
 
 interface ScorerEditSidebarProps {
   form: UseFormReturn<ScorerFormValues>;

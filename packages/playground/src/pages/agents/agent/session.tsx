@@ -1,10 +1,16 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { AgentChatLoadingSkeleton } from '@mastra/playground-ui/domains/agents/components/agent-loading-skeletons';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { AgentSettingsProvider } from '@mastra/playground-ui/domains/agents/context/agent-context';
+import { ObservationalMemoryProvider } from '@mastra/playground-ui/domains/agents/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@mastra/playground-ui/domains/agents/context/agent-working-memory-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { buildAgentDefaultSettings } from '@mastra/playground-ui/domains/agents/utils/agent-default-settings';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/conversation/context/ThreadInputContext';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useAgent } from '@mastra/react/hooks/agents';
@@ -12,15 +18,9 @@ import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { SessionHeader } from '@/components/session-header';
-import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentChatLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
-import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
-import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { StudioAgentChat } from '@/domains/agents/components/studio-agent-chat';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
-import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentSession() {
@@ -119,7 +119,7 @@ function AgentSession() {
                     <h1 className="sr-only">{agentId}</h1>
                     <SessionHeader />
                     <div className="relative grid h-full min-h-0">
-                      <AgentChat
+                      <StudioAgentChat
                         key={actualThreadId}
                         agentId={agentId!}
                         agentName={agent?.name}

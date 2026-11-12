@@ -1,13 +1,13 @@
+import { useAgentBuilderAllowedModels } from '@mastra/playground-ui/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
+import { AgentSettingsContext } from '@mastra/playground-ui/domains/agents/context/agent-context';
+import type { AgentSettingsType } from '@mastra/playground-ui/domains/agents/context/agent-context';
+import { PlaygroundModelContext } from '@mastra/playground-ui/domains/agents/context/playground-model-context';
+import { defaultSettings as fallbackSettings } from '@mastra/playground-ui/domains/agents/hooks/use-agent-settings-state';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useLocalStorageState } from '@mastra/playground-ui/hooks/use-local-storage-state';
 import type { ReactNode } from 'react';
-import { AgentSettingsContext } from './agent-context';
-import { PlaygroundModelContext } from './playground-model-context';
 import { threadPreferencesSchema, serializeThreadPreferences } from './thread-preferences';
-import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { defaultSettings as fallbackSettings } from '@/domains/agents/hooks/use-agent-settings-state';
-import type { AgentSettingsType } from '@/types';
 
 export interface ThreadPreferencesProviderProps {
   children: ReactNode;

@@ -10,7 +10,7 @@ import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/co
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { ReactNode } from 'react';
 
-import { AgentOverviewPanel } from './agent-overview-panel/agent-overview-panel';
+import { StudioAgentOverviewPanel } from './studio-agent-overview-panel';
 import { RouteSidePanel } from '@/lib/route-side-panel';
 
 /**
@@ -30,7 +30,7 @@ export function AgentConfigPanel({
   const isMobile = useIsMobile();
   const panel = (
     <ActivatedSkillsProvider key={agentId}>
-      <AgentOverviewPanel agentId={agentId} />
+      <StudioAgentOverviewPanel agentId={agentId} />
     </ActivatedSkillsProvider>
   );
 

@@ -6,6 +6,7 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { ListChecksIcon } from 'lucide-react';
@@ -19,7 +20,6 @@ import {
 } from '../../hooks/use-mcp-server-tasks';
 import { shortTaskKey, useTaskDrawerParam } from '../../hooks/use-task-drawer-param';
 import { McpTaskStatusBadge } from './mcp-task-status-badge';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { toZodInputSchema } from '@/domains/tools/utils/to-zod-input-schema';
 
 /** The side drawer a task opens in, driven by `?task=`. */

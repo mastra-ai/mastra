@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useStoredWorkspaces } from '@mastra/react/hooks/workspace';
 import { ArrowLeftIcon } from 'lucide-react';
 import { Navigate, useNavigate } from 'react-router';
 import { SkillBuilderStarter } from '@/domains/agent-builder/components/skill-starter/skill-builder-starter';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsCreate() {
   const { hasPermission, rbacEnabled } = usePermissions();

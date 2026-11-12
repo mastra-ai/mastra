@@ -13,6 +13,7 @@ import {
 } from '@mastra/playground-ui/components/ThreadList';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -28,7 +29,6 @@ import { useCollapsedThreadSections } from '../hooks/use-collapsed-thread-sectio
 import { usePinnedThreads } from '../hooks/use-pinned-threads';
 import { RenameThreadDialog } from './rename-thread-dialog';
 import { ThreadActionsMenu } from './thread-actions-menu';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export interface ChatThreadsProps {
   threads: StorageThreadType[];

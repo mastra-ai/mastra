@@ -1,11 +1,12 @@
 import type { StoredSkillResponse } from '@mastra/client-js';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
 import { describe, expect, it } from 'vitest';
-import type { z } from 'zod-v4';
 
+import type { z } from 'zod-v4';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import type { AgentTool } from '../../types/agent-tool';
 import { useAgentBuilderTool } from '../use-agent-builder-tool';
@@ -18,7 +19,6 @@ import { SET_AGENT_NAME_TOOL_NAME } from '../use-set-agent-name-tool';
 import { SET_AGENT_SKILLS_TOOL_NAME } from '../use-set-agent-skills-tool';
 import { SET_AGENT_TOOLS_TOOL_NAME } from '../use-set-agent-tools-tool';
 import { SET_AGENT_WORKSPACE_ID_TOOL_NAME } from '../use-set-agent-workspace-id-tool';
-import type { ModelInfo } from '@/domains/llm';
 
 const allOnFeatures = {
   tools: true,

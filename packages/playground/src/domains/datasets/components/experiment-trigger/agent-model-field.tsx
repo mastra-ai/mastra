@@ -3,12 +3,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Fieldset, FieldsetLegend } from '@mastra/playground-ui/components/Field';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { LLMModels, LLMProviders } from '@mastra/playground-ui/domains/llm';
 import { useLLMProviders } from '@mastra/react/hooks/llm';
 import { Lock, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 import type { RefObject } from 'react';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
-import { LLMModels, LLMProviders } from '@/domains/llm';
 
 export interface AgentModelFieldProps {
   provider: string;

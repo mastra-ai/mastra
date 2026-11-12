@@ -3,6 +3,7 @@ import { Form } from '@mastra/playground-ui/components/Form';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useBuilderSettings } from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover, quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -12,7 +13,6 @@ import { ArrowUpIcon, BookOpen, FileText, GraduationCap, Wrench } from 'lucide-r
 import { nanoid } from 'nanoid';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useCreateSkill } from '@/domains/agents/hooks/use-create-skill';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
 
