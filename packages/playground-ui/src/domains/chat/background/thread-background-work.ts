@@ -65,7 +65,7 @@ export function threadBackgroundWork(messages: readonly MastraDBMessage[]): Thre
       if (!isToolPart(part)) continue;
       const call = readToolPart(part);
       if (isDeferredCall(call.backgroundTaskId, call.backgroundTaskStatus)) work.hasDeferredCalls = true;
-      const pid = backgroundProcessPid(call.toolName, call.output);
+      const pid = backgroundProcessPid(call.toolName, call.input, call.output);
       if (pid && call.toolCallId) {
         work.commands.push({
           toolCallId: call.toolCallId,

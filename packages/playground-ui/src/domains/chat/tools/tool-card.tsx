@@ -292,7 +292,7 @@ export const ToolCardInner = ({
           />
         );
       case 'background_command': {
-        const pid = backgroundProcessPid(toolName, output);
+        const pid = backgroundProcessPid(toolName, input, output);
         if (pid && backgroundWork && threadId) {
           return (
             <BackgroundCommandBadge

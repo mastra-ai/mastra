@@ -28,7 +28,8 @@ export function BackgroundWorkPanel() {
       className="hidden has-[li]:block"
     >
       <ul className="flex flex-col px-1.5 py-1">
-        {work.hasDeferredCalls && <BackgroundTaskRows threadId={threadId} />}
+        {/* Keyed so a thread switch drops the previous thread's tasks with its stream. */}
+        {work.hasDeferredCalls && <BackgroundTaskRows key={threadId} threadId={threadId} />}
         {[...workspaceIds].map(workspaceId => (
           <BackgroundProcessRows key={workspaceId} workspaceId={workspaceId} threadId={threadId} />
         ))}

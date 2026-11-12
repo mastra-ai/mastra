@@ -220,6 +220,42 @@ describe('a background command in the chat', () => {
     });
   });
 
+  describe('when a later turn starts a command after every listed process exited', () => {
+    it('reads the list again and shows the new process', async () => {
+      let listed = [devServer({ running: false, exitCode: 0 })];
+      server.use(http.get(PROCESSES, () => HttpResponse.json(processList(...listed))));
+      const { rerender } = renderWithProviders(
+        <ChatProviders messages={[devServerTurn]}>
+          <MessageRow message={devServerTurn} />
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+      expect(await within(await screen.findByTestId('background-command-badge')).findByText('exit 0')).not.toBeNull();
+
+      const later = backgroundCommandTurn({
+        messageId: 'assistant-later',
+        pid: '5151',
+        command: 'npm run watch',
+        toolCallId: 'call-watch',
+      });
+      listed = [
+        ...listed,
+        devServer({ pid: '5151', command: 'npm run watch', metadata: { toolCallId: 'call-watch' } }),
+      ];
+      rerender(
+        <ChatProviders messages={[devServerTurn, later]}>
+          <MessageRow message={devServerTurn} />
+          <MessageRow message={later} />
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+
+      expect(
+        await within(screen.getByTestId('background-work-panel')).findByRole('group', { name: 'Run: npm run watch' }),
+      ).not.toBeNull();
+    });
+  });
+
   describe('when a later turn reuses the call id of a command that exited', () => {
     it('keeps the later command running and in the dock', async () => {
       const later = backgroundCommandTurn({ messageId: 'assistant-later', pid: '5151', command: 'npm run watch' });
@@ -262,6 +298,57 @@ describe('a deferred call in the chat', () => {
       await confirm('Cancel task');
 
       await waitFor(() => expect(cancelled).toEqual([BACKGROUND_TASK_ID]));
+    });
+  });
+
+  describe('when the task stream fails to connect', () => {
+    it('says so and lists the task once the reader retries', async () => {
+      let attempts = 0;
+      server.use(
+        http.get(`${API}/background-tasks/stream`, () => {
+          attempts += 1;
+          if (attempts === 1) return HttpResponse.json({ error: 'Forbidden' }, { status: 403 });
+          return new HttpResponse(eventStream(reportTaskStream), { headers: { 'Content-Type': 'text/event-stream' } });
+        }),
+      );
+      renderWithProviders(
+        <ChatProviders messages={[deferredReportTurn]}>
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+
+      expect(await screen.findByText("Couldn't follow background tasks")).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(await screen.findByRole('group', { name: 'Reports slow report' })).not.toBeNull();
+      expect(screen.queryByText("Couldn't follow background tasks")).toBeNull();
+    });
+  });
+
+  describe('when the chat switches to another thread', () => {
+    it("drops the previous thread's running tasks from the dock", async () => {
+      server.use(
+        http.get(`${API}/background-tasks/stream`, ({ request }) => {
+          const ofThread = new URL(request.url).searchParams.get('threadId') === THREAD_ID;
+          return new HttpResponse(eventStream(ofThread ? reportTaskStream : []), {
+            headers: { 'Content-Type': 'text/event-stream' },
+          });
+        }),
+      );
+      const { rerender } = renderWithProviders(
+        <ChatProviders messages={[deferredReportTurn]}>
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+      expect(await screen.findByRole('group', { name: 'Reports slow report' })).not.toBeNull();
+
+      rerender(
+        <ChatProviders messages={[deferredReportTurn]} threadId="thread-2">
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'Reports slow report' })).toBeNull());
     });
   });
 

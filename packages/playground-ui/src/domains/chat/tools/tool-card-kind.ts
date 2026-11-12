@@ -180,7 +180,7 @@ export function toolCardKind(
   if (isAgentCall(metadata, toolName)) return 'agent';
   if (isWorkflowCall(metadata, toolName)) return 'workflow';
   if (toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES) return 'file_tree';
-  if (backgroundProcessPid(toolName, output)) return 'background_command';
+  if (backgroundProcessPid(toolName, input, output)) return 'background_command';
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
