@@ -187,6 +187,13 @@ export interface BackgroundProcessConfig {
   /** Callback when the background process exits. */
   onExit?: (meta: BackgroundProcessExitMeta) => void;
   /**
+   * Tell the agent when a background process exits (default: false). The agent's thread gets a
+   * notification with the command, exit code and the end of its output: an active run sees it on its
+   * next step and an idle thread wakes up. Needs an agent registered on Mastra and a run with a memory
+   * thread and resource. Processes stopped with `kill_process` or by the run's abort signal are skipped.
+   */
+  notifyAgent?: boolean;
+  /**
    * Abort signal for background processes.
    * - `undefined` (default): uses the agent's abort signal from context (processes are killed when the signal fires)
    * - `AbortSignal`: uses the provided signal

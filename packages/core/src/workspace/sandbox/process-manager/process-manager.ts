@@ -16,6 +16,16 @@ import type { ProcessInfo, SpawnProcessOptions } from './types';
 // Sandbox Process Manager (Base Class)
 // =============================================================================
 
+const killedOnRequest = new WeakSet<ProcessHandle>();
+
+/**
+ * @internal Whether the process was stopped with {@link SandboxProcessManager.kill}
+ * (the `kill_process` tool or a host), as opposed to exiting on its own.
+ */
+export function wasKilledOnRequest(handle: ProcessHandle): boolean {
+  return killedOnRequest.has(handle);
+}
+
 /**
  * Abstract base class for process management in sandboxes.
  *
@@ -92,6 +102,8 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
       const handle = await impl.spawn(...args);
       this._dismissed.delete(handle.pid);
       handle.command = args[0];
+      const metadata = args[1]?.metadata;
+      if (metadata) handle.metadata = { ...metadata, startedAt: metadata.startedAt ?? Date.now() };
 
       // Wire abort signal to handle.kill() so all providers get abort support automatically.
       const abortSignal = args[1]?.abortSignal;
@@ -116,7 +128,13 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
 
     this.list = async () => {
       await this.sandbox.ensureRunning();
-      return impl.list();
+      const processes = await impl.list();
+      // Providers build ProcessInfo themselves; fill in what the spawn wrapper recorded.
+      return processes.map(info => {
+        const handle = this._tracked.get(info.pid);
+        if (!handle?.metadata || info.metadata) return info;
+        return { ...info, command: info.command ?? handle.command, metadata: handle.metadata };
+      });
     };
 
     this.get = async (...args: Parameters<typeof impl.get>) => {
@@ -169,7 +187,16 @@ export abstract class SandboxProcessManager<TSandbox extends MastraSandbox = Mas
   async kill(pid: string): Promise<boolean> {
     const handle = await this.get(pid);
     if (!handle) return false;
-    const killed = await handle.kill();
+    // Exit observers run before handle.kill() resolves, so mark the handle first.
+    killedOnRequest.add(handle);
+    let killed: boolean;
+    try {
+      killed = await handle.kill();
+    } catch (error) {
+      killedOnRequest.delete(handle);
+      throw error;
+    }
+    if (!killed) killedOnRequest.delete(handle);
     if (killed) {
       // Wait for termination so handle.exitCode is populated before returning.
       // Without this, a subsequent get() could still report the process as running.

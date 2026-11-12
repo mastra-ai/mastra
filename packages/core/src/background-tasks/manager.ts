@@ -1025,23 +1025,32 @@ export class BackgroundTaskManager {
 
         // 2. Emit snapshot of existing in-flight tasks (running + suspended).
         if (!includeExisting) return;
+        const snapshotChunk = (task: BackgroundTask) => {
+          const base = {
+            taskId: task.id,
+            toolName: task.toolName,
+            toolCallId: task.toolCallId,
+            agentId: task.agentId,
+            runId: task.runId,
+            args: task.args,
+          };
+          return task.status === 'suspended'
+            ? {
+                type: 'background-task-suspended',
+                payload: { ...base, suspendPayload: task.suspendPayload, suspendedAt: task.suspendedAt },
+              }
+            : { type: 'background-task-running', payload: { ...base, startedAt: task.startedAt } };
+        };
         try {
           const storage = await manager.getStorage();
           if (taskId) {
             const task = await storage.getTask(taskId);
-            if (task && task.status === 'running' && matchesResource(task.resourceId)) {
-              controller.enqueue({
-                type: 'background-task-running',
-                payload: {
-                  taskId: task.id,
-                  toolName: task.toolName,
-                  toolCallId: task.toolCallId,
-                  agentId: task.agentId,
-                  runId: task.runId,
-                  startedAt: task.startedAt,
-                  args: task.args,
-                },
-              });
+            if (
+              task &&
+              (task.status === 'running' || task.status === 'suspended') &&
+              matchesResource(task.resourceId)
+            ) {
+              controller.enqueue(snapshotChunk(task));
             }
           } else {
             const { tasks: existing } = await storage.listTasks({
@@ -1049,25 +1058,14 @@ export class BackgroundTaskManager {
               runId,
               threadId,
               resourceId,
-              status: ['running'],
+              status: ['running', 'suspended'],
             });
 
             for (const task of existing) {
               if (abortSignal?.aborted) break;
               if (!matchesResource(task.resourceId)) continue;
               try {
-                controller.enqueue({
-                  type: 'background-task-running',
-                  payload: {
-                    taskId: task.id,
-                    toolName: task.toolName,
-                    toolCallId: task.toolCallId,
-                    agentId: task.agentId,
-                    runId: task.runId,
-                    startedAt: task.startedAt,
-                    args: task.args,
-                  },
-                });
+                controller.enqueue(snapshotChunk(task));
               } catch {
                 break;
               }

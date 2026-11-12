@@ -953,6 +953,23 @@ describe('background processes killed by an aborted run', () => {
     }
   });
 
+  // Hosts scope process lists and kills by these, so a missing owner would show one user's processes to another.
+  it('records the thread, resource and tool call that started a background process', async () => {
+    const { start, cleanup, sandbox } = await setup();
+    try {
+      const before = Date.now();
+      const { pid } = await start(longRunning);
+
+      const owner = { threadId: 'thread-1', resourceId: 'user-1', toolCallId: 'call-1' };
+      const [listed] = await sandbox.processes!.list();
+      expect(listed).toMatchObject({ pid, command: longRunning, running: true, metadata: owner });
+      expect(listed!.metadata!.startedAt).toBeGreaterThanOrEqual(before);
+      expect((await sandbox.processes!.get(pid, { release: false }))?.metadata).toEqual(listed!.metadata);
+    } finally {
+      await cleanup();
+    }
+  });
+
   it('does not explain an abort for a process stopped with kill_process', async () => {
     const { start, cleanup, workspace } = await setup();
     try {

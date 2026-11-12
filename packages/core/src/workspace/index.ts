@@ -142,6 +142,7 @@ export type {
   MastraSandboxOptions,
   // Process management types
   ProcessInfo,
+  ProcessMetadata,
   SpawnProcessOptions,
 } from './sandbox';
 export type { MountManagerConfig, MountFn, OnMountHook, OnMountArgs, OnMountResult } from './sandbox';

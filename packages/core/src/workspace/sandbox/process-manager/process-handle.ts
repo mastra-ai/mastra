@@ -10,7 +10,7 @@
 import { Readable, Writable } from 'node:stream';
 
 import type { CommandResult } from '../types';
-import type { SpawnProcessOptions } from './types';
+import type { ProcessMetadata, SpawnProcessOptions } from './types';
 
 export const DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES = 1024 * 1024;
 /**
@@ -246,6 +246,8 @@ export abstract class ProcessHandle {
   abstract readonly exitCode: number | undefined;
   /** The command that was spawned (set by the process manager) */
   command?: string;
+  /** Who started the process and when (set by the process manager from the spawn `metadata`) */
+  metadata?: ProcessMetadata;
   /** Kill the running process (SIGKILL). Returns true if killed, false if not found. */
   abstract kill(): Promise<boolean>;
   /** Send data to the process's stdin */

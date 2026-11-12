@@ -2552,6 +2552,30 @@ describe('BackgroundTaskManager', () => {
       abortController.abort();
     });
 
+    it('a client that connects after a task suspended still sees its question', async () => {
+      const { task } = await manager.enqueue(
+        { toolName: 'refund', toolCallId: 'c1', args: { amount: 40 }, agentId: 'a1', runId: 'run-1' },
+        ctx(async (_args, opts) => {
+          await opts?.suspend?.({ question: 'Approve the refund?' });
+          return undefined;
+        }),
+      );
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+
+      const abortController = new AbortController();
+      const reader = manager.stream({ abortSignal: abortController.signal }).getReader();
+      const snapshot = await reader.read();
+      expect(snapshot.value).toMatchObject({
+        type: 'background-task-suspended',
+        payload: { taskId: task.id, toolName: 'refund', suspendPayload: { question: 'Approve the refund?' } },
+      });
+      expect((snapshot.value!.payload as { suspendedAt?: unknown }).suspendedAt).toBeInstanceOf(Date);
+
+      const byId = manager.stream({ abortSignal: abortController.signal, taskId: task.id }).getReader();
+      expect((await byId.read()).value).toMatchObject({ type: 'background-task-suspended' });
+      abortController.abort();
+    });
+
     it('emits snapshot of running tasks then live completion', async () => {
       // Enqueue a task that blocks
       let resolver!: (val: string) => void;

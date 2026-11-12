@@ -10507,9 +10507,6 @@ export class Agent<
     if (this.#mastra?.backgroundTaskManager?.config.notifyAgentOnFinish === false) return;
     if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
     const outcome = status === 'completed' ? 'completed' : 'failed';
-    // A copy, so later writes by the finished run don't reach the woken one.
-    const requestContext = params.requestContext ? new RequestContext(params.requestContext.entries()) : undefined;
-    const ifIdleStreamOptions = requestContext ? { streamOptions: { requestContext } } : {};
     const signal: AgentSignal = {
       type: 'notification',
       tagName: 'background-task',
@@ -10522,27 +10519,43 @@ export class Agent<
       attributes: { taskId, toolCallId, toolName, status },
     };
     try {
-      const result = this.sendSignal<unknown>(signal, {
-        threadId,
-        resourceId,
-        ifActive: { behavior: 'deliver' },
-        ifIdle: { behavior: 'wake', ...ifIdleStreamOptions },
-      });
-      const accepted = await result.accepted;
-      // Another agent's run holds the thread (e.g. waiting for approval, or in another
-      // process). Queue the notice so it starts this agent's run once that run ends.
-      if (accepted.action === 'blocked' && accepted.reason === 'thread-blocked') {
-        await this.queueSignal<unknown>(
-          { ...signal, id: result.signal.id },
-          { threadId, resourceId, ...(requestContext ? { ifIdle: { streamOptions: { requestContext } } } : {}) },
-        ).accepted;
-      }
+      await this.__sendThreadNotice(signal, { threadId, resourceId, requestContext: params.requestContext });
     } catch (error) {
       this.logger.warn('Could not notify the agent that a background task finished', {
         taskId,
         toolCallId,
         error,
       });
+    }
+  }
+
+  /**
+   * @internal Sends a notice about background work to a thread: an active run gets it on its
+   * next step and an idle thread wakes. Pass the run's request context so a woken run resolves
+   * model, instructions and memory as the run that started the work did.
+   */
+  async __sendThreadNotice(
+    signal: AgentSignal,
+    target: { threadId: string; resourceId: string; requestContext?: RequestContext },
+  ): Promise<void> {
+    const { threadId, resourceId } = target;
+    // A copy, so later writes by the finished run don't reach the woken one.
+    const requestContext = target.requestContext ? new RequestContext(target.requestContext.entries()) : undefined;
+    const ifIdleStreamOptions = requestContext ? { streamOptions: { requestContext } } : {};
+    const result = this.sendSignal<unknown>(signal, {
+      threadId,
+      resourceId,
+      ifActive: { behavior: 'deliver' },
+      ifIdle: { behavior: 'wake', ...ifIdleStreamOptions },
+    });
+    const accepted = await result.accepted;
+    // Another agent's run holds the thread (e.g. waiting for approval, or in another
+    // process). Queue the notice so it starts this agent's run once that run ends.
+    if (accepted.action === 'blocked' && accepted.reason === 'thread-blocked') {
+      await this.queueSignal<unknown>(
+        { ...signal, id: result.signal.id },
+        { threadId, resourceId, ...(requestContext ? { ifIdle: { streamOptions: { requestContext } } } : {}) },
+      ).accepted;
     }
   }
 
