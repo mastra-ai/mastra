@@ -71,16 +71,7 @@ console.log(second.text)
 
 If your Mastra instance already has storage, you can leave `storage` out of `Memory` and it uses that.
 
-:::warning
-When a client application calls your agent, send only the new message instead of the full conversation. OM already loads the thread's history from storage. See [message history](/docs/memory/message-history) for how Mastra handles echoed history and when to use `retainFullInput`.
-:::
-
-### Verify in Studio
-
-Open [Studio](/docs/studio/overview), chat with an agent that has OM enabled, and open the **Memory** tab in the sidebar. The **Observational Memory** section shows:
-
-- **Messages** and **Observations** progress bars show how close each is to its threshold, updating live during observation and reflection. Hover over the info icon to see the model and threshold.
-- **Analyze observations**: opens a detail view with the current observation log, a timeline of messages, observations, buffered observations and events, and a **History** list of earlier observation and reflection records.
+To watch OM work, open the **Memory** tab of the agent in [Studio](/docs/studio/overview). Progress bars show how close messages and observations are to their thresholds, and **Analyze observations** opens the observation log and its history.
 
 ## Benefits
 
@@ -326,6 +317,10 @@ To observe synchronously instead, set `observation.bufferTokens: false`. That tu
 ### Thread scope (default)
 
 Each thread has its own observations. Every call needs a thread: without one, OM throws `OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED`, so that unrelated threads never share one observation record.
+
+:::warning
+When a client application calls your agent, send only the new message instead of the full conversation. OM already loads the thread's history from storage. See [message history](/docs/memory/message-history) for how Mastra handles echoed history and when to use `retainFullInput`.
+:::
 
 OM remembers within a thread. To let the agent reach a user's other threads, turn on [retrieval mode](#retrieval-mode), which gives it a `recall` tool for the raw messages behind observations and for other threads of the same resource.
 
