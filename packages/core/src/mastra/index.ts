@@ -4563,6 +4563,14 @@ export class Mastra<
 
       runFencing = await this.#supportsRunFencing(workflowsStore);
       const listed = await this.#listActiveRunSummaries(workflowsStore);
+      // A failed run that is no longer active cannot fail again, so it is forgotten.
+      const listedKeys = new Set(listed.map(({ run }) => recoveryRunKey(run.workflowName, run.runId)));
+      for (const key of this.#failedRecoveryRestarts) {
+        if (!listedKeys.has(key)) {
+          this.#failedRecoveryRestarts.delete(key);
+        }
+      }
+
       const candidates = await this.#recoveryCandidates(workflowsStore, listed);
       const graceMs = this.#workflowGraceMs();
 
