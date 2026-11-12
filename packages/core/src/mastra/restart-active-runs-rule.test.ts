@@ -18,6 +18,7 @@ import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createStep, createWorkflow } from '../workflows';
 import type { WorkflowRunStatus } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
+import { runEndedKey } from '../workflows/evented/leases';
 import { Run } from '../workflows/workflow';
 import { killableProcess } from './test-utils/killable-process';
 import { Mastra } from './index';
@@ -156,6 +157,101 @@ describe('workflow recovery rule (#28712)', () => {
     await sleep(GRACE_MS);
     await mastra.restartAllActiveWorkflowRuns();
     expect(executions).toEqual(['B:work']);
+  });
+
+  /** A replica whose default-engine `recovered-wf` records each run it runs, and holds `blocked` until `release`. */
+  function startBlockingReplica(storage: InMemoryStore, blocked: string, recovery: MastraRecoveryConfig) {
+    const executions: string[] = [];
+    const started = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const workflow = createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+      .then(
+        createStep({
+          id: 'work',
+          inputSchema: schema,
+          outputSchema: schema,
+          execute: async ({ runId }) => {
+            executions.push(runId);
+            if (runId === blocked) {
+              started.resolve();
+              await release.promise;
+            }
+
+            return {};
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ logger: false, storage, workflows: { 'recovered-wf': workflow }, recovery });
+    replicas.push({ mastra });
+    return { mastra, executions, started: started.promise, release: release.resolve };
+  }
+
+  it("reads a queued restart's keys again, and leaves the run alone when another instance restarted it meanwhile", async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: GRACE_MS, workflowConcurrency: 1 });
+    await persistActiveRun(storage, 'run-1');
+    await persistActiveRun(storage, 'run-2');
+    await sleep(GRACE_MS);
+
+    // run-2 waits for run-1's slot. Meanwhile another instance restarts run-2, and the lease it took
+    // lapses at once, as one whose workers lag behind would: the run is in its grace period again.
+    const pass = b.mastra.restartAllActiveWorkflowRuns();
+    await b.started;
+    await store.claimRunOwnership({ runId: 'run-2', ownerId: 'other-instance', leaseMs: 1, force: true });
+    await sleep(5);
+    b.release();
+    await pass;
+
+    expect(b.executions).toEqual(['run-1']);
+  });
+
+  it('lets a later call list the runs again while an earlier call still waits for its default-engine restarts', async () => {
+    const storage = new InMemoryStore();
+    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
+    await persistActiveRun(storage, 'run-1');
+    let firstSettled = false;
+    const first = b.mastra.restartAllActiveWorkflowRuns().then(() => {
+      firstSettled = true;
+    });
+    await b.started;
+
+    await persistActiveRun(storage, 'run-2');
+    await b.mastra.restartAllActiveWorkflowRuns();
+
+    expect(b.executions).toEqual(['run-1', 'run-2']);
+    expect(firstSettled).toBe(false);
+    b.release();
+    await first;
+  }, 10_000);
+
+  it('logs a restart of an evented run whose end already went out without a stored result as failed', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const workflow = createEventedWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+      .then(reportingStep('evented', 'B', 'work', []))
+      .commit();
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    const mastra = new Mastra({
+      logger: logger as any,
+      storage,
+      workflows: { 'recovered-wf': workflow },
+      recovery: { workflowGraceMs: 0 },
+    });
+    replicas.push({ mastra });
+    await mastra.startWorkers();
+    // The run's end went out, and the end deleted nothing yet: it still reads running.
+    await persistActiveRun(storage, 'ended');
+    await store.claimRunOwnership({ runId: runEndedKey('ended'), ownerId: 'other-instance', leaseMs: 60_000 });
+
+    await mastra.restartAllActiveWorkflowRuns();
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'Failed to restart workflow run',
+      expect.objectContaining({ runId: 'ended' }),
+    );
+    expect(logger.debug).not.toHaveBeenCalledWith('Restarted workflow run', expect.anything());
   });
 
   it('restarts every active run at once in a store without run fencing', async () => {

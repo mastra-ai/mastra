@@ -879,6 +879,14 @@ interface RecoveryCandidate {
   run: WorkflowRun;
 }
 
+/** A recovery pass that dispatched every restart it picked. */
+interface RecoveryPass {
+  /** The earliest time a run the pass left in its grace period becomes due. */
+  earliestDueAt?: number;
+  /** Settles once every restart the pass dispatched settled; never rejects. */
+  settled: Promise<void>;
+}
+
 /** Whether the recovery rule restarts a run now, or when it should look at it again. */
 type RecoveryVerdict = { restart: true } | { restart: false; live: boolean; dueAt: number };
 
@@ -1017,7 +1025,7 @@ export class Mastra<
   #durableRecoveryRechecksInFlight = new Set<Promise<unknown>>();
   #shuttingDown = false;
   /** The workflow recovery pass in flight; see `#recoverStoppedRuns`. */
-  #recoveryPass?: Promise<number | undefined>;
+  #recoveryPass?: Promise<RecoveryPass>;
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
   #tools?: TTools;
@@ -4500,21 +4508,23 @@ export class Mastra<
    * Without run fencing in the store, every active run is restarted.
    *
    * Resolves once every default-engine restart finished and every evented
-   * restart was published to the workers. A call made while another is in
-   * flight joins it. Failures are logged per run and never reject. Once
-   * `shutdown()` starts, no further runs are restarted.
+   * restart was published to the workers. A call made while another is still
+   * dispatching restarts joins it. Failures are logged per run and never
+   * reject. Once `shutdown()` starts, no further runs are restarted.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
-    await this.#recoverStoppedRuns();
+    const pass = await this.#recoverStoppedRuns();
+    await pass.settled;
   }
 
   /**
-   * The recovery pass in flight, or a new one. Callers that arrive while a
-   * pass runs share it, so one instance never restarts a run twice for two
-   * overlapping calls. Resolves to the earliest time a run the pass left in its
-   * grace period becomes due, or `undefined` when none is.
+   * The recovery pass that is still dispatching restarts, or a new one.
+   * Callers that arrive meanwhile share it, so one instance never restarts a
+   * run twice for two overlapping calls. It resolves once every restart was
+   * handed to the limiter: a later call lists the runs afresh instead of
+   * waiting for the default-engine restarts this pass still runs.
    */
-  #recoverStoppedRuns(): Promise<number | undefined> {
+  #recoverStoppedRuns(): Promise<RecoveryPass> {
     if (!this.#recoveryPass) {
       const pass = this.#runRecoveryPass();
       this.#recoveryPass = pass;
@@ -4540,62 +4550,60 @@ export class Mastra<
    * A run left live or in its grace period gets a re-check when it could next
    * become due. Never rejects.
    */
-  async #runRecoveryPass(): Promise<number | undefined> {
+  async #runRecoveryPass(): Promise<RecoveryPass> {
+    // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
+    const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
+      this.#logger.error('Failed to restart workflow run', { error }),
+    );
+
+    let earliestDueAt: number | undefined;
     try {
       const workflowsStore = await this.#storage?.getStore('workflows');
       if (!workflowsStore) {
         this.#logger.debug('Cannot restart active workflow runs. Mastra storage is not initialized');
-        return undefined;
+        return { settled: Promise.resolve() };
       }
 
       const readsLiveness = await this.#supportsRunFencing(workflowsStore);
       const listed = await this.#listActiveRunSummaries(workflowsStore);
       const candidates = await this.#recoveryCandidates(workflowsStore, listed);
-      // Shared by every batch, so a long default-engine restart holds one slot rather than the next batch.
-      const restarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency, error =>
-        this.#logger.error('Failed to restart workflow run', { error }),
-      );
 
-      let earliestDueAt: number | undefined;
-      try {
-        for (let start = 0; start < candidates.length; start += RECOVERY_OWNERSHIP_BATCH_SIZE) {
+      for (let start = 0; start < candidates.length; start += RECOVERY_OWNERSHIP_BATCH_SIZE) {
+        if (this.#shuttingDown) {
+          break;
+        }
+
+        const batch = candidates.slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE);
+        const owners = readsLiveness ? await this.#readRunOwners(workflowsStore, batch) : undefined;
+        const now = Date.now();
+
+        for (const { workflow, run } of batch) {
           if (this.#shuttingDown) {
             break;
           }
 
-          const batch = candidates.slice(start, start + RECOVERY_OWNERSHIP_BATCH_SIZE);
-          const owners = readsLiveness ? await this.#readRunOwners(workflowsStore, batch) : undefined;
-          const now = Date.now();
-
-          for (const { workflow, run } of batch) {
-            if (this.#shuttingDown) {
-              break;
-            }
-
-            const verdict = this.#batchVerdict({ workflow, run, readsLiveness, owners, now });
-            if (verdict.restart) {
-              // Waits for a free slot, so the pass reads the next batch only once a restart frees one.
-              await restarts.start(() => this.#restartStoppedRun(workflow, run.runId));
-              continue;
-            }
-
-            if (!verdict.live) {
-              earliestDueAt = Math.min(earliestDueAt ?? Infinity, verdict.dueAt);
-            }
-
-            // Nothing else looks at the run again before the next boot: a process that dies later leaves it to this.
-            this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
+          const verdict = this.#batchVerdict({ workflow, run, readsLiveness, owners, now });
+          if (verdict.restart) {
+            // Waits for a free slot, so the pass reads the next batch only once a restart frees one.
+            await restarts.start(() => this.#restartStoppedRun({ workflow, run, workflowsStore, readsLiveness }));
+            continue;
           }
-        }
-      } finally {
-        await restarts.drain();
-      }
 
-      return earliestDueAt;
+          if (!verdict.live) {
+            earliestDueAt = Math.min(earliestDueAt ?? Infinity, verdict.dueAt);
+          }
+
+          // This recheck is the only thing that looks at the run again before the next boot, so a process that
+          // dies later is still caught.
+          this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
+        }
+      }
     } catch (error) {
       this.#logger.error('Failed to recover stopped workflow runs', { error });
-      return undefined;
     }
+
+    // `drain()` never rejects: the limiter reports each task's failure itself.
+    return { earliestDueAt, settled: restarts.drain() };
   }
 
   /** What the pass does with one run of a batch whose liveness keys `owners` holds. */
@@ -4777,12 +4785,44 @@ export class Mastra<
     }
   }
 
-  /** Restarts one run of a recovery pass (see `#restartWorkflowRun`), and logs a restart that fails. */
-  async #restartStoppedRun(workflow: AnyWorkflow, runId: string): Promise<void> {
+  /**
+   * Restarts one run of a recovery pass (see `#restartWorkflowRun`), and logs
+   * a restart that fails. The run's keys are read again first: the verdict was
+   * made when its batch was read, and while this restart waited for a slot
+   * another instance can have restarted the run, whose `restart()` lease and
+   * liveness then lapsed in a worker backlog. `restart()` alone would not see
+   * that, as it ignores the grace period.
+   */
+  async #restartStoppedRun({
+    workflow,
+    run,
+    workflowsStore,
+    readsLiveness,
+  }: {
+    workflow: AnyWorkflow;
+    run: WorkflowRun;
+    workflowsStore: WorkflowsStorage;
+    readsLiveness: boolean;
+  }): Promise<void> {
     try {
-      await this.#restartWorkflowRun(workflow, runId);
+      if (readsLiveness) {
+        const keys = livenessKeysOf(workflow, run.runId);
+        const owners = await workflowsStore.getRunOwnerships({ runIds: keys });
+        const verdict = recoveryVerdict({
+          records: keys.map(key => owners.get(key)),
+          updatedAt: run.updatedAt,
+          graceMs: this.#workflowGraceMs(),
+          now: Date.now(),
+        });
+        if (!verdict.restart) {
+          this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, verdict.dueAt);
+          return;
+        }
+      }
+
+      await this.#restartWorkflowRun(workflow, run.runId);
     } catch (error) {
-      this.#logger.error('Failed to restart workflow run', { workflow: workflow.id, runId, error });
+      this.#logger.error('Failed to restart workflow run', { workflow: workflow.id, runId: run.runId, error });
     }
   }
 
@@ -4804,10 +4844,16 @@ export class Mastra<
 
     const run = await workflow.createRun({ runId });
     try {
+      let published = true;
       if (workflow.engineType === 'evented') {
-        await run.restartInBackground();
+        published = await run.restartInBackground();
       } else {
         await run.restart();
+      }
+
+      if (!published) {
+        this.#logger.debug('Skipped restarting workflow run that ended meanwhile', { workflow: workflow.id, runId });
+        return;
       }
     } catch (error) {
       if (!(error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED')) {
