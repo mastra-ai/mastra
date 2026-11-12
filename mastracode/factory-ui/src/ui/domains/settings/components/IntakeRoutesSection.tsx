@@ -39,6 +39,7 @@ import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteListResponse } fro
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
 import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
@@ -57,6 +58,7 @@ import {
   triggerLabel,
 } from './intakeRoutes';
 import { SettingsSubsection } from './SettingsSubsection';
+import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -349,12 +351,15 @@ function RouteName({ name, onRename }: { name: string; onRename: (name: string) 
 function RouteConditions({
   route,
   board,
+  sources,
   readOnly,
   needsOne,
   onSave,
 }: {
   route: IntakeRouteInfo;
   board: InstalledBoardInfo | undefined;
+  /** The project's repositories, teams and projects, offered for `source.repository`. */
+  sources: SourceOption[];
   readOnly: boolean;
   /** A new-card route with no conditions would take every new card, hiding the routes below it. */
   needsOne: boolean;
@@ -393,7 +398,7 @@ function RouteConditions({
         label={`${route.name} conditions`}
         rule={route.when}
         facts={intakeRouteFacts(route.on)}
-        options={phaseOptions(board)}
+        options={{ ...phaseOptions(board), 'source.repository': sources }}
         emptyHint={needsOne ? 'Add at least one.' : 'Matches every card.'}
         onChange={(when, incomplete) => {
           // An empty new-card route isn't saved, and the empty rows already say why.
@@ -418,6 +423,7 @@ function RouteCard({
   route,
   scope,
   boards,
+  sources,
   readOnly,
   isCatchAll,
   unreachable,
@@ -433,6 +439,7 @@ function RouteCard({
   route: IntakeRouteInfo;
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   readOnly: boolean;
   isCatchAll: boolean;
   unreachable: boolean;
@@ -512,6 +519,7 @@ function RouteCard({
             key={route.on.join()}
             route={route}
             board={board}
+            sources={sources}
             readOnly={readOnly}
             needsOne={scope.kind === 'arrivals'}
             onSave={when => onUpdate({ when })}
@@ -575,12 +583,14 @@ function RouteCard({
 function NewRoute({
   scope,
   boards,
+  sources,
   initialBoard,
   onAdd,
   onCancel,
 }: {
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   initialBoard: InstalledBoardInfo | undefined;
   /** Resolves to whether the route was added. */
   onAdd: (route: NewRouteValue) => Promise<boolean>;
@@ -638,7 +648,7 @@ function NewRoute({
           label="New route conditions"
           rule={when}
           facts={intakeRouteFacts(on)}
-          options={phaseOptions(board)}
+          options={{ ...phaseOptions(board), 'source.repository': sources }}
           emptyHint={needsCondition ? 'Add at least one.' : 'Matches every card.'}
           onChange={(next, unfinished) => {
             setWhen(next);
@@ -722,6 +732,7 @@ function RouteList({
   noun: string;
 }) {
   const query = useIntakeRoutesQuery(factoryId);
+  const sources = useSourceSuggestions(factoryId);
   const { latest, show, save, failures } = useRouteSaves(factoryId);
   const [adding, setAdding] = useState(false);
   const routes = (query.data?.intakeRoutes ?? []).filter(route => inScope(route, scope));
@@ -901,6 +912,7 @@ function RouteList({
                   route={route}
                   scope={scope}
                   boards={boards}
+                  sources={sources}
                   readOnly={readOnly}
                   isCatchAll={index === catchAllAt}
                   unreachable={catchAllAt >= 0 && index > catchAllAt}
@@ -953,6 +965,7 @@ function RouteList({
             <NewRoute
               scope={scope}
               boards={boards}
+              sources={sources}
               initialBoard={scope.kind === 'moves' ? scope.board : defaultBoard}
               onAdd={add}
               onCancel={() => setAdding(false)}

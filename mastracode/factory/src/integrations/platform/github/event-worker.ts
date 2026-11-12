@@ -40,7 +40,7 @@ const SUPPORTED_EVENTS = new Set([
   'pull_request_review',
   'pull_request_review_comment',
   // Pushes never reach the subscription dispatcher; they feed the factory
-  // ingest path so base checkpoints rebuild on default-branch updates.
+  // ingest path so environment templates rebuild on default-branch updates.
   'push',
 ]);
 // Kinds emitted by `classifyGithubWebhook` that carry untrusted sender-authored
@@ -660,8 +660,8 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
     const issue = event.payload.issue;
     if (issue && typeof issue === 'object' && 'pull_request' in issue && issue.pull_request) return true;
   }
-  // Default-branch pushes drive base-checkpoint rebuilds
-  // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
+  // Default-branch pushes reach the environment build hand-off
+  // (`GithubRules` calls the `onRepositoryPush` hook).
   if (event.event === 'push') return true;
   return false;
 }

@@ -1,7 +1,9 @@
 import type { FactoryRuleStage } from '@mastra/factory/rules/types';
+import { boardCheck } from '@mastra/factory/work-items/board-check';
 import type { QueryClient, QueryKey } from '@tanstack/react-query';
 import {
   queryOptions,
+  replaceEqualDeep,
   skipToken,
   useMutation,
   useMutationState,
@@ -10,7 +12,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { cardMoveMutationKey, queryKeys } from '../api/keys';
+import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
 import {
@@ -66,6 +68,44 @@ const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new 
 const NO_SESSIONS: ReadonlySet<string> = new Set();
 
 /**
+ * Reads the board: whole the first time, then only what moved since the cursor of the board
+ * held, merged into the board held when the answer arrives. That board carries the changes
+ * made here that the server has not answered and none it refused. A card the answer leaves
+ * equal stays the object held, so nothing showing it renders again.
+ */
+async function readBoard(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal: AbortSignal,
+  client: QueryClient,
+  whole = false,
+): Promise<BoardSnapshot> {
+  const held = () => client.getQueryData<BoardSnapshot>(queryKeys.workItems(factoryProjectId));
+  const since = whole ? undefined : held()?.cursor;
+  const only = since ? { since } : undefined;
+  const { removedIds, check, ...read } = await listWorkItems(baseUrl, factoryProjectId, signal, only);
+  const board = held();
+  const byId = new Map(board?.workItems.map(card => [card.id, card]));
+  let cards = read.workItems.map(card => replaceEqualDeep(byId.get(card.id), card));
+  if (removedIds) {
+    for (const card of cards) byId.set(card.id, card);
+    for (const id of removedIds) byId.delete(id);
+    cards = [...byId.values()];
+    // What moved fits only the board its cursor names, and leaves the board the server checks
+    // once every card written here is answered. Otherwise this copy drifted: read it whole.
+    const writing = client.isMutating({ mutationKey: cardWriteMutationKey(factoryProjectId) });
+    if (board?.cursor !== since || (check !== boardCheck(cards) && !writing)) {
+      return readBoard(baseUrl, factoryProjectId, signal, client, true);
+    }
+    // The order a whole read lists them in: newest first, then by id.
+    cards.sort((a, b) => (a.createdAt + a.id < b.createdAt + b.id ? 1 : -1));
+  }
+  if (!board) return { ...read, workItems: cards };
+  const same = cards.length === board.workItems.length && cards.every((card, i) => card === board.workItems[i]);
+  return same ? replaceEqualDeep(board, { ...read, workItems: board.workItems }) : { ...read, workItems: cards };
+}
+
+/**
  * The board: its cards and the sessions parked on them. `scope` narrows it to the cards holding a
  * session, with the cards related to them.
  */
@@ -73,10 +113,16 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
   return queryOptions({
     queryKey: scope ? queryKeys.workItemsWithSessions(factoryProjectId) : queryKeys.workItems(factoryProjectId),
     queryFn: factoryProjectId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, scope && { scope })
+      ? ({ signal, client }) =>
+          scope
+            ? listWorkItems(baseUrl, factoryProjectId, signal, { scope })
+            : readBoard(baseUrl, factoryProjectId, signal, client)
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
+    // `readBoard` shares cards by id. React Query shares by index, which would rebuild every card
+    // after an added or removed one.
+    structuralSharing: !!scope,
   });
 }
 
@@ -156,6 +202,7 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
@@ -175,6 +222,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
@@ -335,6 +383,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });

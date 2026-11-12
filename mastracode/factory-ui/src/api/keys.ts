@@ -220,5 +220,9 @@ export const queryKeys = {
     ] as const,
 } as const;
 
+/** Every mutation that writes a card of this Factory's board. */
+export const cardWriteMutationKey = (factoryProjectId: string | undefined) =>
+  ['factory', 'write-work-item', factoryProjectId] as const;
+
 export const cardMoveMutationKey = (factoryProjectId: string | undefined) =>
-  ['factory', 'transition-work-item', factoryProjectId] as const;
+  [...cardWriteMutationKey(factoryProjectId), 'transition'] as const;
