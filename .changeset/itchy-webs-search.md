@@ -15,9 +15,9 @@ Set the grace period above the longest time your pubsub can hold an event before
 
 Recovery is also faster when many runs are active: it reads the snapshot of a run only when it restarts it. With 3,000 active runs that another instance is running, among 30,000 finished runs, a call takes about 30 ms instead of 1.7 s on Postgres and 60 ms instead of 670 ms on LibSQL.
 
-For evented workflows, `restartAllActiveWorkflowRuns()` returns once each restart is handed to the workers instead of waiting for the runs to finish. `shutdown()` doesn't wait for those runs either. Calls made while another call is still starting restarts share it.
+For evented workflows, `restartAllActiveWorkflowRuns()` returns once each restart is handed to the workers instead of waiting for the runs to finish. `shutdown()` doesn't wait for those runs either. A call made while another is still starting its restarts joins that call.
 
-A default-engine nested run resumed directly now keeps its parent, or on stores without atomic status updates itself, from being restarted while it runs.
+A default-engine nested run resumed directly now keeps its parent from being restarted while it runs. On stores without atomic status updates, it keeps itself from being restarted instead.
 
 Storage adapter authors can implement `getRunOwnerships({ runIds })` to read the ownership of many runs in one call. It returns a `Map` keyed by run ID and leaves out runs that were never claimed. Adapters that don't implement it read each run separately.
 
