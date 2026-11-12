@@ -36,7 +36,10 @@ type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
 
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
-  readonly compiled: CompiledKnowledgeScopes;
+  readonly #config: KnowledgeScopeDeclarations;
+  readonly #configCompiled: CompiledKnowledgeScopes;
+  /** The last resolved declarations, keyed by what the store supplied. */
+  #resolved: { stored: string; compiled: CompiledKnowledgeScopes };
   #declarationsChecked?: Promise<void>;
 
   constructor(
@@ -44,7 +47,69 @@ export class KnowledgeScopeRuntime {
     private readonly getStorage: () => Promise<KnowledgeStorage>,
     private readonly warn: (message: string) => void,
   ) {
-    this.compiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#config = structuredClone(declarations);
+    this.#configCompiled = compileKnowledgeScopes(structuredClone(declarations));
+    this.#resolved = { stored: '{}', compiled: this.#configCompiled };
+  }
+
+  /** The declarations as last resolved: the config's, plus the store's from the latest {@link resolve}. */
+  get compiled(): CompiledKnowledgeScopes {
+    return this.#resolved.compiled;
+  }
+
+  /**
+   * Re-reads the store's scope declarations and merges them under the config's: a key the config
+   * declares keeps the config's declaration. Called once at the start of every call, so a declaration
+   * the store adds or changes applies from the next call. A store declaration that doesn't compile
+   * next to the others is skipped with a warning. Recompiles only when the store's answer changes.
+   */
+  async resolve(): Promise<CompiledKnowledgeScopes> {
+    const stored = await (await this.getStorage()).getScopeDeclarations();
+    const key = JSON.stringify(stored);
+    if (key === this.#resolved.stored) return this.#resolved.compiled;
+    let merged = this.#config;
+    let compiled = this.#configCompiled;
+    // Declarations can name types declared after them, or each other, so the whole record is tried
+    // first. When that fails, ones that compile on their own are added until a pass adds none, then
+    // the rest without each one in turn, which keeps a group that only compiles together next to one
+    // that doesn't compile.
+    let pending = Object.entries(stored).filter(([name]) => !Object.hasOwn(this.#config, name));
+    const failures = new Map<string, unknown>();
+    const add = (entries: typeof pending, failed?: string) => {
+      const next = { ...merged, ...Object.fromEntries(entries) };
+      try {
+        compiled = compileKnowledgeScopes(structuredClone(next));
+        merged = next;
+        return true;
+      } catch (error) {
+        if (failed) failures.set(failed, error);
+        return false;
+      }
+    };
+    if (!add(pending)) {
+      while (pending.length) {
+        const skipped = pending.filter(entry => !add([entry], entry[0]));
+        if (skipped.length < pending.length) {
+          pending = skipped;
+          continue;
+        }
+        const left = skipped.findIndex((_, i) => skipped.length > 1 && add(skipped.filter((__, j) => j !== i)));
+        if (left !== -1) {
+          pending = [skipped[left]!];
+          continue;
+        }
+        for (const [name] of skipped) {
+          const error = failures.get(name);
+          this.warn(
+            `Knowledge skipped the store's scope declaration "${name}": ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+        break;
+      }
+    }
+    this.#resolved = { stored: key, compiled };
+    this.#declarationsChecked = undefined;
+    return compiled;
   }
 
   validatePrincipals(principals: readonly string[]): void {
@@ -56,9 +121,10 @@ export class KnowledgeScopeRuntime {
   }
 
   /**
-   * Fails when stored scope pages carry declaration keys this config doesn't declare: a renamed or
-   * removed key would otherwise silently cut those scopes off from prefix and `belongsTo` reach.
-   * Checked once per instance; only a pass is remembered, so a store error is retried next time.
+   * Fails when stored scope pages carry declaration keys neither the config nor the store declares: a
+   * renamed or removed key would otherwise silently cut those scopes off from prefix and `belongsTo`
+   * reach. Checked once per set of resolved declarations; only a pass is remembered, so a store error
+   * is retried next time.
    */
   checkDeclarations(): Promise<void> {
     if (!this.#declarationsChecked) {
@@ -119,7 +185,7 @@ export class KnowledgeScopeRuntime {
     return renamed;
   }
 
-  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  async readScopeFor(principals: readonly string[]): Promise<Exclude<KnowledgeReadScope, 'all'>> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();

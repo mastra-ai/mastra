@@ -144,7 +144,8 @@ export class Knowledge extends MastraBase {
    * rules reach in one hop. Undeclared principals throw; an empty list reads nothing. Never `'all'`.
    * Pass the result as `read` to the store's read methods.
    */
-  readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+  async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+    await this.#runtime.resolve();
     return this.#runtime.readScopeFor(principals);
   }
 
@@ -158,18 +159,19 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  explainAccess(
+  async explainAccess(
     runScopes: readonly string[],
     target: { scope: string } | { page: string },
   ): Promise<KnowledgeAccessExplanation> {
+    await this.#runtime.resolve();
     return this.#runtime.explainAccess(runScopes, target);
   }
 
   /**
    * Who the declared rules give a role on one scope: each principal scope address (bound for this
-   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the address of
-   * the scope page's tree parent, needed for rules that bind through `belongsTo`. Declared config
-   * only; it reads no storage. For browsing UIs that draw access between scopes.
+   * scope's params) with its strongest role, `self` rules left out. `parentAddress` is the
+   * address of the scope page's tree parent, needed for rules that bind through `belongsTo`. Reads the
+   * declarations as last resolved, not storage. For browsing UIs that draw access between scopes.
    *
    * @experimental
    */
@@ -194,7 +196,8 @@ export class Knowledge extends MastraBase {
    *
    * @experimental
    */
-  renameScopeDeclaration(from: string, to: string): Promise<number> {
+  async renameScopeDeclaration(from: string, to: string): Promise<number> {
+    await this.#runtime.resolve();
     return this.#runtime.renameScopeDeclaration(from, to);
   }
 

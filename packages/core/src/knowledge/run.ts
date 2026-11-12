@@ -51,6 +51,7 @@ export class KnowledgeRun {
     context: KnowledgeRunContext | undefined,
     options: { write?: boolean } = {},
   ): Promise<KnowledgeRun> {
+    await runtime.resolve();
     const principals = knowledgeRunPrincipals(runtime, context);
     const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
     const provenance: KnowledgeProvenance = {
