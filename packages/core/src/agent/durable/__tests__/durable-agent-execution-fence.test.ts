@@ -775,6 +775,121 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    it.skipIf(backend === 'lease').each([undefined, 1])(
+      'preserves checkpointed text and tool output after later-iteration recovery (observe offset %s)',
+      async offset => {
+        const storage = createStorage(backend);
+        const cache = new InMemoryServerCache();
+        const memory = new MockMemory({ storage });
+        const interrupted = gate();
+        const toolExecutions: string[] = [];
+        const tools = {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up the confirmed result.',
+            inputSchema: z.object({}),
+            outputSchema: z.object({ result: z.string() }),
+            execute: async () => {
+              toolExecutions.push('confirmed result');
+              return { result: 'confirmed result' };
+            },
+          }),
+        };
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => {
+            const iteration = calls++;
+            return {
+              stream: new ReadableStream({
+                async start(controller) {
+                  controller.enqueue({ type: 'stream-start', warnings: [] });
+                  controller.enqueue({ type: 'text-start', id: `text-${iteration}` });
+                  controller.enqueue({
+                    type: 'text-delta',
+                    id: `text-${iteration}`,
+                    delta: iteration === 0 ? 'committed text' : 'abandoned text',
+                  });
+                  if (iteration !== 0) await interrupted.opened;
+                  controller.enqueue({ type: 'text-end', id: `text-${iteration}` });
+                  if (iteration === 0) {
+                    controller.enqueue({
+                      type: 'tool-call',
+                      toolCallType: 'function',
+                      toolCallId: 'committed-call',
+                      toolName: 'lookup',
+                      input: '{}',
+                      providerExecuted: false,
+                    });
+                  }
+                  controller.enqueue({
+                    type: 'finish',
+                    finishReason: iteration === 0 ? 'tool-calls' : 'stop',
+                    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                  });
+                  controller.close();
+                },
+              }),
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+            };
+          },
+        });
+        const agentA = buildAgent({ model, storage, memory, cache, tools });
+        const started = await agentA.stream('Look it up and explain the result.', {
+          memory: { thread: THREAD, resource: RESOURCE },
+        });
+        const originalStream = collect(started.fullStream);
+        const recovering = gatedModel('replacement answer');
+        try {
+          // Iteration 0 has checkpointed its text/tool result before iteration 1 streams an unfinished answer (#28421).
+          await vi.waitFor(() =>
+            expect(originalStream.chunks.some(chunk => chunk.payload?.text === 'abandoned text')).toBe(true),
+          );
+          expect(calls).toBe(2);
+          expect(toolExecutions).toEqual(['confirmed result']);
+          const { runId } = started;
+          globalRunRegistry.clear();
+          __resetExecutionFencesForTests();
+          const agentB = buildAgent({ model: recovering.model, storage, memory, cache, tools });
+          const recovered = await agentB.recover(runId, { force: true });
+          const recoveryDone = drain(recovered.fullStream);
+          await recovering.entered;
+          // Offset 1 skips the initial iteration boundary, but must retain the committed text and tool exchange.
+          const observation = await agentB.observe(runId, { offset });
+          const replayDone = drain(observation.fullStream);
+          recovering.release();
+          try {
+            await recoveryDone;
+            const chunks = await replayDone;
+            expect(chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => chunk.payload.text)).toEqual([
+              'committed text',
+              'replacement answer',
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'tool-call').map(chunk => chunk.payload)).toEqual([
+              expect.objectContaining({ toolCallId: 'committed-call', toolName: 'lookup', args: {} }),
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload)).toEqual([
+              expect.objectContaining({
+                toolCallId: 'committed-call',
+                toolName: 'lookup',
+                result: { result: 'confirmed result' },
+              }),
+            ]);
+            expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+            expect(toolExecutions).toEqual(['confirmed result']);
+          } finally {
+            observation.cleanup();
+            recovered.cleanup();
+          }
+        } finally {
+          interrupted.open();
+          recovering.release();
+          await originalStream.stop();
+          started.cleanup();
+        }
+      },
+    );
+
     it.skipIf(backend === 'lease')(
       'uses the highest generation when a stale step start arrives after its successor',
       async () => {
