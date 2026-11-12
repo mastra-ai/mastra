@@ -6,7 +6,9 @@
  * pass every iteration result to the next step, and a step suspended two levels
  * deep must resume. The evented engine coordinates those constructs through the
  * nested run's stored record, which top-level runs always write; nested runs
- * must get the same guarantee.
+ * must get the same guarantee. That also holds when a nested workflow starts
+ * fresh after its parent resumes, where the parent's `resumeSteps` leak into
+ * the child's start event.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -289,4 +291,76 @@ describe('evented nested workflow with shouldPersistSnapshot skipping running sn
       expect(resumed.result).toEqual({ n: 13 });
     });
   });
+
+  it.each(['branch', 'foreach'] as const)(
+    'keeps a nested %s() workflow working when it starts after its parent resumes',
+    async shape => {
+      const ask = makeAsk();
+      const deep = createWorkflow({
+        id: 'deep',
+        inputSchema: item,
+        outputSchema: item,
+        options: { shouldPersistSnapshot: settled },
+      })
+        .then(ask)
+        .commit();
+
+      const mid =
+        shape === 'branch'
+          ? (() => {
+              const { double, other, pick } = makeBranchSteps();
+              return createWorkflow({
+                id: 'mid',
+                inputSchema: item,
+                outputSchema: item,
+                options: { shouldPersistSnapshot: settled },
+              })
+                .branch([
+                  [async () => true, double],
+                  [async () => false, other],
+                ])
+                .then(pick)
+                .commit();
+            })()
+          : (() => {
+              const { fan, two, sum } = makeForeachSteps();
+              return createWorkflow({
+                id: 'mid',
+                inputSchema: item,
+                outputSchema: item,
+                options: { shouldPersistSnapshot: settled },
+              })
+                .then(fan)
+                .foreach(two)
+                .then(sum)
+                .commit();
+            })();
+
+      const top = createWorkflow({ id: 'top', inputSchema: item, outputSchema: item }).then(deep).then(mid).commit();
+
+      const storage = new MockStore();
+      await withHost(storage, { top, deep, mid }, async () => {
+        const run = await top.createRun();
+        const suspended: any = await guarded(run.start({ inputData: { n: 3 } }));
+
+        expect(suspended).not.toBe(HANG);
+        if (suspended === HANG) return;
+        expect(suspended.status).toBe('suspended');
+        expect(suspended.suspended?.[0]).toEqual(['deep', 'ask']);
+
+        // Resuming `deep` dispatches `mid` fresh while the parent run still carries
+        // the resumed step. `mid` must still get its run record, or its `.branch()`
+        // hangs and its `.foreach()` keeps only the inline iteration result.
+        const resumed: any = await guarded(run.resume({ step: suspended.suspended[0], resumeData: { value: 10 } }));
+
+        expect(resumed).not.toBe(HANG);
+        if (resumed === HANG) return;
+        expect(resumed.status).toBe('success');
+        expect(resumed.result).toEqual({ n: 26 });
+
+        const store = (await storage.getStore('workflows'))!;
+        expect((await store.listWorkflowRuns({ workflowName: 'mid' })).runs).toHaveLength(1);
+      });
+    },
+  );
 });
