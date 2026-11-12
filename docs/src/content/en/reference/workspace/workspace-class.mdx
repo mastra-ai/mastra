@@ -827,7 +827,8 @@ The `execute_command` tool accepts these options:
           {
             name: 'onExit',
             type: '(meta: BackgroundProcessExitMeta) => void',
-            description: 'Callback when a background process exits. Meta includes pid, exitCode, stdout, and stderr.',
+            description:
+              'Callback when a background process exits. Meta includes pid, exitCode, stdout, stderr, and timedOut (true when the process was stopped by its timeout).',
             isOptional: true,
           },
           {
@@ -835,6 +836,20 @@ The `execute_command` tool accepts these options:
             type: 'AbortSignal | null | false',
             description:
               "Abort signal for background processes. undefined (default) uses the agent's signal. null or false disables abort — processes persist after agent shutdown.",
+            isOptional: true,
+          },
+          {
+            name: 'defaultTimeoutMs',
+            type: 'number',
+            description:
+              'Lifetime limit in milliseconds for a background process started without a timeout. When unset, such processes run until they exit or are killed.',
+            isOptional: true,
+          },
+          {
+            name: 'maxTimeoutMs',
+            type: 'number',
+            description:
+              'Upper bound in milliseconds on any background process lifetime. Longer requested timeouts are lowered to it, and it applies when no timeout or defaultTimeoutMs is set.',
             isOptional: true,
           },
         ],
