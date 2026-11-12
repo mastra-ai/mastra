@@ -112,6 +112,42 @@ export function describeLateDeliveryCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
+    // An outcome check: the finished-step check and the end check also drop the second join's
+    // events, so it passes without the `joinsBranches` flag too.
+    it('runs the step after a parallel once when both branches finish before either step end is handled', async () => {
+      const executions: string[] = [];
+      const report: Report = async id => void executions.push(id);
+      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+        .parallel([work('a', report), work('b', report)])
+        .then(
+          createStep({
+            id: 'c',
+            inputSchema: z.any(),
+            outputSchema: Num,
+            execute: async () => {
+              await report('c');
+              return { n: 1 };
+            },
+          }),
+        )
+        .commit();
+      const fromA = heldQueue(
+        event => event.type === 'workflow.step.end' && (samePath(event, [0, 0]) || samePath(event, [0, 1])),
+      );
+      const a = await startReplica(workflow, fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await expect.poll(() => fromA.queue.length).toBe(2);
+
+      // Each branch saved its result before its step end, so both step ends see both results.
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect(executions.sort()).toEqual(['a', 'b', 'c']);
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(finishesOf(run.runId, a)).toHaveLength(1);
+    }, 20_000);
+
     it('keeps counting the attempts of a failing step across a restart', async () => {
       let attempts = 0;
       const build = () =>
