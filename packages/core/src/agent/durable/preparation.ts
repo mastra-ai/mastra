@@ -844,13 +844,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   const nullToUndefined =
     Boolean(execOptions?.structuredOutput?.schema) &&
     !(execOptions?.structuredOutput as any)?.model &&
-    [
-      { model, providerOptions: undefined },
-      ...(modelList ?? []).map((entry: AgentModelManagerConfig) => ({
-        model: entry.model,
-        providerOptions: entry.providerOptions,
-      })),
-    ].some(candidate =>
+    // The model list already contains the enabled model, so the bare model is only used without a list.
+    (modelList ?? [{ model, providerOptions: undefined }]).some(candidate =>
       needsNullToUndefined(
         candidate.model as any,
         mergeProviderOptions(execOptions?.providerOptions, candidate.providerOptions),
