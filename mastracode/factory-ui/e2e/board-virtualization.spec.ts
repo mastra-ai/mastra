@@ -316,7 +316,8 @@ test.describe('Factory board virtualization', () => {
         .getByText('Large task 1999', { exact: true })
         .click();
       const details = page.getByRole('dialog', { name: 'Large task 1999' });
-      await details.getByRole('textbox', { name: 'Comment' }).fill('Keep this draft');
+      await details.getByRole('button', { name: 'Add a description', exact: true }).click();
+      await details.getByRole('textbox', { name: 'Description', exact: true }).fill('Keep this draft');
 
       await page.evaluate(() => {
         history.pushState(null, '', '?sort=created-oldest');
@@ -326,7 +327,7 @@ test.describe('Factory board virtualization', () => {
       expect(await page.getByTestId('work-item-card').count()).toBeLessThan(40);
 
       await page.getByRole('article', { name: 'Large task 1999', exact: true }).scrollIntoViewIfNeeded();
-      await expect(details.getByRole('textbox', { name: 'Comment' })).toHaveValue('Keep this draft');
+      await expect(details.getByRole('textbox', { name: 'Description', exact: true })).toHaveValue('Keep this draft');
     });
   });
 });

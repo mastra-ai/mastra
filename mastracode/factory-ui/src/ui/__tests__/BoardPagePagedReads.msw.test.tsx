@@ -1,14 +1,15 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { isStubbedProjectRead } from '../../../e2e/ui/board-reads';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
+import { boardViewport, mockBoardRowLayout } from './boardRowLayout';
 import { largeBoard, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
@@ -55,11 +56,15 @@ const cardIds = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, offset) => largeCardId(from + offset));
 
 describe('The board of a large project', () => {
+  beforeEach(mockBoardRowLayout);
+  afterEach(() => vi.restoreAllMocks());
+
   it('opens on the count of every card of a column and its first cards only, in one read', async () => {
     const { asked } = openLargeBoard(250);
 
     expect(await screen.findByRole('button', { name: 'Triage, 250' })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: 'Load more cards' })).toBeInTheDocument();
+    expect(screen.getByRole('article', { name: 'Large task 249' })).toBeInTheDocument();
     expect(asked.listings.map(listing => listing.get('cards'))).toEqual(['true']);
     expect(asked.cardReads).toEqual([]);
     expect(asked.wholeBoards).toBe(0);
@@ -77,6 +82,9 @@ describe('The board of a large project', () => {
     expect(asked.listings.at(-1)?.getAll('window')).toEqual(['triage:100']);
     expect(asked.listings.at(-1)?.has('cards')).toBe(false);
     expect(screen.getByRole('button', { name: 'Triage, 250' })).toBeInTheDocument();
+    // The cards just downloaded are the rows the column now lists below its first fifty.
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 60 * 48 } });
+    expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
   });
 
@@ -103,6 +111,7 @@ describe('The board of a large project', () => {
 
     expect(asked.listings.map(listing => listing.get('cards'))).toEqual(['true', null]);
     expect(asked.cardReads).toEqual([]);
+    expect(screen.getByRole('article', { name: 'Large task 249' })).toBeInTheDocument();
 
     project.cards = project.cards.map(card =>
       card.id === largeCardId(249)
@@ -113,6 +122,8 @@ describe('The board of a large project', () => {
 
     expect(asked.listings).toHaveLength(3);
     expect(asked.cardReads).toEqual([[largeCardId(249)]]);
+    expect(await screen.findByRole('article', { name: 'Renamed task' })).toBeInTheDocument();
+    expect(screen.queryByRole('article', { name: 'Large task 249' })).not.toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
   });
 });

@@ -221,22 +221,22 @@ describe('useBoardIntake project-bound sources', () => {
     expect(here.result.current.alreadyMaterialized).toBe(0);
   });
 
-  describe('while the server has not said which feed items are already filed', () => {
-    /** Answers each filed lookup only once released, with no card filed. */
-    function holdFiledLookups() {
-      const releases: (() => void)[] = [];
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, async () => {
-          await new Promise<void>(resolve => releases.push(resolve));
-          return HttpResponse.json({ workItems: [] });
-        }),
-      );
-      return {
-        held: () => releases.length,
-        answer: () => releases.splice(0).forEach(release => release()),
-      };
-    }
+  /** Answers each filed lookup only once released, with no card filed. */
+  function holdFiledLookups() {
+    const releases: (() => void)[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, async () => {
+        await new Promise<void>(resolve => releases.push(resolve));
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+    return {
+      held: () => releases.length,
+      answer: () => releases.splice(0).forEach(release => release()),
+    };
+  }
 
+  describe('while the server has not said which feed items are already filed', () => {
     it('offers the next page of a feed only once the items of its first page are shown', async () => {
       stubIntake(bindings, ['factory-1'], issues);
       server.use(
@@ -283,6 +283,30 @@ describe('useBoardIntake project-bound sources', () => {
       await waitFor(() => expect(result.current.candidates).toHaveLength(3));
       expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
     });
+  });
+
+  it('leaves a feed as it is shown while a board refresh asks again which of its items are filed', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues, nextCursor: 'page-2' })),
+    );
+    const { result, client } = renderIntake('factory-1');
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+
+    const filed = holdFiledLookups();
+    // What a feed frame does to every read of the project's cards.
+    act(() => void client.invalidateQueries({ queryKey: queryKeys.workItems('factory-1') }));
+    await waitFor(() => expect(filed.held()).toBe(1));
+
+    // The items are known already: no row leaves, no page reads as loading, the next one stays on offer.
+    expect(result.current.candidates).toHaveLength(2);
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
+    expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+
+    filed.answer();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.candidates).toHaveLength(2);
   });
 
   it('reports a failed filed lookup as a failed feed, not an empty column, and asks again on retry', async () => {

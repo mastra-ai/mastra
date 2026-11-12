@@ -84,6 +84,17 @@ describe('Factory work item service boundary', () => {
     expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
 
+  it.each([{ workItemId: [] }, { source: [] }])(
+    'answers %o with no card and no request, since sent bare it would read the whole project',
+    async none => {
+      const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] }));
+      vi.stubGlobal('fetch', fetchMock);
+
+      expect((await listWorkItems('', 'project-1', undefined, none)).workItems).toEqual([]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    },
+  );
+
   it('sends provider-neutral external source data when creating a board item', async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ workItem: wireItem }));
     vi.stubGlobal('fetch', fetchMock);

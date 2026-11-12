@@ -337,6 +337,8 @@ export async function listWorkItems(
         ? only.workItemId.map(id => ['workItemId', id])
         : only,
   );
+  // No id and no source asked for: no card. Sent bare, the request would read the whole project.
+  if (params.size === 0) return { workItems: [], runningSessionIds: [], parkedSessionIds: [] };
   const { workItems, runningSessionIds, parkedSessionIds, total } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
   >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`, { signal });
