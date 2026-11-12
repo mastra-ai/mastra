@@ -449,7 +449,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
-    // Like the persistent stores, every write moves `updatedAt`: recovery reads it to tell a stalled run.
+    // Like the persistent stores, every write moves `updatedAt`: recovery waits out its grace period from it.
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,

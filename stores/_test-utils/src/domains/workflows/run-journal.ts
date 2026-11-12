@@ -1169,9 +1169,8 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await load(id))!.status).toBe('canceled');
       });
 
-      // The workflow recovery loop restarts a run nothing keeps alive once it has gone unwritten
-      // for `recovery.workflowStallThresholdMs`, so a header patch counts as a write, while a patch
-      // its status guard rejected wrote nothing.
+      // Run recovery waits out a grace period from a run's last `updatedAt` before restarting it, so
+      // a header patch counts as a write, while a patch its status guard rejected wrote nothing.
       it.for(['updateWorkflowRunHeader', 'updateWorkflowState'] as const)(
         'advances updatedAt on %s, and leaves it when the status guard rejects the patch',
         async method => {

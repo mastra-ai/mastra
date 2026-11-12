@@ -292,9 +292,8 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
       expect(updatedAtAfter).toBeGreaterThan(updatedAtBefore);
     });
 
-    // The workflow recovery loop restarts a run nothing keeps alive once it has gone unwritten
-    // for `recovery.workflowStallThresholdMs`, so every write an engine makes between steps must
-    // count as activity, not only a full re-persist.
+    // Run recovery waits out a grace period from a run's last `updatedAt` before restarting it, so
+    // every write an engine makes between steps must count as activity, not only a full re-persist.
     it.for(['updateWorkflowResults', 'updateWorkflowState'] as const)(
       'should advance updatedAt on %s',
       async (method, { skip }) => {
