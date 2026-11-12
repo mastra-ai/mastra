@@ -40,6 +40,7 @@ The configured observability store must support each API. Call `getObservability
 | `traceQuery` | `trace-query` | `queryTraces()` |
 | `spanQuery` | `span-query` | `querySpans()` |
 | `spanQueryDurationSort` | `span-query-duration-sort` | `orderBy` on `durationMs` in `querySpans()` |
+| `spanQueryModelProviderSort` | `span-query-model-provider-sort` | `orderBy` on `model` or `provider` in `querySpans()` |
 | `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
 | `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
