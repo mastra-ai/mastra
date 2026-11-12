@@ -184,7 +184,11 @@ describe('buildBuiltinMCPTools', () => {
   });
 
   it('keeps only read-backed tools in read-only mode and derives readOnlyHint from the same fact', async () => {
-    const { build } = setup({ agents: { a: agent('a', 'A') }, workflows: { w: workflow('w') }, mcp: {} });
+    const { build } = setup({
+      agents: { a: agent('a', 'A') },
+      workflows: { w: workflow('w') },
+      mcp: { toolsets: ['agents', 'workflows', 'tools'] },
+    });
     const all = await build();
     expect(all.list_agents?.mcp?.annotations?.readOnlyHint).toBe(true);
     expect(all.call_agent?.mcp?.annotations?.readOnlyHint).toBe(false);

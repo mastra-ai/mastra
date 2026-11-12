@@ -28,7 +28,7 @@ const MISSING_MCP_MESSAGE = 'Built-in MCP server needs @mastra/mcp: npm install 
 const reportedMissingMCP = new WeakSet<Mastra>();
 
 /** Whether `error` (or an error it wraps) says `@mastra/mcp` itself can't be resolved, not a module inside it. */
-function isMissingMCPPackage(error: unknown): boolean {
+export function isMissingMCPPackage(error: unknown): boolean {
   for (let current = error; current instanceof Error; current = current.cause) {
     const code = (current as { code?: unknown }).code;
     if (
@@ -46,8 +46,10 @@ function isMissingMCPPackage(error: unknown): boolean {
 }
 
 /**
- * The only place `@mastra/mcp` (an optional peer dependency) is loaded, so apps that never serve the built-in MCP
- * endpoint never load the MCP SDK. When it isn't installed the endpoint answers 501.
+ * Loads `@mastra/mcp` (an optional peer dependency) on the first MCP request, so apps that never serve the
+ * built-in MCP endpoint don't load the MCP SDK at startup. The only other import is the descriptor route's
+ * install check (./descriptor), which runs when Studio opens the MCP Servers page on an enabled server.
+ * When the package isn't installed the endpoint answers 501.
  * The catalogue is loaded here as well: it imports the server adapter, which imports this route.
  */
 async function loadBuiltinMCP(mastra: Mastra) {
@@ -135,13 +137,19 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     server.__setLogger(mastra.getLogger());
     return {
       server,
-      httpPath: mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra),
+      httpPath: getBuiltinMCPMountedPath(mastra),
       mcpOptions: getBuiltinMCPTransportOptions(mastra),
     };
   },
 });
 
 const mountedPaths = new WeakMap<Mastra, string>();
+
+/** Path the built-in MCP route is served on (without the API prefix), after collision fallback. */
+export function getBuiltinMCPMountedPath(mastra: Mastra): string {
+  return mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra);
+}
+
 const warnedCollision = new WeakSet<Mastra>();
 
 /** Whether `path` would be served by `route` (`:param` matches one segment, `*` the rest). */

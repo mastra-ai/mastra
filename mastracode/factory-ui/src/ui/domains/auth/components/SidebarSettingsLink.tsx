@@ -6,6 +6,7 @@ import { Settings2 } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { accountName } from '../services/accountName';
 import type { FactoryAuthState } from '../services/auth';
 import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
@@ -72,7 +73,5 @@ export function SidebarSettingsLink() {
 
 function signedInName(account: FactoryAuthState | undefined): string | undefined {
   if (!account?.authEnabled || !account.authenticated) return undefined;
-  const name = account.user?.name?.trim();
-  if (name) return name;
-  return account.user?.email || 'User';
+  return accountName(account.user) ?? 'User';
 }
