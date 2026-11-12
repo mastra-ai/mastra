@@ -12,14 +12,12 @@ Added background shells and background subagents to Mastra Code. They are off by
 - The `subagent` tool can run as a background task with no time limit. When the task finishes, fails or is cancelled, the agent gets a notification. The result is in the original tool call.
 - Completions of every background task now wake an idle agent on the current thread. Before, they were only saved to the thread.
 - Background tasks cut off by a crash or a shutdown are reported as interrupted. Their notifications are saved to the thread without starting a new turn.
-- The completion text changed from `<tool> completed in background` to `↳ <tool> finished`.
-- `BackgroundCompletionEvent` from `@mastra/code-sdk/agents/background-completion-events` now also covers background shell exits, with `kind: 'process'`. Task events include `kind: 'task'`. Check `kind` before reading `taskId`.
-- `createMastraCode()` returns `backgroundProcesses`, which reads the output of a running background shell and kills it without posting an exit notification:
+- The `contents` of a task notification changed from `<tool> <status> in background` to a sentence with the task's name and its call, such as `Background Explore subagent finished. Its result is in the original subagent call (call-1).`
+- `BackgroundCompletionEvent` from `@mastra/code-sdk/agents/background-completion-events` now also covers background shell exits, with `kind: 'process'`. Task events include `kind: 'task'` and a `title`: the subagent's name for subagents, else the tool name. Subagent events include the task's first line as `summary`. Check `kind` before reading `taskId`.
+- `createMastraCode()` returns `backgroundProcesses`, which reads a background shell's output and kills it without posting an exit notification. `read` still works after the shell exits, until a kill or `get_process_output` releases it:
 
 ```ts
 const { backgroundProcesses } = await createMastraCode();
 const handle = await backgroundProcesses?.read(pid);
 await backgroundProcesses?.kill(pid);
 ```
-
-- Plugin tool render configs accept `expandOnComplete`. By default a finished background subagent box stays compact. Set it to `true` to expand it.
