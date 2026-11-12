@@ -17,6 +17,7 @@ vi.hoisted(() => {
 });
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PubSub } from '../../events/pubsub';
 import { describeForAllEngines } from '../../loop/test-utils/aimock/aimock-scenario';
 import { isDurableEngineVariant } from '../../loop/test-utils/aimock/types';
 import type { EngineVariant } from '../../loop/test-utils/aimock/types';
@@ -27,6 +28,7 @@ import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { createDurableAgent, createEventedAgent } from '../durable';
 import { assembleAgentFromFsEntry } from '../fs-routing';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 const RESOURCE = 'parked-lease-user';
 
@@ -85,6 +87,17 @@ class FlakyLeasePubSub extends EventEmitterPubSub {
     const lease = this.leases.get(key)!;
     this.leases.set(key, { ...lease, owner: toOwner });
     return true;
+  }
+}
+
+/**
+ * Leases under generation tokens, as Redis and every bus but the in-process EventEmitterPubSub do: the runtime
+ * leases under the bare run id only when the raw bus is an EventEmitterPubSub.
+ */
+class SharedLeasePubSub extends FlakyLeasePubSub {
+  readonly #raw = Object.create(PubSub.prototype) as PubSub;
+  override __rawBus(): PubSub {
+    return this.#raw;
   }
 }
 
@@ -222,7 +235,11 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
   );
 
   /** Parks a run on an approval, then lets the backend forget its lease past the TTL. */
-  async function parkAndLoseLease(tag: string, execute: () => Promise<unknown>) {
+  async function parkAndLoseLease(
+    tag: string,
+    execute: (input: unknown, context: any) => Promise<unknown>,
+    pubsub: FlakyLeasePubSub = new FlakyLeasePubSub(),
+  ) {
     const thread = `parked-lease-thread-${tag}`;
     llm.on(
       { userMessage: `archive ${tag}`, hasToolResult: false },
@@ -236,7 +253,6 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       requireApproval: true,
       execute,
     });
-    const pubsub = new FlakyLeasePubSub();
     const agent = buildAgent(engine, llm.url, archive, pubsub, new InMemoryStore());
     const result = await agent.stream(`archive ${tag}`, { memory: { thread, resource: RESOURCE } });
     const output = isDurableEngineVariant(engine) ? result.output : result;
@@ -248,66 +264,135 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     await pubsub.parked(runId);
     const leaseKey = [...pubsub.leases.keys()].find(key => key.endsWith(thread));
     expect(leaseKey).toBeDefined();
+    const parkedOwner = pubsub.leases.get(leaseKey!)!.owner;
     pubsub.leases.clear();
     // Several TTLs pass, so the renewal fails and the lease would be free for a successor.
     await new Promise(resolve => setTimeout(resolve, 600));
-    return { agent, pubsub, runId, leaseKey: leaseKey!, toolCallId: `call_archive_${tag}` };
+    return { agent, pubsub, runId, thread, parkedOwner, leaseKey: leaseKey!, toolCallId: `call_archive_${tag}` };
   }
 
-  it('holds the thread lease again while the resumed tool runs after a lapse', async () => {
-    let ctx!: Awaited<ReturnType<typeof parkAndLoseLease>>;
-    const owners: (string | undefined)[] = [];
-    ctx = await parkAndLoseLease(`${engine}-relock`, async () => {
-      // Sample across more than three TTLs, so a lease without renewal would have lapsed.
-      for (let i = 0; i < 4; i++) {
-        const lease = ctx.pubsub.leases.get(ctx.leaseKey);
-        owners.push(lease && lease.expiresAt > Date.now() ? lease.owner : undefined);
-        await new Promise(resolve => setTimeout(resolve, 250));
-      }
-      return { archived: true };
-    });
-
-    const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
-    for await (const _ of resumed.fullStream) {
-      // drain
-    }
-    expect(await resumed.text).toBe('Archived.');
-    expect(owners).toEqual([ctx.runId, ctx.runId, ctx.runId, ctx.runId]);
-  }, 20_000);
-
-  // Normal and fs resumes register through the non-strict registerRun, which deliberately runs on
-  // when another owner holds the lease, so they still run the tool beside a successor. Changing that
-  // is a separate behaviour decision; `it.fails` flags the gap until then.
-  const refuseIt = isDurableEngineVariant(engine) ? it : it.fails;
-  refuseIt(
-    'refuses to resume a parked run whose lapsed lease a successor now holds',
-    async () => {
-      let executions = 0;
-      const ctx = await parkAndLoseLease(`${engine}-taken`, async () => {
-        executions++;
-        return { archived: true };
-      });
-      ctx.pubsub.leases.set(ctx.leaseKey, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
-
-      let refusal: unknown;
-      try {
-        const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
-        for await (const chunk of resumed.fullStream) {
-          if (chunk.type === 'error') refusal ??= chunk.payload?.error;
-        }
-      } catch (error) {
-        refusal = error;
-      }
-      // Give a resume that slipped through time to reach the tool.
-      await new Promise(resolve => setTimeout(resolve, 500));
-      expect(executions).toBe(0);
-      expect(String((refusal as Error | undefined)?.message ?? refusal)).toContain(
-        'thread lease is held by successor-run',
+  it.each(['in-process', 'shared'] as const)(
+    'holds the thread lease again while the resumed tool runs after a lapse (%s bus)',
+    async bus => {
+      let ctx!: Awaited<ReturnType<typeof parkAndLoseLease>>;
+      const owners: (string | undefined)[] = [];
+      ctx = await parkAndLoseLease(
+        `${engine}-relock-${bus}`,
+        async () => {
+          // Sample across more than three TTLs, so a lease without renewal would have lapsed.
+          for (let i = 0; i < 4; i++) {
+            const lease = ctx.pubsub.leases.get(ctx.leaseKey);
+            owners.push(lease && lease.expiresAt > Date.now() ? lease.owner : undefined);
+            await new Promise(resolve => setTimeout(resolve, 250));
+          }
+          return { archived: true };
+        },
+        bus === 'shared' ? new SharedLeasePubSub() : new FlakyLeasePubSub(),
       );
-      expect(ctx.pubsub.leases.get(ctx.leaseKey)?.owner).toBe('successor-run');
+      // Durable runs on a shared bus lease under a generation token, not the bare run id.
+      if (bus === 'shared' && isDurableEngineVariant(engine)) expect(ctx.parkedOwner).not.toBe(ctx.runId);
+
+      const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+      expect(await resumed.text).toBe('Archived.');
+      // Taken again under the owner it renews with, so the lease is still held after several TTLs.
+      expect(owners).toHaveLength(4);
+      for (const owner of owners) expect(owner).toEqual(expect.stringContaining(ctx.runId));
+      expect(new Set(owners).size).toBe(1);
     },
     20_000,
   );
+
+  it.each(['in-process', 'shared'] as const)(
+    'keeps renewing the lease a parked run takes again, under the owner it held it with (%s bus)',
+    async bus => {
+      const ctx = await parkAndLoseLease(
+        `${engine}-renew-${bus}`,
+        async () => ({ archived: true }),
+        bus === 'shared' ? new SharedLeasePubSub() : new FlakyLeasePubSub(),
+      );
+      await agentThreadStreamRuntime.reacquireParkedRunLease(ctx.runId, ctx.agent.getPubSub());
+      // Past the TTL, so only renewals keep the lease. Nothing re-registers the run meanwhile.
+      await new Promise(resolve => setTimeout(resolve, 600));
+      const lease = ctx.pubsub.leases.get(ctx.leaseKey);
+      expect(lease && lease.expiresAt > Date.now() ? lease.owner : undefined).toBe(ctx.parkedOwner);
+
+      const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+      expect(await resumed.text).toBe('Archived.');
+    },
+    20_000,
+  );
+
+  it('reports a user abort of a run resumed after a lapse as a plain abort, not a lost lease', async () => {
+    let toolStarted!: () => void;
+    const started = new Promise<void>(resolve => (toolStarted = resolve));
+    const ctx = await parkAndLoseLease(`${engine}-later-abort`, async (_input: unknown, context: any) => {
+      toolStarted();
+      // Runs until the user stops the run.
+      await new Promise<void>(resolve => {
+        const timer = setTimeout(resolve, 5_000);
+        context?.abortSignal?.addEventListener('abort', () => {
+          clearTimeout(timer);
+          resolve();
+        });
+      });
+      return { archived: true };
+    });
+    const subscription = await ctx.agent.subscribeToThread({ resourceId: RESOURCE, threadId: ctx.thread });
+    const aborts: unknown[] = [];
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'abort') {
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+    const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+    const drained = (async () => {
+      for await (const _ of resumed.fullStream) {
+        // drain
+      }
+    })().catch(() => {});
+    await started;
+    expect(ctx.agent.abortThreadStream({ resourceId: RESOURCE, threadId: ctx.thread })).toBe(true);
+    await vi.waitFor(() => expect(aborts).toHaveLength(1), { timeout: 5_000 });
+    subscription.unsubscribe();
+    await watching;
+    await drained;
+    expect(aborts[0]).not.toEqual(expect.objectContaining({ reason: 'thread-lease-lost' }));
+  }, 20_000);
+
+  it('refuses to resume a parked run whose lapsed lease a successor now holds', async () => {
+    let executions = 0;
+    const ctx = await parkAndLoseLease(`${engine}-taken`, async () => {
+      executions++;
+      return { archived: true };
+    });
+    ctx.pubsub.leases.set(ctx.leaseKey, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+
+    let refusal: unknown;
+    try {
+      const resumed = await ctx.agent.approveToolCall({ runId: ctx.runId, toolCallId: ctx.toolCallId });
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'error') refusal ??= chunk.payload?.error;
+      }
+    } catch (error) {
+      refusal = error;
+    }
+    // Give a resume that slipped through time to reach the tool.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(executions).toBe(0);
+    expect(String((refusal as Error | undefined)?.message ?? refusal)).toContain(
+      'thread lease is held by successor-run',
+    );
+    expect(ctx.pubsub.leases.get(ctx.leaseKey)?.owner).toBe('successor-run');
+  }, 20_000);
 
   it('still stops a partly resumed run that loses its lease while a sibling suspension is pending', async () => {
     const tag = `${engine}-partial`;
@@ -325,7 +410,8 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
 
     let toolStarted!: () => void;
     const started = new Promise<void>(resolve => (toolStarted = resolve));
-    let toolAborted = false;
+    let abortedWhileRunning: boolean | undefined;
+    let toolSignal: AbortSignal | undefined;
     // Suspends at runtime with no suspend schema, so sibling calls run (and suspend) side by side.
     const ask = createTool({
       id: 'ask',
@@ -333,17 +419,11 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
       inputSchema: z.object({ q: z.string() }),
       execute: async (_input, context) => {
         if (!context?.agent?.resumeData) return await context?.agent?.suspend({ question: 'ok?' });
+        toolSignal = context?.abortSignal;
         toolStarted();
-        // Runs until the run is stopped, or gives up after a while.
-        const signal = context?.abortSignal;
-        await new Promise<void>(resolve => {
-          const timer = setTimeout(resolve, 3_000);
-          signal?.addEventListener('abort', () => {
-            toolAborted = true;
-            clearTimeout(timer);
-            resolve();
-          });
-        });
+        // Outlives several TTLs, so the lease is lost while it runs.
+        await new Promise(resolve => setTimeout(resolve, 800));
+        abortedWhileRunning = context?.abortSignal?.aborted ?? false;
         return { answered: true };
       },
     });
@@ -363,7 +443,7 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
 
     // Resume one call: its tool runs while the sibling suspension stays pending.
     const resumed = await agent.resumeStream({ answer: 'yes' }, { runId, toolCallId: suspended[0] });
-    void (async () => {
+    const drained = (async () => {
       for await (const _ of resumed.fullStream) {
         // drain
       }
@@ -371,6 +451,9 @@ describeForAllEngines('parked run across a lease backend outage', (engine: Engin
     await started;
     // The backend lost the lease, so the next renewal returns false while the resumed tool runs.
     pubsub.leases.clear();
-    await vi.waitFor(() => expect(toolAborted).toBe(true), { timeout: 2_000 });
+    // The tool already running finishes undisturbed, and the run is stopped once its step settles.
+    await vi.waitFor(() => expect(abortedWhileRunning).toBe(false), { timeout: 5_000 });
+    await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true), { timeout: 2_000 });
+    await drained;
   }, 20_000);
 });
