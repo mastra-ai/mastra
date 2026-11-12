@@ -2,6 +2,7 @@
  * @vitest-environment jsdom
  */
 import type { Client, Transport } from '@modelcontextprotocol/client';
+import type { McpUiHostCapabilities } from '@modelcontextprotocol/ext-apps';
 import { AppBridge } from '@modelcontextprotocol/ext-apps/app-bridge';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
@@ -24,11 +25,13 @@ async function openTrace(
   mcp: ReturnType<typeof traceServer>,
   traceId: string,
   hostContext: Record<string, unknown> = {},
+  { capabilities = {}, meta }: { capabilities?: McpUiHostCapabilities; meta?: Record<string, unknown> } = {},
 ) {
   const host = await serveAndConnect(mcp.server);
   hosts.push(host);
   const client: Client = host.client;
-  const result = await client.callTool({ name: 'get_trace', arguments: { traceId } });
+  const called = await client.callTool({ name: 'get_trace', arguments: { traceId } });
+  const result = meta ? { ...called, _meta: { ...called._meta, ...meta } } : called;
 
   const parent = { postMessage: (message: unknown) => hostTransport.onmessage?.(structuredClone(message) as never) };
   Object.defineProperty(window, 'parent', { configurable: true, get: () => parent });
@@ -41,7 +44,12 @@ async function openTrace(
       window.dispatchEvent(event);
     },
   };
-  const bridge = new AppBridge(client, { name: 'test-host', version: '1.0.0' }, { serverTools: {} }, { hostContext });
+  const bridge = new AppBridge(
+    client,
+    { name: 'test-host', version: '1.0.0' },
+    { serverTools: {}, ...capabilities },
+    { hostContext },
+  );
   bridge.oninitialized = () => void bridge.sendToolResult(result as Parameters<AppBridge['sendToolResult']>[0]);
   await bridge.connect(hostTransport);
 
@@ -93,4 +101,96 @@ it("follows the host's theme", async () => {
   await openTrace(traceServer(), 'trace-1', { theme: 'light' });
 
   await waitFor(() => expect(document.documentElement.classList.contains('light')).toBe(true));
+});
+
+it('tells the model which trace and span are open, when the host takes context updates', async () => {
+  const contexts: string[] = [];
+  const bridge = await openTrace(traceServer(), 'trace-1', {}, { capabilities: { updateModelContext: { text: {} } } });
+  bridge.onupdatemodelcontext = async ({ content }) => {
+    contexts.push(content?.map(block => (block.type === 'text' ? block.text : '')).join('') ?? '');
+    return {};
+  };
+
+  await waitFor(() => expect(contexts.at(-1)).toContain("They're viewing trace trace-1"), { timeout: 3000 });
+  expect(contexts.at(-1)).toContain(
+    `whose root is agent_run "agent run: 'weather-agent'" (span root), succeeded, took 6000ms`,
+  );
+  expect(contexts.at(-1)).toContain('It has 3 spans.');
+
+  fireEvent.click(await spanRow("tool: 'get-weather'"));
+  await waitFor(
+    () =>
+      expect(contexts.at(-1)).toContain(
+        `The span open beside it is tool_call "tool: 'get-weather'" (span tool), succeeded, took 2000ms.`,
+      ),
+    { timeout: 3000 },
+  );
+});
+
+it('asks the model about the trace, then the picked span, as a user message', async () => {
+  const messages: string[] = [];
+  const bridge = await openTrace(traceServer(), 'trace-1', {}, { capabilities: { message: { text: {} } } });
+  bridge.onmessage = async ({ content }) => {
+    messages.push(content.map(block => (block.type === 'text' ? block.text : '')).join(''));
+    return {};
+  };
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask about this trace' }));
+  await waitFor(() => expect(messages).toEqual(['Look into trace trace-1. Summarize what happened.']));
+
+  fireEvent.click(await spanRow("tool: 'get-weather'"));
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask about this span' }));
+  await waitFor(() =>
+    expect(messages.at(-1)).toBe(
+      `Look into the tool_call "tool: 'get-weather'" (span tool), succeeded, took 2000ms in trace trace-1. What did it do?`,
+    ),
+  );
+});
+
+it("opens the trace, and then the picked span, in Studio at the server's Studio URL", async () => {
+  const links: string[] = [];
+  const bridge = await openTrace(
+    traceServer(),
+    'trace-1',
+    {},
+    { capabilities: { openLinks: {} }, meta: { 'mastra/studioUrl': 'http://studio.test/' } },
+  );
+  bridge.onopenlink = async ({ url }) => {
+    links.push(url);
+    return {};
+  };
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Open in Studio' }));
+  await waitFor(() => expect(links).toEqual(['http://studio.test/traces?traceId=trace-1']));
+
+  fireEvent.click(await spanRow("tool: 'get-weather'"));
+  fireEvent.click(screen.getByRole('button', { name: 'Open in Studio' }));
+  await waitFor(() => expect(links.at(-1)).toBe('http://studio.test/traces?traceId=trace-1&spanId=tool'));
+});
+
+it('goes fullscreen and back when the host offers it', async () => {
+  const bridge = await openTrace(traceServer(), 'trace-1', {
+    displayMode: 'inline',
+    availableDisplayModes: ['inline', 'fullscreen'],
+  });
+  const requested: string[] = [];
+  bridge.onrequestdisplaymode = async ({ mode }) => {
+    requested.push(mode);
+    bridge.setHostContext({ displayMode: mode, availableDisplayModes: ['inline', 'fullscreen'] });
+    return { mode };
+  };
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Fullscreen' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Exit fullscreen' }));
+  await waitFor(() => expect(requested).toEqual(['fullscreen', 'inline']));
+  expect(await screen.findByRole('button', { name: 'Fullscreen' })).toBeTruthy();
+});
+
+it("offers no host actions the host doesn't support, or a Studio link without a Studio URL", async () => {
+  await openTrace(traceServer(), 'trace-1', {}, { capabilities: { openLinks: {} } });
+
+  expect(await spanRow("tool: 'get-weather'")).toBeTruthy();
+  for (const name of ['Ask about this trace', 'Open in Studio', 'Fullscreen']) {
+    expect(screen.queryByRole('button', { name })).toBeNull();
+  }
 });

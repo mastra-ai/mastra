@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
+import { AppHost, AppToolbar, readStudioUrl } from '../../shared/host';
 import { applyTheme, readResult } from '../../shared/mcp-app';
 import { isLightTrace, OpenedTrace } from '../../shared/trace-view';
 import type { LightTrace } from '../../shared/trace-view';
@@ -16,6 +17,7 @@ import type { LightTrace } from '../../shared/trace-view';
 export function TraceViewer() {
   const [trace, setTrace] = useState<LightTrace>();
   const [problem, setProblem] = useState<string>();
+  const [studioUrl, setStudioUrl] = useState<string>();
   const [queryClient] = useState(
     () => new QueryClient({ defaultOptions: { queries: { retry: false, refetchOnWindowFocus: false } } }),
   );
@@ -25,6 +27,7 @@ export function TraceViewer() {
     onAppCreated: app => {
       app.ontoolresult = result => {
         const value = readResult(result);
+        setStudioUrl(readStudioUrl(result));
         if (isLightTrace(value)) setTrace(value);
         else setProblem(result.isError ? 'The trace could not be loaded.' : 'The tool returned no trace.');
       };
@@ -51,7 +54,12 @@ export function TraceViewer() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
-        <OpenedTrace app={app} trace={trace} />
+        <AppHost app={app} name="trace viewer" studioUrl={studioUrl}>
+          <div className="flex justify-end px-3 pt-2">
+            <AppToolbar />
+          </div>
+          <OpenedTrace app={app} trace={trace} />
+        </AppHost>
       </TooltipProvider>
     </QueryClientProvider>
   );

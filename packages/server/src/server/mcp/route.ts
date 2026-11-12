@@ -215,12 +215,16 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
         // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
         // output, the model reads a summary of it instead.
         transform: ({ toolName, output, result, apps }) => {
-          const summary = apps && !result.isError ? modelSummaryOf(tools[toolName]) : undefined;
-          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return undefined;
+          if (!apps || result.isError) return undefined;
+          const withStudio = config.studioUrl
+            ? { ...result, _meta: { ...result._meta, 'mastra/studioUrl': config.studioUrl } }
+            : result;
+          const summary = modelSummaryOf(tools[toolName]);
+          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return withStudio;
           // Routes can return dates as `Date`s; read the output as the client receives it.
           const sent = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
           return {
-            ...result,
+            ...withStudio,
             structuredContent: sent,
             content: [{ type: 'text', text: summary(sent) }],
           };

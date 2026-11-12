@@ -24,6 +24,8 @@ export interface ResolvedBuiltinMCPConfig {
   readOnly: boolean;
   /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
   apps: boolean;
+  /** Studio's base URL, sent to MCP Apps for "Open in Studio" links. */
+  studioUrl?: string;
   enumLimit: number;
   featured: { agents: string[]; workflows: string[] };
   /**
@@ -146,6 +148,7 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     toolsets,
     readOnly,
     apps: config.apps ?? true,
+    studioUrl: resolveStudioUrl(mastra, config),
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },
     isSelected: (kind, names) => {
@@ -157,6 +160,19 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     },
     serverInfo: config.serverInfo ?? {},
   };
+}
+
+/** Studio's base URL for app links: `server.mcp.studioUrl`, else the local Studio under `mastra dev`. */
+function resolveStudioUrl(mastra: Mastra, config: ServerMCPConfig): string | undefined {
+  if (config.studioUrl === false) return undefined;
+  if (config.studioUrl) return config.studioUrl.replace(/\/+$/, '');
+  if (!isDev()) return undefined;
+  const server = mastra.getServer();
+  const bound = server?.host && server.host !== '0.0.0.0' && server.host !== '::' ? server.host : undefined;
+  const host = server?.studioHost ?? bound ?? 'localhost';
+  const port = server?.studioPort ?? server?.port ?? 4111;
+  const base = (server?.studioBase ?? '/').replace(/\/+$/, '');
+  return `${server?.studioProtocol ?? 'http'}://${host}:${port}${base}`;
 }
 
 /** DNS-rebinding protection for `mastra dev` only; production hosts sit behind proxies and custom domains. */

@@ -220,6 +220,17 @@ describe('built-in MCP server apps', () => {
   });
 });
 
+it("tells apps the configured Studio URL, for their Studio links, and not callers that don't render apps", async () => {
+  const { connect, traceId } = await start({ studioUrl: 'https://studio.example.com/' });
+  const apps = await connect('tracer', { rendersApps: true });
+  const plain = await connect('tracer', { rendersApps: false });
+
+  const opened = await apps.callTool({ name: 'get_trace', arguments: { traceId } });
+  expect(opened._meta?.['mastra/studioUrl']).toBe('https://studio.example.com');
+  const plainTrace = await plain.callTool({ name: 'get_trace', arguments: { traceId } });
+  expect(plainTrace._meta?.['mastra/studioUrl']).toBeUndefined();
+});
+
 it('serves no apps with `server.mcp.apps: false`', async () => {
   const { connect } = await start({ apps: false });
   const client = await connect('tracer', { rendersApps: true });

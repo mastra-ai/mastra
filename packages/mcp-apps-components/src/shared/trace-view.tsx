@@ -8,6 +8,7 @@ import { TraceSummaryDescription } from '@mastra/playground-ui/domains/traces/co
 import type { LightSpanRecord, SpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useEffect, useMemo, useState } from 'react';
+import { AppState, AskButton } from './host';
 import { callTool } from './mcp-app';
 
 /** The built-in server's light trace (`get_trace`): every span's tree fields, paged by `nextOffset`. */
@@ -77,6 +78,42 @@ function SpanPanel({
   );
 }
 
+function errorMessage(span: LightSpanRecord): string | undefined {
+  const { error } = span as { error?: unknown };
+  if (!error) return undefined;
+  const message = typeof error === 'object' && 'message' in error ? error.message : error;
+  return typeof message === 'string' ? message.slice(0, 300) : 'unknown error';
+}
+
+/** A span as one line: its type and name, whether it failed, and how long it took. */
+function describeSpan(span: LightSpanRecord): string {
+  const ms = span.endedAt ? Date.parse(String(span.endedAt)) - Date.parse(String(span.startedAt)) : undefined;
+  const error = errorMessage(span);
+  return [
+    `${span.spanType} "${span.name}" (span ${span.spanId})`,
+    error ? `failed: ${error}` : span.endedAt ? 'succeeded' : 'still running',
+    ms !== undefined && !Number.isNaN(ms) ? `took ${ms}ms` : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
+
+/** What the model hears about the open trace, and what "Ask" asks it. */
+function traceState(traceId: string, spans: LightSpanRecord[], selected: LightSpanRecord | undefined) {
+  const root = spans.find(span => span.parentSpanId == null);
+  const failed = spans.filter(span => errorMessage(span));
+  const context = [
+    `They're viewing trace ${traceId}${root ? `, whose root is ${describeSpan(root)}` : ''}. It has ${spans.length} spans${failed.length ? `, ${failed.length} of them failed` : ''}.`,
+    selected && `The span open beside it is ${describeSpan(selected)}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+  const prompt = selected
+    ? `Look into the ${describeSpan(selected)} in trace ${traceId}. What did it do${errorMessage(selected) ? ', and why did it fail' : ''}?`
+    : `Look into trace ${traceId}. Summarize what happened${failed.length ? ' and why it failed' : ''}.`;
+  return { context, prompt };
+}
+
 export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrace; spanId?: string }) {
   const [spans, setSpans] = useState(trace.spans);
   const [selectedSpanId, setSelectedSpanId] = useState(spanId);
@@ -89,37 +126,43 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>([]);
   useEffect(() => setExpandedSpanIds(spans.map(span => span.spanId)), [spans]);
   const rootSpan = spans.find(span => span.parentSpanId == null);
+  const selectedSpan = spans.find(span => span.spanId === selectedSpanId);
+  const { context, prompt } = traceState(trace.traceId, spans, selectedSpan);
+  const studioPath = `/traces?${new URLSearchParams({ traceId: trace.traceId, ...(selectedSpanId ? { spanId: selectedSpanId } : {}) })}`;
 
   return (
-    <div className="flex flex-col gap-3 p-3">
-      <DataPanel variant="inline" title={`Trace ${trace.traceId}`}>
-        <DataPanel.Header>
-          <DataPanel.HeaderContent>
-            <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-            {rootSpan && <TraceSummaryDescription rootSpan={rootSpan} />}
-          </DataPanel.HeaderContent>
-        </DataPanel.Header>
-        <DataPanel.Content className="p-0">
-          <TraceSpanTimeline
-            hierarchicalSpans={hierarchicalSpans}
-            selectedSpanId={selectedSpanId}
-            onSpanClick={id => setSelectedSpanId(current => (current === id ? undefined : id))}
-            expandedSpanIds={expandedSpanIds}
-            setExpandedSpanIds={setExpandedSpanIds}
-          />
-        </DataPanel.Content>
-      </DataPanel>
-      {selectedSpanId && (
-        <div className="h-[32rem]">
-          <SpanPanel
-            app={app}
-            traceId={trace.traceId}
-            spanId={selectedSpanId}
-            onClose={() => setSelectedSpanId(undefined)}
-          />
-        </div>
-      )}
-    </div>
+    <AppState context={context} studioPath={studioPath}>
+      <div className="flex flex-col gap-3 p-3">
+        <DataPanel variant="inline" title={`Trace ${trace.traceId}`}>
+          <DataPanel.Header>
+            <DataPanel.HeaderContent>
+              <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+              {rootSpan && <TraceSummaryDescription rootSpan={rootSpan} />}
+            </DataPanel.HeaderContent>
+            <AskButton label={selectedSpan ? 'Ask about this span' : 'Ask about this trace'} prompt={prompt} />
+          </DataPanel.Header>
+          <DataPanel.Content className="p-0">
+            <TraceSpanTimeline
+              hierarchicalSpans={hierarchicalSpans}
+              selectedSpanId={selectedSpanId}
+              onSpanClick={id => setSelectedSpanId(current => (current === id ? undefined : id))}
+              expandedSpanIds={expandedSpanIds}
+              setExpandedSpanIds={setExpandedSpanIds}
+            />
+          </DataPanel.Content>
+        </DataPanel>
+        {selectedSpanId && (
+          <div className="h-[32rem]">
+            <SpanPanel
+              app={app}
+              traceId={trace.traceId}
+              spanId={selectedSpanId}
+              onClose={() => setSelectedSpanId(undefined)}
+            />
+          </div>
+        )}
+      </div>
+    </AppState>
   );
 }
 

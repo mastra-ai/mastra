@@ -22,6 +22,7 @@ import {
   TRACE_DATE_PRESET_PARAM,
   TRACE_DATE_PRESET_VALUES,
   TRACE_DATE_TO_PARAM,
+  applyTracePropertyFilterTokens,
   getTraceFilterGroups,
   getTracePropertyFilterTokens,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
@@ -31,6 +32,7 @@ import type { App } from '@modelcontextprotocol/ext-apps';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { AppFrame, AppHost, AppState, AppToolbar, readStudioUrl } from '../../shared/host';
 import { applyTheme } from '../../shared/mcp-app';
 import { createMcpFetch } from '../../shared/mcp-fetch';
 import type { OpenedTraceFilter } from '../../shared/mcp-fetch';
@@ -93,6 +95,16 @@ function decodeTraceFilters(params: URLSearchParams): TracesFilters {
     tokens: getTracePropertyFilterTokens(params),
     groups: getTraceFilterGroups(params),
   };
+}
+
+/** The traces filters as a Studio traces URL's params, the inverse of `decodeTraceFilters`. */
+function encodeTraceFilters(filters: TracesFilters): URLSearchParams {
+  const params = new URLSearchParams();
+  if (filters.datePreset) params.set(TRACE_DATE_PRESET_PARAM, filters.datePreset);
+  if (filters.dateFrom) params.set(TRACE_DATE_FROM_PARAM, filters.dateFrom.toISOString());
+  if (filters.dateTo) params.set(TRACE_DATE_TO_PARAM, filters.dateTo.toISOString());
+  applyTracePropertyFilterTokens(params, filters.tokens, filters.groups);
+  return params;
 }
 
 const NO_METRICS = { supported: false, isLoading: false };
@@ -179,31 +191,40 @@ function TracesTab({
       />
     );
   }
+  const params = encodeTraceFilters(state.filters);
+  const context = [
+    `The trace list's filters, as Studio URL params: ${params.toString() || 'none'}.`,
+    query && `It's also filtered by the query the model opened it with: ${JSON.stringify(query)}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
-      <TracesExplorer
-        metricsSupport={NO_METRICS}
-        selection={state.selection}
-        filters={state.filters}
-        onChange={setState}
-        sort={sort}
-        onSortChange={setSort}
-        features={FEATURES}
-      >
-        <TracesExplorer.Body
-          toolbar={
-            <div className="flex items-center justify-between gap-2">
-              <TracesExplorer.FilterBar />
-              <TracesExplorer.ColumnsMenu />
-            </div>
-          }
-          chart={<TracesExplorer.Histogram />}
+    <AppState context={context} studioPath={`/traces?${params}`}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
+        <TracesExplorer
+          metricsSupport={NO_METRICS}
+          selection={state.selection}
+          filters={state.filters}
+          onChange={setState}
+          sort={sort}
+          onSortChange={setSort}
+          features={FEATURES}
         >
-          <TracesExplorer.List />
-        </TracesExplorer.Body>
-      </TracesExplorer>
-    </div>
+          <TracesExplorer.Body
+            toolbar={
+              <div className="flex items-center justify-between gap-2">
+                <TracesExplorer.FilterBar />
+                <TracesExplorer.ColumnsMenu />
+              </div>
+            }
+            chart={<TracesExplorer.Histogram />}
+          >
+            <TracesExplorer.List />
+          </TracesExplorer.Body>
+        </TracesExplorer>
+      </div>
+    </AppState>
   );
 }
 
@@ -267,49 +288,59 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
   const logFilter = opened.filter?.logs;
 
   return (
-    <Tabs value={current} onValueChange={setView} defaultTab="traces" className="flex min-h-0 flex-1 flex-col">
-      {views.length > 1 && (
-        <TabList>
-          {views.map(v => (
-            <Tab key={v} value={v}>
-              {VIEW_LABELS[v]}
-            </Tab>
-          ))}
-        </TabList>
-      )}
-      <TabContent value="traces" className="min-h-0 flex-1 overflow-auto">
-        <TracesTab key={traces.key} app={app} opened={opened} filters={traces.filters} onClearQuery={onClearQuery} />
-      </TabContent>
-      {views.includes('spans') && (
-        <TabContent value="spans" className="min-h-0 flex-1 overflow-auto">
-          <SpansTab app={app} />
+    <AppState
+      context={`They're on its ${VIEW_LABELS[current]} tab.`}
+      studioPath={current === 'traces' || current === 'logs' ? undefined : `/${current}`}
+    >
+      <Tabs value={current} onValueChange={setView} defaultTab="traces" className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-between gap-2 pr-2">
+          {views.length > 1 ? (
+            <TabList>
+              {views.map(v => (
+                <Tab key={v} value={v}>
+                  {VIEW_LABELS[v]}
+                </Tab>
+              ))}
+            </TabList>
+          ) : (
+            <span />
+          )}
+          <AppToolbar />
+        </div>
+        <TabContent value="traces" className="min-h-0 flex-1 overflow-auto">
+          <TracesTab key={traces.key} app={app} opened={opened} filters={traces.filters} onClearQuery={onClearQuery} />
         </TabContent>
-      )}
-      {views.includes('threads') && (
-        <TabContent value="threads" className="min-h-0 flex-1 overflow-auto">
-          <ThreadsTab />
-        </TabContent>
-      )}
-      {views.includes('logs') && (
-        <TabContent value="logs" className="min-h-0 flex-1 overflow-auto">
-          <LogsTab
-            key={logs.key}
-            app={app}
-            initialParams={logs.params}
-            banner={logFilter && <OpenedQueryBar query={logFilter} onClear={onClearQuery} />}
-          />
-        </TabContent>
-      )}
-      {views.includes('metrics') && (
-        <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
-          <MetricsTab onDrilldown={drilldown} />
-        </TabContent>
-      )}
-    </Tabs>
+        {views.includes('spans') && (
+          <TabContent value="spans" className="min-h-0 flex-1 overflow-auto">
+            <SpansTab app={app} />
+          </TabContent>
+        )}
+        {views.includes('threads') && (
+          <TabContent value="threads" className="min-h-0 flex-1 overflow-auto">
+            <ThreadsTab />
+          </TabContent>
+        )}
+        {views.includes('logs') && (
+          <TabContent value="logs" className="min-h-0 flex-1 overflow-auto">
+            <LogsTab
+              key={logs.key}
+              app={app}
+              initialParams={logs.params}
+              banner={logFilter && <OpenedQueryBar query={logFilter} onClear={onClearQuery} />}
+            />
+          </TabContent>
+        )}
+        {views.includes('metrics') && (
+          <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
+            <MetricsTab onDrilldown={drilldown} />
+          </TabContent>
+        )}
+      </Tabs>
+    </AppState>
   );
 }
 
-function Explorer({ app, opened: initial }: { app: App; opened: Opened }) {
+function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opened; studioUrl?: string }) {
   const [opened, setOpened] = useState(initial);
   const filter = useRef(opened.filter);
   filter.current = opened.filter;
@@ -328,9 +359,11 @@ function Explorer({ app, opened: initial }: { app: App; opened: Opened }) {
     <QueryClientProvider client={queryClient}>
       <MastraReactProvider baseUrl="https://mcp-app.mastra.invalid" customFetch={customFetch}>
         <TooltipProvider>
-          <div className="flex h-[44rem] flex-col">
-            <Views app={app} opened={opened} onClearQuery={clearQuery} />
-          </div>
+          <AppHost app={app} name="trace explorer" studioUrl={studioUrl}>
+            <AppFrame>
+              <Views app={app} opened={opened} onClearQuery={clearQuery} />
+            </AppFrame>
+          </AppHost>
         </TooltipProvider>
       </MastraReactProvider>
     </QueryClientProvider>
@@ -345,6 +378,7 @@ function Explorer({ app, opened: initial }: { app: App; opened: Opened }) {
  */
 export function TraceList() {
   const [opened, setOpened] = useState<Opened>();
+  const [studioUrl, setStudioUrl] = useState<string>();
   const { app, error } = useApp({
     appInfo: { name: 'Mastra trace list', version: __PACKAGE_VERSION__ },
     capabilities: {},
@@ -352,7 +386,10 @@ export function TraceList() {
       const tool = () => app.getHostContext()?.toolInfo?.tool.name;
       app.ontoolinput = ({ arguments: args }) => setOpened(current => current ?? toOpened(tool(), args));
       // Hosts may skip the input; the result still means the tool ran.
-      app.ontoolresult = () => setOpened(current => current ?? toOpened(tool(), undefined));
+      app.ontoolresult = result => {
+        setStudioUrl(readStudioUrl(result));
+        setOpened(current => current ?? toOpened(tool(), undefined));
+      };
       app.onhostcontextchanged = context => applyTheme(context.theme);
     },
   });
@@ -372,5 +409,5 @@ export function TraceList() {
       </div>
     );
   }
-  return <Explorer app={app} opened={opened} />;
+  return <Explorer app={app} opened={opened} studioUrl={studioUrl} />;
 }

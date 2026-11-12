@@ -3,6 +3,7 @@
 @import '@mastra/playground-ui/sources.css';
 
 @source '.';
+@source '../../shared';
 
 html,
 body {

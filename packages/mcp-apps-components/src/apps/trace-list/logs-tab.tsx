@@ -23,7 +23,26 @@ import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mast
 import type { App } from '@modelcontextprotocol/ext-apps';
 import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AppState, AskButton } from '../../shared/host';
 import { TraceView } from '../../shared/trace-view';
+
+/** A log as one line, with its data clipped, for the model. */
+function describeLog(log: {
+  timestamp: unknown;
+  level: string;
+  message: string;
+  data?: unknown;
+  traceId?: string | null;
+}) {
+  const data = log.data ? JSON.stringify(log.data, (key, value: unknown) => (key === 'stack' ? undefined : value)) : '';
+  return [
+    `${log.level} log from ${new Date(String(log.timestamp)).toISOString()}: "${log.message.slice(0, 300)}"`,
+    data && data !== '{}' ? `data ${data.slice(0, 500)}` : undefined,
+    log.traceId ? `trace ${log.traceId}` : undefined,
+  ]
+    .filter(Boolean)
+    .join(', ');
+}
 
 /** Studio keeps the logs page's state in the URL; the app keeps the same params in memory. */
 function useSearchParamsState(initial: string): [URLSearchParams, SetURLSearchParamsLike] {
@@ -136,6 +155,7 @@ export function LogsTab({ app, initialParams, banner }: { app: App; initialParam
     );
   }
 
+  const log = featuredLog ? describeLog(featuredLog) : undefined;
   const contentFiltersApplied = !!url.selectedEntityOption || url.filterTokens.length > 0;
   let body: ReactNode;
   if (logsError) {
@@ -168,47 +188,58 @@ export function LogsTab({ app, initialParams, banner }: { app: App; initialParam
           onSpanClick={(traceId, spanId) => url.handleFeaturedChange({ traceId, spanId })}
           onPrevious={handlePreviousLog}
           onNext={handleNextLog}
+          actions={log && <AskButton label="Ask about this log" prompt={`Look into this ${log}. What caused it?`} />}
         />
       </div>
     );
   }
 
+  const filters = new URLSearchParams(searchParams);
+  filters.delete('logId');
+  const context = [
+    `The logs list's filters, as Studio URL params: ${filters.toString() || 'none'}.`,
+    log && `The log open in the side panel is the ${log}.`,
+  ]
+    .filter(Boolean)
+    .join(' ');
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      {banner}
-      <div className="flex flex-col gap-2 p-3">
-        <ActionRow>
-          <ActionRow.Start>
-            <DateTimeRangePicker
-              preset={url.datePreset}
-              onPresetChange={url.handleDatePresetChange}
-              dateFrom={url.selectedDateFrom}
-              dateTo={url.selectedDateTo}
-              onDateChange={url.handleDateChange}
-              disabled={isLoadingLogs}
-              presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
-            />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={url.filterTokens}
-              onTokensChange={url.handleFilterTokensChange}
-              disabled={isLoadingLogs}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-              size="sm"
-            />
-          </ActionRow.Start>
-        </ActionRow>
-        <LogsToolbar
-          isLoading={isLoadingLogs}
-          filterFields={filterFields}
-          filterTokens={url.filterTokens}
-          onFilterTokensChange={url.handleFilterTokensChange}
-          onClear={handleClear}
-          onRemoveAll={url.handleRemoveAll}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
+    <AppState context={context} studioPath={`/logs?${searchParams}`}>
+      <div className="flex h-full min-h-0 flex-col">
+        {banner}
+        <div className="flex flex-col gap-2 p-3">
+          <ActionRow>
+            <ActionRow.Start>
+              <DateTimeRangePicker
+                preset={url.datePreset}
+                onPresetChange={url.handleDatePresetChange}
+                dateFrom={url.selectedDateFrom}
+                dateTo={url.selectedDateTo}
+                onDateChange={url.handleDateChange}
+                disabled={isLoadingLogs}
+                presets={['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom']}
+              />
+              <PropertyFilterCreator
+                fields={filterFields}
+                tokens={url.filterTokens}
+                onTokensChange={url.handleFilterTokensChange}
+                disabled={isLoadingLogs}
+                onStartTextFilter={setAutoFocusFilterFieldId}
+                size="sm"
+              />
+            </ActionRow.Start>
+          </ActionRow>
+          <LogsToolbar
+            isLoading={isLoadingLogs}
+            filterFields={filterFields}
+            filterTokens={url.filterTokens}
+            onFilterTokensChange={url.handleFilterTokensChange}
+            onClear={handleClear}
+            onRemoveAll={url.handleRemoveAll}
+            autoFocusFilterFieldId={autoFocusFilterFieldId}
+          />
+        </div>
+        {body}
       </div>
-      {body}
-    </div>
+    </AppState>
   );
 }

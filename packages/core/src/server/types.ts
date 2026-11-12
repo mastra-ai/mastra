@@ -276,6 +276,13 @@ export type ServerMCPConfig = {
    * @default true
    */
   apps?: boolean;
+  /**
+   * Base URL of Studio, which MCP Apps use for "Open in Studio" links. Under `mastra dev` it defaults to the
+   * local Studio, built from `studioProtocol`, `studioHost`, `studioPort`, and `studioBase`. Elsewhere the
+   * links are only shown when this is set. `false` hides them.
+   * @example 'https://studio.example.com'
+   */
+  studioUrl?: string | false;
   /** When set for a primitive type, only these ids are exposed. */
   include?: ServerMCPPrimitiveFilter;
   /** Ids that are never exposed. Takes precedence over `include`. */

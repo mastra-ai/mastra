@@ -92,6 +92,27 @@ describe('resolveBuiltinMCPConfig isSelected', () => {
   });
 });
 
+describe('resolveBuiltinMCPConfig studioUrl', () => {
+  const studioUrl = (server: ServerConfig) => resolveBuiltinMCPConfig(mastraWith(server)).studioUrl;
+
+  it("defaults to the local Studio under mastra dev, from the server's Studio settings", () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    expect(studioUrl({})).toBe('http://localhost:4111');
+    expect(studioUrl({ host: '0.0.0.0', port: 4311, studioBase: '/studio/' })).toBe('http://localhost:4311/studio');
+    expect(studioUrl({ host: 'devbox.local', studioProtocol: 'https', studioPort: 443 })).toBe(
+      'https://devbox.local:443',
+    );
+    expect(studioUrl({ studioHost: 'studio.local' })).toBe('http://studio.local:4111');
+    expect(studioUrl({ mcp: { studioUrl: false } })).toBeUndefined();
+  });
+
+  it('is only set elsewhere when configured', () => {
+    vi.stubEnv('MASTRA_DEV', '');
+    expect(studioUrl({})).toBeUndefined();
+    expect(studioUrl({ mcp: { studioUrl: 'https://studio.example.com/' } })).toBe('https://studio.example.com');
+  });
+});
+
 describe('resolveServerRoute', () => {
   it('falls back to /mcp when server.mcp.path collides with an existing route, logging an error', () => {
     for (const path of ['/agents', '/agents/some-agent', '/workflows/w/runs/r']) {
