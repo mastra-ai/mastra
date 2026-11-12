@@ -56,19 +56,25 @@ const FIRST_GENERATION = `MAX(1, ${DB_NOW_MS})`;
 const SUMMARY_FIELDS_COLUMN = `CASE WHEN json_valid(snapshot) THEN json_extract(snapshot, '$.status', '$.timestamp', '$.parentWorkflow.workflowId', '$.parentWorkflow.runId') END AS summaryFields`;
 
 /**
- * Builds the reduced snapshot of a summary row from `SUMMARY_FIELDS_COLUMN`: `status`,
- * `timestamp`, and `parentWorkflow` only for nested runs.
+ * The reduced snapshot of a summary row from `SUMMARY_FIELDS_COLUMN`: `status` and `timestamp`
+ * when set, and `parentWorkflow` only when both of its IDs are non-empty strings. A row whose
+ * snapshot isn't valid JSON reduces to `{}`.
  */
 function summarySnapshot(summaryFields: unknown): WorkflowRunState {
-  const [status, timestamp, parentWorkflowId, parentRunId] =
+  const [status, timestamp, workflowId, runId] =
     typeof summaryFields === 'string' ? (JSON.parse(summaryFields) as unknown[]) : [];
-  const snapshot: Record<string, unknown> = {
-    status: status ?? undefined,
-    timestamp: timestamp === null || timestamp === undefined ? undefined : Number(timestamp),
-  };
+  const snapshot: Record<string, unknown> = {};
 
-  if (parentWorkflowId && parentRunId) {
-    snapshot.parentWorkflow = { workflowId: parentWorkflowId, runId: parentRunId };
+  if (status !== null && status !== undefined) {
+    snapshot.status = status;
+  }
+
+  if (timestamp !== null && timestamp !== undefined) {
+    snapshot.timestamp = Number(timestamp);
+  }
+
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    snapshot.parentWorkflow = { workflowId, runId };
   }
 
   return snapshot as unknown as WorkflowRunState;
@@ -96,6 +102,8 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
   };
 
   #db: DODB;
+  /** Set once the snapshot table is seen with a `resourceId` column, which is never dropped. */
+  #hasResourceIdColumn = false;
 
   constructor(config: DODomainConfig) {
     super();
@@ -437,12 +445,23 @@ export class WorkflowsStorageDO extends WorkflowsStorage {
 
   /**
    * Rewrites the listing's `SELECT *` to the summary columns. The SQL builder only selects plain
-   * column names, so the JSON expressions go in here. Tables created before `resourceId` existed
-   * still list, with no resource ID.
+   * column names, so the JSON expressions go in here. A table created before `resourceId` existed
+   * is listed without that column, as `SELECT *` lists it.
    */
   async #summarySql(tableName: string, selectAllSql: string): Promise<string> {
-    const resourceId = (await this.#db.hasColumn(tableName, 'resourceId')) ? 'resourceId' : 'NULL AS resourceId';
-    const columns = ['workflow_name', 'run_id', resourceId, 'createdAt', 'updatedAt', SUMMARY_FIELDS_COLUMN];
+    if (!selectAllSql.startsWith('SELECT *')) {
+      throw new Error(`Expected the workflow run listing to start with "SELECT *": ${selectAllSql}`);
+    }
+
+    if (!this.#hasResourceIdColumn) {
+      this.#hasResourceIdColumn = await this.#db.hasColumn(tableName, 'resourceId');
+    }
+
+    const columns = ['workflow_name', 'run_id', 'createdAt', 'updatedAt', SUMMARY_FIELDS_COLUMN];
+    if (this.#hasResourceIdColumn) {
+      columns.push('resourceId');
+    }
+
     return `SELECT ${columns.join(', ')}${selectAllSql.slice('SELECT *'.length)}`;
   }
 
