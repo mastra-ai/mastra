@@ -202,16 +202,6 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-/** When a card last entered its board's completed phase, if it sits there now. */
-export function doneAt(
-  item: Pick<WorkItem, 'stages' | 'stageHistory'>,
-  completed: string | undefined,
-): number | undefined {
-  if (completed === undefined || !item.stages.includes(completed)) return undefined;
-  const entry = item.stageHistory.findLast(candidate => candidate.stage === completed);
-  return entry && Date.parse(entry.enteredAt);
-}
-
 /** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;

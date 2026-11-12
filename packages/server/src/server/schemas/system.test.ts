@@ -53,3 +53,8 @@ it('treats missing duration ordering support from an older server as unavailable
   const { spanQueryDurationSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
   expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryDurationSort).toBe(false);
 });
+
+it('treats missing model/provider ordering support from an older server as unavailable', () => {
+  const { spanQueryModelProviderSort: _, ...legacy } = NO_OBSERVABILITY_STORAGE_CAPABILITIES;
+  expect(observabilityStorageCapabilitiesSchema.parse(legacy).spanQueryModelProviderSort).toBe(false);
+});

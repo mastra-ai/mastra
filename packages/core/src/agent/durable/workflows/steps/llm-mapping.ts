@@ -10,6 +10,7 @@ import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../../../loop/shared/termi
 import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan, SpanTermination } from '../../../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../../../observability/error-count';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
@@ -252,6 +253,8 @@ export function createDurableLLMMappingStep() {
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
             mappingError.stack = toolResult.mappingError.stack;
+            const origin = getSpanErrorOrigin(toolResult.mappingError);
+            if (origin) setSpanErrorOrigin(mappingError, origin);
             throw mappingError;
           }
 

@@ -27,7 +27,9 @@
  * site that genuinely wants another fill still overrides it, since its own
  * classes come after these.
  */
-const fieldsOnSurface =
+/** The field colors a raised surface gives the inputs on it. A surface that drops the rim and shadow but keeps
+ * the card fill (a settings card) uses it alone, so its fields look the same as on a raised card. */
+export const fieldsOnSurface =
   '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--field-rim-on-surface)]';
 const fieldsOnDialog =
   '[--field:var(--field-on-surface)] [--field-disabled:var(--field-on-surface)] [--field-rim:var(--surface-rim)]';
@@ -62,9 +64,8 @@ export const surfaceStateLayerStyle = 'state-layer';
 
 /**
  * Same layer, driven by an ancestor marked `group` rather than the surface
- * itself. A utility cannot read an ancestor's state, so this one stays composed
- * from variants — `isolate` and the negative z-index do the same job as the
- * utility's, and `inset-px` likewise keeps the inset rim visible.
+ * itself. A utility cannot read an ancestor's state, so this one is composed from
+ * variants that paint the same `background-image`.
  */
 export const surfaceGroupStateLayerStyle =
-  'relative isolate before:pointer-events-none before:absolute before:-z-1 before:inset-px before:rounded-[inherit] before:transition-colors before:duration-fast motion-reduce:before:transition-none group-hover:before:bg-fill-subtle group-focus-visible:before:bg-fill-subtle';
+  'group-hover:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))] group-focus-visible:bg-[linear-gradient(var(--fill-subtle),var(--fill-subtle))]';
