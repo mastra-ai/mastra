@@ -27,6 +27,7 @@ import {
   sandboxToModelOutput,
   DEFAULT_TAIL_LINES,
 } from '../output-helpers';
+import type { BackgroundProcessExitMeta } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mock Helpers
@@ -787,10 +788,15 @@ describe('background processes killed by an aborted run', () => {
   const abortNote =
     'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
 
-  async function setup() {
+  async function setup(opts: { onExit?: (meta: BackgroundProcessExitMeta) => void } = {}) {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-abort-'));
     const sandbox = new LocalSandbox({ workingDirectory: dir });
-    const workspace = new Workspace({ sandbox });
+    const workspace = new Workspace({
+      sandbox,
+      tools: opts.onExit
+        ? { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: { onExit: opts.onExit } } }
+        : undefined,
+    });
     await workspace.init();
     // Capture handles from spawn(): `get()` would prune a process that already exited.
     const spawn = vi.spyOn(sandbox.processes!, 'spawn');
@@ -798,6 +804,8 @@ describe('background processes killed by an aborted run', () => {
       const started = await executeCommandWithBackgroundTool.execute!({ command, background: true }, {
         workspace,
         abortSignal,
+        runId: 'run-1',
+        agent: { agentId: 'agent-1', toolCallId: 'call-1', threadId: 'thread-1', resourceId: 'user-1', messages: [] },
       } as any);
       const pid = String(started).match(/PID: (.+)\)/)![1]!;
       const handle = await spawn.mock.results.at(-1)!.value;
@@ -881,6 +889,65 @@ describe('background processes killed by an aborted run', () => {
       controller.abort();
 
       expect(await read(pid)).toBe('done\n\n\nExit code: 3');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // `node -e` instead of shell syntax so these run under both sh and cmd.exe.
+  const longRunning = `node -e "console.log('started'); setInterval(() => {}, 1000)"`;
+
+  it('tells onExit which run started the process and that the abort killed it', async () => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(longRunning, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      controller.abort();
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+
+      expect(exits[0]).toMatchObject({
+        pid,
+        toolCallId: 'call-1',
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        runId: 'run-1',
+        killedByAbort: true,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    {
+      when: 'exits on its own',
+      command: `node -e "console.log('started'); setTimeout(() => process.exit(3), 100)"`,
+      stop: async () => {},
+    },
+    {
+      when: 'is stopped with kill_process',
+      command: longRunning,
+      stop: async (pid: string, workspace: Workspace) => {
+        await killProcessTool.execute!({ pid }, { workspace } as any);
+      },
+    },
+  ])('does not report an abort to onExit when the process $when', async ({ command, stop }) => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup, workspace } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(command, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      await stop(pid, workspace);
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+      controller.abort();
+
+      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false });
     } finally {
       await cleanup();
     }
