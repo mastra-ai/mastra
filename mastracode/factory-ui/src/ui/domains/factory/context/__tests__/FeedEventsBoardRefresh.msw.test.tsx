@@ -5,6 +5,7 @@ import { act, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { answerBoardPhases, versionedCard } from '../../../../../../e2e/ui/board-reads';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
@@ -12,6 +13,7 @@ import { queryKeys } from '../../../../../api/keys';
 import { useActiveRunResourceIds } from '../../../../../hooks/useActiveRunResources';
 import { useFactoryDecisionStatus } from '../../../../../hooks/useFactoryDecisions';
 import {
+  useBoardPhasesQuery,
   useSessionWorkItemsQuery,
   useSidebarWorkItemsQuery,
   useTransitionWorkItemMutation,
@@ -26,6 +28,7 @@ const PROJECT_ID = 'project-1';
 const BOARD_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`;
 const DECISIONS_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/decisions`;
 const RUNS_URL = '*/api/agent-controller/:controllerId/active-runs';
+const PHASES_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/boards/:boardKey/phases`;
 const FEED_URL = `${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/feed-events`;
 const WITHIN_A_SECOND_MS = 900;
 const PAST_ONE_REFRESH_GAP_MS = 6_000;
@@ -173,6 +176,51 @@ describe('FeedEventsProvider, on the board', () => {
 
     await waitFor(() => expect(requests).toEqual(oneMoreRefresh(before)));
     await waitForMutationsIdle(rendered.client);
+  });
+
+  it('lists a card that landed on the board in the phase the board shows, within a second of a frame', async () => {
+    const stream = pushableFeedStream(PROJECT_ID);
+    const project = {
+      workItems: [card('Fix login')],
+      boards: [{ id: 'work', phases: [{ id: 'intake' }] }],
+      userId: 'user-1',
+    };
+    let listings = 0;
+    server.use(
+      stream.handler,
+      http.get(PHASES_URL, ({ request, params }) => {
+        listings += 1;
+        return answerBoardPhases(request, project, String(params.boardKey));
+      }),
+      http.get(BOARD_URL, ({ request }) => {
+        const ids = new URL(request.url).searchParams.getAll('workItemId');
+        return HttpResponse.json({
+          workItems: project.workItems.filter(listed => ids.includes(listed.id)).map(versionedCard),
+        });
+      }),
+    );
+    const rendered = renderHookWithProviders(
+      () => useBoardPhasesQuery(PROJECT_ID, { board: 'work', sort: 'created-newest', q: '', filters: {}, windows: {} }),
+      { inner },
+    );
+    const titlesInIntake = () => {
+      const snapshot = rendered.result.current.data;
+      return snapshot?.phases[0]?.ids.map(id => snapshot.workItems.find(held => held.id === id)?.title);
+    };
+    await waitFor(() => expect(stream.open).toBe(true));
+    await waitFor(() => expect(titlesInIntake()).toEqual(['Fix login']));
+    await advance(rendered.client, PAST_ONE_REFRESH_GAP_MS);
+    const before = listings;
+
+    project.workItems = [
+      ...project.workItems,
+      { ...card('Fix logout'), id: 'item-2', createdAt: '2030-01-02T00:00:00.000Z' },
+    ];
+    stream.push();
+    await advance(rendered.client, WITHIN_A_SECOND_MS);
+
+    await waitFor(() => expect(titlesInIntake()).toEqual(['Fix logout', 'Fix login']));
+    expect(listings).toBe(before + 1);
   });
 
   it('folds a burst of frames into one refresh', async () => {

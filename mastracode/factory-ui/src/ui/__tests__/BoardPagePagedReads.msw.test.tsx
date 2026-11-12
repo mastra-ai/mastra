@@ -133,7 +133,14 @@ describe('The board of a large project', () => {
     await user.click(moreOfTriage);
     await screen.findByRole('status', { name: 'Loading more cards' });
     await user.click(screen.getByRole('button', { name: 'Load more cards' }));
-    answerTriage();
+    try {
+      // Planning is asked for while Triage's read is still held.
+      await waitFor(() =>
+        expect(asked.listings.some(listing => listing.getAll('window').includes('planning:100'))).toBe(true),
+      );
+    } finally {
+      answerTriage();
+    }
 
     // Each phase listed its newest fifty: the fifty-first of each follows.
     await waitFor(() => expect(asked.cardReads).not.toEqual([]));
