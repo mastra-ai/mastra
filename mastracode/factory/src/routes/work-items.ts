@@ -47,8 +47,8 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
-import { workItemColumns } from '../work-items/board-columns.js';
 import { workItemFilterOptions } from '../work-items/board-filter-options.js';
+import { boardPhases } from '../work-items/board-phases.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { relatedCardsIn } from '../work-items/list-related-cards.js';
@@ -604,16 +604,20 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         },
       }),
 
-      // ── What each column of a board view shows, a page of it at a time ──────
-      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemColumns.path, {
-        method: FACTORY_ROUTE_CONTRACTS.workItemColumns.method,
+      // ── What each phase of a board view lists, a page of it at a time ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardPhases.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardPhases.method,
         requiresAuth: false,
         handler: async c => {
           const context = loose(c);
           const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
-          const query = FACTORY_ROUTE_CONTRACTS.workItemColumns.querySchema.safeParse({
-            board: context.req.query('board'),
+          const path = FACTORY_ROUTE_CONTRACTS.boardPhases.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            boardKey: context.req.param('boardKey'),
+          });
+          if (!path.success) return c.json({ error: 'board_not_found' }, 404);
+          const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
             sort: context.req.query('sort'),
             q: context.req.query('q'),
             source: context.req.queries('source'),
@@ -630,15 +634,15 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             cards: context.req.query('cards'),
           });
           // A view that fails to parse must not answer as another view.
-          if (!query.success) return c.json({ error: 'invalid_columns_query' }, 400);
-          const { board: boardId, cards: withBodies, ...view } = query.data;
+          if (!query.success) return c.json({ error: 'invalid_phases_query' }, 400);
+          const { cards: withBodies, ...view } = query.data;
           const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
           await workItems.ensureReady();
           const [list, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
-          const board = boards.get(boardId);
+          const board = boards.get(path.data.boardKey);
           if (!board) return c.json({ error: 'board_not_found' }, 404);
           const phases = Object.keys(board.phases);
-          const { body, named } = workItemColumns(list, { id: boardId, phases }, view, resolved.userId);
+          const { body, named } = boardPhases(list, { id: path.data.boardKey, phases }, view, resolved.userId);
           // The board asks again on each feed frame; most frames change nothing it shows.
           return sendRevalidated(
             context,

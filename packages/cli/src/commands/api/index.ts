@@ -711,17 +711,6 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
-  addAction(factoryWorkItem, 'columns', FACTORY_API_ROUTE_CATALOG.workItemColumns, {
-    description: 'List the first cards of each column of a Factory board, with how many each column holds',
-    input: 'required',
-    routePlacement: 'origin',
-    examples: [
-      {
-        description: 'The ten latest bugs of each column of the Work board, with the card bodies',
-        command: `mastra api factory work-item columns <project-id> '{"board":"work","label":["bug"],"limit":10,"cards":"true"}'`,
-      },
-    ],
-  });
   addAction(factoryWorkItem, 'filter-options', FACTORY_API_ROUTE_CATALOG.workItemFilterOptions, {
     description: 'List the labels and people a Factory board can be filtered by',
     routePlacement: 'origin',
@@ -785,6 +774,17 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
     description: "Get a board's definition and, except for the legacy Review board, its revision",
     routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'phases', FACTORY_API_ROUTE_CATALOG.boardPhases, {
+    description: 'List the first cards under each phase of a Factory board, with how many each phase holds',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'The ten latest bugs under each phase of the Work board, with the card bodies',
+        command: `mastra api factory board phases <project-id> work '{"label":["bug"],"limit":10,"cards":"true"}'`,
+      },
+    ],
   });
   addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
     description: 'Create a board on a Factory project',

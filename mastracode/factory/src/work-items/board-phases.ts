@@ -1,11 +1,11 @@
 /**
  * What one board view shows: for each phase of the board, the cards a reader lists and how many
- * match. The columns route answers with it, and the browser's tests run it in place of the server,
+ * match. The phases route answers with it, and the browser's tests run it in place of the server,
  * so it reads plain values only.
  */
 
 import { boardForWorkItem } from '../boards/semantics.js';
-import type { WorkItemColumnsQuery, WorkItemColumnsResponse } from '../routes/contracts.js';
+import type { BoardPhasesQuery, BoardPhasesResponse } from '../routes/contracts.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardFacts } from './card-facts.js';
 import { hasEveryLabel } from './card-labels.js';
@@ -14,60 +14,60 @@ import { matchesSourceFilters } from './card-source-filters.js';
 import { relatedCardsIn } from './list-related-cards.js';
 import { hasEveryWord, searchWords } from './search-words.js';
 
-/** The board whose columns are read: its id and its phases in declaration order. */
-export interface ColumnsBoard {
+/** The board whose phases are read: its id and its phases in declaration order. */
+export interface PhasesBoard {
   id: string;
   phases: readonly string[];
 }
 
-/** The view, as the columns route parses it. `cards` is the route's own: bodies are not computed here. */
-export type ColumnsView = Omit<WorkItemColumnsQuery, 'board' | 'cards'>;
+/** The view, as the phases route parses it. `cards` is the route's own: bodies are not computed here. */
+export type BoardPhasesView = Omit<BoardPhasesQuery, 'board' | 'cards'>;
 
-export interface WorkItemColumns {
+export interface BoardPhases {
   /** The answer, without what only the route knows: session states and card bodies. */
-  body: Pick<WorkItemColumnsResponse, 'columns' | 'related' | 'boardTotal' | 'matchingTotal'>;
+  body: Pick<BoardPhasesResponse, 'phases' | 'related' | 'boardTotal' | 'matchingTotal'>;
   /** Every card `body` names, the listed ones first. */
   named: Card[];
 }
 
-/** A card in one column. */
+/** A card in one phase. */
 interface Placed {
   card: Card;
-  /** When the card last entered the column; when it was created, for a card the column holds without an entry. */
+  /** When the card last entered the phase; when it was created, for a card the phase holds without an entry. */
   at: string;
   /** Who made that entry. */
   by: string | undefined;
 }
 
-interface Column {
-  stage: string;
+interface PhaseCards {
+  phase: string;
   /** Latest entry first. */
   recent: Placed[];
   newest?: Placed[];
   oldest?: Placed[];
 }
 
-interface BoardColumns {
+interface BoardIndex {
   /** The board's cards, each once. */
   cards: Card[];
-  columns: Column[];
-  /** A card once for each column it is in beyond its first. */
+  phases: PhaseCards[];
+  /** A card once for each phase it is listed under beyond its first. */
   repeats: Card[];
 }
 
 // One index per list version and board: `listShared` returns the same array until a card changes.
-const boardsByList = new WeakMap<readonly Card[], Map<string, BoardColumns>>();
+const boardsByList = new WeakMap<readonly Card[], Map<string, BoardIndex>>();
 
-/** The columns that show the card: each of the board's phases it is in, or the first one when it is in none. */
-function cardColumns(card: Card, phases: readonly string[]): readonly string[] {
+/** The phases that list the card: each of the board's phases it is in, or the first one when it is in none. */
+function cardPhases(card: Card, phases: readonly string[]): readonly string[] {
   const held = phases.filter(phase => card.stages.includes(phase));
   return held.length > 0 ? held : phases.slice(0, 1);
 }
 
-function placed(card: Card, stage: string): Placed {
+function placed(card: Card, phase: string): Placed {
   let latest: Card['stageHistory'][number] | undefined;
   for (const entry of card.stageHistory) {
-    if (entry.stage === stage && (!latest || entry.enteredAt > latest.enteredAt)) latest = entry;
+    if (entry.stage === phase && (!latest || entry.enteredAt > latest.enteredAt)) latest = entry;
   }
   return { card, at: latest?.enteredAt ?? card.createdAt.toISOString(), by: latest?.by };
 }
@@ -87,7 +87,7 @@ function byCreation(direction: 1 | -1): (left: Placed, right: Placed) => number 
     descending(left.card.id, right.card.id);
 }
 
-function boardColumns(list: readonly Card[], board: ColumnsBoard): BoardColumns {
+function boardIndex(list: readonly Card[], board: PhasesBoard): BoardIndex {
   let boards = boardsByList.get(list);
   if (!boards) boardsByList.set(list, (boards = new Map()));
   // The phases are part of the key: an edited board keeps its id.
@@ -95,34 +95,34 @@ function boardColumns(list: readonly Card[], board: ColumnsBoard): BoardColumns 
   let index = boards.get(key);
   if (index) return index;
 
-  const byStage = new Map(board.phases.map((stage): [string, Placed[]] => [stage, []]));
+  const byPhase = new Map(board.phases.map((phase): [string, Placed[]] => [phase, []]));
   const cards: Card[] = [];
   const repeats: Card[] = [];
   for (const card of list) {
     if (boardForWorkItem(card) !== board.id) continue;
     cards.push(card);
-    cardColumns(card, board.phases).forEach((stage, nth) => {
-      byStage.get(stage)?.push(placed(card, stage));
+    cardPhases(card, board.phases).forEach((phase, nth) => {
+      byPhase.get(phase)?.push(placed(card, phase));
       if (nth > 0) repeats.push(card);
     });
   }
   index = {
     cards,
-    columns: [...byStage].map(([stage, column]) => ({ stage, recent: column.sort(byRecent) })),
+    phases: [...byPhase].map(([phase, entries]) => ({ phase, recent: entries.sort(byRecent) })),
     repeats,
   };
   boards.set(key, index);
   return index;
 }
 
-function ordered(column: Column, sort: ColumnsView['sort']): readonly Placed[] {
-  if (sort === 'created-newest') return (column.newest ??= column.recent.toSorted(byCreation(-1)));
-  if (sort === 'created-oldest') return (column.oldest ??= column.recent.toSorted(byCreation(1)));
-  return column.recent;
+function ordered(held: PhaseCards, sort: BoardPhasesView['sort']): readonly Placed[] {
+  if (sort === 'created-newest') return (held.newest ??= held.recent.toSorted(byCreation(-1)));
+  if (sort === 'created-oldest') return (held.oldest ??= held.recent.toSorted(byCreation(1)));
+  return held.recent;
 }
 
 /** Whether the view's search and filters keep a card; undefined when the view has none. */
-function viewMatcher(view: ColumnsView): ((card: Card) => boolean) | undefined {
+function viewMatcher(view: BoardPhasesView): ((card: Card) => boolean) | undefined {
   const words = searchWords(view.q ?? '');
   const bySource = view.source.size > 0 || view.linearProject.size > 0;
   const byLabel = view.label.size > 0;
@@ -146,17 +146,17 @@ function stamp(card: Card): { id: string; changedAt: string | null } {
 }
 
 /**
- * The columns of `board` as `view` shows them to `userId`, read from the project's whole `list`.
- * A window for a stage the board has no phase for deepens nothing: a reader may still hold a
- * column deeper after the board lost that phase, and keeps its board.
+ * The phases of `board` as `view` shows them to `userId`, read from the project's whole `list`.
+ * A window for a phase the board does not have deepens nothing: a reader may still hold a
+ * phase deeper after the board lost that phase, and keeps its board.
  */
-export function workItemColumns(
+export function boardPhases(
   list: readonly Card[],
-  board: ColumnsBoard,
-  view: ColumnsView,
+  board: PhasesBoard,
+  view: BoardPhasesView,
   userId: string,
-): WorkItemColumns {
-  const index = boardColumns(list, board);
+): BoardPhases {
+  const index = boardIndex(list, board);
   const matches = viewMatcher(view);
   // `recent-mine` is `recent` read twice: the cards the reader last moved here, then the others.
   const passes =
@@ -164,15 +164,15 @@ export function workItemColumns(
       ? [(entry: Placed) => entry.by === userId, (entry: Placed) => entry.by !== userId]
       : EVERY_CARD;
   const item = view.item === undefined ? undefined : index.cards.find(card => card.id === view.item);
-  const reached = item && (!matches || matches(item)) ? cardColumns(item, board.phases) : [];
+  const reached = item && (!matches || matches(item)) ? cardPhases(item, board.phases) : [];
 
   const listed = new Set<Card>();
   let matchingTotal = 0;
-  const columns = index.columns.map(column => {
-    const all = ordered(column, view.sort);
-    const size = view.window.get(column.stage) ?? view.limit;
-    // The column lists down to the asked card, however deep it is.
-    let awaited = reached.includes(column.stage) ? item : undefined;
+  const phases = index.phases.map(held => {
+    const all = ordered(held, view.sort);
+    const size = view.window.get(held.phase) ?? view.limit;
+    // The phase lists down to the asked card, however deep it is.
+    let awaited = reached.includes(held.phase) ? item : undefined;
     const cards: Card[] = [];
     let total = 0;
     scan: for (const pass of passes) {
@@ -191,7 +191,7 @@ export function workItemColumns(
     }
     if (!matches) total = all.length;
     matchingTotal += total;
-    return { stage: column.stage, total, cards: cards.map(stamp) };
+    return { phase: held.phase, total, cards: cards.map(stamp) };
   });
   for (const card of index.repeats) {
     if (!matches || matches(card)) matchingTotal -= 1;
@@ -205,7 +205,7 @@ export function workItemColumns(
     }
   }
   return {
-    body: { columns, related: [...related].map(stamp), boardTotal: index.cards.length, matchingTotal },
+    body: { phases, related: [...related].map(stamp), boardTotal: index.cards.length, matchingTotal },
     named: [...listed, ...related],
   };
 }

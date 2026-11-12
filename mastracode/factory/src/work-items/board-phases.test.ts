@@ -1,28 +1,28 @@
 import { describe, expect, it } from 'vitest';
 
-import { workItemColumnsQuerySchema } from '../routes/contracts.js';
+import { boardPhasesQuerySchema } from '../routes/contracts.js';
 import { testCard } from '../routes/test-utils.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { workItemColumns } from './board-columns.js';
 import { workItemFilterOptions } from './board-filter-options.js';
+import { boardPhases } from './board-phases.js';
 
 const BOARD = { id: 'work', phases: ['intake', 'planning', 'done'] };
 
 /** The view a reader's query string asks for, parsed as the route parses it. */
 function view(query: Record<string, string | string[]> = {}) {
-  const { board: _board, cards: _cards, ...parsed } = workItemColumnsQuerySchema.parse({ board: 'work', ...query });
+  const { cards: _cards, ...parsed } = boardPhasesQuerySchema.parse(query);
   return parsed;
 }
 
 function listedIds(list: readonly Card[], query: Record<string, string | string[]> = {}, userId = 'u1') {
-  const { body } = workItemColumns(list, BOARD, view(query), userId);
-  return Object.fromEntries(body.columns.map(column => [column.stage, column.cards.map(card => card.id)]));
+  const { body } = boardPhases(list, BOARD, view(query), userId);
+  return Object.fromEntries(body.phases.map(entry => [entry.phase, entry.cards.map(card => card.id)]));
 }
 
 const entered = (stage: string, enteredAt: string, by = 'u1') => ({ stage, enteredAt, by });
 
-describe('workItemColumns', () => {
-  it('orders a column by each card’s latest entry into it, not its first', () => {
+describe('boardPhases', () => {
+  it('orders a phase by each card’s latest entry into it, not its first', () => {
     const cameBack = testCard('came-back', {
       stages: ['planning'],
       stageHistory: [
@@ -39,7 +39,7 @@ describe('workItemColumns', () => {
     expect(listedIds([stayed, cameBack]).planning).toEqual(['came-back', 'stayed']);
   });
 
-  it('places a card that never entered its column by when it was created', () => {
+  it('places a card that never entered its phase by when it was created', () => {
     const noHistory = testCard('no-history', { createdAt: new Date('2026-03-04T00:00:00.000Z') });
     const before = testCard('before', { stageHistory: [entered('intake', '2026-03-03T00:00:00.000Z')] });
     const after = testCard('after', { stageHistory: [entered('intake', '2026-03-05T00:00:00.000Z')] });
@@ -47,7 +47,7 @@ describe('workItemColumns', () => {
     expect(listedIds([before, noHistory, after]).intake).toEqual(['after', 'no-history', 'before']);
   });
 
-  it('puts first the cards the reader last moved into the column, each group in recent order', () => {
+  it('puts first the cards the reader last moved into the phase, each group in recent order', () => {
     const list = [
       testCard('a', { stageHistory: [entered('intake', '2026-03-01T00:00:00.000Z', 'u1')] }),
       testCard('b', { stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z', 'u2')] }),
@@ -73,7 +73,7 @@ describe('workItemColumns', () => {
     expect(listedIds(list, { sort: 'created-oldest' }).intake).toEqual(['c', 'b', 'a']);
   });
 
-  it('does not deepen a column for a card the view filters out', () => {
+  it('does not deepen a phase for a card the view filters out', () => {
     const list = [
       testCard('old', { title: 'Rename the palette', stageHistory: [entered('intake', '2026-03-01T00:00:00.000Z')] }),
       testCard('mid', { title: 'Fix the login', stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z')] }),
@@ -86,24 +86,24 @@ describe('workItemColumns', () => {
     expect(listedIds(withIds, { limit: '1', item, q: 'fix' }).intake).toEqual(['new']);
   });
 
-  it('deepens a column whose phase id is as long as a board allows', () => {
+  it('deepens a phase whose id is as long as a board allows', () => {
     const longest = 'p'.repeat(128);
     const list = [testCard('a', { stages: [longest] }), testCard('b', { stages: [longest] })];
 
-    const { body } = workItemColumns(
+    const { body } = boardPhases(
       list,
       { id: 'work', phases: [longest] },
       view({ limit: '1', window: [`${longest}:2`] }),
       'u1',
     );
 
-    expect(body.columns[0]?.cards.map(card => card.id)).toEqual(['b', 'a']);
+    expect(body.phases[0]?.cards.map(card => card.id)).toEqual(['b', 'a']);
   });
 
-  it('shows a card held by none of the board’s phases in the first column only', () => {
-    const { body } = workItemColumns([testCard('lost', { stages: ['retired-lane'] })], BOARD, view(), 'u1');
+  it('shows a card held by none of the board’s phases under the first one only', () => {
+    const { body } = boardPhases([testCard('lost', { stages: ['retired-lane'] })], BOARD, view(), 'u1');
 
-    expect(body.columns.map(column => [column.stage, column.total])).toEqual([
+    expect(body.phases.map(entry => [entry.phase, entry.total])).toEqual([
       ['intake', 1],
       ['planning', 0],
       ['done', 0],
@@ -159,7 +159,7 @@ describe('workItemColumns', () => {
       stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z')],
     });
 
-    const { body, named } = workItemColumns([parent, child], BOARD, view({ limit: '1' }), 'u1');
+    const { body, named } = boardPhases([parent, child], BOARD, view({ limit: '1' }), 'u1');
 
     expect(body.related).toEqual([{ id: 'parent', changedAt: null }]);
     expect(named.map(card => card.id)).toEqual(['child', 'parent']);
