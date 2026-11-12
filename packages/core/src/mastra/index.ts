@@ -4584,7 +4584,20 @@ export class Mastra<
 
         if (runFencing) {
           const keys = livenessKeysOf(workflow, run.runId);
-          const owners = await workflowsStore.getRunOwnerships({ runIds: keys });
+          let owners: Map<string, RunOwnershipRecord>;
+          try {
+            owners = await workflowsStore.getRunOwnerships({ runIds: keys });
+          } catch (error) {
+            // As for a failed batch read: look again once a grace period passed.
+            this.#logger.warn('Failed to read workflow run liveness before restarting', {
+              workflow: workflow.id,
+              runId: run.runId,
+              error,
+            });
+            this.#scheduleWorkflowRecoveryRecheck(run.workflowName, run.runId, Date.now() + graceMs);
+            return;
+          }
+
           const verdict = recoveryVerdict({
             records: keys.map(key => owners.get(key)),
             updatedAt: run.updatedAt,

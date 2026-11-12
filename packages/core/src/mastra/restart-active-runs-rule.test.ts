@@ -295,6 +295,27 @@ describe('workflow recovery rule (#28712)', () => {
     expect(restarts).toEqual([]);
   });
 
+  it('checks a run again one grace period later when the read right before its restart fails', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const executions: string[] = [];
+    const b = startReplica(storage, 'default', 'B', executions);
+    await persistActiveRun(storage, 'stopped');
+    await sleep(GRACE_MS);
+    // No recheck jitter, so the recheck comes one grace period after the failed read.
+    vi.spyOn(Math, 'random').mockReturnValue(0);
+    const read = store.getRunOwnerships.bind(store);
+    vi.spyOn(store, 'getRunOwnerships')
+      .mockImplementationOnce(read)
+      .mockRejectedValueOnce(new Error('ownership read failed'))
+      .mockImplementation(read);
+
+    await b.restartAllActiveWorkflowRuns();
+
+    expect(executions).toEqual([]);
+    await vi.waitFor(() => expect(executions).toEqual(['B:work']), { timeout: GRACE_MS * 10 });
+  });
+
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
