@@ -70,8 +70,8 @@ async function loadBuiltinMCP(mastra: Mastra) {
       res: Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: MISSING_MCP_MESSAGE } }),
     });
   }
-  const { buildBuiltinMCPTools } = await import('./catalogue');
-  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools };
+  const { buildBuiltinMCPTools, modelSummaryOf } = await import('./catalogue');
+  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools, modelSummaryOf };
 }
 
 const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
@@ -183,7 +183,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       throw new HTTPException(404, { message: 'Not Found' });
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
-    const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP(mastra);
+    const { MCPServer, buildBuiltinMCPTools, modelSummaryOf } = await loadBuiltinMCP(mastra);
     const apps = config.apps ? await loadBuiltinApps() : undefined;
     const tools = await buildBuiltinMCPTools(
       {
@@ -211,6 +211,21 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       appResources: apps?.appResources,
       // Clients without MCP Apps support see no app links, resources, or `ui` capability.
       appsRequireClientSupport: true,
+      toolResult: {
+        // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
+        // output, the model reads a summary of it instead.
+        transform: ({ toolName, output, result, apps }) => {
+          const summary = apps && !result.isError ? modelSummaryOf(tools[toolName]) : undefined;
+          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return undefined;
+          // Routes can return dates as `Date`s; read the output as the client receives it.
+          const sent = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+          return {
+            ...result,
+            structuredContent: sent,
+            content: [{ type: 'text', text: summary(sent) }],
+          };
+        },
+      },
       legacy: 'stateless',
       requestState: { key: getRequestStateKey() },
     });

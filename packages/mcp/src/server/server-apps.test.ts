@@ -170,3 +170,72 @@ describe('MCP Apps without the client-support requirement', () => {
     }
   });
 });
+
+describe('tool result transform told whether the caller is served apps', () => {
+  let served: ServedHTTP;
+  const seen: boolean[] = [];
+
+  beforeAll(async () => {
+    const rows = Array.from({ length: 50 }, (_, i) => ({ id: `row-${i}`, detail: 'x'.repeat(200) }));
+    served = await serveHTTP(
+      new MCPServer({
+        name: 'Apps',
+        version: '1.0.0',
+        appsRequireClientSupport: true,
+        legacy: 'stateless',
+        appResources: { 'ui://viewer': { name: 'Viewer', html: '<h1>viewer</h1>' } },
+        toolResult: {
+          // The app renders every row; the model only needs a summary of them.
+          transform: ({ output, result, apps }) => {
+            seen.push(apps);
+            if (!apps) return undefined;
+            const { rows: all } = output as { rows: { id: string }[] };
+            return {
+              ...result,
+              structuredContent: output as Record<string, unknown>,
+              content: [{ type: 'text', text: `${all.length} rows, shown in the viewer.` }],
+            };
+          },
+        },
+        tools: {
+          list: createTool({
+            id: 'list',
+            description: 'Lists rows',
+            inputSchema: z.object({}),
+            mcp: { _meta: { ui: { resourceUri: 'ui://viewer' } } },
+            execute: async () => ({ rows }),
+          }),
+        },
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await served.close();
+  });
+
+  it('lets an app caller send the model a summary and the app the full output', async () => {
+    const client = await connectClient(served.url, declaresUi);
+    try {
+      const result = await client.callTool({ name: 'list', arguments: {} });
+      expect(result.content).toEqual([{ type: 'text', text: '50 rows, shown in the viewer.' }]);
+      expect((result.structuredContent as { rows: unknown[] }).rows).toHaveLength(50);
+      expect(result._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('keeps the full output for a caller without apps', async () => {
+    const client = await connectClient(served.url);
+    try {
+      const result = await client.callTool({ name: 'list', arguments: {} });
+      expect(result.structuredContent).toBeUndefined();
+      const [block] = result.content as { type: string; text: string }[];
+      expect(JSON.parse(block!.text).rows).toHaveLength(50);
+      expect(seen).toEqual([true, false]);
+    } finally {
+      await client.close();
+    }
+  });
+});

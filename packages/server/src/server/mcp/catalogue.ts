@@ -31,7 +31,21 @@ type MCPTool = ReturnType<typeof createTool>;
 export type ToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
 export type Args = Record<string, any>;
 type Execute = (args: Args, signal?: AbortSignal) => Promise<unknown>;
-type AddOptions = { annotations?: ToolAnnotations; outputSchema?: JSONSchema7; meta?: Record<string, unknown> };
+/** What the model reads instead of the full output, when the caller renders the tool's app with it. */
+export type ModelSummary = (output: Args) => string;
+type AddOptions = {
+  annotations?: ToolAnnotations;
+  outputSchema?: JSONSchema7;
+  meta?: Record<string, unknown>;
+  summary?: ModelSummary;
+};
+
+const modelSummaries = new WeakMap<object, ModelSummary>();
+
+/** The summary a tool sends the model when its result is rendered in an MCP App, if it has one. */
+export function modelSummaryOf(tool: object | undefined): ModelSummary | undefined {
+  return tool ? modelSummaries.get(tool) : undefined;
+}
 
 /** What a toolset needs to register route-backed tools. Every call goes through `dispatchRoute`. */
 export interface CatalogueKit {
@@ -296,6 +310,7 @@ export async function buildBuiltinMCPTools(
       },
       execute: async (args, context) => execute((args ?? {}) as Args, context?.abortSignal),
     });
+    if (options.summary) modelSummaries.set(tools[name], options.summary);
   };
   const addOperation = (
     route: ServerRoute,

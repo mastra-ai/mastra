@@ -1173,7 +1173,7 @@ export class MCPServer extends MCPServerBase {
         }
         // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
         const result = server.projectCallToolResult(
-          await this.completedToolResult(name, tool, execution.output, requestContext),
+          await this.completedToolResult(name, tool, execution.output, requestContext, apps),
           this.toolInfo(name, tool).outputSchema,
         );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
@@ -1982,6 +1982,7 @@ export class MCPServer extends MCPServerBase {
     tool: InternalCoreTool,
     output: unknown,
     requestContext: RequestContext,
+    apps = false,
   ): Promise<CallToolResult> {
     let result = this.toCallToolResult(name, tool, output);
     const { modelOutput = false, transform } = this.toolResultOptions;
@@ -1997,7 +1998,7 @@ export class MCPServer extends MCPServerBase {
         };
       }
     }
-    if (transform) result = (await transform({ toolName: name, output, result, requestContext })) ?? result;
+    if (transform) result = (await transform({ toolName: name, output, result, requestContext, apps })) ?? result;
     return result;
   }
 

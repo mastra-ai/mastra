@@ -170,6 +170,42 @@ describe('built-in MCP server apps', () => {
     expect(json(result).spans.length).toBeGreaterThan(0);
   });
 
+  it('sends the model a line per row of what an app renders, and the app every field', async () => {
+    const text = (result: { content?: unknown }) => (result.content as { text: string }[])[0]!.text;
+    const timeRange = { from: new Date(Date.now() - 3_600_000).toISOString(), to: new Date().toISOString() };
+    const apps = await server.connect('tracer', { rendersApps: true });
+    const plain = await server.connect('tracer', { rendersApps: false });
+
+    const trace = await apps.callTool({ name: 'get_trace', arguments: { traceId: server.traceId } });
+    const { spans } = trace.structuredContent as { spans: { spanId: string; startedAt: string; endedAt: string }[] };
+    expect(spans.length).toBeGreaterThan(0);
+    const tree = text(trace);
+    expect(tree).toMatch(new RegExp(`^Trace ${server.traceId}: ${spans.length} spans`));
+    for (const span of spans) {
+      const ms = Date.parse(span.endedAt) - Date.parse(span.startedAt);
+      expect(tree).toContain(`- ${span.spanId} | `);
+      expect(tree.split('\n').find(line => line.includes(span.spanId))).toContain(` | ${ms}ms`);
+    }
+    expect(tree).toContain('get_span');
+    expect(() => JSON.parse(tree)).toThrow();
+
+    const queried = await apps.callTool({ name: 'query_traces', arguments: { timeRange } });
+    expect((queried.structuredContent as { traces: unknown[] }).traces.length).toBeGreaterThan(0);
+    expect(text(queried)).toContain(`- ${server.traceId} | `);
+    expect(text(queried).length).toBeLessThan(JSON.stringify(queried.structuredContent).length);
+
+    // Tools no app renders, and every tool for a caller without apps, keep the full JSON for the model.
+    const span = await apps.callTool({
+      name: 'get_span',
+      arguments: { traceId: server.traceId, spanId: spans[0]!.spanId },
+    });
+    expect(span.structuredContent).toBeUndefined();
+    expect(JSON.parse(text(span)).span.spanId).toBe(spans[0]!.spanId);
+    const plainQuery = await plain.callTool({ name: 'query_traces', arguments: { timeRange } });
+    expect(plainQuery.structuredContent).toBeUndefined();
+    expect(JSON.parse(text(plainQuery)).traces.length).toBeGreaterThan(0);
+  });
+
   it("does not let the viewer read traces the caller can't", async () => {
     const client = await server.connect('runner', { rendersApps: true });
 

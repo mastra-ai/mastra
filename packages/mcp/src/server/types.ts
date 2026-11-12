@@ -38,6 +38,12 @@ export interface MCPServerToolResultContext {
   result: CallToolResult;
   /** The request context the tool ran with. */
   requestContext: RequestContext;
+  /**
+   * Whether the caller is served MCP Apps, so a host renders the tool's linked app with this result.
+   * Hosts give the model `content` and the app `structuredContent` and `_meta`, so an app-linked tool
+   * can send the model a summary and the app the full output. `false` for results of tool tasks.
+   */
+  apps: boolean;
 }
 
 /** Controls how a tool's return value becomes the `CallToolResult` an MCP client receives. */

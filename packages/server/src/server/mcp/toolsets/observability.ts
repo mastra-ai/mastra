@@ -41,10 +41,11 @@ import {
   QUERY_TRACES,
 } from '../../handlers/observability-new-endpoints';
 import type { ServerRoute } from '../../server-adapter';
-import type { Args, CatalogueKit } from '../catalogue';
+import type { Args, CatalogueKit, ModelSummary } from '../catalogue';
 import { toolError } from '../catalogue';
 import { fitRows } from '../result-size';
 import { compact, hoistRepeated, object, str, toJSONSchema } from '../schema';
+import { summarizeLogs, summarizeTrace, summarizeTraces } from './observability-summary';
 
 const COMBINATORS = ['anyOf', 'oneOf', 'allOf', 'not'] as const;
 const DELTA_POLLING = ['mode', 'after', 'limit'];
@@ -169,6 +170,9 @@ export function addObservabilityTools(kit: CatalogueKit) {
   // JSON as before. The explorer learns what it can show through the observability toolset's app-only tools.
   const explorer = kit.apps.traceList && offered(GET_CAPABILITIES) ? kit.apps.traceList : undefined;
   const traceListLink = explorer ? { meta: { ui: { resourceUri: explorer } } } : undefined;
+  // An app renders the full rows, so the model reads one line per row (see observability-summary.ts).
+  const opensIn = (app: string | undefined, summary: ModelSummary) =>
+    app ? { meta: { ui: { resourceUri: app } }, summary } : undefined;
 
   if (config.toolsets.has('observability')) {
     const bodyTool = (
@@ -189,7 +193,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
         options,
       );
 
-    bodyTool(QUERY_TRACES, 'traces', undefined, traceListLink);
+    bodyTool(QUERY_TRACES, 'traces', undefined, opensIn(explorer, summarizeTraces('traces')));
     bodyTool(AGGREGATE_TRACES);
     bodyTool(QUERY_SPANS, 'spans');
     bodyTool(AGGREGATE_SPANS);
@@ -233,7 +237,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
         return kept < page.length ? { ...result, nextOffset: offset + kept } : result;
       },
       // Hosts with MCP Apps draw the trace with Studio's timeline; others read the JSON as before.
-      kit.apps.traceViewer ? { meta: { ui: { resourceUri: kit.apps.traceViewer } } } : undefined,
+      opensIn(kit.apps.traceViewer, summarizeTrace),
     );
     addOperation(GET_SPAN_ROUTE, object({ traceId, spanId: str('Span id.') }, ['traceId', 'spanId']), (args, signal) =>
       call(GET_SPAN_ROUTE, { pathParams: { traceId: args.traceId, spanId: args.spanId } }, signal),
@@ -249,7 +253,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
           cursors: CURSORS,
           detail: 'get_span',
         }),
-      traceListLink,
+      opensIn(explorer, summarizeTraces('spans')),
     );
     // The explorer asks which views the store supports and which of them this caller's tools serve, and
     // fills its filter bars from the values the store has seen; the model has no use for either.
@@ -299,7 +303,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
       hoistRepeated(listQuerySchema(LIST_LOGS)),
       async (args, signal) =>
         fitRows(await call(LIST_LOGS, { query: args }, signal), 'logs', PER_PAGE_HINT, { cursors: CURSORS }),
-      traceListLink,
+      opensIn(explorer, summarizeLogs),
     );
   }
 
