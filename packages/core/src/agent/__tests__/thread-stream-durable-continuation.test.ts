@@ -230,6 +230,59 @@ describe('durable thread continuation', () => {
     await h.pubsub.close();
   });
 
+  it('keeps the resumed request context after the completed run record is dropped', async () => {
+    const h = setup();
+    const initialContext = new RequestContext();
+    const resumedContext = new RequestContext();
+    const first = h.makeStream();
+    await first.ready;
+    await h.runtime.registerRun(h.agent, first.output, { ...h.options, requestContext: initialContext }, h.pubsub, {
+      continuation: 'across-suspension',
+    });
+    const subscription = await h.runtime.subscribeToThread(
+      h.agent,
+      { threadId: h.options.memory.thread, resourceId: h.options.memory.resource },
+      h.pubsub,
+    );
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    const readUntil = async (type: string) => {
+      for (;;) {
+        const { value, done } = await iterator.next();
+        if (done) throw new Error(`stream ended before ${type}`);
+        if (value.type === type) return subscription.__getCurrentRunRequestContext!();
+      }
+    };
+
+    await h.chunk('tool-call-approval', { toolCallId: 'call-1', toolName: 'read_page', args: {} });
+    expect(await readUntil('tool-call-approval')).toBe(initialContext);
+    await vi.waitFor(() => expect(first.output.status).toBe('suspended'));
+
+    const resumed = h.makeStream();
+    await resumed.ready;
+    expect(
+      h.runtime.continueRun(
+        h.agent,
+        resumed.output,
+        { ...h.options, requestContext: resumedContext, toolCallId: 'call-1' } as any,
+        h.pubsub,
+      ),
+    ).toBe(true);
+    await h.chunk('text-delta', { text: 'answer' });
+    expect(await readUntil('text-delta')).toBe(resumedContext);
+
+    // Let the run complete and its record be dropped before `finish` is read.
+    await h.finish();
+    await resumed.output._waitUntilFinished();
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(await readUntil('finish')).toBe(resumedContext);
+
+    subscription.unsubscribe();
+    await iterator.return?.();
+    first.cleanup();
+    resumed.cleanup();
+    await h.pubsub.close();
+  });
+
   it('registers a replacement after the original adapter was cleaned up', async () => {
     const h = setup();
     const first = h.makeStream();

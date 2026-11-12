@@ -7229,7 +7229,10 @@ export class AgentThreadStreamRuntime {
       activeRunId,
       __getCurrentRunRequestContext: () => {
         const record = activeReaderStreamId ? state.threadRunsByStreamId.get(activeReaderStreamId) : undefined;
-        return record ? record.streamOptions.requestContext : currentRunRequestContext;
+        // Keep the latest context: a resumed run replaces it, and the record is
+        // dropped at completion before this reader drains the buffered `finish`.
+        if (record) currentRunRequestContext = record.streamOptions.requestContext;
+        return currentRunRequestContext;
       },
       abort: abortOptions => this.abortThread({ ...options, ...abortOptions }, resolvedPubSub),
       unsubscribe,
