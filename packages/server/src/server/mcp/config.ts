@@ -5,7 +5,15 @@ import type { MastraMCPToolset, ServerMCPConfig, ServerMCPPrimitiveFilter } from
 export const BUILTIN_MCP_SERVER_ID = 'mastra';
 export const DEFAULT_BUILTIN_MCP_PATH = '/mcp';
 
-const ALL_TOOLSETS: readonly MastraMCPToolset[] = ['agents', 'workflows', 'tools'];
+const ALL_TOOLSETS: readonly MastraMCPToolset[] = [
+  'agents',
+  'workflows',
+  'tools',
+  'memory',
+  'observability',
+  'observability_analytics',
+  'stored_agents',
+];
 const DEFAULT_ENUM_LIMIT = 25;
 
 export type MCPPrimitiveKind = keyof ServerMCPPrimitiveFilter;

@@ -268,6 +268,12 @@ function sourceChangeRequestMessage(agentId: string, userName?: string, changeMe
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_stored_agents',
+    description: 'List agents created in the editor or agent builder that you can see.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
@@ -530,6 +536,12 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'get_stored_agent',
+    description: "Get a stored agent's full configuration.",
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   queryParamSchema: statusQuerySchema,
@@ -585,6 +597,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'POST',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'create_stored_agent',
+    description:
+      'Create an agent (instructions, model, tools, memory). Call list_available_models first. The new agent can be called with call_agent right away.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
@@ -801,6 +820,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'PATCH',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'update_stored_agent',
+    description: 'Update a stored agent. Only the fields you pass change.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,

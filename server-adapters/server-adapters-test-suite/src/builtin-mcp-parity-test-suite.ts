@@ -348,6 +348,28 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
             'tool_locked-tool',
             'tool_test-tool',
             'tool_whoami',
+            // memory + observability(_analytics): MockMemory agent and the default in-memory observability store.
+            'analyze_feedback',
+            'analyze_metrics',
+            'analyze_scores',
+            'clone_thread',
+            'create_thread',
+            'get_memory_status',
+            'get_observations',
+            'get_span',
+            'get_thread',
+            'get_trace',
+            'get_trace_trajectory',
+            'list_feedback',
+            'list_logs',
+            'list_messages',
+            'list_metric_names',
+            'list_scores',
+            'list_threads',
+            'list_traces',
+            'save_messages',
+            'search_memory',
+            'update_thread',
           ].sort(),
         );
       });
@@ -390,7 +412,11 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       it('narrows toolsets and read-only per request but never widens them', async () => {
         const agentsOnly = Object.keys(await listTools('owner-token', { path: '/api/mcp?toolsets=agents,bogus' }));
         expect(agentsOnly.sort()).toEqual(['call_agent', 'get_agent', 'list_agents']);
-        const readOnly = Object.keys(await listTools('owner-token', { headers: { 'x-mcp-readonly': '1' } }));
+        const readOnly = Object.keys(
+          await listTools('owner-token', {
+            headers: { 'x-mcp-readonly': '1', 'x-mcp-toolsets': 'agents,workflows,tools' },
+          }),
+        );
         // Read-only drops every execute-backed tool; registered tools fall back to list_tools/get_tool.
         expect(readOnly.sort()).toEqual([
           'get_agent',
