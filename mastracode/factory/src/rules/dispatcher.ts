@@ -1889,6 +1889,7 @@ export class FactoryDecisionDispatcher {
             externalSource: externalSourceForDecision(decision),
             parentWorkItemId,
             title: decision.title,
+            ...(decision.description ? { description: decision.description } : {}),
             board: decision.board,
             stages: [entryStage],
             sessions: {},
