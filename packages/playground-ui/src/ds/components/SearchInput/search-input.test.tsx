@@ -279,6 +279,38 @@ describe('SearchInput controlled and debounced', () => {
     vi.useRealTimers();
   });
 
+  it('keeps typing that continues while the parent is still applying an earlier search', () => {
+    vi.useFakeTimers();
+    // Applies the search a moment later, like a URL update.
+    function SlowParent() {
+      const [value, setValue] = useState('');
+      return (
+        <>
+          <SearchInput
+            label="Search agents"
+            value={value}
+            onValueChange={next => setTimeout(() => setValue(next), 50)}
+            debounceMs={300}
+          />
+          <output>{value}</output>
+        </>
+      );
+    }
+    render(<SlowParent />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'foob' } });
+    act(() => vi.advanceTimersByTime(300));
+    fireEvent.change(input, { target: { value: 'foobar' } });
+    act(() => vi.advanceTimersByTime(50));
+    expect(input.value).toBe('foobar');
+
+    act(() => vi.advanceTimersByTime(350));
+    expect(screen.getByRole('status').textContent).toBe('foobar');
+    expect(input.value).toBe('foobar');
+    vi.useRealTimers();
+  });
+
   it('follows a change the parent makes, such as a URL change', () => {
     render(<UrlSearch initial="chef" />);
     const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });

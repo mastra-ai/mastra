@@ -34,12 +34,16 @@ export type SearchInputProps = SearchInputBaseProps &
     debounceMs?: number;
   };
 
-type Draft = { text: string; over: string };
+/**
+ * Typed text waiting on the debounce, the parent's value it was typed over, and the search this
+ * field had already sent then (the parent may still be applying it, e.g. through the URL).
+ */
+type Draft = { text: string; over: string; sent?: string };
 
 /** What the field shows: its own text, or the parent's value unless a draft was typed over it. */
 function shownText({ value, ownText, draft }: { value?: string; ownText: string; draft?: Draft }) {
   if (value === undefined) return ownText;
-  if (draft?.over === value) return draft.text;
+  if (draft && (draft.over === value || draft.sent === value)) return draft.text;
   return value;
 }
 
@@ -65,9 +69,15 @@ export function SearchInput({
   // while its search is still pending and that value hasn't moved: once the search is applied,
   // cancelled, or the parent changes the value some other way, the field follows the parent.
   const [draft, setDraft] = useState<Draft>();
+  // The last search this field sent and the parent hasn't applied yet.
+  const sentRef = useRef<string>(undefined);
+  const report = (next: string) => {
+    sentRef.current = next;
+    onValueChange(next);
+  };
   const debouncedChange = useDebouncedCallback((next: string) => {
     setDraft(undefined);
-    onValueChange(next);
+    report(next);
   }, debounceMs);
   const text = shownText({ value, ownText, draft: debouncedChange.isPending() ? draft : undefined });
   const editable = !inputProps.disabled && !inputProps.readOnly;
@@ -86,22 +96,26 @@ export function SearchInput({
 
   useEffect(() => () => debouncedChange.cancel(), [debouncedChange]);
 
-  // When the parent's value moves (it took the text, or a Reset or URL change replaced it), a
-  // search still waiting on the debounce is stale: drop it so it can't overwrite the new value.
+  // When the parent's value moves, a search still waiting on the debounce is stale (a Reset or URL
+  // change replaced the text) unless the parent is only applying what this field already sent.
   useEffect(() => {
+    if (value !== undefined && value === sentRef.current) {
+      sentRef.current = undefined;
+      return;
+    }
     debouncedChange.cancel();
   }, [value, debouncedChange]);
 
   const change = (next: string) => {
     setOwnText(next);
     if (next && debounceMs > 0) {
-      if (value !== undefined) setDraft({ text: next, over: value });
+      if (value !== undefined) setDraft({ text: next, over: value, sent: sentRef.current });
       debouncedChange(next);
       return;
     }
     setDraft(undefined);
     debouncedChange.cancel();
-    onValueChange(next);
+    report(next);
   };
 
   return (
