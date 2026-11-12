@@ -295,6 +295,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   // SQLITE_BUSY) eventually surfaces as a terminal workflow.fail rather than
   // silently hanging agent.generate().
   private deliveryAttempts: Map<string, number> = new Map();
+
+  /**
+   * Runs whose end or failure threw on this processor after it may have saved
+   * the final status. Their retry ends the run instead of reading that status
+   * as an end already done. A process that crashed in between leaves no entry:
+   * a redelivery there finds the status and the run's finish is not published.
+   */
+  #unfinishedEnds = new Set<string>();
   // Maximum number of times handle() will ask the transport to redeliver the
   // same event before declaring it terminally failed. The underlying storage
   // layer already retries lock errors internally (~5 attempts with backoff)
@@ -1495,71 +1503,79 @@ export class WorkflowEventProcessor extends EventProcessor {
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
-    if (status !== 'canceled' && (await this.#runAlreadyEnded(args))) {
+    if (status !== 'canceled' && !this.#unfinishedEnds.has(runId) && (await this.#runAlreadyEnded(args))) {
       return;
     }
 
-    // Check shouldPersistSnapshot option - default to true if not specified
-    const finalStatus = perStep && status === 'success' ? 'paused' : status;
-    const shouldPersist =
-      workflow?.options?.shouldPersistSnapshot?.({
-        stepResults: stepResults ?? {},
-        workflowStatus: finalStatus,
-      }) ?? true;
+    try {
+      // Check shouldPersistSnapshot option - default to true if not specified
+      const finalStatus = perStep && status === 'success' ? 'paused' : status;
+      const shouldPersist =
+        workflow?.options?.shouldPersistSnapshot?.({
+          stepResults: stepResults ?? {},
+          workflowStatus: finalStatus,
+        }) ?? true;
 
-    if (shouldPersist) {
-      await workflowsStore?.updateWorkflowState({
-        workflowName: workflowId,
-        runId,
-        opts: {
-          status: finalStatus,
-          result: normalizedPrevResult,
-          activePaths: executionPath,
-          activeStepsPath: activeStepsPath,
-        },
-      });
-    } else if (finalStatus !== 'paused') {
-      // The stored status stays running until the end deletes the snapshot: a duplicate end in
-      // between reads this claim instead.
-      await this.#markRunEnded(workflowId, runId, workflow);
-    }
+      if (shouldPersist) {
+        await workflowsStore?.updateWorkflowState({
+          workflowName: workflowId,
+          runId,
+          opts: {
+            status: finalStatus,
+            result: normalizedPrevResult,
+            activePaths: executionPath,
+            activeStepsPath: activeStepsPath,
+          },
+        });
+      } else if (finalStatus !== 'paused') {
+        // The stored status stays running until the end deletes the snapshot: a duplicate end in
+        // between reads this claim instead.
+        await this.#markRunEnded(workflowId, runId, workflow);
+      }
 
-    this.endRunSpans(args, finalStatus);
+      this.endRunSpans(args, finalStatus);
 
-    if (perStep) {
+      if (perStep) {
+        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+          type: 'watch',
+          runId,
+          data: {
+            type: 'workflow-paused',
+            payload: {},
+          },
+        });
+      }
+
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
         type: 'watch',
         runId,
         data: {
-          type: 'workflow-paused',
-          payload: {},
+          type: 'workflow-finish',
+          payload: {
+            runId,
+            workflowStatus: normalizedPrevResult.status,
+            ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
+          },
         },
       });
+
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.end',
+        runId,
+        data: {
+          ...args,
+          prevResult: normalizedPrevResult,
+          workflow: undefined,
+          deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
+        },
+      });
+    } catch (error) {
+      // The status may already read ended: the retry of this end must not be taken for a duplicate.
+      this.#unfinishedEnds.add(runId);
+      throw error;
     }
 
-    await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-      type: 'watch',
-      runId,
-      data: {
-        type: 'workflow-finish',
-        payload: {
-          runId,
-          workflowStatus: normalizedPrevResult.status,
-          ...(normalizedPrevResult.status === 'success' ? { finalWorkflowResult: normalizedPrevResult.output } : {}),
-        },
-      },
-    });
-
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.end',
-      runId,
-      data: {
-        ...args,
-        prevResult: normalizedPrevResult,
-        workflow: undefined,
-        deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
-      },
-    });
+    this.#unfinishedEnds.delete(runId);
   }
 
   private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
@@ -2099,10 +2115,23 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   protected async processWorkflowFail(args: ProcessorArgs) {
     const ownershipLost = args.workflow?.options?.isOwnershipLostError?.((args.prevResult as any)?.error);
-    if (!ownershipLost && (await this.#runAlreadyEnded(args))) {
+    if (!ownershipLost && !this.#unfinishedEnds.has(args.runId) && (await this.#runAlreadyEnded(args))) {
       return;
     }
 
+    try {
+      await this.#failRun(args, ownershipLost);
+    } catch (error) {
+      // The status may already read failed: the retry of this failure must not be taken for a duplicate.
+      this.#unfinishedEnds.add(args.runId);
+      throw error;
+    }
+
+    this.#unfinishedEnds.delete(args.runId);
+  }
+
+  /** The writes and publications of {@link processWorkflowFail}, once it decided to fail the run. */
+  async #failRun(args: ProcessorArgs, ownershipLost: boolean | undefined) {
     this.endRunSpans(args, 'failed');
     const {
       workflowId,
