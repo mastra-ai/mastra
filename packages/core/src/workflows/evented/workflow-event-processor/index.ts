@@ -132,6 +132,12 @@ export type ProcessorArgs = {
    * branch of the entry settled. Only that step end joins the entry.
    */
   joinsBranches?: boolean;
+  /**
+   * Set only on the `workflow.start` of a restart: the run's `updatedAt`
+   * (epoch ms) when the restart read the run. The start is dropped if the run
+   * was written since. Not forwarded to later events.
+   */
+  restartReadUpdatedAt?: number;
   perStep?: boolean;
   format?: 'legacy' | 'vnext';
   state?: Record<string, any>;
@@ -1143,7 +1149,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    * snapshot, records a nested run on its parent's step, and publishes the
    * run's first `workflow.step.run`. The event's handler already counts toward
    * the run's liveness (see `#dispatch`), so a booting instance does not
-   * restart the run before that step is handled.
+   * restart the run before that step is handled. A restart whose run was
+   * written after the restart read it is dropped.
    */
   protected async processWorkflowStart({
     workflow,
@@ -1166,7 +1173,35 @@ export class WorkflowEventProcessor extends EventProcessor {
     forEachIndex,
     resourceId: eventResourceId,
     eventId,
+    restartReadUpdatedAt,
   }: ProcessorArgs & { initialState?: Record<string, any> }) {
+    // Preserve resourceId from an existing snapshot if present (resume /
+    // timeTravel / restart keep their original attribution); otherwise fall
+    // back to the resourceId carried on the event, which is how schedule-fired
+    // runs — that have no pre-existing snapshot — get attributed.
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
+    const resourceId = existingRun?.resourceId ?? eventResourceId;
+
+    // The run was written after the restart read it: it is still going, and the snapshot this
+    // event carries would erase what it wrote. Recovery restarts it later if it really stopped.
+    // The read here and the write below are separate calls, so a write between them gets erased.
+    const storedUpdatedAt = existingRun?.updatedAt ? new Date(existingRun.updatedAt).getTime() : undefined;
+    if (
+      restart &&
+      restartReadUpdatedAt !== undefined &&
+      storedUpdatedAt !== undefined &&
+      storedUpdatedAt > restartReadUpdatedAt
+    ) {
+      this.mastra.getLogger()?.info('Dropping a workflow restart: the run moved on after the restart read it', {
+        workflowId,
+        runId,
+        readUpdatedAt: new Date(restartReadUpdatedAt).toISOString(),
+        storedUpdatedAt: new Date(storedUpdatedAt).toISOString(),
+      });
+      return;
+    }
+
     // Use initialState from event data if provided, otherwise use state from ProcessorArgs
     let initialState = (arguments[0] as any).initialState ?? state ?? {};
     const completed = restart && resolveCompletedRestartEntry(workflow.stepGraph, restart, initialState);
@@ -1244,14 +1279,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.parentChildRelationships.set(runId, parentWorkflow.runId);
       coverNestedRun(parentWorkflow.runId, runId);
     }
-    // Preserve resourceId from an existing snapshot if present (resume /
-    // timeTravel / restart keep their original attribution); otherwise fall
-    // back to the resourceId carried on the event, which is how schedule-fired
-    // runs — that have no pre-existing snapshot — get attributed.
-    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
-    const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
-    const resourceId = existingRun?.resourceId ?? eventResourceId;
-
     // Check shouldPersistSnapshot option - default to true if not specified
     // This is particularly important for resume: if shouldPersist returns false for 'running',
     // we shouldn't overwrite the existing 'suspended' status with 'running'

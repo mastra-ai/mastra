@@ -264,6 +264,8 @@ export abstract class ExecutionEngine extends MastraBase {
     storageVersion?: 1 | 2;
     /** For a storage v2 resume or restart, what the store reported for the loaded state. @internal */
     storedState?: { seq: number; patchBytes: number };
+    /** For a restart, the run's `updatedAt` (epoch ms) when the restart read it. @internal */
+    restartReadUpdatedAt?: number;
     /** For a storage v2 nested start or time travel, the version of the parent's state it starts from. @internal */
     inheritedState?: StateBase;
   }): Promise<TOutput>;

@@ -10,5 +10,6 @@ import { describeLateDeliveryCases } from './test-utils/late-delivery-cases';
 describe('in-memory store', () => {
   const storage = new InMemoryStore();
   describeFinishedOccurrenceCases({ getStorage: () => storage });
-  describeLateDeliveryCases({ getStorage: () => storage });
+  // The in-memory store doesn't move `updatedAt` when a step result is written.
+  describeLateDeliveryCases({ getStorage: () => storage, updatedAtMovesOnEveryWrite: false });
 });

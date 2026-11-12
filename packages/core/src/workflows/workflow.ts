@@ -5928,6 +5928,13 @@ export class Run<
     });
   }
 
+  /** The stored run's `updatedAt` in epoch ms, or `undefined` when the run or its store has none. */
+  async #readRunUpdatedAt(): Promise<number | undefined> {
+    const store = await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows');
+    const run = await store?.getWorkflowRunById({ runId: this.runId, workflowName: this.workflowId });
+    return run?.updatedAt ? new Date(run.updatedAt).getTime() : undefined;
+  }
+
   /**
    * Drives a stored run again from its active steps after its process stopped. A finished run
    * returns its stored result. Throws `WORKFLOW_RESTART_RUN_OWNED` when
@@ -5955,6 +5962,12 @@ export class Run<
     if (!allowedEngines.includes(this.workflowEngineType)) {
       throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
+
+    // An evented restart hands the run's `updatedAt` to the worker that handles its start, which
+    // drops the restart if the run moved on since. Read before the snapshot: a write in between
+    // then makes the restart look stale instead of letting a stale snapshot through.
+    const restartReadUpdatedAt =
+      this.workflowEngineType === 'evented' && this.storageVersion !== 2 ? await this.#readRunUpdatedAt() : undefined;
 
     let snapshot =
       this.storageVersion === 2
@@ -6120,6 +6133,7 @@ export class Run<
         workflowSpan,
         storageVersion: this.storageVersion,
         storedState: this.runStorage.storedState(snapshot),
+        restartReadUpdatedAt,
       });
     } finally {
       await ownership.release();

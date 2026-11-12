@@ -63,13 +63,17 @@ function heldQueue(holds: (event: Event) => boolean) {
 /**
  * `getStorage` is the store the test reads. `connect` opens the store a
  * replica uses, on the same database (see {@link useLateDeliveryReplicas}).
+ * `updatedAtMovesOnEveryWrite` is false for a store whose step result writes
+ * leave the run's `updatedAt` alone: a restart there can't tell the run moved.
  */
 export function describeLateDeliveryCases({
   getStorage,
   connect = getStorage,
+  updatedAtMovesOnEveryWrite = true,
 }: {
   getStorage: () => MastraStorage;
   connect?: () => MastraStorage | Promise<MastraStorage>;
+  updatedAtMovesOnEveryWrite?: boolean;
 }) {
   describe('evented runs whose events arrive late or twice (#28712)', () => {
     const { startReplica, storedRun, redeliver } = useLateDeliveryReplicas({ getStorage, connect });
@@ -378,6 +382,46 @@ export function describeLateDeliveryCases({
       expect(iterations).toEqual([0, 1, 2]);
       expect((await storedRun(run.runId))?.context.count).toMatchObject({ status: 'success', output: { n: 3 } });
     }, 20_000);
+
+    it.skipIf(!updatedAtMovesOnEveryWrite)(
+      'keeps the steps a run saved after a restart read it, and runs each once',
+      async () => {
+        const executions: string[] = [];
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('third', async id => void executions.push(`${replica}:${id}`)))
+            .commit();
+        // The first step's end sits in A's broker queue past a lease TTL, so the run looks stopped.
+        const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [0]));
+        const a = await startReplica(build('A'), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await fromA.firstHeld;
+        await waitUntilOrphaned(run.runId);
+
+        // B's restart reads the run, and its start event is held back in turn.
+        const fromB = heldQueue(event => event.type === 'workflow.start' && !!event.data.restart);
+        const b = await startReplica(build('B'), fromB.intercept);
+        const restarted = deferred<void>();
+        // B's start is handled by hand below, so the restart's own wait never settles unless it throws.
+        (await b.workflow.createRun({ runId: run.runId })).restart().catch(error => restarted.reject(error));
+        await Promise.race([fromB.firstHeld, restarted.promise]);
+
+        // A's step end is delivered: A saves the next steps and ends the run before B's start arrives.
+        fromA.holdAll();
+        await fromA.drain(a);
+        expect((await storedRun(run.runId))?.status).toBe('success');
+        fromB.holdAll();
+        await fromB.drain(b);
+
+        expect(executions).toEqual(['A:first', 'A:second', 'A:third']);
+        expect((await storedRun(run.runId))?.status).toBe('success');
+        expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+      },
+      20_000,
+    );
 
     it('runs the step after a foreach once when two items finish together', async () => {
       const executions: string[] = [];

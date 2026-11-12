@@ -137,6 +137,11 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     perStep?: boolean;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * For a restart, the run's `updatedAt` (epoch ms) when the restart read it. The start
+     * event carries it so the worker drops the restart if the run moved on since. @internal
+     */
+    restartReadUpdatedAt?: number;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -326,6 +331,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             executionPath: params.restart.activePaths,
             stepResults: params.restart.stepResults,
             restart: params.restart,
+            ...(params.restartReadUpdatedAt === undefined ? {} : { restartReadUpdatedAt: params.restartReadUpdatedAt }),
             prevResult: {
               status: 'success',
               output: params.restart.isPreFirstStepRestart ? prevResult : prevResult?.payload,
