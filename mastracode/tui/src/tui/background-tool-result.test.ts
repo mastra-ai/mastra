@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { getBackgroundToolMetadata } from './background-tool-result.js';
 
 describe('getBackgroundToolMetadata', () => {
-  it.each(['running', 'completed', 'failed'])('reads core-owned %s metadata', status => {
+  it.each(['running', 'completed', 'failed', 'cancelled'])('reads core-owned %s metadata', status => {
     expect(
       getBackgroundToolMetadata({ mastra: { backgroundTask: { taskId: 'task-1', status }, modelOutput: null } }),
     ).toEqual({ taskId: 'task-1', status });

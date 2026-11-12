@@ -1652,6 +1652,39 @@ describe('renderExistingMessages subagents', () => {
     },
   );
 
+  // A call cancelled over HTTP has no notice; only its stored status says it was cancelled.
+  it.each([undefined, false, true])(
+    'replays a call stored as cancelled with no notice as cancelled with background enabled %s',
+    async enabled => {
+      const state = createState();
+      state.options.backgroundToolsEnabled = enabled;
+      const message = assistantToolMessage('stored-cancelled-message', [
+        {
+          id: 'stored-cancelled-call',
+          name: 'view',
+          args: {},
+          result: 'Background task started. Task ID: stored-cancelled-task',
+          isError: false,
+          providerMetadata: { mastra: { backgroundTask: { taskId: 'stored-cancelled-task', status: 'cancelled' } } },
+        },
+      ]);
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+      } as unknown as TUIState['session'];
+      state.controller = { session: state.session } as unknown as TUIState['controller'];
+      await renderExistingMessages(state);
+      const rendered = state.chatContainer
+        .render(120)
+        .join('\n')
+        .replace(/\x1b\[[0-9;]*m/g, '');
+      expect(rendered).toContain('Background execution cancelled.');
+      expect(rendered).toContain('■ background · stored-cancelled-task');
+      expect(rendered).not.toContain('Running in background');
+      expect(state.pendingTools.has('stored-cancelled-call')).toBe(false);
+    },
+  );
+
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
       {

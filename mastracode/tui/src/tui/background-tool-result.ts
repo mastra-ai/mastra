@@ -4,7 +4,7 @@ const backgroundTaskMetadataSchema = z.object({
   mastra: z.object({
     backgroundTask: z.object({
       taskId: z.string().min(1),
-      status: z.enum(['running', 'completed', 'failed']),
+      status: z.enum(['running', 'completed', 'failed', 'cancelled']),
     }),
   }),
 });

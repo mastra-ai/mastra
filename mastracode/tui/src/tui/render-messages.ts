@@ -1108,7 +1108,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               : undefined) ??
             backgroundTasksByToolCallId.get(part.toolCallId) ??
             interruptedTasksByToolCallId.get(part.toolCallId);
-          const isCancelledBackground = cancelledBackgroundToolCalls.has(part.toolCallId);
+          const isCancelledBackground =
+            cancelledBackgroundToolCalls.has(part.toolCallId) ||
+            // Stored as cancelled with no notice, for example when cancelled over HTTP.
+            (part.backgroundTask?.status === 'cancelled' && !interruptedTasksByToolCallId.has(part.toolCallId));
           const isFailedBackground = failedBackgroundToolCalls.has(part.toolCallId);
           // An awaited call a restart or shutdown cut off has no result; it also waits for its notice.
           const awaitsInterruptedNotice =
