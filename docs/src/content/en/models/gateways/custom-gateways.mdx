@@ -18,12 +18,15 @@ Gateways handle provider-specific logic for accessing language models:
 
 ## When to use custom gateways
 
-Use a custom gateway to connect Mastra to open-weight models, such as gpt-oss, Llama, Gemma, Mistral, Qwen, or DeepSeek. Because these models can be self-hosted, you can keep prompts and data on your own infrastructure. A custom gateway lets you:
+Use a custom gateway to connect Mastra to open-weight models that you run yourself, such as gpt-oss, Llama, Gemma, Mistral, Qwen, or DeepSeek. Self-hosting fits when:
 
-- Run models on infrastructure you pay a fixed cost for, instead of paying per token
-- List the models behind your endpoint, so they get typed model IDs and appear in the Studio model picker
-- Resolve credentials on every call, for example to exchange or rotate tokens
-- [Limit the Studio model picker](#showing-only-custom-gateways-in-studio) to your own models
+- Your industry's rules don't allow sending prompts or customer data to a third-party API (HIPAA, GDPR, finance, defense)
+- You make enough model calls that per-token API pricing costs more than running your own GPUs
+- You've fine-tuned an open-weight model on internal data and want your agents to use it
+- You need a model that only changes when you upgrade it, so a provider update can't break your prompts
+- Your agents run offline, on air-gapped networks, on edge hardware, or in the same data center as your app
+
+The gateway lists the models behind your endpoint, so they get typed model IDs and appear in the Studio model picker. It can also resolve credentials on every call, and you can [limit the Studio model picker](#showing-only-custom-gateways-in-studio) to your own models.
 
 To call a single endpoint with an OpenAI-compatible API, you don't need a gateway: set `url` in the model config instead. Mastra doesn't read an API key from environment variables for a `url` model, so also set `apiKey` when the endpoint requires authentication. See [Use local models with Mastra](/models#use-local-models-with-mastra).
 
