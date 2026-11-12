@@ -8,8 +8,8 @@ export function recordIntakeEvent(source: IntakeSource, outcome: string): void {
   factoryMetrics().count('intake', 'mastra_factory_intake_events_total', { source, outcome });
 }
 
-// When each source's reconcile sweep last finished cleanly, in this process.
-const lastSweepAt = new Map<IntakeSource, number>();
+// When each source's reconcile sweep of each kind last finished cleanly, in this process.
+const lastSweepAt = new Map<string, { source: IntakeSource; kind: string; at: number }>();
 
 /**
  * One reconcile sweep. `replayed` counts changes the sweep found that live events never
@@ -24,20 +24,20 @@ export function recordReconcileSweep(
   if (!metrics.enabled('intake')) return;
   if (result.replayed > 0)
     metrics.count('intake', 'mastra_factory_intake_replayed_total', { source, kind }, result.replayed);
-  if (result.ok) lastSweepAt.set(source, Date.now());
+  if (result.ok) lastSweepAt.set(`${source}:${kind}`, { source, kind, at: Date.now() });
   else metrics.count('intake', 'mastra_factory_intake_sweep_failures_total', { source, kind });
 }
 
 /**
- * Age of each source's last clean reconcile sweep. Growing without bound means the sweep has
+ * Age of each source's last clean reconcile sweep, per kind. Growing without bound means the sweep has
  * stalled, and webhooks it would have caught stay missed.
  */
 export function intakeCollector(): MetricsCollector {
   return {
     collect(sink) {
       const now = Date.now();
-      for (const [source, at] of lastSweepAt) {
-        sink.emit('mastra_factory_intake_last_sweep_age_s', (now - at) / 1000, { source });
+      for (const { source, kind, at } of lastSweepAt.values()) {
+        sink.emit('mastra_factory_intake_last_sweep_age_s', (now - at) / 1000, { source, kind });
       }
     },
   };

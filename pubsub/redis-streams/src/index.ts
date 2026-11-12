@@ -594,6 +594,14 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * The caller owns it: connect it, and close it when done.
    */
   createMonitorClient(): RedisClientType {
+    const cluster = this.#writeClient as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+    if (cluster._options) {
+      // A cluster's node clients take their options from `defaults`, not the root.
+      const duplicate = (this.#writeClient as unknown as RedisClusterType).duplicate({
+        defaults: { ...cluster._options.defaults, disableOfflineQueue: true },
+      });
+      return duplicate as unknown as RedisClientType;
+    }
     return this.#writeClient.duplicate({ disableOfflineQueue: true }) as RedisClientType;
   }
 

@@ -75,6 +75,9 @@ export class FactoryMetrics {
   #targets: MetricsTargets | undefined;
   #timer: ReturnType<typeof setInterval> | undefined;
   #running = false;
+  // Records this process may still send. Refilled each tick by the interval's share of the
+  // per-minute cap, so a cap below one record per tick still holds over a minute.
+  #credit: number | undefined;
 
   constructor(config: ResolvedMetricsConfig | undefined, service: MetricsService) {
     this.#config = config;
@@ -114,7 +117,13 @@ export class FactoryMetrics {
     observation.count++;
     observation.sum += value;
     observation.max = Math.max(observation.max, value);
+    // Reservoir sampling: every observation in the interval has the same chance of being kept,
+    // so a p95 over a busy interval still reflects its last minutes.
     if (observation.samples.length < MAX_SAMPLES) observation.samples.push(value);
+    else {
+      const slot = Math.floor(Math.random() * observation.count);
+      if (slot < MAX_SAMPLES) observation.samples[slot] = value;
+    }
   }
 
   /** Starts the interval timer. Does nothing when every group is off. */
@@ -125,7 +134,11 @@ export class FactoryMetrics {
     for (const name of this.#config.unknownGroups) {
       targets.getLogger()?.warn(`[factory:metrics] Unknown metric group "${name}" ignored.`);
     }
-    this.#timer = setInterval(() => void this.tick(), this.#config.intervalMs);
+    this.#timer = setInterval(() => {
+      this.tick().catch(error =>
+        this.#targets?.getLogger()?.warn('[factory:metrics] Metrics tick failed.', { error: String(error) }),
+      );
+    }, this.#config.intervalMs);
     this.#timer.unref?.();
   }
 
@@ -145,7 +158,10 @@ export class FactoryMetrics {
     this.#running = true;
     try {
       const metrics = this.#targets?.getMetrics();
-      const budget = Math.max(1, Math.floor((this.#config.maxPerMinute * this.#config.intervalMs) / 60_000));
+      const perTick = (this.#config.maxPerMinute * this.#config.intervalMs) / 60_000;
+      const available = Math.floor((this.#credit = Math.min((this.#credit ?? 0) + perTick, Math.max(perTick, 1))));
+      // One record is held back for the dropped-records count, so the cap includes it.
+      const budget = available > 1 ? available - 1 : available;
       let used = 0;
       let dropped = 0;
       const service = this.#service;
@@ -180,8 +196,12 @@ export class FactoryMetrics {
       }
       this.#observations.clear();
 
-      // Always sent, past the budget, so a capped deployment can see it is capped.
-      if (dropped > 0) metrics?.emit('mastra_factory_metrics_dropped_total', dropped, { service });
+      // Sent from the held-back record, so a capped deployment can see it is capped.
+      if (dropped > 0 && used < available) {
+        used++;
+        metrics?.emit('mastra_factory_metrics_dropped_total', dropped, { service });
+      }
+      this.#credit -= used;
     } finally {
       this.#running = false;
     }

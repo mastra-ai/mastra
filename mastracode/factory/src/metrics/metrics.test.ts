@@ -1,3 +1,6 @@
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { metricsService, resolveMetricsConfig } from './config.js';
@@ -32,8 +35,8 @@ function fakePool() {
               active: 1,
               idle_in_transaction: 0,
               waiting_on_lock: 0,
-              longest_query_ms: 5,
-              longest_idle_transaction_ms: 0,
+              longest_query_s: 5,
+              longest_idle_transaction_s: 0.5,
             },
           ]
         : [],
@@ -115,7 +118,7 @@ describe('FactoryMetrics', () => {
   });
 
   it('caps records per tick and counts the overflow', async () => {
-    // 15s interval at 20/min = a budget of 5 per tick.
+    // 15s interval at 20/min = 5 records per tick, one of them held back for the dropped count.
     const metrics = new FactoryMetrics(
       resolveMetricsConfig({ groups: ['intake'], intervalMs: 15_000, maxRecordsPerMinute: 20 }, {}),
       'all',
@@ -125,10 +128,11 @@ describe('FactoryMetrics', () => {
     for (let i = 0; i < 8; i++) metrics.count('intake', `events_${i}`);
     await metrics.tick();
     metrics.stop();
-    expect(records.filter(r => r.name.startsWith('events_'))).toHaveLength(5);
+    expect(records.filter(r => r.name.startsWith('events_'))).toHaveLength(4);
+    expect(records).toHaveLength(5);
     expect(records).toContainEqual({
       name: 'mastra_factory_metrics_dropped_total',
-      value: 3,
+      value: 4,
       labels: { service: 'all' },
     });
   });
@@ -145,6 +149,18 @@ describe('startFactoryMetrics', () => {
       await stop();
       expect(records.some(r => r.name === 'mastra_factory_db_pool')).toBe(true);
       expect(records.some(r => r.name === 'mastra_factory_db_sessions')).toBe(service === 'worker');
+      if (service === 'worker') {
+        expect(records).toContainEqual({
+          name: 'mastra_factory_db_longest_ms',
+          value: 5000,
+          labels: { kind: 'query', service },
+        });
+        expect(records).toContainEqual({
+          name: 'mastra_factory_db_longest_ms',
+          value: 500,
+          labels: { kind: 'idle_transaction', service },
+        });
+      }
     }
   });
 });
@@ -180,19 +196,25 @@ describe('call-site helpers', () => {
 });
 
 describe('process collector', () => {
-  it('reports GC pauses by kind and the heap limit', async () => {
+  it('reports GC pauses by kind, main-thread utilization, the CPU limit and the heap limit', async () => {
     const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['process'] }, {}), 'all');
     const { records, targets } = capture();
     const stop = startFactoryMetrics(metrics, targets, { storage: undefined, vector: undefined, pubsub: undefined });
-    let garbage: unknown[] = [];
-    for (let i = 0; i < 200_000; i++) garbage.push({ i });
-    garbage = [];
+    // Force a collection instead of hoping allocation triggers one.
+    setFlagsFromString('--expose-gc');
+    (runInNewContext('gc') as () => void)();
     // GC entries are delivered asynchronously.
-    await new Promise(resolve => setTimeout(resolve, 50));
-    await metrics.tick();
+    await vi.waitFor(async () => {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await metrics.tick();
+      expect(records.some(r => r.name === 'mastra_factory_gc_ms')).toBe(true);
+    });
     await stop();
 
-    expect(garbage).toEqual([]);
+    const utilization = records.find(r => r.name === 'mastra_factory_event_loop_utilization');
+    expect(utilization?.value).toBeGreaterThanOrEqual(0);
+    expect(utilization?.value).toBeLessThanOrEqual(1);
+    expect(records.find(r => r.name === 'mastra_factory_process_cpu_limit_cores')?.value).toBeGreaterThan(0);
     const gc = records.filter(r => r.name === 'mastra_factory_gc_ms');
     expect(gc.length).toBeGreaterThan(0);
     expect(gc.every(r => ['minor', 'major', 'incremental', 'weakcb', 'other'].includes(r.labels.kind!))).toBe(true);
@@ -284,5 +306,109 @@ describe('sandbox retirement', () => {
     await metrics.tick();
     metrics.stop();
     expect(records.some(r => r.name === 'mastra_factory_sandbox_retired_total')).toBe(false);
+  });
+});
+
+describe('cap across ticks', () => {
+  it('holds a cap below one record per tick over a minute', async () => {
+    // 1 record per minute at a 15s interval: one record every fourth tick.
+    const metrics = new FactoryMetrics(
+      resolveMetricsConfig({ groups: ['intake'], intervalMs: 15_000, maxRecordsPerMinute: 1 }, {}),
+      'all',
+    );
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+    for (let tick = 0; tick < 4; tick++) {
+      metrics.count('intake', 'events');
+      metrics.count('intake', 'other');
+      await metrics.tick();
+    }
+    metrics.stop();
+    expect(records).toHaveLength(1);
+  });
+
+  it('logs and keeps running when a scheduled tick fails', async () => {
+    vi.useFakeTimers();
+    try {
+      const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['intake'], intervalMs: 15_000 }, {}), 'all');
+      const warn = vi.fn();
+      metrics.start(
+        {
+          getMetrics: () => {
+            throw new Error('exporter broke');
+          },
+          getLogger: () => ({ info: vi.fn(), warn }),
+        },
+        [],
+      );
+      await vi.advanceTimersByTimeAsync(15_000);
+      metrics.stop();
+      expect(warn).toHaveBeenCalledWith('[factory:metrics] Metrics tick failed.', { error: 'Error: exporter broke' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('intake sweep age', () => {
+  it('tracks each sweep kind separately', async () => {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['intake'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    const stop = startFactoryMetrics(metrics, targets, { storage: undefined, vector: undefined, pubsub: undefined });
+    recordReconcileSweep('github', 'merge_close', { replayed: 0, ok: true });
+    recordReconcileSweep('github', 'open', { replayed: 0, ok: true });
+    await metrics.tick();
+    await stop();
+    const kinds = records.filter(r => r.name === 'mastra_factory_intake_last_sweep_age_s').map(r => r.labels.kind);
+    expect(kinds.sort()).toEqual(['merge_close', 'open']);
+  });
+});
+
+describe('config', () => {
+  it('caps the interval at the longest delay setInterval accepts', () => {
+    expect(resolveMetricsConfig({ groups: 'all' }, { FACTORY_METRICS_INTERVAL_MS: '2147483648' })!.intervalMs).toBe(
+      2_147_483_647,
+    );
+  });
+});
+
+describe('redis collectors', () => {
+  function fakeRedis(xInfoGroups: () => Promise<unknown>, cluster = false) {
+    const client = {
+      connect: async () => {},
+      info: async () => 'used_memory:100\r\nmaxmemory:1000\r\nconnected_clients:3\r\nevicted_keys:0\r\n',
+      xInfoGroups,
+      on: () => client,
+      destroy: () => {},
+      ...(cluster ? { masters: [] } : {}),
+    };
+    return { createMonitorClient: () => client, streamKey: (topic: string) => `mastra:topic:${topic}` };
+  }
+
+  async function collect(pubsub: unknown) {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['redis'] }, {}), 'all');
+    const { records, targets } = capture();
+    const stop = startFactoryMetrics(metrics, targets, { storage: undefined, vector: undefined, pubsub });
+    await metrics.tick();
+    await stop();
+    return records;
+  }
+
+  it('treats a missing stream as empty but reports other XINFO errors as a failed check', async () => {
+    const missing = await collect(fakeRedis(() => Promise.reject(new Error('ERR no such key'))));
+    expect(missing.some(r => r.name === 'mastra_factory_probe_failures_total')).toBe(false);
+    const denied = await collect(fakeRedis(() => Promise.reject(new Error('NOPERM no permission'))));
+    expect(denied).toContainEqual({
+      name: 'mastra_factory_probe_failures_total',
+      value: 1,
+      labels: { component: 'redis_streams', reason: 'error', service: 'all' },
+    });
+  });
+
+  it('only runs the probe on a cluster', async () => {
+    const records = await collect(fakeRedis(async () => [], true));
+    expect(records.some(r => r.labels.component === 'redis')).toBe(true);
+    expect(records.some(r => r.name === 'mastra_factory_redis_memory_bytes')).toBe(false);
   });
 });

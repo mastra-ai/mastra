@@ -1,5 +1,5 @@
 import type { MetricsCollector, MetricsLogger } from '../metrics.js';
-import { probe } from './probe.js';
+import { createProbe } from './probe.js';
 
 /** The commands the collector uses, structurally matching a node-redis client. */
 export interface RedisMonitorClient {
@@ -58,6 +58,7 @@ export function connectMonitor(pubsub: MonitorablePubSub, getLogger: () => Metri
 
 /** The `INFO` round trip as the Redis probe, run in every process. */
 export function redisProbeCollector(client: RedisMonitorClient, timeoutMs: number): MetricsCollector {
+  const probe = createProbe();
   return {
     async collect(sink) {
       await probe(sink, 'redis', timeoutMs, () => client.info());
@@ -74,6 +75,7 @@ export function redisStatsCollector(
   client: RedisMonitorClient,
   timeoutMs: number,
 ): MetricsCollector {
+  const probe = createProbe();
   let lastEvicted: number | undefined;
   return {
     async collect(sink) {
@@ -106,8 +108,11 @@ export function redisStatsCollector(
       await probe(sink, 'redis_streams', timeoutMs, () =>
         Promise.all(
           GROUPED_TOPICS.map(async topic => {
-            // A missing stream (nothing published yet) is not a failure.
-            const groups = await client.xInfoGroups(pubsub.streamKey(topic)).catch(() => undefined);
+            // A missing stream (nothing published yet) is not a failure; anything else is.
+            const groups = await client.xInfoGroups(pubsub.streamKey(topic)).catch((error: unknown) => {
+              if (/no such key/i.test(error instanceof Error ? error.message : String(error))) return undefined;
+              throw error;
+            });
             if (!groups) return;
             let pending = 0;
             // Redis reports lag as null when it can't compute it; then the topic gets no lag record.

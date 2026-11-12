@@ -1,5 +1,5 @@
 import type { MetricsCollector, MetricsLogger } from '../metrics.js';
-import { errorText, probe } from './probe.js';
+import { createProbe, errorText } from './probe.js';
 
 /** The subset of `pg.Pool` the collectors read. */
 export interface PoolLike {
@@ -26,6 +26,7 @@ export function asPool(value: unknown): PoolLike | undefined {
  * are queued for a connection: the pool is too small or queries hold connections too long.
  */
 export function postgresPoolCollector(pools: Record<string, PoolLike>, timeoutMs: number): MetricsCollector {
+  const probe = createProbe();
   return {
     async collect(sink) {
       await Promise.all(
@@ -55,7 +56,7 @@ WHERE datname = current_database() AND backend_type = 'client backend' AND pid <
 // Most expensive statements of this database since the extension was last reset. Statement text is
 // normalized by pg_stat_statements (literals become $1, $2, …).
 const STATEMENTS_SQL = `
-SELECT queryid::text AS id, calls, total_exec_time, left(query, 200) AS query
+SELECT queryid::text AS id, calls, total_exec_time
 FROM pg_stat_statements
 WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
 ORDER BY total_exec_time DESC
@@ -67,8 +68,9 @@ const SLOW_STATEMENTS_LOGGED = 5;
  * Server-wide Postgres stats, collected by one process per deployment. Every tick:
  * `pg_stat_activity` session counts and the age of the longest running query and longest idle
  * transaction. Every `statementsEveryTicks` ticks: the statements that used the most time since the
- * previous sample, from `pg_stat_statements`, written as one log line (statement text is too
- * high-cardinality for labels). Skipped when the extension isn't installed.
+ * previous sample, from `pg_stat_statements`, written as one log line with their query IDs and
+ * timings. Statement text is left out: pg_stat_statements can keep literal values in it, which
+ * mustn't reach application logs. Skipped when the extension isn't installed.
  */
 export function postgresStatsCollector(
   pool: PoolLike,
@@ -76,6 +78,7 @@ export function postgresStatsCollector(
   statementsEveryTicks: number,
   getLogger: () => MetricsLogger | undefined,
 ): MetricsCollector {
+  const probe = createProbe();
   let tick = 0;
   let previous: Map<string, { calls: number; time: number }> | undefined;
   let failing = false;
@@ -88,7 +91,6 @@ export function postgresStatsCollector(
     const current = new Map(
       rows.map(row => [String(row.id), { calls: number(row.calls), time: number(row.total_exec_time) }]),
     );
-    const queries = new Map(rows.map(row => [String(row.id), String(row.query)]));
     if (previous) {
       const before = previous;
       const slowest = [...current]
@@ -108,7 +110,7 @@ export function postgresStatsCollector(
         .sort((a, b) => b.time - a.time)
         .slice(0, SLOW_STATEMENTS_LOGGED)
         .map(statement => ({
-          query: queries.get(statement.id),
+          queryId: statement.id,
           calls: statement.calls,
           totalMs: Math.round(statement.time),
           meanMs: Math.round((statement.time / statement.calls) * 10) / 10,

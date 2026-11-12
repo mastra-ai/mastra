@@ -21,6 +21,8 @@ export interface ResolvedMetricsConfig {
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const MIN_INTERVAL_MS = 15_000;
+// Longest delay setInterval accepts; Node turns anything above it into 1 ms.
+const MAX_INTERVAL_MS = 2_147_483_647;
 const DEFAULT_MAX_PER_MINUTE = 500;
 
 function parseGroups(value: readonly string[] | 'all'): { groups: Set<MetricGroup>; unknownGroups: string[] } {
@@ -63,7 +65,10 @@ export function resolveMetricsConfig(
   const maxPerMinute = Number(env.FACTORY_METRICS_MAX_PER_MIN || option?.maxRecordsPerMinute);
   return {
     groups,
-    intervalMs: Number.isFinite(interval) && interval > 0 ? Math.max(interval, MIN_INTERVAL_MS) : DEFAULT_INTERVAL_MS,
+    intervalMs:
+      Number.isFinite(interval) && interval > 0
+        ? Math.min(Math.max(interval, MIN_INTERVAL_MS), MAX_INTERVAL_MS)
+        : DEFAULT_INTERVAL_MS,
     maxPerMinute: Number.isInteger(maxPerMinute) && maxPerMinute > 0 ? maxPerMinute : DEFAULT_MAX_PER_MINUTE,
     unknownGroups,
   };

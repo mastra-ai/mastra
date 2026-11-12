@@ -43,6 +43,8 @@ export function observeSessionFirstMessage(
     if (role !== 'user' && role !== 'assistant') return;
     seen = true;
     unsubscribe();
+    // Taken now: the storage round trip below must not count toward the latency.
+    const at = Date.now();
     void sourceControl.sessions
       .markFirstMessage({
         sessionId: session.identity.getId(),
@@ -51,11 +53,7 @@ export function observeSessionFirstMessage(
       })
       .then(createdAt => {
         if (createdAt)
-          factoryMetrics().observe(
-            'sessions',
-            'mastra_factory_session_first_message_ms',
-            Date.now() - createdAt.getTime(),
-          );
+          factoryMetrics().observe('sessions', 'mastra_factory_session_first_message_ms', at - createdAt.getTime());
       })
       .catch(error => console.warn('[Factory first-message capture] Unable to persist first message time.', error));
   });

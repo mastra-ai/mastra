@@ -60,7 +60,9 @@ export function startFactoryMetrics(
     if (pubsub) {
       redisClient = connectMonitor(pubsub, targets.getLogger);
       collectors.push(redisProbeCollector(redisClient, timeoutMs));
-      if (serverWide) collectors.push(redisStatsCollector(pubsub, redisClient, timeoutMs));
+      // On a cluster, INFO reads one node, so server-wide stats would mix nodes. Only the probe runs.
+      const cluster = 'masters' in (redisClient as object);
+      if (serverWide && !cluster) collectors.push(redisStatsCollector(pubsub, redisClient, timeoutMs));
     }
   }
 

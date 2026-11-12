@@ -203,13 +203,14 @@ export class SessionRetirementCoordinator {
     );
   }
 
-  /** Resolves `false` when there was no session to retire. */
+  /** Resolves `true` when the session had a sandbox and releasing it succeeded. */
   async #retireSession(input: RetireSessionInput): Promise<boolean> {
     const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
     if (!session || session.orgId !== input.orgId) return false;
 
+    let released = false;
     try {
-      await this.#teardownSessionSandbox(input, session);
+      released = await this.#teardownSessionSandbox(input, session);
     } finally {
       await this.#invalidate(session);
 
@@ -219,15 +220,12 @@ export class SessionRetirementCoordinator {
         await input.sourceControl.sessions.delete(session.id);
       }
     }
-    return true;
+    return released;
   }
 
-  async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
+  async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<boolean> {
     const entry = peekSessionSandbox(session.id);
-    if (!entry) {
-      await this.#releaseDetachedSandbox(input, session);
-      return;
-    }
+    if (!entry) return this.#releaseDetachedSandbox(input, session);
 
     // A session booted from its factory environment tears every repository
     // down in position order, each in its own directory; a failure is logged
@@ -249,8 +247,7 @@ export class SessionRetirementCoordinator {
           });
         }
       }
-      await this.#releaseSandbox(input, session);
-      return;
+      return this.#releaseSandbox(input, session);
     }
 
     let projectRepository: ProjectRepository | null | undefined;
@@ -284,20 +281,21 @@ export class SessionRetirementCoordinator {
       }
     }
 
-    await this.#releaseSandbox(input, session);
+    return this.#releaseSandbox(input, session);
   }
 
   /**
    * Stop (or, for a deleted session, destroy) a session's VM that this
    * process never attached to. Only for sessions that materialized (a
    * persisted `sandboxId`): nothing is started, no teardown command runs —
-   * the provider pauses or kills by identity.
+   * the provider pauses or kills by identity. Resolves whether a sandbox was released.
    */
-  async #releaseDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
-    if (!session.sandboxId || !this.#sandbox) return;
+  async #releaseDetachedSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<boolean> {
+    if (!session.sandboxId || !this.#sandbox) return false;
     try {
       if (input.deleteSession) await destroyDetachedSessionSandbox({ sandbox: this.#sandbox, session });
       else await stopDetachedSessionSandbox({ sandbox: this.#sandbox, session });
+      return true;
     } catch (error) {
       this.#warn(`Factory detached session sandbox ${input.deleteSession ? 'destroy' : 'stop'} failed`, {
         orgId: session.orgId,
@@ -305,6 +303,7 @@ export class SessionRetirementCoordinator {
         projectRepositoryId: session.projectRepositoryId,
         error: boundedError(error),
       });
+      return false;
     }
   }
 
@@ -463,9 +462,10 @@ export class SessionRetirementCoordinator {
     }
   }
 
-  async #releaseSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {
+  async #releaseSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<boolean> {
     try {
       await releaseSessionSandbox({ sessionId: session.id, destroy: input.deleteSession });
+      return true;
     } catch (error) {
       this.#warn('Factory session sandbox release failed', {
         orgId: session.orgId,
@@ -473,6 +473,7 @@ export class SessionRetirementCoordinator {
         projectRepositoryId: session.projectRepositoryId,
         error: boundedError(error),
       });
+      return false;
     }
   }
 }

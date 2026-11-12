@@ -117,6 +117,7 @@ export function observeSessionFirstExec(
         if (!isMeaningfulToolName(toolName)) return;
         seen = true;
         unsubscribe();
+        const at = Date.now();
         void sourceControl.sessions
           .markFirstMeaningfulExec({
             sessionId: session.identity.getId(),
@@ -124,11 +125,7 @@ export function observeSessionFirstExec(
           })
           .then(createdAt => {
             if (createdAt) {
-              factoryMetrics().observe(
-                'sessions',
-                'mastra_factory_session_first_exec_ms',
-                Date.now() - createdAt.getTime(),
-              );
+              factoryMetrics().observe('sessions', 'mastra_factory_session_first_exec_ms', at - createdAt.getTime());
             }
           })
           .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
