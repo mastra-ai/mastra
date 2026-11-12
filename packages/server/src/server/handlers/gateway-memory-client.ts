@@ -292,6 +292,17 @@ function isV2GatewayKey(key: string): boolean {
   return key.startsWith('msk-gateway-') || key.startsWith('mskv2_');
 }
 
+/**
+ * Whether this deployment targets Gateway v2. Signaled either by the
+ * MASTRA_GATEWAY_VERSION=v2 runtime env var (set by the platform) or by a v2
+ * (organization) API key prefix, which predates the env var signal.
+ */
+export function isGatewayV2(): boolean {
+  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
+  const key = process.env.MASTRA_GATEWAY_API_KEY;
+  return !!key && isV2GatewayKey(key);
+}
+
 // Singleton-ish lazy instance
 let _gatewayClient: GatewayMemoryClient | null | undefined;
 
@@ -300,12 +311,11 @@ let _gatewayClient: GatewayMemoryClient | null | undefined;
  */
 export function getGatewayClient(): GatewayMemoryClient | null {
   // Gateway v2 has no memory REST API; Studio must use the agent's own memory configuration.
-  if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return null;
+  if (isGatewayV2()) return null;
   if (_gatewayClient !== undefined) return _gatewayClient;
   const url = process.env.MASTRA_GATEWAY_URL || 'https://gateway-api.mastra.ai';
   const key = process.env.MASTRA_GATEWAY_API_KEY;
-  // v2 (organization) keys are served by a gateway without the memory API, so memory stays local.
-  if (!key || isV2GatewayKey(key)) {
+  if (!key) {
     _gatewayClient = null;
     return null;
   }

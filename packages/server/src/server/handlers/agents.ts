@@ -97,6 +97,7 @@ import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
 import { assertWriteAccess, getCallerAuthorId } from './authorship';
 import { handleError } from './error';
+import { isGatewayV2 } from './gateway-memory-client';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -1899,7 +1900,8 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
 
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
-      if (process.env.MASTRA_GATEWAY_VERSION === 'v2' && id === 'mastra') continue;
+      // In v2 the live catalog (via the gateway manager) replaces the static registry entry.
+      if (id === 'mastra' && isGatewayV2()) continue;
       allProviders[id] = provider;
     }
   }

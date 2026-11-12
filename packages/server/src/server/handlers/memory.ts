@@ -61,6 +61,7 @@ import { handleError } from './error';
 import {
   getGatewayClient,
   isGatewayAgentAsync,
+  isGatewayV2,
   toLocalThread,
   toLocalMessage,
   toLocalOMRecord,
@@ -969,7 +970,7 @@ export const LIST_THREADS_ROUTE = createRoute({
         });
       }
 
-      if (agent && isGateway && process.env.MASTRA_GATEWAY_VERSION === 'v2' && !agentSupportsMemory(agent)) {
+      if (agent && isGateway && isGatewayV2() && !agentSupportsMemory(agent)) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
@@ -1215,7 +1216,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         };
       }
 
-      if (agent && isGateway && process.env.MASTRA_GATEWAY_VERSION === 'v2' && !agentSupportsMemory(agent)) {
+      if (agent && isGateway && isGatewayV2() && !agentSupportsMemory(agent)) {
         return { messages: [], uiMessages: [] };
       }
 

@@ -45,10 +45,22 @@ export class MastraGateway extends MastraModelGateway {
     return !!(this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY']);
   }
 
+  /**
+   * Gateway v2 deployments are signaled by MASTRA_GATEWAY_VERSION=v2 (set by the platform)
+   * or by a v2 (organization) API key prefix, which predates the env var signal.
+   * Keep in sync with isGatewayV2 in @mastra/server's gateway-memory-client.
+   */
+  private isV2(): boolean {
+    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
+    const key = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));
+  }
+
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
+    const isV2 = this.isV2();
     const openrouterConfig = PROVIDER_REGISTRY['openrouter'];
     let models = openrouterConfig?.models ?? [];
-    if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') {
+    if (isV2) {
       const apiKey = await this.getApiKey();
       const response = await (this.config?.customFetch ?? fetch)(`${this.getBaseUrl()}/v1/models`, {
         headers: this.config?.customFetch ? withGatewayAuthHeader(apiKey) : { Authorization: `Bearer ${apiKey}` },
@@ -80,8 +92,8 @@ export class MastraGateway extends MastraModelGateway {
         name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
-        modelReleaseDates:
-          process.env['MASTRA_GATEWAY_VERSION'] === 'v2' ? undefined : openrouterConfig?.modelReleaseDates,
+        // Static release dates describe the bundled registry, not the live v2 catalog.
+        modelReleaseDates: isV2 ? undefined : openrouterConfig?.modelReleaseDates,
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };

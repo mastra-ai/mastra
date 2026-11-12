@@ -119,6 +119,20 @@ describe('MastraGateway', () => {
     expect(timeout).toHaveBeenCalledWith(10_000);
   });
 
+  it('uses the live v2 catalog when a v2 organization key is set without MASTRA_GATEWAY_VERSION', async () => {
+    const gatewayFetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ data: [{ id: 'openai/chat-model', endpoints: ['chat'] }] }), { status: 200 }),
+    );
+    const gateway = new MastraGateway({ apiKey: 'mskv2_org-key', customFetch: gatewayFetch });
+
+    const providers = await gateway.fetchProviders();
+
+    expect(gatewayFetch).toHaveBeenCalledOnce();
+    expect(providers.mastra?.models).toEqual(['openai/chat-model']);
+    expect(providers.mastra?.modelReleaseDates).toBeUndefined();
+  });
+
   it('does not show a static v1 model list if v2 catalog loading fails', async () => {
     process.env.MASTRA_GATEWAY_VERSION = 'v2';
     const gateway = new MastraGateway({
