@@ -12,6 +12,7 @@ import { z } from 'zod';
 import { getFactoryAuthUser } from '../auth.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
+import { hasEveryWord, searchWords } from '../routes/work-item-selection.js';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -141,13 +142,10 @@ function createSearchFetchTools(
         'Search this Factory’s work items by title or id. Returns matching items with ids to pass to `fetch`.',
       inputSchema: z.object({ query: z.string().describe('Words to look for in work item titles.') }),
       execute: async ({ query }) => {
-        const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+        const words = searchWords(query);
         const items = await deps.tools.workItems.listShared(project);
         const results = items
-          .filter(item => {
-            const haystack = `${item.id} ${item.title}`.toLowerCase();
-            return terms.every(term => haystack.includes(term));
-          })
+          .filter(item => hasEveryWord(`${item.id} ${item.title}`.toLowerCase(), words))
           .slice(0, 20)
           .map(item => ({
             id: item.id,

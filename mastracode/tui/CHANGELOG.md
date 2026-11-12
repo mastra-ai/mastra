@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.50.0-alpha.11
+
+### Patch Changes
+
+- Expand `~` in browser profile, executable, and storage-state paths using the operating system home directory, including paths already saved in settings, so these paths also work on Windows. ([#30125](https://github.com/mastra-ai/mastra/pull/30125))
+
+- Updated dependencies [[`d7fa576`](https://github.com/mastra-ai/mastra/commit/d7fa57619b0a941c9908bc9e5d171e0174277e95), [`efc1fe4`](https://github.com/mastra-ai/mastra/commit/efc1fe40ba8f0f2c01c8509662ac4ff6f98f8c21), [`2d42846`](https://github.com/mastra-ai/mastra/commit/2d4284603a4b3dad68d3621c5ce6990ea20d8d7e), [`2d42846`](https://github.com/mastra-ai/mastra/commit/2d4284603a4b3dad68d3621c5ce6990ea20d8d7e), [`5e3c087`](https://github.com/mastra-ai/mastra/commit/5e3c087082fd8e2d6b2fffe304bf02977530f549), [`ce631e9`](https://github.com/mastra-ai/mastra/commit/ce631e94c6318617537f1af2e90c6b628f95d78d), [`3dbe6f4`](https://github.com/mastra-ai/mastra/commit/3dbe6f4314d58d9f084b40d561a07c2636c18d26), [`b1948fb`](https://github.com/mastra-ai/mastra/commit/b1948fb07379325fc24a049d040949a7a6b346c9), [`53b9bf6`](https://github.com/mastra-ai/mastra/commit/53b9bf64ba6440df72a440c8ec12b551cede7b83)]:
+  - @mastra/core@1.83.0-alpha.10
+  - @mastra/code-sdk@1.19.0-alpha.12
+  - @mastra/mcp@2.9.0-alpha.4
+  - @mastra/pg@1.36.0-alpha.5
+  - @mastra/libsql@1.30.0-alpha.3
+
 ## 0.50.0-alpha.10
 
 ### Patch Changes

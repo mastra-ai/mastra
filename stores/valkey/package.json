@@ -1,6 +1,6 @@
 {
   "name": "@mastra/valkey",
-  "version": "0.2.9-alpha.0",
+  "version": "0.2.9-alpha.1",
   "description": "Valkey storage and cache provider for Mastra, powered by Valkey GLIDE",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@valkey/valkey-glide": "2.5.1"
+    "@valkey/valkey-glide": "2.5.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

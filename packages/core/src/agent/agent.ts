@@ -215,6 +215,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
+import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
@@ -816,6 +817,21 @@ function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T
 
 /** Tool sources slower than this are named on the `agent:prepare-tools` span. */
 const SLOW_TOOL_SOURCE_MS = 100;
+
+/**
+ * Assistant messages in a delegating agent's context that keep content once tool calls
+ * and tool results are removed. Reasoning still counts, so this matches the iteration
+ * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
+ */
+function countParentAssistantSteps(messages: ModelMessage[]): number {
+  return messages.filter(
+    message =>
+      (message as { id?: string }).id !== 'om-continuation' &&
+      message.role === 'assistant' &&
+      (!Array.isArray(message.content) ||
+        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
+  ).length;
+}
 
 /**
  * Creates an AI agent that generates and streams responses, with optional tools,
@@ -5942,8 +5958,24 @@ export class Agent<
    * so sending references to them causes model providers to reject or
    * mishandle the request.
    *
+   * Provider-executed tool results are stripped too. When a provider runs a tool
+   * itself (OpenAI hosted tool search, Anthropic server tools) AI SDK v5 places the
+   * tool_result part in the *same assistant message* as its tool_call, so removing only
+   * the call leaves an orphaned result that providers reject — "No tool call found for
+   * tool search output with call_id ...". Client-executed results live in `role: 'tool'`
+   * messages instead and are already dropped below.
+   *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
+   *
+   * Reasoning parts are removed from assistant messages too. The parent's
+   * reasoning is replayable only as part of the parent's own unmodified
+   * responses: once tool calls and tool messages are removed,
+   * `@ai-sdk/anthropic` merges the now-adjacent assistant steps into one
+   * message, and Anthropic rejects any signed thinking (`signature` /
+   * `redactedData`) in it as a modified thinking block (#29276). The forwarded
+   * context never ends in a tool-use continuation, so no provider requires
+   * thinking blocks in it.
    * @internal
    */
   private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
@@ -5958,7 +5990,9 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call');
+          const filtered = message.content.filter(
+            part => part.type !== 'tool-call' && part.type !== 'tool-result' && part.type !== 'reasoning',
+          );
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
@@ -6068,8 +6102,10 @@ export class Agent<
             let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
-            // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
+            // Each iteration typically produces an assistant message. Counted on the parent
+            // context with tool parts removed but reasoning kept, so dropping reasoning from
+            // the forwarded context doesn't change what delegation hooks see.
+            const derivedIteration = Math.max(1, countParentAssistantSteps(contextMessages));
 
             // The sub-agent run gets its own RequestContext map derived from the
             // parent's entries, excluding run-scoped identity keys. This isolates
@@ -12494,36 +12530,7 @@ export class Agent<
     // This output belongs to this observer alone: a consumer that stops reading
     // fullStream detaches the subscription (MastraModelOutput only drops the
     // cancelled reader's listeners).
-    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      get(this: typeof output) {
-        // `this` is the real instance (the destructurable proxy reads getters
-        // with its target as receiver); the proxy itself can't reach private fields.
-        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-        return new ReadableStream<ChunkType<TOutput>>({
-          async pull(controller) {
-            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
-            try {
-              result = await reader.read();
-            } catch (error) {
-              detach();
-              throw error;
-            }
-            if (result.done) {
-              detach();
-              controller.close();
-            } else {
-              controller.enqueue(result.value);
-            }
-          },
-          cancel(reason) {
-            detach();
-            return reader.cancel(reason);
-          },
-        });
-      },
-    });
+    detachFullStreamOnEnd(output, detach);
 
     try {
       await stream.ready;

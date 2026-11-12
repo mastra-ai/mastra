@@ -547,6 +547,8 @@ export interface BoardItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** When the card last changed. A reader that keeps the board tells its copy of the card by it. */
+  changedAt?: Date | null;
   /** Authoritative verdict written by the bound triage run. */
   triageType: FactoryTriageType | null;
   /**
@@ -706,6 +708,7 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   created_by: string;
   created_at: Date;
   updated_at: Date;
+  changed_at?: Date | null;
 }
 
 /**
@@ -789,6 +792,7 @@ function toWorkItem(row: WorkItemDbRow): Card {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    changedAt: row.changed_at ?? null,
   };
 }
 
@@ -1569,7 +1573,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
     expectedRevision?: number;
   }): Promise<void> {
-    await this.#withTransaction(ops => this.#syncWorkItemSource(ops, params));
+    await this.#withTransaction(async ops => {
+      await this.#syncWorkItemSource(ops, params);
+    });
   }
 
   async #syncWorkItemSource(
@@ -1582,7 +1588,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       patch,
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
-  ): Promise<void> {
+  ): Promise<Date | undefined> {
     const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
     const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
     const card = source && { work_item_id: source.work_item_id };
@@ -1628,7 +1634,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       },
     );
     // The card shows these facts but its own row did not move: stamp it so a board reload rereads it.
-    if (card && synced) await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at: new Date() });
+    if (!card || !synced) return undefined;
+    const changed_at = new Date();
+    await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, card, { changed_at });
+    return changed_at;
   }
 
   /**
@@ -1708,6 +1717,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     return this.#withTransaction(async ops => {
       let previous = emptyPrior();
+      let stamped: Date | undefined;
       const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         const item = toWorkItem(current);
@@ -1724,7 +1734,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const adapter = workItemProviderAdapter(item.externalSource);
         const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
         if (Object.keys(split.provider ?? {}).length > 0) {
-          await this.#syncWorkItemSource(ops, {
+          stamped = await this.#syncWorkItemSource(ops, {
             orgId,
             factoryProjectId: item.factoryProjectId,
             provider: source.provider,
@@ -1764,7 +1774,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
         });
       });
-      return row ? { item: toWorkItem(row), previous } : null;
+      if (!row) return null;
+      const item = toWorkItem(row);
+      // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
+      const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
+      return { item: { ...item, changedAt }, previous };
     });
   }
 
@@ -2017,6 +2031,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /** The ids deleted after `from`. */
+  #removedSince(scope: CollectionWhere, from: Date) {
+    return super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
+      orderBy: [['deleted_at', 'asc']],
+      cursor: { values: [from] },
+    });
+  }
+
   /**
    * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
    * earlier so a writer whose clock runs behind this one is still caught.
@@ -2029,10 +2051,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         orderBy: [['changed_at', 'asc']],
         cursor: { values: [from] },
       }),
-      super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
-        orderBy: [['deleted_at', 'asc']],
-        cursor: { values: [from] },
-      }),
+      this.#removedSince(scope, from),
     ]);
     if (rows.length === 0 && tombstones.length === 0) return [...previous];
     const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
@@ -2070,15 +2089,51 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
-  /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
-  async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
+  /**
+   * {@link listShared} for a reader that keeps the board between reads. `cursor` names this read.
+   * Sent back as `since`, it adds what moved since that read: `changed`, the listed cards written
+   * since, and `removed`, the ids no longer listed. Without them only the whole list answers: no
+   * cursor or one this didn't issue, or a board showing Review cards, which move without a write.
+   */
+  async listSharedSince(scope: { orgId: string; factoryProjectId: string; since?: string }): Promise<{
+    items: readonly Card[];
+    cursor?: string;
+    changed?: Card[];
+    removed?: string[];
+  }> {
+    const { items, readFrom } = await this.#listCached(scope.orgId, scope.factoryProjectId);
+    if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
+    const cursor = String(readFrom);
+    if (scope.since === undefined) return { items, cursor };
+    // The reader holds this very list.
+    if (scope.since === cursor) return { items, cursor, changed: [], removed: [] };
+    // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't
+    // hold yet is left for the read that sends `cursor` back.
+    const from = new Date(Number(scope.since) - LIST_DELTA_CLOCK_SKEW_MS);
+    const gone = await this.#removedSince({ org_id: scope.orgId, factory_project_id: scope.factoryProjectId }, from);
+    const removed = new Set(gone.map(row => row.id));
+    const changed = items.filter(card => {
+      removed.delete(card.id);
+      return card.changedAt && new Date(card.changedAt) > from;
+    });
+    return { items, cursor, changed, removed: [...removed] };
+  }
+
+  /**
+   * `cached` is true when `items` is shared with other callers, which callers that mutate must clone.
+   * `readFrom` is when the read that produced a cached `items` began.
+   */
+  async #listCached(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<{ items: Card[]; cached: boolean; readFrom?: number }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
     const hit = this.#listCache.get(key);
     if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
-      return { items: hit.items, cached: true };
+      return { items: hit.items, cached: true, readFrom: hit.readFrom };
     }
     if (!version) {
       const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
@@ -2087,7 +2142,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     const inFlight = this.#listInFlight.get(key);
     if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
-      return { items: await inFlight.items, cached: true };
+      return { items: await inFlight.items, cached: true, readFrom: inFlight.startedAt };
     }
     const startedAt = Date.now();
     // Within the TTL a version change only needs the cards changed since the last read; the TTL
@@ -2115,7 +2170,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           this.#listCache.delete(this.#listCache.keys().next().value!);
         }
       }
-      return { items, cached: true };
+      return { items, cached: true, readFrom: startedAt };
     } finally {
       if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
     }

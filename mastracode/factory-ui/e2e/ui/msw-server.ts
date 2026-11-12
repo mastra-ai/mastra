@@ -32,6 +32,7 @@ export const server = setupServer(
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
   http.get('*/web/factory/projects', () => HttpResponse.json({ projects: [] })),
+  http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
   // A server without the JIRA_* env group mounts no Jira routes; the ambient
   // 404 mirrors that and the Jira service degrades to a disabled status.
   // Jira-specific tests override these with `server.use(...)`.

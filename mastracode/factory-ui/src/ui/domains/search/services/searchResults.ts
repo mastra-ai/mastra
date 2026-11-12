@@ -2,7 +2,7 @@ import { boardOf } from '../../factory/boardFlow';
 import type { BoardInfo } from '../../factory/boardFlow';
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
-import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
+import { SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
@@ -156,6 +156,17 @@ export function createSessionSearchGroups(input: {
   };
 }
 
+/**
+ * The card's number as the server's search reads it (`workItemNumber` in `@mastra/factory`): the
+ * source's own, else the one given to a card filed by hand.
+ */
+function searchedNumber(item: WorkItem): string | undefined {
+  const facts = item.workItem?.metadata;
+  const number =
+    facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? item.metadata.cardNumber;
+  return typeof number === 'number' ? `#${number}` : undefined;
+}
+
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
@@ -166,11 +177,37 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
+    // Everything the server's search reads is in it, so a row the server matched passes the palette's filter too.
+    value: joinValue([
+      item.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      // Not always in the identifier, which leaves out the key of a card filed in Factory itself.
+      item.workItem?.key,
+      searchedNumber(item),
+      item.sourceKey,
+    ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     target: { kind: 'work-item', item },
   };
+}
+
+/**
+ * The text a candidate's row is filtered on. The search ranks candidates on it too before looking
+ * up the best ones, so it never cuts a candidate the palette would list.
+ */
+export function candidateSearchValue(candidate: BoardCandidate): string {
+  return joinValue([
+    candidate.title,
+    'work item',
+    SOURCE_LABELS[candidate.source],
+    stageLabel(candidate.column),
+    workItemIdentifier(candidate),
+    candidate.sourceKey,
+  ]);
 }
 
 function createCandidateResult(factoryId: string, candidate: BoardCandidate, updatedAt: string): WorkItemSearchResult {
@@ -183,7 +220,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
     title: candidate.title,
     context: [sourceLabel, stage, 'not filed'],
     identifier,
-    value: joinValue([candidate.title, 'work item', sourceLabel, stage, identifier, candidate.sourceKey]),
+    value: candidateSearchValue(candidate),
     path: relationshipPath(candidate, factoryId),
     updatedAt,
     target: { kind: 'candidate', candidate },
@@ -193,18 +230,15 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
 /** Board entries with no session to open: unstarted cards, plus live candidates not yet filed as one. */
 export function createWorkItemSearchResults(input: {
   factoryId: string;
+  /** The cards holding no session. */
   workItems: WorkItem[];
+  /** The live candidates no card is filed from. */
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
   /** The project's boards, once loaded, so each card's phase reads by its own board's name. */
   boards?: readonly BoardInfo[];
 }): WorkItemSearchResult[] {
-  const filed = persistedSourceKeys(input.workItems);
-  const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
-
   return [
-    ...input.workItems
-      .filter(item => Object.keys(item.sessions).length === 0)
-      .map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
-    ...candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
+    ...input.workItems.map(item => createWorkItemResult(input.factoryId, item, boardOf(input.boards, item))),
+    ...input.candidates.map(({ candidate, updatedAt }) => createCandidateResult(input.factoryId, candidate, updatedAt)),
   ].sort(newestFirst);
 }
