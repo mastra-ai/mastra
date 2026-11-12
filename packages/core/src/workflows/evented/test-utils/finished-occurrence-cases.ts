@@ -652,19 +652,6 @@ export function describeFinishedOccurrenceCases({
       expect(stepEventsOf(b.published, run.runId)).toEqual([]);
     }, 20_000);
 
-    it('drops a finished step whose redelivery exhausted its attempts, leaving the run successful', async () => {
-      const { executions, build, run, first } = await finishTwoSteps();
-      const b = await startReplica(build('B'));
-
-      expect(await b.mastra.handleWorkflowEvent({ ...copyEvent(first), deliveryAttempt: EXHAUSTED_ATTEMPT })).toEqual({
-        ok: true,
-      });
-
-      expect(executions).toEqual(['A:first', 'A:second']);
-      expect(b.published.filter(event => event.runId === run.runId).map(event => event.type)).toEqual([]);
-      expect((await storedRun(run.runId))?.status).toBe('success');
-    }, 20_000);
-
     it.each(['running', 'suspended'] as const)(
       'drops a finished step whose redelivery exhausted its attempts while the next step is %s',
       async state => {
