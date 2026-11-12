@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { cardMoveMutationKey, queryKeys } from '../api/keys';
+import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
 import {
   createWorkItem,
   deleteWorkItem,
@@ -89,7 +89,8 @@ async function readBoard(
     cards = [...byId.values()];
     // What moved fits only the board its cursor names, and leaves the board the server checks
     // once every card written here is answered. Otherwise this copy drifted: read it whole.
-    if (board?.cursor !== since || (check !== boardCheck(cards) && !client.isMutating())) {
+    const writing = client.isMutating({ mutationKey: cardWriteMutationKey(factoryProjectId) });
+    if (board?.cursor !== since || (check !== boardCheck(cards) && !writing)) {
       return readBoard(baseUrl, factoryProjectId, signal, client, true);
     }
     // The order a whole read lists them in: newest first, then by id.
@@ -176,6 +177,7 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (input: CreateWorkItemInput) =>
       createWorkItem(baseUrl, requireFactoryProjectId(factoryProjectId), input),
     onSuccess: item => {
@@ -195,6 +197,7 @@ export function useUpdateWorkItemMutation(factoryProjectId: string | undefined) 
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: ({ id, patch }: { id: string; patch: UpdateWorkItemInput }) => updateWorkItem(baseUrl, id, patch),
     onMutate: async ({ id, patch }) => {
       await queryClient.cancelQueries({ queryKey: listKey });
@@ -355,6 +358,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
   const queryClient = useQueryClient();
   const listKey = queryKeys.workItems(factoryProjectId);
   return useMutation({
+    mutationKey: cardWriteMutationKey(factoryProjectId),
     mutationFn: (id: string) => deleteWorkItem(baseUrl, id),
     onMutate: async id => {
       await queryClient.cancelQueries({ queryKey: listKey });

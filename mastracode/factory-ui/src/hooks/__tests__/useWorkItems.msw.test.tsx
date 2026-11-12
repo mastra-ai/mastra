@@ -413,6 +413,26 @@ describe('useWorkItemsQuery', () => {
     expect(sinces).toEqual([null, 'first', null, 'third']);
   });
 
+  it('reads the board whole while a mutation that writes no card is pending', async () => {
+    const sinces = serveBoard(
+      { workItems: [card('1')], cursor: 'first' },
+      { ...moved([], [], [card('1', 'Renamed')]), cursor: 'second' },
+      { workItems: [card('1', 'Renamed')], cursor: 'third' },
+    );
+    const { result, client } = renderHookWithProviders(() => ({
+      cards: useWorkItemsQuery(PROJECT_ID),
+      other: useMutation({ mutationFn: () => new Promise<void>(() => {}) }),
+    }));
+    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['1']));
+    act(() => result.current.other.mutate());
+    await waitFor(() => expect(client.isMutating()).toBe(1));
+
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.cards.data)).toEqual(['Renamed']));
+    expect(sinces).toEqual([null, 'first', null]);
+  });
+
   it('keeps a change the server has not answered through a merge, and drops it once the server refuses', async () => {
     let refuse!: () => void;
     let answerLate!: (answer: object) => void;
