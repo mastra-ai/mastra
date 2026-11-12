@@ -1232,23 +1232,16 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
     // The run a killed server held lapses sooner.
     const shortLeases = { MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000' };
-    /**
-     * `options` for an instance that boots while the killed server's run still looks live. Its recovery
-     * loop checks that run again a scan interval later, so a short one keeps the test well under a minute.
-     */
+    /** A short scan interval, for an instance whose loop must look again at a run that looked live at boot. */
     const scanningSoon = ({ mastraExtra, ...options }: { mastraExtra?: Record<string, unknown> } = {}) => ({
       ...options,
       mastraExtra: { ...mastraExtra, recovery: { workflowScanIntervalMs: 2_000 } },
     });
 
-    /**
-     * Starts the workers and the boot-time workflow restart, as a deployed server does. The
-     * recovery loop the workers start restarts a crashed run once its liveness lapsed and the grace
-     * period passed.
-     */
+    /** Starts the workers, and with them the recovery loop, and the boot-time restart, as a deployed server does. */
     async function bootLikeServer(mastra: Mastra) {
       await mastra.startWorkers();
-      // Not awaited, as the dev server's boot handler doesn't; the call logs its per-run failures and never rejects.
+      // Not awaited, as the server's boot handler doesn't; the call logs its failures and never rejects.
       void mastra.restartAllActiveWorkflowRuns();
     }
 
