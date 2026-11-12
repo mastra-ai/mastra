@@ -70,7 +70,7 @@ import {
   RunFailure,
   withoutAuthToken,
 } from '../helpers';
-import { acquireStepLease, enterRunLiveness, markRunLive, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
+import { acquireStepLease, enterRunLiveness, stepOccurrenceKey, UNLEASED_STEP } from '../leases';
 import type { StepLease, StepLeaseClaim, StepLeaseHandoff } from '../leases';
 import { StepExecutor } from '../step-executor';
 import {
@@ -1117,6 +1117,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     );
   }
 
+  /**
+   * Handles `workflow.start` and `workflow.resume`: saves the run's `running`
+   * snapshot, records a nested run on its parent's step, and publishes the
+   * run's first `workflow.step.run`. The event's handler already counts toward
+   * the run's liveness (see `#dispatch`), so a booting instance does not
+   * restart the run before that step is handled.
+   */
   protected async processWorkflowStart({
     workflow,
     parentWorkflow,
@@ -1232,13 +1239,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: stepResults ?? {},
         workflowStatus: 'running',
       }) ?? true;
-
-    // Every start, resume, restart and nested run passes here before its first step event is
-    // published. Marking it and its ancestors live first keeps a booting instance from restarting
-    // them before that step is handled, also when the start message sat in the queue for long.
-    for (const live of await this.#livenessRuns(workflow, { runId, parentWorkflow })) {
-      await markRunLive({ scope: this.mastra, store: live.store, runId: live.runId, logger: this.mastra.getLogger() });
-    }
 
     // Guarded execution requires a durable run row even when optional snapshots are disabled.
     const requiresGuardedSnapshot =
@@ -5198,6 +5198,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
   }
 
+  /**
+   * Dispatches one delivery and turns its outcome into the transport's answer:
+   * `ok` to acknowledge, or `retry` to have it redelivered. Counts failed
+   * deliveries per event and publishes `workflow.fail` once an event exhausts
+   * its budget. A delivery a shutting-down process handed back, or one whose
+   * step another worker is running, does not count as failed.
+   */
   async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
@@ -5459,6 +5466,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  /**
+   * Loads the run an event is for, resolves its workflow and runs the event's
+   * handler while the event counts toward the run's liveness and its
+   * ancestors'. Canceled runs, user events and scheduled default-engine fires
+   * are handled before liveness is taken.
+   */
   async #dispatch(event: Event) {
     const { type, data } = event;
 
@@ -5557,85 +5570,99 @@ export class WorkflowEventProcessor extends EventProcessor {
     // for: nested start and resume events are routed on the parent's run ID.
     const leaveLiveness = await this.#enterLiveness(workflow ?? undefined, workflowData);
     try {
-      if (type === 'workflow.start' || type === 'workflow.resume') {
-        const { runId } = workflowData;
-        await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
-          type: 'watch',
-          runId,
-          data: {
-            type: 'workflow-start',
-            payload: {
-              runId,
-            },
-          },
-        });
-      }
-
-      // For the cleanup-path events (`workflow.fail`/`workflow.end`/
-      // `workflow.cancel`) we may have fallen through above with no resolved
-      // workflow. The processors for those events tolerate `workflow=undefined`
-      // (they rely on optional chaining / persisted state), so we cast here to
-      // avoid widening the shared `ProcessorArgs.workflow` type across the
-      // hundreds of usage sites in this file.
-      const workflowArg = workflow as Workflow;
-
-      switch (type) {
-        case 'workflow.cancel':
-          await this.processWorkflowCancel({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.start':
-          await this.processWorkflowStart({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.resume':
-          await this.processWorkflowStart({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.end':
-          await this.processWorkflowEnd({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.step.end':
-          await this.processWorkflowStepEnd({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.step.run':
-          await this.processWorkflowStepRun(
-            {
-              workflow: workflowArg,
-              ...workflowData,
-            },
-            control,
-          );
-          break;
-        case 'workflow.suspend':
-          await this.processWorkflowSuspend({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        case 'workflow.fail':
-          await this.processWorkflowFail({
-            workflow: workflowArg,
-            ...workflowData,
-          });
-          break;
-        default:
-          break;
-      }
+      await this.#route(type, workflow ?? undefined, workflowData, control);
     } finally {
       leaveLiveness();
+    }
+  }
+
+  /**
+   * Hands an event `#dispatch` accepted to the handler for its type. `workflow`
+   * is `undefined` only for the cleanup events (`workflow.fail`, `workflow.end`,
+   * `workflow.cancel`) of a workflow this process cannot resolve.
+   */
+  async #route(
+    type: string,
+    workflow: Workflow | undefined,
+    workflowData: Omit<ProcessorArgs, 'workflow'>,
+    control: ControlAtDispatch,
+  ) {
+    if (type === 'workflow.start' || type === 'workflow.resume') {
+      const { runId } = workflowData;
+      await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
+        type: 'watch',
+        runId,
+        data: {
+          type: 'workflow-start',
+          payload: {
+            runId,
+          },
+        },
+      });
+    }
+
+    // For the cleanup-path events (`workflow.fail`/`workflow.end`/
+    // `workflow.cancel`) we may have fallen through above with no resolved
+    // workflow. The processors for those events tolerate `workflow=undefined`
+    // (they rely on optional chaining / persisted state), so we cast here to
+    // avoid widening the shared `ProcessorArgs.workflow` type across the
+    // hundreds of usage sites in this file.
+    const workflowArg = workflow as Workflow;
+
+    switch (type) {
+      case 'workflow.cancel':
+        await this.processWorkflowCancel({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.start':
+        await this.processWorkflowStart({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.resume':
+        await this.processWorkflowStart({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.end':
+        await this.processWorkflowEnd({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.step.end':
+        await this.processWorkflowStepEnd({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.step.run':
+        await this.processWorkflowStepRun(
+          {
+            workflow: workflowArg,
+            ...workflowData,
+          },
+          control,
+        );
+        break;
+      case 'workflow.suspend':
+        await this.processWorkflowSuspend({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      case 'workflow.fail':
+        await this.processWorkflowFail({
+          workflow: workflowArg,
+          ...workflowData,
+        });
+        break;
+      default:
+        break;
     }
   }
 }
