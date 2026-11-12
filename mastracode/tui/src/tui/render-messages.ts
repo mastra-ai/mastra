@@ -1052,7 +1052,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               }
             }
             const subagentTaskId = part.backgroundTask?.taskId ?? backgroundTasksByToolCallId.get(part.toolCallId);
-            if (subagentTaskId && state.options?.backgroundToolsEnabled) subComponent.setBackgroundTaskId(subagentTaskId);
+            if (subagentTaskId && state.options?.backgroundToolsEnabled)
+              subComponent.setBackgroundTaskId(subagentTaskId);
             // Mark as finished with result
             subComponent.finish(isErr ?? false, durationMs, resultText);
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);

@@ -35,7 +35,8 @@ function formatBackgroundCompletionLine(
   const summary = completion.summary ? theme.fg('muted', ` · ${completion.summary}`) : '';
   if (completion.kind === 'process') {
     const failed = completion.exitCode !== 0;
-    const exit = completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
+    const exit =
+      completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
     return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
   }
   const verb = completion.interrupted

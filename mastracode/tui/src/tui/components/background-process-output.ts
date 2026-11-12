@@ -36,7 +36,11 @@ export class BackgroundProcessOutputComponent extends Box implements Focusable {
     const hidden = Math.max(0, lines.length - MAX_OUTPUT_LINES);
     if (hidden > 0) this.addChild(new Text(theme.fg('muted', `… ${hidden} earlier lines`), 0, 0));
     this.addChild(
-      new Text(lines.length > 0 ? lines.slice(-MAX_OUTPUT_LINES).join('\n') : theme.fg('muted', '(no output yet)'), 0, 0),
+      new Text(
+        lines.length > 0 ? lines.slice(-MAX_OUTPUT_LINES).join('\n') : theme.fg('muted', '(no output yet)'),
+        0,
+        0,
+      ),
     );
     this.addChild(new Spacer(1));
     this.addChild(new Text(theme.fg('dim', 'Esc close'), 0, 0));

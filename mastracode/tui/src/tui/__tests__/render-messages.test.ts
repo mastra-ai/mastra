@@ -569,7 +569,14 @@ describe('addUserMessage', () => {
     ],
     [
       'a background shell',
-      { kind: 'process', pid: '4242', exitCode: 1, toolName: 'execute_command', title: 'Shell', summary: 'Running tests' },
+      {
+        kind: 'process',
+        pid: '4242',
+        exitCode: 1,
+        toolName: 'execute_command',
+        title: 'Shell',
+        summary: 'Running tests',
+      },
       'failed',
       '↳ Shell finished · Running tests (exit 1)',
     ],

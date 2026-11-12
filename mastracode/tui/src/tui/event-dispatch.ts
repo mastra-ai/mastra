@@ -347,7 +347,9 @@ export async function dispatchEvent(
         // Background shells keep the PID design: the result names the PID, and the
         // exit arrives later as a `process` completion event.
         const pid =
-          !event.isError && context?.toolName === 'execute_command' ? parseBackgroundProcessPid(event.result) : undefined;
+          !event.isError && context?.toolName === 'execute_command'
+            ? parseBackgroundProcessPid(event.result)
+            : undefined;
         if (pid && context) {
           startBackgroundProcessActivity(state.backgroundActivities, pid, event.toolCallId, context);
           const row = state.pendingTools.get(event.toolCallId);
