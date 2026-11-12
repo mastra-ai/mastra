@@ -837,12 +837,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
 
   // 10. Serialize structured output if provided
   let serializedStructuredOutput: SerializableStructuredOutput | undefined;
-  // Same strict-mode null → undefined handling as Agent.#execute; skipped when a separate
+  // Same strict-mode null → undefined handling as Agent.#execute, enabled when the main model or
+  // any fallback model uses strict mode (the flag is persisted once per run); skipped when a separate
   // structuring model runs (its own agent call applies the transform).
   const nullToUndefined =
     Boolean(execOptions?.structuredOutput?.schema) &&
     !(execOptions?.structuredOutput as any)?.model &&
-    needsNullToUndefined(model, execOptions?.providerOptions);
+    [model, ...(modelList ?? []).map((entry: AgentModelManagerConfig) => entry.model)].some(candidate =>
+      needsNullToUndefined(candidate as any, execOptions?.providerOptions),
+    );
   const structuredOutputSchema = execOptions?.structuredOutput?.schema
     ? toLiveStructuredOutputSchema<{}>(execOptions.structuredOutput.schema, nullToUndefined)
     : undefined;
