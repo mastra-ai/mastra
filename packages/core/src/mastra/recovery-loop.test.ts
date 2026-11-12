@@ -492,6 +492,45 @@ describe('workflow recovery loop (#28712)', () => {
     expect(failures).toBe(3);
   });
 
+  it('keeps checking after the boot pass failed to probe the store for run fencing', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunFencing').mockRejectedValueOnce(new Error('not connected yet'));
+    const listings = vi.spyOn(store, 'listWorkflowRuns');
+    const mastra = replica(storage, 'default', 'B', [], { recovery: scanning });
+
+    await mastra.startWorkers();
+
+    // Two listings a pass: the boot pass, then later ones.
+    await vi.waitFor(() =>
+      expect(listings.mock.calls.filter(([args]) => args?.workflowName === 'recovered-wf').length).toBeGreaterThan(4),
+    );
+  });
+
+  it('leaves a live run alone on a later pass that failed to probe the store for run fencing', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const mastra = replica(storage, 'default', 'B', [], { recovery: { workflowGraceMs: 0, ...scanning } });
+    const restarted = vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun');
+    await persistActiveRun(storage, 'live');
+    await store.claimRunOwnership({ runId: 'live', ownerId: 'other-process', leaseMs: 60_000 });
+    const probe = store.supportsRunFencing.bind(store);
+    let probes = 0;
+    vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => {
+      probes++;
+      if (probes === 2) {
+        throw new Error('connection reset');
+      }
+
+      return probe();
+    });
+
+    await mastra.startWorkers();
+    await vi.waitFor(() => expect(probes).toBeGreaterThan(3));
+
+    expect(restarted).not.toHaveBeenCalled();
+  });
+
   it('restarts every active run once at boot and checks no more when the store has no run fencing', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;

@@ -936,8 +936,11 @@ interface RecoveryCandidate {
 interface RecoveryPass {
   /** The earliest time a run the pass left in its grace period becomes due. */
   earliestDueAt?: number;
-  /** Whether the store had run fencing; without it the pass restarted every active run. */
-  runFencing: boolean;
+  /**
+   * Whether the store had run fencing; without it the pass restarted every active run. `undefined` when
+   * the probe failed: the pass then did as without fencing, or nothing when called with `whenUnprobed: 'skip'`.
+   */
+  runFencing: boolean | undefined;
   /** Settles once every restart the pass handed out settled; never rejects. */
   settled: Promise<void>;
 }
@@ -4591,10 +4594,13 @@ export class Mastra<
     await pass.settled;
   }
 
-  /** The recovery pass still handing out restarts, which overlapping calls share, or a new one. */
-  #recoverStoppedRuns(): Promise<RecoveryPass> {
+  /**
+   * The recovery pass still handing out restarts, which overlapping calls share, or a new one.
+   * `whenUnprobed` applies to a new pass; see `#runRecoveryPass`.
+   */
+  #recoverStoppedRuns({ whenUnprobed = 'restart' }: { whenUnprobed?: 'restart' | 'skip' } = {}): Promise<RecoveryPass> {
     if (!this.#recoveryPass) {
-      const pass = this.#runRecoveryPass();
+      const pass = this.#runRecoveryPass(whenUnprobed);
       this.#recoveryPass = pass;
       // `#runRecoveryPass` never rejects. A pass that already ended must not clear a newer one.
       void pass.finally(() => {
@@ -4607,11 +4613,15 @@ export class Mastra<
     return this.#recoveryPass;
   }
 
-  /** One recovery pass over run summaries and liveness keys (see {@link recoveryVerdict}); never rejects. */
-  async #runRecoveryPass(): Promise<RecoveryPass> {
+  /**
+   * One recovery pass over run summaries and liveness keys (see {@link recoveryVerdict}); never rejects.
+   * When the run fencing probe fails, the pass restarts every active run as without fencing, or with
+   * `whenUnprobed: 'skip'` leaves every run alone.
+   */
+  async #runRecoveryPass(whenUnprobed: 'restart' | 'skip'): Promise<RecoveryPass> {
     const restarts: Promise<void>[] = [];
     let earliestDueAt: number | undefined;
-    let runFencing = false;
+    let runFencing: boolean | undefined = false;
     // A pass, and the restarts it queued, stop once the instance shuts down or its workers stop: the
     // workers a restarted run needs are going away.
     const stops = this.#workerStops;
@@ -4624,6 +4634,10 @@ export class Mastra<
       }
 
       runFencing = await this.#supportsRunFencing(workflowsStore);
+      if (runFencing === undefined && whenUnprobed === 'skip') {
+        return { runFencing, settled: Promise.resolve() };
+      }
+
       const listed = await this.#listActiveRunSummaries(workflowsStore);
       // A failed run that is no longer active cannot fail again, so it is forgotten.
       const listedKeys = new Set(listed.map(({ run }) => recoveryRunKey(run.workflowName, run.runId)));
@@ -4674,7 +4688,13 @@ export class Mastra<
           if (verdict.restart) {
             // Queued without waiting for a slot, so long default-engine restarts never hold up the pass.
             const key = recoveryRunKey(run.workflowName, run.runId);
-            const restart = this.#queueRecoveryRestart({ workflow, run, workflowsStore, runFencing, stopped }).then(
+            const restart = this.#queueRecoveryRestart({
+              workflow,
+              run,
+              workflowsStore,
+              runFencing: runFencing === true,
+              stopped,
+            }).then(
               () => void this.#failedRecoveryRestarts.delete(key),
               error => {
                 // Every pass retries a run whose restart throws, so only its first failure is an error.
@@ -4788,16 +4808,16 @@ export class Mastra<
   }
 
   /**
-   * Whether the pass can read run liveness. A failed probe counts as no, which
-   * restarts every active run as a store without leases does: `restart()`
-   * probes again and refuses a run another process still holds.
+   * Whether the pass can read run liveness, or `undefined` when the probe
+   * failed. Some stores (MongoDB) keep failing the probe until one succeeds,
+   * so a failure says nothing about later passes.
    */
-  async #supportsRunFencing(workflowsStore: WorkflowsStorage): Promise<boolean> {
+  async #supportsRunFencing(workflowsStore: WorkflowsStorage): Promise<boolean | undefined> {
     try {
       return await workflowsStore.supportsRunFencing();
     } catch (error) {
       this.#logger.warn('Failed to check run fencing support before restarting workflow runs', { error });
-      return false;
+      return undefined;
     }
   }
 
@@ -4985,16 +5005,22 @@ export class Mastra<
     this.#stopWorkflowRecoveryLoop = stop;
 
     let dueAt: number | undefined;
+    let bootPass = true;
     // Never rejects, as `repeatAfterSettled` requires: the pass reports its own failures. Tracked so
     // shutdown() waits for a pass in flight and for the restarts it handed out, but the tick only waits
     // for the handing out: a long default-engine restart never holds up the next pass.
     const tick = async () => {
-      const pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns());
+      // The boot pass restarts every active run when the fencing probe fails, as the server's boot call
+      // does. A later pass leaves the runs alone then: doing that every pass would restart runs other
+      // instances still run.
+      const whenUnprobed = bootPass ? 'restart' : 'skip';
+      bootPass = false;
+      const pass = await this.#trackDurableRecovery(this.#recoverStoppedRuns({ whenUnprobed }));
       // `settled` never rejects.
       void this.#trackDurableRecovery(pass.settled);
       // No lease tells a stopped run from a running one without run fencing, so the loop stops;
-      // the server's boot call still restarts every active run there once.
-      if (!pass.runFencing) {
+      // the server's boot call still restarts every active run there once. A failed probe stops nothing.
+      if (pass.runFencing === false) {
         stop();
         return;
       }
