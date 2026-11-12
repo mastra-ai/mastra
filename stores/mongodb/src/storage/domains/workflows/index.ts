@@ -64,18 +64,30 @@ const SUMMARY_PROJECTION = {
 };
 
 /**
- * Builds the reduced snapshot of a `SUMMARY_PROJECTION` document: `status`, `timestamp`, and
- * `parentWorkflow` only for nested runs (a stored `null` parent is dropped).
+ * The reduced snapshot of a `SUMMARY_PROJECTION` document: `status` and `timestamp` when set, and
+ * `parentWorkflow` only when both of its IDs are non-empty strings. A missing snapshot reduces
+ * to `{}`.
  */
-function summarySnapshot(projected: Document | undefined): WorkflowRunState {
-  const snapshot: Record<string, unknown> = { status: projected?.status, timestamp: projected?.timestamp };
-  const parent = projected?.parentWorkflow;
+function summarySnapshot(projected: unknown): WorkflowRunState {
+  const source = (projected !== null && typeof projected === 'object' ? projected : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
 
-  if (parent?.workflowId && parent.runId) {
-    snapshot.parentWorkflow = { workflowId: parent.workflowId, runId: parent.runId };
+  if (status !== undefined && status !== null) {
+    summary.status = status;
   }
 
-  return snapshot as unknown as WorkflowRunState;
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
 }
 
 function toRunOwnershipRecord(doc: Document): RunOwnershipRecord {
