@@ -1507,6 +1507,22 @@ describe('transcript reducer mergeWindow', () => {
       expect(drawn(afterEnd)).toMatchObject({ toolCallIds: ['a', 'b'], texts: ['X'] });
     });
 
+    it('draws one plan and one prompt when a never-ended run missed the text before its plan', () => {
+      const state = streamRun([tool('a'), plan], { end: false });
+      const window = [
+        dbMessage('s1', 'assistant', [tool('a')]),
+        suspended(dbMessage('s2', 'assistant', [text('Plan'), plan])),
+      ];
+      const expected = { toolCallIds: ['a', 'plan'], texts: ['Plan'], prompts: ['suspension-plan'] };
+      const [once, twice] = mergeTwice(state, window);
+      expect(drawn(once)).toMatchObject(expected);
+      expect(drawn(twice)).toMatchObject(expected);
+
+      const ended = transcriptReducer(twice, { type: 'event', event: { type: 'message_end', id: 'streamed-turn' } });
+      const [afterEnd] = mergeTwice(ended, window);
+      expect(drawn(afterEnd)).toMatchObject(expected);
+    });
+
     it('does not redraw a folded tool call that the stream appends later', () => {
       const state = streamRun([tool('a'), tool('b')], { end: false });
       const window = [dbMessage('s1', 'assistant', [tool('a')]), dbMessage('s2', 'assistant', [tool('b'), plan])];
