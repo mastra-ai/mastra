@@ -5403,9 +5403,9 @@ export class Run<
    * already finished, and the restart only returned its stored result. On an
    * engine that runs the restart in the caller, it resolves `false` once the
    * run finishes, as the restart returns the run's result. Rejects
-   * when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`), fails before it
-   * is published, or finds the run ended without a stored result. The recovery
-   * pass uses it for evented runs, which workers drive.
+   * when the restart is refused (`WORKFLOW_RESTART_RUN_OWNED`) or fails before
+   * it is published. The recovery pass uses it for evented runs, which workers
+   * drive.
    * @internal
    */
   async restartInBackground(): Promise<boolean> {
