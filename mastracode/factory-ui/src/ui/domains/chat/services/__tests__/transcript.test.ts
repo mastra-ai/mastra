@@ -1495,6 +1495,18 @@ describe('transcript reducer mergeWindow', () => {
       expect(drawn(caughtUp).toolCallIds).toEqual(['a', 'b', 'plan']);
     });
 
+    it('does not adopt a tool call the streaming run draws into the entry drawn after it', () => {
+      const state = streamRun([tool('a'), tool('b')], { end: false });
+      const window = [dbMessage('s1', 'assistant', [tool('a')]), dbMessage('s2', 'assistant', [text('X'), tool('b')])];
+      const [once, twice] = mergeTwice(state, window);
+      expect(drawn(once)).toMatchObject({ toolCallIds: ['a', 'b'], texts: ['X'] });
+      expect(drawn(twice)).toMatchObject({ toolCallIds: ['a', 'b'], texts: ['X'] });
+
+      const ended = transcriptReducer(twice, { type: 'event', event: { type: 'message_end', id: 'streamed-turn' } });
+      const [afterEnd] = mergeTwice(ended, window);
+      expect(drawn(afterEnd)).toMatchObject({ toolCallIds: ['a', 'b'], texts: ['X'] });
+    });
+
     it('does not redraw a folded tool call that the stream appends later', () => {
       const state = streamRun([tool('a'), tool('b')], { end: false });
       const window = [dbMessage('s1', 'assistant', [tool('a')]), dbMessage('s2', 'assistant', [tool('b'), plan])];

@@ -967,13 +967,15 @@ function adoptCoveringWindowCopies(state: TranscriptState, anchors: Map<MastraDB
     const copy = copyByEntry.get(index);
     if (!copy || entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
     const onScreenParts = entry.message.content.parts;
-    const covers = windowCopyCovers(onScreenParts, copy.content.parts);
-    const identical = covers && windowCopyCovers(copy.content.parts, onScreenParts);
+    // Another entry may already draw some of this step's tool calls (a folded run); never adopt them twice.
+    const copyParts = withoutToolPartsDrawnElsewhere(copy, state.entries, index).message.content.parts;
+    const covers = windowCopyCovers(onScreenParts, copyParts);
+    const identical = covers && windowCopyCovers(copyParts, onScreenParts);
     if (!covers || identical) return entry;
     changed = true;
     return {
       ...entry,
-      message: { ...entry.message, content: { ...entry.message.content, parts: copy.content.parts } },
+      message: { ...entry.message, content: { ...entry.message.content, parts: copyParts } },
     };
   });
 
