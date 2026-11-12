@@ -5897,17 +5897,20 @@ export class Run<
 
       // Without the parent's flip (a store without compare-and-set), the parent stays `suspended`, and
       // recovery restarts a nested run under a suspended parent on its own once nothing keeps it live.
-      // This run holds its own lease meanwhile instead. A claim that fails only loses that protection.
+      // This run holds its own lease meanwhile instead, and, as for the parent's lease, fails the resume
+      // when it can't: it would otherwise run unleased.
       if (!flippedParent) {
         try {
           const claim = await this.#claimOwnership(true, { nested: true });
-          if ('release' in claim) {
-            ownLease = claim;
+          // Even a forced claim can be refused, for example when retention deletes the record mid-claim.
+          if (!('release' in claim)) {
+            throw new Error(`Failed to claim the lease of nested workflow run ${this.runId}`);
           }
+
+          ownLease = claim;
         } catch (error) {
-          this.#mastra
-            ?.getLogger()
-            ?.warn(`[Workflow ${this.workflowId}] Failed to claim the lease of nested run ${this.runId}`, error);
+          await releaseClaimIfUnused();
+          throw error;
         }
       }
 

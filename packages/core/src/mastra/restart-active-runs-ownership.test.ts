@@ -255,7 +255,7 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
       ?.runId as string;
     const resume = async () =>
       (await child.createRun({ runId: nestedRunId })).resume({ step: 'approve', resumeData: { approved: true } });
-    return { run, workflowsStore, resume, parent, child };
+    return { run, nestedRunId, workflowsStore, resume, parent, child };
   }
 
   it('leaves a parent run alone while one of its nested runs is resumed directly, and hands it the lease once', async () => {
@@ -389,19 +389,27 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     expect(executions).toEqual(['approve:suspended', 'approve:resumed', 'after']);
   });
 
+  // The lease is the parent's on a store with compare-and-set, and the nested run's own on a store without.
   it.each([
-    ['the claim throws', 'store unavailable'],
+    ['parent', 'the claim throws', 'store unavailable'],
     // A forced claim can still be refused, for example when retention deletes the record mid-claim.
-    ['the store refuses the claim', /Failed to claim the lease of parent workflow run/],
+    ['parent', 'the store refuses the claim', /Failed to claim the lease of parent workflow run/],
+    ['nested run', 'the claim throws', 'store unavailable'],
+    ['nested run', 'the store refuses the claim', /Failed to claim the lease of nested workflow run/],
   ] as const)(
-    'fails a direct resume of a nested run whose parent lease cannot be claimed (%s), and leaves the parent suspended',
-    async (_, error) => {
+    'fails a direct resume of a nested run whose %s lease cannot be claimed (%s), and leaves both runs suspended',
+    async (leaseOf, _, error) => {
       const storage = new InMemoryStore();
       const executions: string[] = [];
-      const { run, workflowsStore, resume } = await suspendedInChild(storage, executions);
+      const { run, nestedRunId, workflowsStore, resume } = await suspendedInChild(storage, executions);
+      if (leaseOf === 'nested run') {
+        vi.spyOn(workflowsStore, 'supportsConcurrentUpdates').mockReturnValue(false);
+      }
+
+      const leased = leaseOf === 'parent' ? run.runId : nestedRunId;
       const claim = workflowsStore.claimRunOwnership.bind(workflowsStore);
       vi.spyOn(workflowsStore, 'claimRunOwnership').mockImplementation(async args => {
-        if (args.runId !== run.runId) {
+        if (args.runId !== leased) {
           return claim(args);
         }
 
@@ -409,12 +417,15 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
           throw new Error(error);
         }
 
-        return { acquired: false, record: await workflowsStore.getRunOwnership({ runId: run.runId }) };
+        return { acquired: false, record: await workflowsStore.getRunOwnership({ runId: leased }) };
       });
 
       await expect(resume()).rejects.toThrow(error);
       expect(executions).toEqual(['approve:suspended']);
       expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe(
+        'suspended',
+      );
+      expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'child', runId: nestedRunId })).toBe(
         'suspended',
       );
     },
