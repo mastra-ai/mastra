@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.27-alpha.2",
+  "version": "1.5.27",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -59,7 +59,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "@types/express": "^5.0.5",
     "express": "^5.1.0"
   },

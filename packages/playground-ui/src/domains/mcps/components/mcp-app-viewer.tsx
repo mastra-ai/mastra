@@ -231,6 +231,10 @@ export function McpAppViewer({
         height: `${height}px`,
         overflow: 'hidden',
         borderRadius: '8px',
+        // The app sets its root `color-scheme` from the theme we send it. If the iframe's own scheme
+        // differs, the browser paints an opaque canvas behind the app instead of letting it show
+        // through, so the frame declares the same scheme.
+        colorScheme: resolvedTheme,
       }}
     >
       <AppRenderer

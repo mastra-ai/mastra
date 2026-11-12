@@ -106,7 +106,7 @@ function ThreadPageMain({
           secondaryBar={<GoalPanel />}
           emptyState={<EmptyThreadState />}
           composerLabel="Thread composer"
-          composerFooter={<TeammateSessionLine />}
+          composerStatus={<TeammateSessionLine />}
           className={threadShellClass}
           contentRef={railBoxRef}
           contentOverlay={railFits ? <ThreadRailLayer /> : undefined}

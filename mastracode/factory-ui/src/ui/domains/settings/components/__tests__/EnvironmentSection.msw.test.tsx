@@ -55,9 +55,10 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
+    // The loading state already titles its card Environment, so wait for the loaded fields.
+    await screen.findByRole('textbox', { name: 'Working directory' });
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Environment', 'Builds', 'Danger zone']);
+    expect(headings).toEqual(['Environment', 'Environment variables', 'Builds', 'Danger zone']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));

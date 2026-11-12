@@ -20,6 +20,7 @@ export const FACTORY_WORK_ITEMS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_at: { type: 'timestamp' },
@@ -48,6 +49,8 @@ export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
     labels: { type: 'json' },
     author: { type: 'text', nullable: true },
     metadata: { type: 'json', nullable: true },
+    /** `origin` for the record the work item was created from, `attached` for one added later. Null (rows written before this column) reads as `origin`. */
+    role: { type: 'text', nullable: true },
     revision: { type: 'integer', default: 1 },
     synced_at: { type: 'timestamp', nullable: true },
     created_at: { type: 'timestamp' },
@@ -83,17 +86,21 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
     metadata: { type: 'json', nullable: true },
-    comment_count: { type: 'integer', default: 0 },
-    feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },
     created_by: { type: 'text' },
     created_at: { type: 'timestamp' },
     updated_at: { type: 'timestamp' },
     migrated_from_updated_at: { type: 'timestamp', nullable: true },
     migrated_from_hash: { type: 'text', nullable: true },
+    /** Moves on every change to the card, in any of its tables; board reloads read rows changed since. */
+    changed_at: { type: 'timestamp', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] }],
   indexes: [
+    {
+      name: 'factory_board_items_project_changed_at_idx',
+      columns: ['org_id', 'factory_project_id', 'changed_at'],
+    },
     {
       name: 'factory_board_items_org_project_created_at_id_idx',
       columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
@@ -110,6 +117,7 @@ export interface WorkItemDbRecord extends Record<string, unknown> {
   org_id: string;
   factory_project_id: string;
   title: string;
+  description: string | null;
   parent_work_item_id: string | null;
   revision: number;
   created_at: Date;
@@ -133,11 +141,14 @@ export interface WorkItemSourceDbRecord extends Record<string, unknown> {
   labels: string[];
   author: string | null;
   metadata: Record<string, unknown> | null;
+  role?: WorkItemSourceRole | null;
   revision: number;
   synced_at: Date | null;
   created_at: Date;
   updated_at: Date;
 }
+
+export type WorkItemSourceRole = 'origin' | 'attached';
 
 export interface WorkItemSourceRow {
   id: string;
@@ -200,14 +211,13 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   stage_history: unknown[];
   sessions: Record<string, unknown>;
   metadata: Record<string, unknown> | null;
-  comment_count: number;
-  feed_activity_at: Date | null;
   revision: number;
   created_by: string;
   created_at: Date;
   updated_at: Date;
   migrated_from_updated_at: Date | null;
   migrated_from_hash: string | null;
+  changed_at?: Date | null;
 }
 
 /** Serializes first-copy migration with deletion without locking an entire project's cards. */
@@ -227,7 +237,14 @@ export const FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {
     id: { type: 'uuid-pk' },
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
+    deleted_at: { type: 'timestamp', nullable: true },
   },
+  indexes: [
+    {
+      name: 'factory_board_item_tombstones_project_deleted_at_idx',
+      columns: ['org_id', 'factory_project_id', 'deleted_at'],
+    },
+  ],
 };
 
 /** The pre-split card table. Frozen: only the split migration reads it. */
@@ -244,6 +261,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     claim_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
+    description: { type: 'text', nullable: true },
     stages: { type: 'json' },
     stage_history: { type: 'json' },
     sessions: { type: 'json' },
@@ -253,6 +271,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     // Retired hands-off plan grant: plans are approved per board (`exitTool`).
     plans_preapproved_at: { type: 'timestamp', nullable: true },
     accepted_at: { type: 'timestamp', nullable: true },
+    // Retired comment summaries: kept so replicas still on the old release can write them.
     comment_count: { type: 'integer', default: 0 },
     feed_activity_at: { type: 'timestamp', nullable: true },
     revision: { type: 'integer', default: 1 },

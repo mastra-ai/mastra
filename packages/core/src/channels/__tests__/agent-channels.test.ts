@@ -70,6 +70,7 @@ function createMockAgent(name = 'test-agent') {
       unsubscribe: vi.fn(),
     }),
     getMemory: vi.fn().mockResolvedValue(null),
+    listSuspendedRuns: vi.fn().mockResolvedValue({ runs: [], total: 0 }),
     logger: { info: vi.fn(), debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
   } as any;
 }
@@ -182,6 +183,25 @@ describe('AgentChannels', () => {
     it('skips when the user already provided a ChatChannelProcessor', () => {
       const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
       expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+
+    it('adds the generative UI processor when an adapter opts in, independent of the system message', () => {
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), generativeUI: true } },
+        threadContext: { addSystemMessage: false },
+      });
+      expect(channels.getInputProcessors().map(p => p.id)).toEqual(['chat-channel-generative-ui']);
+    });
+
+    it('ignores generativeUI on adapters other than Slack', () => {
+      const channels = new AgentChannels({
+        adapters: { discord: { adapter: createMockAdapter('discord'), generativeUI: true } },
+      });
+      expect(channels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
+    });
+
+    it('leaves out the generative UI processor by default', () => {
+      expect(agentChannels.getInputProcessors().map(p => p.id)).not.toContain('chat-channel-generative-ui');
     });
   });
 

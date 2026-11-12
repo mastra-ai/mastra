@@ -63,7 +63,6 @@ describe('GitLab issue reconciler', () => {
         integrationId: 'gitlab',
         sourceId: SOURCE_ID,
         factoryProjectId: project.id,
-        board: 'work',
       });
       await seeded.workItems.upsert({
         orgId: project.orgId,

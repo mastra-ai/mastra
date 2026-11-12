@@ -5,7 +5,7 @@ import { z } from 'zod/v4';
 import { MASTRA_USER_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { createRoute } from './routes/route-builder';
-import { invokeRoute } from './index';
+import { dispatchRoute, invokeRoute, MastraServer } from './index';
 
 const handler = vi.fn(async ({ name, requestContext }: { name: string; requestContext: RequestContext }) => ({
   greeting: `hello ${name}`,
@@ -30,6 +30,17 @@ const failingRoute = createRoute({
     throw new HTTPException(422, { message: 'Unsupported query' });
   },
 });
+
+/** An adapter that only needs to exist: constructing it records where routes are served. */
+class TestAdapter extends MastraServer<any, any, any> {
+  stream = vi.fn();
+  getParams = vi.fn();
+  sendResponse = vi.fn();
+  registerRoute = vi.fn();
+  registerContextMiddleware = vi.fn();
+  registerAuthMiddleware = vi.fn();
+  registerHttpLoggingMiddleware = vi.fn();
+}
 
 function securedMastra(
   auth: Record<string, unknown> = { authorize: async () => true },
@@ -188,5 +199,298 @@ describe('invokeRoute', () => {
     });
 
     expect(result.status).toBe(422);
+  });
+
+  // invokeRoute shares a pipeline with dispatchRoute but is a public API of its own: these pin
+  // the places where it answers differently from an HTTP request, so the shared code cannot move them.
+  describe('contract it does not share with dispatchRoute', () => {
+    const traceRoute = (overrides: Record<string, unknown> = {}) =>
+      createRoute({
+        method: 'POST',
+        path: '/observability/traces/:traceId',
+        responseType: 'json',
+        handler: async () => ({ ok: true }),
+        ...overrides,
+      } as any);
+    const openMastra = () => new Mastra({ logger: false });
+
+    it('reports the invalid path param first when the path, query and body are all invalid', async () => {
+      const result = await invokeRoute(
+        traceRoute({
+          pathParamSchema: z.object({ traceId: z.string().uuid() }),
+          queryParamSchema: z.object({ limit: z.coerce.number() }),
+          bodySchema: z.object({ name: z.string() }),
+        }),
+        {
+          mastra: openMastra(),
+          requestContext: new RequestContext(),
+          pathParams: { traceId: 'not-a-uuid' },
+          query: { limit: 'many' },
+          body: { name: 1 },
+        },
+      );
+
+      expect(result).toMatchObject({ status: 400, body: { error: 'Invalid path parameters' } });
+    });
+
+    it('throws when a schema fails with something other than a validation error', async () => {
+      const route = traceRoute({
+        bodySchema: z.object({
+          name: z.string().transform(() => {
+            throw new Error('lookup service down');
+          }),
+        }),
+      });
+
+      await expect(
+        invokeRoute(route, {
+          mastra: openMastra(),
+          requestContext: new RequestContext(),
+          pathParams: { traceId: 't1' },
+          body: { name: 'Ada' },
+        }),
+      ).rejects.toThrow('lookup service down');
+    });
+
+    it('answers with the standard error body when the handler raises an exception carrying its own response', async () => {
+      const route = traceRoute({
+        handler: async () => {
+          throw new HTTPException(422, {
+            message: 'Unsupported query',
+            res: new Response(JSON.stringify({ custom: true }), { status: 409 }),
+          });
+        },
+      });
+
+      const result = await invokeRoute(route, {
+        mastra: openMastra(),
+        requestContext: new RequestContext(),
+        pathParams: { traceId: 't1' },
+      });
+
+      expect(result).toEqual({ status: 422, body: { error: 'Unsupported query' } });
+    });
+
+    it('asks authorize about the path under server.apiPrefix even when an adapter is mounted elsewhere', async () => {
+      const authorize = vi.fn(async () => true);
+      const mastra = securedMastra({ authorize }, { apiPrefix: '/mastra' });
+      new TestAdapter({ app: {}, mastra, prefix: '/mounted' });
+
+      const result = await invokeRoute(traceRoute(), {
+        mastra,
+        requestContext: callerContext(['observability:write']),
+        pathParams: { traceId: 't1' },
+      });
+
+      expect(result.status).toBe(200);
+      expect(authorize.mock.calls[0]?.[0]).toBe('/mastra/observability/traces/t1');
+    });
+
+    it('leaves the segment of a path param that was not supplied empty in the path authorize sees', async () => {
+      const authorize = vi.fn(async () => true);
+
+      await invokeRoute(traceRoute(), {
+        mastra: securedMastra({ authorize }),
+        requestContext: callerContext(['observability:write']),
+      });
+
+      expect(authorize.mock.calls[0]?.[0]).toBe('/api/observability/traces/');
+    });
+  });
+});
+
+// dispatchRoute and invokeRoute share one pipeline; these pin where they are meant to differ and where they must not.
+describe('dispatchRoute', () => {
+  const abortSignal = new AbortController().signal;
+
+  it('refuses a user that did not come from Mastra server auth, like invokeRoute', async () => {
+    handler.mockClear();
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'mapped-user' });
+    requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['observability:read']);
+
+    const result = await dispatchRoute(
+      greetRoute,
+      { body: { name: 'Ada' } },
+      { mastra: securedMastra(), requestContext, abortSignal, routePrefix: '/api' },
+    );
+
+    expect(result).toMatchObject({ ok: false, status: 401 });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it('reaches a path server auth declares public without a user, as HTTP does, while invokeRoute still refuses', async () => {
+    const publicRoute = createRoute({
+      method: 'GET',
+      path: '/observability/ping',
+      responseType: 'json',
+      handler: async () => ({ pong: true }),
+    });
+    const mastra = new Mastra({
+      logger: false,
+      server: { auth: { authenticateToken: async () => null, public: ['/api/observability/ping'] } },
+    });
+
+    const dispatched = await dispatchRoute(
+      publicRoute,
+      {},
+      { mastra, requestContext: new RequestContext(), abortSignal, routePrefix: '/api' },
+    );
+    const invoked = await invokeRoute(publicRoute, { mastra, requestContext: new RequestContext() });
+
+    expect(dispatched).toEqual({ ok: true, result: { pong: true } });
+    expect(invoked.status).toBe(401);
+  });
+
+  it('acts on the resource named in the path when the body names another one', async () => {
+    const seen = vi.fn(async ({ traceId }: { traceId: string }) => ({ traceId }));
+    const route = createRoute({
+      method: 'POST',
+      path: '/observability/traces/:traceId',
+      responseType: 'json',
+      handler: seen as any,
+    });
+
+    const result = await dispatchRoute(
+      route,
+      { pathParams: { traceId: 'mine' }, body: { traceId: 'someone-elses' } },
+      { mastra: new Mastra({ logger: false }), requestContext: new RequestContext(), abortSignal },
+    );
+
+    expect(result).toEqual({ ok: true, result: { traceId: 'mine' } });
+  });
+
+  describe('never allows more than an HTTP request to the route would', () => {
+    const user = () => {
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { id: 'user-1' });
+      return requestContext;
+    };
+
+    /** Callers may list things but not touch a single one. */
+    function thingsSetup() {
+      const ran = vi.fn(async ({ thingId }: { thingId: string }) => ({ deleted: thingId }));
+      const route = createRoute({
+        method: 'DELETE',
+        path: '/things/:thingId',
+        responseType: 'json',
+        pathParamSchema: z.object({ thingId: z.string() }),
+        handler: ran as any,
+      });
+      const mastra = new Mastra({
+        logger: false,
+        server: {
+          auth: {
+            authenticateToken: async () => null,
+            rules: [{ path: '/api/things', methods: ['GET', 'DELETE'], allow: true }],
+          },
+        },
+      });
+      const run = (thingId: unknown) =>
+        dispatchRoute(
+          route,
+          { pathParams: { thingId } },
+          { mastra, requestContext: user(), abortSignal, routePrefix: '/api' },
+        );
+      return { ran, run };
+    }
+
+    it('denies a single thing the rules do not allow', async () => {
+      const { ran, run } = thingsSetup();
+      expect(await run('x')).toMatchObject({ ok: false, status: 403 });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    // No URL reaches `/things/:thingId` with an empty id, so the rules for `/api/things` must not decide it.
+    it.each([
+      ['an empty id', ''],
+      ['a missing id', undefined],
+      ['a "." id', '.'],
+      ['a ".." id', '..'],
+      ['an id that is not text', { nested: true }],
+    ])('rejects %s instead of authorizing a different path', async (_label, thingId) => {
+      const { ran, run } = thingsSetup();
+      const result = await run(thingId);
+      expect(result).toMatchObject({
+        ok: false,
+        status: 400,
+        body: { error: 'Invalid path parameters', issues: [{ field: 'thingId' }] },
+      });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses an anonymous caller on a server whose prefix is outside the protected paths', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({ logger: false, server: { auth: { authenticateToken: async () => null } } });
+
+      const result = await dispatchRoute(
+        route,
+        {},
+        { mastra, requestContext: new RequestContext(), abortSignal, routePrefix: '/internal' },
+      );
+
+      expect(result).toMatchObject({ ok: false, status: 401 });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses to guess the path when it is not told where the routes are served', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({
+        logger: false,
+        server: { auth: { authenticateToken: async () => null, authorize: async () => true } },
+      });
+
+      // Not served by an adapter and no routePrefix: an anonymous caller is refused, a user cannot be authorized.
+      expect(
+        await dispatchRoute(route, {}, { mastra, requestContext: new RequestContext(), abortSignal }),
+      ).toMatchObject({ ok: false, status: 401 });
+      await expect(dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal })).rejects.toThrow(
+        /routePrefix/,
+      );
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('refuses a prefix the server adapter does not serve, such as the empty one custom routes are given', async () => {
+      const ran = vi.fn(async () => ({ ran: true }));
+      const route = createRoute({ method: 'GET', path: '/things', responseType: 'json', handler: ran as any });
+      const mastra = new Mastra({
+        logger: false,
+        server: { auth: { authenticateToken: async () => null, rules: [{ path: '/things', allow: true }] } },
+      });
+      // Serves the route at /api/things, which the rules deny.
+      new TestAdapter({ app: {}, mastra, prefix: '/api' });
+
+      await expect(
+        dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal, routePrefix: '' }),
+      ).rejects.toThrow(/routePrefix/);
+      expect(await dispatchRoute(route, {}, { mastra, requestContext: user(), abortSignal })).toMatchObject({
+        ok: false,
+        status: 403,
+      });
+      expect(ran).not.toHaveBeenCalled();
+    });
+
+    it('does not let the request body stand in for what the server provides to handlers', async () => {
+      const seen = vi.fn(async (params: Record<string, unknown>) => ({
+        routePrefix: params.routePrefix ?? null,
+        registeredTools: params.registeredTools ?? null,
+        taskStore: params.taskStore ?? null,
+        request: params.request ?? null,
+      }));
+      const route = createRoute({ method: 'POST', path: '/things', responseType: 'json', handler: seen as any });
+
+      const result = await dispatchRoute(
+        route,
+        { body: { routePrefix: '/evil', registeredTools: { t: 1 }, taskStore: 'fake', request: 'fake' } },
+        { mastra: new Mastra({ logger: false }), requestContext: new RequestContext(), abortSignal },
+      );
+
+      expect(result).toEqual({
+        ok: true,
+        result: { routePrefix: null, registeredTools: null, taskStore: null, request: null },
+      });
+    });
   });
 });

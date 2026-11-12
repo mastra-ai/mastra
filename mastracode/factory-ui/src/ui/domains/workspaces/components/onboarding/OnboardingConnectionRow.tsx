@@ -1,46 +1,47 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
+/** One integration in a section's inset list; its fixed minimum height matches the loading skeleton. */
 export function OnboardingConnectionRow({
   icon,
   name,
   description,
-  connected = false,
   action,
-  compact = false,
+  tone = 'muted',
 }: {
   icon: ReactNode;
   name: string;
   description: string;
-  connected?: boolean;
   action?: ReactNode;
-  compact?: boolean;
+  /** Reconnect lines read as warnings, load failures as errors. */
+  tone?: 'muted' | 'warning' | 'error';
 }) {
   return (
-    <div
-      className={cn(
-        'group/onboarding-connection hover:bg-fill focus-within:bg-fill -mx-3 flex min-w-0 items-center gap-x-3 gap-y-3 rounded-lg px-3 transition-colors',
-        compact ? 'min-h-22 py-3' : 'flex-wrap py-4',
-      )}
-    >
+    <div className="group/onboarding-connection flex min-h-15 min-w-0 items-center gap-3 rounded-lg px-3 py-2.5">
       <span
         className="text-muted-foreground flex size-4 shrink-0 items-center justify-center motion-safe:transition-transform motion-safe:duration-200 motion-safe:group-hover/onboarding-connection:scale-110 [&>svg]:size-4"
         aria-hidden="true"
       >
         {icon}
       </span>
-      <div className="min-w-0 flex-1 basis-40">
-        <Txt as="h2" variant="caption" className="flex items-center gap-2">
+      <div className="min-w-0 flex-1">
+        <Txt as="h3" variant="caption">
           {name}
-          {connected && <Check className="text-success-indicator size-4" role="img" aria-label="Connected" />}
         </Txt>
-        <Txt variant={compact ? 'meta' : 'caption'} tone="muted" className="mt-1">
+        <Txt
+          variant="meta"
+          tone={tone === 'muted' ? 'muted' : undefined}
+          className={cn(
+            'mt-1',
+            tone === 'warning' && 'text-warning-foreground',
+            tone === 'error' && 'text-destructive-foreground',
+          )}
+        >
           {description}
         </Txt>
       </div>
-      {action && <div className={cn('shrink-0', !compact && 'max-sm:ml-7')}>{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

@@ -54,11 +54,13 @@ import {
   runResumeDurableStreamUntilIdle,
   getRunStreamSlot,
   getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
   globalRunRegistry,
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
   requestAcknowledgedAbort,
+  RUN_DEADLINE_KEY,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -67,6 +69,7 @@ import type {
   AgentStepFinishEventData,
   AgentSuspendedEventData,
   DurableToolCallInput,
+  RunDeadline,
 } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
@@ -76,7 +79,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { matchesRunFence } from '@mastra/core/storage';
 import type { RunFence } from '@mastra/core/storage';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -158,6 +161,10 @@ class InngestAgentPubSubRouter extends PubSub {
 
   get supportsOffsets(): boolean {
     return this.defaultPubsub.supportsOffsets && this.getAgentPubsub().supportsOffsets;
+  }
+
+  override __replaysTopic(topic: string): boolean {
+    return this.resolve(topic).__replaysTopic(topic);
   }
 
   getHistory(topic: string, offset?: number): Promise<Event[]> {
@@ -718,6 +725,10 @@ export interface InngestAgent<TOutput = undefined> {
   abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
   /** @internal Thread abort for the server route; runs the Inngest override above. */
   __abortThreadStreamAcrossProcesses: Agent<any, any, TOutput>['__abortThreadStreamAcrossProcesses'];
+  /** @internal Whether an open `untilIdle` stream on this agent handles a finished background task. */
+  __untilIdleHandlesBackgroundTask: Agent<any, any, TOutput>['__untilIdleHandlesBackgroundTask'];
+  /** @internal Wakes the thread for a finished background task unless an `untilIdle` stream on this agent handles it. */
+  __notifyBackgroundTaskFinished: Agent<any, any, TOutput>['__notifyBackgroundTaskFinished'];
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
@@ -985,16 +996,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * one execution session (stream or resume) and compose it into the registry
    * entry's `abortSignal`, which co-located durable steps read. At the
    * deadline the run is reported failed: the stream gets one
-   * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
+   * `MastraTimeoutError` and the snapshot rows are deleted. A step on another
+   * worker stops at the same deadline through the timer it arms from the
+   * carried deadline. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * Returns the timer teardown; a no-op when no budget is configured.
+   * Returns the timer teardown (a no-op when no budget is configured) and the
+   * segment's absolute deadline, which the segment's event carries to workers.
    */
   function armTotalTimeout(
     entry: { abortSignal?: AbortSignal },
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
-  ): () => void {
+  ): { clear: () => void; deadline: RunDeadline | undefined } {
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs,
@@ -1003,14 +1017,30 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
+    const deadline = timeoutMs !== undefined && timeoutMs > 0 ? { at: Date.now() + timeoutMs, timeoutMs } : undefined;
     void totalTimeout.timeoutPromise?.catch(async error => {
-      if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      // A worker in this process can abort the shared controller with its own copy of the
+      // deadline a tick earlier; that is still this deadline, not a caller abort.
+      if (!isMastraTimeoutError(error) || !isMastraTimeoutError(totalTimeout.signal?.reason)) return;
       // The worker owns span finalization and accumulated usage/output (OBS-754).
       // Ending caller copies here races that finalization.
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
-    return totalTimeout.cleanup;
+    return { clear: () => totalTimeout.cleanup(), deadline };
+  }
+
+  /**
+   * The request context a segment's event carries: the caller's, plus this segment's absolute
+   * deadline (or none), so a worker that subscribes after the deadline's abort request went out
+   * still stops at it.
+   */
+  function withSegmentDeadline(
+    requestContext: Record<string, any>,
+    deadline: RunDeadline | undefined,
+  ): Record<string, any> {
+    const { [RUN_DEADLINE_KEY]: _stale, ...rest } = requestContext;
+    return deadline ? { ...rest, [RUN_DEADLINE_KEY]: deadline } : rest;
   }
 
   async function deleteRunSnapshots(runId: string): Promise<void> {
@@ -1241,6 +1271,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
     actor?: ActorSignal,
+    deadline?: RunDeadline,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
@@ -1250,7 +1281,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: workflowInput.requestContextEntries ?? {},
+        requestContext: withSegmentDeadline(workflowInput.requestContextEntries ?? {}, deadline),
         tracingOptions,
         actor,
       }),
@@ -1358,6 +1389,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
     | '__abortThreadStreamAcrossProcesses'
+    | '__untilIdleHandlesBackgroundTask'
+    | '__notifyBackgroundTaskFinished'
     | 'abortRunStream'
     | '__abortRunAcknowledged'
     | '__fork'
@@ -1446,7 +1479,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         { onExternalAbort: () => void requestRemoteAbort(runId) },
       );
       registryEntry.abortController = abortController;
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
         runId,
@@ -1583,7 +1616,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return;
           }
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor, segmentDeadline);
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -1767,9 +1800,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // defaults pick the same callbacks they did for the original run. A resume
       // in a fresh process has no registry entry, so use the suspended snapshot
       // that dispatch resumes from.
-      const savedRequestContext: Iterable<readonly [string, unknown]> =
-        existingRegistryEntry?.requestContext?.entries() ??
-        Object.entries((await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext ?? {});
+      // The run's user and token are left out, so they come only from this resume.
+      const savedRequestContext = Object.entries(
+        withoutLiveRequestKeys(
+          existingRegistryEntry?.requestContext
+            ? Object.fromEntries(existingRegistryEntry.requestContext.entries())
+            : (await resumableSnapshot.catch(() => undefined))?.snapshot?.requestContext,
+        ),
+      );
       const callbackOptions = await withDefaultOptions(agent, {
         ...resumeOptions,
         requestContext: new RequestContext([
@@ -1901,7 +1939,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         existingEntry,
         abortController,
         runId,
@@ -1941,7 +1979,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             // agent default; the first call parked its own delegation on the entry.
             delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
             hooks: resumeOptions.hooks ?? execOptions.hooks,
-            methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
+            // Build for the method that started the run, not from `closeOnSuspend` (#29436).
+            methodType: existingRegistryEntry.methodType ?? 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
             backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
             model: existingRegistryEntry.model,
@@ -2007,6 +2046,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        // Step-finish events carry only the response messages that changed; start from the full list.
+        replayResponseMessagesBeforeOffset: true,
         initialToolCalls,
         messageId: crypto.randomUUID(),
         resumedText,
@@ -2110,7 +2151,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
-            requestContext,
+            requestContext: withSegmentDeadline(requestContext, segmentDeadline),
             tracingOptions,
             actor: resumeOptions?.actor,
             resume: {
@@ -2269,6 +2310,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        replayResponseMessagesBeforeOffset: true,
         idleTimeoutMs: observeOptions?.idleTimeoutMs,
         isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
@@ -2285,11 +2327,18 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // As in core `DurableAgent.observe()`: this output belongs to this
       // observer alone, so a consumer that stops reading fullStream detaches
       // the pubsub subscription instead of leaving it open.
+      //
+      // Kept inline rather than using core's `detachFullStreamOnEnd`: the
+      // `@mastra/core` peer range admits published versions (1.83.0-alpha.7
+      // through .9) that do not export it, which would fail at module load.
+      // Migrate this call site once a released core supplies the export.
       const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
       Object.defineProperty(output, 'fullStream', {
         configurable: true,
-        get() {
-          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+        get(this: typeof output) {
+          // `this` is the real instance (the destructurable proxy reads getters
+          // with its target as receiver); the proxy itself can't reach private fields.
+          const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
           return new ReadableStream<ChunkType<TOutput>>({
             async pull(controller) {
               let result: Awaited<ReturnType<typeof reader.read>>;
@@ -2710,6 +2759,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
       ]);
       return true;
+    },
+
+    // untilIdle streams are tracked on this agent, not the wrapped one, so
+    // the wrapped Agent's check would never see them (#29785).
+    __untilIdleHandlesBackgroundTask(threadId, resourceId, taskId) {
+      return untilIdleHandlesBackgroundTask(activeStreamUntilIdle, threadId, resourceId, taskId);
+    },
+
+    // Defined here too: the proxy binds forwarded methods to the wrapped Agent,
+    // so its version would call its own check above instead of this agent's.
+    async __notifyBackgroundTaskFinished(params) {
+      if (untilIdleHandlesBackgroundTask(activeStreamUntilIdle, params.threadId, params.resourceId, params.taskId)) {
+        return;
+      }
+      return agent.__notifyBackgroundTaskFinished(params);
     },
 
     abortRunStream(runId) {

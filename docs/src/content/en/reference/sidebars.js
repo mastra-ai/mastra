@@ -635,6 +635,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/response-cache', label: 'ResponseCache' },
         { type: 'doc', id: 'processors/semantic-recall-processor', label: 'SemanticRecall' },
         { type: 'doc', id: 'processors/skill-search-processor', label: 'SkillSearchProcessor' },
+        { type: 'doc', id: 'processors/skills-processor', label: 'SkillsProcessor' },
         {
           type: 'doc',
           id: 'processors/stream-error-retry-processor',
@@ -697,7 +698,9 @@ const sidebars = {
       label: 'Server',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'server/builtin-mcp-tools', label: 'Built-in MCP tools' },
         { type: 'doc', id: 'server/create-route', label: 'createRoute()' },
+        { type: 'doc', id: 'server/dispatch-route', label: 'dispatchRoute()' },
         { type: 'doc', id: 'server/elysia-adapter', label: 'Elysia Adapter' },
         { type: 'doc', id: 'server/express-adapter', label: 'Express Adapter' },
         { type: 'doc', id: 'server/fastify-adapter', label: 'Fastify Adapter' },

@@ -79,7 +79,7 @@ function renderSourceControl() {
 
 const sourceControl = () => screen.getByRole('region', { name: 'Source control' });
 const rowOf = (text: string) => {
-  const row = within(sourceControl()).getByText(text).closest<HTMLElement>('[data-slot="settings-row"]');
+  const row = within(sourceControl()).getByText(text).closest<HTMLElement>('[data-slot="settings-item"]');
   if (!row) throw new Error(`${text} row is missing`);
   return row;
 };

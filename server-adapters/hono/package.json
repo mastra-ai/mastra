@@ -1,6 +1,6 @@
 {
   "name": "@mastra/hono",
-  "version": "1.7.25-alpha.2",
+  "version": "1.7.25",
   "description": "Mastra Hono adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -42,7 +42,9 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
+    "@mastra/duckdb": "workspace:*",
     "@mastra/libsql": "workspace:*",
+    "@mastra/mcp": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
     "@mastra/server-adapters-test-suite": "workspace:*",
@@ -55,7 +57,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "hono": "^4.13.5"
   },
   "engines": {

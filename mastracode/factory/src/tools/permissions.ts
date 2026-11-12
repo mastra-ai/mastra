@@ -11,6 +11,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_work_items',
   'factory_inspect_work_item',
   'factory_list_attention',
+  'factory_list_audit_events',
   'factory_create_work_item',
   'factory_update_work_item',
   'factory_transition_work_item',

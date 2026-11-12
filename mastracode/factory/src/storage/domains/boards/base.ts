@@ -5,7 +5,10 @@ import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
 import type { StatusEvent } from '../../../boards/board-events.js';
+import type { FactoryPhaseTool } from '../../../boards/define-board.js';
+import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
+import type { RetiredAutomationSettings } from '../projects/base.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
   FACTORY_BOARD_PHASES_SCHEMA,
@@ -27,6 +30,8 @@ export interface StoredPhaseRunner {
   skill?: string;
   context?: string;
   instructions?: string;
+  /** The objective the phase's runs pursue as a goal. */
+  goal?: { objective: string; maxRuns?: number };
 }
 
 export interface StoredPhaseExitTool {
@@ -47,6 +52,8 @@ export interface StoredPhaseInput {
   autoStart?: boolean;
   autoStartWhen?: RuleGroup | null;
   exitTool?: StoredPhaseExitTool | null;
+  /** Factory tools the phase grants the session working the card there. */
+  tools?: FactoryPhaseTool[] | null;
 }
 
 /** A board as it is written. Phase order is significant: the first phase is where cards start. */
@@ -68,6 +75,7 @@ export interface StoredPhaseRecord {
   autoStart: boolean;
   autoStartWhen: RuleGroup | null;
   exitTool: StoredPhaseExitTool | null;
+  tools: FactoryPhaseTool[] | null;
 }
 
 export interface StoredBoardRecord {
@@ -86,6 +94,46 @@ export interface StoredBoardRecord {
   phases: StoredPhaseRecord[];
 }
 
+/** What a board migration may know about the project besides the board it rewrites. */
+export interface BoardMigrationContext {
+  /** The project switches the boards replaced, as the project last stored them; null when unknown. */
+  readonly retiredSettings: RetiredAutomationSettings | null;
+  /** The phases of each board that cards sit in, by board key; null when the cards can't be read. */
+  readonly occupiedPhases: ReadonlyMap<string, ReadonlySet<string>> | null;
+  /**
+   * The phases the code board under this key declares; undefined for a board only the project
+   * stores. A row that drops one runs without its code rules (`mergeCodeBehaviour`).
+   */
+  codePhases(boardKey: string): ReadonlySet<string> | undefined;
+  /** Tells the operator about a board a migration left as it is. */
+  warn(message: string): void;
+}
+
+/** A one-time rewrite of a stored board, keyed so each project gets it once. */
+export interface StoredBoardMigration {
+  key: string;
+  /** The board it rewrites; `null` rewrites every board the project stores. */
+  boardKey: string | null;
+  /** The board to write instead, with what changed; undefined leaves it as it is. */
+  migrate(
+    board: StoredBoardRecord,
+    context: BoardMigrationContext,
+  ): { board: Omit<StoredBoardInput, 'key'>; filled: string[] } | undefined;
+}
+
+const EMPTY_MIGRATION_CONTEXT: BoardMigrationContext = {
+  retiredSettings: null,
+  occupiedPhases: new Map(),
+  codePhases: () => undefined,
+  warn: () => {},
+};
+
+export interface AppliedBoardMigration {
+  key: string;
+  boardKey: string;
+  filled: string[];
+}
+
 export interface StoredBoardSnapshot {
   version: string | null;
   boards: StoredBoardRecord[];
@@ -93,8 +141,16 @@ export interface StoredBoardSnapshot {
 
 export interface IntakeRouteTarget {
   boardKey: string;
-  /** Unset lands the card in the board's first phase. */
+  /**
+   * Unset lands the card in the board's first phase. On a route that joins a closed issue's
+   * card, the phase that card moves to when its board allows it; unset leaves it where it is.
+   */
   phaseKey?: string | null;
+  /**
+   * Files a pull request on the card of the issue it closes, which must be on `boardKey`, as one
+   * more source instead of a card of its own. The route doesn't match any other arrival.
+   */
+  joinClosedIssue?: boolean;
 }
 
 /** An intake route as it is written. */
@@ -106,8 +162,6 @@ export interface StoredIntakeRouteInput {
   target: IntakeRouteTarget;
   /** The status events the route handles; unset handles new cards (`work_item.created`). */
   on?: StatusEvent[];
-  /** Lets an event move an existing card into a working phase, such as Triage. Off by default. */
-  allowWorkingPhase?: boolean;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -118,9 +172,8 @@ export interface StoredIntakeRouteRecord {
   enabled: boolean;
   position: number;
   when: RuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null };
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
   on: StatusEvent[];
-  allowWorkingPhase: boolean;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -140,68 +193,22 @@ export type StoredBoardErrorCode =
 /** A project's most intake routes; a reorder names every one of them. */
 export const MAX_INTAKE_ROUTES = 100;
 
-/**
- * The route every project starts with: a GitHub or GitLab card whose author is outside the
- * write-access circle lands in Work › Intake, where nothing starts until a person moves it.
- * It is a stored route like any other, so admins can see, edit, disable or delete it.
- */
-export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
-  name: 'Outside authors wait in Intake',
-  when: {
-    operator: 'AND',
-    conditions: [
-      { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
-      { field: 'author.trusted', operator: 'equals', value: false },
-    ],
-  },
-  target: { boardKey: 'work', phaseKey: 'intake' },
-};
-
-/**
- * Pull requests are reviewed in Work › PR review. It comes after `DEFAULT_INTAKE_ROUTE`, so a
- * pull request from outside the write-access circle still waits in Intake for a person.
- */
-export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
-  name: 'Pull requests go to PR review',
-  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
-  target: { boardKey: 'work', phaseKey: 'pr-review' },
-};
-
-/** A Work card whose issue was closed as done goes to Done. */
-export const CLOSED_COMPLETED_ROUTE: StoredIntakeRouteInput = {
-  name: 'Closed issues go to Done',
-  on: ['work_item.closed'],
-  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }] },
-  target: { boardKey: 'work', phaseKey: 'done' },
-};
-
-/** A Work card whose issue was closed as not planned, or as a duplicate, goes to Canceled. */
-export const CLOSED_CANCELED_ROUTE: StoredIntakeRouteInput = {
-  name: 'Issues closed as not planned go to Canceled',
-  on: ['work_item.closed'],
-  when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }] },
-  target: { boardKey: 'work', phaseKey: 'canceled' },
-};
-
-/** A finished Work card whose issue was reopened goes back to Intake, where a person picks it up again. */
-export const REOPENED_ROUTE: StoredIntakeRouteInput = {
-  name: 'Reopened issues go back to Intake',
-  on: ['work_item.reopened'],
-  target: { boardKey: 'work', phaseKey: 'intake' },
-};
-
-/**
- * The routes Factory adds to a project, in order, each under a key that never changes. A project
- * gets each one once: a new project gets them all, a project set up earlier gets a route added
- * since at the end of its list, and a route an admin deleted stays deleted.
- */
-export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
-  { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
-  { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
-  { key: 'closed-completed', route: CLOSED_COMPLETED_ROUTE },
-  { key: 'closed-canceled', route: CLOSED_CANCELED_ROUTE },
-  { key: 'reopened', route: REOPENED_ROUTE },
-];
+// Work's routes are its seed data, kept with the board they target.
+export {
+  DEFAULT_INTAKE_ROUTE,
+  PULL_REQUEST_INTAKE_ROUTE,
+  CLOSED_COMPLETED_ROUTE,
+  CLOSED_CANCELED_ROUTE,
+  REOPENED_ROUTE,
+  PULL_REQUEST_MERGED_ROUTE,
+  PULL_REQUEST_CLOSED_ROUTE,
+  PULL_REQUEST_CLOSED_ISSUE_ROUTE,
+  PULL_REQUEST_UPDATED_ROUTE,
+  PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
+  CLOSES_ISSUE_INTAKE_ROUTE,
+  CATCH_ALL_INTAKE_ROUTE,
+  DEFAULT_INTAKE_ROUTES,
+} from '../../../boards/work-routes.js';
 
 /** The defaults a project whose lock row predates `seeded_defaults` was set up with. */
 const ORIGINAL_DEFAULT_KEYS = ['outside-authors'];
@@ -238,6 +245,8 @@ interface VersionRow extends Record<string, unknown> {
   version: string;
   /** Keys of the boards Factory stored in the project; null on rows written before the list. */
   seeded_boards: string[] | null;
+  /** Keys of the board migrations applied to the project; null before the first one. */
+  applied_migrations: string[] | null;
 }
 
 interface PhaseRow extends Record<string, unknown> {
@@ -255,6 +264,7 @@ interface PhaseRow extends Record<string, unknown> {
   auto_start: boolean;
   auto_start_when: RuleGroup | null;
   exit_tool: StoredPhaseExitTool | null;
+  tools: FactoryPhaseTool[] | null;
 }
 
 interface IntakeRouteRow extends Record<string, unknown> {
@@ -269,7 +279,7 @@ interface IntakeRouteRow extends Record<string, unknown> {
   phase_key: string | null;
   /** Null on rows written before routes named events: they place new cards. */
   on_events: StatusEvent[] | null;
-  allow_working_phase: boolean | null;
+  join_closed_issue: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -297,6 +307,7 @@ const VERSIONS = 'factory_board_definition_versions';
 const INTAKE_ROUTES = 'factory_intake_routes';
 const INTAKE_ROUTE_LOCKS = 'factory_intake_route_locks';
 const MAX_WRITE_ATTEMPTS = 3;
+const MIGRATION_ACTOR = 'factory';
 
 function scopeWhere({ orgId, factoryProjectId }: StoredBoardScope) {
   return { org_id: orgId, factory_project_id: factoryProjectId };
@@ -314,6 +325,7 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     autoStart: row.auto_start,
     autoStartWhen: row.auto_start_when,
     exitTool: row.exit_tool,
+    tools: row.tools ?? null,
   };
 }
 
@@ -334,6 +346,9 @@ function toRecord(row: BoardRow, phases: PhaseRow[]): StoredBoardRecord {
     phases: phases.sort((left, right) => left.position - right.position).map(toPhaseRecord),
   };
 }
+
+/** Runs inside a board write's transaction, before the board is written. */
+export type BoardWriteStep = (ops: FactoryStorageOps) => Promise<void>;
 
 /** A compare-and-set inside a write lost to a concurrent writer; the write is retried from fresh reads. */
 class ConcurrentBoardWrite extends Error {}
@@ -386,23 +401,34 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return { version, boards: await this.list(scope) };
   }
 
-  async get(scope: StoredBoardScope, key: string): Promise<StoredBoardRecord | null> {
-    const row = await this.ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
-    if (!row) return null;
-    const phases = await this.ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
-    return toRecord(row, phases);
+  get(scope: StoredBoardScope, key: string): Promise<StoredBoardRecord | null> {
+    return readStoredBoard(this.ops, scope, key);
   }
 
-  /** Creates a board through the API. */
-  async create(scope: StoredBoardScope, input: StoredBoardInput, actor: string): Promise<StoredBoardRecord> {
+  /**
+   * Creates a board through the API. `before` runs in the same transaction, once the key is known
+   * to be free. A row under the key that `over` accepts does not hold it: the board is written
+   * over that row.
+   */
+  async create(
+    scope: StoredBoardScope,
+    input: StoredBoardInput,
+    actor: string,
+    before?: BoardWriteStep,
+    over?: (row: StoredBoardRecord) => boolean,
+  ): Promise<StoredBoardRecord> {
     await ensureVersionRow(this.ops, scope);
     try {
       return await this.#write(scope, async ops => {
         const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
-        if (rows.some(row => row.board_key === input.key)) {
+        const taken = rows.find(row => row.board_key === input.key);
+        const stored = taken && over ? await readStoredBoard(ops, scope, input.key) : null;
+        if (taken && !(stored && over?.(stored))) {
           throw new StoredBoardError('board_exists', `Board "${input.key}" already exists in this project.`);
         }
-        await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
+        await before?.(ops);
+        if (taken) await writeBoard(ops, scope, taken, input, actor);
+        else await insertBoard(ops, scope, input, { position: nextPosition(rows), actor });
         return { result: undefined, changed: true };
       }).then(async () => (await this.get(scope, input.key))!);
     } catch (error) {
@@ -419,11 +445,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     scope: StoredBoardScope,
     key: string,
     input: Omit<StoredBoardInput, 'key'>,
-    options: { expectedRevision: number; actor: string },
+    options: { expectedRevision: number; actor: string; before?: BoardWriteStep },
   ): Promise<StoredBoardRecord> {
     await this.#write(scope, async ops => {
       const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
+      await options.before?.(ops);
       await writeBoard(ops, scope, row, { key, ...input }, options.actor);
       return { result: undefined, changed: true };
     });
@@ -435,26 +462,85 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
    * project has had before is skipped even if its board was deleted since, and a stored board is
    * never rewritten. A project stored before the list was kept counts the boards it has as stored.
    * Reads one row when every key was stored before. Returns the keys it inserted.
+   *
+   * A key in `onlyIntoEmpty` is inserted only into a project that has no boards at all: one that
+   * already has any board, such as one an app stored under that key, is left as it is. The key
+   * is still recorded as stored, so it never goes in later, even after the project's boards are
+   * deleted: that project chose its boards, and Work is never added beside or after them. The
+   * `intoEmpty` boards (an app's, for every project) go first into a project with no boards, so
+   * Factory's own under the same key, or in `onlyIntoEmpty`, then stay out. `actor` is recorded
+   * as the inserted boards' creator. `before` runs in the same
+   * transaction ahead of each board it inserts.
    */
-  async seedBoards(scope: StoredBoardScope, boards: readonly StoredBoardInput[]): Promise<string[]> {
+  async seedBoards(
+    scope: StoredBoardScope,
+    boards: readonly StoredBoardInput[],
+    options: {
+      actor?: string;
+      onlyIntoEmpty?: readonly string[];
+      intoEmpty?: readonly StoredBoardInput[];
+      before?: (ops: FactoryStorageOps, key: string) => Promise<void>;
+    } = {},
+  ): Promise<string[]> {
     const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
     if (marker?.seeded_boards && boards.every(board => marker.seeded_boards!.includes(board.key))) return [];
-    return this.#insertOnce(scope, boards, { actor: DEFAULT_INTAKE_ROUTE_ACTOR, skipSeeded: true });
+    return this.#insertOnce(scope, boards, {
+      actor: options.actor ?? DEFAULT_INTAKE_ROUTE_ACTOR,
+      skipSeeded: true,
+      onlyIntoEmpty: options.onlyIntoEmpty ?? [],
+      intoEmpty: options.intoEmpty ?? [],
+      before: options.before,
+    });
+  }
+
+  /** The keys of the boards Factory stored in the project; null before it kept the list. */
+  async seededBoardKeys(scope: StoredBoardScope): Promise<string[] | null> {
+    return (await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))?.seeded_boards ?? null;
+  }
+
+  /**
+   * Rewrites the board stored under `seed.key` to `seed` at its next revision when `when` says the
+   * row is nobody's: one an earlier release seeded for a board Factory no longer has, under a key
+   * the app now defines. `before` runs in the same transaction. Returns whether it rewrote the row.
+   */
+  async adoptSeed(
+    scope: StoredBoardScope,
+    seed: StoredBoardInput,
+    options: { when: (row: StoredBoardRecord) => boolean; before?: BoardWriteStep },
+  ): Promise<boolean> {
+    return this.#write(scope, async ops => {
+      const stored = await readStoredBoard(ops, scope, seed.key);
+      if (!stored || !options.when(stored)) return { result: false, changed: false };
+      await options.before?.(ops);
+      await writeBoard(ops, scope, await findBoard(ops, scope, seed.key), seed, DEFAULT_INTAKE_ROUTE_ACTOR);
+      return { result: true, changed: true };
+    });
   }
 
   /**
    * Inserts a board into the project unless one is stored under its key, and records the key as
    * stored, so seeding never adds it again. Unlike seeding, it inserts a key the project deleted.
-   * Returns whether it inserted the board.
+   * Returns whether it inserted the board. `before` runs in the same transaction when it does.
    */
-  async insertIfMissing(scope: StoredBoardScope, board: StoredBoardInput, actor: string): Promise<boolean> {
-    return (await this.#insertOnce(scope, [board], { actor, skipSeeded: false })).length > 0;
+  async insertIfMissing(
+    scope: StoredBoardScope,
+    board: StoredBoardInput,
+    actor: string,
+    before?: BoardWriteStep,
+  ): Promise<boolean> {
+    return (await this.#insertOnce(scope, [board], { actor, skipSeeded: false, before })).length > 0;
   }
 
   async #insertOnce(
     scope: StoredBoardScope,
     boards: readonly StoredBoardInput[],
-    options: { actor: string; skipSeeded: boolean },
+    options: {
+      actor: string;
+      skipSeeded: boolean;
+      onlyIntoEmpty?: readonly string[];
+      intoEmpty?: readonly StoredBoardInput[];
+      before?: (ops: FactoryStorageOps, key: string) => Promise<void>;
+    },
   ): Promise<string[]> {
     await ensureVersionRow(this.ops, scope);
     return this.#transact(async ops => {
@@ -462,15 +548,20 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
       const present = new Set(rows.map(row => row.board_key));
       const seeded = new Set(marker.seeded_boards ?? present);
+      // The `intoEmpty` boards go into a project with no boards, first; `onlyIntoEmpty` keys then
+      // go in only when nothing is stored yet, so a project holding them gets no default beside them.
+      const candidates = [...(rows.length === 0 ? (options.intoEmpty ?? []) : []), ...boards];
       let position = nextPosition(rows);
       const inserted: string[] = [];
-      for (const board of boards) {
+      for (const board of candidates) {
         if (present.has(board.key) || (options.skipSeeded && seeded.has(board.key))) continue;
+        if (present.size > 0 && options.onlyIntoEmpty?.includes(board.key)) continue;
+        await options.before?.(ops, board.key);
         await insertBoard(ops, scope, board, { position: position++, actor: options.actor });
         present.add(board.key);
         inserted.push(board.key);
       }
-      const next = [...new Set([...seeded, ...boards.map(board => board.key)])];
+      const next = [...new Set([...seeded, ...candidates.map(board => board.key)])];
       const unchanged = marker.seeded_boards !== null && next.length === marker.seeded_boards.length;
       if (inserted.length === 0 && unchanged) return inserted;
       // Compare-and-set on the version, and every marker write takes a new one: two replicas
@@ -486,6 +577,64 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       );
       if (updated !== 1) throw new ConcurrentBoardWrite();
       return inserted;
+    });
+  }
+
+  /**
+   * Runs each migration the project hasn't had yet, once: the keys applied are recorded on the
+   * project's version row in the same transaction as the board writes, and the compare-and-set on
+   * its version makes a concurrent first load retry from fresh reads, where it finds them applied.
+   * A migration whose board the project doesn't have is recorded without running, and the version
+   * only changes when a board was rewritten. Reads one row
+   * when every key was applied before. Returns what each migration that rewrote a board filled.
+   */
+  async applyBoardMigrations(
+    scope: StoredBoardScope,
+    migrations: readonly StoredBoardMigration[],
+    /**
+     * Read through the transaction's `ops`, again on every retry, and only when a migration is still
+     * pending, so what it reports is as fresh as the boards the migrations rewrite.
+     */
+    context: (ops: FactoryStorageOps) => Promise<BoardMigrationContext> = async () => EMPTY_MIGRATION_CONTEXT,
+  ): Promise<AppliedBoardMigration[]> {
+    if (migrations.length === 0) return [];
+    const marker = await this.ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope));
+    if (marker?.applied_migrations && migrations.every(({ key }) => marker.applied_migrations!.includes(key))) {
+      return [];
+    }
+    await ensureVersionRow(this.ops, scope);
+    return this.#transact(async ops => {
+      const current = (await ops.findOne<VersionRow>(VERSIONS, scopeWhere(scope)))!;
+      const applied = current.applied_migrations ?? [];
+      const pending = migrations.filter(({ key }) => !applied.includes(key));
+      if (pending.length === 0) return [];
+      const project = await context(ops);
+      const changed: AppliedBoardMigration[] = [];
+      for (const migration of pending) {
+        const rows =
+          migration.boardKey === null
+            ? await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope))
+            : await ops.findMany<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: migration.boardKey });
+        for (const row of rows) {
+          const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
+          const result = migration.migrate(toRecord(row, phases), project);
+          if (!result) continue;
+          await writeBoard(ops, scope, row, { ...result.board, key: row.board_key }, MIGRATION_ACTOR);
+          changed.push({ key: migration.key, boardKey: row.board_key, filled: result.filled });
+        }
+      }
+      const updated = await ops.updateMany(
+        VERSIONS,
+        { ...scopeWhere(scope), version: current.version },
+        {
+          applied_migrations: [...applied, ...pending.map(({ key }) => key)],
+          // Only a rewritten board is news to the other replicas' caches.
+          version: changed.length > 0 ? randomUUID() : current.version,
+          updated_at: new Date(),
+        },
+      );
+      if (updated !== 1) throw new ConcurrentBoardWrite();
+      return changed;
     });
   }
 
@@ -528,7 +677,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row ? toIntakeRouteRecord(row) : null;
   }
 
-  /** Adds a route after the project's last one. */
+  /**
+   * Adds a route after the project's last one. A route that places new cards goes just ahead of the
+   * first route that takes every new card instead, since after it it would never place one.
+   */
   async createIntakeRoute(
     scope: StoredBoardScope,
     input: StoredIntakeRouteInput,
@@ -545,12 +697,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
         );
       }
-      await insertIntakeRoute(ops, scope, {
-        id,
-        input,
-        position: rows.reduce((max, row) => Math.max(max, row.position), -1) + 1,
-        actor,
-      });
+      const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+      await insertIntakeRoute(ops, scope, { id, input, position, actor });
+      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+        ? rows.findIndex(catchesEveryNewCard)
+        : -1;
+      if (ahead >= 0) {
+        const added = (await readIntakeRoutes(ops, scope)).find(row => row.id === id)!;
+        await placeIntakeRoutes(ops, rows.toSpliced(ahead, 0, added), actor);
+      }
     });
     return (await this.getIntakeRoute(scope, id))!;
   }
@@ -568,13 +723,13 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
         ...(patch.on !== undefined && { on_events: patch.on }),
-        ...(patch.allowWorkingPhase !== undefined && { allow_working_phase: patch.allowWorkingPhase }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
         ...(patch.target !== undefined && {
           board_key: patch.target.boardKey,
           phase_key: patch.target.phaseKey ?? null,
+          join_closed_issue: patch.target.joinClosedIssue ?? false,
         }),
         updated_by: options.actor,
       });
@@ -642,15 +797,27 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       if (missing.length === 0) return;
       const rows = await readIntakeRoutes(ops, scope);
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
-      for (const { route } of missing) {
+      const first: string[] = [];
+      for (const { route, first: leads } of missing) {
         // A project at the limit keeps its own routes; the default counts as added all the same.
         if (position >= MAX_INTAKE_ROUTES) break;
+        const id = randomUUID();
         await insertIntakeRoute(ops, scope, {
-          id: randomUUID(),
+          id,
           input: route,
           position: position++,
           actor: DEFAULT_INTAKE_ROUTE_ACTOR,
         });
+        if (leads) first.push(id);
+      }
+      // A project that had routes before gets a leading default ahead of them.
+      if (first.length > 0 && rows.length > 0) {
+        const placed = await readIntakeRoutes(ops, scope);
+        const leading = new Set(first);
+        await placeIntakeRoutes(ops, [
+          ...first.map(id => placed.find(row => row.id === id)!),
+          ...placed.filter(row => !leading.has(row.id)),
+        ]);
       }
       await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
         seeded_defaults: [...seededDefaults(current), ...missing.map(({ key }) => key)],
@@ -696,6 +863,18 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 async function readVersion(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<string | null> {
   const row = await ops.findOne<{ version: string }>(VERSIONS, scopeWhere(scope));
   return row?.version ?? null;
+}
+
+/** The project's board under `key`, read through `ops` so a caller inside a transaction reads within it. */
+export async function readStoredBoard(
+  ops: FactoryStorageOps,
+  scope: StoredBoardScope,
+  key: string,
+): Promise<StoredBoardRecord | null> {
+  const row = await ops.findOne<BoardRow>(BOARDS, { ...scopeWhere(scope), board_key: key });
+  if (!row) return null;
+  const phases = await ops.findMany<PhaseRow>(PHASES, { ...scopeWhere(scope), board_key: key });
+  return toRecord(row, phases);
 }
 
 async function readBoards(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<StoredBoardRecord[]> {
@@ -782,6 +961,7 @@ async function insertPhases(ops: FactoryStorageOps, scope: StoredBoardScope, inp
       auto_start: phase.autoStart ?? false,
       auto_start_when: phase.autoStartWhen ?? null,
       exit_tool: phase.exitTool ?? null,
+      tools: phase.tools?.length ? phase.tools : null,
     });
   }
 }
@@ -839,15 +1019,24 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     enabled: row.enabled,
     position: row.position,
     when: row.when_condition,
-    target: { boardKey: row.board_key, phaseKey: row.phase_key },
+    target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
     on: routeEvents(row),
-    allowWorkingPhase: row.allow_working_phase ?? false,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
+}
+
+/** Whether `row` places every new card that reaches it, as the seeded "Everything else" route does. */
+function catchesEveryNewCard(row: IntakeRouteRow): boolean {
+  return (
+    row.enabled &&
+    row.when_condition === null &&
+    (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&
+    !row.join_closed_issue
+  );
 }
 
 async function readIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {
@@ -906,7 +1095,7 @@ async function insertIntakeRoute(
     board_key: route.input.target.boardKey,
     phase_key: route.input.target.phaseKey ?? null,
     on_events: route.input.on ?? null,
-    allow_working_phase: route.input.allowWorkingPhase ?? false,
+    join_closed_issue: route.input.target.joinClosedIssue ?? false,
     revision: 1,
     created_by: route.actor,
     created_at: now,

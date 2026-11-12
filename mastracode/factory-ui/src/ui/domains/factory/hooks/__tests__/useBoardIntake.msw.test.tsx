@@ -1,14 +1,14 @@
 /**
- * BDD coverage for the Intake swimlane's provider gating: a board only offers
- * a Linear or Jira feed when one of that provider's sources is explicitly
- * bound to that board of the Factory project being viewed. Nothing is routed
- * implicitly.
+ * BDD coverage for the Intake swimlane's provider gating: every new card is
+ * filed on the default board before the project's intake routes place it, so
+ * only Work offers items without a card, and a Linear or Jira feed only when
+ * one of that provider's sources is bound to the Factory project being viewed.
  */
-import { waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, newProjectWorkBoardInfo, releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { LinkedRepositoryPayload } from '../../../workspaces/services/github';
@@ -16,7 +16,7 @@ import { queryKeys } from '../../../../../api/keys';
 import type { InstalledBoardInfo } from '../../../../../api/types';
 import type { GithubIssue } from '../../services/factory';
 import type { GitLabIssue } from '../../services/gitlab';
-import type { IntakeLabelRoute, IntakeSourceBinding } from '../../services/intake';
+import type { IntakeSourceBinding } from '../../services/intake';
 import type { JiraIssue } from '../../services/jira';
 import type { LinearIssue } from '../../services/linear';
 import { useBoardIntake } from '../useBoardIntake';
@@ -24,7 +24,6 @@ import { githubWithLinearConfig, gitlabOnlyConfig, connectedLinear, disabledGitl
 
 const repository: LinkedRepositoryPayload = { projectRepositoryId: 'repo-1', slug: 'acme/app' };
 const workBoard = builtinBoardCatalog.boards.find(board => board.id === 'work')!;
-const reviewBoard = builtinBoardCatalog.boards.find(board => board.id === 'review')!;
 
 const linearIssue = (identifier: string, sourceId: string): LinearIssue => ({
   id: identifier,
@@ -62,7 +61,6 @@ function stubIntake(
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
-    http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
     ),
@@ -71,19 +69,43 @@ function stubIntake(
   );
 }
 
-const renderIntake = (
-  factoryProjectId: string,
-  definition: InstalledBoardInfo = workBoard,
-  knownSourceKeys = new Set<string>(),
-  elsewhereSourceKeys?: Set<string>,
-) =>
-  renderHookWithProviders(() =>
-    useBoardIntake({ factoryProjectId, repositories: [repository], definition, knownSourceKeys, elsewhereSourceKeys }),
+const renderIntake = (factoryProjectId: string, definition: InstalledBoardInfo = workBoard) =>
+  renderHookWithProviders(() => useBoardIntake({ factoryProjectId, repositories: [repository], definition }));
+
+/** A card the project already holds for a feed item, as the server lists it. */
+const filedCard = (integrationId: string, externalId: string, board: string) => ({
+  id: `card-${externalId}`,
+  orgId: 'org-1',
+  createdBy: 'user-1',
+  factoryProjectId: 'factory-1',
+  board,
+  externalSource: { integrationId, type: 'issue', externalId },
+  parentWorkItemId: null,
+  title: externalId,
+  stages: ['intake'],
+  stageHistory: [],
+  sessions: {},
+  metadata: {},
+  triageType: null,
+  acceptedAt: null,
+  description: null,
+  revision: 1,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-01T00:00:00Z',
+});
+
+/** Answers the lookup of which feed items are already filed with `cards`. */
+function stubFiledCards(factoryProjectId: string, cards: ReturnType<typeof filedCard>[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
+      HttpResponse.json({ workItems: cards }),
+    ),
   );
+}
 
 describe('useBoardIntake Linear gating', () => {
   it('given a source bound to Work on the viewed project, when the board loads, then the Linear feed is offered', async () => {
-    stubIntake([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' }]);
+    stubIntake([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1' }]);
 
     const { result } = renderIntake('factory-1');
 
@@ -109,7 +131,6 @@ describe('useBoardIntake Linear gating', () => {
       integrationId: 'linear',
       sourceId: 'proj-1',
       factoryProjectId: 'factory-1',
-      board: 'work',
     };
     stubIntake([binding]);
     let releaseBindings: () => void = () => {};
@@ -137,24 +158,12 @@ describe('useBoardIntake Linear gating', () => {
   });
 
   it('given the source is bound to another Factory, when the board loads, then the Linear feed is withheld', async () => {
-    stubIntake([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' }]);
+    stubIntake([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1' }]);
 
     const { result } = renderIntake('factory-2');
 
     await waitFor(() => expect(result.current.available).toEqual([]));
     expect(result.current.available).not.toContain('linear');
-  });
-
-  it('given a source routed to the Factory without a board, when Work loads, then the Linear feed is withheld', async () => {
-    stubIntake(
-      [{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: null }],
-      ['factory-1'],
-    );
-
-    const { result } = renderIntake('factory-1');
-
-    await waitFor(() => expect(result.current.isPending).toBe(false));
-    expect(result.current.available).toEqual([]);
   });
 
   it('given no bindings and a single Factory, when the board loads, then the Linear feed is still withheld', async () => {
@@ -167,66 +176,229 @@ describe('useBoardIntake Linear gating', () => {
   });
 });
 
-describe('useBoardIntake board-bound sources', () => {
+describe('useBoardIntake project-bound sources', () => {
   const bindings: IntakeSourceBinding[] = [
-    { integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1', board: 'work' },
-    { integrationId: 'linear', sourceId: 'proj-2', factoryProjectId: 'factory-1', board: 'release' },
+    { integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'factory-1' },
+    { integrationId: 'linear', sourceId: 'proj-2', factoryProjectId: 'factory-1' },
   ];
   const issues = [linearIssue('ENG-1', 'proj-1'), linearIssue('REL-1', 'proj-2')];
 
-  it('offers a custom board only the issues bound to it, on its initial phase', async () => {
-    stubIntake(bindings, ['factory-1'], issues);
-
-    const { result } = renderIntake('factory-1', releaseBoard);
-
-    await waitFor(() => expect(result.current.active).toBe('linear'));
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'linear:REL-1', column: 'queued' });
-    expect(result.current.feedByColumn).toHaveProperty('queued');
-    expect(result.current.feedByColumn).not.toHaveProperty('intake');
-  });
-
-  it('keeps issues bound to another board off Work', async () => {
+  it('offers Work the issues of every source bound to the project, on its Intake', async () => {
     stubIntake(bindings, ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.active).toBe('linear'));
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'linear:ENG-1', column: 'intake' });
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    expect(result.current.candidates).toEqual([
+      expect.objectContaining({ sourceKey: 'linear:ENG-1', column: 'intake' }),
+      expect.objectContaining({ sourceKey: 'linear:REL-1', column: 'intake' }),
+    ]);
   });
 
-  it('counts feed items held back only when their card sits on another board', async () => {
+  it('offers a custom board no items without a card, since intake routes place them after Work files them', async () => {
     stubIntake(bindings, ['factory-1'], issues);
-    const known = new Set(['linear:REL-1']);
-
-    const elsewhere = renderIntake('factory-1', releaseBoard, known, known);
-    await waitFor(() => expect(elsewhere.result.current.isPending).toBe(false));
-    expect(elsewhere.result.current.candidates).toEqual([]);
-    expect(elsewhere.result.current.alreadyMaterialized).toBe(1);
-
-    // The same card on this board is already visible in a column; nothing to explain.
-    const here = renderIntake('factory-1', releaseBoard, known, new Set());
-    await waitFor(() => expect(here.result.current.isPending).toBe(false));
-    expect(here.result.current.candidates).toEqual([]);
-    expect(here.result.current.alreadyMaterialized).toBe(0);
-  });
-
-  it('withholds the Linear feed from a custom board with nothing bound to it', async () => {
-    stubIntake([bindings[0]], ['factory-1'], issues);
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.available).toEqual([]);
+    expect(result.current.candidates).toEqual([]);
+  });
+
+  it('counts feed items held back only when their card sits on another board', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    stubFiledCards('factory-1', [filedCard('linear', 'linear:REL-1', 'release')]);
+
+    const elsewhere = renderIntake('factory-1');
+    await waitFor(() => expect(elsewhere.result.current.candidates).toHaveLength(1));
+    expect(elsewhere.result.current.alreadyMaterialized).toBe(1);
+
+    // The same card on this board is already visible in a column; nothing to explain.
+    stubFiledCards('factory-1', [filedCard('linear', 'linear:REL-1', 'work')]);
+    const here = renderIntake('factory-1');
+    await waitFor(() => expect(here.result.current.candidates).toHaveLength(1));
+    expect(here.result.current.alreadyMaterialized).toBe(0);
+  });
+
+  /** Answers each filed lookup only once released, with no card filed. */
+  function holdFiledLookups() {
+    const releases: (() => void)[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, async () => {
+        await new Promise<void>(resolve => releases.push(resolve));
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+    return {
+      held: () => releases.length,
+      answer: () => releases.splice(0).forEach(release => release()),
+    };
+  }
+
+  describe('while the server has not said which feed items are already filed', () => {
+    it('offers the next page of a feed only once the items of its first page are shown', async () => {
+      stubIntake(bindings, ['factory-1'], issues);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues, nextCursor: 'page-2' })),
+      );
+      const filed = holdFiledLookups();
+
+      const { result } = renderIntake('factory-1');
+
+      // The feed answered, and its items are held back: the column has nothing to scroll past yet.
+      await waitFor(() => expect(filed.held()).toBe(1));
+      expect(result.current.candidates).toEqual([]);
+      expect(result.current.isPending).toBe(true);
+      expect(result.current.feedByColumn.intake?.hasNextPage).toBe(false);
+
+      filed.answer();
+      await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+    });
+
+    it('keeps a later page loading until its items are known, with the earlier ones still listed', async () => {
+      stubIntake(bindings, ['factory-1'], issues);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/linear/issues`, ({ request }) =>
+          new URL(request.url).searchParams.has('after')
+            ? HttpResponse.json({ issues: [linearIssue('ENG-2', 'proj-1')], nextCursor: null })
+            : HttpResponse.json({ issues, nextCursor: 'page-2' }),
+        ),
+      );
+      const { result } = renderIntake('factory-1');
+      await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+
+      const filed = holdFiledLookups();
+      await act(async () => {
+        await result.current.feedByColumn.intake?.fetchNextPage();
+      });
+      await waitFor(() => expect(filed.held()).toBe(1));
+      expect(result.current.candidates).toHaveLength(2);
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(true);
+
+      filed.answer();
+      await waitFor(() => expect(result.current.candidates).toHaveLength(3));
+      expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
+    });
+  });
+
+  it('leaves a feed as it is shown while a board refresh asks again which of its items are filed', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues, nextCursor: 'page-2' })),
+    );
+    const { result, client } = renderIntake('factory-1');
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+
+    const filed = holdFiledLookups();
+    // What a feed frame does to every read of the project's cards.
+    act(() => void client.invalidateQueries({ queryKey: queryKeys.workItems('factory-1') }));
+    await waitFor(() => expect(filed.held()).toBe(1));
+
+    // The items are known already: no row leaves, no page reads as loading, the next one stays on offer.
+    expect(result.current.candidates).toHaveLength(2);
+    expect(result.current.isPending).toBe(false);
+    expect(result.current.feedByColumn.intake?.isFetchingNextPage).toBe(false);
+    expect(result.current.feedByColumn.intake?.hasNextPage).toBe(true);
+
+    filed.answer();
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.candidates).toHaveLength(2);
+  });
+
+  it('reports a failed filed lookup as a failed feed, not an empty column, and asks again on retry', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, () =>
+        HttpResponse.json({ error: 'nope' }, { status: 500 }),
+      ),
+    );
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.feedByColumn.intake?.error).toBeInstanceOf(Error));
+    expect(result.current.candidates).toEqual([]);
+    expect(result.current.isPending).toBe(false);
+
+    stubFiledCards('factory-1', []);
+    await act(async () => {
+      await result.current.feedByColumn.intake?.refetch();
+    });
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    expect(result.current.feedByColumn.intake?.error).toBeNull();
+  });
+
+  it('shows the one source picked when the lookup of a source the view hides fails, and looks nothing up for that source', async () => {
+    stubIntake(bindings, ['factory-1'], issues);
+    const lookedUp: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({
+          config: {
+            github: { enabled: true, sourceIds: ['acme/app'] },
+            linear: { enabled: true, sourceIds: ['proj-1', 'proj-2'] },
+          },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
+        HttpResponse.json({
+          issues: [
+            {
+              number: 7,
+              title: 'Issue 7',
+              url: 'https://github.com/acme/app/issues/7',
+              author: 'octocat',
+              labels: [],
+              comments: 0,
+              createdAt: '2026-07-01T00:00:00Z',
+              updatedAt: '2026-07-02T00:00:00Z',
+            },
+          ],
+          nextCursor: null,
+        }),
+      ),
+      // The server answers for Linear items and fails for GitHub ones.
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1/work-items`, ({ request }) => {
+        const sources = new URL(request.url).searchParams.getAll('source');
+        lookedUp.push(...sources);
+        if (sources.some(source => source.includes('github'))) {
+          return HttpResponse.json({ error: 'nope' }, { status: 500 });
+        }
+        return HttpResponse.json({ workItems: [] });
+      }),
+    );
+
+    const { result, client } = renderHookWithProviders(() =>
+      useBoardIntake({
+        factoryProjectId: 'factory-1',
+        repositories: [repository],
+        definition: workBoard,
+        sourceFilters: { source: new Set(['linear']), linearProject: new Set() },
+      }),
+    );
+
+    // The hidden GitHub feed is read all the same: the person filters name its people.
+    await waitFor(() =>
+      expect(result.current.participantCandidates).toContainEqual(expect.objectContaining({ source: 'github-issue' })),
+    );
+    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual(['linear:ENG-1', 'linear:REL-1']);
+    expect(result.current.feedByColumn.intake?.error).toBeNull();
+    expect(result.current.isPending).toBe(false);
+    expect(lookedUp.filter(source => source.includes('github'))).toEqual([]);
+    expect(lookedUp).toContain('linear:ENG-1');
   });
 });
 
 describe('useBoardIntake GitLab routing', () => {
-  it('never queries GitHub issues or label routes for a GitLab-linked Work board', async () => {
+  it('never queries GitHub issues for a GitLab-linked Work board', async () => {
     const sourceId = 'gitlab-project:encoded-source';
     let githubIssueRequests = 0;
-    let githubLabelRouteRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
         HttpResponse.json({
@@ -239,7 +411,7 @@ describe('useBoardIntake GitLab routing', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
         HttpResponse.json({
-          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }],
+          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1' }],
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
@@ -251,10 +423,6 @@ describe('useBoardIntake GitLab routing', () => {
         githubIssueRequests++;
         return HttpResponse.json({ issues: [], nextPage: null });
       }),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => {
-        githubLabelRouteRequests++;
-        return HttpResponse.json({ routes: [] });
-      }),
     );
 
     const { result } = renderHookWithProviders(() =>
@@ -262,46 +430,15 @@ describe('useBoardIntake GitLab routing', () => {
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
     await waitFor(() => expect(result.current.active).toBe('gitlab'));
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(githubIssueRequests).toBe(0);
-    expect(githubLabelRouteRequests).toBe(0);
   });
 
-  it('settles Review even when configured GitLab intake has a disabled status query', async () => {
-    stubIntake([]);
-    let gitlabStatusRequests = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            gitlab: { enabled: true, sourceIds: ['gitlab-project:1'] },
-            linear: { enabled: false, sourceIds: null },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () => {
-        gitlabStatusRequests++;
-        return HttpResponse.json({ enabled: true, configured: true, reauthRequired: false });
-      }),
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-        HttpResponse.json({ pullRequests: [], nextPage: null }),
-      ),
-    );
-
-    const { result, client } = renderIntake('factory-1', reviewBoard);
-
-    await waitFor(() => expect(client.getQueryState(queryKeys.intakeConfig())?.status).toBe('success'));
-    await waitFor(() => expect(result.current.isPending).toBe(false));
-    expect(gitlabStatusRequests).toBe(0);
-  });
-
-  it('uses the GitLab MR feed for a GitLab-linked Review board and never requests GitHub PRs', async () => {
+  it('browses the GitLab MR feed on Work for a GitLab-linked repository and never requests GitHub PRs', async () => {
     stubIntake([]);
     let githubRequests = 0;
     server.use(
@@ -337,18 +474,19 @@ describe('useBoardIntake GitLab routing', () => {
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories: [{ ...repository, provider: 'gitlab' }],
-        definition: reviewBoard,
-        knownSourceKeys: new Set(),
+        definition: workBoard,
       }),
     );
 
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.active).toBe('gitlab-prs');
-    expect(result.current.candidates[0]).toMatchObject({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' });
+    await waitFor(() =>
+      expect(result.current.candidates).toContainEqual(
+        expect.objectContaining({ source: 'gitlab-pr', sourceKey: 'gitlab-pr:encoded-5' }),
+      ),
+    );
     expect(githubRequests).toBe(0);
   });
 
-  it('shows a routed GitLab issue on its destination board', async () => {
+  it('offers Work an issue from a GitLab project bound to the Factory', async () => {
     const sourceId = 'gitlab-project:encoded-source';
     const issue: GitLabIssue = {
       id: '42',
@@ -379,35 +517,34 @@ describe('useBoardIntake GitLab routing', () => {
       ),
       http.get(TEST_BASE_URL + '/web/intake/bindings', () =>
         HttpResponse.json({
-          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'release' }],
+          bindings: [{ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1' }],
         }),
       ),
-      http.get(TEST_BASE_URL + '/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
       http.get(TEST_BASE_URL + '/web/gitlab/status', () =>
         HttpResponse.json({ enabled: true, configured: true, reauthRequired: false }),
       ),
       http.get(TEST_BASE_URL + '/web/gitlab/issues', ({ request }) => {
         const url = new URL(request.url);
         expect(url.searchParams.get('factoryProjectId')).toBe('factory-1');
-        expect(url.searchParams.get('board')).toBe('release');
+        expect(url.searchParams.has('board')).toBe(false);
         return HttpResponse.json({ issues: [issue], nextCursor: null });
       }),
       http.get(TEST_BASE_URL + '/web/linear/status', () => HttpResponse.json({ enabled: false, connected: false })),
     );
 
-    const { result } = renderIntake('factory-1', releaseBoard);
+    const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.active).toBe('gitlab'));
     await waitFor(() => expect(result.current.candidates).toHaveLength(1));
     expect(result.current.candidates[0]).toMatchObject({
       source: 'gitlab-issue',
       sourceKey: issue.externalId,
-      column: 'queued',
+      column: 'intake',
     });
   });
 });
 
-describe('useBoardIntake GitHub label routes', () => {
+describe('useBoardIntake GitHub issues', () => {
   const githubIssue = (number: number, labels: string[]): GithubIssue => ({
     number,
     title: `Issue ${number}`,
@@ -420,7 +557,7 @@ describe('useBoardIntake GitHub label routes', () => {
   });
   const issues = [githubIssue(1, ['bug']), githubIssue(2, ['Release']), githubIssue(3, [])];
 
-  function stubGithub(routes: IntakeLabelRoute[]) {
+  function stubGithub() {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: 'factory-1', name: 'factory-1', repositories: [] }] }),
@@ -431,10 +568,6 @@ describe('useBoardIntake GitHub label routes', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, ({ request }) => {
-        const factoryProjectId = new URL(request.url).searchParams.get('factoryProjectId');
-        return HttpResponse.json({ routes: routes.filter(route => route.factoryProjectId === factoryProjectId) });
-      }),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
       http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
         HttpResponse.json({
@@ -444,88 +577,77 @@ describe('useBoardIntake GitHub label routes', () => {
       ),
     );
   }
-  const releaseRoute: IntakeLabelRoute = {
-    factoryProjectId: 'factory-1',
-    integrationId: 'github',
-    label: 'release',
-    board: 'release',
-  };
+  it("offers an auto-triaged issue in Intake on a new project's Work, which has no Triage, and never fetches the triaged feed", async () => {
+    stubGithub();
+    const triagedRequests: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        if (label) triagedRequests.push(label);
+        return HttpResponse.json({
+          issues: label ? [] : [...issues, githubIssue(4, ['status: auto-triaged'])],
+          nextCursor: null,
+        });
+      }),
+    );
 
-  it('offers a custom board the issues carrying its routed label, on its initial phase', async () => {
-    stubGithub([releaseRoute]);
-
-    const { result } = renderIntake('factory-1', releaseBoard);
+    const { result } = renderIntake('factory-1', newProjectWorkBoardInfo);
 
     await waitFor(() => expect(result.current.active).toBe('github'));
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'github-issue:2', column: 'queued' });
-    expect(result.current.feedByColumn).toHaveProperty('queued');
+    await waitFor(() => expect(result.current.candidates).toHaveLength(4));
+    expect(result.current.candidates.find(candidate => candidate.sourceKey === 'github-issue:4')).toMatchObject({
+      column: 'intake',
+    });
     expect(result.current.feedByColumn).not.toHaveProperty('triage');
+    expect(result.current.isTriagePending).toBe(false);
+    expect(triagedRequests).toEqual([]);
   });
 
-  it('keeps routed issues off Work while unrouted ones stay', async () => {
-    stubGithub([releaseRoute]);
+  it('keeps an auto-triaged issue out of Intake on Work that kept Triage, where the triaged feed offers it', async () => {
+    stubGithub();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
+        HttpResponse.json({
+          issues: new URL(request.url).searchParams.get('label')
+            ? [githubIssue(4, ['status: auto-triaged'])]
+            : [...issues, githubIssue(4, ['status: auto-triaged'])],
+          nextCursor: null,
+        }),
+      ),
+    );
 
     const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.active).toBe('github'));
-    await waitFor(() => expect(result.current.candidates).toHaveLength(2));
+    await waitFor(() =>
+      expect(result.current.candidates.filter(candidate => candidate.sourceKey === 'github-issue:4')).toEqual([
+        expect.objectContaining({ column: 'triage' }),
+      ]),
+    );
+    expect(result.current.feedByColumn).toHaveProperty('triage');
+  });
+
+  it('offers Work every issue of a selected repository, whatever its labels', async () => {
+    stubGithub();
+
+    const { result } = renderIntake('factory-1');
+
+    await waitFor(() => expect(result.current.active).toBe('github'));
+    await waitFor(() => expect(result.current.candidates).toHaveLength(3));
     expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
       'github-issue:1',
+      'github-issue:2',
       'github-issue:3',
     ]);
   });
 
-  it('withholds the GitHub feed from a custom board with no label routed to it', async () => {
-    stubGithub([]);
+  it('withholds the GitHub feed from a custom board', async () => {
+    stubGithub();
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
     await waitFor(() => expect(result.current.isPending).toBe(false));
     expect(result.current.available).toEqual([]);
-  });
-
-  it('keeps a custom board pending until its label routes have loaded', async () => {
-    stubGithub([releaseRoute]);
-    let releaseRoutes: () => void = () => {};
-    const routesRequested = new Promise<void>(resolve => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/intake/label-routes`, async () => {
-          resolve();
-          await new Promise<void>(release => (releaseRoutes = release));
-          return HttpResponse.json({ routes: [releaseRoute] });
-        }),
-      );
-    });
-
-    const { result } = renderIntake('factory-1', releaseBoard);
-
-    // Routes are in flight (the handler is holding the request): the board
-    // must report pending rather than an empty feed.
-    await routesRequested;
-    expect(result.current.available).toEqual([]);
-    expect(result.current.isPending).toBe(true);
-
-    releaseRoutes();
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.isPending).toBe(false);
-  });
-
-  it('reports a failed label-route load instead of treating every issue as Work', async () => {
-    stubGithub([releaseRoute]);
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })),
-    );
-
-    const work = renderIntake('factory-1');
-    await waitFor(() => expect(work.result.current.isPending).toBe(false));
-    expect(work.result.current.candidates).toEqual([]);
-    expect(work.result.current.feedByColumn.intake?.error).toBeInstanceOf(Error);
-
-    const release = renderIntake('factory-1', releaseBoard);
-    await waitFor(() => expect(release.result.current.isPending).toBe(false));
-    expect(release.result.current.candidates).toEqual([]);
-    expect(release.result.current.feedByColumn.queued?.error).toBeInstanceOf(Error);
   });
 });
 
@@ -570,7 +692,6 @@ function stubJiraIntake(
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
-    http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
     http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
       HttpResponse.json({ enabled: true, configured: true, mode: 'platform', site: null, sites: [], reason: 'ready' }),
@@ -589,7 +710,6 @@ describe('useBoardIntake Jira gating', () => {
     integrationId: 'jira',
     sourceId: '10001',
     factoryProjectId: 'factory-1',
-    board: 'work',
   };
 
   it('given Jira is enabled but not configured, when the board loads, then the Jira feed is withheld', async () => {
@@ -644,16 +764,14 @@ describe('useBoardIntake Jira gating', () => {
     expect(result.current.available).toEqual([]);
   });
 
-  it('offers a custom board only the issues bound to it, on its initial phase', async () => {
-    stubJiraIntake([{ ...workBinding, board: 'release' }]);
+  it('withholds the Jira feed from a custom board', async () => {
+    const requestedFactoryIds = stubJiraIntake([workBinding]);
 
     const { result } = renderIntake('factory-1', releaseBoard);
 
-    await waitFor(() => expect(result.current.active).toBe('jira'));
-    await waitFor(() => expect(result.current.candidates).toHaveLength(1));
-    expect(result.current.candidates[0]).toMatchObject({ sourceKey: 'jira-issue-acme-eng-42', column: 'queued' });
-    expect(result.current.feedByColumn).toHaveProperty('queued');
-    expect(result.current.feedByColumn).not.toHaveProperty('intake');
+    await waitFor(() => expect(result.current.isPending).toBe(false));
+    expect(result.current.available).toEqual([]);
+    expect(requestedFactoryIds).toEqual([]);
   });
 
   it('given an issue bound here, when candidates map, then they carry the jira source identity', async () => {
@@ -673,7 +791,8 @@ describe('useBoardIntake Jira gating', () => {
   it('given the issue is already a card, when candidates map, then the known source key is dropped', async () => {
     stubJiraIntake([workBinding]);
 
-    const { result } = renderIntake('factory-1', workBoard, new Set(['jira-issue-acme-eng-42']));
+    stubFiledCards('factory-1', [filedCard('jira', 'jira-issue-acme-eng-42', 'work')]);
+    const { result } = renderIntake('factory-1');
 
     await waitFor(() => expect(result.current.participantCandidates).toHaveLength(1));
     expect(result.current.candidates).toEqual([]);
@@ -797,7 +916,6 @@ describe('useBoardIntake across linked repositories', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
       http.get(`${TEST_BASE_URL}/web/linear/status`, () => HttpResponse.json({ enabled: false, connected: false })),
       http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, ({ params, request }) => {
         const id = String(params.id);
@@ -822,7 +940,6 @@ describe('useBoardIntake across linked repositories', () => {
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -841,7 +958,6 @@ describe('useBoardIntake across linked repositories', () => {
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(),
       }),
     );
 
@@ -857,36 +973,15 @@ describe('useBoardIntake across linked repositories', () => {
     expect(requested).toEqual(expect.arrayContaining(['prs:repo-1', 'prs:repo-2', 'prs:repo-3']));
   });
 
-  it('offers Review the pull requests of every linked GitHub repository', async () => {
-    const requested: string[] = [];
-    stubRepositories(requested);
-
-    const { result } = renderHookWithProviders(() =>
-      useBoardIntake({
-        factoryProjectId: 'factory-1',
-        repositories,
-        definition: reviewBoard,
-        knownSourceKeys: new Set(),
-      }),
-    );
-
-    await waitFor(() => expect(result.current.candidates).toHaveLength(3));
-    expect(result.current.candidates.map(candidate => candidate.sourceKey)).toEqual([
-      'github:1:pull-request:9',
-      'github:2:pull-request:9',
-      'github:3:pull-request:9',
-    ]);
-  });
-
   it('drops a second repository candidate that is already a card without hiding the first repository one', async () => {
     stubRepositories([]);
 
+    stubFiledCards('factory-1', [filedCard('github', 'github:2:issue:5', 'work')]);
     const { result } = renderHookWithProviders(() =>
       useBoardIntake({
         factoryProjectId: 'factory-1',
         repositories,
         definition: workBoard,
-        knownSourceKeys: new Set(['github:2:issue:5']),
       }),
     );
 
