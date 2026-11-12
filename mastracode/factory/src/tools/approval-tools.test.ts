@@ -55,8 +55,24 @@ function setup({
   parkedTool?: string;
 } = {}) {
   const respondToToolApproval = vi.fn((_input: unknown) => ({ accepted: true as const }));
-  const respondToToolSuspension = vi.fn(async (_input: unknown) => {});
+  // As the live session does: a paused call is answered by whoever claims it first, and stays
+  // waiting when its resume fails to start.
+  const address = { resourceId: 'resource-1', threadId: 'thread-1', runId: 'run-1', toolCallId: 'call-1' };
+  const paused = { waiting: parkedTool !== undefined, claimed: false };
+  const respondToToolSuspension = vi.fn(async (_input: unknown) => {
+    paused.waiting = false;
+  });
   const session = {
+    suspensions: { has: () => paused.waiting },
+    claimToolSuspension: () => {
+      if (!paused.waiting) return { accepted: false as const, reason: 'no_pending_suspension' };
+      if (paused.claimed) return { accepted: false as const, reason: 'not_pending' };
+      paused.claimed = true;
+      return { accepted: true as const, address, claimKey: 'claim-1' };
+    },
+    releaseToolResponse: () => {
+      paused.claimed = false;
+    },
     approval: { list: () => (armed ? [{ toolCallId: 'call-1', toolName: 'factory_transition_work_item' }] : []) },
     respondToToolApproval,
     displayState: {
@@ -114,7 +130,10 @@ describe('factory_answer_approval', () => {
 
     expect(respondToToolApproval).not.toHaveBeenCalled();
     expect(respondToToolSuspension).toHaveBeenCalledWith(
-      expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId: 'call-1' }),
+      expect.objectContaining({
+        resumeData: { action: 'approved' },
+        address: expect.objectContaining({ toolCallId: 'call-1' }),
+      }),
     );
     const { requestContext } = respondToToolSuspension.mock.calls[0]![0] as {
       requestContext: { get(key: string): unknown };
@@ -140,7 +159,10 @@ describe('factory_answer_approval', () => {
 
     expect(respondToToolApproval).not.toHaveBeenCalled();
     expect(respondToToolSuspension).toHaveBeenCalledWith(
-      expect.objectContaining({ resumeData: { action: 'approved' }, toolCallId: 'call-1' }),
+      expect.objectContaining({
+        resumeData: { action: 'approved' },
+        address: expect.objectContaining({ toolCallId: 'call-1' }),
+      }),
     );
   });
 
@@ -239,6 +261,42 @@ describe('factory_answer_approval', () => {
       await expect(answer({ decision: 'approve' })).rejects.toThrow('Nothing is waiting on that tool call any more');
       expect(respondToToolApproval).not.toHaveBeenCalled();
     }
+  });
+
+  it('lets one of two answers arriving together resume the call, and tells the other it was answered', async () => {
+    const { answer, respondToToolSuspension, record } = setup({ armed: false, parkedTool: 'sign_off' });
+    const { promise: resuming, resolve: resumed } = Promise.withResolvers<void>();
+    const consume = respondToToolSuspension.getMockImplementation()!;
+    respondToToolSuspension.mockImplementationOnce(async input => {
+      await resuming;
+      await consume(input);
+    });
+
+    const first = answer({ decision: 'approve' });
+    const second = answer({ decision: 'decline', reason: 'Not yet.' });
+    await expect(second).rejects.toThrow('That call was already answered');
+    resumed();
+
+    await expect(first).resolves.toMatchObject({ answered: 'approve' });
+    expect(respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not report an answer the session could not carry on from, and leaves the call open to answer', async () => {
+    const { answer, respondToToolSuspension, record } = setup({ armed: false, parkedTool: 'sign_off' });
+    // The session reports a failed resume to its own stream and returns; the call still waits.
+    respondToToolSuspension.mockImplementationOnce(async () => {});
+
+    await expect(answer({ decision: 'approve' })).rejects.toThrow('The answer did not reach sign_off');
+    expect(record).not.toHaveBeenCalled();
+
+    await expect(answer({ decision: 'approve' })).resolves.toMatchObject({ answered: 'approve' });
+  });
+
+  it('tells a second answer to a held call that it was already answered', async () => {
+    const { answer, respondToToolApproval } = setup();
+    respondToToolApproval.mockReturnValueOnce({ accepted: false, reason: 'not_pending' } as never);
+    await expect(answer({ decision: 'approve' })).rejects.toThrow('That call was already answered');
   });
 
   it('reports an answer the session refused', async () => {

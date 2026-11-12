@@ -4,6 +4,7 @@ import type { AgentController } from '@mastra/core/agent-controller';
 import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
 import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -390,26 +391,33 @@ export async function hydrateFactorySession(
   return switched ? selectedModelId : undefined;
 }
 
+/** Where a Factory-owned run can find a model to call. */
+export interface OrganizationModelSources {
+  modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
+  /** OpenAI-compatible providers the organization configured, each with its own key. */
+  customProviders?: Pick<CustomProvidersStorage, 'ensureReady' | 'list'>;
+  /** Providers that run on the server process's own credentials, so need no stored key. */
+  deploymentModelProviders?: ReadonlySet<string>;
+}
+
 /**
- * A run owned by the Factory resolves the organization's model keys and nothing else.
- * With none stored it cannot run however often it is retried, so say what to add
- * instead of starting a run that dies on its first model call.
+ * A run owned by the Factory reaches models through the organization alone: its stored
+ * keys and the providers it configured. With neither it cannot run however often it is
+ * retried, so say what to add instead of starting a run that dies on its first model call.
  */
 export async function requireOrganizationModelKey(
-  sources:
-    | {
-        modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
-        /** Providers that run on the server process's own credentials, so need no stored key. */
-        deploymentModelProviders?: ReadonlySet<string>;
-      }
-    | undefined,
+  sources: OrganizationModelSources | undefined,
   project: Pick<FactoryProject, 'id' | 'orgId'>,
 ): Promise<void> {
   if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
   const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
   if (credentials.some(credential => credential.scope === 'org')) return;
+  if (sources.customProviders) {
+    await sources.customProviders.ensureReady();
+    if ((await sources.customProviders.list({ orgId: project.orgId })).length) return;
+  }
   throw new FactoryDispatchError(
     'factory_org_key_missing',
-    "This Factory runs its cards on the organization's model keys, and none is set. Add an organization key under Settings → Models, then retry.",
+    "This Factory runs its cards on the organization's model keys, and none is set. Add an organization key or provider under Settings → Models, then retry.",
   );
 }

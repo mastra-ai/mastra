@@ -165,12 +165,13 @@ export async function answerParkedApproval(
   baseUrl: string,
   sessionId: string,
   decision: 'approve' | 'decline',
+  toolCallId?: string,
 ): Promise<void> {
   const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/parked-approval`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ decision }),
+    body: JSON.stringify({ decision, ...(toolCallId ? { toolCallId } : {}) }),
   });
   if (res.ok) return;
   const body: { error?: string } = await res.json().catch(() => ({}));

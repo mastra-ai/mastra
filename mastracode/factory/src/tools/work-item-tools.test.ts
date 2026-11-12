@@ -453,6 +453,19 @@ describe('factory_transition_work_item', () => {
     ]);
   });
 
+  it('still reports the move when following the card fails, so the agent does not move it twice', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+    vi.spyOn(workItems, 'subscribeToWorkItem').mockRejectedValue(new Error('storage is away'));
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).resolves.toEqual({
+      workItemId: item.id,
+      stage: 'triage',
+      revision: item.revision + 1,
+      warnings: ['This session does not follow it yet: storage is away'],
+    });
+  });
+
   it('keeps "created" when a session moves a card it filed', async () => {
     const { run, workItems } = await setup();
     const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });

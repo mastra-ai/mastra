@@ -579,6 +579,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       },
     );
 
+    it('resumes a plan once when two followers answer it at the same moment, and tells the other it was answered', async () => {
+      const { answerOnWeb, errors, audit, waitingOn } = await parkedPhaseSession();
+
+      const responses = await Promise.all([answerOnWeb(REQUESTER, 'approve'), answerOnWeb(OWNER, 'approve')]);
+
+      expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
+      const refused = responses.find(response => response.status === 409)!;
+      expect(await refused.json()).toEqual({ error: 'That call was already answered: someone else got there first.' });
+      expect(audit).toHaveLength(1);
+      expect(waitingOn()).toBeUndefined();
+      expect(errors).toEqual([]);
+    });
+
     it('declines a tool call that is not a plan from the web, so the tool never runs', async () => {
       const { answerOnWeb, errors, shipped, waitingOn } = await parkedPhaseSession({ parkedOn: 'release' });
       const requestsBefore = mock.getRequests().length;

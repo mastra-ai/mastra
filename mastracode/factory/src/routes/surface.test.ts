@@ -256,7 +256,11 @@ describe('prepareFactoryRuleBinding', () => {
         boards,
         input,
         undefined,
-        { workItems: seed.seeded.workItems, modelCredentials: seed.seeded.credentials },
+        {
+          workItems: seed.seeded.workItems,
+          modelCredentials: seed.seeded.credentials,
+          customProviders: seed.seeded.customProviders,
+        },
       );
       return { prepare, started };
     }
@@ -332,7 +336,13 @@ describe('prepareFactoryRuleBinding', () => {
         await started;
 
         expect(prepare).toHaveBeenCalledWith(
-          expect.objectContaining({ userId: factory, modelScope: 'factory', defaultModelId: 'openai/gpt-5.5' }),
+          expect.objectContaining({
+            userId: factory,
+            // The person stays the one who started it.
+            startedBy: { type: 'human', id: 'approver-1' },
+            modelScope: 'factory',
+            defaultModelId: 'openai/gpt-5.5',
+          }),
         );
         const { sessionId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string };
         expect(await seed.sourceControl.sessions.getBySessionId(sessionId)).toMatchObject({ userId: factory });
@@ -357,6 +367,42 @@ describe('prepareFactoryRuleBinding', () => {
         const { seed, factory } = await seedWithKey();
 
         await expect(ownerOfPreparedSession(seed, undefined)).resolves.toBe(factory);
+      });
+
+      it('starts the phase as the Factory when the organization runs on its own provider and stores no key', async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.upsert({
+          orgId: 'org-1',
+          userId: 'factory-creator',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+
+        await expect(ownerOfPreparedSession(seed, 'approver-1')).resolves.toBe(`factory-project:${seed.project.id}`);
+      });
+
+      it("does not count another organization's provider as this one's", async () => {
+        const seed = await seedFactoryWithRepository({ modelScope });
+        await seed.seeded.customProviders.upsert({
+          orgId: 'org-elsewhere',
+          userId: 'someone-elsewhere',
+          input: {
+            providerId: 'acme',
+            name: 'Acme',
+            url: 'https://llm.acme.dev/v1',
+            apiKey: 'sk-acme',
+            models: ['fast-1'],
+          },
+        });
+        const { prepare, started } = start(seed, 'approver-1');
+
+        await expect(started).rejects.toMatchObject({ code: 'factory_org_key_missing' });
+        expect(prepare).not.toHaveBeenCalled();
       });
 
       it.each([

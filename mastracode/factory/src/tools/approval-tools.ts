@@ -1,3 +1,4 @@
+import type { SuspensionAddress } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -30,12 +31,20 @@ interface ApprovalGateSession {
     requestContext?: RequestContext;
     declineContext?: { reason?: string };
   }): { accepted: true } | { accepted: false; reason: string };
+  suspensions: { has(address: SuspensionAddress): boolean };
+  /** Takes the right to answer a paused call, so two answers cannot both resume it. */
+  claimToolSuspension(
+    toolCallId: string,
+  ): { accepted: true; address: SuspensionAddress; claimKey: string } | { accepted: false; reason: string };
+  releaseToolResponse(claimKey: string): void;
   respondToToolSuspension(input: {
     resumeData: { action: 'approved' | 'rejected'; feedback?: string };
-    toolCallId: string;
+    address: SuspensionAddress;
     requestContext?: RequestContext;
   }): Promise<void>;
 }
+
+const ALREADY_ANSWERED = 'That call was already answered: someone else got there first.';
 
 /** A tool call waiting for a yes or no, and which of the session's two channels answers it. */
 interface WaitingApproval {
@@ -95,11 +104,24 @@ export async function answerParkedCall(
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: session.userId, organizationId: session.orgId });
   if (call.channel === 'resume') {
-    await live.respondToToolSuspension({
-      resumeData: decision === 'approve' ? { action: 'approved' } : { action: 'rejected', feedback: declineReason },
-      toolCallId,
-      requestContext,
-    });
+    // Claimed before anything is awaited: of two answers arriving together, one resumes the call.
+    const claim = live.claimToolSuspension(toolCallId);
+    if (!claim.accepted) throw new Error(ALREADY_ANSWERED);
+    try {
+      await live.respondToToolSuspension({
+        resumeData: decision === 'approve' ? { action: 'approved' } : { action: 'rejected', feedback: declineReason },
+        address: claim.address,
+        requestContext,
+      });
+    } finally {
+      live.releaseToolResponse(claim.claimKey);
+    }
+    // A resume that fails to start reports its error to the session and leaves the call waiting.
+    if (live.suspensions.has(claim.address)) {
+      throw new Error(
+        `The answer did not reach ${toolName}: the session could not carry on and still waits on it. Open the session to see why.`,
+      );
+    }
     return { toolCallId, toolName };
   }
   const result = live.respondToToolApproval({
@@ -108,7 +130,11 @@ export async function answerParkedCall(
     requestContext,
     ...(decision === 'decline' ? { declineContext: { reason: declineReason } } : {}),
   });
-  if (!result.accepted) throw new Error(`The answer was not accepted (${result.reason}).`);
+  if (!result.accepted) {
+    throw new Error(
+      result.reason === 'not_pending' ? ALREADY_ANSWERED : `The answer was not accepted (${result.reason}).`,
+    );
+  }
   return { toolCallId, toolName };
 }
 

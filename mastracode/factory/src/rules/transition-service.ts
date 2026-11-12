@@ -543,6 +543,8 @@ export class FactoryTransitionService {
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
+            // A start lands the card where its run already is; it is not the agent leaving a phase.
+            request.cause !== 'run_start' &&
             !request.eventRoute &&
             exitTool &&
             fromStage !== request.stage &&

@@ -2341,6 +2341,7 @@ export class MastraFactory {
               threadId: session.thread.getId(),
               ...request,
             }),
+          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
       observeSessionThreadStamp(session);

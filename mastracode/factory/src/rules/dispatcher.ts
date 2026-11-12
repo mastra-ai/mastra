@@ -223,14 +223,18 @@ function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
     timeoutMs,
-    approvePlans,
+    autoApprovedTool,
+    autoApproving,
     requestContext,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
-    approvePlans: boolean;
+    /** The tool this run answers itself when it pauses on it; any other pause waits for a person. */
+    autoApprovedTool?: string;
+    /** Where the run says which paused calls it is about to answer. */
+    autoApproving?: Set<string>;
     /** The run's own request context; resuming an approved plan resolves the session's workspace with it. */
     requestContext?: RequestContext;
     onAgentEnd?: () => Promise<boolean>;
@@ -244,6 +248,8 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  let approvals = 0;
+  const announced = new Set<string>();
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
   // reason — so without this the true cause (e.g. a provider rejecting the OM
@@ -280,6 +286,11 @@ function watchRun(
     }
     if (event.type === 'tool_suspended') {
       parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      // Said before the run ends on it, so nobody is asked to answer what this run answers itself.
+      if (event.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        announced.add(event.toolCallId);
+        autoApproving?.add(event.toolCallId);
+      }
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -307,19 +318,27 @@ function watchRun(
     endReason: () => endReason,
     /** The tool the run is parked on, when it ended suspended. */
     parked: () => parked,
-    close: unsubscribe,
+    close: () => {
+      // A watch that gives up answers nothing more, so its pauses wait for a person again.
+      for (const toolCallId of announced) autoApproving?.delete(toolCallId);
+      unsubscribe();
+    },
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
       // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
-      if (approvePlans) {
-        for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
-          const { toolCallId } = parked;
-          parked = undefined;
-          arm();
+      while (autoApprovedTool && parked?.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        const { toolCallId } = parked;
+        parked = undefined;
+        // Counted before the resumed run can pause again, so its next pause is judged against the cap.
+        approvals += 1;
+        arm();
+        try {
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
-          observed = await wait();
+        } finally {
+          autoApproving?.delete(toolCallId);
         }
+        observed = await wait();
       }
       if (!observed) {
         // A completed decision with no observed run end is exactly the
@@ -693,6 +712,7 @@ export class FactoryDecisionDispatcher {
   readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
+  readonly #autoApproving = new Set<string>();
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
@@ -1120,7 +1140,6 @@ export class FactoryDecisionDispatcher {
     if (runStillActive()) {
       const run = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label: 'Factory skill run',
         runStillActive,
       });
@@ -1543,7 +1562,8 @@ export class FactoryDecisionDispatcher {
           );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            autoApprovedTool: await this.#autoApprovedExitTool(record),
+            autoApproving: this.#autoApproving,
             requestContext,
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
@@ -2582,10 +2602,10 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether the run answers its plan approvals itself: the card's phase ends with an auto-approved
-   * `submit_plan`. Otherwise a plan waits for a person.
+   * The tool whose pauses the run answers itself: the exit tool of the card's phase, where the
+   * board approves it without a person for this card. Any other pause waits for a person.
    */
-  async #plansAreAutoApproved({
+  async #autoApprovedExitTool({
     orgId,
     factoryProjectId,
     workItemId,
@@ -2593,12 +2613,14 @@ export class FactoryDecisionDispatcher {
     orgId: string;
     factoryProjectId: string;
     workItemId: string | null;
-  }): Promise<boolean> {
+  }): Promise<string | undefined> {
     const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
-    return (
-      item !== null &&
-      autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
-    );
+    return item ? autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) : undefined;
+  }
+
+  /** Whether a run this dispatcher watches is about to approve `toolCallId` itself, so no person needs asking. */
+  autoApproves(toolCallId: string): boolean {
+    return this.#autoApproving.has(toolCallId);
   }
 
   /**
@@ -2629,7 +2651,6 @@ export class FactoryDecisionDispatcher {
     while (true) {
       const openRun = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label,
         runStillActive,
       });
@@ -2851,7 +2872,8 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
+            autoApproving: this.#autoApproving,
             requestContext,
             label: 'Factory kickoff run',
             runStillActive: () =>

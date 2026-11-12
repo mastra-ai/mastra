@@ -63,7 +63,14 @@ const ERROR_MESSAGE_LENGTH = 400;
 export function observeSessionRunReports(
   session: RunReportSession,
   report: SessionRunEndReport,
-  { onApprovalRequested }: { onApprovalRequested?: SessionApprovalReport } = {},
+  {
+    onApprovalRequested,
+    answersItself,
+  }: {
+    onApprovalRequested?: SessionApprovalReport;
+    /** Whether the Factory answers this paused call without a person, so its run carries on and nobody needs telling. */
+    answersItself?: (toolCallId: string) => boolean;
+  } = {},
 ): () => void {
   let parked: ParkedTool | undefined;
   let lastError: string | undefined;
@@ -99,6 +106,8 @@ export function observeSessionRunReports(
     parked = undefined;
     lastError = undefined;
     if (!outcome) return;
+    // Not an end: the Factory answers the call and the same run carries on in its window.
+    if (outcome.status === 'blocked' && outcome.toolCallId && answersItself?.(outcome.toolCallId)) return;
     // Move the window now, so a run that starts before this report settles is judged on its own;
     // reports made up to the end, including its last millisecond, belong to the run that ended.
     const runSince = since;

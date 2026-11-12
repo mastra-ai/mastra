@@ -234,8 +234,19 @@ export function createFactoryWorkItemTools(
         if (result.status === 'rejected') throw new Error(`The move was refused (${result.code}): ${result.reason}`);
         // The move can start a phase session the Factory owns. Following the card is what lets
         // this session hear when that run waits on someone, and answer it from here.
-        await follow(item, 'moved');
-        return { workItemId: item.id, stage: result.stage, revision: result.revision };
+        // The card has moved by now: a failed follow is reported with the move, not instead of it.
+        const moved = { workItemId: item.id, stage: result.stage, revision: result.revision };
+        try {
+          await follow(item, 'moved');
+        } catch (error) {
+          return {
+            ...moved,
+            warnings: [
+              `This session does not follow it yet: ${error instanceof Error ? error.message : String(error)}`,
+            ],
+          };
+        }
+        return moved;
       },
     }),
 

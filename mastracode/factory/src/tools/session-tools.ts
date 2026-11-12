@@ -415,6 +415,7 @@ export function createFactorySessionTools(
       await requireOrganizationModelKey(
         {
           modelCredentials: deps.sessionModel.tenantCatalog?.credentials,
+          customProviders: deps.sessionModel.tenantCatalog?.customProviders,
           deploymentModelProviders: deps.sessionModel.tenantCatalog?.deploymentProviders,
         },
         project,
@@ -457,6 +458,7 @@ export function createFactorySessionTools(
       prepared = await coordinator.prepare({
         orgId: scope.orgId,
         userId: ownerUserId,
+        startedBy: { type: 'human', id: scope.userId },
         factoryProjectId: scope.factoryProjectId,
         sessionId: ensured.sessionId,
         threadTitle: title ?? `${label} ${role}`,

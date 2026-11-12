@@ -319,7 +319,14 @@ describe('sendRunEndReport', () => {
       priority: 'urgent',
       summary:
         'The work session for #7 is waiting on sign_off and needs an answer. Approve or decline it with factory_answer_approval (sessionId "session-w", toolCallId "call-9").',
-      attributes: { 'parked-tool': 'sign_off', 'tool-call-id': 'call-9', 'waiting-for': 'approval' },
+      // What the chat needs to answer it in place: the session that waits, and the call.
+      attributes: {
+        'parked-tool': 'sign_off',
+        'tool-call-id': 'call-9',
+        'waiting-for': 'approval',
+        'from-session': SENDER.sessionId,
+        'from-thread': SENDER.threadId,
+      },
     });
   });
 

@@ -1062,7 +1062,11 @@ describe('factory_start_session in work-item mode', () => {
 
       const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
 
-      expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory', userId: factory });
+      expect(env.prepare.mock.calls[0]![0]).toMatchObject({
+        modelScope: 'factory',
+        userId: factory,
+        startedBy: { type: 'human', id: 'user-1' },
+      });
       await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ userId: factory });
       const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
       expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory, factoryModelScope: 'factory' });
@@ -1089,7 +1093,7 @@ describe('factory_start_session in work-item mode', () => {
     const before = await env.sessionRows();
 
     await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
-      'Add an organization key under Settings → Models',
+      'Add an organization key or provider under Settings → Models',
     );
 
     expect(env.prepare).not.toHaveBeenCalled();
@@ -1100,6 +1104,29 @@ describe('factory_start_session in work-item mode', () => {
     await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
       mode: 'work-item',
     });
+  });
+
+  it('starts a Factory-run role for an organization that runs on its own provider and stores no key', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: {
+        providerId: 'acme',
+        name: 'Acme',
+        url: 'https://llm.acme.dev/v1',
+        apiKey: 'sk-acme',
+        models: ['fast-1'],
+      },
+    });
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+    expect(env.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `factory-project:${env.scope.factoryProjectId}` }),
+    );
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {

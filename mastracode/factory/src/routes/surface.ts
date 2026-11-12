@@ -36,7 +36,7 @@ import {
   resolveFactorySourceControl,
   requireOrganizationModelKey,
 } from '../session/factory-session.js';
-import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
+import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
@@ -323,11 +323,8 @@ function restingExitLane(board: InstalledBoard | undefined, role: string, hasPul
 }
 
 /** What the autonomous start reads to decide who a phase session runs as. */
-export interface PhaseSessionOwnerSources {
+export interface PhaseSessionOwnerSources extends OrganizationModelSources {
   workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
-  modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
-  /** Providers that run on the server process's own credentials, so need no stored key. */
-  deploymentModelProviders?: ReadonlySet<string>;
 }
 
 /**
@@ -510,6 +507,8 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      // As the dispatcher does: an agent's approval moves as a person's would, under the agent's id.
+      ...(approver ? { startedBy: { type: 'human' as const, id: approver } } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       modelScope,
@@ -904,6 +903,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 {
                   workItems: deps.domains.workItems,
                   modelCredentials: deps.domains.modelCredentials,
+                  customProviders: deps.domains.customProviders,
                   deploymentModelProviders: deps.deploymentModelProviders,
                 },
               );
