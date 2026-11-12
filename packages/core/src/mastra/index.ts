@@ -4522,9 +4522,10 @@ export class Mastra<
    * changed; a run still in its grace period is checked again when it ends.
    * Without run fencing in the store, every active run is restarted.
    *
-   * Resolves once every default-engine restart finished and every evented
-   * restart was published to the workers. A call made while another is still
-   * dispatching restarts joins it. Failures are logged per run and never
+   * Resolves once every default-engine restart its pass queued finished and
+   * every evented restart was published to the workers. Runs an earlier pass
+   * already queued are skipped and not awaited. A call made while another is
+   * still handing out restarts joins it. Failures are logged per run and never
    * reject. Once `shutdown()` starts, no further runs are restarted.
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
