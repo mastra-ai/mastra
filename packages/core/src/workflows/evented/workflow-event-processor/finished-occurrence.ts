@@ -1,5 +1,6 @@
 import { getEntryId } from '../../step-entry';
 import type { RestartExecutionParams, StepFlowEntry, StepResult, WorkflowRunState } from '../../types';
+import { isSingleStepEntry } from '../../utils';
 
 type LeafEntry = Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
 type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; metadata?: Record<string, any> };
@@ -49,7 +50,7 @@ function leafIds(entries: StepFlowEntry[]): string[] {
       return [getEntryId(entry.step)];
     }
 
-    if (entry.type === 'step' || entry.type === 'agent' || entry.type === 'tool' || entry.type === 'mapping') {
+    if (isSingleStepEntry(entry)) {
       return [getEntryId(entry)];
     }
 
