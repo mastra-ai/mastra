@@ -321,6 +321,8 @@ if (output.finishReason === 'suspended') {
 `toolCallId` is optional on all four methods. Pass it when multiple tool calls may be pending (common in supervisor agents). When omitted, the agent resumes the most recent suspended tool call.
 :::
 
+When the model calls several tools that need approval in the same step, the agent requests every approval at once instead of one after another. Answer them in any order and pass each call's `toolCallId`: each approved call starts right away, and the run continues once every call is answered.
+
 ## Tool-level approval
 
 Instead of pausing every tool call at the agent level, you can mark individual tools as requiring approval. You get fine-grained control: only specific tools pause, while others execute immediately.
