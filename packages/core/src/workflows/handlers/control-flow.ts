@@ -11,8 +11,9 @@ import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import { isFrameworkCondition } from '../framework-condition';
+import { buildStepResultAccessors } from '../run-journal';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
-import { getStepResult, getStepResultAsync } from '../step';
 import { getEntryId } from '../step-entry';
 import type {
   DefaultEngineType,
@@ -41,6 +42,7 @@ import {
 import { isWorkflowRunCanceled } from './entry';
 import { getForeachProgress, omitForeachProgress } from './foreach-progress';
 import type { ForeachProgress } from './foreach-progress';
+import { emitStepResultEvents } from './step';
 import type { ExecuteStepParams } from './step';
 
 /**
@@ -258,6 +260,7 @@ export async function executeParallel(
           activeStepsPath: executionContext.activeStepsPath,
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, i],
           stepExecutionPath: executionContext.stepExecutionPath,
           suspendedPaths: executionContext.suspendedPaths,
@@ -465,8 +468,7 @@ export async function executeConditional(
               retryCount: -1,
               ...createObservabilityContext({ currentSpan: evalSpan }),
               getInitData: () => stepResults?.input as any,
-              getStepResult: getStepResult.bind(null, stepResults),
-              getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+              ...buildStepResultAccessors(engine, runId, stepResults),
               bail: (() => {}) as () => InnerOutput,
               abort: () => {
                 abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
@@ -616,6 +618,7 @@ export async function executeConditional(
         executionContext: {
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, steps.indexOf(step)],
           stepExecutionPath: executionContext.stepExecutionPath,
           activeStepsPath: executionContext.activeStepsPath,
@@ -910,8 +913,7 @@ export async function executeLoop(
               ...createObservabilityContext({ currentSpan: evalSpan }),
               iterationCount: iteration + 1,
               getInitData: () => stepResults?.input as any,
-              getStepResult: getStepResult.bind(null, stepResults),
-              getStepResultAsync: getStepResultAsync.bind(null, stepResults),
+              ...buildStepResultAccessors(engine, runId, stepResults),
               bail: (() => {}) as () => InnerOutput,
               abort: () => {
                 abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
@@ -952,7 +954,30 @@ export async function executeLoop(
         operationId: `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.span.error`,
         errorOptions: { ...termination, error: errorInstance },
       });
-      throw error;
+      if (isFrameworkCondition(condition)) throw error;
+      // End the loop step as failed, like a failed body: a throw would reject run.start()
+      // and leave the run recorded as running.
+      const body = result as Extract<typeof result, { status: 'success' }>;
+      const failed: StepResult<any, any, any, any> = {
+        status: 'failed',
+        error: errorInstance,
+        payload: body.payload,
+        startedAt: body.startedAt,
+        endedAt: Date.now(),
+        nonRetryable: true,
+        metadata: body.metadata,
+      };
+      // The body already reported this iteration as a success, and already sent its step finish.
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.loop.${executionContext.executionPath.join('-')}.eval.${iteration}.emit_failure`,
+        () =>
+          publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: { type: 'workflow-step-result', payload: { id: stepId, ...failed } },
+          }),
+      );
+      return failed;
     }
     await engine.endChildSpan({
       span: evalSpan,
@@ -1068,10 +1093,40 @@ export async function executeForeach(
   const { step, opts } = entry;
   const stepId = getEntryId(step);
   const results: any[] = [];
-  const concurrency = resolveForeachConcurrency(opts, {
-    inputData: prevOutput,
-    getInitData: () => stepResults?.input,
-  });
+  let concurrency: number;
+  try {
+    concurrency = resolveForeachConcurrency(opts, {
+      inputData: prevOutput,
+      getInitData: () => stepResults?.input,
+    });
+  } catch (error) {
+    // Fail the foreach step: a throw would reject run.start() and leave the run recorded as running.
+    const failed: StepResult<any, any, any, any> = {
+      status: 'failed',
+      error: getErrorFromUnknown(error, { serializeStack: false }),
+      payload: prevOutput,
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      nonRetryable: true,
+    };
+    if (engine.options.emitStepEvents !== false) {
+      await engine.wrapDurableOperation(
+        `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.concurrency_failure`,
+        async () => {
+          await publishStepEvent(engine, pubsub, `workflow.events.v2.${runId}`, {
+            type: 'watch',
+            runId,
+            data: {
+              type: 'workflow-step-start',
+              payload: { id: stepId, payload: prevOutput, startedAt: failed.startedAt, status: 'running' },
+            },
+          });
+          await emitStepResultEvents({ stepId, execResults: failed, pubsub, runId });
+        },
+      );
+    }
+    return failed;
+  }
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
@@ -1154,17 +1209,22 @@ export async function executeForeach(
   const totalCount = prevOutput.length;
   let completedCount = 0;
 
-  /** The running foreach result that carries the checkpointed progress. */
+  /**
+   * The running foreach result that carries the checkpointed progress. Only its progress changes
+   * between calls, so a progress write can send just the items finished since the previous one.
+   */
+  const runningFields = {
+    payload: prevOutput,
+    startedAt: Date.now(),
+    ...stepInfo,
+    // A resumed foreach keeps the per-item suspend state that resumed siblings read.
+    ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
+    status: 'running',
+  };
   const runningWithProgress = (): StepResult<any, any, any, any> =>
-    ({
-      payload: prevOutput,
-      startedAt: Date.now(),
-      ...stepInfo,
-      // A resumed foreach keeps the per-item suspend state that resumed siblings read.
-      ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
-      status: 'running',
-      metadata: { ...stepInfo.metadata, foreachProgress },
-    }) as StepResult<any, any, any, any>;
+    ({ ...runningFields, metadata: { ...stepInfo.metadata, foreachProgress } }) as StepResult<any, any, any, any>;
+  /** Items finished since the latest progress write started. */
+  let unsentItems: number[] = [];
 
   // Finished items are checkpointed on one serialized chain per foreach: at most one
   // write in flight, and items that finish meanwhile are folded into the next write,
@@ -1182,6 +1242,8 @@ export async function executeForeach(
       while (checkpointDirty && !checkpointClosed) {
         checkpointDirty = false;
         executionContext.activeStepsPath[stepId] = executionContext.executionPath;
+        const indices = unsentItems;
+        unsentItems = [];
         try {
           await engine.persistStepUpdate({
             workflowId,
@@ -1189,6 +1251,7 @@ export async function executeForeach(
             resourceId,
             serializedStepGraph,
             stepResults: { ...stepResults, [stepId]: runningWithProgress() },
+            foreachItems: { stepId, indices },
             executionContext,
             workflowStatus: 'running',
             requestContext,
@@ -1346,17 +1409,13 @@ export async function executeForeach(
       }
 
       const stepExecResult = await executeForeachIteration(item, k, resumeToUse);
-
-      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
-      Object.assign(stepResults, stepExecResult.stepResults);
-
       const result = stepExecResult.result as ForeachStepResult;
 
-      if (result.status !== 'success') {
-        await handleNonSuccessResult(result, k);
-      } else {
-        await handleSuccessResult(result, k);
-      }
+      // No await until the item is recorded: a write that carries the item's state
+      // changes then also carries its progress, so a restart doesn't run it again on
+      // top of its own changes.
+      engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
+      Object.assign(stepResults, stepExecResult.stepResults);
 
       if (result.status === 'success' && result.output !== undefined) {
         results[k] = result.output;
@@ -1378,10 +1437,17 @@ export async function executeForeach(
           output: result.output,
           ...(nestedRunIds[k] ? { nestedRunId: nestedRunIds[k] } : {}),
         };
+        unsentItems.push(k);
         stepResults[stepId] = runningWithProgress();
         // Not awaited: holding the queue slot for the write would change which
         // items start before a sibling suspends and stops the queue.
         scheduleCheckpoint();
+      }
+
+      if (result.status !== 'success') {
+        await handleNonSuccessResult(result, k);
+      } else {
+        await handleSuccessResult(result, k);
       }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));

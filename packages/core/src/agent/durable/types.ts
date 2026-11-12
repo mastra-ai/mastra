@@ -15,6 +15,7 @@ import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { ScoringFilter } from '../../evals/predicate';
 import type { SystemMessage } from '../../llm';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../llm/model/shared.types';
+import type { ToolResultCommitOutcome } from '../../loop/shared/steps/tool-result-commit-core';
 import type { ToolCallConcurrency } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import type { RunScope } from '../../mastra/run-scope';
@@ -53,7 +54,7 @@ import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
-import type { GoalConfig, StructuredOutputOptions } from '../types';
+import type { AgentMethodType, GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
 import type { ResponseRecord } from './workflows/shared/schemas';
 
@@ -175,6 +176,8 @@ export interface SerializableStructuredOutput {
    * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
+  /** The model answers omitted optional fields with `null` (OpenAI strict mode); validate with null → undefined. */
+  nullToUndefined?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
   errorStrategy?: 'strict' | 'warn' | 'fallback';
   /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */
@@ -522,6 +525,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
   processorDataParts?: Array<{
     type: string;
     data?: unknown;
+    id?: string;
     messageId?: string;
   }>;
   /**
@@ -634,46 +638,7 @@ export interface DurableAgenticLoopOutput {
   state: SerializableDurableState;
 }
 
-/**
- * Event types emitted via pubsub for agent streaming
- */
-export type AgentStreamEventType =
-  | 'chunk'
-  | 'step-start'
-  | 'step-finish'
-  | 'finish'
-  | 'error'
-  | 'suspended'
-  | 'abort'
-  | 'iteration-complete'
-  | 'ownership-claimed';
-
-/**
- * Event emitted via pubsub for agent streaming
- */
-export interface AgentStreamEvent<T = unknown> {
-  /** Event type */
-  type: AgentStreamEventType;
-  /** Run identifier */
-  runId: string;
-  /** Event payload */
-  data: T;
-  /** Epoch ms at which a `chunk` event's chunk was produced. */
-  producedAt?: number;
-  /** Claim generation of the execution that published the event. See {@link Event.generation}. */
-  generation?: number;
-  /**
-   * Position of this event in its run topic's log. Only present on events read
-   * back from the topic; it is stripped before an event reaches an `observe()`
-   * consumer.
-   */
-  index?: number;
-  /**
-   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
-   * before it was published, so the stream consumer must not run them again.
-   */
-  outputProcessed?: boolean;
-}
+export type { AgentStreamEvent, AgentStreamEventType } from '../streams/types';
 
 /**
  * Chunk event data
@@ -705,6 +670,12 @@ export interface AgentFinishEventData {
     user: ModelMessage[];
     nonUser: AIV5ResponseMessage[];
   };
+  /**
+   * Set when processOutputResult changed the reply after the last step-finish was streamed.
+   * The last entry of `output.steps` then holds the processed text, and callers must use it
+   * instead of the text they buffered from the stream.
+   */
+  textRewritten?: boolean;
 }
 
 /**
@@ -786,7 +757,7 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
-  /** Transient tracing fact; not part of the iteration state or finish payload. */
+  /** In-process copy of a tracing fact the iteration state carries across workers; not in the finish payload. */
   tracingTermination?: SpanTermination;
   tracingDelegationFailure?: SpanTermination;
   tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
@@ -825,6 +796,12 @@ export interface RunRegistryEntry {
    * replaced tools are kept (#25960).
    */
   requestTools?: Record<string, CoreTool>;
+  /**
+   * The method that started the run (`stream` or `generate`). A warm resume
+   * rebuilds `requestTools` for this method, so a streamed run's sub-agents keep
+   * streaming whatever the resume's `closeOnSuspend` is (#29436).
+   */
+  methodType?: AgentMethodType;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */
   saveQueueManager?: SaveQueueManager;
   /** Memory instance for thread creation and message persistence */
@@ -847,6 +824,27 @@ export interface RunRegistryEntry {
   runScope?: RunScope;
   /** MessageList for tracking conversation messages (non-serializable) */
   messageList?: MessageList;
+  /** Message list as of the last completed step; memory saves this when a total deadline ends the run */
+  completedStepsState?: SerializedMessageListState;
+  /**
+   * Text the step in flight has streamed (as published) before a total deadline cut it off; cleared once the
+   * step completes. Only kept for runs with a total deadline.
+   */
+  streamedStepText?: string[];
+  /**
+   * Tool calls of the step in flight that settled, kept for runs with a total deadline: when the deadline ends
+   * the run before the step merges its results, the deadline save records them.
+   */
+  settledToolResults?: Array<{
+    toolCallId: string;
+    toolName: string;
+    args: unknown;
+    outcome: ToolResultCommitOutcome;
+    /** The approval decision of an approved approval-gated tool, so it round-trips on recall. */
+    approval?: { id: string; approved: boolean; reason?: string };
+    /** Includes the tool payload transform metadata, so transcript transforms apply on recall. */
+    providerMetadata?: Record<string, any>;
+  }>;
   /** Resolved input processors (non-serializable, combined into workflow) */
   inputProcessors?: InputProcessorOrWorkflow[];
   /**
@@ -1068,6 +1066,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.

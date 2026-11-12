@@ -522,6 +522,84 @@ Line 3 conclusion`;
       expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
     });
 
+    describe('with a vector store that embeds server-side', () => {
+      const makeStore = () => ({
+        id: 'mock-vector',
+        isSelfEmbedding: true,
+        createIndex: vi.fn(async () => {}),
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => []),
+        deleteVector: vi.fn(async () => {}),
+      });
+
+      it('should offer vector search without an embedder', () => {
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: makeStore() as any,
+        });
+
+        expect(workspace.canVector).toBe(true);
+      });
+
+      it('should still require an embedder for a store that does not embed server-side', () => {
+        const store = { ...makeStore(), isSelfEmbedding: false };
+
+        expect(
+          () => new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }), vectorStore: store as any }),
+        ).toThrow(/vectorStore requires an embedder/);
+      });
+
+      it('should index and search through the store as text', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          id: 'my-workspace-id',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+        });
+
+        await workspace.index('/doc.txt', 'Reset passwords from the account settings page.');
+        await workspace.search('password reset', { mode: 'vector' });
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'my_workspace_id_search_selfembed' });
+        expect(store.upsert).toHaveBeenCalledWith(
+          expect.objectContaining({
+            indexName: 'my_workspace_id_search_selfembed',
+            documents: ['Reset passwords from the account settings page.'],
+          }),
+        );
+        expect(store.query).toHaveBeenCalledWith(
+          expect.objectContaining({ indexName: 'my_workspace_id_search_selfembed', queryText: 'password reset' }),
+        );
+      });
+
+      it('should keep a custom searchIndexName as given', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          searchIndexName: 'custom_index_name',
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'custom_index_name' });
+      });
+
+      it('should keep the default index name when an embedder is configured', async () => {
+        const store = makeStore();
+        const workspace = new Workspace({
+          id: 'my-workspace-id',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          embedder: vi.fn(async () => [0.1, 0.2, 0.3]),
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+
+        expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'my_workspace_id_search', dimension: 3 });
+      });
+    });
+
     it('should release the search index on destroy', async () => {
       const filesystem = new LocalFilesystem({ basePath: tempDir });
       const workspace = new Workspace({
@@ -964,12 +1042,14 @@ Line 3 conclusion`;
           await scoped.list();
         }
 
+        // Each source indexes two documents per skill: the SKILL.md body and its name/description
         const indexedIds = new Set(indexSpy.mock.calls.map(([doc]) => doc.id));
-        expect(indexedIds.size).toBe(5);
-        // Three sources evicted → their documents removed
-        expect(removeSpy).toHaveBeenCalledTimes(3);
+        expect(indexedIds.size).toBe(10);
+        // Three sources evicted → both of their documents removed
+        expect(removeSpy).toHaveBeenCalledTimes(6);
         const removedIds = new Set(removeSpy.mock.calls.map(([id]) => id));
         for (const id of removedIds) expect(indexedIds.has(id)).toBe(true);
+        expect([...removedIds].filter(id => id.endsWith(':SKILL.md#metadata'))).toHaveLength(3);
 
         const scoped = await skills.getScoped({ requestContext: new RequestContext() });
         expect((await scoped.search('demo')).map(r => r.skillName)).toEqual(['demo']);
@@ -992,20 +1072,21 @@ Line 3 conclusion`;
         // A second source evicts A and releases its search documents
         const viewB = await skills.getScoped({ requestContext: new RequestContext() });
         await viewB.list();
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        // One skill per source, two documents each (body + name/description)
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
 
         // A retained view (and the request-context cache) still searches correctly…
         expect((await viewA.search('demo')).map(r => r.skillName)).toEqual(['demo']);
         const viewAAgain = await skills.getScoped({ requestContext: ctxA });
         expect((await viewAAgain.search('demo')).map(r => r.skillName)).toEqual(['demo']);
         // …and re-admission evicted B instead of growing the index
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
 
         // A refresh on the now-evicted B must not repopulate its namespace without re-admitting
         await viewB.refresh();
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
         expect((await viewB.search('demo')).map(r => r.skillName)).toEqual(['demo']);
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
       });
 
       it('returns to the cache bound after concurrent live views re-admit each other', async () => {
@@ -1040,8 +1121,8 @@ Line 3 conclusion`;
           ]);
         }
 
-        // Only one source may hold documents once everything settles
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource);
+        // Only one source may hold documents once everything settles (two per skill)
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource * 2);
       });
 
       it('rejects a search engine that cannot remove evicted documents', () => {
@@ -2896,6 +2977,19 @@ Line 3 conclusion`;
 
       expect(resolved).toBeDefined();
       expect(resolved!.provider).toBe('local');
+    });
+
+    it('retries the filesystem resolver after a failure in the same request', async () => {
+      const fsInstance = new LocalFilesystem({ basePath: tempDir });
+      const resolver = vi.fn().mockRejectedValueOnce(new Error('temporary outage')).mockResolvedValue(fsInstance);
+      const workspace = new Workspace({ filesystem: resolver });
+      const ctx = new RequestContext();
+
+      await expect(workspace.resolveFilesystem({ requestContext: ctx })).rejects.toThrow('temporary outage');
+      await expect(workspace.resolveFilesystem({ requestContext: ctx })).resolves.toBe(fsInstance);
+      // Successful results are still memoized per request.
+      await workspace.resolveFilesystem({ requestContext: ctx });
+      expect(resolver).toHaveBeenCalledTimes(2);
     });
 
     it('should fall back to static filesystem in resolveFilesystem', async () => {

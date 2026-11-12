@@ -578,7 +578,7 @@ describe('Spans page', () => {
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
       expect(
-        screen.getByText('Pick a wider time range — older spans may fall outside the current window.'),
+        screen.getByText('Pick a wider time range. Older spans may fall outside the current window.'),
       ).toBeTruthy();
     });
 

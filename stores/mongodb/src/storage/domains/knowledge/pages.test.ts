@@ -322,6 +322,44 @@ describe('MongoKnowledgePages (schema 4)', () => {
     ).resolves.toMatchObject({ scopeId: y.id });
   });
 
+  it('keeps pins from before pin kinds as page pins and then takes a list pin on the same page', async () => {
+    await store.reset();
+    const { scope } = await store.materializeScope({
+      address: 'org:kinds',
+      declaration: 'org:$orgId',
+      name: 'Kinds',
+      provenance,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Policy', body: 'Be kind.', provenance });
+    // The pins collection as it shipped before kinds: no kind field, one pin per page.
+    const pins = await connector.getCollection('mastra_knowledge_pins');
+    await pins.drop();
+    await pins.createIndex({ pageId: 1 }, { unique: true });
+    const at = new Date();
+    await pins.insertOne({
+      id: 'pin-old',
+      pageId: page.id,
+      audience: ['org:kinds'],
+      createdBy: 'agent:alex',
+      createdAt: at,
+      updatedAt: at,
+    });
+    await store.init();
+    await store.init();
+    const { pins: listed } = await store.listPins({ audience: ['org:kinds'], read: 'all' });
+    expect(listed).toMatchObject([{ id: 'pin-old', pageId: page.id, kind: 'page', audience: ['org:kinds'] }]);
+    await store.addPinAudience({ pageId: page.id, kind: 'list', depth: 2, audience: ['org:kinds'], createdBy: 'a' });
+    const kinds = (await store.listPins({ audience: ['org:kinds'], read: 'all' })).pins.map(pin => [
+      pin.kind,
+      pin.depth,
+    ]);
+    expect(kinds.sort()).toEqual([
+      ['list', 2],
+      ['page', undefined],
+    ]);
+    await store.reset();
+  });
+
   it('refuses an unknown schema version until reset', async () => {
     await (
       await connector.getCollection('mastra_knowledge_access_state')

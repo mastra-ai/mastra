@@ -504,3 +504,72 @@ describe('bounded result contract', () => {
     expect(spanQueryResponseSchema.safeParse({ spans: [], page: { next: null } }).success).toBe(true);
   });
 });
+
+describe('span text search', () => {
+  it('normalizes case and outer whitespace without interpreting punctuation or inner spaces', () => {
+    expect(planSpanQuery({ timeRange, textSearch: '  Error  50%_\\path  ', where })).toMatchObject({
+      textSearch: 'error  50%_\\path',
+      where: planSpanQuery({ timeRange, where }).where,
+    });
+  });
+
+  it.each(['', '   ', 'ab', '😀😀', 'x'.repeat(257), null, 123])('rejects invalid search input: %j', textSearch => {
+    expect(() => parseSpanQueryRequest({ timeRange, textSearch })).toThrow();
+  });
+
+  it.each(['abc', '😀😀😀', 'x'.repeat(256)])('accepts bounded search input', textSearch => {
+    expect(parseSpanQueryRequest({ timeRange, textSearch }).textSearch).toBe(textSearch);
+  });
+
+  it('binds pagination to search while allowing equivalent case and whitespace', () => {
+    const plan = planSpanQuery({ timeRange, textSearch: ' ERROR ' });
+    const after = encodeSpanQueryCursor(plan, values);
+    expect(planSpanQuery({ timeRange, textSearch: 'error', page: { after, limit: 5 } }).cursor).toEqual({
+      ...values,
+      sortValue: '2026-10-01T12:00:00.000Z',
+    });
+    for (const textSearch of ['timeout', undefined]) {
+      expect(() => planSpanQuery({ timeRange, textSearch, page: { after } })).toThrow(TraceQueryCursorError);
+    }
+    const noSearchCursor = encodeSpanQueryCursor(planSpanQuery({ timeRange }), values);
+    expect(() => planSpanQuery({ timeRange, textSearch: 'error', page: { after: noSearchCursor } })).toThrow(
+      TraceQueryCursorError,
+    );
+  });
+});
+
+describe('span duration ordering', () => {
+  const request = { timeRange, orderBy: [{ field: 'durationMs', direction: 'desc' }] };
+  it('keeps duration ordering opt-in so older hosts cannot forward it to unsupported stores', () => {
+    expect(() => planSpanQuery(request)).toThrow();
+    const plan = planSpanQuery(request, { allowSpanDurationOrdering: true });
+    expect(plan.orderBy).toEqual({ field: 'durationMs', direction: 'desc' });
+    expect(() => parseTraceQueryRequest(request)).toThrow();
+  });
+
+  it('walks a numeric duration cursor and rejects changed queries and invalid boundaries', () => {
+    const options = { allowSpanDurationOrdering: true, scope };
+    const plan = planSpanQuery(request, options);
+    const after = encodeSpanQueryCursor(plan, { ...identity, sortValue: 1000 });
+    expect(planSpanQuery({ ...request, page: { after } }, options).cursor?.sortValue).toBe(1000);
+    for (const change of [
+      { orderBy: [{ field: 'durationMs', direction: 'asc' }] },
+      { orderBy: [{ field: 'endedAt', direction: 'desc' }] },
+      { where },
+    ]) {
+      expect(() => planSpanQuery({ ...request, ...change, page: { after } }, options)).toThrow(
+        'The cursor does not match the query',
+      );
+    }
+    expect(() =>
+      planSpanQuery({ ...request, page: { after } }, { ...options, scope: { organizationId: 'other' } }),
+    ).toThrow('The cursor does not match the query');
+    for (const sortValue of [null, -1, '2026-10-01T12:00:00Z']) {
+      const malformed = Buffer.from(
+        JSON.stringify({ version: 1, result: 'spans', binding: plan.binding, values: { ...identity, sortValue } }),
+      ).toString('base64url');
+      expect(() => planSpanQuery({ ...request, page: { after: malformed } }, options)).toThrow(TraceQueryCursorError);
+      expect(() => encodeSpanQueryCursor(plan, { ...identity, sortValue })).toThrow();
+    }
+  });
+});

@@ -75,6 +75,7 @@ import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-re
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
 import { firstRunOnboardingScenario } from './first-run-onboarding.js';
+import { gatewayWebSearchScenario } from './gateway-web-search.js';
 import { githubSignalsCommandScenario } from './github-signals-command.js';
 import { githubSignalsIncrementalScenario } from './github-signals-incremental.js';
 import { githubSignalsLegacyUpgradeScenario } from './github-signals-legacy-upgrade.js';
@@ -129,6 +130,8 @@ import { modelsPackActivationPersistenceScenario } from './models-pack-activatio
 import { modelsPackKimiModelScenario } from './models-pack-kimi-model.js';
 import { modelsPackMemoryAutoScenario } from './models-pack-memory-auto.js';
 import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
+import { mouseInputModeScenario } from './mouse-input-mode.js';
+import { mouseModalAndAutocompleteScenario } from './mouse-modal-and-autocomplete.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
 import { notificationInboxCrudFlowScenario } from './notification-inbox-crud-flow.js';
 import { notificationInboxReloadScenario } from './notification-inbox-reload.js';
@@ -194,6 +197,7 @@ import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-
 import { resumeLockedThreadScenario } from './resume-locked-thread.js';
 import { resumeMissingThreadScenario } from './resume-missing-thread.js';
 import { schedulesCommandScenario } from './schedules-command.js';
+import { schedulesMultilinePromptScenario } from './schedules-multiline-prompt.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -329,6 +333,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
   'schedules-command': schedulesCommandScenario,
+  'schedules-multiline-prompt': schedulesMultilinePromptScenario,
   'github-signals-multi-subscribe': githubSignalsMultiSubscribeScenario,
   'github-signals-legacy-upgrade': githubSignalsLegacyUpgradeScenario,
   'github-signals-tool-multi-subscribe': githubSignalsToolMultiSubscribeScenario,
@@ -372,6 +377,8 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'mcp-skipped-validation': mcpSkippedValidationScenario,
   'bedrock-model-discovery': bedrockModelDiscoveryScenario,
   'model-search': modelSearchScenario,
+  'mouse-modal-and-autocomplete': mouseModalAndAutocompleteScenario,
+  'mouse-input-mode': mouseInputModeScenario,
   'model-selection-api-key-prompt': modelSelectionApiKeyPromptScenario,
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
@@ -494,6 +501,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'update-command-prompt': updateCommandPromptScenario,
   'update-startup-prompt': updateStartupPromptScenario,
   'web-search-rendering': webSearchRenderingScenario,
+  'gateway-web-search': gatewayWebSearchScenario,
   'workspace-commands': workspaceCommandsScenario,
   'workspace-plan-mode-tools': workspacePlanModeToolsScenario,
   'workspace-tool-names': workspaceToolNamesScenario,

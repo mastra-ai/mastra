@@ -216,6 +216,16 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     expect(KNOWLEDGE_WRITE_INSTRUCTIONS).toMatch(/page bodies in markdown/);
   });
 
+  it('tells the model a read from a line is sized by the token cap, not by limit', () => {
+    const read = (
+      standardSchemaToJSONSchema(tools.knowledge_read!.inputSchema as never, { io: 'input' }) as {
+        properties: Record<string, { description?: string }>;
+      }
+    ).properties;
+    expect(read.from!.description).toMatch(/token cap/);
+    expect(read.limit!.description).toMatch(/not a line count/i);
+  });
+
   it('a note accepts a plain date or a date-time for when', async () => {
     const schema = tools.knowledge_note!.inputSchema as Parameters<typeof validateToolInput>[0];
     const modelSchema = standardSchemaToJSONSchema(schema!, { io: 'input' }) as {

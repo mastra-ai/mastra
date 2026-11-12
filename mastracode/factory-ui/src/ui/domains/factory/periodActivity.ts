@@ -1,5 +1,5 @@
+import type { WorkItemActivity } from '../../../api/types';
 import { sessionRowStatus } from '../workspaces/services/sessionStatus';
-import { doneAt } from './boardItems';
 import type { WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';
@@ -7,6 +7,9 @@ export type ActivityKind = 'cameIn' | 'ran' | 'shipped';
 export type ActivityCounts = Record<ActivityKind, number>;
 
 export const ACTIVITY_KIND_ORDER: readonly ActivityKind[] = ['cameIn', 'ran', 'shipped'];
+
+/** The period the activity band opens on. */
+export const DEFAULT_ACTIVITY_PERIOD: ActivityPeriod = 'week';
 
 export const ACTIVITY_PERIOD_LABELS: Record<ActivityPeriod, string> = {
   today: 'Today',
@@ -42,6 +45,11 @@ const HOURS_PER_SLOT: Record<ActivityPeriod, number> = { today: 1, week: 4, mont
 
 function noCounts(): ActivityCounts {
   return { cameIn: 0, ran: 0, shipped: 0 };
+}
+
+/** The period a read fetches for `period`: Today reads the week's answer, so narrowing fetches nothing. */
+export function activityDepth(period: ActivityPeriod): ActivityPeriod {
+  return period === 'month' ? 'month' : 'week';
 }
 
 export function activityStart(period: ActivityPeriod, now: number): number {
@@ -85,25 +93,26 @@ function activitySlots(period: ActivityPeriod, now: number, runsCompleteAfter: n
 export function periodActivity({
   period,
   now,
-  cards,
+  cardTimes,
   runStarts,
 }: {
   period: ActivityPeriod;
   now: number;
-  cards: readonly WorkItem[];
+  /** When cards were created, and when the completed ones entered their board's completed phase. */
+  cardTimes: Pick<WorkItemActivity, 'createdAt' | 'doneAt'>;
   runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
   const slots = activitySlots(period, now, runStarts.completeAfter);
   const totals = noCounts();
-  const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
-    cameIn: cards.map(card => Date.parse(card.createdAt)),
+  const times: Record<ActivityKind, readonly number[]> = {
+    cameIn: cardTimes.createdAt.map(at => Date.parse(at)),
     ran: runStarts.starts,
-    shipped: cards.map(doneAt),
+    shipped: cardTimes.doneAt.map(at => Date.parse(at)),
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
     for (const time of times[kind]) {
-      if (time === undefined || time < from) continue;
+      if (time < from) continue;
       const slot = slots.findLast(candidate => candidate.start <= Math.min(time, now));
       if (!slot) continue;
       slot.counts[kind] += 1;

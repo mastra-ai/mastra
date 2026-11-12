@@ -1,3 +1,4 @@
+import type { JSONSchema7, JSONSchema7Definition } from 'json-schema';
 import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -90,6 +91,72 @@ export function isValidationError(value: unknown): value is ValidationError {
     value.error === true &&
     'validationErrors' in value
   );
+}
+
+type JSONSchemaNode = JSONSchema7Definition | undefined;
+
+/**
+ * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
+ * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
+ * Only property names declared by `schema` and array indexes are kept; any other segment (a record
+ * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ */
+export function getValidationIssuePaths(
+  error: ValidationError,
+  schema: PublicSchema | undefined,
+  io: 'input' | 'output' = 'input',
+): string[] {
+  let root: JSONSchemaNode;
+  try {
+    root = schema ? standardSchemaToJSONSchema(toStandardSchema(schema), { io }) : undefined;
+  } catch {
+    root = undefined;
+  }
+
+  const resolve = (node: JSONSchemaNode, seen = new Set<string>()): JSONSchema7[] => {
+    if (!node || typeof node !== 'object') return [];
+    if (node.$ref?.startsWith('#/') && typeof root === 'object' && !seen.has(node.$ref)) {
+      seen.add(node.$ref);
+      const target = node.$ref
+        .slice(2)
+        .split('/')
+        .reduce<unknown>((at, key) => (at as Record<string, unknown> | undefined)?.[key], root);
+      return resolve(target as JSONSchemaNode, seen);
+    }
+    return [
+      node,
+      ...[...(node.anyOf ?? []), ...(node.oneOf ?? []), ...(node.allOf ?? [])].flatMap(branch => resolve(branch, seen)),
+    ];
+  };
+
+  const child = (nodes: JSONSchema7[], key: string): { segment: string; nodes: JSONSchema7[] } => {
+    const declared = nodes.filter(node => node.properties && Object.hasOwn(node.properties, key));
+    if (declared.length > 0) return { segment: key, nodes: declared.flatMap(node => resolve(node.properties![key])) };
+    if (/^\d+$/.test(key)) {
+      const items = nodes.flatMap(node =>
+        Array.isArray(node.items) ? resolve(node.items[Number(key)]) : resolve(node.items),
+      );
+      if (items.length > 0 || nodes.some(node => node.type === 'array')) return { segment: key, nodes: items };
+    }
+    return {
+      segment: '*',
+      nodes: nodes.flatMap(node => [
+        ...resolve(node.additionalProperties),
+        ...Object.values(node.patternProperties ?? {}).flatMap(pattern => resolve(pattern)),
+      ]),
+    };
+  };
+
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[], nodes: JSONSchema7[]) => {
+    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
+    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      const next = child(nodes, key);
+      walk(field, [...path, next.segment], next.nodes);
+    }
+  };
+  walk(error.validationErrors, [], resolve(root));
+  return [...new Set(paths)];
 }
 
 /**

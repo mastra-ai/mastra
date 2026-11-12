@@ -24,8 +24,22 @@ export interface KnowledgeBodySection {
   end: number;
 }
 
-const HEADING = /^(#{1,6})[ \t]+(.+?)[ \t]*#*[ \t]*$/;
-const FENCE = /^[ \t]*(```|~~~)/;
+// A closing run of `#` only counts when whitespace comes before it, so `## Use C#` keeps its `#`.
+const HEADING = /^(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
+// CommonMark allows up to three spaces before a fence; four or more is an indented code line.
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+/**
+ * Tracks fenced code line by line: returns the open fence after `line`, given the one open before
+ * it. A fence closes only on a run of the same character at least as long, with nothing after it.
+ */
+function nextFence(open: string | undefined, line: string): string | undefined {
+  const fence = FENCE.exec(line);
+  if (!fence) return open;
+  if (open === undefined) return fence[1];
+  const closes = fence[1]![0] === open[0] && fence[1]!.length >= open.length && !fence[2]!.trim();
+  return closes ? undefined : open;
+}
 
 /** Markdown sections by ATX heading, in body order; headings inside fenced code are ignored. */
 export function knowledgeBodySections(body: string): KnowledgeBodySection[] {
@@ -33,12 +47,12 @@ export function knowledgeBodySections(body: string): KnowledgeBodySection[] {
   let fence: string | undefined;
   let at = 0;
   for (const line of body.split('\n')) {
-    const fenced = FENCE.exec(line)?.[1];
-    if (fenced) fence = fence === undefined ? fenced : fence === fenced ? undefined : fence;
-    else if (fence === undefined) {
+    const fenced = FENCE.test(line);
+    if (!fenced && fence === undefined) {
       const heading = HEADING.exec(line);
       if (heading) headings.push({ level: heading[1]!.length, title: heading[2]!.trim(), start: at });
     }
+    fence = nextFence(fence, line);
     at += line.length + 1;
   }
   return headings.map((heading, i) => {
@@ -146,7 +160,7 @@ export class KnowledgeBodyLines {
   /** The position of an end offset: its line, with a column only when it isn't the line's end. */
   endPosition(offset: number): KnowledgeLinePosition {
     const line = this.lineAt(offset);
-    return offset === this.lineEnd(line) ? { line } : { line, col: offset - this.starts[line - 1]! };
+    return offset >= this.lineEnd(line) ? { line } : { line, col: offset - this.starts[line - 1]! };
   }
 
   /** Body characters `start` to `end`, each line prefixed with its number: `12│text`. */
@@ -276,7 +290,8 @@ export function knowledgeBodyChunks(
   overlapTokens = KNOWLEDGE_EMBED_CHUNK_OVERLAP_TOKENS,
 ): string[] {
   if (estimateTokenCount(body) <= maxTokens) return [body];
-  const room = Math.max(maxTokens - overlapTokens, 1);
+  const room = maxTokens - overlapTokens;
+  if (room < 1) throw new RangeError('knowledgeBodyChunks: maxTokens must be larger than overlapTokens.');
 
   // Paragraphs and fenced blocks, with a break before each heading.
   const blocks: Array<{ text: string; heading: boolean }> = [];
@@ -289,7 +304,7 @@ export function knowledgeBodyChunks(
     heading = false;
   };
   for (const line of body.split('\n')) {
-    const fenced = FENCE.exec(line)?.[1];
+    const fenced = FENCE.test(line);
     if (fence === undefined && !fenced && !line.trim()) {
       flush();
       continue;
@@ -298,7 +313,7 @@ export function knowledgeBodyChunks(
       flush();
       heading = true;
     }
-    if (fenced) fence = fence === undefined ? fenced : fence === fenced ? undefined : fence;
+    fence = nextFence(fence, line);
     lines.push(line);
   }
   flush();

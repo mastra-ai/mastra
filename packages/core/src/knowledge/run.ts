@@ -49,6 +49,7 @@ export class KnowledgeRun {
     runtime: KnowledgeScopeRuntime,
     storage: KnowledgeStorage,
     context: KnowledgeRunContext | undefined,
+    options: { write?: boolean } = {},
   ): Promise<KnowledgeRun> {
     const principals = knowledgeRunPrincipals(runtime, context);
     const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
@@ -56,8 +57,11 @@ export class KnowledgeRun {
       author,
       ...(context?.agent?.threadId ? { sourceThreadId: context.agent.threadId } : {}),
     };
-    // Held scopes are host-vouched, so they materialize (and late-link) on first use.
-    for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+    // Held scopes are host-vouched, so a writing run materializes (and late-links) them. Reads create
+    // nothing: a scope with no pages yet reads the same as one that doesn't exist.
+    if (options.write) {
+      await runtime.materializeScopes(principals, principals, provenance);
+    }
     const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
     return new KnowledgeRun(runtime, storage, principals, read, provenance);
   }

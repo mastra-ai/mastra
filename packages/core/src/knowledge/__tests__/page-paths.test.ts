@@ -138,8 +138,8 @@ describe('Knowledge results name pages by full ref', () => {
 describe('Knowledge template pages belong to config', () => {
   it('refuses to move or merge away a template page, by key path, id and name', async () => {
     const { call, read } = setup();
-    const refund = await read('org:acme#policies/refund');
     const other = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
+    const refund = await read('org:acme#policies/refund');
     for (const page of ['org:acme#policies/refund', refund.id, 'Refund policy']) {
       await expect(call('knowledge_page', { op: 'move', page, scope: 'org:acme' })).rejects.toThrow(
         `"org:acme#policies/refund" is declared in config; change the scope's pages to move it.`,
@@ -190,28 +190,31 @@ describe('Knowledge template pages belong to config', () => {
     await expect(read('Refund draft')).rejects.toThrow(/not found/);
   });
 
-  it('creates a page added to the template in an existing scope on its next run', async () => {
+  it('creates a page added to the template in an existing scope on its next writing run', async () => {
     const first = setup();
-    await first.read('org:acme#policies');
+    await first.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
     const next = setup({
       storage: first.storage,
       pages: [{ ...TEMPLATES[0]!, pages: [...TEMPLATES[0]!.pages!, { key: 'returns', name: 'Returns' }] }],
     });
+    await expect(next.read('org:acme#policies/returns')).rejects.toThrow(/not found/);
+    await next.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch 2' });
     expect((await next.read('org:acme#policies/returns')).name).toBe('Returns');
   });
 
   it('gives a newly created scope its template pages', async () => {
     const first = setup();
-    await first.read('org:acme#policies');
+    await first.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
     const globex = setup({ storage: first.storage, org: 'org:globex' });
+    await globex.call('knowledge_page', { op: 'write', scope: 'org:globex', name: 'Scratch' });
     expect((await globex.read('org:globex#policies/refund')).name).toBe('Refund policy');
     expect((await globex.read('org:globex#handbook/refund')).name).toBe('Refund section');
   });
 
   it('turns a page removed from the template into an ordinary page, and re-attaches it when added back', async () => {
     const first = setup();
-    const handbook = await first.read('org:acme#handbook');
     await first.call('knowledge_page', { op: 'write', page: 'org:acme#handbook', body: 'Read me first.' });
+    const handbook = await first.read('org:acme#handbook');
 
     const removed = setup({ storage: first.storage, pages: [TEMPLATES[0]!] });
     expect((await removed.read('org:acme#handbook')).id).toBe(handbook.id);

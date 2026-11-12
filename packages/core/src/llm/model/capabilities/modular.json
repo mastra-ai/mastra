@@ -1,29 +1,23 @@
 {
   "attachment": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
-    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
     "minimax/minimax-m3"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M3.1-Flash",
-    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "google/gemma-4-31b-it",
     "minimax/minimax-m3"
   ],
   "reasoning": {
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "toggle"
       },
@@ -32,9 +26,15 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax/minimax-m3": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

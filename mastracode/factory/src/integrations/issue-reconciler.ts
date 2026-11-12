@@ -1,6 +1,6 @@
 import type { Intake, IntakeIssue, ResolvedIntakeDispatch } from '../capabilities/intake.js';
 import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 export const EXTERNAL_SOURCE_MISSING_KEY = 'externalSourceMissingAt';
 const MISSING_RECHECK_MS = 24 * 60 * 60_000;
@@ -23,7 +23,7 @@ export interface IssueReconcileSummary {
  */
 export interface IssueReconcileScope<TScope> {
   scopes: TScope[];
-  matches(item: WorkItemRow, scope: TScope): boolean;
+  matches(item: Card, scope: TScope): boolean;
 }
 
 export interface IssueReconcilerOptions<TScope = void> {
@@ -31,10 +31,10 @@ export interface IssueReconcilerOptions<TScope = void> {
   intake: Intake;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
   storage: WorkItemsStorage;
-  externalSource?(item: WorkItemRow): { type: string; externalId: string };
-  issueId(item: WorkItemRow): string | undefined;
+  externalSource?(item: Card): { type: string; externalId: string };
+  issueId(item: Card): string | undefined;
   metadata(
-    item: WorkItemRow,
+    item: Card,
     issue: IntakeIssue,
     dispatch: ResolvedIntakeDispatch,
   ): Record<string, unknown> | Promise<Record<string, unknown>>;
@@ -44,13 +44,13 @@ export interface IssueReconcilerOptions<TScope = void> {
    * the provider's rules ingress.
    */
   onClosed?(
-    item: WorkItemRow,
+    item: Card,
     issue: IntakeIssue,
     project: FactoryProject,
     dispatch: ResolvedIntakeDispatch,
   ): Promise<Record<string, unknown> | void>;
   /** Whether the item already rests in a terminal phase of its board. Unknown phases are not terminal. */
-  isTerminal(item: WorkItemRow): boolean;
+  isTerminal(item: Card): boolean;
   now?: () => Date;
 }
 
@@ -109,7 +109,7 @@ function withoutMissingMarker(record: Record<string, unknown> | null): Record<st
   return metadata;
 }
 
-function issueItems(project: FactoryProject, items: WorkItemRow[], integrationId: string): WorkItemRow[] {
+function issueItems(project: FactoryProject, items: readonly Card[], integrationId: string): Card[] {
   return items.filter(
     item =>
       item.factoryProjectId === project.id &&
@@ -137,7 +137,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
     const projects = await options.projects.listAll();
     for (const project of projects) {
-      const all = await options.storage.list({ orgId: project.orgId, factoryProjectId: project.id });
+      const all = await options.storage.listShared({ orgId: project.orgId, factoryProjectId: project.id });
       const candidates = issueItems(project, all, options.integrationId);
       const items = scope
         ? candidates.filter(item => scope.scopes.some(target => scope.matches(item, target)))
@@ -148,7 +148,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
       for (const item of items) {
         summary.checked += 1;
         try {
-          const missingAt = item.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
+          const missingAt = item.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
           const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
           const missingAge = now().getTime() - missingTime;
           if (Number.isFinite(missingTime) && missingAge >= 0 && missingAge < MISSING_RECHECK_MS) {
@@ -161,11 +161,11 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
             externalSource: options.externalSource?.(item) ?? item.externalSource!,
           });
           if (!resolved) {
-            await options.storage.update({
+            await options.storage.syncCard({
               orgId: project.orgId,
               id: item.id,
               userId: 'factory-rule-dispatcher',
-              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
             });
             summary.missing += 1;
             continue;
@@ -173,24 +173,24 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
           const issueId = options.issueId(item) ?? resolved.issueId;
           const issue = await options.intake.getIssue({ ...resolved, issueId });
           if (!issue) {
-            await options.storage.update({
+            await options.storage.syncCard({
               orgId: project.orgId,
               id: item.id,
               userId: 'factory-rule-dispatcher',
-              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
             });
             summary.missing += 1;
             continue;
           }
 
           const hadMissingMarker = typeof missingAt === 'string';
-          const baseMetadata = withoutMissingMarker(item.metadata);
+          const baseMetadata = withoutMissingMarker({ ...item.workItem.metadata, ...item.metadata });
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
             const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
             if (hadMissingMarker || !metadataMatches(baseMetadata, closedMetadata)) {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: project.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
@@ -210,7 +210,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
           const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
           if (!hadMissingMarker && metadataMatches(baseMetadata, metadata)) continue;
-          await options.storage.update({
+          await options.storage.syncCard({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',

@@ -7,6 +7,7 @@ import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import type { createEventedWorkflow } from '../workflows/create';
 import { createWorkflow } from '../workflows/create';
+import { markFrameworkCondition } from '../workflows/framework-condition';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
@@ -675,6 +676,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
+        if (typedInputData.stepResult?.reason !== 'retry') messageList.markStepCompleted();
         await outputWriter({
           type: 'step-finish',
           runId,
@@ -762,7 +764,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         validateInputs: false,
       },
     })
-      .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+      .dowhile(this.buildIterationWorkflow(), markFrameworkCondition(this.buildContinuationPredicate()))
       .commit();
     workflow.__setResumeTracingContext(resumeTracingContext);
     return workflow;

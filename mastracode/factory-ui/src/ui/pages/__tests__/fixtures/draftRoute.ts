@@ -1,7 +1,9 @@
 import { http, HttpResponse } from 'msw';
 
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../e2e/ui/render';
+import type { WorkItemStarters } from '../../../../api/types';
 import type { FactoryUserSession } from '../../../domains/workspaces/services/user-sessions';
 
 export const FACTORY_ID = 'factory-draft-handoff';
@@ -47,8 +49,52 @@ interface DraftRouteOptions {
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
-  /** The Factory's cards, in the wire shape the work-items route answers with. */
-  workItems?: unknown[];
+  /** What the server counts on the default board for the starter buttons; nothing waits unless stated. */
+  starters?: Partial<WorkItemStarters>;
+  /** The Factory's cards, as the instants the activity band reads. */
+  cards?: CardTimes[];
+}
+
+interface CardTimes {
+  createdAt: string;
+  /** When the card entered its board's completed phase, if it sits there now. */
+  doneAt?: string;
+}
+
+/** Answers the starters read as the server does for a board where only `counted` waits. */
+export function stubStarters(counted: Partial<WorkItemStarters> = {}) {
+  const starters: WorkItemStarters = {
+    failed: 0,
+    changesRequested: 0,
+    review: { count: 0 },
+    undecided: 0,
+    untriaged: 0,
+    unplannedBugs: 0,
+    stale: 0,
+    ...counted,
+  };
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/starters`, () =>
+      HttpResponse.json(starters),
+    ),
+  );
+}
+
+/** Answers the activity read as the server does: every card counted, only instants from `since` on listed. */
+function stubActivity(cards: CardTimes[]) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/activity`, ({ request }) => {
+      const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+      if (Number.isNaN(since)) return HttpResponse.json({ error: 'invalid_activity_since' }, { status: 400 });
+      const fromSince = (instants: Array<string | undefined>) =>
+        instants.filter(at => at !== undefined && Date.parse(at) >= since);
+      return HttpResponse.json({
+        total: cards.length,
+        createdAt: fromSince(cards.map(card => card.createdAt)),
+        doneAt: fromSince(cards.map(card => card.doneAt)),
+      });
+    }),
+  );
 }
 
 function readSentMessage(body: unknown): string {
@@ -63,7 +109,8 @@ export function stubDraftRoute({
   modelSwitchGate,
   defaultModelId = null,
   persistedMessages = [],
-  workItems = [],
+  starters,
+  cards = [],
 }: DraftRouteOptions = {}): DraftRoute {
   let releaseWorkspace = () => {};
   // The server creates the session's thread only once the controller session
@@ -93,7 +140,17 @@ export function stubDraftRoute({
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
+      HttpResponse.json({
+        projects: [
+          {
+            id: FACTORY_ID,
+            name: 'Acme Factory',
+            repositories: [
+              listedRepository(REPOSITORY_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/workspace/acme' }),
+            ],
+          },
+        ],
+      }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
       await modelDefaultsGate;
@@ -107,25 +164,6 @@ export function stubDraftRoute({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'connection-1',
-            installationId: 'installation-1',
-            repositories: [
-              {
-                id: REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/acme',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
@@ -214,5 +252,7 @@ export function stubDraftRoute({
     ),
   );
 
+  stubStarters(starters);
+  stubActivity(cards);
   return route;
 }

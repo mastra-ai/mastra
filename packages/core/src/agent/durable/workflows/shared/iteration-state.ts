@@ -160,14 +160,17 @@ function isHeldResult(result: unknown, ids: Set<string>): boolean {
  * };
  * ```
  */
-export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
+export function createBaseIterationStateUpdate(
+  input: IterationStateUpdateInput,
+): BaseIterationState & Required<Pick<BaseIterationState, 'accumulatedSteps'>> {
   const { currentState, executionOutput } = input;
+  const previousSteps = currentState.accumulatedSteps ?? [];
 
   // Legacy states with completed steps cannot prove whether their numeric totals
   // include every provider measurement. Preserve the zero identity only for a
   // pre-first-step state; otherwise migrate the accumulator to unknown.
   const currentUsage =
-    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+    currentState.usageAggregationVersion === 1 || previousSteps.length === 0
       ? currentState.accumulatedUsage
       : {
           ...currentState.accumulatedUsage,
@@ -199,9 +202,9 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     inputTripwire: signalPreempted ? currentState.inputTripwire : undefined,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
-      ? currentState.accumulatedSteps
+      ? previousSteps
       : [
-          ...withReleasedToolResults(currentState.accumulatedSteps, executionOutput.releasedToolResultIds),
+          ...withReleasedToolResults(previousSteps, executionOutput.releasedToolResultIds),
           buildStepRecord(executionOutput),
         ],
     accumulatedUsage: newUsage,
@@ -216,6 +219,8 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // rebuilds the state for the next iteration, so we must carry the
     // flag forward explicitly.
     pendingFeedbackStop: currentState.pendingFeedbackStop,
+    // Set by the predicate after it publishes a step-finish, like pendingFeedbackStop.
+    responseMessagesCursor: currentState.responseMessagesCursor,
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,

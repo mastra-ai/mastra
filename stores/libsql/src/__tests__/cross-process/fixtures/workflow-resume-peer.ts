@@ -3,8 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '../../../storage';
 import { runPeer } from '../peer-runtime';
 import { bootWorkers } from '../process-workers';
-import { createApprovalWorkflow } from './approval-workflow';
-import { createSpanOutcomeObservability } from './span-outcome-agent';
+import { createApprovalWorkflow, createResumeTracingObservability } from './approval-workflow';
 
 export interface WorkflowResumePeerArgs {
   workflowId: string;
@@ -20,7 +19,7 @@ runPeer<WorkflowResumePeerArgs>(async peer => {
     pubsub: peer.pubsub(),
     logger: false,
     workers: peer.workers ? undefined : false,
-    observability: createSpanOutcomeObservability(),
+    observability: createResumeTracingObservability(),
   });
   try {
     await bootWorkers(mastra, peer.workers);

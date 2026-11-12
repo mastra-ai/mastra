@@ -27,6 +27,7 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
@@ -746,11 +747,13 @@ export class ProcessorRunner {
     if (result.status !== 'success') {
       // Collect error details from the workflow result and failed steps
       const details: string[] = [];
+      // A storage v2 result's `steps` is a loader; it holds the failed results without reading storage.
+      const steps = residentStepResults(result.steps) ?? result.steps;
       if (result.status === 'failed') {
         if (result.error) {
           details.push(result.error.message || JSON.stringify(result.error));
         }
-        for (const [stepId, step] of Object.entries(result.steps)) {
+        for (const [stepId, step] of Object.entries(steps)) {
           if (step.status === 'failed' && step.error?.message) {
             details.push(`step ${stepId}: ${step.error.message}`);
           }
@@ -761,7 +764,7 @@ export class ProcessorRunner {
       // flattened status text and lose the original error, stack and type.
       let failedStepError: Error | undefined;
       if (result.status === 'failed') {
-        for (const step of Object.values(result.steps)) {
+        for (const step of Object.values(steps)) {
           if (step.status === 'failed' && step.error) {
             failedStepError = step.error;
             break;

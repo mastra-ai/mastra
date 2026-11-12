@@ -258,70 +258,94 @@ describeForAllEngines(
       );
     });
 
-    it('suspends a routed workflow and resumes it with the resume data', async () => {
-      const llm = getMock();
-      llm.on(
-        { endpoint: 'chat', predicate: isRoutingRequest },
-        routeTo('suspendingWorkflow', 'workflow', JSON.stringify({ query: 'workflow test' })),
-      );
-      llm.on({ endpoint: 'chat', predicate: isCompletionRequest }, complete('Task completed successfully'));
-      const suspendingStep = createStep({
-        id: 'suspending-step',
-        inputSchema: z.object({ query: z.string() }),
-        suspendSchema: z.object({ message: z.string() }),
-        resumeSchema: z.object({ userInput: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-        execute: async ({ inputData, suspend, resumeData }) => {
-          if (!resumeData) return await suspend({ message: 'Please provide user input for workflow' });
-          return { result: `Workflow received: ${inputData.query} and ${resumeData.userInput}` };
-        },
-      });
-      const suspendingWorkflow = createWorkflow({
-        id: 'suspending-workflow',
-        description: 'Collects user input.',
-        inputSchema: z.object({ query: z.string() }),
-        outputSchema: z.object({ result: z.string() }),
-      })
-        .then(suspendingStep)
-        .commit();
-      const network = new Agent({
-        id: 'suspend-workflow',
-        name: 'suspend-workflow',
-        instructions: 'Run the workflow.',
-        model: scenarioModel(llm),
-        workflows: { suspendingWorkflow },
-        memory: new MockMemory(),
-      });
-      const agent = new Mastra({
-        agents: { network: forEngine(network, engine) },
-        storage: new InMemoryStore(),
-        logger: false,
-      }).getAgent('network');
-      const memory = { thread: 'sw-t', resource: 'sw-r' };
+    it.each([1, 2] as const)(
+      'suspends a routed workflow and resumes it with the resume data (storage v%s)',
+      async storageVersion => {
+        const llm = getMock();
+        llm.on(
+          { endpoint: 'chat', predicate: isRoutingRequest },
+          routeTo('suspendingWorkflow', 'workflow', JSON.stringify({ query: 'workflow test' })),
+        );
+        llm.on({ endpoint: 'chat', predicate: isCompletionRequest }, complete('Task completed successfully'));
+        // Two steps ahead of the suspending one, so on storage v2 the first is evicted by the time the run ends.
+        const readStep = createStep({
+          id: 'read-step',
+          inputSchema: z.object({ query: z.string() }),
+          outputSchema: z.object({ query: z.string() }),
+          execute: async ({ inputData }) => ({ query: inputData.query.trim() }),
+        });
+        const checkStep = createStep({
+          id: 'check-step',
+          inputSchema: z.object({ query: z.string() }),
+          outputSchema: z.object({ query: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
+        const suspendingStep = createStep({
+          id: 'suspending-step',
+          inputSchema: z.object({ query: z.string() }),
+          suspendSchema: z.object({ message: z.string() }),
+          resumeSchema: z.object({ userInput: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          execute: async ({ inputData, suspend, resumeData }) => {
+            if (!resumeData) return await suspend({ message: 'Please provide user input for workflow' });
+            return { result: `Workflow received: ${inputData.query} and ${resumeData.userInput}` };
+          },
+        });
+        const suspendingWorkflow = createWorkflow({
+          id: 'suspending-workflow',
+          description: 'Collects user input.',
+          inputSchema: z.object({ query: z.string() }),
+          outputSchema: z.object({ result: z.string() }),
+          options: { storageVersion },
+        })
+          .then(readStep)
+          .then(checkStep)
+          .then(suspendingStep)
+          .commit();
+        const network = new Agent({
+          id: 'suspend-workflow',
+          name: 'suspend-workflow',
+          instructions: 'Run the workflow.',
+          model: scenarioModel(llm),
+          workflows: { suspendingWorkflow },
+          memory: new MockMemory(),
+        });
+        const agent = new Mastra({
+          agents: { network: forEngine(network, engine) },
+          storage: new InMemoryStore(),
+          logger: false,
+        }).getAgent('network');
+        const memory = { thread: 'sw-t', resource: 'sw-r' };
 
-      const stream = await forEngine(agent, engine).network('Run the workflow', { memory });
-      const chunks = await drain(stream);
-      const suspended = chunks.at(-1);
-      expect(suspended?.type).toBe('workflow-execution-suspended');
-      expect((suspended?.payload as { suspendPayload: unknown }).suspendPayload).toEqual({
-        message: 'Please provide user input for workflow',
-      });
+        const stream = await forEngine(agent, engine).network('Run the workflow', { memory });
+        const chunks = await drain(stream);
+        const suspended = chunks.at(-1);
+        expect(suspended?.type).toBe('workflow-execution-suspended');
+        expect((suspended?.payload as { suspendPayload: unknown }).suspendPayload).toEqual({
+          message: 'Please provide user input for workflow',
+        });
 
-      const resumed = await drain(
-        await forEngine(agent, engine).resumeNetwork(
-          { userInput: 'workflow resume input' },
-          { runId: stream.runId, memory },
-        ),
-      );
+        const resumed = await drain(
+          await forEngine(agent, engine).resumeNetwork(
+            { userInput: 'workflow resume input' },
+            { runId: stream.runId, memory },
+          ),
+        );
 
-      expect(resumed[0]?.type).toBe('workflow-execution-start');
-      expect(resumed.at(-1)?.type).toBe('network-execution-event-finish');
-      const end = resumed.find(c => c.type === 'workflow-execution-end');
-      // WorkflowExecutionEndPayload declares `result: string`, but the network emits the workflow's result object.
-      expect((end?.payload as unknown as { result: { result: unknown } }).result.result).toEqual({
-        result: 'Workflow received: workflow test and workflow resume input',
-      });
-    });
+        expect(resumed[0]?.type).toBe('workflow-execution-start');
+        expect(resumed.at(-1)?.type).toBe('network-execution-event-finish');
+        const end = resumed.find(c => c.type === 'workflow-execution-end');
+        // WorkflowExecutionEndPayload declares `result: string`, but the network emits the workflow's result object.
+        const endResult = (end?.payload as unknown as { result: { result: unknown; steps: Record<string, unknown> } })
+          .result;
+        expect(endResult.result).toEqual({ result: 'Workflow received: workflow test and workflow resume input' });
+        expect(endResult.steps['read-step']).toMatchObject({ status: 'success', output: { query: 'workflow test' } });
+        expect(endResult.steps['suspending-step']).toMatchObject({
+          status: 'success',
+          output: { result: 'Workflow received: workflow test and workflow resume input' },
+        });
+      },
+    );
   },
   NETWORK_ENGINE_SKIP,
 );

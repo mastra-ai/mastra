@@ -1,3 +1,4 @@
+import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage } from '@mastra/core/memory';
 import type { QueryResult } from 'pg';
 import { describe, expect, it } from 'vitest';
@@ -73,7 +74,15 @@ class RecordingDbClient extends RecordingDbClientBase {
     return null;
   }
 
-  override async oneOrNone<T = any>(_query: string, values?: QueryValues): Promise<T | null> {
+  saveThreadResult?: Record<string, unknown> | null;
+
+  override async oneOrNone<T = any>(query: string, values?: QueryValues): Promise<T | null> {
+    if (query.includes('INSERT INTO') && Array.isArray(values)) {
+      this.queries.push({ query, values });
+      if (this.saveThreadResult !== undefined) return this.saveThreadResult as T | null;
+      const [id, resourceId, title, metadata, createdAt, createdAtZ, updatedAt, updatedAtZ] = values;
+      return { id, resourceId, title, metadata, createdAt, createdAtZ, updatedAt, updatedAtZ } as T;
+    }
     const id = Array.isArray(values) ? values[0] : undefined;
     return id ? ((this.threads.get(String(id)) as T | undefined) ?? null) : null;
   }
@@ -328,6 +337,97 @@ describe('MemoryPG.saveThread', () => {
 
     expect(saved.metadata).toEqual({ text: 'ab', path: String.raw`literal\u0000` });
     expect(JSON.parse(client.queries[0]!.values![3] as string)).toEqual(saved.metadata);
+  });
+
+  it('keeps resourceId and createdAt out of the conflict update and guards on the stored owner', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+    const now = new Date();
+
+    await memory.saveThread({
+      thread: { id: 'thread-1', resourceId: 'resource-1', title: 'T', metadata: {}, createdAt: now, updatedAt: now },
+    });
+
+    const query = client.queries[0]!.query;
+    const setClause = query.slice(query.indexOf('DO UPDATE SET'), query.indexOf('WHERE'));
+    expect(setClause).not.toContain('"resourceId"');
+    expect(setClause).not.toContain('"createdAt"');
+    expect(setClause).not.toContain('"createdAtZ"');
+    expect(setClause).toContain('"updatedAt" = EXCLUDED."updatedAt"');
+    expect(query).toContain('WHERE t."resourceId" = EXCLUDED."resourceId"');
+    expect(query).toContain('RETURNING *');
+  });
+
+  it('returns the stored createdAt instead of the input createdAt on a re-save', async () => {
+    const client = new RecordingDbClient();
+    const storedCreatedAt = new Date('2026-01-01T00:00:00.000Z');
+    const updatedAt = new Date('2026-02-01T00:00:00.000Z');
+    client.saveThreadResult = {
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'Renamed',
+      metadata: '{"k":"v"}',
+      createdAt: storedCreatedAt,
+      createdAtZ: storedCreatedAt,
+      updatedAt,
+      updatedAtZ: updatedAt,
+    };
+    const memory = new MemoryPG({ client });
+
+    const saved = await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'Renamed',
+        metadata: { k: 'v' },
+        createdAt: new Date('2030-01-01T00:00:00.000Z'),
+        updatedAt,
+      },
+    });
+
+    expect(saved).toEqual({
+      id: 'thread-1',
+      resourceId: 'resource-1',
+      title: 'Renamed',
+      metadata: { k: 'v' },
+      createdAt: storedCreatedAt,
+      updatedAt,
+    });
+  });
+
+  it('returns undefined metadata when the thread has none', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+
+    const saved = await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'No metadata',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+
+    expect(saved.metadata).toBeUndefined();
+  });
+
+  it('refuses to move an existing thread to another resource', async () => {
+    const client = new RecordingDbClient();
+    client.saveThreadResult = null;
+    const memory = new MemoryPG({ client });
+    const now = new Date();
+
+    const error = await memory
+      .saveThread({
+        thread: { id: 'thread-1', resourceId: 'resource-2', title: 'T', metadata: {}, createdAt: now, updatedAt: now },
+      })
+      .catch(e => e);
+
+    expect(error).toBeInstanceOf(MastraError);
+    expect(error.id).toBe('MASTRA_STORAGE_PG_SAVE_THREAD_RESOURCE_ID_MISMATCH');
+    expect(error.category).toBe(ErrorCategory.USER);
+    expect(error.message).toContain('updateThreadResourceId');
   });
 });
 

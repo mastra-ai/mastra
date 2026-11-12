@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -12,9 +13,9 @@ import { OnboardingReviewRow } from './OnboardingReviewRow';
 import { OnboardingWorkReviewRow } from './OnboardingWorkReviewRow';
 
 function sharedModelDetail(scope: OnboardingModelScope | undefined, local: boolean) {
-  if (local) return 'Factory default · local connection';
-  if (scope === 'hybrid') return 'Company account · Factory work';
-  return 'Company account · Factory work and sessions';
+  if (local) return ['Factory default', 'local connection'];
+  if (scope === 'hybrid') return ['Company account', 'Factory work'];
+  return ['Company account', 'Factory work and sessions'];
 }
 
 export function OnboardingReviewStep({
@@ -44,7 +45,14 @@ export function OnboardingReviewStep({
           icon={<GitBranch />}
           label="Codebase"
           value={repo?.fullName ?? 'Choose a repository'}
-          detail={repo ? `${isGitLabRepository(repo) ? 'GitLab' : 'GitHub'} · ${repo.defaultBranch}` : undefined}
+          detail={
+            repo && (
+              <Metadata>
+                <Metadata.Item>{isGitLabRepository(repo) ? 'GitLab' : 'GitHub'}</Metadata.Item>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+              </Metadata>
+            )
+          }
           disabled={pending}
           onEdit={() => onEdit('vcs')}
         />
@@ -64,7 +72,13 @@ export function OnboardingReviewStep({
             icon={<Sparkles />}
             label="Model"
             value={draft.model?.modelId ?? 'Choose a model'}
-            detail={sharedModelDetail(draft.modelScope, local)}
+            detail={
+              <Metadata>
+                {sharedModelDetail(draft.modelScope, local).map((part, index) => (
+                  <Metadata.Item key={index}>{part}</Metadata.Item>
+                ))}
+              </Metadata>
+            }
             disabled={pending}
             onEdit={() => onEdit('model-provider')}
           />
@@ -73,7 +87,14 @@ export function OnboardingReviewStep({
             icon={<Sparkles />}
             label="Model"
             value={personal?.modelId ?? 'Choose a model'}
-            detail={personal && `${personalMethod} · your default for work and sessions`}
+            detail={
+              personal && (
+                <Metadata>
+                  <Metadata.Item>{personalMethod}</Metadata.Item>
+                  <Metadata.Item>your default for work and sessions</Metadata.Item>
+                </Metadata>
+              )
+            }
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />
@@ -83,7 +104,14 @@ export function OnboardingReviewStep({
             icon={<UserRound />}
             label="Personal model"
             value={personal?.modelId ?? 'Choose your session model'}
-            detail={personal ? `${personalMethod} · your default for sessions` : undefined}
+            detail={
+              personal && (
+                <Metadata>
+                  <Metadata.Item>{personalMethod}</Metadata.Item>
+                  <Metadata.Item>your default for sessions</Metadata.Item>
+                </Metadata>
+              )
+            }
             disabled={pending}
             onEdit={() => onEdit('personal-provider')}
           />

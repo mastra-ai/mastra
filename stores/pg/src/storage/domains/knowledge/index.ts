@@ -115,6 +115,7 @@ export class KnowledgePG extends KnowledgeStorage {
       schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION,
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
+      supportsPinKinds: true,
     } as const;
   }
 
@@ -160,6 +161,12 @@ export class KnowledgePG extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['listChildScopes']>[0],
   ): ReturnType<KnowledgePageStore['listChildScopes']> {
     return this.#pages.listChildScopes(input);
+  }
+
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pages.countChildScopes(input);
   }
 
   override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
@@ -236,6 +243,30 @@ export class KnowledgePG extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['countChildPages']>[0],
   ): ReturnType<KnowledgePageStore['countChildPages']> {
     return this.#pages.countChildPages(input);
+  }
+
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
   }
 
   override countNotes(

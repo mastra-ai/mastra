@@ -197,7 +197,8 @@ export const baseIterationStateSchema = z.object({
   inputTripwire: baseDurableAgenticInputSchema.shape.inputTripwire,
   // Iteration tracking
   iterationCount: z.number(),
-  accumulatedSteps: z.array(z.any()),
+  // Absent when the run keeps its step records in workflow state.
+  accumulatedSteps: z.array(z.any()).optional(),
   accumulatedUsage: accumulatedUsageSchema,
   // Identifies states whose usage accumulator preserves unknown counters. Older
   // states have no marker and may contain partial totals presented as complete.
@@ -213,6 +214,16 @@ export const baseIterationStateSchema = z.object({
   // Set when onIterationComplete returns { continue: false, feedback } — allows
   // one more LLM turn with the feedback, then stops on the next predicate eval.
   pendingFeedbackStop: z.boolean().optional(),
+  // The response messages the run's step-finish events have sent (see agent/streams/response-messages.ts)
+  responseMessagesCursor: z
+    .object({
+      producer: z.string(),
+      seq: z.number(),
+      fingerprints: z.array(z.string()),
+      wholeListSize: z.number().optional(),
+      sentSinceWholeList: z.number().optional(),
+    })
+    .optional(),
   // Span data, carried unchanged so every iteration shares one trace
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),

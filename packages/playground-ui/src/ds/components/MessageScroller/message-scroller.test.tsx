@@ -6,6 +6,7 @@ import { ThreadRail } from '../ThreadRail/thread-rail';
 import type { ThreadRailTurn } from '../ThreadRail/thread-rail-turns';
 
 import {
+  MessageScrollerButton,
   MessageScrollerContent,
   MessageScrollerItem,
   MessageScrollerProvider,
@@ -528,6 +529,10 @@ const stubLayout = (tops: Record<string, number>) => {
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
     const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
     return createRect({ top: top ?? 0 });
+  });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function () {
+    const rect = this.getBoundingClientRect();
+    return Object.assign([rect], { item: (index: number) => (index === 0 ? rect : null) });
   });
 };
 
@@ -1195,5 +1200,96 @@ describe('MessageScroller autoScroll', () => {
     });
 
     expect(scrollTo).not.toHaveBeenCalled();
+  });
+});
+
+// A turn whose last step folded into the activity line above it: the step stays
+// registered with the scroller, but is drawn with `display: none`.
+const FoldedStepHarness = () => (
+  <MessageScrollerProvider autoScroll>
+    <MessageScrollerViewport data-testid="folded-step-viewport">
+      <MessageScrollerContent>
+        <MessageScrollerItem messageId="question" scrollAnchor>
+          <div>Read the config files</div>
+        </MessageScrollerItem>
+        <MessageScrollerItem messageId="activity">
+          <div>Read files</div>
+        </MessageScrollerItem>
+        <MessageScrollerItem messageId="folded-step" style={{ display: 'none' }} />
+      </MessageScrollerContent>
+    </MessageScrollerViewport>
+    <MessageScrollerButton behavior="auto" />
+  </MessageScrollerProvider>
+);
+
+type TurnLayout = { rows: Record<string, { top: number; height: number }>; contentHeight: number };
+
+// Lays the turn out as a browser would at the viewport's current scroll, read on every
+// call so a test can grow it. A row with `display: none` has no box: no client rects,
+// and a zero rect at the window origin.
+const stubTurnLayout = (viewport: HTMLElement, layout: TurnLayout) => {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function () {
+    if (this.style.display === 'none') return createRect({ height: 0, width: 0 });
+    const row = this.dataset.messageId ? layout.rows[this.dataset.messageId] : undefined;
+    if (row) return createRect({ top: row.top - viewport.scrollTop, height: row.height });
+    if (this.dataset.slot === 'message-scroller-content') {
+      return createRect({ top: -viewport.scrollTop, height: layout.contentHeight });
+    }
+    return createRect({ height: viewport.clientHeight });
+  });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function () {
+    const rects: DOMRect[] = this.style.display === 'none' ? [] : [this.getBoundingClientRect()];
+    return Object.assign(rects, { item: (index: number) => rects[index] ?? null });
+  });
+};
+
+// The composer docks 100px under the content, so the last drawn row rests at the end of
+// the view at its bottom + 100 - 400, short of the end of the box.
+describe('MessageScroller with a folded last row', () => {
+  it('offers a reader who scrolled up the way back, and lands on the last row still drawn', () => {
+    render(<FoldedStepHarness />);
+
+    const viewport = screen.getByTestId('folded-step-viewport');
+    const scrollTo = installScrollTo(viewport);
+    stubTurnLayout(viewport, {
+      rows: { question: { top: 0, height: 760 }, activity: { top: 784, height: 76 } },
+      contentHeight: 900,
+    });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 560 });
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 100 });
+
+    const jumpToLatest = screen.getByRole('button', { name: 'Scroll to end' });
+    expect(jumpToLatest.getAttribute('data-active')).toBe('true');
+
+    fireEvent.click(jumpToLatest);
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 560, behavior: 'auto' });
+    expect(jumpToLatest.getAttribute('data-active')).toBe('false');
+  });
+
+  it('carries a following reader down as the activity line grows above the folded step', async () => {
+    vi.stubGlobal('ResizeObserver', MockResizeObserver);
+    render(<FoldedStepHarness />);
+
+    const viewport = screen.getByTestId('folded-step-viewport');
+    installScrollTo(viewport);
+    const layout: TurnLayout = {
+      rows: { question: { top: 0, height: 760 }, activity: { top: 784, height: 76 } },
+      contentHeight: 900,
+    };
+    stubTurnLayout(viewport, layout);
+    scrollReaderTo(viewport, { scrollHeight: 1000, clientHeight: 400, scrollTop: 560 });
+
+    const { content, observer } = contentResizeObserver();
+    const scrollTo = installScrollTo(viewport);
+    layout.rows.activity = { top: 784, height: 476 };
+    layout.contentHeight = 1300;
+    Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 1400 });
+
+    await act(async () => {
+      observer.trigger([{ target: content }]);
+    });
+
+    expect(scrollTo).toHaveBeenLastCalledWith({ top: 960, behavior: 'auto' });
   });
 });

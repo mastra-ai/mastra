@@ -27,8 +27,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
+  description: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -211,14 +210,13 @@ describe('custom board operations', () => {
     },
   );
 
-  it('links custom-board comments through the custom route', () => {
+  it('links custom-board cards through the custom route', () => {
     expect(
       factoryAttentionTargetPath('fp-1', {
         kind: 'work-item',
         board: 'release',
         workItemId: item.id,
-        commentId: 'comment-1',
       }),
-    ).toBe('/factories/fp-1/boards/release?item=release-1&comment=comment-1');
+    ).toBe('/factories/fp-1/boards/release?item=release-1');
   });
 });

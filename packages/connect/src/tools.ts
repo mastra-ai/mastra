@@ -10,6 +10,8 @@ import {
   resolveClient,
   validateResourceId,
 } from './client.js';
+import { connectCodeMode } from './code-mode.js';
+import type { CodeModeOptions, ConnectCodeMode } from './code-mode.js';
 import { buildConnectPromptTool, CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
@@ -191,6 +193,23 @@ export interface ToolsResolver extends Promise<ResolvedToolsRecord> {
    * `disconnect`) delegate to the base resolver, and `.with()` calls chain.
    */
   with(extra: ToolsWithInput): ToolsResolver;
+  /**
+   * Exposes these tools through Code Mode: the agent writes one TypeScript
+   * program that calls them as `external_*` functions, instead of calling
+   * each tool in its own step. Returns per-request `tools` and `instructions`
+   * functions to pass to the agent. Tools that need the user's approval, and
+   * `request_connection`, stay direct agent tools because the agent loop
+   * pauses for them.
+   *
+   * ```ts
+   * const code = tools().codeMode({ sandbox })
+   * new Agent({
+   *   instructions: async ctx => ['You are helpful.', await code.instructions(ctx)],
+   *   tools: code.tools,
+   * })
+   * ```
+   */
+  codeMode(options?: CodeModeOptions): ConnectCodeMode;
 }
 
 /**
@@ -231,8 +250,34 @@ interface SnapshotScope {
   resourceId: string | undefined;
   /** Resolved client for this scope; asserts `x-mastra-resource-id` when resource-scoped. */
   client: ResolvedClient;
-  cache?: { snapshot: ResolvedToolsRecord; fetchedAt: number; mcpKeys: Set<string> };
+  cache?: {
+    snapshot: ResolvedToolsRecord;
+    fetchedAt: number;
+    mcpKeys: Set<string>;
+    /** Active connections the snapshot was built from. */
+    activeConnectionIds: Set<string>;
+    /** {@link SnapshotScope.generation} when the fetch behind this snapshot started. */
+    generation: number;
+  };
+  /**
+   * Bumped when a connection change makes the snapshot wrong before its TTL
+   * (see {@link invalidateConnection}). A cache from an older
+   * generation is never served fresh.
+   */
+  generation: number;
   inflight?: Promise<ResolvedToolsRecord>;
+  /** Generation the in-flight fetch started under. */
+  inflightGeneration?: number;
+  /** Fetches started for this scope so far; numbers each fetch. */
+  fetches: number;
+  /** Number of the in-flight fetch. */
+  inflightFetch?: number;
+  /**
+   * Last state reported per connection that invalidated this scope, with the
+   * number of fetches started before it. A fetch numbered higher started
+   * after the report, so it already reflects that state.
+   */
+  reported: Map<string, { active: boolean; afterFetch: number }>;
   lastFailureAt?: number;
   /** LRU clock for resource-scope eviction. The global scope is never evicted. */
   lastUsedAt: number;
@@ -386,6 +431,46 @@ function scopeKey(resourceId: string | undefined): string {
   return resourceId === undefined ? GLOBAL_SCOPE_KEY : `resource:${resourceId}`;
 }
 
+/**
+ * Tells the resolvers in `projectId` that a connection changed (activated, or
+ * stopped being active or was removed), so the next resolution fetches fresh
+ * instead of serving a snapshot that is wrong until its TTL runs out. A
+ * change to `resourceId`'s own connection reaches that resource's scope; a
+ * global connection (no `resourceId`) appears in every scope, so it reaches
+ * all of them. The end-user connect routes call this when they observe the
+ * change. A settled snapshot that already agrees is left alone, and so is a
+ * fetch that started after the same change was reported, so repeated status
+ * polls cost nothing.
+ */
+export function invalidateConnection({
+  projectId,
+  resourceId,
+  connectionId,
+  active,
+}: {
+  projectId: string;
+  resourceId?: string;
+  connectionId: string;
+  active: boolean;
+}): void {
+  for (const state of sharedStates.values()) {
+    if (state.projectId !== projectId) continue;
+    const scopes =
+      resourceId === undefined ? Array.from(state.scopes.values()) : [state.scopes.get(scopeKey(resourceId))];
+    for (const scope of scopes) {
+      if (!scope) continue;
+      if (scope.inflight) {
+        const reported = scope.reported.get(connectionId);
+        if (reported?.active === active && (scope.inflightFetch ?? 0) > reported.afterFetch) continue;
+      } else if (scope.cache?.activeConnectionIds.has(connectionId) === active) {
+        continue;
+      }
+      scope.generation += 1;
+      scope.reported.set(connectionId, { active, afterFetch: scope.fetches });
+    }
+  }
+}
+
 /** Gets or creates the scope for a resource key, touching its LRU clock. */
 function acquireScope(state: SharedToolsState, resourceId: string | undefined): SnapshotScope {
   const key = scopeKey(resourceId);
@@ -398,6 +483,9 @@ function acquireScope(state: SharedToolsState, resourceId: string | undefined): 
         projectId: state.projectId,
         ...(resourceId === undefined ? {} : { resourceId }),
       }),
+      generation: 0,
+      fetches: 0,
+      reported: new Map(),
       lastUsedAt: Date.now(),
     };
     state.scopes.set(key, scope);
@@ -519,6 +607,10 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
     return state.closing.then(() => refreshScope(state, acquireScope(state, scope.resourceId)));
   }
   if (!scope.inflight) {
+    const generation = scope.generation;
+    scope.inflightGeneration = generation;
+    scope.fetches += 1;
+    scope.inflightFetch = scope.fetches;
     scope.inflight = (async () => {
       try {
         const { connections, catalog, catalogAvailable } = await loadSnapshotInputs(state, scope.client);
@@ -553,7 +645,15 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
             resourceId: scope.resourceId,
           }) as ResolvedToolsRecord[string];
         }
-        scope.cache = { snapshot: record, fetchedAt: Date.now(), mcpKeys };
+        scope.cache = {
+          snapshot: record,
+          fetchedAt: Date.now(),
+          mcpKeys,
+          activeConnectionIds: new Set(
+            connections.filter(connection => connection.status === 'active').map(connection => connection.id),
+          ),
+          generation,
+        };
         scope.lastFailureAt = undefined;
         await pruneStaleMcpClients(state);
         return record;
@@ -562,15 +662,43 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
         throw error;
       } finally {
         scope.inflight = undefined;
+        scope.inflightGeneration = undefined;
+        scope.inflightFetch = undefined;
       }
     })();
   }
   return scope.inflight;
 }
 
+/**
+ * Refreshes a scope under its current generation: a fetch already in flight
+ * from before an invalidation may have read the old connection list, so it
+ * settles first and a new fetch starts.
+ */
+async function refreshCurrentGeneration(state: SharedToolsState, scope: SnapshotScope): Promise<ResolvedToolsRecord> {
+  if (scope.inflight && scope.inflightGeneration !== scope.generation) {
+    await scope.inflight.catch(() => {});
+  }
+  return refreshScope(state, scope);
+}
+
 /** Serves a scope's snapshot: fresh from cache, stale with background revalidation, or a blocking first fetch. */
 async function resolveScope(state: SharedToolsState, resourceId: string | undefined): Promise<ResolvedToolsRecord> {
   const scope = acquireScope(state, resourceId);
+  if (scope.cache && scope.cache.generation !== scope.generation) {
+    // A connection changed since this snapshot was built: it is known to be
+    // wrong, so wait for a fresh one. If the platform is down, the old
+    // snapshot is still better than failing the agent call.
+    const staleSnapshot = scope.cache.snapshot;
+    return refreshCurrentGeneration(state, scope).catch((error: unknown) => {
+      console.warn(
+        `[@mastra/connect] Keeping cached tools after a connection change; platform refresh failed: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      return staleSnapshot;
+    });
+  }
   if (scope.cache && Date.now() - scope.cache.fetchedAt < state.ttlMs) {
     return scope.cache.snapshot;
   }
@@ -748,6 +876,7 @@ export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
       },
       disconnect: (): Promise<void> => disconnectState(state),
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -871,6 +1000,7 @@ function dynamicTools(getOptions: (ctx?: ToolsResolverContext) => ToolsOptions |
         return closing;
       },
       with: (extra: ToolsWithInput): ToolsResolver => withExtraTools(resolver, extra),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;
@@ -935,6 +1065,7 @@ function withExtraTools(base: ToolsResolver, extra: ToolsWithInput): ToolsResolv
       },
       disconnect: (): Promise<void> => base.disconnect(),
       with: (more: ToolsWithInput): ToolsResolver => withExtraTools(resolver, more),
+      codeMode: (codeModeOptions?: CodeModeOptions): ConnectCodeMode => connectCodeMode(resolve, codeModeOptions),
     }),
   );
   return resolver;

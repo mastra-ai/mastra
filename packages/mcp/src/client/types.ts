@@ -12,6 +12,7 @@ import type {
   ToolAnnotations,
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
+import type { MCPTaskInputRequests } from '../shared/tasks';
 import type { MCPTraceContext } from '../shared/trace-context';
 import type { EventsWebhookSetup } from './events/types';
 
@@ -32,37 +33,32 @@ type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, an
 };
 
 /** Flat discovery remains partial because servers and tools may be unavailable. */
-export type MCPClientTools<TServers extends MCPClientServers<TServers>> =
-  string extends keyof TServers
-    ? Record<string, Tool<any, any, any, any>>
-    : Partial<{
-        [
-          Entry in {
-            [Server in keyof TServers & string]: {
-              [Name in keyof TServers[Server]['tools'] & string]: {
-                key: `${Server}_${Name}`;
-                tool: MCPClientTool<
-                  TServers[Server]['tools'][Name]['input'],
-                  TServers[Server]['tools'][Name]['output']
-                >;
-              };
-            }[keyof TServers[Server]['tools'] & string];
-          }[keyof TServers & string] as Entry['key']
-        ]: Entry['tool'];
-      }>;
+export type MCPClientTools<TServers extends MCPClientServers<TServers>> = string extends keyof TServers
+  ? Record<string, Tool<any, any, any, any>>
+  : Partial<{
+      [
+        Entry in {
+          [Server in keyof TServers & string]: {
+            [Name in keyof TServers[Server]['tools'] & string]: {
+              key: `${Server}_${Name}`;
+              tool: MCPClientTool<TServers[Server]['tools'][Name]['input'], TServers[Server]['tools'][Name]['output']>;
+            };
+          }[keyof TServers[Server]['tools'] & string];
+        }[keyof TServers & string] as Entry['key']
+      ]: Entry['tool'];
+    }>;
 
 /** Grouped discovery preserves raw tool names and potentially absent servers. */
-export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> =
-  string extends keyof TServers
-    ? Record<string, Record<string, Tool<any, any, any, any>>>
-    : Partial<{
-        [Server in keyof TServers]: Partial<{
-          [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
-            TServers[Server]['tools'][Name]['input'],
-            TServers[Server]['tools'][Name]['output']
-          >;
-        }>;
+export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> = string extends keyof TServers
+  ? Record<string, Record<string, Tool<any, any, any, any>>>
+  : Partial<{
+      [Server in keyof TServers]: Partial<{
+        [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
+          TServers[Server]['tools'][Name]['input'],
+          TServers[Server]['tools'][Name]['output']
+        >;
       }>;
+    }>;
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -96,8 +92,11 @@ export type MCPClientProtocolVersion = typeof MCP_CLIENT_PROTOCOL_VERSION | 'leg
  * This allows custom fetch implementations to access request-scoped data (e.g., authentication
  * cookies, bearer tokens) from the incoming request and forward them to the MCP server.
  *
- * The `requestContext` parameter is `null` when no context is available (e.g., during
- * initial connection or when a tool is called without a request context).
+ * The `requestContext` parameter is `null` when no context is available (e.g., during a
+ * connection handshake that no tool call started, such as the one `listTools()` opens, or when a
+ * tool is called without a request context). When a tool call opens the connection (a tool rebuilt
+ * from a cached definition on its first execution, or a reconnect during a call), the handshake
+ * receives that call's `requestContext`, and streams the connection keeps open afterwards keep it.
  *
  * @example
  * ```typescript
@@ -419,6 +418,37 @@ export interface MCPTaskProgress {
   status: 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
   createdAt: string;
   serverName: string;
+}
+
+/**
+ * What a tool call suspends with when its MCP task needs input and no `inputRequests` handler is
+ * configured. Resume the call with {@link MCPInputRequestResumeData} to answer `requests`.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPInputRequestSuspendPayload {
+  type: 'mcp-input-request';
+  serverName: string;
+  toolName: string;
+  /** The MCP task id issued by the server, which the answers are sent to. */
+  taskId: string;
+  createdAt: string;
+  /**
+   * When the call suspended on these requests. Unlike `createdAt`, it differs for each time the same task
+   * asks again, so a UI can tell a new request from one it already answered.
+   */
+  requestedAt: string;
+  /** The requests still waiting for an answer, keyed as the server sent them. */
+  requests: MCPTaskInputRequests;
+}
+
+/**
+ * Resume data answering an {@link MCPInputRequestSuspendPayload}: one answer per request key.
+ *
+ * @experimental SEP-2663 extension; this API may change.
+ */
+export interface MCPInputRequestResumeData {
+  inputResponses: Record<string, ElicitResult>;
 }
 
 /**

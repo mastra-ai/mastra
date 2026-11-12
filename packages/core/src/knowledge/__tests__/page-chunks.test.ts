@@ -1,6 +1,6 @@
 import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it } from 'vitest';
-import { knowledgeBodyChunks } from '../page-body';
+import { knowledgeBodyChunks, knowledgeBodySections } from '../page-body';
 
 const paragraph = (i: number) => `Paragraph ${i}. ${'Words that fill the paragraph out. '.repeat(20)}`.trim();
 
@@ -41,5 +41,42 @@ describe('knowledgeBodyChunks', () => {
     const chunks = knowledgeBodyChunks(body, 500, 0);
     for (const chunk of chunks) expect(estimateTokenCount(chunk)).toBeLessThanOrEqual(500);
     expect(chunks.join('')).toBe(body);
+  });
+
+  it('keeps a four-backtick fence whole when it shows a three-backtick one inside', () => {
+    const code = ['````md', '```js', 'const a = 1;', '', '## not a heading', '```', '', 'still code', '````'].join(
+      '\n',
+    );
+    const body = [paragraph(1), paragraph(2), code, paragraph(3)].join('\n\n');
+    const chunks = knowledgeBodyChunks(body, 400, 0);
+    expect(chunks.some(chunk => chunk.includes(code))).toBe(true);
+  });
+
+  it('refuses an overlap as big as the chunk', () => {
+    expect(() => knowledgeBodyChunks('word '.repeat(500), 100, 100)).toThrow(RangeError);
+  });
+});
+
+describe('knowledgeBodySections', () => {
+  it('ignores headings in a fence until a matching fence closes it', () => {
+    const body = ['````md', '```js', '## inside', '```', '## still inside', '````', '## Outside'].join('\n');
+    expect(knowledgeBodySections(body).map(section => section.title)).toEqual(['Outside']);
+  });
+
+  it('a ```js line does not close an open ``` fence', () => {
+    const body = ['```', '```js', '## inside', '```', '## Outside'].join('\n');
+    expect(knowledgeBodySections(body).map(section => section.title)).toEqual(['Outside']);
+  });
+
+  it('a fence indented four spaces is indented code, not a fence', () => {
+    const body = ['Example:', '', '    ```', '# Overview', '', '   ```', '## inside', '   ```', '## After'].join('\n');
+    expect(knowledgeBodySections(body).map(section => section.title)).toEqual(['Overview', 'After']);
+  });
+
+  it('keeps a trailing # that is part of the title, and drops a closing run after a space', () => {
+    expect(knowledgeBodySections('## Use C#\n\n### Notes ##').map(section => section.title)).toEqual([
+      'Use C#',
+      'Notes',
+    ]);
   });
 });

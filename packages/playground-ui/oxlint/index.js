@@ -14,6 +14,10 @@
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
 //   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+//   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
+//   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
+
+import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
 // Each option is { selector, message }: report every node an esquery selector matches.
 function selectorRule(selectors) {
@@ -275,7 +279,19 @@ const plugin = {
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
+    'no-text-separators': noTextSeparators,
+    'no-text-layout-spacing': noTextLayoutSpacing,
   },
+};
+
+export const copyRules = {
+  'playground-ui/no-text-separators': 'error',
+  'playground-ui/no-text-layout-spacing': 'error',
+};
+
+export const copyRuleExclusions = {
+  files: ['**/*.{test,spec,stories,story}.*', '**/{test,tests,__tests__,__mocks__,__fixtures__,fixtures,generated}/**'],
+  rules: Object.fromEntries(Object.keys(copyRules).map(rule => [rule, 'off'])),
 };
 
 // Every rule at its default options. Spread into `rules`, then turn rules off per glob in `overrides`
@@ -287,6 +303,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  ...copyRules,
 };
 
 export default plugin;

@@ -102,3 +102,9 @@ export function sessionLink({
 export function modelSettingsLink(factoryProjectId: string): string | undefined {
   return factorySettingsUrl(factoryProjectId, 'models');
 }
+
+/** `VOICE_INPUT_ANCHOR` in factory-ui's `settingsSections.ts`; the voice section scrolls itself into view on this hash. */
+export function voiceSettingsLink(factoryProjectId: string): string | undefined {
+  const models = modelSettingsLink(factoryProjectId);
+  return models && `${models}#voice-input`;
+}

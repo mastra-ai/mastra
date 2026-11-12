@@ -9,8 +9,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { describe, expect, it, vi } from 'vitest';
 
 import { LibSQLStore } from '../../storage';
-import { createApprovalWorkflow } from './fixtures/approval-workflow';
-import { createSpanOutcomeObservability } from './fixtures/span-outcome-agent';
+import { createApprovalWorkflow, createResumeTracingObservability } from './fixtures/approval-workflow';
 import type { WorkflowResumePeerArgs } from './fixtures/workflow-resume-peer';
 import { createXprocEnv, DEFAULT_HANG_GUARD_MS, PEER_TIMEOUT_MS } from './peer-helper';
 
@@ -30,7 +29,7 @@ describe('an evented workflow suspended by a worker in another process', () => {
         pubsub: env.pubsub(),
         logger: false,
         workers: false,
-        observability: createSpanOutcomeObservability(),
+        observability: createResumeTracingObservability(),
       });
       try {
         const worker = await env.spawnPeer(WORKER, { workflowId } satisfies WorkflowResumePeerArgs, {

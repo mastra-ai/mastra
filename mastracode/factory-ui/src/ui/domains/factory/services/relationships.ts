@@ -1,83 +1,38 @@
-import { githubNumberForItem, workItemKey } from '../boardItems';
+import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
+import { relatedCardIndex } from '@mastra/factory/work-items/related-cards';
+import type { PullRequestFacts } from '@mastra/factory/work-items/related-cards';
+import { githubNumberForItem, sourceMetadata, workItemKey } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
-type IdentifiableItem = Pick<WorkItem, 'source' | 'metadata' | 'sourceKey'>;
+type IdentifiableItem = Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'sourceKey'>;
 
 export function workItemNumber(item: IdentifiableItem): string | undefined {
   const githubNumber = githubNumberForItem(item);
   if (githubNumber !== undefined) return String(githubNumber);
   if (item.source === 'gitlab-pr') {
-    const iid = item.metadata.gitlabMergeRequestIid;
+    const iid = sourceMetadata(item).gitlabMergeRequestIid;
     return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? String(iid) : undefined;
   }
 
-  const number = item.metadata.number;
+  const number = sourceMetadata(item).number;
   if (typeof number === 'number' || typeof number === 'string') return String(number);
   return item.sourceKey?.split(':').at(-1) || undefined;
 }
 
-function sessionBranches(item: WorkItem): Set<string> {
-  return new Set(Object.values(item.sessions).map(session => session.branch));
-}
+const PULL_REQUEST_FACTS: PullRequestFacts<WorkItem> = {
+  isPullRequest: item => isPullRequestSource(item.source),
+  headBranch: item => {
+    const branch = sourceMetadata(item).headBranch;
+    return typeof branch === 'string' ? branch : undefined;
+  },
+};
 
-function headBranch(item: WorkItem): string | undefined {
-  const branch = item.metadata.headBranch;
-  return typeof branch === 'string' ? branch : undefined;
-}
-
-// One scan for the whole board instead of one per card. Relations come back in board order.
+/** Relations across `allItems`, read the way the server reads them to scope a session's cards. */
 export function relatedWorkItemIndex(allItems: readonly WorkItem[]): (item: WorkItem) => WorkItem[] {
-  interface Candidate {
-    item: WorkItem;
-    position: number;
-  }
-  const byId = new Map<string, Candidate>();
-  const childrenByParentId = new Map<string, Candidate[]>();
-  // A pull request with no recorded parent still belongs to the card whose session branch it was pushed from.
-  const unlinkedPullRequestsByHeadBranch = new Map<string, Candidate[]>();
-  const authorsBySessionBranch = new Map<string, Candidate[]>();
-  const push = (index: Map<string, Candidate[]>, key: string, candidate: Candidate) => {
-    const bucket = index.get(key);
-    if (bucket) bucket.push(candidate);
-    else index.set(key, [candidate]);
-  };
-
-  allItems.forEach((item, position) => {
-    const candidate = { item, position };
-    byId.set(item.id, candidate);
-    if (item.parentWorkItemId !== null) push(childrenByParentId, item.parentWorkItemId, candidate);
-    if (isPullRequestSource(item.source)) {
-      const branch = item.parentWorkItemId === null ? headBranch(item) : undefined;
-      if (branch !== undefined) push(unlinkedPullRequestsByHeadBranch, branch, candidate);
-      return;
-    }
-    for (const branch of sessionBranches(item)) push(authorsBySessionBranch, branch, candidate);
-  });
-
-  return item => {
-    const parent = item.parentWorkItemId === null ? undefined : byId.get(item.parentWorkItemId);
-    const isPullRequest = isPullRequestSource(item.source);
-    const unlinkedHeadBranch = isPullRequest && item.parentWorkItemId === null ? headBranch(item) : undefined;
-    const branchAuthors =
-      unlinkedHeadBranch === undefined ? [] : (authorsBySessionBranch.get(unlinkedHeadBranch) ?? []);
-    const branchPullRequests = isPullRequest
-      ? []
-      : [...sessionBranches(item)].flatMap(branch => unlinkedPullRequestsByHeadBranch.get(branch) ?? []);
-
-    const related = new Map<string, Candidate>();
-    for (const candidate of [
-      ...(childrenByParentId.get(item.id) ?? []),
-      ...(parent === undefined ? [] : [parent]),
-      ...branchAuthors,
-      ...branchPullRequests,
-    ]) {
-      if (candidate.item.id !== item.id) related.set(candidate.item.id, candidate);
-    }
-    return [...related.values()].toSorted((a, b) => a.position - b.position).map(candidate => candidate.item);
-  };
+  return relatedCardIndex(allItems, PULL_REQUEST_FACTS);
 }
 
 export function inferredParentWorkItemId(
@@ -92,16 +47,14 @@ export function inferredParentWorkItemId(
   )?.id;
 }
 
-/**
- * Pull requests are filed on Work now, so an unfiled one opens Work; a filed one opens the
- * board that holds it, which is Review for cards filed before the move.
- */
+/** A pull request opens the board that holds its card; an unfiled one, or one with no board, opens the default board. */
 export function relationshipPath(
   item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
   factoryId: string,
 ): string {
-  if (!isPullRequestSource(item.source) || item.board === undefined) return rememberedBoardPath(factoryId, 'work');
-  return rememberedBoardPath(factoryId, item.board ?? 'review');
+  if (!isPullRequestSource(item.source) || item.board === undefined)
+    return rememberedBoardPath(factoryId, DEFAULT_BOARD_ID);
+  return rememberedBoardPath(factoryId, item.board ?? DEFAULT_BOARD_ID);
 }
 
 export function relationshipLabel(item: WorkItem): string {
