@@ -26,6 +26,9 @@ export const scoringEntityTypeSchema = z.enum([
   'WORKFLOW',
   'TRAJECTORY',
   'STEP',
+  // Experiment targets emitted as `targetType.toUpperCase()` (scorer/processor runs).
+  'SCORER',
+  'PROCESSOR',
   // Externally executed experiment items (targetType: 'external')
   'EXTERNAL',
   ...Object.values(SpanType),

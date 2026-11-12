@@ -86,7 +86,7 @@ export function TableView(props: TableTabProps & { index: number; page: Dashboar
           onRowClick={onClick && (row => onClick(rowDrilldown(options, row)))}
           pageSize={options.pageSize}
           isLoading={isLoading}
-          empty={options.emptyMessage}
+          empty={options.emptyMessage ?? 'No data'}
         />
         {content?.truncated && content.limit !== undefined && (
           <Txt variant="caption" tone="muted" className="pt-2">

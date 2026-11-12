@@ -151,6 +151,7 @@ import type {
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
+  GetBuiltinMcpServerResponse,
   McpServerToolListResponse,
   GetScorerResponse,
   GetScorersResponse,
@@ -842,6 +843,14 @@ export class MastraClient extends BaseResource {
     }
     const queryString = searchParams.toString();
     return this.request(`/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Describes the built-in Mastra MCP server: whether it is served, its endpoint path, toolsets, and auth mode.
+   * Requires `mcp:read`. Its tools depend on the caller, so connect an MCP client to `path` to list them.
+   */
+  public getBuiltinMcpServer(): Promise<GetBuiltinMcpServerResponse> {
+    return this.request('/mcp/builtin');
   }
 
   /**
@@ -2610,6 +2619,7 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.status) searchParams.set('status', options.status);
     if (options?.orderBy) {
       searchParams.set('orderBy[field]', options.orderBy.field);
       searchParams.set('orderBy[direction]', options.orderBy.direction);

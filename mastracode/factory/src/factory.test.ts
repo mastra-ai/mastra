@@ -907,6 +907,13 @@ describe('MastraFactory.prepare', () => {
     });
   });
 
+  it('hands the context-left sandbox stop to the transition service when a sandbox is configured', async () => {
+    const prepared = await prepareFactory({ storage: fakeStorage(), sandbox: () => ({ id: 'sb' }) as never });
+    (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
+    expect(transitionServiceOptions).toHaveLength(1);
+    expect(transitionServiceOptions[0]!.onContextLeft).toBeTypeOf('function');
+  });
+
   it('threads the default config version when the slot is omitted', async () => {
     const prepared = await prepareFactory({ storage: fakeStorage() });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
@@ -1646,7 +1653,12 @@ describe('MastraFactory.prepare', () => {
       return requestContext;
     }
 
-    const READ_TOOLS = ['factory_list_work_items', 'factory_inspect_work_item', 'factory_list_attention'];
+    const READ_TOOLS = [
+      'factory_list_work_items',
+      'factory_inspect_work_item',
+      'factory_list_attention',
+      'factory_list_audit_events',
+    ];
     const MANAGEMENT_TOOLS = [
       'factory_create_work_item',
       'factory_update_work_item',

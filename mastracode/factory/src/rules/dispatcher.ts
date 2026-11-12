@@ -188,7 +188,10 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  return (
+    attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
+    !factoryDispatchFailureMetadata(failureCode).canRetry
+  );
 }
 
 /**
@@ -368,11 +371,9 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
   });
 }
 
-interface ThreadSwitchSession {
-  thread: {
-    requireId(): string;
-    switch(input: { threadId: string }): Promise<unknown>;
-  };
+interface SessionOwner {
+  userId: string;
+  orgId: string;
 }
 
 interface FactoryNotificationResult {
@@ -477,6 +478,7 @@ export interface FactoryDecisionDispatcherOptions {
   intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /**
@@ -690,6 +692,7 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
@@ -747,6 +750,7 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#reconcileRunBinding = options.reconcileRunBinding;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
@@ -1414,7 +1418,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,
@@ -1438,7 +1442,7 @@ export class FactoryDecisionDispatcher {
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
-          await this.#switchThread(session, binding);
+          await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1517,6 +1521,24 @@ export class FactoryDecisionDispatcher {
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
           const since = new Date();
+          const runItem = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const boards = runItem ? await this.#boards.load(record) : null;
+          const stage = runItem?.stages.length === 1 ? runItem.stages[0] : undefined;
+          const phase = stage && runItem ? boards?.get(boardForWorkItem(runItem))?.phases[stage] : undefined;
+          const workingRevision =
+            phase?.kind === 'working' &&
+            (phase.runner.goal || phase.exitTool) &&
+            phase.runner.context === decision.role &&
+            phase.runner.skill === decision.skillName
+              ? runItem!.revision
+              : null;
+          const existingLinkedReviewIds = new Set(
+            workingRevision === null || !runItem
+              ? []
+              : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
+          );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
             approvePlans: await this.#plansAreAutoApproved(record),
@@ -1608,7 +1630,35 @@ export class FactoryDecisionDispatcher {
                   superseded: async () =>
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
-                () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
+                async () => {
+                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
+                    return;
+                  // A final tool result can persist after agent_end. Read this binding's trailing
+                  // results before deciding the unchanged card means the run did no work.
+                  await this.#reconcileRunBinding?.(binding);
+                  const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
+                  if (after?.revision === workingRevision && !(await kickoffStale())) {
+                    const linked = await this.#storage.listLinked({ item: after, limit: 100 });
+                    const ownCardHandOff = linked.some(card => {
+                      if (
+                        card.parentWorkItemId !== after.id ||
+                        existingLinkedReviewIds.has(card.id) ||
+                        card.externalSource?.integrationId !== 'github' ||
+                        card.externalSource.type !== 'pull-request' ||
+                        card.stages.length !== 1
+                      )
+                        return false;
+                      const review = boards?.get(boardForWorkItem(card))?.phases[card.stages[0]!];
+                      return review?.kind === 'working' && review.runner.context === 'review';
+                    });
+                    if (ownCardHandOff) return;
+                    throw new FactoryDispatchError(
+                      'run_incomplete',
+                      'Factory skill run ended before completing the working phase.',
+                    );
+                  }
+                },
               );
               // Handed on before the turn ended: the run's clean end is the successor's, not
               // a finished review. A move after the turn ended (a merge) keeps the completion.
@@ -1641,7 +1691,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({
           session,
           binding,
@@ -1687,7 +1737,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId });
         await awaitNotification(() =>
           session.sendNotificationSignal(
@@ -2297,7 +2347,11 @@ export class FactoryDecisionDispatcher {
     }
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
-      const session = binding ? await this.#findSession(binding) : undefined;
+      // A binding with no recorded owner never started a run, so it has none in flight.
+      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
+      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+      const session =
+        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
       // Checked again on the next claim: the card may have moved, or the routes changed, by then.
       if (binding && session && (await this.#hasRunInFlight(session, binding))) {
         throw new FactoryDecisionPostponed();
@@ -2401,7 +2455,7 @@ export class FactoryDecisionDispatcher {
     const startedBy = item?.sessions[binding.role]?.startedBy;
     if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
     await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-    const session = await this.#requireSession(binding);
+    const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
     const author = decision.author
       ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
       : decision.authorTrusted
@@ -2515,10 +2569,13 @@ export class FactoryDecisionDispatcher {
     return this.#requireBinding(record, role);
   }
 
-  async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
+  async #findSession(
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<BoundDispatcherSession | undefined> {
     const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
-    await this.#switchThread(session, binding);
+    await this.#switchThread(session, binding, owner);
     return session;
   }
 
@@ -2592,15 +2649,22 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
-    const session = await this.#findSession(binding);
+  async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<BoundDispatcherSession> {
+    const session = await this.#findSession(binding, owner);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
     return session;
   }
 
-  async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+  // Switching subscribes to the thread, which resolves memory and model
+  // credentials, so it always runs as the session owner.
+  async #switchThread(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<void> {
     if (session.thread.requireId() === binding.threadId) return;
-    await session.thread.switch({ threadId: binding.threadId });
+    const requestContext = factoryRequestContext({ session, binding, userId: owner.userId, orgId: owner.orgId });
+    await session.thread.switch({ threadId: binding.threadId, requestContext });
   }
 
   async #withBindingSkillRun(bindingId: string, effect: () => Promise<void>): Promise<void> {
@@ -2771,7 +2835,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,
