@@ -1960,7 +1960,9 @@ export class EventedRun<
    * with no live key for one storage round trip; a claim that loses only
    * leaves a key that lapses one lease TTL later. Each run is marked only when
    * the sweep restarts runs of its workflow. Ancestors above the parent are
-   * marked once a worker handles the event, which carries the whole chain.
+   * marked once a worker handles a resume event, which carries the whole
+   * chain; restart and time-travel events carry none, and only a direct
+   * child resume makes a parent `running` again.
    */
   async #markLive(): Promise<void> {
     if (!this.mastra) {

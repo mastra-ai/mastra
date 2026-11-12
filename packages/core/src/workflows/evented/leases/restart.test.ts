@@ -1,8 +1,9 @@
 /**
  * Booting replicas restart every active evented run they find, including runs
  * another replica is still executing (#28712). `restart()` refuses while the
- * run, or a nested run it drives, is live, so each step runs once however many
- * replicas boot. These cases cover that refusal and concurrent restarts.
+ * run's own liveness key is live, which the run's events and those of the runs
+ * nested under it keep fresh, so each step runs once however many replicas
+ * boot. These cases cover that refusal and concurrent restarts.
  * Leases use a short TTL here, read when core loads.
  */
 vi.hoisted(() => {
