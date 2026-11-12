@@ -450,45 +450,86 @@ export function describeFinishedOccurrenceCases({
       expect(executions.map(e => e.slice(2)).sort()).toEqual(['a', 'b', 'c', 'd']);
     }, 20_000);
 
+    /** The first entries `crashAfterSavingFirst` runs before `second`: a step, or a loop whose last iteration ends it. */
+    const firstEntries = {
+      step: {
+        add: (workflow: ReturnType<typeof createWorkflow>, report: Report) => workflow.then(work('first', report)),
+        id: 'first',
+        ran: ['first'],
+      },
+      loop: {
+        add: (workflow: ReturnType<typeof createWorkflow>, report: Report) =>
+          workflow.dountil(
+            createStep({
+              id: 'body',
+              inputSchema: Num,
+              outputSchema: Num,
+              execute: async ({ inputData }) => {
+                await report(`body:${inputData.n + 1}`);
+                return { n: inputData.n + 1 };
+              },
+            }),
+            async ({ inputData }) => {
+              await report(`check:${inputData.n}`);
+              return inputData.n >= 2;
+            },
+          ),
+        id: 'body',
+        ran: ['body:1', 'check:1', 'body:2', 'check:2'],
+      },
+    };
+
     /**
-     * Runs `first` on replica A, which saves its result and stops before the
-     * second step's message goes out. Returns the first step's message, whose
-     * ack A never sent.
+     * Runs the first entry on replica A, which saves its result and stops
+     * before the second step's message goes out. Returns the first entry's
+     * last message, whose ack A never sent.
      */
-    async function crashAfterSavingFirst() {
+    async function crashAfterSavingFirst(first: keyof typeof firstEntries = 'step') {
+      const entry = firstEntries[first];
       const executions: string[] = [];
-      const build = (replica: string) =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
-          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+      const build = (replica: string) => {
+        const report: Report = async id => void executions.push(`${replica}:${id}`);
+        return entry
+          .add(createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num }), report)
+          .then(work('second', report))
           .commit();
-      const a = await startReplica(build('A'), event =>
-        event.type === 'workflow.step.run' && samePath(event, [1]) ? 'drop' : undefined,
-      );
+      };
+      const secondDropped = deferred<void>();
+      const a = await startReplica(build('A'), event => {
+        if (event.type !== 'workflow.step.run' || !samePath(event, [1])) {
+          return undefined;
+        }
+
+        secondDropped.resolve();
+        return 'drop';
+      });
       const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      startInBackground(run, { n: 1 });
-      await expect.poll(async () => (await storedRun(run.runId))?.context.first?.status).toBe('success');
+      startInBackground(run, { n: 0 });
+      await secondDropped.promise;
+      await expect.poll(async () => (await storedRun(run.runId))?.context[entry.id]?.status).toBe('success');
       // With the id a broker keeps, so on a store with step guards the redelivery is the event that
       // stamped the saved result.
-      const original = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
+      const original = a.delivered.filter(event => event.type === 'workflow.step.run' && samePath(event, [0])).at(-1)!;
       expect(original.id).toBeTruthy();
       await crash(a, [runLivenessKey(run.runId)]);
-      return { executions, build, run, original };
+      return { executions, build, run, original, ran: entry.ran.map(label => `A:${label}`) };
     }
 
     it.each([
-      { delivery: 'a redelivery', attempt: 2 },
-      { delivery: 'a redelivery that used up its attempts', attempt: EXHAUSTED_ATTEMPT },
+      { delivery: 'a redelivery', attempt: 2, first: 'step' as const },
+      { delivery: 'a redelivery that used up its attempts', attempt: EXHAUSTED_ATTEMPT, first: 'step' as const },
+      { delivery: "a redelivery of a loop's last iteration", attempt: 2, first: 'loop' as const },
     ])(
       'continues a run whose worker stopped after saving a step result from $delivery, without running the step again',
-      async ({ attempt }) => {
-        const { executions, build, run, original } = await crashAfterSavingFirst();
+      async ({ attempt, first }) => {
+        const { executions, build, run, original, ran } = await crashAfterSavingFirst(first);
 
         const b = await startReplica(build('B'));
         expect(await redeliver(b, original, attempt)).toEqual({ ok: true });
 
+        // The loop's condition already decided to leave it, so it isn't checked again.
         await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
-        expect(executions).toEqual(['A:first', 'B:second']);
+        expect(executions).toEqual([...ran, 'B:second']);
       },
       20_000,
     );
