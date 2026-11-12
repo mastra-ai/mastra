@@ -11,6 +11,12 @@ import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 
 Mastra Gateway lets you call models from many providers through one managed API. It centralizes credentials, fails over between providers, controls spend, and records the cost of every request. You don't have to run your own proxy or routing layer.
 
+- **One key, many providers**: Call OpenAI, Anthropic, Google, and other providers with one Gateway key and a `provider/model` model ID.
+- **Routing and failover**: Gateway retries eligible failures on another route before any output reaches your client.
+- **Bring your own key (BYOK)**: Send traffic through your own provider accounts.
+- **Usage and spend controls**: Every request records its attempts and cost, and keys can be limited by model.
+- **Gateway tools**: Add web search to any chat model with one tool entry.
+
 Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing SDK or framework, change the base URL and the API key. The model ID picks the provider:
 
 <Tabs>
@@ -90,15 +96,49 @@ Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing S
 
 ## What Gateway handles
 
-| Requirement | How Gateway handles it |
-| - | - |
-| Centralized credentials | Your app authenticates with one Gateway key. Gateway calls providers with Mastra-managed credentials, or with your own provider accounts through [BYOK](/docs/gateway/keys-and-byok#bring-your-own-key). |
-| Provider failover | When a provider fails before any output reaches your client, Gateway retries the request on another eligible route. The `x-gateway-provider` response header names the provider that served it. See [Models and routing](/docs/gateway/models-and-routing). |
-| Key scoping | Project keys attribute usage to one project. Organization keys cover the whole organization. Each key can have an expiry date and a list of allowed models. See [Keys and BYOK](/docs/gateway/keys-and-byok). |
-| Cost tracking | Each request records its model, its provider attempts, its token counts, and its cost. Search usage logs by the `x-request-id` header. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#usage-logs). |
-| Spending controls | An organization spend cap rejects new requests with `402` when it's reached. Per-key spend limits are rolling out. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#spend-caps). |
-| Rate limits | Each key has request-rate limits. Responses with status `429` include `retry-after` and headers that name which limit was hit. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#rate-limits). |
-| Built-in tools | Add `mastra:web_search` to any chat model. Gateway runs the search and reuses the results if the request fails over. See [Web search](/docs/gateway/web-search). |
+<CardGrid columns={3}>
+  <CardGridItem
+    title="Centralized credentials"
+    href="/docs/gateway/keys-and-byok"
+    description="Authenticate with one Gateway key. Gateway calls providers with Mastra-managed credentials or your own accounts through BYOK."
+  />
+
+  <CardGridItem
+    title="Provider failover"
+    href="/docs/gateway/models-and-routing"
+    description="When a provider fails before any output reaches your client, Gateway retries on another eligible route."
+  />
+
+  <CardGridItem
+    title="Key scoping"
+    href="/docs/gateway/keys-and-byok"
+    description="Project and organization keys, each with an optional expiry date and allowed-model list."
+  />
+
+  <CardGridItem
+    title="Cost tracking"
+    href="/docs/gateway/usage-and-limits#usage-logs"
+    description="Every request records its model, provider attempts, tokens, and cost. Search logs by x-request-id."
+  />
+
+  <CardGridItem
+    title="Spending controls"
+    href="/docs/gateway/usage-and-limits#spend-caps"
+    description="An organization spend cap rejects new requests with 402 when it's reached. Per-key limits are rolling out."
+  />
+
+  <CardGridItem
+    title="Rate limits"
+    href="/docs/gateway/usage-and-limits#rate-limits"
+    description="Per-key request limits. 429 responses include retry-after and name the limit that was hit."
+  />
+
+  <CardGridItem
+    title="Web search"
+    href="/docs/gateway/web-search"
+    description="Add mastra:web_search to any chat model. Results are reused if the request fails over."
+  />
+</CardGrid>
 
 You pay only for the attempt that served your request. Failed attempts aren't charged. BYOK requests are billed by your provider, not from Mastra credit. Your provider's own limits and behavior apply to BYOK requests, and they don't fail over. Gateway doesn't store prompts or completions.
 
