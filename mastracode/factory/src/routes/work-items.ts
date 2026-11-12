@@ -58,6 +58,7 @@ import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
 import { workItemActivity } from './work-item-activity.js';
+import { cardsFiledFrom, unstartedCards } from './work-item-selection.js';
 import {
   CARD_DECISION_PAGE_SIZE,
   CARD_DECISION_STATUSES,
@@ -150,6 +151,22 @@ function allSessionCards(board: readonly Card[]): Card[] {
     cardsInSessions.set(board, cards);
   }
   return cards;
+}
+
+/** The error a list query is refused with, named after the parameter that failed to parse. */
+function listQueryError(field: PropertyKey | undefined): string {
+  switch (field) {
+    case 'scope':
+      return 'invalid_scope';
+    case 'started':
+      return 'invalid_started';
+    case 'q':
+      return 'invalid_search';
+    case 'source':
+      return 'invalid_source';
+    default:
+      return 'invalid_session_id';
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -449,24 +466,32 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
             sessionId: context.req.queries('sessionId'),
             scope: context.req.query('scope'),
+            started: context.req.query('started'),
+            q: context.req.query('q'),
+            limit: context.req.query('limit'),
+            source: context.req.queries('source'),
           });
           // A filter that fails to parse must not widen to the whole board.
-          if (!query.success) {
-            const field = query.error.issues[0]?.path[0];
-            return c.json({ error: field === 'scope' ? 'invalid_scope' : 'invalid_session_id' }, 400);
-          }
+          if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
           const board = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
-          const { sessionId: sessionIds, scope } = query.data;
-          const part = scope ? allSessionCards(board) : sessionIds && sessionCards(board, sessionIds);
+          const { sessionId: sessionIds, scope, started, q, limit, source } = query.data;
+          const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
+          const part =
+            unstarted?.cards ??
+            (scope
+              ? allSessionCards(board)
+              : sessionIds
+                ? sessionCards(board, sessionIds)
+                : source && cardsFiledFrom(board, source));
           const items = part ?? board;
           const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
           const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
           const snapshot = part
-            ? scopedSnapshot(part, toWireWorkItem, running, parked)
+            ? scopedSnapshot(part, toWireWorkItem, running, parked, unstarted?.total)
             : boardSnapshot(board, toWireWorkItem, running, parked);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           const headers: Record<string, string> = {

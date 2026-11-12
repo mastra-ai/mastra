@@ -457,17 +457,45 @@ const sessionSchema = z.object({
   threadId: z.string().min(1).max(512),
 });
 
-/** Without `sessionId` or `scope`, the list is the whole board. */
+const boundedLimitSchema = (defaultValue: number, max: number) =>
+  z
+    .string()
+    .optional()
+    .transform(value => {
+      const parsed = value ? Number.parseInt(value, 10) : defaultValue;
+      return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
+    });
+/** Without `sessionId`, `scope`, `started` or `source`, the list is the whole board. */
 const workItemListQuerySchema = z
   .object({
     /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
     sessionId: z.array(sessionSchema.shape.sessionId).optional(),
     /** `sessions` narrows the list to the cards that hold any session and the cards related to them. */
     scope: z.enum(['sessions']).optional(),
+    /** `false` narrows the list to the cards that hold no session, most recently updated first. */
+    started: z.enum(['false']).optional(),
+    /** With `started=false`: words that must all be in the card's title, key, number or source id. */
+    q: z.string().max(200).optional(),
+    /** With `started=false`: how many cards to send. */
+    limit: boundedLimitSchema(20, 50),
+    /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
+    source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
     message: 'Send scope or sessionId, not both',
+  })
+  .refine(query => !(query.started && (query.scope || query.sessionId)), {
+    path: ['started'],
+    message: 'Send started without scope or sessionId',
+  })
+  .refine(query => query.q === undefined || query.started !== undefined, {
+    path: ['q'],
+    message: 'Send q only with started=false',
+  })
+  .refine(query => !(query.source && (query.started || query.scope || query.sessionId)), {
+    path: ['source'],
+    message: 'Send source without started, scope or sessionId',
   });
 
 const countSchema = z.number().int().nonnegative();
@@ -594,14 +622,6 @@ const decisionStatusSchema = z.enum([
   'succeeded',
   'failed',
 ]);
-const boundedLimitSchema = (defaultValue: number, max: number) =>
-  z
-    .string()
-    .optional()
-    .transform(value => {
-      const parsed = value ? Number.parseInt(value, 10) : defaultValue;
-      return Number.isFinite(parsed) ? Math.max(1, Math.min(max, parsed)) : defaultValue;
-    });
 const decisionCursorSchema = z
   .string()
   .optional()
@@ -1048,6 +1068,8 @@ export const FACTORY_ROUTE_CONTRACTS = {
       workItems: z.array(cardSchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
+      /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */
+      total: z.number().int().nonnegative().optional(),
     }),
   },
   workItemStarters: {

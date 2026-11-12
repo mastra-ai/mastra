@@ -299,28 +299,37 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /** How many cards matched a `started: 'false'` read, of which `workItems` holds the first. */
+  total?: number;
 }
 
 /**
- * List the org's work items for a Factory project: the whole board, or with `only` the cards
- * holding that session (`sessionId`) or any session (`scope`), and the cards related to them.
+ * List the org's work items for a Factory project: the whole board, or with `only` a part of it.
+ * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
+ * the cards related to them; `started: 'false'` for the most recently updated cards holding no
+ * session whose text has every word of `q`; `source` for the cards filed from those source ids or URLs.
  */
 export async function listWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-  only?: { sessionId: string } | { scope: 'sessions' },
+  only?: { sessionId: string } | { scope: 'sessions' } | { started: 'false'; q: string } | { source: string[] },
 ): Promise<BoardSnapshot> {
-  const query = only ? `?${new URLSearchParams(only)}` : '';
+  const params = only && new URLSearchParams('source' in only ? only.source.map(source => ['source', source]) : only);
   const data = await requestJson<{
     workItems: WireWorkItem[];
     runningSessionIds?: string[];
     parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${query}`, { signal });
+    total?: number;
+  }>(
+    `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${params ? `?${params}` : ''}`,
+    { signal },
+  );
   return {
     workItems: data.workItems.map(fromWireWorkItem),
     runningSessionIds: data.runningSessionIds ?? [],
     parkedSessionIds: data.parkedSessionIds ?? [],
+    ...(data.total === undefined ? {} : { total: data.total }),
   };
 }
 

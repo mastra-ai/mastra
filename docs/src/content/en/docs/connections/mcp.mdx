@@ -170,6 +170,8 @@ export async function handleRequest(prompt: string, apiKey: string) {
 
 Visit [`listTools()`](/reference/tools/mcp-client#listtools) and [`listToolsets()`](/reference/tools/mcp-client#listtoolsets) for their full APIs.
 
+This example finishes within one request. When agent work must continue after the request ends or survive a process restart, use [durable agents](/docs/harness/durable-agents) or [background tasks](/docs/harness/background-tasks) instead of building your own task tracking. Call-time `toolsets` can't move to another process, so with a durable agent, load per-request MCP tools in the agent's `tools` function from [request context](/docs/server/request-context).
+
 ### Tool approval
 
 Set `requireToolApproval` on a server to require approval for all its tools:

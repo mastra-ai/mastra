@@ -19,7 +19,7 @@ import type {
   SendAgentSignalAccepted,
   ToolsetsInput,
 } from '../agent/types';
-import { getErrorFromUnknown } from '../error';
+import { getErrorFromUnknown, MastraError } from '../error';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { ModelRouterLanguageModel } from '../llm/model/router';
 import type { MastraModelConfig } from '../llm/model/shared.types';
@@ -158,7 +158,7 @@ export const ABORTED_BY_USER_REASON = 'Aborted by the user';
  * preferences that must survive a host restart (sessions themselves are
  * in-memory only).
  */
-const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications'] as const;
+const PERSISTED_STATE_KEYS = ['thinkingLevel', 'notifications', 'permissionRules'] as const;
 const OM_STATE_KEYS = [
   'observerModelId',
   'reflectorModelId',
@@ -2119,6 +2119,16 @@ export class SessionApproval {
     return this.#matching(filter).length > 0;
   }
 
+  /** The parked gates' tool and owner, without their resolvers. */
+  list(): Array<{ toolCallId: string; toolName: string; threadId?: string; runId?: string }> {
+    return [...this.#gates].map(({ toolCallId, toolName, threadId, runId }) => ({
+      toolCallId,
+      toolName,
+      threadId,
+      runId,
+    }));
+  }
+
   /** Ids of the parked gates that match `filter` (or every gate when omitted). */
   getToolCallIds(filter?: ApprovalGateFilter): string[] {
     return (filter ? this.#matching(filter) : [...this.#gates.values()]).map(gate => gate.toolCallId);
@@ -2136,14 +2146,23 @@ export class SessionApproval {
   respond({
     decision,
     toolCallId,
+    threadId,
+    runId,
     requestContext,
     declineContext,
     onAlwaysAllow,
   }: ApprovalResponse & {
     toolCallId: string;
+    /** Narrow to one owner when the same call id is parked on several threads or runs. */
+    threadId?: string;
+    runId?: string;
     onAlwaysAllow?: (toolName: string, threadId?: string) => void;
   }): SessionCommandResult {
-    const matches = this.#matching({ toolCallId });
+    const matches = this.#matching({
+      toolCallId,
+      ...(threadId !== undefined && { threadId }),
+      ...(runId !== undefined && { runId }),
+    });
     if (matches.length !== 1) {
       return { accepted: false, reason: this.#gates.size > 0 ? 'stale_tool_call' : 'not_pending' };
     }
@@ -2916,14 +2935,18 @@ class SessionOM {
 class SessionPermissions {
   #getState: (() => Record<string, unknown>) | undefined;
   #setState: ((updates: Record<string, unknown>) => Promise<void>) | undefined;
+  #onChange: (() => Promise<void>) | undefined;
 
   /** Attach the session-state read/write. The AgentController injects these once. */
   setResolver(options: {
     getState: () => Record<string, unknown>;
     setState: (updates: Record<string, unknown>) => Promise<void>;
+    /** Runs after a rule change is persisted, so parked approvals follow the new policy. */
+    onChange?: () => Promise<void>;
   }): void {
     this.#getState = options.getState;
     this.#setState = options.setState;
+    this.#onChange = options.onChange;
   }
 
   /** The current permission rules, or empty rules when none are set. */
@@ -2934,16 +2957,25 @@ class SessionPermissions {
 
   /** Set the approval policy for a tool category. Resolves once persisted. */
   setForCategory({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.categories[category] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, categories: { ...rules.categories, [category]: policy } }));
   }
 
   /** Set the approval policy for an individual tool. Resolves once persisted. */
   setForTool({ toolName, policy }: { toolName: string; policy: PermissionPolicy }): Promise<void> {
-    const rules = this.getRules();
-    rules.tools[toolName] = policy;
-    return this.#setState?.({ permissionRules: rules }) ?? Promise.resolve();
+    return this.#write(rules => ({ ...rules, tools: { ...rules.tools, [toolName]: policy } }));
+  }
+
+  #writes: Promise<void> = Promise.resolve();
+
+  // Writes are serialized and read the rules inside the queue, so two setters
+  // called back to back both land. `edit` returns a fresh object, so state
+  // persistence sees the change instead of the same reference.
+  #write(edit: (rules: PermissionRules) => PermissionRules): Promise<void> {
+    const write = this.#writes.then(async () => {
+      await this.#setState?.({ permissionRules: edit(this.getRules()) });
+    });
+    this.#writes = write.catch(() => {});
+    return write.then(() => this.#onChange?.());
   }
 }
 
@@ -4906,6 +4938,84 @@ export class Session<TState = unknown> {
     }
     if (approved) await this.approveToolCall(identity);
     else await this.declineToolCall(identity);
+  }
+
+  /**
+   * Answer parked approvals whose tool the current rules now allow or deny.
+   * The policy is otherwise read once, when the approval chunk streams past, so
+   * a rule set afterwards (a later `setForTool`, or a session-created hook on a
+   * process reopening a run parked elsewhere) would leave the call waiting for
+   * a click. Covers gates parked on this session and approvals stored with the
+   * current thread's suspended runs. Calls still resolving to `ask` stay parked.
+   */
+  #parkedApprovalsCheck: Promise<void> = Promise.resolve();
+  // Persisted calls this session already answered, so a later re-check (another
+  // rule write, or the post-create pass) does not resume the same call again
+  // while storage still lists its run as suspended.
+  readonly #answeredParkedApprovals = new Set<string>();
+
+  applyToolPolicyToParkedApprovals(): Promise<void> {
+    const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
+    this.#parkedApprovalsCheck = check;
+    return check;
+  }
+
+  async #applyToolPolicyToParkedApprovalsSafely(): Promise<void> {
+    try {
+      await this.#applyToolPolicyToParkedApprovals();
+    } catch (error) {
+      // Best-effort: a parked call left waiting is no worse than before, and
+      // must not fail session creation or a rule write that already landed.
+      console.error('Re-checking parked tool approvals against the current policy failed:', error);
+    }
+  }
+
+  async #applyToolPolicyToParkedApprovals(): Promise<void> {
+    // Rules live on the active thread's state, so only that thread's calls
+    // can be judged against them.
+    const threadId = this.thread.getId();
+    if (!threadId) return;
+    const address = (runId: string | undefined, toolCallId: string) => `${runId ?? ''}:${toolCallId}`;
+    const handled = new Set<string>();
+    for (const gate of this.approval.list()) {
+      if (gate.threadId !== undefined && gate.threadId !== threadId) continue;
+      handled.add(address(gate.runId, gate.toolCallId));
+      const policy = this.resolveToolApproval(gate.toolName, threadId);
+      if (policy === 'ask') continue;
+      if (this.run.isAbortRequested()) continue;
+      this.approval.respond({
+        decision: policy === 'allow' ? 'approve' : 'decline',
+        toolCallId: gate.toolCallId,
+        threadId: gate.threadId,
+        runId: gate.runId,
+      });
+      this.displayState.clearPendingApprovals([gate.toolCallId]);
+    }
+
+    const agent = this.machinery.getAgent();
+    if (typeof agent.listSuspendedRuns !== 'function') return;
+    let runs: Awaited<ReturnType<typeof agent.listSuspendedRuns>>['runs'];
+    try {
+      ({ runs } = await agent.listSuspendedRuns({ threadId, resourceId: this.identity.getResourceId() }));
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') return;
+      throw error;
+    }
+    for (const run of runs) {
+      for (const call of run.toolCalls) {
+        const { toolCallId, toolName } = call;
+        if (!call.requiresApproval || !toolCallId || !toolName) continue;
+        const key = address(run.runId, toolCallId);
+        if (handled.has(key) || this.#answeredParkedApprovals.has(key)) continue;
+        const policy = this.resolveToolApproval(toolName, threadId);
+        if (policy === 'ask') continue;
+        handled.add(key);
+        this.#answeredParkedApprovals.add(key);
+        const identity = { toolCallId, runId: run.runId, threadId, resourceId: this.identity.getResourceId() };
+        if (policy === 'allow') await this.approveToolCall(identity);
+        else await this.declineToolCall(identity);
+      }
+    }
   }
 
   // ===========================================================================

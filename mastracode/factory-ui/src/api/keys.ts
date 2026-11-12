@@ -109,6 +109,10 @@ export const queryKeys = {
     [...queryKeys.workItems(factoryProjectId), 'session', sessionId ?? null] as const,
   workItemsWithSessions: (factoryProjectId: string | undefined) =>
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
+  unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
+    [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
+  workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
+    [...queryKeys.workItems(factoryProjectId), 'sources', sources] as const,
   // Outside the board's key: these hold counts and dates, not cards, so a rewrite of the cached cards must not reach them.
   boardFacts: (factoryProjectId: string | undefined) => ['factory', 'board-facts', factoryProjectId ?? null] as const,
   workItemStarters: (factoryProjectId: string | undefined) =>

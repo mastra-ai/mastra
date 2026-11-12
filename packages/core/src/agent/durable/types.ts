@@ -176,6 +176,8 @@ export interface SerializableStructuredOutput {
    * text and the finish step runs a separate structuring pass, like Agent.
    */
   hasStructuringModel?: boolean;
+  /** The model answers omitted optional fields with `null` (OpenAI strict mode); validate with null → undefined. */
+  nullToUndefined?: boolean;
   /** How validation failures are handled (see `StructuredOutputOptionsBase.errorStrategy`) */
   errorStrategy?: 'strict' | 'warn' | 'fallback';
   /** Value used when `errorStrategy` is `'fallback'`. Omitted when it is not JSON-safe. */

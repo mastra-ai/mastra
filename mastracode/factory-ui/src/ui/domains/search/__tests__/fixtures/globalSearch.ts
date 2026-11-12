@@ -234,3 +234,43 @@ export function toWireWorkItem(item: WorkItem) {
     externalSource: toExternalSource(source, sourceKey, url),
   };
 }
+
+/**
+ * The list route's answer for a query, by the server's rules: the whole board, or the part the
+ * query narrows it to. `null` is a query the server refuses.
+ */
+export function listWorkItemsResponse(cards: WorkItem[], query: URLSearchParams) {
+  const sessionIds = query.getAll('sessionId');
+  const sources = query.getAll('source');
+  const scope = query.get('scope');
+  const holdsSession = (card: WorkItem) => Object.keys(card.sessions).length > 0;
+  let listed = cards;
+  let total: number | undefined;
+  if (scope !== null && scope !== 'sessions') return null;
+  if (query.get('started') === 'false') {
+    const words = (query.get('q') ?? '').toLowerCase().split(/\s+/).filter(Boolean);
+    const matches = cards
+      .filter(card => !holdsSession(card))
+      .filter(card => {
+        const text = [card.title, card.workItem?.key, `#${card.metadata.number}`, card.sourceKey]
+          .join(' ')
+          .toLowerCase();
+        return words.every(word => text.includes(word));
+      })
+      .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    listed = matches.slice(0, Number(query.get('limit') ?? 20));
+    total = matches.length;
+  } else if (scope === 'sessions') {
+    listed = cards.filter(holdsSession);
+  } else if (sessionIds.length > 0) {
+    listed = cards.filter(card => Object.values(card.sessions).some(ref => sessionIds.includes(ref.sessionId)));
+  } else if (sources.length > 0) {
+    listed = cards.filter(card => [card.sourceKey, card.url].some(key => key !== null && sources.includes(key)));
+  }
+  return {
+    workItems: listed.map(toWireWorkItem),
+    runningSessionIds: [],
+    parkedSessionIds: [],
+    ...(total === undefined ? {} : { total }),
+  };
+}

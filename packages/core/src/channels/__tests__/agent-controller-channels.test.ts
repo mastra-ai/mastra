@@ -1124,14 +1124,14 @@ describe('AgentControllerChannels', () => {
       'posts no approval card for $policy-policy tools the session resolves itself',
       async ({ policy, executes }) => {
         const { tool, executeSpy } = createDeployTool();
+        // Rules belong to the session's bound thread, so set them once the channel
+        // has bound its thread: the documented seam for configuring channel sessions.
         const { adapter, controller, mastra, channels } = await createSetup({
           model: createApprovalFlowModel(),
           tools: { deployTool: tool },
+          onSessionStart: ({ session }) => session.permissions.setForTool({ toolName: 'deployTool', policy }),
         });
         const threadId = `chan-1:t-${policy}`;
-        const resourceId = `channel:${threadId}`;
-        const session = await controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-        await session.permissions.setForTool({ toolName: 'deployTool', policy });
         const chatThread = createChatThread(adapter, threadId);
 
         await (channels as any).processChatMessage(
@@ -1144,6 +1144,8 @@ describe('AgentControllerChannels', () => {
         await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
           what: 'continuation rendered',
         });
+        const session = (await controller.getSession(`channel:${threadId}`))!;
+        expect(session.permissions.getRules().tools.deployTool).toBe(policy);
         expect(session.approval.isArmed()).toBe(false);
         expect(executeSpy).toHaveBeenCalledTimes(executes ? 1 : 0);
         // Cards are posted then edited in place, so check both paths.

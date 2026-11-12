@@ -281,7 +281,7 @@ describe('AgentsMDInjector', () => {
     expect(extractReminderMarkup(messageList)).toEqual([]);
   });
 
-  it('uses the reader from getReader instead of instance defaults when provided', async () => {
+  it('uses an asynchronous reader from getReader instead of instance defaults when provided', async () => {
     const messageList = new TestMessageList();
     const toolCallId = 'call-agents-reader';
     messageList.push(createUserMessage('Open the instructions'));
@@ -302,10 +302,10 @@ describe('AgentsMDInjector', () => {
       readFile: instanceReadFile,
       // Simulates serving content from a trusted git ref rather than the
       // (untrusted) working tree.
-      getReader: () => ({
-        pathExists: path => String(path) === '/repo/src/agents/nested/AGENTS.md',
-        isDirectory: () => false,
-        readFile: () => '# Trusted ref content',
+      getReader: async () => ({
+        pathExists: async path => String(path) === '/repo/src/agents/nested/AGENTS.md',
+        isDirectory: async () => false,
+        readFile: async () => '# Trusted ref content',
       }),
     });
 
