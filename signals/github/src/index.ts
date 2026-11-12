@@ -106,6 +106,8 @@ export type GithubSignalsSyncInput = {
   includeComments?: boolean;
   /** Inclusive local snapshot cutoff; does not add GitHub API requests. */
   commentsSince?: string;
+  /** Comment URLs already delivered at exactly `commentsSince`; skipped so a page can move past them. */
+  commentsSeenAtSince?: string[];
 };
 
 export type GithubSignalsSyncResult = {
@@ -669,6 +671,11 @@ function getCommentExcerpt(body: string): string {
 }
 
 const MAX_COMMENT_NOTIFICATIONS = 10;
+// Comments read per poll; later comments stay past the cursor and arrive on the next poll.
+const COMMENT_PAGE_SIZE = 25;
+const COMMENT_BODY_MAX_CHARS = 200_000;
+// One page of maximum-size bodies, allowing for JSON escaping.
+const COMMENT_QUERY_MAX_BUFFER = COMMENT_PAGE_SIZE * COMMENT_BODY_MAX_CHARS * 6 + 1024 * 1024;
 
 function snapshotComments(snapshot: GithubPullRequestSnapshot): GithubPullRequestCommentSnapshot[] {
   return (
@@ -727,6 +734,26 @@ function checkpointComments(subscription: GithubPRSubscription, snapshot: Github
     subscription.lastObservedCommentsAt = at;
     subscription.lastObservedCommentKeys = [...keys];
   }
+}
+
+function holdCommentCheckpoint(
+  target: GithubPRSubscription,
+  subscription: GithubPRSubscription,
+  snapshot: GithubPullRequestSnapshot,
+) {
+  if (subscription.lastObservedCommentsAt) {
+    target.lastObservedCommentsAt = subscription.lastObservedCommentsAt;
+    target.lastObservedCommentKeys = subscription.lastObservedCommentKeys ?? [];
+    return;
+  }
+  const since = subscription.lastObservedGithubUpdatedAt;
+  if (!since) return;
+  // The PR cursor still advances, so pin the comment cursor where this poll started. Comments at
+  // exactly that time were already observed by the previous poll.
+  target.lastObservedCommentsAt = since;
+  target.lastObservedCommentKeys = snapshotComments(snapshot)
+    .filter(comment => comment.updatedAt && Date.parse(comment.updatedAt) === Date.parse(since))
+    .map(commentKey);
 }
 
 function withComment(
@@ -1156,11 +1183,11 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
     return join(defaultDirs[0]!, 'gitcrawl.db');
   }
 
-  async #queryDb<T>(sql: string): Promise<T[]> {
+  async #queryDb<T>(sql: string, maxBuffer = 10 * 1024 * 1024): Promise<T[]> {
     this.#dbPathPromise ??= this.#resolveDbPath();
     const dbPath = await this.#dbPathPromise;
     try {
-      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer: 10 * 1024 * 1024 });
+      const { stdout } = await execFileAsync('sqlite3', ['-json', dbPath, sql], { maxBuffer });
       return JSON.parse(stdout || '[]') as T[];
     } catch (error) {
       // Drop the cached path so a fixed or moved database is picked up on the next poll.
@@ -1280,8 +1307,9 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
       path?: string;
       line?: number;
       review_thread_id?: string;
-    }>(`select * from (
-          select c.author_login, c.author_type, c.is_bot, substr(c.body, 1, 200000) as body,
+    }>(
+      `select * from (
+          select c.author_login, c.author_type, c.is_bot, substr(c.body, 1, ${COMMENT_BODY_MAX_CHARS}) as body,
                  json_extract(c.raw_json, '$.html_url') as html_url,
                  coalesce(c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as created_at,
                  coalesce(c.updated_at_gh, c.created_at_gh, json_extract(c.raw_json, '$.submitted_at')) as updated_at,
@@ -1296,7 +1324,7 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
                       then json_extract(c.value, '$.author.login') || '[bot]'
                       else json_extract(c.value, '$.author.login') end,
                  json_extract(c.value, '$.author.__typename'),
-                 json_extract(c.value, '$.author.__typename')='Bot', substr(json_extract(c.value, '$.body'), 1, 200000),
+                 json_extract(c.value, '$.author.__typename')='Bot', substr(json_extract(c.value, '$.body'), 1, ${COMMENT_BODY_MAX_CHARS}),
                  json_extract(c.value, '$.url'), json_extract(c.value, '$.createdAt'),
                  coalesce(json_extract(c.value, '$.updatedAt'), json_extract(c.value, '$.createdAt')),
                  rt.path, rt.line, rt.review_thread_id
@@ -1305,8 +1333,21 @@ export class GitcrawlSyncClient implements GithubSignalsSyncClient {
             join repositories r on r.id=t.repo_id
             join json_each(rt.comments_json) c
            where r.owner=${owner} and r.name=${repo} and t.number=${number}
-        ) ${input.commentsSince ? `where julianday(updated_at) >= julianday(${sqlString(input.commentsSince)})` : ''}
-        order by julianday(updated_at) desc, html_url desc${input.commentsSince ? '' : ' limit 20'}`);
+        ) ${
+          input.commentsSince
+            ? `where julianday(updated_at) >= julianday(${sqlString(input.commentsSince)})${
+                input.commentsSeenAtSince?.length
+                  ? ` and not (julianday(updated_at) = julianday(${sqlString(input.commentsSince)}) and html_url in (${input.commentsSeenAtSince.map(sqlString).join(', ')}))`
+                  : ''
+              }
+        order by julianday(updated_at) asc, html_url asc limit ${COMMENT_PAGE_SIZE}`
+            : 'order by julianday(updated_at) desc, html_url desc limit 20'
+        }`,
+      COMMENT_QUERY_MAX_BUFFER,
+    );
+    // Since-cursor pages are read oldest-first so the cursor stops at the last row read; the rest
+    // arrive on the next poll. Callers expect newest-first.
+    if (input.commentsSince) latestComments.reverse();
     const latestComment = latestComments[0];
 
     const checks = normalizeGithubChecksForSnapshot({
@@ -2010,6 +2051,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           cwd: this.#options.cwd,
           includeComments: options.includeComments,
           commentsSince: subscription.lastObservedCommentsAt ?? subscription.lastObservedGithubUpdatedAt,
+          ...(subscription.lastObservedCommentsAt && subscription.lastObservedCommentKeys?.length
+            ? { commentsSeenAtSince: subscription.lastObservedCommentKeys }
+            : {}),
         };
         const syncResult = await this.#syncClient.syncPullRequest(syncInput);
         if (!isCurrentGeneration()) return 0;
@@ -2032,6 +2076,8 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         if (snapshot) {
           comments = newSnapshotComments(subscription, snapshot);
           checkpointComments(commentCheckpoint, snapshot);
+          let authorizationUnavailable = false;
+          const rawSnapshot = snapshot;
           snapshot = await this.#filterUnauthorizedLatestComment(
             subscription.owner,
             subscription.repo,
@@ -2039,8 +2085,17 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
               ? { ...snapshot, latestComments: comments }
               : snapshot,
             isCurrentGeneration,
+            () => {
+              authorizationUnavailable = true;
+            },
           );
           comments = perCommentDelivery ? (snapshot.latestComments ?? []) : [];
+          if (perCommentDelivery && authorizationUnavailable) {
+            // Hold this poll's comments and leave them past the cursor, so a failed permission
+            // lookup is retried next poll instead of being treated as a denial.
+            holdCommentCheckpoint(commentCheckpoint, subscription, rawSnapshot);
+            comments = [];
+          }
         }
         if (!isCurrentGeneration()) return 0;
         const nextSubscription: GithubPRSubscription = {
@@ -2287,6 +2342,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     user: string | undefined,
     metadata: { authorType?: string; isBot?: boolean } = {},
     isCurrentGeneration?: () => boolean,
+    onLookupFailure?: () => void,
   ): Promise<boolean> {
     if (!user) return false;
     const normalizedUser = user.toLowerCase();
@@ -2303,12 +2359,18 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       if (appOwner.type === 'Organization') return appOwner.login.toLowerCase() === owner.toLowerCase();
       if (appOwner.type !== 'User') return false;
 
-      const permission = await this.#loadAuthorPermission(owner, repo, appOwner.login, isCurrentGeneration);
+      const permission = await this.#loadAuthorPermission(
+        owner,
+        repo,
+        appOwner.login,
+        isCurrentGeneration,
+        onLookupFailure,
+      );
       if (isCurrentGeneration && !isCurrentGeneration()) return false;
       const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
       return !!permission && authorizedPermissions.includes(permission);
     }
-    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration);
+    const permission = await this.#loadAuthorPermission(owner, repo, user, isCurrentGeneration, onLookupFailure);
     if (isCurrentGeneration && !isCurrentGeneration()) return false;
     const authorizedPermissions = this.#options.authorizedPermissions ?? DEFAULT_AUTHORIZED_PERMISSIONS;
     return !!permission && authorizedPermissions.includes(permission);
@@ -2319,6 +2381,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     snapshot: GithubPullRequestSnapshot,
     isCurrentGeneration?: () => boolean,
+    onAuthorizationUnavailable?: () => void,
   ): Promise<GithubPullRequestSnapshot> {
     const comments = snapshotComments(snapshot);
     if (
@@ -2342,6 +2405,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
             isBot: comment.isBot,
           },
           isCurrentGeneration,
+          onAuthorizationUnavailable,
         ))
       ) {
         continue;
@@ -2368,6 +2432,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
     repo: string,
     user: string,
     isCurrentGeneration?: () => boolean,
+    onLookupFailure?: () => void,
   ): Promise<GithubPermission | undefined> {
     const cacheKey = `${owner}/${repo}:${user.toLowerCase()}`;
     const cached = this.#permissionCache.get(cacheKey);
@@ -2398,6 +2463,7 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
       return permission;
     } catch {
       this.#permissionCache.delete(cacheKey);
+      onLookupFailure?.();
       return undefined;
     }
   }

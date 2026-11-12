@@ -69,6 +69,7 @@ else console.log('{}');
   };
   const delivered: SendNotificationSignalInput[] = [];
   const permissionLookups: string[] = [];
+  let permissionLookupFails = false;
   const createProvider = () => {
     const provider = new GithubSignals({
       gitcrawlCommand: command,
@@ -84,6 +85,7 @@ else console.log('{}');
       permissionResolver: {
         async getPermission(_owner, _repo, user) {
           permissionLookups.push(user);
+          if (permissionLookupFails) throw new Error('GitHub permission lookup unavailable');
           return user === 'maintainer' ? 'write' : 'read';
         },
       },
@@ -142,6 +144,9 @@ else console.log('{}');
     restart() {
       provider = createProvider();
     },
+    failPermissionLookups(fail: boolean) {
+      permissionLookupFails = fail;
+    },
     async resubscribe(nextMode: 'working' | 'review' = mode) {
       await provider.subscribeThreadToPR({
         threadId: thread.id,
@@ -171,6 +176,60 @@ describe.each(['working', 'review'] as const)('%s subscriber receives every find
     f.delivered.length = 0;
     await f.poll();
     expect(f.delivered).toHaveLength(0);
+  }, 30_000);
+
+  it('reads a bounded page of comments and delivers the rest on the next poll', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    for (let i = 0; i < 30; i++) {
+      f.comment(`page-${i}`, `Paged finding ${i}.`, `2026-11-12T20:42:${String(i).padStart(2, '0')}Z`);
+    }
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(10);
+    expect(f.delivered.find(n => n.kind === 'pull-request-comments-collapsed')).toMatchObject({
+      attributes: expect.objectContaining({ commentCount: 25, collapsedCommentCount: 15 }),
+    });
+    f.delivered.length = 0;
+    await f.poll();
+    const rest = f.delivered.filter(n => n.kind === 'pull-request-activity').map(n => n.summary);
+    expect(rest).toHaveLength(5);
+    expect(rest.join('\n')).toContain('Paged finding 29.');
+    f.delivered.length = 0;
+    await f.poll();
+    expect(f.delivered).toHaveLength(0);
+  }, 60_000);
+
+  it('keeps delivering when cached comments are larger than one read', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    f.sql(`with recursive n(i) as (select 0 union all select i + 1 from n where i < 59)
+      insert into comments select 1, 'coderabbitai[bot]', 'Bot', 1,
+        'Large finding ' || i || '. ' || replace(hex(zeroblob(100000)), '00', 'x'),
+        printf('2026-11-12T20:43:%02dZ', i), printf('2026-11-12T20:43:%02dZ', i),
+        json_object('html_url', 'https://github.com/mastra-ai/mastra/pull/29096#issuecomment-large-' || i)
+      from n`);
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(10);
+    await f.poll();
+    await f.poll();
+    expect(f.delivered.map(n => n.summary).join('\n')).toContain('Large finding 59.');
+  }, 120_000);
+
+  it('retries comments whose author permission could not be looked up', async () => {
+    const f = fixture(mode);
+    await f.poll();
+    f.delivered.length = 0;
+    f.failPermissionLookups(true);
+    f.comment('retry', 'Finding while permissions are down.', undefined, 'maintainer');
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity')).toHaveLength(0);
+    f.failPermissionLookups(false);
+    await f.poll();
+    expect(f.delivered.filter(n => n.kind === 'pull-request-activity').map(n => n.summary)).toEqual([
+      expect.stringContaining('Finding while permissions are down.'),
+    ]);
   }, 30_000);
 
   it('delivers a newly discovered identity at the same timestamp without replaying siblings', async () => {
