@@ -100,6 +100,23 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered).toEqual([]);
   });
 
+  it('still reports the natural exit of a process whose kill_process failed', async () => {
+    const { delivered, start, tools } = await setup();
+
+    const { pid, exit } = await start(node('setTimeout(() => process.exit(0), 1500)'));
+    const sandboxKill = vi
+      .spyOn(workspace!.sandbox!.processes!, 'kill')
+      .mockRejectedValueOnce(new Error('kill not permitted'));
+    await expect(
+      tools['kill_process'].execute({ pid }, { workspace, agent: { toolCallId: 'kill-call' } }),
+    ).rejects.toThrow('kill not permitted');
+    sandboxKill.mockRestore();
+    await exit;
+
+    expect(delivered).toHaveLength(1);
+    expect(String(delivered[0]!.signal.contents)).toContain('exited with code 0');
+  });
+
   it('posts no notice for a process the user kills from the activity list', async () => {
     const { delivered, exits, notices, start } = await setup();
 
@@ -136,16 +153,20 @@ describe('Mastra Code background shell exit notices', () => {
   });
 
   describe('shells started by a subagent', () => {
-    function subagentContext(isParentThreadActive: boolean) {
+    function subagentContext(isParentThreadActive: boolean, forkThreadId?: string) {
       const requestContext = new RequestContext();
-      // A non-forked subagent's controller context has no thread of its own.
+      // A non-forked subagent's controller context has no thread of its own; a
+      // forked one points at the cloned thread. Both keep the parent's `isThreadActive`.
       requestContext.set('controller', {
-        threadId: null,
-        resourceId: '',
+        threadId: forkThreadId ?? null,
+        resourceId: forkThreadId ? 'resource-1' : '',
         sessionId: 'session-1',
         isThreadActive: () => isParentThreadActive,
       });
-      return { agent: { toolCallId: 'sub-call' }, requestContext };
+      const agent = forkThreadId
+        ? { toolCallId: 'fork-call', threadId: forkThreadId, resourceId: 'resource-1' }
+        : { toolCallId: 'sub-call' };
+      return { agent, requestContext };
     }
     const session = {
       thread: { getId: () => 'parent-thread' },
@@ -156,6 +177,15 @@ describe('Mastra Code background shell exit notices', () => {
       const { delivered, start } = await setup({ 'session-1': session });
 
       const { exit } = await start(node('process.exit(0)'), subagentContext(true));
+      await exit;
+
+      expect(delivered.map(notice => notice.target)).toEqual([{ resourceId: 'resource-1', threadId: 'parent-thread' }]);
+    });
+
+    it('notify the parent thread, not the cloned one, when the subagent is forked', async () => {
+      const { delivered, start } = await setup({ 'session-1': session });
+
+      const { exit } = await start(node('process.exit(0)'), subagentContext(true, 'fork-thread'));
       await exit;
 
       expect(delivered.map(notice => notice.target)).toEqual([{ resourceId: 'resource-1', threadId: 'parent-thread' }]);

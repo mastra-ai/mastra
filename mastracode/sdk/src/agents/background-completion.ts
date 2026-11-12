@@ -1,6 +1,6 @@
 import type { AgentControllerSubagent, Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
-import type { BackgroundCompletionEvents } from './background-completion-events.js';
+import type { BackgroundCompletionEvents, BackgroundTaskCompletionEvent } from './background-completion-events.js';
 
 interface BackgroundCompletionRouter<TState = unknown> {
   getSession(sessionId: string): Promise<Session<TState> | undefined>;
@@ -43,24 +43,39 @@ export async function findSessionForThread<TState>(
 // exists; past this many, the oldest notices are dropped.
 const MAX_HELD_NOTICES = 100;
 
+export interface BackgroundNoticeDeliveryOptions {
+  /** False to only persist the notice to its thread, never starting a new turn. Default: true. */
+  wake?: boolean;
+}
+
 export interface BackgroundNoticeDelivery {
   /**
    * Wakes the agent when the notice's thread is the session's current thread,
    * and persists it to the thread otherwise. Holds it while no session runs
    * the thread's resource yet.
    */
-  deliver(target: BackgroundNoticeTarget, signal: BackgroundNoticeSignal): Promise<void>;
+  deliver(
+    target: BackgroundNoticeTarget,
+    signal: BackgroundNoticeSignal,
+    options?: BackgroundNoticeDeliveryOptions,
+  ): Promise<void>;
   /** Retries the held notices. Call when a session is created. */
   flush(): Promise<void>;
 }
 
-export function createBackgroundNoticeDelivery(getRouter: () => BackgroundCompletionRouter): BackgroundNoticeDelivery {
-  const held: Array<{ target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal }> = [];
+type HeldNotice = { target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal; wake: boolean };
 
-  const send = async (target: BackgroundNoticeTarget, signal: BackgroundNoticeSignal): Promise<boolean> => {
+export function createBackgroundNoticeDelivery(getRouter: () => BackgroundCompletionRouter): BackgroundNoticeDelivery {
+  const held: HeldNotice[] = [];
+  const hold = (notice: HeldNotice) => {
+    held.push(notice);
+    if (held.length > MAX_HELD_NOTICES) held.shift();
+  };
+
+  const send = async ({ target, signal, wake }: HeldNotice): Promise<boolean> => {
     const session = await findSessionForThread(getRouter(), target);
     if (!session) return false;
-    if (session.thread.getId() === target.threadId) {
+    if (wake && session.thread.getId() === target.threadId) {
       await session.sendSignal(signal, { ifIdle: { behavior: 'wake' } }).accepted;
     } else {
       await session.sendSignalToThread(signal, target).accepted;
@@ -69,18 +84,16 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
   };
 
   return {
-    async deliver(target, signal) {
-      if (await send(target, signal)) return;
-      held.push({ target, signal });
-      if (held.length > MAX_HELD_NOTICES) held.shift();
+    async deliver(target, signal, options) {
+      const notice = { target, signal, wake: options?.wake ?? true };
+      if (!(await send(notice))) hold(notice);
     },
     async flush() {
       for (const notice of held.splice(0)) {
-        try {
-          if (!(await send(notice.target, notice.signal))) held.push(notice);
-        } catch {
-          // The thread is gone or rejected the notice; retrying would fail the same way.
-        }
+        // A failed send (for example storage not ready yet) is retried on the
+        // next session, within the cap.
+        const sent = await send(notice).catch(() => false);
+        if (!sent) hold(notice);
       }
     },
   };
@@ -88,6 +101,10 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
 
 const RESTART_FAILURE_MESSAGE = 'Worker process terminated before task completed';
 const MAX_SUMMARY_LENGTH = 80;
+
+type TaskStatus = 'completed' | 'failed' | 'cancelled';
+/** Why a task ended without finishing its work, when no one asked it to stop. */
+type Interruption = 'restart' | 'shutdown';
 
 function summarize(text: string): string {
   const firstLine = text.trim().split('\n')[0]?.trim() ?? '';
@@ -110,26 +127,46 @@ function describeTask(
 
 function taskNoticeContents(
   task: BackgroundTask,
-  status: 'completed' | 'failed' | 'cancelled',
+  status: TaskStatus,
   label: string,
-  interrupted: boolean,
+  interruption: Interruption | undefined,
 ): string {
   const call = `the original ${task.toolName} call (${task.toolCallId})`;
-  if (interrupted) return `Background ${label} was interrupted by a restart before it finished. See ${call}.`;
+  if (interruption) return `Background ${label} was interrupted by a ${interruption} before it finished. See ${call}.`;
   if (status === 'cancelled') return `Background ${label} was cancelled. See ${call}.`;
   if (status === 'failed') return `Background ${label} failed. The error is in ${call}.`;
   return `Background ${label} finished. Its result is in ${call}.`;
 }
 
+export interface BackgroundCompletionCallbackOptions {
+  /** Subagent definitions, to name background subagent tasks. */
+  subagents?: readonly Pick<AgentControllerSubagent, 'id' | 'name'>[];
+  /**
+   * True while the task manager shuts down. Tasks it stops then are reported
+   * as interrupted, and their notices are only persisted: waking an agent
+   * would start a run in a process that is going away.
+   */
+  isShuttingDown?: () => boolean;
+}
+
+/**
+ * Background task callbacks that tell the task's thread it finished.
+ *
+ * The first argument is the notice delivery, or (older call shape) a function
+ * returning the session router, in which case a delivery is created for it.
+ */
 export function createBackgroundCompletionCallbacks(
-  delivery: BackgroundNoticeDelivery,
+  delivery: BackgroundNoticeDelivery | (() => BackgroundCompletionRouter),
   events?: BackgroundCompletionEvents,
-  options: { subagents?: readonly Pick<AgentControllerSubagent, 'id' | 'name'>[] } = {},
+  options: BackgroundCompletionCallbackOptions = {},
 ): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed' | 'onTaskCancelled'> {
-  const deliver = async (task: BackgroundTask, status: 'completed' | 'failed' | 'cancelled') => {
+  const notices = typeof delivery === 'function' ? createBackgroundNoticeDelivery(delivery) : delivery;
+
+  const deliver = async (task: BackgroundTask, status: TaskStatus) => {
     if (!task.resourceId || !task.threadId) return;
     const eventId = `background-task:${task.id}:${status}`;
-    const event = {
+    const event: BackgroundTaskCompletionEvent = {
+      kind: 'task',
       id: eventId,
       taskId: task.id,
       originRunId: task.runId,
@@ -140,15 +177,20 @@ export function createBackgroundCompletionCallbacks(
       status,
     };
     const { title, summary, label } = describeTask(task, options.subagents ?? []);
-    const interrupted = status === 'failed' && task.error?.message === RESTART_FAILURE_MESSAGE;
+    const interruption: Interruption | undefined =
+      status === 'failed' && task.error?.message === RESTART_FAILURE_MESSAGE
+        ? 'restart'
+        : status !== 'completed' && options.isShuttingDown?.()
+          ? 'shutdown'
+          : undefined;
     try {
-      await delivery.deliver(
+      await notices.deliver(
         { resourceId: task.resourceId, threadId: task.threadId },
         {
           id: eventId,
           type: 'notification',
           tagName: 'notification',
-          contents: taskNoticeContents(task, status, label, interrupted),
+          contents: taskNoticeContents(task, status, label, interruption),
           attributes: {
             source: 'background-work',
             kind: `background-task-${status}`,
@@ -165,10 +207,12 @@ export function createBackgroundCompletionCallbacks(
               status,
               title,
               ...(summary ? { summary } : {}),
-              ...(interrupted ? { interrupted: true } : {}),
+              ...(interruption ? { interrupted: interruption } : {}),
             },
           },
         },
+        // Nothing is waiting on an interrupted task; the agent sees the notice on its next turn.
+        { wake: !interruption },
       );
     } finally {
       events?.publish(event);

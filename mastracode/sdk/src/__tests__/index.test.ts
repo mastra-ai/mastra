@@ -856,6 +856,49 @@ describe('createMastraCode', () => {
     expect(enabled.backgroundCompletionEvents).toBeDefined();
   });
 
+  it('delivers a background notice held before any session existed once a session is created', async () => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), backgroundTools: { enabled: true } });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    const { backgroundTasks } = controllerConstructorMock.mock.calls[0]![0];
+    controllerGetSessionMock.mockResolvedValue(undefined);
+
+    // Startup recovery reports an orphaned task before the TUI's session exists.
+    await backgroundTasks.onTaskFailed({
+      id: 'task-1',
+      status: 'failed',
+      toolName: 'subagent',
+      toolCallId: 'call-1',
+      args: { agentType: 'explore', task: 'Audit' },
+      error: { message: 'Worker process terminated before task completed' },
+      agentId: 'code-agent',
+      runId: 'run-1',
+      threadId: 'thread-1',
+      resourceId: 'project-resource',
+      retryCount: 0,
+      maxRetries: 0,
+      timeoutMs: 0,
+      createdAt: new Date(),
+    });
+    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const session = {
+      sendSignalToThread,
+      identity: { getResourceId: () => 'project-resource' },
+      thread: { getId: () => 'thread-1' },
+    };
+    controllerGetSessionMock.mockImplementation(async (id: string) =>
+      id === 'project-resource' ? session : undefined,
+    );
+    const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
+    trackLiveSession(session);
+
+    await vi.waitFor(() => expect(sendSignalToThread).toHaveBeenCalledOnce());
+    expect(sendSignalToThread).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining('interrupted by a restart') }),
+      { resourceId: 'project-resource', threadId: 'thread-1' },
+    );
+  });
+
   it('registers background signal processing only when background tools are enabled', async () => {
     const { createMastraCode } = await import('../index.js');
 

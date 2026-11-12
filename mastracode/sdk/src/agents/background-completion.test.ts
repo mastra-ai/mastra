@@ -100,20 +100,6 @@ describe('createBackgroundCompletionCallbacks', () => {
     });
   });
 
-  it('says a task orphaned by a crash was interrupted by a restart', async () => {
-    const { session, sendSignalToThread } = createSession();
-    const { callbacks } = createHarness(session);
-
-    await callbacks.onTaskFailed?.(
-      createTask('failed', { error: { message: 'Worker process terminated before task completed' } }),
-    );
-
-    expect(sentContents(sendSignalToThread)).toContain('was interrupted by a restart');
-    expect(sendSignalToThread.mock.calls[0]?.[0]).toMatchObject({
-      metadata: { backgroundCompletion: { interrupted: true } },
-    });
-  });
-
   it('wakes the agent when the task finishes on the thread the session is on', async () => {
     const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
     const { callbacks } = createHarness(session);
@@ -126,19 +112,19 @@ describe('createBackgroundCompletionCallbacks', () => {
     });
   });
 
-  it('holds notices that arrive before any session exists and delivers them once one does', async () => {
+  it('keeps a held notice when sending it fails, and sends it once on a later session', async () => {
     const { callbacks, delivery, sessions } = createHarness();
 
-    await callbacks.onTaskFailed?.(
-      createTask('failed', { error: { message: 'Worker process terminated before task completed' } }),
-    );
+    await callbacks.onTaskFailed?.(createTask('failed'));
     const { session, sendSignalToThread } = createSession();
+    sendSignalToThread.mockReturnValueOnce({ accepted: Promise.reject(new Error('storage not ready')) });
     sessions.set('resource-1', session);
     await delivery.flush();
     await delivery.flush();
+    await delivery.flush();
 
-    expect(sendSignalToThread).toHaveBeenCalledOnce();
-    expect(sentContents(sendSignalToThread)).toContain('interrupted by a restart');
+    expect(sendSignalToThread).toHaveBeenCalledTimes(2);
+    expect(sentContents(sendSignalToThread)).toContain('Background mastra_expert call failed.');
   });
 
   it('publishes the process-local event after delivery, even when delivery fails', async () => {
@@ -152,6 +138,7 @@ describe('createBackgroundCompletionCallbacks', () => {
     await expect(callbacks.onTaskComplete?.(createTask('completed'))).rejects.toBe(persistenceError);
 
     expect(listener).toHaveBeenCalledWith({
+      kind: 'task',
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
       originRunId: 'run-1',

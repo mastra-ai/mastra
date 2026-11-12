@@ -260,7 +260,7 @@ ${patchToolGuidance}
 
   if (options.hasSubagents !== false && !denied.has('subagent')) {
     const when = options.backgroundTools
-      ? `- Run a subagent in the background (\`_background: { disposition: "deferred" }\`) when its task is independent of what you do next, and keep working. Run it in the foreground when you need its answer before you can continue.`
+      ? `- Run a subagent in the background (\`_background: { disposition: "deferred" }\`) when its task is independent of what you do next, and keep working. Run it in the foreground when you need its answer before you can continue. For a small task, do it yourself.`
       : `- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.`;
     sections.push(`
 **subagent** — Delegate a focused task to a specialized subagent

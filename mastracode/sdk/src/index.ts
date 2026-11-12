@@ -58,6 +58,7 @@ import type { AgentConnectionsSignalProviderOptions } from './agent-connections/
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
 import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './agents/background-completion.js';
 import { createBackgroundProcessNotices } from './agents/background-processes.js';
+import type { BackgroundProcessControls } from './agents/background-processes.js';
 import {
   hasCredentialStoreProvider,
   setCredentialLogger,
@@ -1809,7 +1810,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       })
     : undefined;
   const backgroundTaskCallbacks = backgroundNotices
-    ? createBackgroundCompletionCallbacks(backgroundNotices, backgroundCompletionEvents, { subagents })
+    ? createBackgroundCompletionCallbacks(backgroundNotices, backgroundCompletionEvents, {
+        subagents,
+        // Clean shutdown cancels running tasks; that must not wake an agent mid-teardown.
+        isShuttingDown: () => controller.getMastra()?.backgroundTaskManager?.isShuttingDown() ?? false,
+      })
     : undefined;
   // Used when the host passes no `workspace`. Its plan-mode write guard must
   // allow the same plans directory the prompts tell the agent to write to.
@@ -2016,9 +2021,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     githubSignals,
     backgroundToolsEnabled,
     backgroundCompletionEvents,
-    /** Background shell exit notices; also reads and kills shells for the user without posting a notice. */
-    backgroundProcesses,
-    /** Background task completion callbacks, shared by the controller and a server-owned Mastra. */
+    /** Reads and kills background shells for the user; a kill posts no exit notice. */
+    backgroundProcesses: backgroundProcesses as BackgroundProcessControls | undefined,
+    /**
+     * Background task completion callbacks, shared by the controller and a server-owned Mastra.
+     * @internal
+     */
     backgroundTaskCallbacks,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.

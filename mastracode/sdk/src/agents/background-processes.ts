@@ -18,8 +18,8 @@ interface Launch {
   command?: string;
   description?: string;
   sandbox?: WorkspaceSandbox;
-  /** Thread to notify when the exit metadata has none (shells started by subagents). */
-  fallbackTarget?: BackgroundNoticeTarget;
+  /** The parent thread, for shells started by subagents. Wins over the thread in the exit metadata. */
+  parentTarget?: BackgroundNoticeTarget;
 }
 
 interface ToolContextLike {
@@ -36,13 +36,17 @@ export interface BackgroundProcessNotices {
   /** `execute_command` `backgroundProcesses.onExit` callback. */
   onExit(meta: BackgroundProcessExitMeta): Promise<void>;
   /**
-   * Reads a background process's current output without releasing it, so the
-   * agent can still read it with `get_process_output`.
+   * Reads a running background process's output without releasing it, so the
+   * agent can still read it with `get_process_output`. Undefined once the
+   * process has exited.
    */
   read(pid: string): Promise<ProcessHandle | undefined>;
-  /** Kills a background process for the user, without posting an exit notice. */
+  /** Kills a background process for the user, without posting an exit notice. False when it was not running. */
   kill(pid: string): Promise<boolean>;
 }
+
+/** What `createMastraCode()` hands to hosts: reading and killing background shells. */
+export type BackgroundProcessControls = Pick<BackgroundProcessNotices, 'read' | 'kill'>;
 
 function stringInput(input: unknown, key: string): string | undefined {
   const value = (input as Record<string, unknown> | undefined)?.[key];
@@ -55,22 +59,33 @@ function formatOutput(stdout: string, stderr: string): string {
   return stdout;
 }
 
+/** The PID in an `execute_command` background result, such as `Started background process (PID: 4242)`. */
+export function parseBackgroundProcessPid(result: unknown): string | undefined {
+  return typeof result === 'string' ? result.match(BACKGROUND_PROCESS_RESULT)?.[1] : undefined;
+}
+
 /**
- * A subagent's request context has no thread, so its shells exit with no
- * thread to notify. Its controller context still answers whether the parent
- * thread is the session's current one; only then is that thread the parent's.
+ * Subagents run on a thread of their own: none for a plain subagent, a cloned
+ * thread for a forked one. Their shells should report to the parent thread.
+ * The subagent's controller context keeps the parent run's `isThreadActive`,
+ * which says whether the session is still on the parent thread. Only then is
+ * the session's current thread the parent's. This is checked when the shell
+ * starts, so a subagent that starts a shell after the user left the parent
+ * thread gets no agent notice.
  */
 async function resolveParentThread(
   context: ToolContextLike | undefined,
   getSession: (sessionId: string) => Promise<Session<any> | undefined>,
 ): Promise<BackgroundNoticeTarget | undefined> {
   const controller = context?.requestContext?.get?.('controller') as AgentControllerRequestContext | undefined;
-  if (!controller || controller.threadId || !controller.sessionId || controller.isThreadActive?.() !== true) {
-    return undefined;
-  }
+  if (!controller?.sessionId || !controller.isThreadActive) return undefined;
   const session = await getSession(controller.sessionId);
-  const threadId = session?.thread.getId();
-  return session && threadId ? { resourceId: session.identity.getResourceId(), threadId } : undefined;
+  if (!session) return undefined;
+  // Read the current thread and the parent check together, after the await,
+  // so a thread switch cannot fall between them.
+  const currentThreadId = session.thread.getId();
+  if (!currentThreadId || currentThreadId === controller.threadId || !controller.isThreadActive()) return undefined;
+  return { resourceId: session.identity.getResourceId(), threadId: currentThreadId };
 }
 
 export function createBackgroundProcessNotices(options: {
@@ -102,9 +117,7 @@ export function createBackgroundProcessNotices(options: {
         command: stringInput(input, 'command'),
         description: stringInput(input, 'description'),
         sandbox: toolContext?.workspace?.sandbox,
-        fallbackTarget: toolContext?.agent?.threadId
-          ? undefined
-          : await resolveParentThread(toolContext, options.getSession).catch(() => undefined),
+        parentTarget: await resolveParentThread(toolContext, options.getSession).catch(() => undefined),
       });
     },
 
@@ -118,25 +131,26 @@ export function createBackgroundProcessNotices(options: {
       if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
       const toolContext = context as ToolContextLike | undefined;
       const toolCallId = toolContext?.agent?.toolCallId;
-      if (error !== undefined) {
+      const pid = error === undefined ? parseBackgroundProcessPid(output) : undefined;
+      // No PID means no process started (an error, or a call the hook chain answered), so no exit will come.
+      if (!pid) {
         if (toolCallId) launches.delete(toolCallId);
         return;
       }
-      const pid = typeof output === 'string' ? output.match(BACKGROUND_PROCESS_RESULT)?.[1] : undefined;
       const sandbox = toolContext?.workspace?.sandbox;
-      if (pid && sandbox) sandboxes.set(pid, sandbox);
+      if (sandbox) sandboxes.set(pid, sandbox);
     },
 
     async onExit(meta) {
       const launch = meta.toolCallId ? launches.get(meta.toolCallId) : undefined;
       if (meta.toolCallId) launches.delete(meta.toolCallId);
+      sandboxes.delete(meta.pid);
       const killedOnPurpose = killed.delete(meta.pid);
       const shuttingDown = SANDBOX_TEARDOWN_STATUSES.has(String(launch?.sandbox?.status));
       const wasKilled = killedOnPurpose || meta.killedByAbort === true || shuttingDown;
       const target =
-        meta.threadId && meta.resourceId
-          ? { resourceId: meta.resourceId, threadId: meta.threadId }
-          : launch?.fallbackTarget;
+        launch?.parentTarget ??
+        (meta.threadId && meta.resourceId ? { resourceId: meta.resourceId, threadId: meta.threadId } : undefined);
       const eventId = `background-process:${meta.pid}:${meta.toolCallId ?? meta.runId ?? 'exit'}`;
 
       try {
@@ -196,7 +210,9 @@ export function createBackgroundProcessNotices(options: {
     },
 
     async read(pid) {
-      return sandboxes.get(pid)?.processes?.get(pid, { release: false });
+      const handle = await sandboxes.get(pid)?.processes?.get(pid, { release: false });
+      if (handle?.exitCode !== undefined) sandboxes.delete(pid);
+      return handle;
     },
 
     async kill(pid) {
@@ -207,6 +223,7 @@ export function createBackgroundProcessNotices(options: {
         return await sandbox.processes.kill(pid);
       } finally {
         killed.delete(pid);
+        sandboxes.delete(pid);
       }
     },
   };
