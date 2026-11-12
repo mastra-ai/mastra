@@ -39,8 +39,8 @@ export function ConnectToolsSection() {
       ) : unavailable ? (
         <Notice variant="info">
           <Notice.Message>
-            Mastra Connect tools are off: this Factory sets a custom <InlineCode>tools</InlineCode> option or lacks
-            Platform credentials and <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
+            Mastra Connect tools are off: this Factory sets a custom <InlineCode>tools</InlineCode> option or is missing
+            Platform credentials or <InlineCode>MASTRA_PROJECT_ID</InlineCode>.
           </Notice.Message>
         </Notice>
       ) : query.isError ? (
