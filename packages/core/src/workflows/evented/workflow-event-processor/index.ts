@@ -1145,6 +1145,36 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
+   * Whether a restart's start event must be dropped because `stored`, the run
+   * as read now, was written after the restart read it at
+   * `restartReadUpdatedAt`: the run is still going, and the snapshot the event
+   * carries would erase what it wrote. Recovery restarts it later if it really
+   * stopped. Logs the drop. The read and the write that follows are separate
+   * calls, so a write landing between them still gets erased.
+   */
+  #restartIsStale(
+    stored: { updatedAt?: Date | string } | null | undefined,
+    { workflowId, runId, restartReadUpdatedAt }: { workflowId: string; runId: string; restartReadUpdatedAt?: number },
+  ): boolean {
+    const storedUpdatedAt = stored?.updatedAt ? new Date(stored.updatedAt).getTime() : undefined;
+    if (
+      restartReadUpdatedAt === undefined ||
+      storedUpdatedAt === undefined ||
+      storedUpdatedAt <= restartReadUpdatedAt
+    ) {
+      return false;
+    }
+
+    this.mastra.getLogger()?.info('Dropping a workflow restart: the run moved on after the restart read it', {
+      workflowId,
+      runId,
+      readUpdatedAt: new Date(restartReadUpdatedAt).toISOString(),
+      storedUpdatedAt: new Date(storedUpdatedAt).toISOString(),
+    });
+    return true;
+  }
+
+  /**
    * Handles `workflow.start` and `workflow.resume`: saves the run's `running`
    * snapshot, records a nested run on its parent's step, and publishes the
    * run's first `workflow.step.run`. The event's handler already counts toward
@@ -1178,27 +1208,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Preserve resourceId from an existing snapshot if present (resume /
     // timeTravel / restart keep their original attribution); otherwise fall
     // back to the resourceId carried on the event, which is how schedule-fired
-    // runs — that have no pre-existing snapshot — get attributed.
+    // runs, which have no snapshot yet, get attributed.
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
     const existingRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
     const resourceId = existingRun?.resourceId ?? eventResourceId;
 
-    // The run was written after the restart read it: it is still going, and the snapshot this
-    // event carries would erase what it wrote. Recovery restarts it later if it really stopped.
-    // The read here and the write below are separate calls, so a write between them gets erased.
-    const storedUpdatedAt = existingRun?.updatedAt ? new Date(existingRun.updatedAt).getTime() : undefined;
-    if (
-      restart &&
-      restartReadUpdatedAt !== undefined &&
-      storedUpdatedAt !== undefined &&
-      storedUpdatedAt > restartReadUpdatedAt
-    ) {
-      this.mastra.getLogger()?.info('Dropping a workflow restart: the run moved on after the restart read it', {
-        workflowId,
-        runId,
-        readUpdatedAt: new Date(restartReadUpdatedAt).toISOString(),
-        storedUpdatedAt: new Date(storedUpdatedAt).toISOString(),
-      });
+    // Checked first so a restart of a run that went on doesn't evaluate any condition, and again
+    // right before the snapshot is written.
+    if (restart && this.#restartIsStale(existingRun, { workflowId, runId, restartReadUpdatedAt })) {
       return;
     }
 
@@ -1325,6 +1342,19 @@ export class WorkflowEventProcessor extends EventProcessor {
         // A cancel sent before the first step result reads its execution claim from here.
         requestContext: withoutAuthToken(requestContext),
       };
+      // The conditions and claims above take time: read the run once more right before the write.
+      if (
+        restart &&
+        restartReadUpdatedAt !== undefined &&
+        this.#restartIsStale(await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id }), {
+          workflowId,
+          runId,
+          restartReadUpdatedAt,
+        })
+      ) {
+        return;
+      }
+
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,
         runId,

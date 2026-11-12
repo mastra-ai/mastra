@@ -4,10 +4,10 @@
  * before it moved on, a restart after a lost retry. Run them against each
  * storage.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { MastraStorage } from '../../../storage';
-import { runLivenessKey, stepOccurrenceKey } from '../leases';
+import { runEndedKey, runLivenessKey, stepOccurrenceKey } from '../leases';
 import {
   copyEvent,
   deferred,
@@ -238,6 +238,49 @@ export function describeLateDeliveryCases({
 
         expect(executions).toEqual(['A:first', 'A:second', 'A:third']);
         expect((await storedRun(run.runId))?.status).toBe('success');
+        expect(finishesOf(run.runId, a, b)).toHaveLength(1);
+      },
+      20_000,
+    );
+
+    it.skipIf(!updatedAtMovesOnEveryWrite)(
+      'keeps the steps a run saved while the restart start event was being handled',
+      async () => {
+        const executions: string[] = [];
+        const build = (replica: string) =>
+          createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+            .then(work('first', async id => void executions.push(`${replica}:${id}`)))
+            .then(work('second', async id => void executions.push(`${replica}:${id}`)))
+            .commit();
+        const fromA = heldQueue(event => event.type === 'workflow.step.end' && samePath(event, [0]));
+        const a = await startReplica(build('A'), fromA.intercept);
+        const run = await a.workflow.createRun({ runId: uniqueRunId() });
+        startInBackground(run, { n: 1 });
+        await fromA.firstHeld;
+        await waitUntilOrphaned(run.runId);
+
+        // B handles its restart's start event, and A's step end is delivered in the middle of it:
+        // after B read the run, before B writes the snapshot it carries.
+        const b = await startReplica(build('B'));
+        const store = (await b.mastra.getStorage()!.getStore('workflows'))!;
+        const readOwnership = store.getRunOwnership.bind(store);
+        let delivered = false;
+        vi.spyOn(store, 'getRunOwnership').mockImplementation(async args => {
+          if (!delivered && args.runId === runEndedKey(run.runId)) {
+            delivered = true;
+            fromA.holdAll();
+            await fromA.drain(a);
+          }
+
+          return readOwnership(args);
+        });
+        (await b.workflow.createRun({ runId: run.runId }))
+          .restart()
+          .catch(error => console.error('The restart rejected', error));
+        await expect.poll(() => delivered).toBe(true);
+        await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+
+        expect(executions).toEqual(['A:first', 'A:second']);
         expect(finishesOf(run.runId, a, b)).toHaveLength(1);
       },
       20_000,
