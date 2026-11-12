@@ -34,7 +34,7 @@ export const backgroundSubagentDeferredScenario = {
     expect(terminal.serialize().view).not.toContain('AUDIT_RESULT_MARKER');
 
     terminal.write('\x07');
-    await runtime.waitForScreenText(/✓ ◆ explore: Audit the auth module/, terminal, 10_000);
+    await runtime.waitForScreenText(/✓ ◆ Explore: Audit the auth module/, terminal, 10_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/AUDIT_RESULT_MARKER/, terminal, 10_000);
     expect(terminal.serialize().view).not.toContain('UNEXPECTED_MODEL_CALL');

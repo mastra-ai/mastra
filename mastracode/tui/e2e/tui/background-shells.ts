@@ -97,6 +97,7 @@ export const backgroundShellsScenario = {
   verifyAimockRequests(requests) {
     const serialized = JSON.stringify(requests);
     // The exit notice carries the output tail; the killed server's output never reaches the model.
+    // The commands build the markers from two strings, so only their output contains them.
     expect(serialized).toContain('BUILD_OUTPUT_MARKER');
     expect(serialized).not.toContain('SERVER_READY');
   },
