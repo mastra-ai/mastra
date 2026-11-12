@@ -17,6 +17,7 @@ import { NoOpObservability, SpanType } from '../observability';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
+import { runLivenessKey } from '../workflows/evented/leases';
 import { Run } from '../workflows/workflow';
 import { interceptStarts, persistActiveRun, sleep } from './test-utils/active-runs';
 import { killableProcess } from './test-utils/killable-process';
@@ -74,6 +75,16 @@ function startReplica(
   const mastra = new Mastra({ logger: false, storage, pubsub, workflows: { 'recovered-wf': workflow }, recovery });
   replicas.push({ mastra });
   return mastra;
+}
+
+/** Replaces the restarts of `mastra`'s `recovered-wf` with no-ops, and returns the IDs of the runs it restarts. */
+function stubRestarts(mastra: Mastra): string[] {
+  const restarted: string[] = [];
+  vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
+    restarted.push(runId!);
+    return { restart: async () => {} } as any;
+  });
+  return restarted;
 }
 
 /**
@@ -374,11 +385,7 @@ describe('workflow recovery rule (#28712)', () => {
       return listed;
     });
     // The restarts never finish the runs, so every run is still waiting when that status is listed.
-    const restarted: string[] = [];
-    vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
-      restarted.push(runId!);
-      return { restart: async () => {} } as any;
-    });
+    const restarted = stubRestarts(mastra);
 
     await mastra.restartAllActiveWorkflowRuns();
 
@@ -401,11 +408,7 @@ describe('workflow recovery rule (#28712)', () => {
 
       return readOwners(args);
     });
-    const restarted: string[] = [];
-    vi.spyOn(mastra.getWorkflow('recovered-wf'), 'createRun').mockImplementation(async ({ runId } = {}) => {
-      restarted.push(runId!);
-      return { restart: async () => {} } as any;
-    });
+    const restarted = stubRestarts(mastra);
 
     await mastra.restartAllActiveWorkflowRuns();
 
@@ -458,7 +461,10 @@ describe('workflow recovery rule (#28712)', () => {
     const workflow = b.getWorkflow('recovered-wf');
     expect(await (await workflow.createRun({ runId: 'stuck' })).restartInBackground()).toBe(true);
     // The liveness the first restart wrote lapses, so the run can be restarted again.
-    await sleep(700);
+    const store = (await storage.getStore('workflows'))!;
+    await vi.waitFor(async () =>
+      expect((await store.getRunOwnership({ runId: runLivenessKey('stuck') }))?.live).toBe(false),
+    );
     expect(await (await workflow.createRun({ runId: 'stuck' })).restartInBackground()).toBe(true);
 
     expect(finishListeners()).toBe(1);
