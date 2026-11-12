@@ -12,6 +12,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createSampleMessageV2, createSampleThread } from '../memory/data';
+import { createSummaryListingTests } from './summary-listing';
 
 export interface RunFencingTestOptions {
   storage: MastraStorage;
@@ -222,6 +223,38 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect(afterTakeover.record).toMatchObject({ generation: fenceA.generation + 1, ownerId: 'owner-b' });
       });
 
+      // A process that stops lets its leases lapse this way, so another process can take over
+      // without waiting out the full lease.
+      it('expires a lease renewed with leaseMs: 1, and leaves a newer claim by another owner live', async ctx => {
+        if (!(await workflows.supportsRunFencing())) {
+          return ctx.skip();
+        }
+
+        const runId = `run-${randomUUID()}`;
+        const fenceA = await claimed(runId, 'owner-a');
+
+        expect((await workflows.renewRunOwnership({ ...fenceA, leaseMs: 1 })).renewed).toBe(true);
+        await sleep(SHORT_LEASE_MS * 3);
+        expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+          generation: fenceA.generation,
+          ownerId: 'owner-a',
+          live: false,
+        });
+
+        // Not forced, so this only succeeds because the lease is no longer live.
+        const fenceB = await claimed(runId, 'owner-b');
+        expect(fenceB.generation).toBe(fenceA.generation + 1);
+
+        const late = await workflows.renewRunOwnership({ ...fenceA, leaseMs: 1 });
+        expect(late.renewed).toBe(false);
+        await sleep(SHORT_LEASE_MS * 3);
+        expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+          generation: fenceB.generation,
+          ownerId: 'owner-b',
+          live: true,
+        });
+      });
+
       it('release clears the lease and keeps the generation and owner', async ctx => {
         if (!(await workflows.supportsRunFencing())) return ctx.skip();
         const runId = `run-${randomUUID()}`;
@@ -297,6 +330,8 @@ export function createRunFencingTests({ storage }: RunFencingTestOptions) {
         expect((await workflows.getRunOwnerships({ runIds: [] })).size).toBe(0);
       });
     });
+
+    createSummaryListingTests(() => workflows);
 
     describe('fenced writes', () => {
       const workflowName = 'run-fencing-workflow';
