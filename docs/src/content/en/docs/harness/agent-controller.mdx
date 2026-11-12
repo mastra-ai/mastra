@@ -273,16 +273,19 @@ await session.state.set({ activeProject: 'docs-site' })
 
 ## Approve tools and resume suspensions
 
-Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Map custom tools to categories with `toolCategoryResolver` on the controller:
+Permission policies decide whether a tool is allowed, denied, or sent to the UI for approval. Map custom tools to categories with `toolCategoryResolver` on the controller. Return `null` for tools that never need approval, such as `ask_user`:
 
 ```typescript
 const controller = new AgentController({
   toolCategoryResolver: toolName => {
     if (toolName === 'delete_project') return 'execute'
-    return null
+    if (toolName === 'ask_user') return null
+    return 'other'
   },
 })
 ```
+
+Tools the rules allow run without pausing the run. On a regular `Agent`, tool calls in one step run at the same time when none of them needs approval or can suspend. Durable agents run them one at a time unless the session's `yolo` state is on.
 
 Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
 

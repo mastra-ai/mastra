@@ -40,6 +40,7 @@ import {
   THREAD_OWNER_ID_CONTEXT_KEY,
   isReservedThreadMetadataKey,
   migratePersistedModelSelection,
+  readPermissionRules,
   runModelPersistenceOperation,
 } from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
@@ -416,7 +417,12 @@ export class AgentController<TState = {}> {
       setOn: (threadId, key, value) => session.thread.setSettingOn({ threadId, key, value }),
       setModelOn: (threadId, settings) => this.writeThreadMetadataValues(threadId, settings),
     });
-    session.setCategoryResolver(toolName => this.getToolCategory({ toolName }));
+    // Only an explicit `null` from a configured resolver marks a tool always allowed.
+    // Without a resolver, or for a tool it leaves `undefined`, the tool keeps asking.
+    const toolCategoryResolver = this.config.toolCategoryResolver;
+    if (toolCategoryResolver) {
+      session.setCategoryResolver(toolName => toolCategoryResolver(toolName));
+    }
     session.setSubagentNameResolver(agentType => this.getSubagentDisplayName(agentType));
     session.mode.setResolver(modeId => this.config.modes.find(m => m.id === modeId) ?? null);
     session.model.setResolver({
@@ -476,7 +482,7 @@ export class AgentController<TState = {}> {
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
-      resolveModeActiveTools: modeId => this.resolveModeActiveTools(session, modeId),
+      resolveModeActiveTools: (modeId, requestContext) => this.resolveModeActiveTools(session, modeId, requestContext),
       onSessionDeleted: listener =>
         this.onSessionDeleted(deleted => {
           if (deleted === session) listener();
@@ -2164,8 +2170,15 @@ export class AgentController<TState = {}> {
    * The returned list uses the same exposed tool names the execution pipeline
    * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
    * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   *
+   * Pass the run's `requestContext` to filter with the rules of the run's own
+   * thread rather than the thread the session currently holds.
    */
-  private resolveModeActiveTools(session: Session<TState>, modeId?: string): string[] | undefined {
+  private resolveModeActiveTools(
+    session: Session<TState>,
+    modeId?: string,
+    requestContext?: RequestContext,
+  ): string[] | undefined {
     // An unknown explicit mode throws rather than falling back to the live mode's tools.
     const currentMode = modeId ? session.mode.resolveId(modeId) : session.mode.resolve();
     const availableTools = currentMode?.availableTools;
@@ -2176,7 +2189,7 @@ export class AgentController<TState = {}> {
       return [];
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     const deniedTools = new Set(
       Object.entries(permissionRules.tools)
         .filter(([, policy]) => policy === 'deny')
@@ -2314,7 +2327,7 @@ export class AgentController<TState = {}> {
     // the execution pipeline already enforces at tool-call time.  Only set
     // when the helper returns a concrete list so modes without
     // `availableTools` keep unrestricted behaviour.
-    const activeTools = this.resolveModeActiveTools(session);
+    const activeTools = this.resolveModeActiveTools(session, undefined, requestContext);
     if (activeTools !== undefined) {
       streamOptions.activeTools = activeTools;
     }
@@ -2351,7 +2364,16 @@ export class AgentController<TState = {}> {
     const shared: SharedRunOptions = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo && !channelAutoApprove,
+      // Evaluated per call, so a tool the session already allows runs without
+      // pausing for an approval the session would answer itself. `deny` still
+      // reaches the approval gate, where the run engine declines it.
+      requireToolApproval:
+        isYolo || channelAutoApprove
+          ? false
+          : ({ toolName }: { toolName: string }) => session.resolveToolApproval(toolName, requestContext) !== 'allow',
+      // Only the tools a step actually calls decide whether it runs sequentially,
+      // so calls that need no approval and cannot suspend run in parallel.
+      toolCallConcurrency: { strategy: 'called' },
       onStepFinish: this.createUsageRecorder(context?.threadId ?? session.thread.getId()),
     };
 
@@ -2569,7 +2591,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];

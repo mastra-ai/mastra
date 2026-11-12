@@ -86,17 +86,18 @@ const cases = [
 describeForAllEngines('Controller tool status matches the tool outcome', engine => {
   const getMock = useLoopScenarioAimock();
 
-  for (const route of ['direct', 'delegated', 'built-in subagent'] as const) {
+  for (const route of ['direct', 'delegated', 'approved delegation', 'built-in subagent'] as const) {
     const delegated = route !== 'direct';
     const builtIn = route === 'built-in subagent';
-    // Durable/evented delegations currently emit no subagent_tool_end.
+    const approved = route === 'approved delegation';
+    // Durable/evented delegations resumed after an approval emit no subagent_tool_end.
     // Reproduced before and after the classification fix; not yet investigated.
-    const test = route === 'delegated' && (engine === 'durable' || engine === 'evented') ? it.fails : it;
+    const test = approved && (engine === 'durable' || engine === 'evented') ? it.fails : it;
     test.each(cases)(`${route}: $name`, async ({ tool, args, isError, errorMessage }) => {
       const llm = getMock();
       const tools = { lookup: tool };
       const worker =
-        route === 'delegated'
+        delegated && !builtIn
           ? new Agent({
               id: 'worker',
               name: 'worker',
@@ -130,9 +131,15 @@ describeForAllEngines('Controller tool status matches the tool outcome', engine 
       const events: AgentControllerEvent[] = [];
       session.subscribe(event => {
         events.push(event);
+        if (event.type === 'tool_approval_required') {
+          queueMicrotask(() => session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
+        }
       });
       await session.permissions.setForTool({ toolName: 'lookup', policy: 'allow' });
-      await session.permissions.setForTool({ toolName: builtIn ? 'subagent' : 'agent-worker', policy: 'allow' });
+      await session.permissions.setForTool({
+        toolName: builtIn ? 'subagent' : 'agent-worker',
+        policy: approved ? 'ask' : 'allow',
+      });
       if (delegated) {
         llm.on(
           { endpoint: 'chat', sequenceIndex: 0 },

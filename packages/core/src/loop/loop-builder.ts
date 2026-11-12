@@ -407,6 +407,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             return toolCallForeachOptions.concurrency;
           }
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
             requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
