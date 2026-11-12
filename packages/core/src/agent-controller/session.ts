@@ -4953,6 +4953,15 @@ export class Session<TState = unknown> {
   // rule write, or the post-create pass) does not resume the same call again
   // while storage still lists its run as suspended.
   readonly #answeredParkedApprovals = new Set<string>();
+  // The host-built context of the request that opened this session. A stored
+  // run resumes from its snapshot, which carries no authenticated user, so
+  // releasing it with no context leaves host credential gates nothing to check.
+  #parkedApprovalsRequestContext: RequestContext | undefined;
+
+  /** Resume calls released by a policy re-check under the context of the request that opened this session. */
+  setParkedApprovalsRequestContext(requestContext: RequestContext | undefined): void {
+    this.#parkedApprovalsRequestContext = requestContext;
+  }
 
   applyToolPolicyToParkedApprovals(): Promise<void> {
     const check = this.#parkedApprovalsCheck.then(() => this.#applyToolPolicyToParkedApprovalsSafely());
@@ -5011,7 +5020,13 @@ export class Session<TState = unknown> {
         if (policy === 'ask') continue;
         handled.add(key);
         this.#answeredParkedApprovals.add(key);
-        const identity = { toolCallId, runId: run.runId, threadId, resourceId: this.identity.getResourceId() };
+        const identity = {
+          toolCallId,
+          runId: run.runId,
+          threadId,
+          resourceId: this.identity.getResourceId(),
+          requestContext: this.#parkedApprovalsRequestContext,
+        };
         if (policy === 'allow') await this.approveToolCall(identity);
         else await this.declineToolCall(identity);
       }

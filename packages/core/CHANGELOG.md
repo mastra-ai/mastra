@@ -1,5 +1,26 @@
 # @mastra/core
 
+## 1.83.0-alpha.11
+
+### Patch Changes
+
+- `Agent.observe()` and `DurableAgent.observe()` now share a single helper for detaching an observer's `fullStream` subscription, instead of each keeping its own copy. The helper is exported from `@mastra/core/agent/durable` as `detachFullStreamOnEnd`, so durable-agent integrations stop reimplementing the wrapper: ([#30111](https://github.com/mastra-ai/mastra/pull/30111))
+
+  ```ts
+  import { createDurableAgentStream, detachFullStreamOnEnd } from '@mastra/core/agent/durable';
+
+  // Wrap the observer's own stream output, right after the stream is created.
+  // `pubsub`, `runId`, `messageId` and `model` are the options it requires.
+  const { output, detach } = createDurableAgentStream({ pubsub, runId, messageId, model });
+  detachFullStreamOnEnd(output, detach);
+  ```
+
+  The subscription is detached when the stream completes, when a read throws, and when the consumer cancels. Existing `Agent.observe()` and `DurableAgent.observe()` behavior is unchanged.
+
+- Fixed tool calls released by a permission rule after a session reopens failing with "the request has no authenticated user". When a reopened session allowed a call that was waiting for approval, the run resumed without the reopening request's context, so hosts that check the signed-in user before resolving model credentials refused the next model step. The resumed run now carries the request context the session was opened with. ([#30159](https://github.com/mastra-ai/mastra/pull/30159))
+
+- Fixed the replay cache of DurableAgent and EventedAgent runs storing a sub-agent's full prompt, message history and steps on every chunk it forwards during delegation. The cached copy of these chunks now leaves them out, so the cache no longer grows by megabytes per delegated run. Callers streaming their own run still receive the full chunks, top-level chunks and data written by tools are cached unchanged, and the sub-agent's usage is still reported. ([#29151](https://github.com/mastra-ai/mastra/pull/29151))
+
 ## 1.83.0-alpha.10
 
 ### Patch Changes
