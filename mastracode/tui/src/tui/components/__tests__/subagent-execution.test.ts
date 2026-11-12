@@ -143,6 +143,19 @@ describe('SubagentExecutionComponent', () => {
     expect(renderPlain(failed).join('\n')).toContain('✗ background');
   });
 
+  it('shows a finished background subagent result when Ctrl+E has expanded tool output', () => {
+    let toolOutputExpanded = false;
+    const comp = new SubagentExecutionComponent('alexandria', 'Inspect architecture', mockTui, undefined, {
+      isToolOutputExpanded: () => toolOutputExpanded,
+    });
+    comp.setBackgroundTaskId('task-1');
+    toolOutputExpanded = true;
+
+    comp.finish(false, 1000, 'FINAL_RESULT');
+
+    expect(renderPlain(comp).join('\n')).toContain('FINAL_RESULT');
+  });
+
   it('renders tool call activity while running', () => {
     const comp = new SubagentExecutionComponent('explore', 'Find usages', mockTui);
     comp.addToolStart('search_content', { pattern: 'foo' });

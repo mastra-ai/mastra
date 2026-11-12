@@ -959,6 +959,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
   state.backgroundShellRows?.clear();
+  state.backgroundSubagentCalls?.clear();
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
@@ -1043,7 +1044,12 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: false, expandOnComplete: true, forked: subArgs?.forked },
+              {
+                collapseOnComplete: false,
+                expandOnComplete: true,
+                forked: subArgs?.forked,
+                isToolOutputExpanded: () => state.toolOutputExpanded,
+              },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -1092,8 +1098,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               pluginRenderConfig.modelId,
               {
                 collapseOnComplete: false,
-                expandOnComplete: pluginRenderConfig.expandOnComplete ?? true,
-                expandBackgroundOnComplete: pluginRenderConfig.expandOnComplete === true,
+                expandOnComplete: true,
+                isToolOutputExpanded: () => state.toolOutputExpanded,
                 forked: pluginRenderConfig.forked,
                 label: pluginRenderConfig.label,
                 maxActivityLines: pluginRenderConfig.maxActivityLines,

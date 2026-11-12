@@ -127,7 +127,10 @@ function adoptionScenario(mode: 'deferred' | 'awaited' | 'cancel' | 'failure'): 
         expect(events).not.toContain('completed');
         if (awaited) expect(events).not.toContain('parent-action');
         else terminal.write('\x1b');
-        expect(terminal.serialize().view).not.toContain('↳ adopted_probe');
+        // A cancelled task is reported as soon as it is marked cancelled; other endings wait for cleanup.
+        expect(terminal.serialize().view).not.toContain(
+          mode === 'cancel' ? 'adopted_probe finished' : '↳ adopted_probe',
+        );
         cleanup.resolve();
         const status = mode === 'cancel' ? 'cancelled' : mode === 'failure' ? 'failed' : 'completed';
         const verb = status === 'completed' ? 'finished' : status;

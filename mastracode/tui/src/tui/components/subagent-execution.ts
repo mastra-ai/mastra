@@ -52,8 +52,11 @@ export interface SubagentExecutionOptions {
   forked?: boolean;
   /** When true, show full completed content including the final result. Default false. */
   expandOnComplete?: boolean;
-  /** Also expand a background run on completion. Default false: background runs stay compact. */
-  expandBackgroundOnComplete?: boolean;
+  /**
+   * The global Ctrl+E state. A background run finishes expanded only while it
+   * is on; otherwise it stays compact. Default: always compact.
+   */
+  isToolOutputExpanded?: () => boolean;
   /** Footer label before the agent type. Default "subagent". */
   label?: string;
   /** Max activity lines shown while running. Default 15. */
@@ -92,7 +95,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private expanded = false;
   private collapseOnComplete: boolean;
   private expandOnComplete: boolean;
-  private expandBackgroundOnComplete: boolean;
+  private isToolOutputExpanded: () => boolean;
   private forked: boolean;
   private label: string;
   private maxActivityLines: number;
@@ -108,7 +111,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.ui = ui;
     this.collapseOnComplete = options?.collapseOnComplete ?? false;
     this.expandOnComplete = options?.expandOnComplete ?? false;
-    this.expandBackgroundOnComplete = options?.expandBackgroundOnComplete ?? false;
+    this.isToolOutputExpanded = options?.isToolOutputExpanded ?? (() => false);
     this.forked = options?.forked ?? false;
     this.label = options?.label ?? 'subagent';
     this.maxActivityLines = clampPositiveInt(options?.maxActivityLines, MAX_ACTIVITY_LINES);
@@ -185,9 +188,10 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.isError = isError;
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
     // Background work finishes while the user is doing something else, so it
-    // stays compact rather than unfolding into the chat.
-    if (this.backgroundTaskId && !this.expandBackgroundOnComplete) {
-      this.expanded = false;
+    // stays compact rather than unfolding into the chat, unless Ctrl+E has
+    // expanded every tool output.
+    if (this.backgroundTaskId) {
+      this.expanded = this.isToolOutputExpanded();
     } else if (this.expandOnComplete) {
       this.expanded = true;
     } else if (this.collapseOnComplete) {

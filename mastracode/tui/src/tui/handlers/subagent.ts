@@ -2,12 +2,19 @@
  * Event handlers for subagent delegation events:
  * subagent_start, subagent_tool_start, subagent_tool_end, subagent_end.
  */
+import { SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
+import { describeBackgroundCall } from '../background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { flushRender, requestRender } from '../render-scheduler.js';
 
 import type { EventHandlerContext } from './types.js';
+
+/** The subagent definition's name, as the controller resolved it on `subagent_start`. */
+export function subagentDisplayName(state: EventHandlerContext['state'], toolCallId: string): string | undefined {
+  return state.session.displayState?.get().activeSubagents?.get(toolCallId)?.displayName;
+}
 
 export function handleSubagentStart(
   ctx: EventHandlerContext,
@@ -22,6 +29,7 @@ export function handleSubagentStart(
     collapseOnComplete: false,
     expandOnComplete: true,
     forked,
+    isToolOutputExpanded: () => state.toolOutputExpanded,
   });
   state.pendingSubagents.set(toolCallId, component);
   state.allToolComponents.push(component as any);
@@ -32,6 +40,12 @@ export function handleSubagentStart(
   if (background) {
     component.setBackgroundTaskId(background.taskId);
     background.component = component;
+    // The activity list row was made before the definition name was known.
+    const activity = state.backgroundActivities?.get(background.taskId);
+    const name = subagentDisplayName(state, toolCallId);
+    if (activity?.status === 'accepted' && name) {
+      activity.label = describeBackgroundCall(SUBAGENT_TOOL_NAME, { agentType, task }, name);
+    }
   }
   const children = state.chatContainer.children as unknown[];
   const beforeIndex = background?.insertBefore ? children.indexOf(background.insertBefore) : -1;

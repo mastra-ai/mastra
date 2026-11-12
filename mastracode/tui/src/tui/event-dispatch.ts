@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
+import { MC_TOOLS, SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type {
   AgentControllerEvent,
@@ -45,6 +45,7 @@ import {
   handleSubagentToolEnd,
   handleSubagentEnd,
   markBackgroundSubagent,
+  subagentDisplayName,
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
@@ -362,7 +363,10 @@ export async function dispatchEvent(
             }
           }
         }
-        if (taskId && context?.toolName === 'subagent') markBackgroundSubagent(ectx, event.toolCallId, taskId);
+        if (taskId && context?.toolName === SUBAGENT_TOOL_NAME) {
+          markBackgroundSubagent(ectx, event.toolCallId, taskId);
+          context.subagentName = subagentDisplayName(state, event.toolCallId);
+        }
         if ((taskId || pid) && context) {
           if (taskId) acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
           state.backgroundToolContexts.delete(event.toolCallId);

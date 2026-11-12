@@ -23,12 +23,6 @@ export type MastraCodeToolRenderConfig = {
   label?: string;
   maxActivityLines?: number;
   collapsedLines?: number;
-  /**
-   * Whether the box expands to its result when the call finishes. By default a
-   * foreground call expands and a background call stays compact; `true` expands
-   * both, `false` neither.
-   */
-  expandOnComplete?: boolean;
   colors?: {
     border?: string;
     label?: string;

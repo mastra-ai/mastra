@@ -108,6 +108,25 @@ describe('background activity', () => {
     expect(activities.get('task-1')).toMatchObject({ status: 'cancelled' });
   });
 
+  it('names a host-defined subagent by its definition once its completion reports the name', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    acceptBackgroundActivity(activities, 'task-1', 'call-1', {
+      toolName: 'subagent',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      createdAt: 10,
+      args: { agentType: 'reviewer', task: 'Review the diff' },
+    });
+    expect(activities.get('task-1')?.label).toBe('reviewer: Review the diff');
+
+    completeBackgroundActivity(
+      activities,
+      completion({ toolName: 'subagent', title: 'Code reviewer', summary: 'Review the diff' }),
+    );
+
+    expect(activities.get('task-1')?.label).toBe('Code reviewer: Review the diff');
+  });
+
   it('keeps the exit of a shell that ended before its call returned the PID', () => {
     const activities = new Map<string, BackgroundActivity>();
     finishBackgroundProcessActivity(activities, processExit({ exitCode: 2 }));

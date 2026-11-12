@@ -3,10 +3,7 @@ import type {
   BackgroundTaskCompletionEvent,
 } from '@mastra/code-sdk/agents/background-completion-events';
 import { parseBackgroundProcessPid } from '@mastra/code-sdk/agents/background-processes';
-import { builtinSubagents } from '@mastra/code-sdk/agents/subagents/index';
-import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
-
-const SUBAGENT_TOOL_NAME = 'subagent';
+import { MC_TOOLS, SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
 
 export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed' | 'cancelled';
 
@@ -35,6 +32,8 @@ export interface BackgroundToolContext {
   threadId: string;
   createdAt: number;
   args?: unknown;
+  /** The subagent definition's name, once the controller has reported it. */
+  subagentName?: string;
 }
 
 export { parseBackgroundProcessPid };
@@ -49,16 +48,20 @@ function firstLine(value: unknown): string | undefined {
   return line || undefined;
 }
 
-/** The label a background call shows in the activity list. */
-export function describeBackgroundCall(toolName: string, args: unknown): string | undefined {
+function subagentLabel(name: string | undefined, task: string | undefined): string | undefined {
+  return task && name ? `${name}: ${task}` : (task ?? name);
+}
+
+/**
+ * The label a background call shows in the activity list. A subagent shows its
+ * definition name when known, else its id until the name arrives (on
+ * `subagent_start`, or with the completion).
+ */
+export function describeBackgroundCall(toolName: string, args: unknown, subagentName?: string): string | undefined {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
   if (toolName === MC_TOOLS.EXECUTE_COMMAND) return firstLine(record.description) ?? firstLine(record.command);
   if (toolName === SUBAGENT_TOOL_NAME) {
-    const task = firstLine(record.task);
-    const agentType = firstLine(record.agentType);
-    // Named like the completion card; custom subagents fall back to their id.
-    const name = builtinSubagents.find(subagent => subagent.id === agentType)?.name ?? agentType;
-    return task && name ? `${name}: ${task}` : (task ?? name);
+    return subagentLabel(subagentName ?? firstLine(record.agentType), firstLine(record.task));
   }
   return undefined;
 }
@@ -77,7 +80,7 @@ export function acceptBackgroundActivity(
     taskId,
     toolCallId,
     toolName: context.toolName,
-    label: describeBackgroundCall(context.toolName, context.args),
+    label: describeBackgroundCall(context.toolName, context.args, context.subagentName),
     resourceId: context.resourceId,
     threadId: context.threadId,
     status: 'accepted',
@@ -96,7 +99,11 @@ export function completeBackgroundActivity(
     taskId: event.taskId,
     toolCallId: event.originToolCallId,
     toolName: event.toolName,
-    label: existing?.label,
+    // The SDK names subagents from their definitions, as the completion card does.
+    label:
+      event.toolName === SUBAGENT_TOOL_NAME && event.title
+        ? subagentLabel(event.title, event.summary)
+        : existing?.label,
     resourceId: event.resourceId,
     threadId: event.threadId,
     status: event.status,

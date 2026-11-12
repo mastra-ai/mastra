@@ -8,7 +8,7 @@ import { Container, TUI, ProcessTerminal } from '@earendil-works/pi-tui';
 import type { CombinedAutocompleteProvider, Component, Terminal, Text } from '@earendil-works/pi-tui';
 import type { KnowledgeInspector } from '@mastra/code-sdk';
 import type { BackgroundCompletionEvents } from '@mastra/code-sdk/agents/background-completion-events';
-import type { BackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
+import type { BackgroundProcessControls } from '@mastra/code-sdk/agents/background-processes';
 import type { MastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import type { HookManager } from '@mastra/code-sdk/hooks/index';
@@ -193,7 +193,7 @@ export interface MastraTUIBaseOptions {
   backgroundCompletionEvents?: BackgroundCompletionEvents;
 
   /** Reads and kills background shells for the user; a kill posts no exit notice. */
-  backgroundProcesses?: Pick<BackgroundProcessNotices, 'read' | 'kill'>;
+  backgroundProcesses?: BackgroundProcessControls;
 
   /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
   storageMaintenance?: StorageMaintenance;

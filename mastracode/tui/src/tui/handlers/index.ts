@@ -23,6 +23,7 @@ export {
   handleSubagentToolEnd,
   handleSubagentEnd,
   markBackgroundSubagent,
+  subagentDisplayName,
 } from './subagent.js';
 export {
   formatToolResult,
