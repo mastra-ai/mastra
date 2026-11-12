@@ -58,8 +58,3 @@ export function lanesUsing(scope: FactoryModelScope, defaults: ModelDefaults): M
 export function defaultsInUse(scope: FactoryModelScope, defaults: ModelDefaults): boolean {
   return lanesUsing(scope, defaults).length > 0;
 }
-
-export function connectorPath(fromX: number, fromY: number, toX: number, toY: number): string {
-  const midX = (fromX + toX) / 2;
-  return `M${fromX} ${fromY} C${midX} ${fromY} ${midX} ${toY} ${toX} ${toY}`;
-}

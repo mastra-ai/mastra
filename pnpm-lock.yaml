@@ -2557,6 +2557,9 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.22
         version: 3.14.25(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@xyflow/react':
+        specifier: ^12.12.1
+        version: 12.12.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(immer@11.1.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0

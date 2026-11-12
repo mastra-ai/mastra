@@ -1,7 +1,8 @@
 import { createRef, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
-import { MODEL_DEFAULTS_TONES, MODEL_LANES, connectorPath } from './model-routes';
+import { connectorPath } from '../../../../routeMaps/connectors';
+import { MODEL_DEFAULTS_TONES, MODEL_LANES } from './model-routes';
 import type { ModelDefaults, ModelLane } from './model-routes';
 
 export type ConnectorAnchors = Record<ModelLane, RefObject<HTMLDivElement | null>> &

@@ -1,7 +1,8 @@
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { MODEL_LANES, MODEL_ROUTES, MODEL_SCOPE_LABELS, connectorPath } from './model-routes';
+import { connectorPath } from '../../../../routeMaps/connectors';
+import { MODEL_LANES, MODEL_ROUTES, MODEL_SCOPE_LABELS } from './model-routes';
 import type { ModelDefaults, ModelLane } from './model-routes';
 
 const GLYPH_LANE_Y: Record<ModelLane, number> = { chats: 4, runs: 12 };

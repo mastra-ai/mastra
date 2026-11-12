@@ -957,7 +957,11 @@ describe('CardMovesSection', () => {
 
   it("lists only this board's moves, each led by the change that triggers it", async () => {
     serveRoutes();
-    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="work" />);
+    renderWithProviders(
+      <MemoryRouter>
+        <CardMovesSection factoryId="fp-1" boardId="work" />
+      </MemoryRouter>,
+    );
 
     await screen.findByRole('list', { name: 'Card moves' });
     expect(moveNames()).toContain('Closed issues go to Done');
@@ -971,7 +975,11 @@ describe('CardMovesSection', () => {
 
   it('says a board has no moves rather than showing an empty list', async () => {
     serveRoutes();
-    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="ship" />);
+    renderWithProviders(
+      <MemoryRouter>
+        <CardMovesSection factoryId="fp-1" boardId="ship" />
+      </MemoryRouter>,
+    );
 
     expect(await screen.findByText('No card moves on this board.')).toBeInTheDocument();
   });
@@ -984,7 +992,11 @@ describe('CardMovesSection', () => {
     );
     const state = serveRoutes({ routes });
     const user = userEvent.setup();
-    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="work" />);
+    renderWithProviders(
+      <MemoryRouter>
+        <CardMovesSection factoryId="fp-1" boardId="work" />
+      </MemoryRouter>,
+    );
 
     await screen.findByRole('list', { name: 'Card moves' });
     const row = routeRow('Merged pull requests go to Done');
@@ -999,7 +1011,11 @@ describe('CardMovesSection', () => {
   it('adds a move on this board for the change picked', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
-    renderWithProviders(<CardMovesSection factoryId="fp-1" boardId="ship" />);
+    renderWithProviders(
+      <MemoryRouter>
+        <CardMovesSection factoryId="fp-1" boardId="ship" />
+      </MemoryRouter>,
+    );
 
     const draft = await startRoute(user, 'Merged pull requests ship', 'Add card move');
     await user.click(within(draft).getByRole('combobox', { name: 'When' }));

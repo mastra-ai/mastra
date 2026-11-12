@@ -42,7 +42,9 @@ import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/us
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
-import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
+import { IntakeRoutesMap } from '../../routeMaps/intake/IntakeRoutesMap';
+import { RouteViewTabs } from '../../routeMaps/RouteViewTabs';
+import { intakeRouteAnchor, NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
 import { ConditionRows } from './ConditionRows';
 import { describeConditions, intakeRouteFacts } from './conditionFields';
 import {
@@ -801,6 +803,14 @@ function RouteList({
   const lastMovable = catchAllAt >= 0 ? catchAllAt - 1 : routes.length - 1;
   // With no route taking every new card, the leftovers land on the default board's first phase.
   const fallback = scope.kind === 'arrivals' && !catchAll ? defaultBoard : undefined;
+  // A link naming one route (from the routes map) lands on it once the list has loaded.
+  const { hash, key } = useLocation();
+  const loaded = query.isSuccess;
+  useEffect(() => {
+    if (loaded && hash.startsWith('#intake-route-')) {
+      document.getElementById(hash.slice(1))?.scrollIntoView({ block: 'center' });
+    }
+  }, [hash, key, loaded]);
 
   const update = (route: IntakeRouteInfo, fields: RouteFields, message = updateMessage(fields), undoable = true) => {
     const previous = previousOf(route, fields);
@@ -963,6 +973,7 @@ function RouteList({
               <li
                 // A failed save remounts the cards so their name and condition editors drop the rejected input.
                 key={`${route.id}-${failures}`}
+                id={intakeRouteAnchor(route.id)}
                 data-drop={drag.dropAt(index)}
                 className={cn('relative', DROP_LINE, dragging && 'z-10')}
                 style={dragging ? { transform: `translateY(${drag.drag?.offset ?? 0}px)` } : undefined}
@@ -1059,7 +1070,11 @@ export function IntakeRoutesSection({ factoryId }: { factoryId?: string }) {
       description="Each new issue or pull request takes the first route that matches."
     >
       {factoryId ? (
-        <RouteList factoryId={factoryId} scope={{ kind: 'arrivals' }} boards={boards} noun="intake routes" />
+        <RouteViewTabs
+          label="Intake routes view"
+          editor={<RouteList factoryId={factoryId} scope={{ kind: 'arrivals' }} boards={boards} noun="intake routes" />}
+          map={<IntakeRoutesMap factoryId={factoryId} />}
+        />
       ) : (
         <Notice variant="info">Open a Factory to edit its intake routes.</Notice>
       )}
