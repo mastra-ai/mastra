@@ -188,6 +188,13 @@ describe('VCS Factory step', () => {
             : { enabled: true, connected: false, installations: [], reason: 'not_connected' },
         ),
       ),
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({
+          authEnabled: true,
+          authenticated: true,
+          user: { userId: 'user-1', organizationId: 'org_1' },
+        }),
+      ),
     );
     const onDismissGithubCallback = vi.fn();
     renderStep({
@@ -199,9 +206,9 @@ describe('VCS Factory step', () => {
       onDismissGithubCallback,
     });
 
-    expect(await screen.findByRole('link', { name: 'Open Mastra Platform' })).toHaveAttribute(
-      'href',
-      'https://projects.mastra.ai/settings/general',
+    const platform = await screen.findByRole('link', { name: 'Open Mastra Platform' });
+    await waitFor(() =>
+      expect(platform).toHaveAttribute('href', 'https://projects.mastra.ai/orgs/org_1/settings/general'),
     );
     linkedInPlatform = true;
     await userEvent.click(screen.getByRole('button', { name: 'Refresh' }));

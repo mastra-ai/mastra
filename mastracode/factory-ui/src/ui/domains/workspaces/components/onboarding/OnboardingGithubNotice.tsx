@@ -1,10 +1,18 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 
+import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { MASTRA_PLATFORM_URL } from '../../../factory/services/platformConnect';
 import type { GitHubAppCallbackResult } from '../GitHubAppCallbackHandler';
 
-/** Where Platform's Refresh accounts lives; the Accounts section there shows only to organization admins. */
-const PLATFORM_ACCOUNTS_URL = `${MASTRA_PLATFORM_URL}/settings/general`;
+/**
+ * Where Platform's Refresh accounts lives (shown to organization admins). The Factory organization id is the
+ * Platform one the GitHub connect flow sent, so it fills Platform's `/orgs/:orgId` route; without it, Platform's home.
+ */
+function platformAccountsUrl(organizationId?: string): string {
+  return organizationId
+    ? `${MASTRA_PLATFORM_URL}/orgs/${encodeURIComponent(organizationId)}/settings/general`
+    : MASTRA_PLATFORM_URL;
+}
 
 interface Recovery {
   /** A Mastra Platform page where the refusal is fixed first. */
@@ -13,9 +21,11 @@ interface Recovery {
   next: 'refresh' | 'connect';
 }
 
-function recoveryFor(code?: string): Recovery {
+function recoveryFor(code: string | undefined, organizationId: string | undefined): Recovery {
   // Refresh accounts links the older install in Platform; a refresh here then sees it.
-  if (code === 'github_app_installation_preexisting') return { platformHref: PLATFORM_ACCOUNTS_URL, next: 'refresh' };
+  if (code === 'github_app_installation_preexisting') {
+    return { platformHref: platformAccountsUrl(organizationId), next: 'refresh' };
+  }
   // Disconnecting the other GitHub account in Platform links nothing; only a new connect does.
   if (code === 'github_app_connection_mismatch') return { platformHref: MASTRA_PLATFORM_URL, next: 'connect' };
   // An already-used link usually means the install went through.
@@ -45,6 +55,7 @@ export function OnboardingGithubNotice({
   onRefresh,
   onDismiss,
 }: OnboardingGithubNoticeProps) {
+  const auth = useFactoryAuth();
   const refresh = (
     <Notice.Button disabled={refreshing} onClick={onRefresh}>
       Refresh
@@ -53,7 +64,7 @@ export function OnboardingGithubNotice({
   const connectAgain = <Notice.Button onClick={onConnect}>Connect GitHub again</Notice.Button>;
 
   if (callback?.kind === 'error') {
-    const recovery = recoveryFor(callback.code);
+    const recovery = recoveryFor(callback.code, auth.data?.user?.organizationId);
     const informational = !recovery.platformHref && recovery.next === 'refresh';
     return (
       <Notice
