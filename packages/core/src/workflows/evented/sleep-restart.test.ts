@@ -94,6 +94,8 @@ describe('evented workflow durable sleep recovery', () => {
       storage,
       pubsub: new EventEmitterPubSub(),
       workflows: { [workflow.id]: workflow },
+      // The dead runtime wrote the run just now; a zero grace lets the boot call recover it at once.
+      recovery: { workflowGraceMs: 0 },
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
@@ -132,6 +134,8 @@ describe('evented workflow durable sleep recovery', () => {
       storage,
       pubsub: new EventEmitterPubSub(),
       workflows: { [workflow.id]: workflow },
+      // The dead runtime wrote the run just now; a zero grace lets the boot call recover it at once.
+      recovery: { workflowGraceMs: 0 },
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
@@ -170,6 +174,8 @@ describe('evented workflow durable sleep recovery', () => {
       storage,
       pubsub: new EventEmitterPubSub(),
       workflows: { [workflow.id]: workflow },
+      // With a zero grace the boot call would restart the run at once, so only the opt-out keeps it.
+      recovery: { workflowGraceMs: 0 },
     });
     await replacementRuntime.startWorkers();
     await replacementRuntime.restartAllActiveWorkflowRuns();
