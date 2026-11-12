@@ -69,10 +69,32 @@ describe('boardPhases', () => {
   });
 
   it('breaks a tie on the creation instant by id, descending, in both creation orders', () => {
-    const list = [testCard('a'), testCard('c'), testCard('b')];
+    // Entered in the opposite order, so the creation orders cannot inherit theirs from `recent`.
+    const list = [
+      testCard('a', { stageHistory: [entered('intake', '2026-03-03T00:00:00.000Z')] }),
+      testCard('b', { stageHistory: [entered('intake', '2026-03-02T00:00:00.000Z')] }),
+      testCard('c', { stageHistory: [entered('intake', '2026-03-01T00:00:00.000Z')] }),
+    ];
 
+    expect(listedIds(list, {}).intake).toEqual(['a', 'b', 'c']);
     expect(listedIds(list, { sort: 'created-newest' }).intake).toEqual(['c', 'b', 'a']);
     expect(listedIds(list, { sort: 'created-oldest' }).intake).toEqual(['c', 'b', 'a']);
+  });
+
+  it('lists the same cards under the phases the board has now, once the board loses a phase', () => {
+    const list = [testCard('kept', { stages: ['intake'] }), testCard('moved', { stages: ['planning'] })];
+    const read = (phases: string[]) =>
+      boardPhases(list, { id: 'work', phases }, view(), 'u1', version).body.phases.map(entry => [
+        entry.phase,
+        entry.cards.map(card => card.id),
+      ]);
+
+    expect(read(['intake', 'planning'])).toEqual([
+      ['intake', ['kept']],
+      ['planning', ['moved']],
+    ]);
+    // The edited board keeps its id; a card of the phase it lost is listed under the first one.
+    expect(read(['intake'])).toEqual([['intake', ['moved', 'kept']]]);
   });
 
   describe('asked for a card (item)', () => {
