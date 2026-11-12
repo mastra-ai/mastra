@@ -1,5 +1,5 @@
-import { useMastraClient } from '@mastra/react';
-import { useQuery } from '@tanstack/react-query';
+import type { BackgroundTaskResponse } from '@mastra/client-js';
+import { skipToken, useQuery } from '@tanstack/react-query';
 import { isDeferredCall, isStoppedBackgroundCall } from '../tool-card-kind';
 import { backgroundTaskQueryKey } from './use-deferred-input-request';
 
@@ -13,11 +13,10 @@ export function useBackgroundTaskStatus(
   backgroundTaskId: string | undefined,
   partStatus: string | undefined,
 ): string | undefined {
-  const client = useMastraClient();
-  const { data } = useQuery({
+  const { data } = useQuery<BackgroundTaskResponse>({
+    // Must match the key `useCancelBackgroundTask` in `@mastra/react` writes the cancelled task to.
     queryKey: backgroundTaskQueryKey(backgroundTaskId ?? ''),
-    queryFn: () => client.getBackgroundTask(backgroundTaskId ?? ''),
-    enabled: false,
+    queryFn: skipToken,
   });
   const stopped =
     isDeferredCall(backgroundTaskId, partStatus) && isStoppedBackgroundCall(backgroundTaskId, data?.status);

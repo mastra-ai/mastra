@@ -21,7 +21,8 @@ export function BackgroundTaskRow({ task, threadId }: { task: BackgroundTaskEven
   const { icon: Icon, label, detail, description } = presentTool(task.toolName, task.args);
   const queryClient = useQueryClient();
   const cancel = useCancelBackgroundTask();
-  // A cancel starts no run, so nothing refreshes the chat; read the thread again so its call comes back cancelled.
+  // A cancel starts no run, so nothing refreshes the chat; read the thread again so its call comes back
+  // cancelled. The first key holds the chat's messages, the second the memory panel's.
   const refreshThread = () =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['memory', 'messages', threadId] }),

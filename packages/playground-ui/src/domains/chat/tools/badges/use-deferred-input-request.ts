@@ -45,6 +45,8 @@ export function useDeferredInputRequest(backgroundTaskId: string, enabled: boole
       void queryClient.invalidateQueries({ queryKey });
       return;
     }
+    // A late stream event must not bring back a task the cache already saw end, e.g. after a cancel.
+    if (ENDED_STATUSES.has(cached.status)) return;
     queryClient.setQueryData<BackgroundTaskResponse>(queryKey, {
       ...cached,
       status: event.status,

@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import type { SandboxProcess } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { memoryThreadMessagesQueryKey } from '@mastra/react/hooks/memory';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BackgroundWorkPanel } from '../background-work-panel';
 import { BackgroundWorkProvider } from '../background-work-provider';
 import { ChatAgentContext, ChatMessagesContext } from '@/domains/chat/context/chat-context';
@@ -274,7 +275,8 @@ describe('a deferred call in the chat', () => {
         http.get(`${API}/background-tasks/:taskId`, () => HttpResponse.json(backgroundTask('running'))),
         http.post(`${API}/background-tasks/:taskId/cancel`, () => HttpResponse.json(backgroundTask('cancelled'))),
       );
-      renderChat([deferredReportTurn]);
+      const { queryClient } = renderChat([deferredReportTurn]);
+      const invalidated = vi.spyOn(queryClient, 'invalidateQueries');
       const card = await screen.findByTestId('tool-badge');
       expect(within(card).getByText('Background')).not.toBeNull();
 
@@ -283,6 +285,11 @@ describe('a deferred call in the chat', () => {
 
       expect(await within(card).findByText('cancelled')).not.toBeNull();
       expect(within(card).queryByText('Background')).toBeNull();
+      // The chat's messages and the memory panel's are read again, so the stored `cancelled` comes back.
+      await waitFor(() => {
+        expect(invalidated).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', THREAD_ID] });
+        expect(invalidated).toHaveBeenCalledWith({ queryKey: memoryThreadMessagesQueryKey(THREAD_ID) });
+      });
     });
   });
 
