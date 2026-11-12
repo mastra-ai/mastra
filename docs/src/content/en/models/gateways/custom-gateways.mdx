@@ -18,8 +18,9 @@ Gateways handle provider-specific logic for accessing language models:
 
 ## When to use custom gateways
 
-Use a custom gateway to connect Mastra to open-weight models, such as gpt-oss, Llama, Gemma, Mistral, Qwen, or DeepSeek. Because these models can be self-hosted, you can keep prompts and data on your own infrastructure. You also pay a fixed cost for the infrastructure that runs them instead of paying per token. A custom gateway lets you:
+Use a custom gateway to connect Mastra to open-weight models, such as gpt-oss, Llama, Gemma, Mistral, Qwen, or DeepSeek. Because these models can be self-hosted, you can keep prompts and data on your own infrastructure. A custom gateway lets you:
 
+- Run models on infrastructure you pay a fixed cost for, instead of paying per token
 - List the models behind your endpoint, so they get typed model IDs and appear in the Studio model picker
 - Resolve credentials on every call, for example to exchange or rotate tokens
 - [Limit the Studio model picker](#showing-only-custom-gateways-in-studio) to your own models
