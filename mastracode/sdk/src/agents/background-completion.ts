@@ -77,17 +77,29 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
     const session = await findSessionForThread(getRouter(), target);
     if (!session) return false;
     if (wake && session.thread.getId() === target.threadId) {
-      await session.sendSignal(signal, { ifIdle: { behavior: 'wake' } }).accepted;
-    } else {
-      await session.sendSignalToThread(signal, target).accepted;
+      const woken = await session
+        .sendSignal(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true })
+        .accepted.catch(() => undefined);
+      // A wake that could not start or that the thread refused never reached the
+      // thread. Save the notice instead; it has the event's id, so it is saved once.
+      if (woken && woken.action !== 'blocked' && woken.action !== 'discard') return true;
     }
+    await session.sendSignalToThread(signal, target).accepted;
     return true;
   };
 
   return {
     async deliver(target, signal, options) {
       const notice = { target, signal, wake: options?.wake ?? true };
-      if (!(await send(notice))) hold(notice);
+      let sent: boolean;
+      try {
+        sent = await send(notice);
+      } catch (error) {
+        // A later session retries it, as `flush` does for notices held earlier.
+        hold(notice);
+        throw error;
+      }
+      if (!sent) hold(notice);
     },
     async flush() {
       for (const notice of held.splice(0)) {

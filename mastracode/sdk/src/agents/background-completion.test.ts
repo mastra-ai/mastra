@@ -115,7 +115,35 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(sendSignalToThread).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(expect.objectContaining({ id: 'background-task:task-1:completed' }), {
       ifIdle: { behavior: 'wake' },
+      requireDelivery: true,
     });
+  });
+
+  it.each([
+    ['the wake could not start', () => Promise.reject(new Error('no model'))],
+    ['the thread refused it', () => Promise.resolve({ accepted: true as const, action: 'blocked' as const })],
+  ])('saves the notice to the thread when %s', async (_case, accepted) => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    sendSignal.mockReturnValueOnce({ accepted: accepted() } as never);
+    const { callbacks } = createHarness(session);
+
+    await callbacks.onTaskComplete?.(createTask('completed'));
+
+    expect(sendSignal).toHaveBeenCalledOnce();
+    expect(sendSignalToThread).toHaveBeenCalledOnce();
+    expect(sentContents(sendSignalToThread)).toContain('Background mastra_expert call finished.');
+  });
+
+  it('keeps a notice whose first send failed, and sends it on a later session', async () => {
+    const { session, sendSignalToThread } = createSession();
+    sendSignalToThread.mockReturnValueOnce({ accepted: Promise.reject(new Error('storage not ready')) });
+    const { callbacks, delivery } = createHarness(session);
+
+    await expect(callbacks.onTaskFailed?.(createTask('failed'))).rejects.toThrow('storage not ready');
+    await delivery.flush();
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledTimes(2);
   });
 
   it('saves the notice for a task the user cancelled without waking the agent', async () => {
