@@ -1,8 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useWorkSourceConnections } from '../hooks/useWorkSourceConnections';
 import type { WorkSource } from '../hooks/useWorkSourceConnections';
+import { OnboardingInset } from './onboarding/OnboardingInset';
 import { OnboardingLinearConnection } from './onboarding/OnboardingLinearConnection';
 import { OnboardingPlatformConnection } from './onboarding/OnboardingPlatformConnection';
+import { OnboardingStepCard } from './onboarding/OnboardingStepCard';
 
 export interface ProjectManagementFactoryStepProps {
   onConnect: () => void;
@@ -17,8 +20,21 @@ export function ProjectManagementFactoryStep({
 }: ProjectManagementFactoryStepProps) {
   const anyConnected = Object.values(useWorkSourceConnections()).some(Boolean);
   return (
-    <div className="flex min-h-0 w-full flex-col">
-      <section aria-label="Project management connections" className="-mx-3 min-h-0 space-y-1 overflow-y-auto px-3">
+    <OnboardingStepCard
+      section="project-management"
+      headerEnd={
+        <Txt variant="meta" tone="muted">
+          Where new issues come from
+        </Txt>
+      }
+      note={anyConnected ? 'You’ll choose which issues to bring in after setup' : undefined}
+      primary={
+        <Button variant={anyConnected ? 'primary' : 'ghost'} onClick={onContinue}>
+          {anyConnected ? 'Continue' : 'Skip for now'}
+        </Button>
+      }
+    >
+      <OnboardingInset>
         <div onMouseEnter={() => onPreviewSource?.('linear')} onFocus={() => onPreviewSource?.('linear')}>
           <OnboardingLinearConnection onConnect={onConnect} />
         </div>
@@ -28,12 +44,7 @@ export function ProjectManagementFactoryStep({
         <div onMouseEnter={() => onPreviewSource?.('incident-io')} onFocus={() => onPreviewSource?.('incident-io')}>
           <OnboardingPlatformConnection provider="incident-io" />
         </div>
-      </section>
-      <div className="mt-8 flex shrink-0 items-center gap-2">
-        <Button variant={anyConnected ? 'primary' : 'ghost'} size="lg" onClick={onContinue}>
-          {anyConnected ? 'Continue' : 'Skip for now'}
-        </Button>
-      </div>
-    </div>
+      </OnboardingInset>
+    </OnboardingStepCard>
   );
 }
