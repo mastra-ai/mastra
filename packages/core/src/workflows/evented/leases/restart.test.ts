@@ -20,6 +20,7 @@ import { WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import {
   Num,
   crash,
+  holdEvents,
   interceptWorkflowEvents,
   isStepRunAt,
   recordLeases,
@@ -29,6 +30,7 @@ import {
   shapes,
   sleep,
   startReplica,
+  stepRunningOnA,
   stopReplicas,
   track,
 } from '../test-utils/lease-replicas';
@@ -131,38 +133,27 @@ describe('evented restart refusal (#28712)', () => {
     async (_, startQueuedPastTtl) => {
       const storage = new InMemoryStore();
       const tracked = track({ blocks: [] });
-      const startQueued = Promise.withResolvers<void>();
-      const deliverStart = Promise.withResolvers<void>();
-      const stepQueued = Promise.withResolvers<void>();
-      const deliverStep = Promise.withResolvers<void>();
       // The events that start the run and its first step sit in the broker's queue for a while.
-      const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-        if (event.type === 'workflow.start') {
-          startQueued.resolve();
-          return { hold: deliverStart.promise };
-        }
-        if (!startQueuedPastTtl || !isStepRunAt(event, [0])) return undefined;
-        stepQueued.resolve();
-        return { hold: deliverStep.promise };
-      });
-      const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')), { pubsub });
+      const start = holdEvents(event => event.type === 'workflow.start');
+      const step = holdEvents(event => startQueuedPastTtl && isStepRunAt(event, [0]), start.pubsub);
+      const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')), { pubsub: step.pubsub });
       const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')));
       const run = await a.workflow.createRun();
       // startAsync() resolves once its start event is published, which the queue holds back here.
       const started = run.startAsync({ inputData: { n: 1 } });
-      await startQueued.promise;
+      await start.held;
       if (startQueuedPastTtl) {
         // The liveness the caller wrote lapses; the worker taking the start event writes it again.
         await vi.waitFor(async () => expect(await runIsLive(storage, run.runId)).toBe(false), {
           timeout: WORKFLOW_RUN_LEASE_TTL_MS * 2,
         });
-        deliverStart.resolve();
-        await stepQueued.promise;
+        start.deliver();
+        await step.held;
       }
 
       await b.mastra.restartAllActiveWorkflowRuns();
-      deliverStart.resolve();
-      deliverStep.resolve();
+      start.deliver();
+      step.deliver();
       await started;
 
       await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
@@ -174,14 +165,8 @@ describe('evented restart refusal (#28712)', () => {
   it('leaves a time-travelled run to its replica while its start event is still queued', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
-    const queued = Promise.withResolvers<void>();
-    const deliver = Promise.withResolvers<void>();
     let holding = false;
-    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-      if (!holding || event.type !== 'workflow.start') return undefined;
-      queued.resolve();
-      return { hold: deliver.promise };
-    });
+    const queue = holdEvents(event => holding && event.type === 'workflow.start');
     // The step fails for the run's input, and the run is time travelled with a corrected one.
     const build = (replica: string) =>
       createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
@@ -198,7 +183,7 @@ describe('evented restart refusal (#28712)', () => {
           }),
         )
         .commit();
-    const a = await startReplica(storage, build('A'), { pubsub });
+    const a = await startReplica(storage, build('A'), { pubsub: queue.pubsub });
     const b = await startReplica(storage, build('B'));
     const run = await a.workflow.createRun();
     expect((await run.start({ inputData: { n: 1 } })).status).toBe('failed');
@@ -209,9 +194,9 @@ describe('evented restart refusal (#28712)', () => {
 
     holding = true;
     const travelled = (await a.workflow.createRun({ runId: run.runId })).timeTravel({ step: 'a', inputData: { n: 2 } });
-    await queued.promise;
+    await queue.held;
     await b.mastra.restartAllActiveWorkflowRuns();
-    deliver.resolve();
+    queue.deliver();
 
     expect((await travelled).status).toBe('success');
     expect(executions).toEqual(['A:1', 'A:2']);
@@ -221,14 +206,8 @@ describe('evented restart refusal (#28712)', () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
-    const queued = Promise.withResolvers<void>();
-    const deliver = Promise.withResolvers<void>();
     let holding = false;
-    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-      if (!holding || event.type !== 'workflow.resume') return undefined;
-      queued.resolve();
-      return { hold: deliver.promise };
-    });
+    const queue = holdEvents(event => holding && event.type === 'workflow.resume');
     const build = (replica: string) => {
       const child = createWorkflow({ id: 'child', inputSchema: Num, outputSchema: Num })
         .then(
@@ -249,7 +228,7 @@ describe('evented restart refusal (#28712)', () => {
     };
     const onA = build('A');
     const onB = build('B');
-    const a = await startReplica(storage, onA.parent, { pubsub, nested: { child: onA.child } });
+    const a = await startReplica(storage, onA.parent, { pubsub: queue.pubsub, nested: { child: onA.child } });
     const b = await startReplica(storage, onB.parent, { nested: { child: onB.child } });
     const run = await a.workflow.createRun();
     expect((await run.start({ inputData: { n: 1 } })).status).toBe('suspended');
@@ -266,9 +245,9 @@ describe('evented restart refusal (#28712)', () => {
     // Resuming the nested run directly makes its parent `running` again too.
     holding = true;
     const resumed = (await onA.child.createRun({ runId: nestedRunId })).resume({ resumeData: { approved: true } });
-    await queued.promise;
+    await queue.held;
     await b.mastra.restartAllActiveWorkflowRuns();
-    deliver.resolve();
+    queue.deliver();
 
     expect((await resumed).status).toBe('success');
     await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('success'));
@@ -320,31 +299,16 @@ describe('evented restart refusal (#28712)', () => {
   }, 20_000);
 
   it('marks a run live before its restart is published', async () => {
-    const storage = new InMemoryStore();
-    const tracked = track({ blocks: ['a'] }, { hangForever: true });
-    const a = await startReplica(storage, shapes.step.build(tracked.reporter('A')));
-    const run = await a.workflow.createRun();
-    void run.start({ inputData: { n: 1 } });
-    await tracked.allBlocked;
+    // The restart's start event sits in the broker's queue; no worker has handled it yet.
+    const queue = holdEvents(event => event.type === 'workflow.start');
+    const { storage, a, b, run } = await stepRunningOnA({ hangForever: true, b: { pubsub: queue.pubsub } });
     await crash(a, storage, [stepOccurrenceKey(run.runId, [0]), runLivenessKey(run.runId)]);
     expect(await runIsLive(storage, run.runId)).toBe(false);
 
-    // The restart's start event sits in the broker's queue; no worker has handled it yet.
-    const queued = Promise.withResolvers<boolean | undefined>();
-    const deliver = Promise.withResolvers<void>();
-    const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-      if (event.type !== 'workflow.start') {
-        return undefined;
-      }
-
-      queued.resolve(runIsLive(storage, run.runId));
-      return { hold: deliver.promise };
-    });
-    const b = await startReplica(storage, shapes.step.build(tracked.reporter('B')), { pubsub });
     const restarted = restartOutcome(b, run.runId);
-
-    expect(await queued.promise).toBe(true);
-    deliver.resolve();
+    await queue.held;
+    expect(await runIsLive(storage, run.runId)).toBe(true);
+    queue.deliver();
     expect((await restarted).id).toBe('resolved:success');
   }, 20_000);
 });

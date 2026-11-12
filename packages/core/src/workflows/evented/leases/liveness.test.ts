@@ -20,7 +20,7 @@ import { InMemoryStore } from '../../../storage/mock';
 import { WORKFLOW_RUN_LEASE_RENEW_INTERVAL_MS, WORKFLOW_RUN_LEASE_TTL_MS } from '../../run-ownership';
 import {
   Num,
-  interceptWorkflowEvents,
+  holdEvents,
   isStepRunAt,
   recordLeases,
   restartOutcome,
@@ -86,28 +86,19 @@ describe('evented run liveness (#28712)', () => {
     'keeps a run live and refuses its restart while its replica handles %s between steps',
     async (_, build, inGap) => {
       const storage = new InMemoryStore();
-      const handling = Promise.withResolvers<string>();
-      const deliver = Promise.withResolvers<void>();
       // The handler stalls on its publish, so it is the only work of the run in flight.
-      const pubsub = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
-        if (!inGap(event)) {
-          return undefined;
-        }
-
-        handling.resolve(event.runId);
-        return { hold: deliver.promise };
-      });
-      const a = await startReplica(storage, build(async () => {}) as unknown as Built, { pubsub });
+      const queue = holdEvents(inGap);
+      const a = await startReplica(storage, build(async () => {}) as unknown as Built, { pubsub: queue.pubsub });
       const b = await startReplica(storage, build(async () => {}) as unknown as Built);
       const run = await a.workflow.createRun();
       const result = run.start({ inputData: { n: 1 } });
-      await handling.promise;
+      await queue.held;
 
       await sleep(WORKFLOW_RUN_LEASE_TTL_MS * 2);
       expect(await runIsLive(storage, run.runId)).toBe(true);
       expect((await restartOutcome(b, run.runId)).id).toBe('WORKFLOW_RESTART_RUN_OWNED');
 
-      deliver.resolve();
+      queue.deliver();
       expect((await result).status).toBe('success');
     },
     20_000,

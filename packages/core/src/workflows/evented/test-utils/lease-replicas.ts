@@ -208,6 +208,24 @@ export function interceptWorkflowEvents(
   });
 }
 
+/**
+ * A pubsub over `inner` whose `workflows` events `match` picks sit in the broker's queue until
+ * `deliver()`. `held` resolves once the first of them is published.
+ */
+export function holdEvents(match: (event: Event) => boolean, inner: PubSub = new EventEmitterPubSub()) {
+  const held = withResolvers<void>();
+  const delivered = withResolvers<void>();
+  const pubsub = interceptWorkflowEvents(inner, event => {
+    if (!match(event)) {
+      return undefined;
+    }
+
+    held.resolve();
+    return { hold: delivered.promise };
+  });
+  return { pubsub, held: held.promise, deliver: delivered.resolve };
+}
+
 /** Whether `event` is the `workflow.step.run` of the step at `path`. */
 export const isStepRunAt = (event: Event, path: number[]) =>
   event.type === 'workflow.step.run' &&
