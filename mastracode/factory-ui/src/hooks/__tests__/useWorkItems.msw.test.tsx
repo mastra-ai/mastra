@@ -605,4 +605,37 @@ describe('useBoardPhasesQuery', () => {
     expect(result.current.board.data).toMatchObject({ matchingTotal: 2, boardTotal: 2 });
     expect(project.listings).toHaveLength(1);
   });
+
+  it('asks the server which searched view a card created here is in, and puts it on the view that searches nothing', async () => {
+    const project = serveProject([card(1, 'Fix login'), card(2, 'Ship billing')]);
+    const created = { ...card(3, 'New card'), stages: ['intake'] };
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () => {
+        project.cards = [...project.cards, created];
+        return HttpResponse.json({ workItem: created });
+      }),
+    );
+    const { result, rerender, client } = renderHookWithProviders(
+      (q: string) => ({
+        board: useBoardPhasesQuery(PROJECT_ID, { ...VIEW, q }),
+        create: useUpsertWorkItemMutation(PROJECT_ID),
+      }),
+      { initialProps: '' },
+    );
+    await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Ship billing', 'Fix login']));
+    rerender('login');
+    await waitFor(() => expect(titles(result.current.board.data)).toEqual(['Fix login']));
+
+    act(() => result.current.create.mutate({ source: 'manual', sourceKey: null, title: 'New card' }));
+    await waitForMutationsIdle(client);
+
+    // The search does not match the card: the server says so, and counts the board again.
+    await waitFor(() => expect(result.current.board.data).toMatchObject({ matchingTotal: 1, boardTotal: 3 }));
+    expect(listed(result.current.board.data, 'intake')).toEqual({ phase: 'intake', total: 0, ids: [] });
+    expect(project.listings.map(asked => asked.get('q'))).toEqual([null, 'login', 'login']);
+    // Every card is in the view that searches nothing: it takes the card without being read again.
+    const whole = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(PROJECT_ID, VIEW));
+    expect(listed(whole, 'intake')).toEqual({ phase: 'intake', total: 1, ids: [cardId(3)] });
+    expect(whole).toMatchObject({ matchingTotal: 3, boardTotal: 3 });
+  });
 });

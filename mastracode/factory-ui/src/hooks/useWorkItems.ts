@@ -12,7 +12,7 @@ import {
 } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { cardMoveMutationKey, cardWriteMutationKey, queryKeys } from '../api/keys';
+import { cardMoveMutationKey, cardWriteMutationKey, isUnnarrowedBoardView, queryKeys } from '../api/keys';
 import type { BoardPhasesRequest } from '../api/types';
 import { activityDepth, activityStart } from '../ui/domains/factory/periodActivity';
 import type { ActivityPeriod } from '../ui/domains/factory/periodActivity';
@@ -389,10 +389,17 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
       patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards =>
         cards.map(card => (card.id === item.id ? item : card)),
       );
+      // Only the server knows whether a card matches a search or a filter: the view with neither
+      // takes the card, and the server is asked for the others again.
+      const boardKey = queryKeys.boardPhases(factoryProjectId, itemBoard(item));
       queryClient.setQueriesData<BoardPhasesSnapshot>(
-        { queryKey: queryKeys.boardPhases(factoryProjectId, itemBoard(item)) },
+        { queryKey: boardKey, predicate: query => isUnnarrowedBoardView(query.queryKey) },
         snapshot => snapshot && withCardOnTop(snapshot, item),
       );
+      void queryClient.invalidateQueries({
+        queryKey: boardKey,
+        predicate: query => !isUnnarrowedBoardView(query.queryKey),
+      });
       // Whoever asked which cards are filed from this one's source learns of it without asking again.
       queryClient.setQueriesData<FiledFromAnswer>(
         { queryKey: queryKeys.workItemsFiledFromAny(factoryProjectId) },

@@ -25,6 +25,17 @@ export interface AvailableModelsFilter {
   threadId?: string;
 }
 
+/**
+ * Whether a `boardPhasesView` key is of a view that searches and filters nothing: the one view
+ * every card of its board is in.
+ */
+export function isUnnarrowedBoardView(boardPhasesViewKey: readonly unknown[]): boolean {
+  const view = boardPhasesViewKey.at(-2);
+  if (typeof view !== 'object' || view === null || !('q' in view) || !('filters' in view)) return false;
+  const { q, filters } = view;
+  return q === '' && typeof filters === 'object' && filters !== null && Object.keys(filters).length === 0;
+}
+
 export const queryKeys = {
   serverFeatures: () => ['server-features'] as const,
   serverVersions: () => ['server-versions'] as const,
