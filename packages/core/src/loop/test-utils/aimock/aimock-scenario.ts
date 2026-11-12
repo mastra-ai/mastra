@@ -573,11 +573,11 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     try {
       for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
         chunks.push(chunk);
-        // Durable streams stay open after suspension (no FINISH event fires).
-        // Break out so the harness returns and the test can call resume.
+        // Durable streams stay open after suspension (no FINISH event fires) unless
+        // closeOnSuspend is set. Break out so the harness returns and the test can call resume.
         if (isDurable && (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval')) {
           suspendedDuringDrain = true;
-          break;
+          if (!closeOnSuspend) break;
         }
       }
     } catch (error) {
@@ -588,10 +588,11 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     // Durable: drain via fullStream iteration
     try {
       for await (const chunk of fullStream as AsyncIterable<ChunkType>) {
-        // Durable streams stay open after suspension — break so the harness returns.
+        // Durable streams stay open after suspension unless closeOnSuspend is set —
+        // break so the harness returns.
         if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
           suspendedDuringDrain = true;
-          break;
+          if (!closeOnSuspend) break;
         }
       }
     } catch (error) {

@@ -240,3 +240,41 @@ describe('resolveDurableToolCallConcurrency', () => {
     });
   });
 });
+
+describe('resolveDurableToolCallConcurrency in a delegated sub-agent run', () => {
+  it('serializes run-wide approval', () => {
+    expect(
+      resolveDurableToolCallConcurrency({ options: { requireToolApproval: true }, serializeApprovals: true }),
+    ).toBe(1);
+  });
+
+  it('serializes a stamped approval-gated call', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolCalls: [{ toolName: 'gated', requireApproval: true }],
+        serializeApprovals: true,
+      }),
+    ).toBe(1);
+  });
+
+  it('serializes a registered approval tool', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolsMetadata: [tool({ name: 'gated', requireApproval: true })],
+        serializeApprovals: true,
+      }),
+    ).toBe(1);
+  });
+
+  it('keeps ungated tools parallel', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolsMetadata: [tool({ name: 'safe' })],
+        serializeApprovals: true,
+      }),
+    ).toBe(5);
+  });
+});

@@ -125,6 +125,7 @@ import type { ProcessorStepOutput } from '../processors/step-schema';
 import { REPROCESS_PART_KEY, takeHeldParts } from '../processors/stream-reprocess';
 import {
   RequestContext,
+  MASTRA_DELEGATED_RUN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_RESOURCE_ID_KEY,
   MASTRA_SCOPES_KEY,
@@ -6117,6 +6118,9 @@ export class Agent<
                   key !== MASTRA_INHERITED_MEMORY_KEY,
               ),
             );
+            // This call surfaces one pause from the sub-agent at a time and resumes it without a
+            // target, so the sub-agent keeps its approval-gated calls sequential (#30152).
+            subAgentRequestContext.set(MASTRA_DELEGATED_RUN_KEY, true);
             // Sub-agents inherit the parent's non-identity scopes (org:, custom) and pick
             // their own resource/thread, as with the reserved ID keys above.
             const parentScopes = subAgentRequestContext.get(MASTRA_SCOPES_KEY);

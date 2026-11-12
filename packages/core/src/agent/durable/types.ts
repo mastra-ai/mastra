@@ -471,8 +471,11 @@ export interface DurableToolCallInput {
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
    * `resolveDurableToolCallConcurrency` can enforce sequential execution for
-   * suspend-capable tools even on a cold resume.
+   * suspend-capable tools (and approval-gated tools in a delegated sub-agent run)
+   * even on a cold resume.
    */
+  requireApproval?: boolean;
+  /** @see requireApproval */
   hasSuspendSchema?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;

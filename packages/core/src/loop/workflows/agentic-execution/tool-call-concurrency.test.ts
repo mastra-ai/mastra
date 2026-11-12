@@ -333,3 +333,56 @@ describe('resolveEmittedToolCallConcurrency', () => {
     expect(concurrency).toBe(5);
   });
 });
+
+describe('delegated sub-agent runs (serializeApprovals)', () => {
+  it('serializes an emitted batch with a gated call', async () => {
+    const concurrency = await resolveEmittedToolCallConcurrency({
+      configuredConcurrency: 5,
+      serializeApprovals: true,
+      tools: { gated: { requireApproval: true }, safe: {} } as any,
+      toolCalls: [
+        { toolCallId: 'a', toolName: 'gated', args: {} },
+        { toolCallId: 'b', toolName: 'gated', args: {} },
+      ],
+    });
+    expect(concurrency).toBe(1);
+  });
+
+  it('keeps ungated batches parallel', async () => {
+    const concurrency = await resolveEmittedToolCallConcurrency({
+      configuredConcurrency: 5,
+      serializeApprovals: true,
+      tools: { safe: {} } as any,
+      toolCalls: [
+        { toolCallId: 'a', toolName: 'safe', args: {} },
+        { toolCallId: 'b', toolName: 'safe', args: {} },
+      ],
+    });
+    expect(concurrency).toBe(5);
+  });
+
+  it('serializes the resume fallback when an approval tool or run-wide approval applies', () => {
+    expect(
+      resolveToolCallConcurrency({
+        configuredConcurrency: 5,
+        serializeApprovals: true,
+        tools: { gated: { requireApproval: true } } as any,
+      }),
+    ).toBe(1);
+    expect(
+      resolveToolCallConcurrency({
+        configuredConcurrency: 5,
+        serializeApprovals: true,
+        requireToolApproval: true,
+        tools: { safe: {} } as any,
+      }),
+    ).toBe(1);
+    expect(
+      resolveToolCallConcurrency({
+        configuredConcurrency: 5,
+        requireToolApproval: true,
+        tools: { gated: { requireApproval: true } } as any,
+      }),
+    ).toBe(5);
+  });
+});

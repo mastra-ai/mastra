@@ -11,13 +11,11 @@
  * suspension and only records the suspension once the segment is drained to the
  * end, while durable and evented keep the stream open until the run is resumed.
  * The helper stops every drain at the first suspension chunk, which is enough
- * for a single approval (its own approval scenario) but leaves plain's second
- * approval unregistered: approving the second call then fails with "cannot
- * resume tool call ... because it is not suspended". The helper also has no
+ * for a single approval (its own approval scenario) but misses the second
+ * approval: both are raised by the same step (#30152). The helper also has no
  * equivalent of the harness's per-condition `stopOn`, so this case builds plain
- * and the target engine directly and drives them the way the harness does — plain's
- * segments are read to the end, durable/evented segments stop at the suspension
- * chunk.
+ * and the target engine directly and reads every segment to its end, asking
+ * durable/evented to close their streams once the run parks (`closeOnSuspend`).
  *
  * Excluded, as in the harness: recovery while suspended on a processor-added
  * tool, `activeTools` narrowing by the processor, and the `called` tool-call
@@ -82,8 +80,8 @@ type EngineContract = {
   persisted: Array<{ toolName: string; state: string }>;
 };
 
-/** Reads a segment, stopping at its suspension on the engines that keep it open. */
-async function readSegment(engine: ParityEngine, output: unknown) {
+/** Reads a segment to its end; every engine closes it once the run parks. */
+async function readSegment(output: unknown) {
   const types: string[] = [];
   const approvals: string[] = [];
   const stream = (output as { fullStream: AsyncIterable<{ type?: string; payload?: { toolCallId?: string } }> })
@@ -92,9 +90,6 @@ async function readSegment(engine: ParityEngine, output: unknown) {
     types.push(chunk.type ?? '');
     if (chunk.type === 'tool-call-suspended' || chunk.type === 'tool-call-approval') {
       approvals.push(chunk.payload?.toolCallId ?? '');
-      // Plain ends its stream at a suspension; durable and evented leave it open
-      // until the run is resumed (closeOnSuspend only applies to `resume`).
-      if (engine !== 'plain') break;
     }
   }
   return { types, approvals };
@@ -154,7 +149,14 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
   }
 
   const memoryOptions = { thread: THREAD, resource: RESOURCE };
-  const streamOptions = { memory: memoryOptions, runId: `parity-t66-${engine}`, maxSteps: 4 };
+  // Durable and evented keep a suspended stream open unless asked to close it, so the
+  // segment can be read to its end and show every approval the step raised (#30152).
+  const streamOptions = {
+    memory: memoryOptions,
+    runId: `parity-t66-${engine}`,
+    maxSteps: 4,
+    ...(engine === 'plain' ? {} : { closeOnSuspend: true }),
+  };
 
   const approvals: string[] = [];
   let finishes = 0;
@@ -167,7 +169,7 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
   const openingOutput = engine === 'plain' ? opening : opening.output;
 
   try {
-    let segment = await readSegment(engine, openingOutput);
+    let segment = await readSegment(openingOutput);
     finishes += segment.types.filter(type => type === 'finish').length;
     errors += segment.types.filter(type => type === 'error' || type === 'tool-error').length;
     let pending = [...segment.approvals];
@@ -177,7 +179,7 @@ async function drive(engine: ParityEngine, variant: Variant): Promise<EngineCont
       approvals.push(toolCallId);
       // Plain's Agent and both wrappers return the resumed output directly.
       const resumed = await registered.approveToolCall({ ...streamOptions, toolCallId });
-      segment = await readSegment(engine, resumed);
+      segment = await readSegment(resumed);
       finishes += segment.types.filter(type => type === 'finish').length;
       errors += segment.types.filter(type => type === 'error' || type === 'tool-error').length;
       pending = [...new Set([...pending, ...segment.approvals.filter(id => id !== toolCallId)])];

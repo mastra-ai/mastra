@@ -2,6 +2,7 @@ import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
 import { getResumeTracingContext, InternalSpans, SpanType } from '../observability';
+import { MASTRA_DELEGATED_RUN_KEY } from '../request-context';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -360,6 +361,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           // `requireToolApproval` or a tool's `needsApprovalFn`) is still evaluated here with
           // the emitted args. Only suspend-capable tools serialize: under the default
           // ('available') strategy any active one does, under 'called' only called ones.
+          // A delegated sub-agent run also serializes gated calls (see MASTRA_DELEGATED_RUN_KEY).
           //
           // Read step tools through the run scope like toolCallStep does: on resume, `_internal`
           // is rebuilt without them while the scope still holds the suspended step's values.
@@ -379,6 +381,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             requestContext,
             workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
             logger: rest.logger,
+            serializeApprovals: requestContext?.get(MASTRA_DELEGATED_RUN_KEY) === true,
           });
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
@@ -412,6 +415,8 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             configuredConcurrency: configuredToolCallConcurrency,
             strategy: toolCallConcurrencyStrategy,
             calledToolNames: toolCalls.flatMap(call => (typeof call?.toolName === 'string' ? [call.toolName] : [])),
+            serializeApprovals: rest.requestContext?.get(MASTRA_DELEGATED_RUN_KEY) === true,
+            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
           });
         },
       })

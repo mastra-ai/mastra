@@ -14,6 +14,7 @@ import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
+import { MASTRA_DELEGATED_RUN_KEY } from '../../../request-context';
 import { currentRunGeneration } from '../../../storage/run-fencing';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -622,6 +623,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               options: state?.options,
               toolsMetadata: state?.toolsMetadata,
               toolCalls: inputData as DurableToolCallInput[],
+              serializeApprovals: state?.requestContextEntries?.[MASTRA_DELEGATED_RUN_KEY] === true,
             });
           },
         })

@@ -48,6 +48,9 @@ describeForAllEngines('AIMock loop scenario: pending tool result flush', engine 
       threadId: 'pending-tool-result-flush-thread',
       resourceId: 'test-resource',
       collectChunks: true,
+      // Both calls run in the same step; read the opening stream until the run parks so
+      // the lookup result is seen even when it lands after the approval (#30152).
+      closeOnSuspend: true,
       fixtures: llm => {
         llm.onMessage(/look up|delete/i, {
           toolCalls: [

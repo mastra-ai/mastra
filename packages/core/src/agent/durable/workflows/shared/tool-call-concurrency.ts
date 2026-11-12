@@ -11,7 +11,10 @@ import type { DurableToolCallInput, SerializableDurableOptions, SerializableTool
  * (loop/workflows/agentic-execution/tool-call-concurrency.ts):
  * - Approval never forces sequential execution. An approval-gated call parks
  *   before it executes, so every gated call in the step reaches its gate at
- *   once and is resumed by its own toolCallId (#30152).
+ *   once and is resumed by its own toolCallId (#30152). The exception is a
+ *   delegated sub-agent run (`serializeApprovals`): its delegation surfaces one
+ *   pause at a time and resumes without a target, so there approval-gated tools
+ *   keep forcing sequential execution.
  * - Any tool in the step's *effective active tool set* with `hasSuspendSchema`
  *   forces sequential execution so suspension flows never race with
  *   concurrent tool calls. The check is against the active tool set, NOT the
@@ -34,17 +37,23 @@ export function resolveDurableToolCallConcurrency({
   options,
   toolsMetadata,
   toolCalls,
+  serializeApprovals = false,
 }: {
-  options?: Pick<SerializableDurableOptions, 'toolCallConcurrency' | 'activeTools'>;
+  options?: Pick<SerializableDurableOptions, 'requireToolApproval' | 'toolCallConcurrency' | 'activeTools'>;
   toolsMetadata?: SerializableToolMetadata[];
-  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName' | 'hasSuspendSchema'>[];
+  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName' | 'requireApproval' | 'hasSuspendSchema'>[];
+  serializeApprovals?: boolean;
 }): number {
-  // Step-stamped suspension flags cover tools that input processors added for
+  if (serializeApprovals && options?.requireToolApproval) {
+    return 1;
+  }
+
+  // Step-stamped capability flags cover tools that input processors added for
   // this step (e.g. via ToolSearchProcessor). Those tools never appear in the
   // run-start `toolsMetadata`, so the metadata lookups below cannot see them.
   // The stamps are persisted with the tool calls, so this stays correct across
   // cold durable resumes (issue #24377).
-  if (toolCalls?.some(tc => tc.hasSuspendSchema)) {
+  if (toolCalls?.some(tc => tc.hasSuspendSchema || (serializeApprovals && tc.requireApproval))) {
     return 1;
   }
 
@@ -68,7 +77,7 @@ export function resolveDurableToolCallConcurrency({
         : (toolsMetadata ?? []).filter(tool => activeTools.includes(tool.name));
   }
 
-  if (consideredTools.some(tool => tool.hasSuspendSchema)) {
+  if (consideredTools.some(tool => tool.hasSuspendSchema || (serializeApprovals && tool.requireApproval))) {
     return 1;
   }
 

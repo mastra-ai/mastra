@@ -791,16 +791,16 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
     ]);
   });
 
-  it('does not run eager work in parallel when an approval-capable tool joins the step', async () => {
+  it('does not run eager work in parallel when a suspend-capable tool joins the step', async () => {
     const { record } = createRecorder();
     const peak = { current: 0, max: 0 };
     const safeTools = { 'safe-a': peakTrackingTool('safe-a', peak), 'safe-b': peakTrackingTool('safe-b', peak) };
-    const gated = createTool({
-      id: 'gated',
-      description: 'Requires approval',
+    const suspending = createTool({
+      id: 'suspending',
+      description: 'Can suspend',
       inputSchema: z.object({ value: z.string() }),
       outputSchema: z.object({ value: z.string() }),
-      requireApproval: true,
+      suspendSchema: z.object({ question: z.string() }),
       execute: async ({ value }) => ({ value }),
     });
     const agent = new Agent({
@@ -823,10 +823,10 @@ describe('eager tool dispatch — ordering and exactly-once', () => {
         maxSteps: 1,
         eagerToolExecution: true,
         toolCallConcurrency: 5,
-        // The approval-capable tool only enters at step level, where llm-execution recomputes
+        // The suspend-capable tool only enters at step level, where llm-execution recomputes
         // the limit down to 1. A coordinator holding a construction-time copy would still run
         // the safe calls in parallel; reading the limit late keeps one source of truth.
-        prepareStep: () => ({ tools: { ...safeTools, gated } }),
+        prepareStep: () => ({ tools: { ...safeTools, suspending } }),
       }),
     );
 
