@@ -138,6 +138,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.rebuild();
   }
 
+  setModelId(modelId: string): void {
+    this.modelId = modelId;
+    this.rebuild();
+  }
+
   setText(text: string): void {
     const nextSnapshot = text.trim();
     if (!nextSnapshot || nextSnapshot === this.lastTextSnapshot) return;

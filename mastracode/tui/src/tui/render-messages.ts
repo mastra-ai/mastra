@@ -54,8 +54,13 @@ import {
   getUserSignalView,
   isSignalMessage,
 } from './db-message-parts.js';
-import type { AssistantRenderPart } from './db-message-parts.js';
-import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
+import type { AssistantRenderPart, BackgroundCompletionView } from './db-message-parts.js';
+import {
+  forgetPluginSubagentCall,
+  formatToolResult,
+  isLivePluginSubagentCall,
+  isTaskMutationTool,
+} from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
@@ -607,6 +612,8 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
       subagentComponent?.cancel();
       state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
+    } else if (backgroundCompletion?.taskId) {
+      settleBackgroundCall(state, backgroundCompletion, notification.message);
     }
     const component = new NotificationComponent({
       message: notification.message,
@@ -939,9 +946,31 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
 }
 
 /**
- * Re-render all existing messages from the controller thread into the chat container.
- * Called on thread switch and initial load.
+ * Ends a call still shown as running when its task's finished or failed
+ * notice arrives and nothing else will end it: a box replayed from history
+ * gets no `subagent_end`, and no result reaches a call a restart or a
+ * shutdown cut off. A live plugin subagent's box and a live tool row still
+ * get their result in `tool_end`.
  */
+function settleBackgroundCall(state: TUIState, completion: BackgroundCompletionView, notice: string): void {
+  const toolCallId = completion.originToolCallId;
+  const failed = completion.status === 'failed';
+  const subagentComponent = state.pendingSubagents.get(toolCallId);
+  if (subagentComponent && (completion.interrupted || !isLivePluginSubagentCall(toolCallId))) {
+    if (completion.taskId) subagentComponent.setBackgroundTaskId(completion.taskId);
+    subagentComponent.finish(failed, 0, notice);
+    state.pendingSubagents.delete(toolCallId);
+    forgetPluginSubagentCall(toolCallId);
+  }
+  const toolComponent = completion.interrupted ? state.pendingTools.get(toolCallId) : undefined;
+  if (toolComponent) {
+    if (completion.taskId) toolComponent.setBackgroundTaskId?.(completion.taskId);
+    toolComponent.updateResult({ content: [{ type: 'text', text: notice }], isError: failed }, false);
+    state.pendingTools.delete(toolCallId);
+    state.pendingTaskToolIds?.delete(toolCallId);
+  }
+}
+
 /**
  * Leaves a replayed subagent box as the live handlers would: cancelled,
  * finished, or still waiting on its background task, where live events, a
@@ -971,6 +1000,10 @@ function restoreReplayedSubagent(
   }
 }
 
+/**
+ * Re-render all existing messages from the controller thread into the chat container.
+ * Called on thread switch and initial load.
+ */
 export async function renderExistingMessages(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   if (!isCurrent()) return;

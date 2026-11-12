@@ -1,8 +1,11 @@
 import { Container, Text } from '@earendil-works/pi-tui';
+import { createSignal } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
+import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 
+import { addUserMessage } from '../render-messages.js';
 import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
 import { handleSubagentStart, markBackgroundSubagent } from './subagent.js';
@@ -94,6 +97,47 @@ describe('background placeholder opt-in', () => {
     const rendered = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(rendered).toMatch(title);
     if (toolName === 'mastra_expert') expect(rendered).not.toContain('trusted-task');
+  });
+
+  it('leaves a live plugin subagent box to its result when the completion notice comes first', () => {
+    const ctx = createToolHandlerContext();
+    ctx.state.options.backgroundToolsEnabled = true;
+    Object.assign(ctx.state, { messageComponentsById: new Map(), followUpComponents: [] });
+    ctx.state.pluginManager = {
+      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
+    } as unknown as TUIState['pluginManager'];
+    handleToolStart(ctx, 'plugin-call', 'mastra_expert', { question: 'demo' });
+    handleToolEnd(ctx, 'plugin-call', 'Waiting', false, {
+      mastra: { backgroundTask: { taskId: 'plugin-task', status: 'running' } },
+    });
+
+    addUserMessage(
+      ctx.state,
+      createSignal({
+        type: 'notification',
+        tagName: 'notification',
+        contents:
+          'Background mastra_expert call finished. Its result is in the original mastra_expert call (plugin-call).',
+        attributes: { source: 'background-work', status: 'completed' },
+        metadata: {
+          backgroundCompletion: {
+            eventId: 'background-task:plugin-task:completed',
+            taskId: 'plugin-task',
+            originToolCallId: 'plugin-call',
+            toolName: 'mastra_expert',
+            status: 'completed',
+          },
+        },
+      }).toDBMessage(),
+    );
+    expect(ctx.state.pendingSubagents.has('plugin-call')).toBe(true);
+
+    handleToolEnd(ctx, 'plugin-call', 'AUTHORITATIVE_RESULT', false, {
+      mastra: { backgroundTask: { taskId: 'plugin-task', status: 'completed' } },
+    });
+    const box = ctx.state.chatContainer.children.find(child => child instanceof SubagentExecutionComponent)!;
+    (box as SubagentExecutionComponent).setExpanded(true);
+    expect(stripAnsi(box.render(100).join('\n'))).toContain('AUTHORITATIVE_RESULT');
   });
 
   it.each(['execute_command', 'mastra_expert'])(

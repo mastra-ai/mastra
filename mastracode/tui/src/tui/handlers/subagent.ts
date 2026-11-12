@@ -35,6 +35,8 @@ export function handleSubagentStart(
     }
     // History replay already made this box: a deferred subagent that had not started yet.
     if (background.component && state.pendingSubagents.get(toolCallId) === background.component) {
+      // The replay only knew the model from the call's args.
+      if (modelId) background.component.setModelId(modelId);
       flushRender(state);
       return;
     }

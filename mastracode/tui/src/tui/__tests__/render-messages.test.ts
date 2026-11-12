@@ -1705,6 +1705,53 @@ describe('renderExistingMessages subagents', () => {
     expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
   });
 
+  /** The notice for a task a crash and restart cut off, as it arrives live. */
+  function interruption(toolCallId: string, toolName: string, taskId: string): MastraDBMessage {
+    return createSignal({
+      id: `background-task:${taskId}:failed`,
+      type: 'notification',
+      tagName: 'notification',
+      contents: `Background ${toolName} call was interrupted by a restart before it finished. See the original ${toolName} call (${toolCallId}).`,
+      attributes: { source: 'background-work', status: 'failed' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: `background-task:${taskId}:failed`,
+          taskId,
+          originRunId: 'run-1',
+          originToolCallId: toolCallId,
+          toolName,
+          status: 'failed',
+          interrupted: 'restart',
+        },
+      },
+    }).toDBMessage();
+  }
+
+  it('ends a replayed running tool row when the restart that cut it off is reported', async () => {
+    const state = createState();
+    state.options.backgroundToolsEnabled = true;
+    const message = assistantToolMessage('assistant-background-view', [
+      {
+        id: 'view-call',
+        name: 'view',
+        args: { path: 'package.json' },
+        result: 'Background task started. Task ID: task-view-1',
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-view-1', status: 'running' } } },
+      },
+    ]);
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
+    } as unknown as TUIState['session'];
+    await renderExistingMessages(state);
+    expect(state.pendingTools.has('view-call')).toBe(true);
+
+    addUserMessage(state, interruption('view-call', 'view', 'task-view-1'));
+
+    expect(state.pendingTools.has('view-call')).toBe(false);
+    expect(stripAnsi(state.chatContainer.render(120).join('\n'))).not.toContain('◌ background');
+  });
+
   describe('background subagent calls', () => {
     const placeholder = 'Background task started. Task ID: task-sub-1';
     const subagentCall = assistantToolMessage('assistant-background-subagent', [
@@ -1772,10 +1819,22 @@ describe('renderExistingMessages subagents', () => {
         'sub-call',
         'explore',
         'Find the auth middleware',
+        'openai/gpt-5.5',
       );
 
       expect(state.chatContainer.children.filter(child => child instanceof SubagentExecutionComponent)).toEqual([box]);
       expect(state.pendingSubagents.get('sub-call')).toBe(box);
+      expect(stripAnsi(box.render(120).join('\n'))).toContain('openai/gpt-5.5');
+    });
+
+    it('ends a replayed running one when the restart that cut it off is reported', async () => {
+      const { state, rendered } = await replay([subagentCall]);
+
+      addUserMessage(state, interruption('sub-call', 'subagent', 'task-sub-1'));
+
+      expect(rendered()).not.toContain('◌');
+      expect(rendered()).toContain('✗ background');
+      expect(state.pendingSubagents.has('sub-call')).toBe(false);
     });
 
     it('replays a cancelled one as cancelled', async () => {
