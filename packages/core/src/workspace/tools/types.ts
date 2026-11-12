@@ -160,6 +160,8 @@ export interface BackgroundProcessExitMeta extends BackgroundProcessMeta {
   stderrTruncated?: boolean;
   stdoutDroppedBytes?: number;
   stderrDroppedBytes?: number;
+  /** True when the process was stopped because it reached its timeout. */
+  timedOut?: boolean;
 }
 
 /**
@@ -181,6 +183,18 @@ export interface BackgroundProcessConfig {
    *   Use this for cloud sandboxes (e.g. E2B) where processes should survive agent shutdown.
    */
   abortSignal?: AbortSignal | null | false;
+  /**
+   * Lifetime limit in milliseconds for a background process started without a `timeout`.
+   * When the limit is reached the process is stopped (on `LocalSandbox`: SIGTERM, then SIGKILL).
+   * Unset (default): a process started without a `timeout` runs until it exits or is killed.
+   */
+  defaultTimeoutMs?: number;
+  /**
+   * Upper bound in milliseconds on any background process's lifetime. A longer requested
+   * timeout is lowered to it, and a process started with no timeout (and no `defaultTimeoutMs`)
+   * gets this limit. Unset (default): no upper bound.
+   */
+  maxTimeoutMs?: number;
 }
 
 // =============================================================================

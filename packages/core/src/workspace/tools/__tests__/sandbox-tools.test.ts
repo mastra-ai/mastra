@@ -264,6 +264,75 @@ describe('execute_command tool', () => {
     });
   });
 
+  describe('background time limits', () => {
+    async function startWithLimits(
+      limits: { defaultTimeoutMs?: number; maxTimeoutMs?: number } | undefined,
+      timeoutSeconds?: number,
+    ) {
+      const spawn = vi.fn().mockResolvedValue(createMockHandle({ pid: '42' }));
+      const workspace = new Workspace({
+        sandbox: createMockSandbox({ processes: { spawn } }),
+        tools: limits ? { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: limits } } : undefined,
+      });
+      const result = await executeCommandWithBackgroundTool.execute(
+        { command: 'node server.js', background: true, timeout: timeoutSeconds },
+        { workspace },
+      );
+      return { result, timeout: spawn.mock.calls[0]![1].timeout };
+    }
+
+    it('keeps background processes unlimited when no limits are configured', async () => {
+      const { result, timeout } = await startWithLimits(undefined);
+      expect(timeout).toBeUndefined();
+      expect(result).toBe('Started background process (PID: 42)');
+    });
+
+    it('applies defaultTimeoutMs when the model omits timeout and tells the model', async () => {
+      const { result, timeout } = await startWithLimits({ defaultTimeoutMs: 600_000 });
+      expect(timeout).toBe(600_000);
+      expect(result).toBe(
+        'Started background process (PID: 42)\nIt will be stopped after 600s (workspace time limit for background processes).',
+      );
+    });
+
+    it('lowers a longer requested timeout to maxTimeoutMs', async () => {
+      const { result, timeout } = await startWithLimits({ maxTimeoutMs: 60_000 }, 300);
+      expect(timeout).toBe(60_000);
+      expect(result).toContain('It will be stopped after 60s');
+    });
+
+    it('keeps a requested timeout under maxTimeoutMs without a note', async () => {
+      const { result, timeout } = await startWithLimits({ maxTimeoutMs: 60_000 }, 30);
+      expect(timeout).toBe(30_000);
+      expect(result).toBe('Started background process (PID: 42)');
+    });
+
+    it('applies maxTimeoutMs when no timeout or default is given', async () => {
+      const { result, timeout } = await startWithLimits({ maxTimeoutMs: 60_000 });
+      expect(timeout).toBe(60_000);
+      expect(result).toContain('It will be stopped after 60s');
+    });
+
+    it('caps defaultTimeoutMs at maxTimeoutMs', async () => {
+      const { timeout } = await startWithLimits({ defaultTimeoutMs: 600_000, maxTimeoutMs: 60_000 });
+      expect(timeout).toBe(60_000);
+    });
+
+    it('reports timedOut to onExit', async () => {
+      const onExit = vi.fn();
+      const handle = createMockHandle({
+        pid: '42',
+        waitResult: { exitCode: 143, success: false, stdout: '', stderr: '', timedOut: true },
+      });
+      const workspace = new Workspace({
+        sandbox: createMockSandbox({ processes: { spawn: vi.fn().mockResolvedValue(handle) } }),
+        tools: { [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: { onExit } } },
+      });
+      await executeCommandWithBackgroundTool.execute({ command: 'node server.js', background: true }, { workspace });
+      await vi.waitFor(() => expect(onExit).toHaveBeenCalledWith(expect.objectContaining({ timedOut: true })));
+    });
+  });
+
   describe('background mode', () => {
     it('returns PID when background: true', async () => {
       const handle = createMockHandle({ pid: '42' });
@@ -902,6 +971,39 @@ describe('background processes killed by an aborted run', () => {
       await cleanup();
     }
   });
+});
+
+describe('background time limit on a real LocalSandbox', () => {
+  it.skipIf(process.platform === 'win32')(
+    'stops a process that ignores SIGTERM once the workspace default limit is reached',
+    async () => {
+      const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-limit-'));
+      const onExit = vi.fn();
+      const workspace = new Workspace({
+        sandbox: new LocalSandbox({ workingDirectory: dir }),
+        tools: {
+          [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: { backgroundProcesses: { defaultTimeoutMs: 500, onExit } },
+        },
+      });
+      await workspace.init();
+      try {
+        const started = await executeCommandWithBackgroundTool.execute!(
+          { command: "trap '' TERM; while true; do sleep 0.1; done", background: true },
+          { workspace } as any,
+        );
+        expect(started).toContain('It will be stopped after 1s');
+
+        await vi.waitFor(() => expect(onExit).toHaveBeenCalled(), { timeout: 8_000, interval: 50 });
+        expect(onExit).toHaveBeenCalledWith(expect.objectContaining({ timedOut: true }));
+        const pid = Number(onExit.mock.calls[0]![0].pid);
+        expect(() => process.kill(pid, 0)).toThrow();
+      } finally {
+        await workspace.destroy();
+        await fs.rm(dir, { recursive: true, force: true });
+      }
+    },
+    15_000,
+  );
 });
 
 describe('kill_process tool', () => {

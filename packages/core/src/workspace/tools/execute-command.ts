@@ -108,6 +108,21 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   return `${output}${separator}${terminalLine}`;
 }
 
+function positiveMs(value: number | undefined): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+}
+
+/** Apply the workspace's background-process time limits to the timeout the model requested. */
+function resolveBackgroundTimeout(
+  requested: number | undefined,
+  config: { defaultTimeoutMs?: number; maxTimeoutMs?: number } | undefined,
+): number | undefined {
+  const max = positiveMs(config?.maxTimeoutMs);
+  const effective = requested ?? positiveMs(config?.defaultTimeoutMs);
+  if (max === undefined) return effective;
+  return effective === undefined ? max : Math.min(effective, max);
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command } = input;
@@ -184,6 +199,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     const bgConfig = toolConfig?.backgroundProcesses;
+    const bgTimeout = resolveBackgroundTimeout(timeout, bgConfig);
 
     // Resolve abort signal: undefined = use context signal (from agent), null/false = disabled
     const bgAbortSignal =
@@ -194,7 +210,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
     handle = await sandbox.processes.spawn(command, {
       cwd: cwd ?? undefined,
-      timeout: timeout ?? undefined,
+      timeout: bgTimeout,
       abortSignal: bgAbortSignal,
       // A background process collects output rather than being driven over stdin,
       // so close stdin at spawn. Otherwise `rg`/`grep`/`cat` with no path argument
@@ -229,6 +245,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
               stderrTruncated: result.stderrTruncated,
               stdoutDroppedBytes: result.stdoutDroppedBytes,
               stderrDroppedBytes: result.stderrDroppedBytes,
+              timedOut: result.timedOut,
               toolCallId,
             });
           } catch (callbackError) {
@@ -249,7 +266,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
     }
 
     span.end({ success: true }, { pid: Number(handle.pid) || undefined });
-    return `Started background process (PID: ${handle.pid})`;
+    const started = `Started background process (PID: ${handle.pid})`;
+    if (bgTimeout === undefined || bgTimeout === timeout) return started;
+    return `${started}\nIt will be stopped after ${Math.ceil(bgTimeout / 1000)}s (workspace time limit for background processes).`;
   }
 
   // Foreground mode: execute and wait for completion
