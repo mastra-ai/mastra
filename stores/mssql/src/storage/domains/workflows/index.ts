@@ -56,8 +56,8 @@ const RUN_OWNERSHIP_BATCH_SIZE = 500;
  * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty.
  * Only these paths are read, so `context` is never sent. OPENJSON parses each snapshot once, and
  * FOR JSON PATH leaves out NULL values. A snapshot that isn't valid JSON lists as `{}`, since
- * OPENJSON would fail the whole listing on it. `TOP (1)` keeps a JSON array, which OPENJSON
- * returns one row per element for, to one object.
+ * OPENJSON would fail the whole listing on it. OPENJSON returns one row per element of a JSON
+ * array, so `TOP (1)` keeps the summary to one object.
  */
 const SUMMARY_SNAPSHOT_SQL = `COALESCE(CASE WHEN ISJSON([snapshot]) = 1 THEN (
     SELECT TOP (1) s.[status],
