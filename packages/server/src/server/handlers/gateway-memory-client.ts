@@ -294,13 +294,23 @@ function isV2GatewayKey(key: string): boolean {
 
 /**
  * Whether this deployment targets Gateway v2. Signaled either by the
- * MASTRA_GATEWAY_VERSION=v2 runtime env var (set by the platform) or by a v2
- * (organization) API key prefix, which predates the env var signal.
+ * MASTRA_GATEWAY_VERSION=v2 runtime env var (set by the platform), by a v2
+ * (organization) API key prefix (which predates the env var signal), or by a
+ * registered Mastra gateway instance that carries a v2 key via config.apiKey
+ * (pass `mastra` so instance-level config is consulted too).
  */
-export function isGatewayV2(): boolean {
+export function isGatewayV2(mastra?: { listGateways?: () => Record<string, unknown> | undefined }): boolean {
   if (process.env.MASTRA_GATEWAY_VERSION === 'v2') return true;
   const key = process.env.MASTRA_GATEWAY_API_KEY;
-  return !!key && isV2GatewayKey(key);
+  if (!!key && isV2GatewayKey(key)) return true;
+  // A user-registered MastraGateway can hold a v2 key in its config rather
+  // than the environment; ask the instance for its effective v2 state.
+  const gateways = mastra?.listGateways?.() ?? {};
+  for (const gateway of Object.values(gateways)) {
+    const candidate = gateway as { id?: string; isV2?: () => boolean };
+    if (candidate?.id === 'mastra' && typeof candidate.isV2 === 'function' && candidate.isV2()) return true;
+  }
+  return false;
 }
 
 // Singleton-ish lazy instance

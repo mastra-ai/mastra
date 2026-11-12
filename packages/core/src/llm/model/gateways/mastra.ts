@@ -49,8 +49,11 @@ export class MastraGateway extends MastraModelGateway {
    * Gateway v2 deployments are signaled by MASTRA_GATEWAY_VERSION=v2 (set by the platform)
    * or by a v2 (organization) API key prefix, which predates the env var signal.
    * Keep in sync with isGatewayV2 in @mastra/server's gateway-memory-client.
+   * Public so the server can ask a registered gateway instance for its
+   * effective v2 state (the instance may carry a v2 key via config.apiKey
+   * that env-only checks cannot see).
    */
-  private isV2(): boolean {
+  isV2(): boolean {
     if (process.env['MASTRA_GATEWAY_VERSION'] === 'v2') return true;
     const key = this.config?.apiKey ?? process.env['MASTRA_GATEWAY_API_KEY'];
     return !!key && (key.startsWith('msk-gateway-') || key.startsWith('mskv2_'));

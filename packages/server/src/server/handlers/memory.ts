@@ -970,7 +970,7 @@ export const LIST_THREADS_ROUTE = createRoute({
         });
       }
 
-      if (agent && isGateway && isGatewayV2() && !agentSupportsMemory(agent)) {
+      if (agent && isGateway && isGatewayV2(mastra) && !agentSupportsMemory(agent)) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
 
@@ -1216,7 +1216,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         };
       }
 
-      if (agent && isGateway && isGatewayV2() && !agentSupportsMemory(agent)) {
+      if (agent && isGateway && isGatewayV2(mastra) && !agentSupportsMemory(agent)) {
         return { messages: [], uiMessages: [] };
       }
 
