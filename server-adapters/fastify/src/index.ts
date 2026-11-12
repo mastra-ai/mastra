@@ -1,5 +1,6 @@
 import { Busboy } from '@fastify/busboy';
 import type { ToolsInput } from '@mastra/core/agent';
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -22,22 +23,6 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 export { createAuthMiddleware } from './auth-middleware';
 export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
-
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
@@ -670,17 +655,14 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       // Check if any auth is configured (studio or server) for RBAC
       const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
       if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
+        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
 
-          if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
-          }
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
+          });
         }
       }
 
@@ -820,29 +802,18 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         // Check if any auth is configured (studio or server) for RBAC
         const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
         if (hasAuth) {
-          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-          try {
-            ({ hasPermission } = await import('@mastra/core/auth/ee'));
-          } catch {
-            console.error(
-              '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
-          }
-
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              serverRoute,
-              userPermissions,
-              hasPermission,
-              requestContext,
-            );
-            if (permissionError) {
-              return reply.status(permissionError.status).send({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
+          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+          const permissionError = this.checkRoutePermission(
+            serverRoute,
+            userPermissions,
+            hasPermission,
+            requestContext,
+          );
+          if (permissionError) {
+            return reply.status(permissionError.status).send({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
           }
         }
 
