@@ -942,6 +942,35 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
  * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
+/**
+ * Leaves a replayed subagent box as the live handlers would: cancelled,
+ * finished, or still waiting on its background task, where live events, a
+ * cancel signal and Ctrl+G can reach it.
+ */
+function restoreReplayedSubagent(
+  state: TUIState,
+  toolCallId: string,
+  component: SubagentExecutionComponent,
+  replay: {
+    taskId?: string;
+    cancelled: boolean;
+    running: boolean;
+    isError: boolean;
+    durationMs: number;
+    result?: string;
+  },
+): void {
+  if (replay.taskId) component.setBackgroundTaskId(replay.taskId);
+  if (replay.cancelled) {
+    component.cancel();
+  } else if (replay.running) {
+    state.pendingSubagents.set(toolCallId, component);
+    if (replay.taskId) state.backgroundSubagentCalls?.set(toolCallId, { taskId: replay.taskId, component });
+  } else {
+    component.finish(replay.isError, replay.durationMs, replay.result);
+  }
+}
+
 export async function renderExistingMessages(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const messages = await state.session.thread.listActiveMessages({ limit: STARTUP_MESSAGE_WINDOW_SIZE });
   if (!isCurrent()) return;
@@ -1018,6 +1047,11 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             !resultIsError &&
             part.backgroundTask?.status === 'running' &&
             !backgroundTasksByToolCallId.has(part.toolCallId);
+          const backgroundTaskId =
+            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+              ? part.backgroundTask?.taskId
+              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+          const isCancelledBackground = cancelledBackgroundToolCalls.has(part.toolCallId);
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1058,11 +1092,14 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 subComponent.addToolEnd(tc.name, '', tc.isError);
               }
             }
-            const subagentTaskId = part.backgroundTask?.taskId ?? backgroundTasksByToolCallId.get(part.toolCallId);
-            if (subagentTaskId && state.options?.backgroundToolsEnabled)
-              subComponent.setBackgroundTaskId(subagentTaskId);
-            // Mark as finished with result
-            subComponent.finish(isErr ?? false, durationMs, resultText);
+            restoreReplayedSubagent(state, part.toolCallId, subComponent, {
+              taskId: state.options?.backgroundToolsEnabled ? backgroundTaskId : undefined,
+              cancelled: isCancelledBackground,
+              running: isBackgroundPlaceholder,
+              isError: isErr ?? false,
+              durationMs,
+              result: resultText,
+            });
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1108,20 +1145,14 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 icons: pluginRenderConfig.icons,
               },
             );
-            const backgroundTaskId =
-              (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
-                ? part.backgroundTask?.taskId
-                : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
-            if (backgroundTaskId) {
-              subComponent.setBackgroundTaskId(backgroundTaskId);
-            }
-            if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
-              subComponent.cancel();
-            } else if (isBackgroundPlaceholder) {
-              state.pendingSubagents.set(part.toolCallId, subComponent);
-            } else {
-              subComponent.finish(isErr ?? false, 0, rawResult);
-            }
+            restoreReplayedSubagent(state, part.toolCallId, subComponent, {
+              taskId: backgroundTaskId,
+              cancelled: isCancelledBackground,
+              running: isBackgroundPlaceholder,
+              isError: isErr ?? false,
+              durationMs: 0,
+              result: rawResult,
+            });
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1138,10 +1169,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             },
             state.ui,
           );
-          const backgroundTaskId =
-            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
-              ? part.backgroundTask?.taskId
-              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
           if (backgroundTaskId) {
             toolComponent.setBackgroundTaskId(backgroundTaskId);
           }
@@ -1176,7 +1203,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             toolComponent.stopLiveUpdates();
           }
 
-          if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+          if (isCancelledBackground) {
             toolComponent.updateResult(
               { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
               true,

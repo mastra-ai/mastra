@@ -1,5 +1,6 @@
 import { Box, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, SelectListTheme, TUI } from '@earendil-works/pi-tui';
+import { SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
 import type { BackgroundActivity } from '../background-activity.js';
 import { formatStatusDuration } from '../status-duration.js';
 import { theme } from '../theme.js';
@@ -125,7 +126,7 @@ function describeState(activity: BackgroundActivity): string {
 
 function kindIcon(activity: BackgroundActivity): string {
   if (activity.kind === 'process') return theme.fg('toolTitle', '$');
-  if (activity.toolName === 'subagent') return theme.fg('accent', '◆');
+  if (activity.toolName === SUBAGENT_TOOL_NAME) return theme.fg('accent', '◆');
   return theme.fg('muted', '•');
 }
 

@@ -25,6 +25,21 @@ export function handleSubagentStart(
   forked?: boolean,
 ): void {
   const { state } = ctx;
+  const background = state.backgroundSubagentCalls?.get(toolCallId);
+  if (background) {
+    // The activity list row was made before the definition name was known.
+    const activity = state.backgroundActivities?.get(background.taskId);
+    const name = subagentDisplayName(state, toolCallId);
+    if (activity?.status === 'accepted' && name) {
+      activity.label = describeBackgroundCall(SUBAGENT_TOOL_NAME, { agentType, task }, name);
+    }
+    // History replay already made this box: a deferred subagent that had not started yet.
+    if (background.component && state.pendingSubagents.get(toolCallId) === background.component) {
+      flushRender(state);
+      return;
+    }
+  }
+
   const component = new SubagentExecutionComponent(agentType, task, state.ui, modelId, {
     collapseOnComplete: false,
     expandOnComplete: true,
@@ -36,16 +51,9 @@ export function handleSubagentStart(
 
   // A deferred subagent can start after its placeholder result, when the chat
   // has already moved on: place it where the call was made.
-  const background = state.backgroundSubagentCalls?.get(toolCallId);
   if (background) {
     component.setBackgroundTaskId(background.taskId);
     background.component = component;
-    // The activity list row was made before the definition name was known.
-    const activity = state.backgroundActivities?.get(background.taskId);
-    const name = subagentDisplayName(state, toolCallId);
-    if (activity?.status === 'accepted' && name) {
-      activity.label = describeBackgroundCall(SUBAGENT_TOOL_NAME, { agentType, task }, name);
-    }
   }
   const children = state.chatContainer.children as unknown[];
   const beforeIndex = background?.insertBefore ? children.indexOf(background.insertBefore) : -1;

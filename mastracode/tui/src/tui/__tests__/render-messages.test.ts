@@ -16,6 +16,8 @@ import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
+import { handleSubagentEnd, handleSubagentStart } from '../handlers/subagent.js';
+import type { EventHandlerContext } from '../handlers/types.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
 
@@ -1701,6 +1703,88 @@ describe('renderExistingMessages subagents', () => {
     expect(state.pendingTools.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingTaskToolIds.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
+  });
+
+  describe('background subagent calls', () => {
+    const placeholder = 'Background task started. Task ID: task-sub-1';
+    const subagentCall = assistantToolMessage('assistant-background-subagent', [
+      {
+        id: 'sub-call',
+        name: 'subagent',
+        args: { agentType: 'explore', task: 'Find the auth middleware' },
+        result: placeholder,
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-sub-1', status: 'running' } } },
+        isError: false,
+      },
+    ]);
+    const cancellation = createSignal({
+      id: 'background-task:task-sub-1:cancelled',
+      type: 'notification',
+      tagName: 'notification',
+      contents: 'Background Explore subagent was cancelled. See the original subagent call (sub-call).',
+      attributes: { source: 'background-work', status: 'cancelled' },
+      metadata: {
+        backgroundCompletion: {
+          eventId: 'background-task:task-sub-1:cancelled',
+          taskId: 'task-sub-1',
+          originRunId: 'run-1',
+          originToolCallId: 'sub-call',
+          toolName: 'subagent',
+          status: 'cancelled',
+        },
+      },
+    }).toDBMessage();
+
+    async function replay(messages: MastraDBMessage[]) {
+      const state = createState();
+      state.options.backgroundToolsEnabled = true;
+      state.backgroundSubagentCalls = new Map();
+      state.session = {
+        ...state.session,
+        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+        model: { get: () => undefined },
+      } as unknown as TUIState['session'];
+      await renderExistingMessages(state);
+      const box = state.chatContainer.children.find(
+        child => child instanceof SubagentExecutionComponent,
+      ) as SubagentExecutionComponent;
+      return { state, box, rendered: () => stripAnsi(box.render(120).join('\n')) };
+    }
+
+    it('replays a running one as running, where its live end reaches it', async () => {
+      const { state, box, rendered } = await replay([subagentCall]);
+
+      expect(rendered()).toContain('◌ background');
+      expect(rendered()).not.toContain(placeholder);
+      expect(state.backgroundSubagentCalls.get('sub-call')).toEqual({ taskId: 'task-sub-1', component: box });
+
+      handleSubagentEnd({ state } as unknown as EventHandlerContext, 'sub-call', false, 1000, 'MIDDLEWARE_FOUND');
+
+      expect(rendered()).toContain('✓ background');
+      expect(state.pendingSubagents.has('sub-call')).toBe(false);
+    });
+
+    it('reuses the replayed box when a deferred subagent starts after the replay', async () => {
+      const { state, box } = await replay([subagentCall]);
+
+      handleSubagentStart(
+        { state } as unknown as EventHandlerContext,
+        'sub-call',
+        'explore',
+        'Find the auth middleware',
+      );
+
+      expect(state.chatContainer.children.filter(child => child instanceof SubagentExecutionComponent)).toEqual([box]);
+      expect(state.pendingSubagents.get('sub-call')).toBe(box);
+    });
+
+    it('replays a cancelled one as cancelled', async () => {
+      const { state, rendered } = await replay([subagentCall, cancellation]);
+
+      expect(rendered()).toContain('■ background');
+      expect(rendered()).not.toContain('✓');
+      expect(state.pendingSubagents.has('sub-call')).toBe(false);
+    });
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {
