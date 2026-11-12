@@ -37,6 +37,7 @@ describe('Knowledge scope rows stored under a different declaration than their a
     );
 
     const read = await runtime.readScopeFor(['org:acme']);
+    if (read === 'all') throw new Error('expected a narrowed read scope');
     expect(read.addresses).not.toContain('org:acme:viewer');
     const { pages } = await store.listPages({ read });
     expect(pages.map(page => page.name)).not.toContain('Legacy secret');
