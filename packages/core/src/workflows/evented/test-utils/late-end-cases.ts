@@ -158,6 +158,30 @@ export function describeLateEndCases({
       await expect.poll(() => finishesOf(run.runId, a).length).toBe(2);
     }, 20_000);
 
+    it('ends a time travel to the last step when the workflow saves no running snapshots', async () => {
+      const executions: string[] = [];
+      const workflow = createWorkflow({
+        id: 'finished',
+        inputSchema: Num,
+        outputSchema: Num,
+        options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+      })
+        .then(work('first', async id => void executions.push(id)))
+        .then(work('second', async id => void executions.push(id)))
+        .commit();
+      const a = await startReplica(workflow);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
+
+      const travelled = run.timeTravel({ step: 'second', inputData: { n: 2 } });
+      const outcome = await Promise.race([
+        travelled.then(result => result.status),
+        new Promise(resolve => setTimeout(() => resolve('still waiting'), 5_000)),
+      ]);
+      expect(outcome).toBe('success');
+      expect(executions).toEqual(['first', 'second', 'second']);
+    }, 20_000);
+
     // An outcome check: with the nested step last, the top-level end check alone also keeps the
     // second hand-off from ending the parent again.
     it('continues the parent once when a nested run ends twice', async () => {

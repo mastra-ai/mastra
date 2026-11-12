@@ -1363,6 +1363,10 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext: withoutAuthToken(requestContext),
         });
       }
+    } else if (timeTravel && existingRun) {
+      // The stored run keeps the status it ended with when no running snapshot is saved, and the
+      // end of this time travel would read it as already ended. Only the status is written.
+      await workflowsStore?.updateWorkflowState({ workflowName: workflow.id, runId, opts: { status: 'running' } });
     }
 
     // Keep the captured cursor until the successor records its own input. A crash
