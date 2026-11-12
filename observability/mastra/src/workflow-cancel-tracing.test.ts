@@ -18,6 +18,7 @@ import {
 
 import {
   createOutcomeStep,
+  createConcurrencyFailureFixture,
   expectWorkflowOutcome,
   expectPublicWorkflowError,
   expectNestedWorkflowOutcome,
@@ -29,6 +30,39 @@ import {
 const empty = z.object({});
 
 describe.each(['default', 'evented'] as const)('originating failures across %s retries', engine => {
+  it('counts a concurrency resolver failure before any child starts', async () => {
+    const exporter = new TestExporter();
+    const fixture = createConcurrencyFailureFixture();
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: 'resolver-failure',
+      inputSchema: z.array(empty),
+      outputSchema: z.array(empty),
+    })
+      .foreach(fixture.step, fixture.options)
+      .commit();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { workflow },
+      observability: new Observability({ configs: { default: { serviceName: 'resolver', exporters: [exporter] } } }),
+    });
+    try {
+      if (engine === 'evented') await mastra.startWorkers();
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: [{}] });
+      expect(result.status).toBe('failed');
+      expectPublicWorkflowError(result);
+      const spans = [
+        ...new Map(
+          exporter.getByEventType(TracingEventType.SPAN_ENDED).map(e => [e.exportedSpan.id, e.exportedSpan]),
+        ).values(),
+      ];
+      expect(spans.reduce((sum, span) => sum + (span.errorCount ?? NaN), 0)).toBe(1);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
   it('retains two failed attempts after success when the step rethrows the same Error', async () => {
     const exporter = new TestExporter();
     const failure = new Error('service unavailable');

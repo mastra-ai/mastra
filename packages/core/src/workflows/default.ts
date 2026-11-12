@@ -1388,8 +1388,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           if (result.error) {
             workflowSpan?.error({
               ...workflowTermination(result),
-              // A failed step result is being forwarded, not a new failure in the run itself.
-              origin: 'propagated',
               error: result.error,
               attributes: {
                 status: result.status,

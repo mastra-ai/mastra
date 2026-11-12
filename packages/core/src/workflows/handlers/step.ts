@@ -12,6 +12,7 @@ import {
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
+import { getSpanErrorOrigin, setSpanErrorOrigin } from '../../observability/error-count';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
@@ -325,15 +326,15 @@ export async function executeStep(
       // End the step span with the nested workflow result
       if (stepSpan) {
         if (workflowResult.status === 'failed') {
+          const failure = getErrorFromUnknown(workflowResult.error, { supportSerialization: false });
+          const origin = getSpanErrorOrigin(workflowResult.error);
+          if (origin) setSpanErrorOrigin(failure, origin);
           await engine.errorStepSpan({
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
               ...workflowTermination(workflowResult),
-              // The nested workflow already reported this failure on its own execution.
-              origin: 'propagated',
-              error:
-                workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
+              error: failure,
               attributes: { status: 'failed' },
             },
           });

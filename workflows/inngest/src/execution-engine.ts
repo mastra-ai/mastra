@@ -191,10 +191,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             if (cause.error && !(cause.error instanceof Error)) {
               cause.error = getErrorFromUnknown(cause.error, { serializeStack: false });
             }
+            const { __mastraSpanErrorOrigin: _transportOrigin, ...publicFailure } = cause;
             return {
               ok: false,
               error: {
-                ...cause,
+                ...publicFailure,
                 ...(isNonRetryable && { nonRetryable: true as const }),
               },
             };
@@ -451,9 +452,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const { span, operationId, errorOptions } = params;
     if (!span) return;
 
-    await this.wrapDurableOperation(operationId, async () => {
+    const origin = await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
+      return coreObservability.getSpanErrorOrigin?.(errorOptions.error);
     });
+    // Restore attribution even when the error operation was replayed from its memoized result.
+    if (origin) coreObservability.setSpanErrorOrigin?.(errorOptions.error, origin);
   }
 
   /**
@@ -539,9 +543,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const { span, operationId, errorOptions } = params;
     if (!span) return;
 
-    await this.wrapDurableOperation(operationId, async () => {
+    const origin = await this.wrapDurableOperation(operationId, async () => {
       span.error(errorOptions);
+      return coreObservability.getSpanErrorOrigin?.(errorOptions.error);
     });
+    // Restore attribution even when the error operation was replayed from its memoized result.
+    if (origin) coreObservability.setSpanErrorOrigin?.(errorOptions.error, origin);
   }
 
   /**
@@ -611,6 +618,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     // New invocations return compact output; legacy memoized WorkflowResult
     // envelopes are structural supersets of this parent-facing contract.
     let result: NestedWorkflowResult;
+    let nestedErrorOrigin: ReturnType<typeof coreObservability.getSpanErrorOrigin>;
     let runId: string;
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
@@ -758,7 +766,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object' && 'status' in errorCause && errorCause.status === 'failed') {
-        result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
+        nestedErrorOrigin = coreObservability.getSpanErrorOrigin?.(errorCause);
+        const { __mastraSpanErrorOrigin: _transportOrigin, ...publicResult } = errorCause as Record<string, unknown>;
+        result = publicResult as Extract<NestedWorkflowResult, { status: 'failed' }>;
         runId =
           'runId' in errorCause && typeof errorCause.runId === 'string'
             ? errorCause.runId
@@ -799,7 +809,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             },
           });
 
-          return { executionContext, result: { status: 'failed', error: result?.error, endedAt: Date.now() } };
+          return {
+            executionContext,
+            errorOrigin: nestedErrorOrigin,
+            result: { status: 'failed', error: result?.error, endedAt: Date.now() },
+          };
         } else if (result.status === 'suspended') {
           const suspendedSteps = Object.entries(result.steps).filter(([_stepName, stepResult]) => {
             const stepRes: StepResult<any, any, any, any> = stepResult as StepResult<any, any, any, any>;
@@ -984,6 +998,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     );
 
     Object.assign(executionContext, res.executionContext);
+    if (res.result.status === 'failed' && 'error' in res.result) {
+      const failure = getErrorFromUnknown(res.result.error);
+      if ('errorOrigin' in res && res.errorOrigin) coreObservability.setSpanErrorOrigin?.(failure, res.errorOrigin);
+      res.result.error = failure;
+    }
     return {
       ...res.result,
       startedAt,

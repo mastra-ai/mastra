@@ -15,6 +15,36 @@ export {
   expectedResumeOutcomes,
 } from './workflow-outcome-fixtures';
 
+export function createConcurrencyFailureFixture() {
+  return {
+    step: createStep({
+      id: 'resolver-body',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    }),
+    options: {
+      concurrency: () => {
+        throw new Error('Concurrency resolver failed');
+      },
+    },
+  };
+}
+
+export function createInstrumentedFailureStep() {
+  return createStep({
+    id: 'instrumented-failure',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+    execute: async ({ tracingContext }) => {
+      const child = tracingContext?.currentSpan?.createChildSpan({ name: 'child operation', type: SpanType.TOOL_CALL });
+      const error = new Error('Child operation failed');
+      child?.error({ error });
+      throw error;
+    },
+  });
+}
+
 /** Internal error attribution must not become part of a public workflow response. */
 export function expectPublicWorkflowError(result: { error?: unknown }) {
   expect(result.error).toBeDefined();
