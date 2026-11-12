@@ -22,7 +22,6 @@ Use a custom gateway to connect Mastra to open-weight models, such as gpt-oss, L
 
 - List the models behind your endpoint, so they get typed model IDs and appear in the Studio model picker
 - Resolve credentials on every call, for example to exchange or rotate tokens
-- Report [cost metrics](#model-pricing) for models that models.dev doesn't list
 - [Limit the Studio model picker](#showing-only-custom-gateways-in-studio) to your own models
 
 To call a single endpoint with an OpenAI-compatible API, you don't need a gateway: set `url` in the model config instead. Mastra doesn't read an API key from environment variables for a `url` model, so also set `apiKey` when the endpoint requires authentication. See [Use local models with Mastra](/models#use-local-models-with-mastra).
