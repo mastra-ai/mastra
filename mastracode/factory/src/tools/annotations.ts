@@ -18,6 +18,7 @@ export const FACTORY_TOOL_ANNOTATIONS: Record<string, ToolAnnotations> = {
   factory_list_work_items: { ...read, title: 'List work items' },
   factory_inspect_work_item: { ...read, title: 'Inspect a work item' },
   factory_list_attention: { ...read, title: 'List items that need attention' },
+  factory_list_audit_events: { ...read, title: 'List audit events' },
   factory_create_work_item: { ...additive, title: 'Create a work item' },
   factory_update_work_item: { ...changes, title: 'Update a work item' },
   factory_transition_work_item: { ...changes, title: 'Move a work item to another stage' },

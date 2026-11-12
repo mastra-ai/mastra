@@ -665,6 +665,9 @@ export interface LoopVNextNetworkResponse {
 
 export type McpServerListResponse = GeneratedResponse<'GET /mcp/v0/servers'>;
 
+/** The built-in Mastra MCP server (`server.mcp`) as described by `GET /mcp/builtin`. */
+export type GetBuiltinMcpServerResponse = GeneratedResponse<'GET /mcp/builtin'>;
+
 /** MCP server registry entry plus the transports served under `/mcp/:serverId`. */
 export type McpServerInfo = McpServerListResponse['servers'][number];
 

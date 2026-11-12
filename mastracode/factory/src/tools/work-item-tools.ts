@@ -22,6 +22,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import type { FactoryAuditEmit } from '../work-items/create-work-item.js';
 import {
@@ -30,15 +31,7 @@ import {
   retryFactoryDecision,
 } from '../work-items/decision-actions.js';
 import type { FactoryDecisionActionResult } from '../work-items/decision-actions.js';
-import {
-  MAX_TEXT,
-  findWorkItem,
-  workItemRefSchema,
-  truncate,
-  workItemNotFound,
-  workItemNumber,
-  workItemStage,
-} from './read-tools.js';
+import { MAX_TEXT, findWorkItem, workItemRefSchema, truncate, workItemNotFound, workItemStage } from './read-tools.js';
 import { requirePerson } from './scope.js';
 import type { FactoryToolScope } from './scope.js';
 

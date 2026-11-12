@@ -84,7 +84,7 @@ const MOUSE_CHOICES = [
 ] as const;
 
 function mouseChoice(mouse: { dialogs: boolean; input: boolean }) {
-  return MOUSE_CHOICES.find(c => c.dialogs === mouse.dialogs && c.input === mouse.input)!;
+  return MOUSE_CHOICES.find(c => c.dialogs === mouse.dialogs && c.input === mouse.input) ?? MOUSE_CHOICES[0];
 }
 
 function mouseLabel(mouse: { dialogs: boolean; input: boolean }): string {

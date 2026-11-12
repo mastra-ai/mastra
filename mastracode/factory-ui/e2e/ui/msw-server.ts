@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
+import { boardReadHandlers } from './board-reads';
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -63,6 +64,23 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/sandbox-envs', () => HttpResponse.json({ envs: [], writable: true })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  ...boardReadHandlers,
+  // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/work-items/starters', () =>
+    HttpResponse.json({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 0 },
+      undecided: 0,
+      untriaged: 0,
+      unplannedBugs: 0,
+      stale: 0,
+    }),
+  ),
+  http.get('*/web/factory/projects/:id/work-items/activity', () =>
+    HttpResponse.json({ total: 0, createdAt: [], doneAt: [] }),
+  ),
   http.get('*/web/github/projects/:projectRepositoryId/worktrees', () => HttpResponse.json({ worktrees: [] })),
 );

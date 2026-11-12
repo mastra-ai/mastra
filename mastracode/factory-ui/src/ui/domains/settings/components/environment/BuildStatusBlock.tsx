@@ -1,5 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import type {
@@ -47,9 +48,9 @@ export function BuildStatusBlock({
     <div className="flex flex-col items-end gap-1">
       <div className="flex items-center gap-3">
         {status === undefined ? (
-          <Txt as="span" variant="meta" tone="muted">
-            Loading
-          </Txt>
+          <span role="status" aria-label="Loading build status">
+            <Skeleton aria-hidden className="h-5 w-16 rounded-full motion-reduce:before:animate-none" />
+          </span>
         ) : status ? (
           <span className="flex items-center gap-2">
             <Badge size="sm" variant={status.variant}>

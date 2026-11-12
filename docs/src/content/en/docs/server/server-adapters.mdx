@@ -372,6 +372,8 @@ const server = new MastraServer({
 
 With this prefix, Mastra routes become `/api/v2/agents`, `/api/v2/workflows`, etc. Custom routes you add directly to the app aren't affected by this prefix.
 
+The [built-in MCP server](/docs/server/mcp) moves with the prefix to `/api/v2/mcp`. Its OAuth metadata stays at the server root, at `/.well-known/oauth-protected-resource/api/v2/mcp`.
+
 ## OpenAPI spec
 
 Mastra can generate an OpenAPI specification for all registered routes. This is useful for documentation or client generation, including integration with API tools. Enable it by setting the `openapiPath` option:

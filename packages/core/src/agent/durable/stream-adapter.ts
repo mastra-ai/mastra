@@ -684,12 +684,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       else pendingRejection = error;
     } else {
       // Ordinary durable failures remain deferred error chunks so the stream
-      // closes normally even when no finish event follows.
-      safeEnqueue(controller, {
-        type: 'error',
-        ...(index === undefined ? {} : { index }),
-        payload: { error },
-      } as ChunkType<OUTPUT>);
+      // closes normally even when no finish event follows. A step may already
+      // have streamed a total timeout as a chunk before the run reported the
+      // same timeout, so the caller sees it once. Other errors are never folded.
+      const repeatsStreamedTimeout =
+        error.name === 'MastraTimeoutError' && lastErrorName === error.name && lastErrorMessage === error.message;
+      if (!repeatsStreamedTimeout) {
+        safeEnqueue(controller, {
+          type: 'error',
+          ...(index === undefined ? {} : { index }),
+          payload: { error },
+        } as ChunkType<OUTPUT>);
+      }
       safeClose(controller);
     }
     markTerminated();

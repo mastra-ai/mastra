@@ -1,8 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Switch } from '@mastra/playground-ui/components/Switch';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import {
   useEnvironmentBuildQuery,
@@ -30,7 +29,15 @@ export function EnvironmentSection({ factoryId }: { factoryId: string }) {
       </Notice>
     );
   }
-  if (!environmentQuery.data) return <Skeleton className="h-24 w-full" />;
+  if (!environmentQuery.data) {
+    return (
+      <SettingsSubsection scope="factory" title="Environment">
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading environment" rows={3} />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
 
   return <EnvironmentBlocks key={factoryId} factoryId={factoryId} environment={environmentQuery.data} />;
 }
@@ -39,7 +46,7 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
   const { save, disabled } = useEnvironmentSave(factoryId);
   const canBuild = environment.sandbox.capabilities.builds.available && environment.buildTriggers !== undefined;
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <SettingsSubsection
         scope="factory"
         title="Environment"
@@ -80,15 +87,17 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
           description="The template image built ahead of sessions, and when it rebuilds."
           action={<BuildNow factoryId={factoryId} environment={environment} />}
         >
-          <div className="flex flex-col gap-4">
-            <SettingsContainer>
-              <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
-            </SettingsContainer>
-            {environment.sandbox.capabilities.builds.history && <BuildHistory factoryId={factoryId} />}
-          </div>
+          <SettingsContainer>
+            <BuildTriggersRows triggers={environment.buildTriggers!} disabled={disabled} onSave={save} />
+          </SettingsContainer>
         </SettingsSubsection>
       )}
-    </div>
+      {canBuild && environment.sandbox.capabilities.builds.history && (
+        <SettingsSubsection scope="factory" title="Build history">
+          <BuildHistory factoryId={factoryId} />
+        </SettingsSubsection>
+      )}
+    </>
   );
 }
 

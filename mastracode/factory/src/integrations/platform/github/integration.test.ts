@@ -1575,6 +1575,62 @@ describe('PlatformGithubIntegration', () => {
     });
   });
 
+  it.each([
+    {
+      scenario: 'says Platform withheld a personal install instead of reporting nothing installed',
+      installations: [],
+      expected: { connected: false, reason: 'personal_install_hidden' },
+    },
+    {
+      scenario: 'stays ready when another installation is usable beside the withheld personal one',
+      installations: [
+        { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+      ],
+      expected: { connected: true, reason: 'ready' },
+    },
+  ])('$scenario', async ({ installations, expected }) => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({
+          installations,
+          pendingRequests: [],
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ error: 'Not found' }, 404);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      sandbox: { enabled: true, provider: 'stub' },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject(expected);
+  });
+
   it('defaults the integrations API URL and requires a platform credential', () => {
     vi.stubEnv('MASTRA_INTEGRATIONS_API_URL', '');
     expect(new PlatformGithubIntegration().diagnostics()).toMatchObject({ endpointHost: 'integrations.mastra.ai' });
