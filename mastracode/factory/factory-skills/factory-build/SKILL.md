@@ -28,7 +28,7 @@ The Factory system prompt identifies the **Target repository**. Before the first
 
 ## Phase 1: Find the plan
 
-Use the plan approved in Planning: the plan message in this conversation, or `.artifacts/plans/issue-<number>.md` in the checkout. If neither exists, or the signal shows no approved plan, the card should not be here: move it back to the phase it came from in the signal's `Next phases` (Planning on the default board) with a rationale saying the plan is missing, and stop.
+Use the plan approved in Planning: the plan message in this conversation, or `.artifacts/plans/issue-<number>.md` at the workspace root. If neither exists, or the signal shows no approved plan, the card should not be here: move it back to the phase it came from in the signal's `Next phases` (Planning on the default board) with a rationale saying the plan is missing, and stop.
 
 When the card came back from self-review (the signal shows a last self-review verdict of `request changes`), this round fixes the self-review's required changes: read each one from the signal, confirm it against the code on the work branch, fix the confirmed ones with tests, and note any you disagree with and why. Do not implement the follow-ups, and do not redo work the required changes do not touch.
 

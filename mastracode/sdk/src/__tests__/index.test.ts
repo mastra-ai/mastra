@@ -469,6 +469,12 @@ vi.mock('../providers/xai.js', () => ({
 
 vi.mock('../tools/index.js', () => ({
   defaultTools: {},
+  // Keep the real host tool: it is a plain `createTool` object, and the controller config test
+  // asserts its registered identity rather than its behaviour.
+  createSubmitPlanTool: (options?: { plansDir?: string }) => ({
+    id: 'submit_plan',
+    createSubmitPlanOptions: options,
+  }),
 }));
 
 vi.mock('../schema.js', () => ({
@@ -1058,6 +1064,25 @@ describe('createMastraCode', () => {
     await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
     expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
   });
+
+  it('registers the host submit_plan tool through the controller tools config', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ plansDir: '.artifacts/plans' });
+
+    // The host tool reaches the harness through `controller` tools, the toolset that flattens
+    // after `controllerBuiltIn` and therefore replaces the filesystem-free builtin by name.
+    const controllerTools = controllerConstructorMock.mock.calls[0]![0].tools as Record<string, { id?: string }>;
+    expect(Object.keys(controllerTools)).toEqual(['submit_plan']);
+    expect(controllerTools.submit_plan?.id).toBe('submit_plan');
+    expect(controllerTools.submit_plan).toHaveProperty('createSubmitPlanOptions', { plansDir: '.artifacts/plans' });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toBeUndefined();
+  }, 30_000);
+
+  it('does not register the host submit_plan tool when the builtin is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].tools).toBeUndefined();
+  }, 30_000);
 
   it('removes disabled task tools from the task signal provider', async () => {
     const { TaskSignalProvider } = await import('@mastra/core/signals');

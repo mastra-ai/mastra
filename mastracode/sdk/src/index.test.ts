@@ -195,7 +195,12 @@ vi.mock('./providers/xai.js', () => ({
   setAuthStorage: vi.fn(),
 }));
 
-vi.mock('./tools/index.js', () => ({ defaultTools: {} }));
+vi.mock('./tools/index.js', () => ({
+  defaultTools: {},
+  // `createMastraCode` registers the host submit_plan tool through the controller config, so the
+  // barrel mock has to provide it; the stub only needs the shape the registration reads.
+  createSubmitPlanTool: (options?: { plansDir?: string }) => ({ id: 'submit_plan', createSubmitPlanOptions: options }),
+}));
 vi.mock('./schema.js', () => ({ stateSchema: {} }));
 vi.mock('./tui/theme.js', () => ({ mastra: {} }));
 vi.mock('./utils/gateway-sync.js', () => ({ syncGateways: vi.fn() }));
