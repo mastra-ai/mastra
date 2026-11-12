@@ -3421,6 +3421,34 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
+    // The stored failure already used the last attempt: it is the step's final failure, saved
+    // before its step end was handled. Continue from it instead of running the step again.
+    if (
+      restart &&
+      storedAttempt?.status === 'failed' &&
+      retryCount > (getEntryRetries(leaf) ?? workflow.retryConfig.attempts ?? 0)
+    ) {
+      await this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.step.end',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          prevResult: storedAttempt,
+          activeStepsPath,
+          requestContext,
+          actor,
+          state: currentState,
+          outputOptions,
+        },
+      });
+      return;
+    }
+
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     const nestedWorkflowStep = getEntryWorkflow(leaf);
     const guardStart = this.#guardsStepStart(workflowsStore, args, step);
