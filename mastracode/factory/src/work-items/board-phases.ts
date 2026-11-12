@@ -25,7 +25,7 @@ export type BoardPhasesView = Omit<BoardPhasesQuery, 'cards'>;
 
 export interface BoardPhases {
   /** The answer, without what only the route knows: session states and card bodies. */
-  body: Pick<BoardPhasesResponse, 'phases' | 'item' | 'related' | 'boardTotal' | 'matchingTotal'>;
+  body: Pick<BoardPhasesResponse, 'phases' | 'item' | 'related' | 'relatedTotal' | 'boardTotal' | 'matchingTotal'>;
   /** Every card `body` names: the listed ones, the asked one, then the related ones. */
   named: Card[];
 }
@@ -204,9 +204,17 @@ export function boardPhases(
 
   const relatedTo = relatedCardsIn(list);
   const related = new Set<Card>();
+  const everyRelated = new Set<Card>();
   for (const card of listed) {
+    // One card may be the parent of thousands: each names its first `limit`, and the total counts the rest.
+    let named = 0;
     for (const other of relatedTo(card)) {
-      if (!listed.has(other)) related.add(other);
+      if (listed.has(other)) continue;
+      everyRelated.add(other);
+      if (named < view.limit) {
+        related.add(other);
+        named += 1;
+      }
     }
   }
   return {
@@ -214,6 +222,7 @@ export function boardPhases(
       phases,
       ...(item ? { item: { ...stamp(item), places } } : {}),
       related: [...related].map(stamp),
+      relatedTotal: everyRelated.size,
       boardTotal: index.cards.length,
       matchingTotal,
     },

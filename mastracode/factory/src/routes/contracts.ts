@@ -642,8 +642,13 @@ export const boardPhasesResponseSchema = z.object({
       places: z.array(z.object({ phase: z.string(), position: countSchema })),
     })
     .optional(),
-  /** Cards related to a listed card or to the asked one that no phase lists. */
+  /**
+   * Cards related to a listed card or to the asked one that no phase lists: the first `limit` of
+   * each card's, in the board's order.
+   */
   related: z.array(cardStampSchema),
+  /** How many such cards there are, named in `related` or not. */
+  relatedTotal: countSchema,
   /** Cards of the board, whatever the search and filters. */
   boardTotal: countSchema,
   /** Cards of the board that match the view, each counted once: a card in two phases is one. */

@@ -2436,6 +2436,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "$ref": "#/$defs/__schema1"
           }
         },
+        "relatedTotal": {
+          "$ref": "#/$defs/__schema0"
+        },
         "boardTotal": {
           "$ref": "#/$defs/__schema0"
         },
@@ -2518,6 +2521,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "phases",
         "related",
+        "relatedTotal",
         "boardTotal",
         "matchingTotal",
         "runningSessionIds",

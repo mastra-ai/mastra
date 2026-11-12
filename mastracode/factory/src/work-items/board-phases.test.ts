@@ -97,6 +97,19 @@ describe('boardPhases', () => {
     expect(read(['intake'])).toEqual([['intake', ['moved', 'kept']]]);
   });
 
+  it('names the first `limit` cards related to one listed card, and counts them all', () => {
+    const children = ['c1', 'c2', 'c3', 'c4', 'c5'].map(id =>
+      testCard(id, { board: 'other', parentWorkItemId: 'parent' }),
+    );
+    const list = [testCard('parent'), ...children, testCard('alone')];
+
+    const { body, named } = boardPhases(list, BOARD, view({ limit: '2' }), 'u1', version);
+
+    expect(body.related.map(card => card.id)).toEqual(['c1', 'c2']);
+    expect(body.relatedTotal).toBe(5);
+    expect(named.map(card => card.id)).toEqual(['parent', 'alone', 'c1', 'c2']);
+  });
+
   describe('asked for a card (item)', () => {
     const cardId = (nth: number) => `00000000-0000-4000-8000-${String(nth).padStart(12, '0')}`;
     /** `count` cards of one phase; the lower the number, the longer ago it entered. */
