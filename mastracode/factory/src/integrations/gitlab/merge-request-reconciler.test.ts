@@ -7,7 +7,7 @@ import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { IntegrationContext } from '../base.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId } from './integration.js';
-import { attachGitLabMergeRequestReconciler } from './merge-request-reconciler.js';
+import { attachGitLabMergeRequestReconciler, attachGitLabMergeRequestSync } from './merge-request-reconciler.js';
 import { mergeRequestTargetKey, subscribeToMergeRequest } from './subscriptions.js';
 
 const PROJECT_ID = '101';
@@ -342,5 +342,35 @@ describe('GitLab merge-request reconciler', () => {
       mergeRequestTargetKey({ ...input, changeRequestId: '18' }),
     );
     expect(untouched?.status).toBe('open');
+  });
+});
+
+describe('GitLab merge-request one-card sync', () => {
+  it("writes the merge request's current title and facts to its card without replaying anything", async () => {
+    const seeded = await seedMergeRequestCard({ initialStage: 'review', initialState: 'open' });
+    const getPullRequest = vi.fn<VersionControl['getPullRequest']>().mockResolvedValue({
+      ...closedMergeRequest(false),
+      title: 'Docs: fix the intro',
+      state: 'open',
+      labels: ['area: docs'],
+    });
+    const gitlab = {
+      versionControl: { getPullRequest } as VersionControl,
+      getProjectMemberAccessLevel: vi.fn().mockResolvedValue(40),
+      resolveActiveConnectionForHost: vi.fn().mockImplementation(async (connectionId: string) => connectionId),
+    };
+    const context = {
+      storage: { projects: seeded.seeded.projects, sourceControl: seeded.sourceControl, intake: seeded.seeded.intake },
+      runtime: { configVersion: 'gitlab-test-v1', workItems: seeded.seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const commitRuleEvaluation = vi.spyOn(seeded.seeded.workItems, 'commitRuleEvaluation');
+
+    await attachGitLabMergeRequestSync(gitlab, context)!(seeded.item.item);
+
+    const synced = await seeded.seeded.workItems.get({ orgId: 'org-1', id: seeded.item.item.id });
+    expect(synced?.title).toBe('Docs: fix the intro');
+    expect(synced?.workItem.labels).toEqual(['area: docs']);
+    expect(synced?.stages).toEqual(seeded.item.item.stages);
+    expect(commitRuleEvaluation).not.toHaveBeenCalled();
   });
 });

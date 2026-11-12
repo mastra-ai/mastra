@@ -385,6 +385,7 @@ export function attachGitLabMergeRequestSync(
       id: item.id,
       userId: 'factory-rule-dispatcher',
       patch: {
+        ...(pullRequest.title !== item.title ? { title: pullRequest.title } : {}),
         metadata: {
           gitlabHost: host,
           gitlabProjectId: projectId,
