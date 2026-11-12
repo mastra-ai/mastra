@@ -1,5 +1,17 @@
 # mastra
 
+## 1.39.0-alpha.12
+
+### Patch Changes
+
+- Fixed Factory search (⌘K) refusing to start a listed card with "This card no longer exists" after a more recent card took its place in the results, and its Retry button leaving the failure notice up when the intake had nothing to offer. Search now also lists a card found by its number alone, and an intake item found by its source label. ([#30154](https://github.com/mastra-ai/mastra/pull/30154))
+
+- Factory search (Cmd/Ctrl+K) now shows which phase each work session belongs to, such as **Triage** or **Work**, and marks the session for the card's current phase as **current**. Before, a card's sessions all showed the same title, branch, and issue number, so they looked like duplicates. You can also search by phase name, for example `triage 30123`. ([#30142](https://github.com/mastra-ai/mastra/pull/30142))
+
+- Updated dependencies [[`a0cd52c`](https://github.com/mastra-ai/mastra/commit/a0cd52cdc15c67c5e3d225b90428efde1c15d8a3), [`c1fb13f`](https://github.com/mastra-ai/mastra/commit/c1fb13f325096d244285907d0dd4b0ad35d2cfca), [`6f7eb69`](https://github.com/mastra-ai/mastra/commit/6f7eb696e9c629f5659072947fbed0e09d5e02d3)]:
+  - @mastra/core@1.83.0-alpha.11
+  - @mastra/deployer@1.83.0-alpha.11
+
 ## 1.39.0-alpha.11
 
 ### Patch Changes
