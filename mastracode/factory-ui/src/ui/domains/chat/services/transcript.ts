@@ -630,7 +630,10 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
     const anchorIndex = onScreenIndex.get(message);
     if (anchorIndex === undefined) {
       const unseen = withoutDrawnToolCalls(message, drawnToolCallIds);
-      if (unseen) missing.push(unseen);
+      if (unseen) {
+        missing.push(unseen);
+        for (const toolCallId of toolCallIdsOf(unseen.content.parts)) drawnToolCallIds.add(toolCallId);
+      }
       continue;
     }
 

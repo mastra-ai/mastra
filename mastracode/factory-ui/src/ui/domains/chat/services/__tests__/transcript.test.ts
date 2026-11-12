@@ -1441,7 +1441,8 @@ describe('transcript reducer mergeWindow', () => {
     const window = [
       dbMessage('step-1', 'assistant', [tool('a', 'view')]),
       dbMessage('step-2', 'assistant', [tool('b', 'view'), plan]),
-      dbMessage('step-3', 'assistant', [tool('b', 'view'), { type: 'text', text: 'Final answer' }]),
+      dbMessage('step-3', 'assistant', [plan, { type: 'text', text: 'Final answer' }]),
+      dbMessage('step-4', 'assistant', [tool('b', 'view'), { type: 'text', text: 'Done' }]),
     ];
 
     const next = transcriptReducer(state, { type: 'mergeWindow', messages: window });
@@ -1452,6 +1453,7 @@ describe('transcript reducer mergeWindow', () => {
       const ids = parts.filter(isToolInvocationPart).map(part => part.toolInvocation.toolCallId);
       expect(ids.sort()).toEqual(['a', 'b', 'plan-1']);
       expect(parts).toContainEqual({ type: 'text', text: 'Final answer' });
+      expect(parts).toContainEqual({ type: 'text', text: 'Done' });
     }
   });
 
