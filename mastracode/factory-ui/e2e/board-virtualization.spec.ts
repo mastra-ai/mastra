@@ -135,7 +135,10 @@ test.describe('Factory board virtualization', () => {
               HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/app'] } } }),
             ),
             http.get('*/web/factory/projects/fp-1/intake/candidates', async ({ request }) => {
-              const cursor = new URL(request.url).searchParams.get('cursor') ?? 'first';
+              const query = new URL(request.url).searchParams;
+              // Triage asks for its own labelled list; none of these candidates is auto-triaged.
+              if (query.has('label')) return HttpResponse.json({ candidates: [], passes: [] });
+              const cursor = query.get('cursor') ?? 'first';
               requestedPages.push(cursor);
               if (cursor === 'first') {
                 return HttpResponse.json({ candidates: largeCandidates(30), nextCursor: 'second', passes: [] });
