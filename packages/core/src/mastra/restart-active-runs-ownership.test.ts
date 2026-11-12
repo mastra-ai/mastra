@@ -314,7 +314,8 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     const resuming = resume();
     await resumed.promise;
     expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe('suspended');
-    const restarts = vi.spyOn(child, 'createRun');
+    // A stub, so a restart that slips through fails here instead of blocking on the held step.
+    const restarts = vi.spyOn(child, 'createRun').mockResolvedValue({ restart: async () => {} } as any);
     await other.restartAllActiveWorkflowRuns();
     expect(restarts).not.toHaveBeenCalled();
     restarts.mockRestore();
