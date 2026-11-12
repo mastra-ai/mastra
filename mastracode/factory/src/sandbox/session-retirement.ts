@@ -94,8 +94,8 @@ export class SessionRetirementCoordinator {
   }
 
   async retireSession(input: RetireSessionInput): Promise<void> {
-    await this.#withSessionLock(input.sessionId, () => this.#retireSession(input));
-    factoryMetrics().count('sandbox', 'mastra_factory_sandbox_retired_total');
+    const retired = await this.#withSessionLock(input.sessionId, () => this.#retireSession(input));
+    if (retired) factoryMetrics().count('sandbox', 'mastra_factory_sandbox_retired_total');
   }
 
   /**
@@ -203,9 +203,10 @@ export class SessionRetirementCoordinator {
     );
   }
 
-  async #retireSession(input: RetireSessionInput): Promise<void> {
+  /** Resolves `false` when there was no session to retire. */
+  async #retireSession(input: RetireSessionInput): Promise<boolean> {
     const session = await input.sourceControl.sessions.getBySessionId(input.sessionId);
-    if (!session || session.orgId !== input.orgId) return;
+    if (!session || session.orgId !== input.orgId) return false;
 
     try {
       await this.#teardownSessionSandbox(input, session);
@@ -218,6 +219,7 @@ export class SessionRetirementCoordinator {
         await input.sourceControl.sessions.delete(session.id);
       }
     }
+    return true;
   }
 
   async #teardownSessionSandbox(input: RetireSessionInput, session: SourceControlSession): Promise<void> {

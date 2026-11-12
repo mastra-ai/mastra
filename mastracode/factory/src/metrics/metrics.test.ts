@@ -220,3 +220,69 @@ describe('first-message capture', () => {
     }
   });
 });
+
+describe('session latency', () => {
+  it('records time to first message when the stamping call returns the creation time', async () => {
+    const { observeSessionFirstMessage } = await import('../session/first-message-capture.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sessions'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+    let listener: ((event: never) => void) | undefined;
+    const markFirstMessage = vi.fn().mockResolvedValue(new Date(Date.now() - 1_000));
+    observeSessionFirstMessage(
+      { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) },
+      { sourceControl: { sessions: { markFirstMessage } } },
+    );
+    listener!({ type: 'message_start', message: { role: 'user' } } as never);
+    await vi.waitFor(() => expect(markFirstMessage).toHaveBeenCalled());
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await metrics.tick();
+    metrics.stop();
+    const max = records.find(r => r.name === 'mastra_factory_session_first_message_ms' && r.labels.stat === 'max');
+    expect(max?.value).toBeGreaterThanOrEqual(1_000);
+  });
+
+  it('records time to first exec when the stamping call returns the creation time', async () => {
+    const { observeSessionFirstExec } = await import('../session/first-exec-capture.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sessions'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+    const markFirstMeaningfulExec = vi.fn().mockResolvedValue(new Date(Date.now() - 2_000));
+    let listener: ((event: never) => void) | undefined;
+    observeSessionFirstExec(
+      { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) } as never,
+      { sourceControl: { sessions: { markFirstMeaningfulExec } } },
+    );
+    listener!({ type: 'tool_start', toolCallId: 'c1', toolName: 'view', args: {} } as never);
+    listener!({ type: 'tool_end', toolCallId: 'c1', result: null, isError: false } as never);
+    await vi.waitFor(() =>
+      expect(markFirstMeaningfulExec).toHaveBeenCalledWith({ sessionId: 's1', withCreatedAt: true }),
+    );
+    await new Promise(resolve => setTimeout(resolve, 0));
+    await metrics.tick();
+    metrics.stop();
+    const max = records.find(r => r.name === 'mastra_factory_session_first_exec_ms' && r.labels.stat === 'max');
+    expect(max?.value).toBeGreaterThanOrEqual(2_000);
+  });
+});
+
+describe('sandbox retirement', () => {
+  it('counts a retirement only when there was a session to retire', async () => {
+    const { SessionRetirementCoordinator } = await import('../sandbox/session-retirement.js');
+    const { SourceControlStorageInMemory } = await import('../storage/domains/source-control/inmemory.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sandbox'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+    await new SessionRetirementCoordinator({ sandbox: {} as never }).retireSession({
+      sourceControl: new SourceControlStorageInMemory(),
+      orgId: 'org-1',
+      sessionId: 'missing-session',
+    });
+    await metrics.tick();
+    metrics.stop();
+    expect(records.some(r => r.name === 'mastra_factory_sandbox_retired_total')).toBe(false);
+  });
+});

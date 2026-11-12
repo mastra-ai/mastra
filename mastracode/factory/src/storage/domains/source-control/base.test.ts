@@ -743,6 +743,29 @@ describe('SourceControlStorage', () => {
     await expect(github.sessions.markFirstMeaningfulExec({ sessionId: 'missing-session' })).resolves.toBeUndefined();
   });
 
+  it('returns created_at only from the call that sets a first-activity stamp, when asked', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000005',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-00000000-0000-4000-8000-000000000005',
+      baseBranch: 'main',
+    });
+    const sessionId = session.sessionId;
+
+    await expect(github.sessions.markFirstMessage({ sessionId, withCreatedAt: true })).resolves.toEqual(
+      session.createdAt,
+    );
+    await expect(github.sessions.markFirstMessage({ sessionId, withCreatedAt: true })).resolves.toBeUndefined();
+    // Without withCreatedAt the stamp is set but nothing is read back.
+    await expect(github.sessions.markFirstMeaningfulExec({ sessionId })).resolves.toBeUndefined();
+    expect((await github.sessions.getBySessionId(sessionId))?.firstMeaningfulExecAt).toBeInstanceOf(Date);
+    await expect(github.sessions.markFirstMeaningfulExec({ sessionId, withCreatedAt: true })).resolves.toBeUndefined();
+  });
+
   it('records materialized_at write-once via sessions.markMaterialized', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });
@@ -1683,6 +1706,14 @@ describe('SourceControlStorageInMemory sessions', () => {
       baseBranch: 'main',
     });
     expect(session.materializedAt).toBeNull();
+
+    await expect(
+      store.sessions.markFirstMessage({ sessionId: session.sessionId, withCreatedAt: true }),
+    ).resolves.toEqual(session.createdAt);
+    await expect(
+      store.sessions.markFirstMessage({ sessionId: session.sessionId, withCreatedAt: true }),
+    ).resolves.toBeUndefined();
+    await expect(store.sessions.markFirstMeaningfulExec({ sessionId: session.sessionId })).resolves.toBeUndefined();
 
     await store.sessions.markMaterialized({ id: session.id });
     const first = await store.sessions.getBySessionId(session.sessionId);

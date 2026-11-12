@@ -82,6 +82,44 @@ Dry-run mode is only for pre-cutover databases. Once any split board items exist
 
 During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Legacy claim values remain inert and are not copied into split storage. Avoid simultaneous writes from old and new versions during the cutover.
 
+### Health metrics
+
+Factory can send health metrics through `mastra.metrics` (so through whatever observability exporter the Mastra instance has; on Mastra Platform that's added for you). They're off by default: every record counts towards observability usage, so you turn on only the groups you want.
+
+```ts
+new MastraFactory({
+  // ...
+  metrics: {
+    groups: ['process', 'postgres', 'sandbox'], // or 'all'
+    intervalMs: 60_000, // default 60s, minimum 15s
+    maxRecordsPerMinute: 500, // default 500 per process
+  },
+});
+```
+
+Env vars override the code option:
+
+| Variable                      | Meaning                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `FACTORY_METRICS`             | `all`, `0`/`off` (turns metrics off), or a list such as `sandbox,intake`   |
+| `FACTORY_METRICS_INTERVAL_MS` | How often gauges are sampled and aggregated timings are sent (min 15000)   |
+| `FACTORY_METRICS_MAX_PER_MIN` | Most records sent per minute per process; the rest are dropped and counted |
+
+A group that's off does nothing: no timers, no probes, no connections, no records. Unknown group names are logged once at boot.
+
+| Group      | Series (all prefixed `mastra_factory_`)                                                                                                                                                                                                     |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `process`  | `event_loop_delay_ms{stat}`, `gc_ms{kind}`, `process_memory_bytes{kind=rss\|heap_used\|heap_limit}`, `process_cpu_ratio`, `process_uptime_s`                                                                                                |
+| `postgres` | `db_pool{pool,state}`, `probe_duration_ms` / `probe_failures_total` for `db_<pool>`, `db_sessions{state}`, `db_longest_ms{kind}`; the statements that used the most time are logged every 10 minutes when `pg_stat_statements` is installed |
+| `redis`    | `probe_duration_ms{component=redis}`, `redis_memory_bytes{kind}`, `redis_clients`, `redis_evicted_keys_total`, `redis_stream_backlog{topic,kind}`; only with `RedisStreamsPubSub`                                                           |
+| `sandbox`  | `sandbox_phase_ms{phase,outcome}`, `sandbox_command_ms{step,outcome}`, `sandbox_start_ms{provider,outcome}`, `sandbox_start_failures_total{provider,cause}`, `sandbox_recreated_total{kind}`, `sandbox_retired_total`, `sandboxes_active`   |
+| `sessions` | `session_first_message_ms`, `session_first_exec_ms`                                                                                                                                                                                         |
+| `intake`   | `intake_events_total{source,outcome}`, `intake_replayed_total{source,kind}` (each one is a missed webhook), `intake_sweep_failures_total{source}`, `intake_last_sweep_age_s{source}`                                                        |
+
+Counts and timings are aggregated in the process and sent once per interval: a counter is one record per series, a timing is `stat=count|avg|p95|max` on the same series. Records past the per-minute cap are dropped and counted in `mastra_factory_metrics_dropped_total`. Labels only take values from fixed lists; IDs, paths and repository names are never sent.
+
+Every record has a `service` label read from `MASTRA_WORKERS`: `api` when it's `false`, `worker` when it's set to anything else, `all` when unset. On a split deployment (API plus worker service) the database-wide and Redis-wide stats (`db_sessions`, `db_longest_ms`, slow statements, `redis_memory_bytes`, `redis_clients`, `redis_evicted_keys_total`, `redis_stream_backlog`) run only on `worker`, so they aren't reported twice. `intake_last_sweep_age_s` only advances on the process that ran the sweep, so take the minimum across processes.
+
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
