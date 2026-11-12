@@ -1244,24 +1244,25 @@ A repository maintainer with write or admin access can start a Factory review fr
 
 A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions doing work for someone else, either bound to a work item's run or started as a side session, only get `factory_message_origin`, so they can report back and answer messages.
 
-| Tool                            | Input                                                                                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50) |
-| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
-| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
-| `factory_create_work_item`      | `title`, `description`, optional `repository` (`owner/name`, one this Factory links)                                                            |
-| `factory_update_work_item`      | `workItem` plus any of `title`, `description`, `repository`, `parentWorkItem` (or `null` to detach)                                             |
-| `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
-| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
-| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
-| `factory_retry_decision`        | `decisionId`                                                                                                                                    |
-| `factory_dismiss_decision`      | `decisionId`                                                                                                                                    |
-| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                 |
-| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`; for a work-item role, `workItem` and `role`                               |
-| `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                   |
-| `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                          |
-| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                       |
-| `factory_message_origin`        | `message`, optional `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                    |
+| Tool                            | Input                                                                                                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50)                |
+| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                                   |
+| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                                      |
+| `factory_list_audit_events`     | Optional `actor` (`me`, a user id or `agent:<threadId>`), `includeAgentRuns`, `namespace`, `actions`, `workItem`, `since`, `until`, `cursor`, `limit` (max 50) |
+| `factory_create_work_item`      | `title`, `description`, optional `repository` (`owner/name`, one this Factory links)                                                                           |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `description`, `repository`, `parentWorkItem` (or `null` to detach)                                                            |
+| `factory_subscribe_work_item`   | `workItem`                                                                                                                                                     |
+| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                                     |
+| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                                            |
+| `factory_retry_decision`        | `decisionId`                                                                                                                                                   |
+| `factory_dismiss_decision`      | `decisionId`                                                                                                                                                   |
+| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                                |
+| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`; for a work-item role, `workItem` and `role`                                              |
+| `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                                  |
+| `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                                         |
+| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                                      |
+| `factory_message_origin`        | `message`, optional `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                                   |
 
 Read tools and `factory_message_origin` are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. The one exception is `factory_signal_session`: on those turns it can still message the side sessions this session started and the active sessions of work items it follows, so the session can answer the sessions it is waiting on. None of them asks for approval: they are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
 
