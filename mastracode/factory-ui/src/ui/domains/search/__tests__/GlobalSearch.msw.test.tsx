@@ -704,7 +704,16 @@ describe('Global search', () => {
           source: 'github-pr',
           sourceKey: `github-pr:${pullRequest.number}`,
           url: pullRequest.url,
-          metadata: { number: pullRequest.number },
+          workItem: {
+            provider: 'github',
+            key: null,
+            url: pullRequest.url,
+            title: pullRequest.title,
+            state: 'open',
+            labels: [],
+            author: null,
+            metadata: { number: pullRequest.number },
+          },
         },
       ],
     });
@@ -723,6 +732,40 @@ describe('Global search', () => {
 
     expect(await within(results).findByRole('option', { name: /not started/ })).toHaveTextContent(pullRequest.title);
     expect(within(results).getAllByRole('option')).toHaveLength(1);
+  });
+
+  // Technical: the server matches a card's number whatever its source; the palette then filters the row itself.
+  it('lists a card found by its number alone when it has no key and no GitHub source', async () => {
+    stubSearchApi({
+      workItems: [
+        {
+          ...unstartedCard('numbered-card', 'Rotate the signing keys', '2026-07-01'),
+          source: 'gitlab-issue',
+          sourceKey: 'gitlab-issue:9001',
+          url: 'https://gitlab.com/group/repo/-/issues/9001',
+          workItem: {
+            provider: 'gitlab',
+            key: null,
+            url: 'https://gitlab.com/group/repo/-/issues/9001',
+            title: 'Rotate the signing keys',
+            state: 'opened',
+            labels: [],
+            author: null,
+            metadata: { number: 42 },
+          },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openWithShortcut();
+    const results = within(dialog).getByRole('region', { name: 'Search results' });
+    await within(results).findByText('Rotate the signing keys');
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '42');
+
+    await waitFor(() => expect(within(results).getAllByRole('option')).toHaveLength(1));
+    expect(within(results).getByRole('option', { name: /not started/ })).toHaveTextContent('Rotate the signing keys');
   });
 
   // Technical: only the 20 best candidates are looked up, ranked on the text their rows are filtered on.

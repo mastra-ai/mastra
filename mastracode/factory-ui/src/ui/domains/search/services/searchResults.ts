@@ -156,6 +156,17 @@ export function createSessionSearchGroups(input: {
   };
 }
 
+/**
+ * The card's number as the server's search reads it (`workItemNumber` in `@mastra/factory`): the
+ * source's own, else the one given to a card filed by hand.
+ */
+function searchedNumber(item: WorkItem): string | undefined {
+  const facts = item.workItem?.metadata;
+  const number =
+    facts?.number ?? facts?.githubIssueNumber ?? facts?.githubPullRequestNumber ?? item.metadata.cardNumber;
+  return typeof number === 'number' ? `#${number}` : undefined;
+}
+
 function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInfo | undefined): WorkItemSearchResult {
   const identifier = workItemIdentifier(item);
   const sourceLabel = SOURCE_LABELS[item.source];
@@ -166,7 +177,17 @@ function createWorkItemResult(factoryId: string, item: WorkItem, board: BoardInf
     title: item.title,
     context: [sourceLabel, stage, 'not started'],
     identifier,
-    value: joinValue([item.title, 'work item', sourceLabel, stage, identifier, item.sourceKey]),
+    // Everything the server's search reads is in it, so a row the server matched passes the palette's filter too.
+    value: joinValue([
+      item.title,
+      'work item',
+      sourceLabel,
+      stage,
+      identifier,
+      item.workItem?.key,
+      searchedNumber(item),
+      item.sourceKey,
+    ]),
     path: relationshipPath(item, factoryId),
     updatedAt: item.updatedAt,
     target: { kind: 'work-item', item },
