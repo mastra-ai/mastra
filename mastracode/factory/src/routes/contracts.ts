@@ -480,8 +480,15 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
-    /** The `cursor` of the whole board this reader holds: the answer is then what moved since. */
-    since: z.string().optional(),
+    /**
+     * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
+     * this server did not issue reads as none, and the board answers whole.
+     */
+    since: z
+      .string()
+      .regex(/^\d{1,15}$/)
+      .optional()
+      .catch(undefined),
   })
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
@@ -498,7 +505,11 @@ const workItemListQuerySchema = z
   .refine(query => !(query.source && (query.started || query.scope || query.sessionId)), {
     path: ['source'],
     message: 'Send source without started, scope or sessionId',
-  });
+  })
+  // A narrowed list is not the board a cursor names, so it answers as it does without one.
+  .transform(query =>
+    query.sessionId || query.scope || query.started || query.source ? { ...query, since: undefined } : query,
+  );
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z

@@ -473,7 +473,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
-            since: scope || sessionIds || started || source ? undefined : since,
+            since,
           });
           const board = list.items;
           const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;

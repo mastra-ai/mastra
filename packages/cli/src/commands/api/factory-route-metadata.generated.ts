@@ -3492,7 +3492,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "maxLength": 512
         },
         "__schema7": {
-          "type": "string"
+          "type": "string",
+          "pattern": "^\\d{1,15}$"
         }
       }
     },

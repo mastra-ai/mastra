@@ -2104,7 +2104,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const { items, readFrom } = await this.#listCached(scope.orgId, scope.factoryProjectId);
     if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
     const cursor = String(readFrom);
-    if (!/^\d{1,15}$/.test(scope.since ?? '')) return { items, cursor };
+    if (scope.since === undefined) return { items, cursor };
     // The reader holds this very list.
     if (scope.since === cursor) return { items, cursor, changed: [], removed: [] };
     // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't

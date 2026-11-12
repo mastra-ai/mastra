@@ -2453,6 +2453,20 @@ describe('run activity on the work-item listing', () => {
       const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
       expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
     });
+
+    it('answers a narrowed list as it does without a cursor', async () => {
+      const held = await startRun('session-mine');
+      await startRun('session-other');
+      const { cursor } = await read();
+      later();
+      await json('PATCH', `/web/factory/work-items/${held.id}`, { title: 'Renamed' });
+
+      const narrowed = `${boardPath()}?sessionId=session-mine`;
+      const answer = await buildApp(orgUser).request(`${narrowed}&since=${cursor}`);
+
+      expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
+      expect(await answer.json()).not.toHaveProperty('removedIds');
+    });
   });
 
   describe('one session’s cards (?sessionId=)', () => {
