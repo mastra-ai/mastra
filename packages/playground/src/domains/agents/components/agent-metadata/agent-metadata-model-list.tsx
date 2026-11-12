@@ -153,7 +153,7 @@ const AgentMetadataModelListItem = ({
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
   return (
-    <div className="state-layer rounded-lg bg-sidebar">
+    <div className="rounded-lg bg-sidebar state-layer">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
           <div {...dragHandleProps} className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing">
