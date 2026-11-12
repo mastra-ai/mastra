@@ -151,8 +151,9 @@ describe('dispatcher thread switch credentials', () => {
     await dispatcher.runOnce(now);
 
     const decisions = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    const failures = decisions.filter(d => d.status === 'failed').map(d => d.lastError);
-    expect(failures).toEqual([]);
+    expect(decisions.map(d => ({ status: d.status, lastError: d.lastError }))).toEqual([
+      { status: 'succeeded', lastError: null },
+    ]);
     expect(session.thread.requireId()).toBe(cardThreadId);
     expect(memoryUsers[0]).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });

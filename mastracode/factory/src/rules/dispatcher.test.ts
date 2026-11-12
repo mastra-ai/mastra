@@ -178,7 +178,7 @@ function createSession(
     thread: {
       list: vi.fn(async () => []),
       create: vi.fn(async () => ({ id: threadId })),
-      switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
+      switch: vi.fn(async ({ threadId: next }: { threadId: string; requestContext?: RequestContext }) => {
         threadId = next;
       }),
       getSetting: vi.fn(async ({ key }: { key: string }) => settings[key]),
