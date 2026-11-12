@@ -596,8 +596,23 @@ describe('Agent signals: claimed thread ownership', () => {
       requestContext.set('tenant', 'acme');
       requestContext.setRaw(MASTRA_THREAD_ID_KEY, callerIds.threadId);
       requestContext.setRaw(MASTRA_RESOURCE_ID_KEY, callerIds.resourceId);
-      if (token) requestContext.setRaw(MASTRA_AUTH_TOKEN_KEY, token);
+      if (token) {
+        // The signed-in identity the server auth middleware writes next to the token.
+        requestContext.setRaw(MASTRA_AUTH_TOKEN_KEY, token);
+        requestContext.setRaw('mastra__user', { id: 'sender-user' });
+        requestContext.setRaw('mastra__userRoles', ['admin']);
+        requestContext.setRaw('mastra__userPermissions', ['billing:write']);
+      }
       return requestContext;
+    }
+
+    function identity(context: RequestContext | undefined) {
+      return {
+        token: context?.getRaw(MASTRA_AUTH_TOKEN_KEY),
+        user: context?.getRaw('mastra__user'),
+        roles: context?.getRaw('mastra__userRoles'),
+        permissions: context?.getRaw('mastra__userPermissions'),
+      };
     }
 
     async function wakeClaimedOwner({
@@ -623,7 +638,11 @@ describe('Agent signals: claimed thread ownership', () => {
       const subscription = await ownerRuntime.subscribeToThread(owner.agent, ids, pubsub);
       const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
       const ownerContext = new RequestContext();
-      if (ownerToken) ownerContext.setRaw(MASTRA_AUTH_TOKEN_KEY, ownerToken);
+      if (ownerToken) {
+        ownerContext.setRaw(MASTRA_AUTH_TOKEN_KEY, ownerToken);
+        ownerContext.setRaw('mastra__user', { id: 'owner-user' });
+        ownerContext.setRaw('mastra__userRoles', ['viewer']);
+      }
       const claim = await ownerRuntime.claimThreadOwnership(
         owner.agent,
         {
@@ -674,19 +693,31 @@ describe('Agent signals: claimed thread ownership', () => {
       });
     }
 
-    it("keeps a local owner's own auth token over the caller's", async () => {
+    it("keeps a local owner's own auth token and signed-in user over the caller's", async () => {
       const { owner } = await wakeClaimedOwner({
         remote: false,
         ownerToken: 'owner-token',
         callerToken: 'sender-token',
       });
-      expect(owner.seen.at(-1)?.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('owner-token');
+      // The owner's whole identity replaces the caller's, so a permission only the caller had is gone.
+      expect(identity(owner.seen.at(-1))).toEqual({
+        token: 'owner-token',
+        user: { id: 'owner-user' },
+        roles: ['viewer'],
+        permissions: undefined,
+      });
     });
 
     it("keeps the caller's auth token when a local owner has none", async () => {
       // A dispatcher waking a session for an authenticated caller: the owner has no token of its own.
       const { owner } = await wakeClaimedOwner({ remote: false, callerToken: 'sender-token' });
-      expect(owner.seen.at(-1)?.getRaw(MASTRA_AUTH_TOKEN_KEY)).toBe('sender-token');
+      // The caller's token and user stay together, never mixed with the owner's.
+      expect(identity(owner.seen.at(-1))).toEqual({
+        token: 'sender-token',
+        user: { id: 'sender-user' },
+        roles: ['admin'],
+        permissions: ['billing:write'],
+      });
     });
   });
 

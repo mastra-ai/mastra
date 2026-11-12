@@ -34,7 +34,7 @@ import type { AgentExecutionOptions } from './agent.types';
 import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
-import { restoreRequestContext, snapshotRequestContextEntries } from './request-context-snapshot';
+import { liveRequestEntries, restoreRequestContext, snapshotRequestContextEntries } from './request-context-snapshot';
 import {
   clearRunLeaseFence,
   hasRunningRunStep,
@@ -383,23 +383,32 @@ function snapshotWireRequestContext(requestContext: RequestContext | undefined):
  * The caller's context is returned as-is when nothing differs.
  */
 function claimedOwnerRequestContext(caller: RequestContext, owner: RequestContext | undefined): RequestContext {
-  const ownerToken = owner?.getRaw(MASTRA_AUTH_TOKEN_KEY);
+  // An owner with its own token runs as its own signed-in user: its whole live identity (token,
+  // user, roles, permissions) replaces the caller's, as on the remote path. An owner without one
+  // keeps the caller's whole identity, so the two are never mixed.
+  const ownerHasToken = owner?.getRaw(MASTRA_AUTH_TOKEN_KEY) !== undefined;
+  const ownerLive = ownerHasToken ? liveRequestEntries(owner) : [];
+  const swapLive = ownerHasToken && !sameEntries(liveRequestEntries(caller), ownerLive);
   const replaced = [MASTRA_THREAD_ID_KEY, MASTRA_RESOURCE_ID_KEY]
     .map(key => [key, owner?.getRaw(key)] as const)
     .filter(([key, value]) => caller.getRaw(key) !== value);
-  if (ownerToken !== undefined && caller.getRaw(MASTRA_AUTH_TOKEN_KEY) !== ownerToken) {
-    replaced.push([MASTRA_AUTH_TOKEN_KEY, ownerToken]);
-  }
-  if (replaced.length === 0) return caller;
+  if (!swapLive && replaced.length === 0) return caller;
   // Copy the input form, so a schema-transformed tool view is validated as its inputs again.
+  const source = Object.fromEntries((getRequestContextInputSource(caller) ?? caller).entries());
   const restored: RequestContext = new RequestContext<unknown>(
-    (getRequestContextInputSource(caller) ?? caller).entries(),
+    swapLive ? [...Object.entries(withoutLiveRequestKeys(source)), ...ownerLive] : Object.entries(source),
   );
   for (const [key, value] of replaced) {
     if (value === undefined) restored.deleteRaw(key);
     else restored.setRaw(key, value);
   }
   return restored;
+}
+
+/** Two entry lists hold the same keys with identical values. */
+function sameEntries(a: [string, unknown][], b: [string, unknown][]): boolean {
+  const right = new Map(b);
+  return a.length === b.length && a.every(([key, value]) => right.has(key) && right.get(key) === value);
 }
 
 /** Unions scope lists, dropping duplicates. */
