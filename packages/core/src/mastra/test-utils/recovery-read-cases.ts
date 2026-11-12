@@ -68,8 +68,19 @@ async function countReads(storage: MastraStorage) {
   return { snapshotReads, listings, ownershipReads };
 }
 
-/** `getStorage` is the store the pass reads; it is cleared before each case. */
-export function describeRecoveryReadCases({ getStorage }: { getStorage: () => MastraStorage }) {
+/**
+ * `getStorage` is the store the test writes, cleared before each case.
+ * `connect` opens the store the recovering instance uses, on the same
+ * database: an instance that shuts down closes its store. It defaults to
+ * `getStorage`, for stores that close harmlessly.
+ */
+export function describeRecoveryReadCases({
+  getStorage,
+  connect = getStorage,
+}: {
+  getStorage: () => MastraStorage;
+  connect?: () => MastraStorage | Promise<MastraStorage>;
+}) {
   describe('what a workflow recovery pass reads (#28712)', () => {
     const instances: Mastra[] = [];
     afterEach(async () => {
@@ -110,9 +121,10 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
       const store = (await getStorage().getStore('workflows'))!;
       await store.dangerouslyClearAll();
       const executions: string[] = [];
+      const instanceStorage = await connect();
       const mastra = new Mastra({
         logger: false,
-        storage: getStorage(),
+        storage: instanceStorage,
         workflows: {
           plain: oneStep('plain', 'default', executions),
           evented: oneStep('evented', 'evented', executions),
@@ -139,7 +151,7 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
         await persistRun('child', `child-${i}`, { parent: { workflowId: 'parent', runId: `parent-${i}` } });
       }
 
-      const reads = await countReads(getStorage());
+      const reads = await countReads(instanceStorage);
       await mastra.restartAllActiveWorkflowRuns();
 
       expect(reads.snapshotReads).toEqual([]);
