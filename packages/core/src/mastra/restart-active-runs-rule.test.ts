@@ -226,32 +226,34 @@ describe('workflow recovery rule (#28712)', () => {
     await first;
   }, 10_000);
 
-  it('logs a restart of an evented run whose end already went out without a stored result as failed', async () => {
+  it('rejects a background restart of an evented run whose end already went out without a stored result', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
-    const workflow = createEventedWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
-      .then(reportingStep('evented', 'B', 'work', []))
-      .commit();
-    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
-    const mastra = new Mastra({
-      logger: logger as any,
-      storage,
-      workflows: { 'recovered-wf': workflow },
-      recovery: { workflowGraceMs: 0 },
-    });
-    replicas.push({ mastra });
-    await mastra.startWorkers();
+    const restarts: string[] = [];
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub: recordRestarts(new EventEmitterPubSub(), restarts) });
+    await b.startWorkers();
     // The run's end went out, and the end deleted nothing yet: it still reads running.
     await persistActiveRun(storage, 'ended');
     await store.claimRunOwnership({ runId: runEndedKey('ended'), ownerId: 'other-instance', leaseMs: 60_000 });
 
-    await mastra.restartAllActiveWorkflowRuns();
+    const run = await b.getWorkflow('recovered-wf').createRun({ runId: 'ended' });
+    await expect(run.restartInBackground()).rejects.toThrow();
 
-    expect(logger.error).toHaveBeenCalledWith(
-      'Failed to restart workflow run',
-      expect.objectContaining({ runId: 'ended' }),
-    );
-    expect(logger.debug).not.toHaveBeenCalledWith('Restarted workflow run', expect.anything());
+    expect(restarts).toEqual([]);
+    expect(await statusOf(storage, 'ended')).toBe('running');
+  });
+
+  it('resolves a background restart of an evented run that ended with a stored result to false, without publishing', async () => {
+    const storage = new InMemoryStore();
+    const restarts: string[] = [];
+    const b = startReplica(storage, 'evented', 'B', [], { pubsub: recordRestarts(new EventEmitterPubSub(), restarts) });
+    await b.startWorkers();
+    await persistActiveRun(storage, 'finished', { status: 'success' });
+
+    const run = await b.getWorkflow('recovered-wf').createRun({ runId: 'finished' });
+    await expect(run.restartInBackground()).resolves.toBe(false);
+
+    expect(restarts).toEqual([]);
   });
 
   it('restarts every active run at once in a store without run fencing', async () => {
