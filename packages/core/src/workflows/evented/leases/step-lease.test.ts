@@ -382,7 +382,10 @@ describe('evented step leases (#28712)', () => {
       const store = (await storage.getStore('workflows'))!;
       const list = store.listWorkflowRuns.bind(store);
       vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async args => {
-        listedAt.push(Date.now());
+        // A pass lists each recovered workflow's running and waiting runs: count one listing a pass.
+        if (args?.workflowName === 'child' && args.status === 'running') {
+          listedAt.push(Date.now());
+        }
         return list(args);
       });
       await crash(a, storage, [
