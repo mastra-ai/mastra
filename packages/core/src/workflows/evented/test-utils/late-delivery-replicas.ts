@@ -153,6 +153,18 @@ export function heldQueue(holds: (event: Event) => boolean) {
     }
   }
 
+  /**
+   * Like {@link drain}, but hands every kept event to `replica` at once, and
+   * then the events their handling published, as a broker with several
+   * consumers would.
+   */
+  async function drainConcurrently(replica: { mastra: { handleWorkflowEvent: (event: Event) => Promise<unknown> } }) {
+    while (queue.length > 0) {
+      const results = await Promise.all(queue.splice(0).map(event => replica.mastra.handleWorkflowEvent(event)));
+      expect(results.every(result => (result as { ok?: boolean }).ok)).toBe(true);
+    }
+  }
+
   return {
     intercept,
     queue,
@@ -161,6 +173,7 @@ export function heldQueue(holds: (event: Event) => boolean) {
       all = true;
     },
     drain,
+    drainConcurrently,
   };
 }
 

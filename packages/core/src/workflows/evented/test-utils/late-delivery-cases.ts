@@ -112,8 +112,59 @@ export function describeLateDeliveryCases({
       expect(finishesOf(run.runId, a, b)).toHaveLength(1);
     }, 20_000);
 
-    // An outcome check: the finished-step check and the end check also drop the second join's
-    // events, so it passes without the `joinsBranches` flag too.
+    it('ends a run whose last entry is a parallel once when both branch step ends are handled at once', async () => {
+      const executions: string[] = [];
+      const report: Report = async id => void executions.push(id);
+      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+        .parallel([work('a', report), work('b', report)])
+        .commit();
+      const fromA = heldQueue(
+        event => event.type === 'workflow.step.end' && (samePath(event, [0, 0]) || samePath(event, [0, 1])),
+      );
+      const a = await startReplica(workflow, fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await expect.poll(() => fromA.queue.length).toBe(2);
+
+      fromA.holdAll();
+      await fromA.drainConcurrently(a);
+
+      expect(executions.sort()).toEqual(['a', 'b']);
+      expect((await storedRun(run.runId))?.status).toBe('success');
+      expect(finishesOf(run.runId, a)).toHaveLength(1);
+    }, 20_000);
+
+    it('reports a parallel suspended once when one branch suspends and the other succeeds', async () => {
+      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: z.any() })
+        .parallel([
+          createStep({
+            id: 'approval',
+            inputSchema: Num,
+            outputSchema: Num,
+            execute: async ({ suspend }) => suspend({}),
+          }),
+          work('b', async () => {}),
+        ])
+        .commit();
+      const fromA = heldQueue(
+        event => event.type === 'workflow.step.end' && (samePath(event, [0, 0]) || samePath(event, [0, 1])),
+      );
+      const a = await startReplica(workflow, fromA.intercept);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      startInBackground(run, { n: 1 });
+      await expect.poll(() => fromA.queue.length).toBe(2);
+
+      // The suspended branch's step end comes first, so the finished branch's step end sees both.
+      fromA.queue.sort((left, right) => Number(samePath(right, [0, 0])) - Number(samePath(left, [0, 0])));
+      fromA.holdAll();
+      await fromA.drain(a);
+
+      expect((await storedRun(run.runId))?.status).toBe('suspended');
+      expect(finishesOf(run.runId, a).map(event => event.type)).toEqual(['workflow.suspend']);
+    }, 20_000);
+
+    // An outcome check: the second join of a parallel followed by another step is also dropped by
+    // the finished-step check and the end check.
     it('runs the step after a parallel once when both branches finish before either step end is handled', async () => {
       const executions: string[] = [];
       const report: Report = async id => void executions.push(id);
