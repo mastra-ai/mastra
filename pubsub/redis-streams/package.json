@@ -27,6 +27,8 @@
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d --wait",
     "test": "pnpm check:test && vitest run",
+    "test:stream-harness": "vitest run src/stream-harness",
+    "test:stream-harness:chunks": "vitest run src/stream-harness/grid.chunks.test.ts",
     "check:test": "tsc --project tsconfig.test.json",
     "posttest": "docker compose down",
     "lint": "oxlint --type-aware .",

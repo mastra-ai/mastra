@@ -1,5 +1,11 @@
 import type { Cause, Engine, LayoutName, ReaderName } from './types';
 
+/**
+ * Ticket placeholder for a difference whose ticket hasn't been filed yet.
+ * Every use is listed in `UNFILED_DIFFERENCES` so it can't go unnoticed.
+ */
+export const UNFILED = 'UNFILED';
+
 /** Why a reader differs: the Linear ticket, the cause and the evidence for that cause. */
 export interface Attribution {
   /** Linear ticket, e.g. `COR-1390`. */
@@ -140,13 +146,19 @@ const THREAD_ENDS_AT_TERMINAL: Attribution = {
     `(${MAIN}).`,
 };
 const PLAIN_TRIPWIRE_UNPUBLISHED: Attribution = {
-  ticket: 'COR-1519',
+  ticket: UNFILED,
   cause: 'plain-layer',
   evidence:
     "Plain's input tripwire returns from map-results before the stream step runs " +
     '(agent/workflows/prepare-stream/map-results-step.ts:147), so the run publisher is never written to or closed ' +
     '(agent/agent.ts:9492 only fails it on a failed run): the topic stays empty and observers wait until they time ' +
-    `out. Untracked bug; COR-1519 holds it until it has its own ticket (${MAIN}).`,
+    `out. No ticket covers this (closest, PLTFRM-3226 "Tripwire stream omits finish chunk", is an unverified ` +
+    `finding about trip-wire.ts and doesn't describe the unpublished/unclosed run); new ticket awaiting approval ` +
+    `(${MAIN}).`,
+};
+/** Differences listed with `UNFILED` and the ticket they're waiting for. */
+export const UNFILED_DIFFERENCES = {
+  'plain input tripwire never published or closed': PLAIN_TRIPWIRE_UNPUBLISHED,
 };
 const ROUTE_CLOSES_ON_FINISH: Attribution = {
   ticket: 'COR-1543',

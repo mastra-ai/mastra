@@ -96,10 +96,18 @@ const tools = {
 };
 
 /** Blocks the turn before the model is called when the prompt asks for it. */
+// The processor takes 300ms before tripping, like a moderation call would. A
+// reader in another process decides whether a run it learns about is live by
+// checking the run's thread lease (thread-stream-runtime.ts:6890); a plain run
+// that trips instantly can release the lease before that check and the remote
+// thread subscriber drops the run. That race is a follow-up finding, not what
+// this scenario pins.
 const tripwire = {
   id: 'harness-tripwire',
   processInput: async ({ messages, abort }: any) => {
-    if (JSON.stringify(messages).includes('TRIPWIRE')) abort('blocked by harness');
+    if (!JSON.stringify(messages).includes('TRIPWIRE')) return messages;
+    await new Promise(resolve => setTimeout(resolve, 300));
+    abort('blocked by harness');
     return messages;
   },
 };

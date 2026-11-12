@@ -80,6 +80,16 @@ export const SCENARIOS: Record<string, Scenario> = {
   },
 };
 
+/**
+ * Scenarios by grid file. Each group runs in its own test file
+ * (`grid.<group>.test.ts`) over the full layout × engine grid.
+ */
+export const SCENARIO_GROUPS = {
+  chunks: ['structured-output', 'structured-invalid', 'tool-throws', 'tool-undefined', 'input-tripwire'],
+} as const satisfies Record<string, readonly string[]>;
+export type ScenarioGroup = keyof typeof SCENARIO_GROUPS;
+export const SCENARIO_NAMES: string[] = Object.values(SCENARIO_GROUPS).flat();
+
 export function getScenario(name: string): Scenario {
   const scenario = SCENARIOS[name];
   if (!scenario) throw new Error(`unknown stream-harness scenario: ${name}`);

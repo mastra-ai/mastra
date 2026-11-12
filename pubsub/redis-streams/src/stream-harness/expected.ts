@@ -1,4 +1,5 @@
-import { compareRun } from './compare';
+import { compareRun, diffFrames, judgeCell } from './compare';
+import type { Verdict } from './compare';
 import type { Attribution, Observation } from './known-differences';
 import { BASELINES, OBSERVATIONS } from './known-differences';
 import { READERS, layoutName } from './types';
@@ -114,4 +115,28 @@ export function knownDifferencesFor(cell: Cell): KnownDifference[] {
       evidence: attribution.evidence,
     };
   });
+}
+
+export interface CellCheck {
+  verdict: Verdict;
+  /** Readers whose capture differs from what the observations say they deliver. */
+  drift: { reader: ReaderName; kind: string; detail: string }[];
+}
+
+/**
+ * Judges one captured run. Differences are always computed from the actual
+ * capture (every reader vs its own live stream, every non-plain reader vs
+ * plain's same reader) and must match the listed ones exactly; the listed
+ * ones come from the observations, never from the capture. Differences alone
+ * can't see a change every reader shares (all of plain drifting together), so
+ * each reader is also held to exactly what the observations say it delivers.
+ */
+export function checkCell(cell: Cell, capture: RunCapture, plain?: RunCapture): CellCheck {
+  const verdict = judgeCell(cell, compareRun(cell, capture, plain), knownDifferencesFor(cell));
+  const expected = expectedCapture(cell);
+  const drift = READERS.flatMap(reader => {
+    const diff = diffFrames(expected[reader]!, capture[reader] ?? []);
+    return diff ? [{ reader, ...diff }] : [];
+  });
+  return { verdict, drift };
 }
