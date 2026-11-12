@@ -929,6 +929,33 @@ describe('Global search', () => {
     expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
   });
 
+  // Technical: a server older than `workItemId` ignores it and sends the whole board, which holds the card.
+  it('starts a session on the card clicked when the server sends the whole board whatever is asked', async () => {
+    const cards: WorkItem[] = ['first', 'second', 'third'].map((name, index) => ({
+      ...unstartedCard(`backlog-${name}`, `Backlog chore ${name}`, `2026-07-0${3 - index}`),
+      board: 'custom',
+      metadata: { repository: 'mastra-ai/mastra' },
+    }));
+    stubSearchApi({ workItems: cards, serverNarrowsBySessionOnly: true });
+    const starts: unknown[] = [];
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+        starts.push(await request.json());
+        return HttpResponse.json({ threadId: 'thread-search' });
+      }),
+    );
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const search = await openWithShortcut();
+
+    await user.click(await within(search).findByText('Backlog chore third'));
+
+    await waitFor(() =>
+      expect(starts).toEqual([expect.objectContaining({ workItem: expect.objectContaining({ id: 'backlog-third' }) })]),
+    );
+    expect(screen.queryByText(/no longer exists/)).not.toBeInTheDocument();
+  });
+
   it('says a listed card was deleted since, and starts nothing on it', async () => {
     const cards: WorkItem[] = [
       {
