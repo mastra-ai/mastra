@@ -1030,6 +1030,51 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
   });
 
+  it('fills a gap between anchors when an answered suspension prompt disappears', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+        dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+      ],
+    });
+    const withPrompt = {
+      ...onScreen,
+      entries: [
+        onScreen.entries[0],
+        {
+          kind: 'suspension' as const,
+          id: 'suspension-ask-1',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Continue?' },
+          suspendPayload: {},
+        },
+        onScreen.entries[1],
+      ],
+    };
+    const refreshed = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'result' as const,
+            toolCallId: 'ask-1',
+            toolName: 'ask_user',
+            args: { question: 'Continue?' },
+            result: 'yes',
+          },
+        },
+        { type: 'text' as const, text: 'second' },
+      ]),
+      dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+    ];
+
+    const next = transcriptReducer(withPrompt, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
+  });
+
   it('keeps the streaming entry for a message the window also carries', () => {
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {

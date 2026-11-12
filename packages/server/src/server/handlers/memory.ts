@@ -56,6 +56,7 @@ import {
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { assertStoredAgentAccess } from './agent-access';
 
 import { handleError } from './error';
 import {
@@ -79,7 +80,7 @@ interface MemoryContext extends Context {
   agentId?: string;
   resourceId?: string;
   threadId?: string;
-  requestContext?: RequestContext;
+  requestContext: RequestContext;
 }
 
 /**
@@ -249,6 +250,7 @@ async function getMemoryFromContext({
 }): Promise<MastraMemory | null | undefined> {
   const logger = mastra.getLogger();
   let agent;
+  let fromStore = false;
   if (agentId) {
     try {
       agent = mastra.getAgentById(agentId);
@@ -262,6 +264,7 @@ async function getMemoryFromContext({
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -285,18 +288,24 @@ async function getMemoryFromContext({
         }
       }
     }
+  }
 
-    if (!agent) {
-      if (allowMissingAgent) {
-        logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
-        return null;
-      }
-      throw new HTTPException(404, { message: 'Agent not found' });
+  // Sub-agents (`SubAgent`) have no raw config and are never stored agents; everything else is checked. A hidden
+  // agent takes the missing-agent path, so the response can't reveal that the id exists.
+  if (agent && 'toRawConfig' in agent && !canReadAgent(agent, agentId!, requestContext, fromStore)) {
+    agent = undefined;
+  }
+
+  if (agentId && !agent) {
+    if (allowMissingAgent) {
+      logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
+      return null;
     }
+    throw new HTTPException(404, { message: 'Agent not found' });
   }
 
   if (agent) {
-    return await agent?.getMemory({
+    return await agent.getMemory({
       requestContext,
     });
   }
@@ -353,12 +362,14 @@ async function getAgentFromContext({
   }
 
   // Then try stored agents
+  let fromStore = false;
   if (!agent) {
     logger.debug('Agent not found in registered agents, trying stored agents', { agentId });
     try {
       const storedAgent = (await mastra.getEditor()?.agent.getById(agentId)) ?? null;
       if (storedAgent) {
         agent = storedAgent;
+        fromStore = true;
       }
     } catch (error) {
       logger.debug('Error getting stored agent', error);
@@ -385,7 +396,27 @@ async function getAgentFromContext({
     }
   }
 
+  // A hidden agent is reported as missing, so the response can't reveal that the id exists.
+  if (agent && !canReadAgent(agent, agentId, requestContext, fromStore)) {
+    return null;
+  }
   return agent;
+}
+
+/** Whether the caller may read the agent; a denied stored agent is handled exactly like a missing one. */
+function canReadAgent(
+  agent: Pick<Agent, 'source' | 'toRawConfig'>,
+  agentId: string,
+  requestContext: RequestContext,
+  fromStore: boolean,
+): boolean {
+  try {
+    assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read', fromStore });
+    return true;
+  } catch (error) {
+    if (error instanceof HTTPException && error.status === 404) return false;
+    throw error;
+  }
 }
 
 /**

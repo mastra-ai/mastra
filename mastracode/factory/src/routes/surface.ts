@@ -122,6 +122,8 @@ export interface FactoryApiRoutesDeps {
   sandbox?: FactorySandbox;
   /** Push hand-off for environment builds, present when the sandbox can build templates. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+  /** Saved-environment hand-off for environment builds, present when the sandbox can build templates. */
+  onEnvironmentSaved?: (projectId: string) => void;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -913,7 +915,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
-    ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
+    ...(sourceControls.length === 0
+      ? []
+      : buildSourceControlSettingsRoutes({
+          auth: deps.auth,
+          sourceControls,
+          ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
+        })),
     ...providerRoutes,
     ...absentStubs,
     ...slackAbsentStubs,

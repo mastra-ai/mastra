@@ -1,14 +1,7 @@
-import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import {
-  checkRouteFGA,
-  getEffectivePermission,
-  isZodError,
-  MASTRA_AUTH_MODE_KEY,
-  SERVER_ROUTES,
-} from '@mastra/server/server-adapter';
+import { checkRouteFGA, checkRouteRBAC, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
 import { BadRequestException, ForbiddenException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 
@@ -313,19 +306,9 @@ export class RouteHandlerService {
   async enforceRoutePermission(route: ServerRoute, requestContext: RequestContext): Promise<void> {
     if (this.options.auth?.enabled === false) return;
 
-    const studio = this.mastra.getStudio?.();
-    const server = this.mastra.getServer();
-    if (!studio?.auth && !server?.auth) return;
-
-    const rbacProvider =
-      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' ? (studio?.rbac ?? server?.rbac) : server?.rbac;
-    const requiredPermission = rbacProvider ? getEffectivePermission(route) : null;
-    if (requiredPermission) {
-      const required = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
-      const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-      if (!userPermissions || !required.some(permission => hasPermission(userPermissions, permission))) {
-        throw new ForbiddenException(`Missing required permission: ${required.join(' or ')}`);
-      }
+    const permissionError = checkRouteRBAC(this.mastra, route, requestContext);
+    if (permissionError) {
+      throw new ForbiddenException(permissionError.message);
     }
   }
 

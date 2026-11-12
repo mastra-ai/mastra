@@ -12,7 +12,6 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -23,7 +22,7 @@ import {
 } from '../../../../hooks/usePlatformConnections';
 import { MASTRA_PLATFORM_URL, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
-import { IntegrationLabel } from './IntegrationLabel';
+import { IntegrationItem } from './IntegrationItem';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 
 const platformIcons = {
@@ -152,10 +151,9 @@ export function ProviderConnectControl({
   );
 }
 
-export function PlatformLabel({ provider }: { provider: PlatformConnectProviderId }) {
-  return (
-    <IntegrationLabel provider={platformIcons[provider]} name={PLATFORM_CONNECT_PROVIDERS[provider].displayName} />
-  );
+/** The integration icon and name `IntegrationItem` takes for a Platform provider. */
+export function platformIntegration(provider: PlatformConnectProviderId) {
+  return { provider: platformIcons[provider], name: PLATFORM_CONNECT_PROVIDERS[provider].displayName };
 }
 
 export function PlatformConnectButton({ provider }: { provider: PlatformConnectProviderId }) {
@@ -216,13 +214,13 @@ export function PlatformConnectionActions({
 
 export function AddPlatformAccountRow({ provider }: { provider: PlatformConnectProviderId }) {
   return (
-    <SettingsRow label={<PlatformLabel provider={provider} />} description="Another account">
+    <IntegrationItem {...platformIntegration(provider)} description="Another account">
       <ProviderConnectControl
         provider={provider}
         label={`Connect another ${PLATFORM_CONNECT_PROVIDERS[provider].displayName} account`}
         buttonLabel="Connect"
         icon={<Link2 />}
       />
-    </SettingsRow>
+    </IntegrationItem>
   );
 }

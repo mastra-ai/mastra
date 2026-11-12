@@ -1,5 +1,56 @@
 # @mastra/factory
 
+## 0.28.0-alpha.14
+
+### Minor Changes
+
+- A card's sandbox now stops as soon as the card is done with that context, instead of idling until the provider times it out. ([#29981](https://github.com/mastra-ai/mastra/pull/29981))
+
+  - When a card moves out of the last phase of a context into a phase that runs in another one, Factory stops that context's sandbox. Triage → Planning stops the triage sandbox; Planning → Building keeps the shared `work` sandbox running. A run still in flight on the session keeps its sandbox until it ends.
+  - When a card finishes, Factory stops every sandbox it holds, from any Factory process, by identity through the configured sandbox provider. Before, only the process that had opened a sandbox stopped it.
+  - A card that comes back to a context resumes the same sandbox with its files.
+
+  Stopping never fails the move. Sandboxes are stopped, not destroyed; deleting a session still destroys its sandbox.
+
+- Added two read routes that answer what the new session page shows without sending a project's cards. ([#30097](https://github.com/mastra-ai/mastra/pull/30097))
+
+  `GET /web/factory/projects/:id/work-items/starters` counts the cards behind each starter on the project's default board, such as the cards whose run failed, the pull requests awaiting review and the cards not yet triaged.
+
+  `GET /web/factory/projects/:id/work-items/activity?since=<instant>` returns how many cards the project has, and when cards were created and completed since that instant. `since` is required and must be an ISO date-time such as `2026-06-01T00:00:00.000Z`. The answer carries an `ETag`, so asking again for the same `since` with `If-None-Match` returns a 304 with no body when nothing changed.
+
+### Patch Changes
+
+- Fixed environment templates that could stop rebuilding for good. When a build start was never recorded and the sandbox provider can't list its builds (Mastra Platform), every later Build now, schedule and push run used to skip with `unresolved` forever. Factory now treats that start as failed 30 minutes after its lease lapsed and the next trigger builds. ([#30148](https://github.com/mastra-ai/mastra/pull/30148))
+
+  Saving a change to a template input (setup commands, the working directory, settings, environment repositories, source-control connections or Build variables) now rebuilds the template once the project has one, so new sandboxes stop rerunning setup on every boot. Saves that change nothing don't build, and a change saved during any build, scheduled ones included, is built when that build ends.
+
+- Factory sessions and MCP clients can now read the Factory's audit trail with `factory_list_audit_events`: who did what to which work item, run, branch or setting, and when. Filter by actor (`me`, a user id, or an agent, optionally with the agent runs a person started), namespace or exact actions, work item and time range, and page back with a cursor. The tool only returns this Factory's events and never returns request context (IP address, user agent), actor emails or event metadata beyond who started an agent run. It leaves out events from or about other people's private sessions. ([#30165](https://github.com/mastra-ai/mastra/pull/30165))
+
+- Added a "Join the issue's card instead" switch to intake routes in the Factory UI. A route for pull requests that close an issue can now put the pull request on that issue's card instead of giving it a card of its own; until now only the route Factory seeds could do this. The switch shows on new and saved routes whose conditions include "Source kind is Pull request" and "Pull request closes an issue is Yes". ([#30197](https://github.com/mastra-ai/mastra/pull/30197))
+
+- Updated dependencies [[`56f654f`](https://github.com/mastra-ai/mastra/commit/56f654fc0d17ce3e81ff9a9b9563cde2b7c9d417), [`f071044`](https://github.com/mastra-ai/mastra/commit/f0710446e02325f645e1e1023261092657ca30d4), [`72abae6`](https://github.com/mastra-ai/mastra/commit/72abae68ebfb90362bd9c9390768d5feb7a809ab), [`987566e`](https://github.com/mastra-ai/mastra/commit/987566e88240ab94581fdaaf34dfdd9a099ad232)]:
+  - @mastra/core@1.83.0-alpha.12
+  - @mastra/code-sdk@1.19.0-alpha.14
+  - @mastra/mcp@2.9.0-alpha.4
+
+## 0.28.0-alpha.13
+
+### Minor Changes
+
+- Added a `workItemId` filter to the work-item list route for reading cards by id without listing the whole board. ([#30154](https://github.com/mastra-ai/mastra/pull/30154))
+
+  `GET /web/factory/projects/:id/work-items?workItemId=<id>` lists the cards with the given ids and no other. `workItemId` can be repeated, up to 100 times. An id no card has is left out, so asking for a deleted card answers 200 with an empty list. It cannot be combined with `source`, `started`, `sessionId` or `scope`.
+
+  ```bash
+  curl "$FACTORY_URL/web/factory/projects/$PROJECT_ID/work-items?workItemId=$CARD_ID"
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a0cd52c`](https://github.com/mastra-ai/mastra/commit/a0cd52cdc15c67c5e3d225b90428efde1c15d8a3), [`c1fb13f`](https://github.com/mastra-ai/mastra/commit/c1fb13f325096d244285907d0dd4b0ad35d2cfca), [`6f7eb69`](https://github.com/mastra-ai/mastra/commit/6f7eb696e9c629f5659072947fbed0e09d5e02d3)]:
+  - @mastra/core@1.83.0-alpha.11
+  - @mastra/code-sdk@1.19.0-alpha.13
+
 ## 0.28.0-alpha.12
 
 ### Minor Changes

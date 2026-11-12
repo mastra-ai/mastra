@@ -47,15 +47,24 @@ const CARDS_URL = 'GET /web/factory/projects/factory-1/work-items';
 // A page that shows the board shares that one read with the sidebar; any other asks only for the cards holding a session.
 const THE_BOARD = [CARDS_URL];
 const WITH_SESSIONS = [`${CARDS_URL}?scope=sessions`];
+// A draft also asks the server for what its starters count and when cards came in and shipped, from a week back.
+const WITH_SESSIONS_AND_COUNTS = [...WITH_SESSIONS, `${CARDS_URL}/starters`, `${CARDS_URL}/activity?since=`];
+
+// A draft offers starters and activity only once it has a model to start a session with.
+const USABLE_MODEL = [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }];
 
 function renderApp(
   path: string,
   {
     listed = linkedFactory,
     projects = () => HttpResponse.json({ projects: [listed] }),
-  }: { listed?: typeof linkedFactory; projects?: Parameters<typeof http.get>[1] } = {},
+    models = [],
+  }: { listed?: typeof linkedFactory; projects?: Parameters<typeof http.get>[1]; models?: typeof USABLE_MODEL } = {},
 ) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({ models, fallbackModelId: models[0]?.id ?? null }),
+    ),
     http.get(PROJECTS_URL, projects),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, () =>
       HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
@@ -91,7 +100,9 @@ function recordRequests() {
   let signInAnswered = false;
   const listener = ({ request }: { request: Request }) => {
     const { pathname, search } = new URL(request.url);
-    requests.push({ url: `${request.method} ${pathname}${search}`, afterSignIn: signInAnswered });
+    // `since` is the moment the read was sent, so a re-read differs only by it: recorded without its value.
+    const query = search.replace(/([?&]since=)[^&]*/, '$1');
+    requests.push({ url: `${request.method} ${pathname}${query}`, afterSignIn: signInAnswered });
   };
   server.events.on('request:start', listener);
   onTestFinished(() => server.events.removeListener('request:start', listener));
@@ -123,7 +134,12 @@ describe('Opening Factory', () => {
     { page: 'a custom board', path: '/factories/factory-1/boards/release', cards: THE_BOARD },
     { page: 'Rules', path: '/factories/factory-1/rules?group=failed', cards: WITH_SESSIONS },
     { page: 'a new session', path: '/factories/factory-1/new', cards: WITH_SESSIONS },
-    { page: 'a draft session', path: '/factories/factory-1/user/new/draft-1', cards: THE_BOARD },
+    {
+      page: 'a draft session',
+      path: '/factories/factory-1/user/new/draft-1',
+      models: USABLE_MODEL,
+      cards: WITH_SESSIONS_AND_COUNTS,
+    },
     { page: 'Settings', path: '/factories/factory-1/settings/preferences', cards: [] },
     {
       page: 'Work before a repository is linked',
@@ -131,7 +147,7 @@ describe('Opening Factory', () => {
       listed: emptyFactory,
       cards: THE_BOARD,
     },
-  ])('loads everything $page needs during the sign-in check, once each', async ({ path, listed, cards }) => {
+  ])('loads everything $page needs during the sign-in check, once each', async ({ path, listed, models, cards }) => {
     const { requests, markSignInAnswered } = recordRequests();
     let finishSignInCheck = () => {};
     const signInCheck = new Promise<void>(resolve => {
@@ -145,7 +161,7 @@ describe('Opening Factory', () => {
         return HttpResponse.json(signedIn);
       }),
     );
-    const { client } = renderApp(path, { listed });
+    const { client } = renderApp(path, { listed, models });
 
     // Everything the loaders started has answered; only the sign-in check is left.
     await waitFor(() => expect(client.isFetching()).toBe(1));
@@ -170,7 +186,9 @@ describe('Opening Factory', () => {
       [...new Set(sent)].filter(url => sent.filter(other => other === url).length > timesNeeded(url)),
       'requests sent more often than the page needs',
     ).toEqual([]);
-    expect([...new Set(sent.filter(url => url.startsWith(CARDS_URL)))], 'card lists the page asks for').toEqual(cards);
+    expect([...new Set(sent.filter(url => url.startsWith(CARDS_URL)))], 'what the page asks about the cards').toEqual(
+      cards,
+    );
     const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
     expect(unread, 'queries started for the page but never read by it').toEqual([]);
   });

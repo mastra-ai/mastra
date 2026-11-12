@@ -70,7 +70,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
     <SettingsContainer>
       <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
         <Select value={selectedValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
-          <SelectTrigger size="sm" aria-label={row.picker} className="w-64">
+          <SelectTrigger size="sm" aria-label={row.picker}>
             {voiceModelLabel(models, selected) ?? AUTO_LABEL}
           </SelectTrigger>
           <SelectContent>
