@@ -3564,7 +3564,7 @@ type Shared_Type_62 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3703,7 +3703,7 @@ type Shared_Type_64 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;

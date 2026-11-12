@@ -129,6 +129,14 @@ const serializedErrorSchema = z.object({
   name: z.string(),
   message: z.string(),
   stack: z.string().optional(),
+  __mastraSpanErrorOrigin: z
+    .object({
+      traceId: z.string(),
+      spanId: z.string(),
+      occurrenceId: z.string(),
+      attemptId: z.string().optional(),
+    })
+    .optional(),
 });
 
 const durableToolCallOutputSchema = durableToolCallInputSchema.extend({

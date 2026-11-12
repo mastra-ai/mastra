@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
+import { setSpanErrorAttemptResolver } from './error-count';
 import type { AnySpan } from './types';
 import { setCurrentSpanResolver, setExecuteWithContext, setExecuteWithContextSync } from './utils';
 
@@ -9,6 +10,14 @@ import { setCurrentSpanResolver, setExecuteWithContext, setExecuteWithContextSyn
  * being passed it explicitly.
  */
 const spanContextStorage = new AsyncLocalStorage<AnySpan>();
+const errorAttemptStorage = new AsyncLocalStorage<string>();
+
+/** @internal An actual retry gets a new scope; durable replay uses the same scope. */
+export function withSpanErrorAttempt<T>(attemptId: string, fn: () => T): T {
+  // Register at the call boundary so standalone workflow execution works without Mastra initialization.
+  setSpanErrorAttemptResolver(() => errorAttemptStorage.getStore());
+  return errorAttemptStorage.run(attemptId, fn);
+}
 
 /**
  * Returns the current span from AsyncLocalStorage, if one is active.
