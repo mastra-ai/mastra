@@ -326,11 +326,10 @@ export class MessageHistory implements Processor {
 
     await policy?.authorize(threadId, resourceId);
     const responseIds = new Set(newOutput.map(message => message.id));
-    const previous = policy?.trackUndo
-      ? (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages
-      : [];
+    const trackUndo = policy && policy.memoryStorage !== this.storage;
+    const previous = trackUndo ? (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages : [];
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-    if (policy?.trackUndo)
+    if (trackUndo)
       policy.undo.push(async () => {
         const saved = (await this.storage.listMessagesById({ messageIds: [...responseIds] })).messages.filter(
           message => message.threadId === threadId,

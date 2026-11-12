@@ -3777,13 +3777,19 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      const preparationRequestContext: RequestContext =
+        options?.requestContext ?? snapshotRequestContext ?? new RequestContext();
+      if (workflowInput.state?.explicitMemoryContext) {
+        preparationRequestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+      }
+
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
         [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
-        requestContext: options?.requestContext ?? snapshotRequestContext,
+        requestContext: preparationRequestContext,
         memory,
         // Restore the original run's flag from the persisted snapshot so a
         // cross-process resume still returns scoringData; caller override wins.

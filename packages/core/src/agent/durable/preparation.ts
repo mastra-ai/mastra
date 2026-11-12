@@ -524,18 +524,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Setting the context first keeps read (inject) and write (tool) in sync.
   const memory = await typedAgent.getMemory({ requestContext });
   const memoryConfig = execOptions?.memory?.options;
-  const explicitContext = !memory
-    ? (requestContext.get('MastraMemory') as
-        | { thread?: { id?: string }; resourceId?: string; memoryConfig?: MemoryConfig }
-        | undefined)
-    : undefined;
-  const explicitMemoryContext = explicitContext?.thread?.id
-    ? {
-        thread: { id: explicitContext.thread.id },
-        resourceId: explicitContext.resourceId,
-        memoryConfig: explicitContext.memoryConfig,
-      }
-    : undefined;
   const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
   const authorizeMemory = (permission: MastraFGAPermissionInput) =>
     authorizeDurableMemory(memoryAuthorizationChecks, {
@@ -732,6 +720,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }
     }
   }
+
+  const explicitContext = !memory
+    ? (requestContext.get('MastraMemory') as
+        | { thread?: { id?: string }; resourceId?: string; memoryConfig?: MemoryConfig }
+        | undefined)
+    : undefined;
+  const explicitMemoryContext = explicitContext?.thread?.id
+    ? {
+        thread: { id: explicitContext.thread.id },
+        resourceId: explicitContext.resourceId,
+        memoryConfig: explicitContext.memoryConfig,
+      }
+    : undefined;
 
   // Snapshot the request context AFTER input processors have run so their
   // writes reach the durable run (#23904) — cross-process engines rebuild the

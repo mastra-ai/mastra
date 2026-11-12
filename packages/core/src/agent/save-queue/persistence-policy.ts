@@ -1,8 +1,9 @@
+import type { MemoryStorage } from '../../storage';
 import type { MessageList } from '../message-list';
 
 interface PersistencePolicy {
   readOnly: boolean;
-  trackUndo: boolean;
+  memoryStorage?: MemoryStorage;
   authorize: (threadId: string, resourceId?: string) => Promise<void>;
   undo: Array<() => Promise<void>>;
 }
