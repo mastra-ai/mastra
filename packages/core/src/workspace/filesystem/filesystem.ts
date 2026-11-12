@@ -249,6 +249,18 @@ export interface WorkspaceFilesystem extends FilesystemLifecycle<FilesystemInfo>
   readonly basePath?: string;
 
   /**
+   * Absolute directory inside the sandbox that shell commands should default to.
+   *
+   * Sandbox-backed filesystems whose paths resolve against a single root implement
+   * this so `execute_command` and the file tools resolve relative paths against the
+   * same directory. Leave it undefined (or absent) when the filesystem is not
+   * sandbox-backed, when `basePath` is a host path rather than a sandbox path, or
+   * when it has several roots (mounts); commands then keep the sandbox's own default
+   * working directory.
+   */
+  getCommandCwd?(): Promise<string | undefined>;
+
+  /**
    * Icon identifier for UI display.
    * Used by CompositeFilesystem to show different icons for mount points.
    */
