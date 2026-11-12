@@ -4,7 +4,7 @@
 
 Fixed AgentController sessions pausing every tool call for approval and running a step's tool calls one at a time. Fixes #30131.
 
-- Tools the session's permission rules allow now run without pausing the run. Only calls that need approval wait on an approval prompt, and `deny` calls are still declined.
+- Calls to tools the session's permission rules allow no longer pause the run. Only calls that need approval wait on an approval prompt, and `deny` calls are still declined.
 - Tool calls in one step run at the same time when none of them needs approval or can suspend. Durable agents still run them one at a time unless the session's `yolo` state is on.
 - Answering `ask_user` no longer turns off approval for the rest of the run.
 - Runs on a thread the session no longer has open use that thread's permission rules. `session.resolveToolApproval(toolName, scope)` accepts a run's `RequestContext` as `scope` for this.
@@ -23,4 +23,4 @@ toolCategoryResolver: toolName => (toolName === 'delete_project' ? 'execute' : n
 toolCategoryResolver: toolName => (toolName === 'delete_project' ? 'execute' : 'other')
 ```
 
-Allowed tools no longer emit `tool-call-approval` and `tool-call-resumed` chunks or store an approval on the tool part, matching runs with `yolo` on.
+Allowed tools no longer emit `tool-call-approval` and `tool-call-resumed` chunks or store an approval on the tool part. Runs with `yolo` on already behaved this way.

@@ -285,7 +285,7 @@ const controller = new AgentController({
 })
 ```
 
-Tools the rules allow run without pausing the run. On a regular `Agent`, tool calls in one step run at the same time when none of them needs approval or can suspend. Durable agents run them one at a time unless the session's `yolo` state is on.
+Calls to tools the rules allow don't pause the run. On a regular `Agent`, tool calls in one step run at the same time when none of them needs approval or can suspend. Durable agents run them one at a time unless the session's `yolo` state is on.
 
 Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
 

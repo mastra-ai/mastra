@@ -1088,8 +1088,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
     }
     // Permission rules belong to each thread. A woken thread the session isn't
-    // holding is judged by its own rules, falling back to the initial rules as
-    // core does, never by the rules of the thread that happens to be open.
+    // holding is judged by its own saved rules. Without saved rules it uses the
+    // initial rules, as core does for a thread it opens.
     if (session.thread.getId() !== threadId) {
       baseState.permissionRules = (metadata?.permissionRules as MastraCodeState['permissionRules'] | undefined) ??
         config?.initialState?.permissionRules ?? { categories: {}, tools: {} };
