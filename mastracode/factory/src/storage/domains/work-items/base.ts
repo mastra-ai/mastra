@@ -36,12 +36,13 @@ import {
 import type { BoardScope } from './board-version.js';
 import {
   candidateCreatedAt,
+  findCandidate,
   listCandidates,
   removeCandidate,
   storeCandidate,
   trackCandidateWrites,
 } from './candidates.js';
-import type { CandidateInput, CandidateWrite } from './candidates.js';
+import type { CandidateInput, CandidateRows, CandidateVersion, CandidateWrite } from './candidates.js';
 import { Cards, externalSourceOf, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
@@ -1334,6 +1335,19 @@ export interface IntakeCandidate {
   createdAt: Date;
 }
 
+function toIntakeCandidate({ source, work }: CandidateRows): IntakeCandidate {
+  return {
+    workItemId: work.id,
+    orgId: work.org_id,
+    factoryProjectId: work.factory_project_id,
+    title: work.title,
+    description: work.description,
+    externalSource: externalSourceOf(source)!,
+    source: toSource(source),
+    createdAt: candidateCreatedAt(source),
+  };
+}
+
 export interface IntakeCandidatePage {
   candidates: IntakeCandidate[];
   /** Pass as `after` to read the next page; `null` on the last one. */
@@ -2402,8 +2416,30 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Stop offering a record as intake, e.g. once its provider closed it. Returns whether it was a candidate. */
+  /**
+   * Stop offering a record as intake, e.g. once its provider closed it. Returns whether it was a
+   * candidate. With `expected`, only the candidate the caller read is removed: one stored or
+   * changed since stays.
+   */
   async removeIntakeCandidate({
+    orgId,
+    factoryProjectId,
+    source,
+    expected,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    source: ExternalWorkItemSource;
+    expected?: CandidateVersion;
+  }): Promise<boolean> {
+    if (this.#legacyMode) return false;
+    return this.#withTransaction((_ops, candidates) =>
+      removeCandidate(candidates, { orgId, factoryProjectId }, source, expected),
+    );
+  }
+
+  /** The candidate stored for a record right now, or `null` when it has none. */
+  async getIntakeCandidate({
     orgId,
     factoryProjectId,
     source,
@@ -2411,11 +2447,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId: string;
     factoryProjectId: string;
     source: ExternalWorkItemSource;
-  }): Promise<boolean> {
-    if (this.#legacyMode) return false;
-    return this.#withTransaction((_ops, candidates) =>
-      removeCandidate(candidates, { orgId, factoryProjectId }, source),
-    );
+  }): Promise<IntakeCandidate | null> {
+    if (this.#legacyMode) return null;
+    const rows = await findCandidate(this.#db, { orgId, factoryProjectId }, source);
+    return rows && toIntakeCandidate(rows);
   }
 
   /** One page of a project's intake candidates, newest record first. Reads no card. */
@@ -2444,16 +2479,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       limit,
     });
     return {
-      candidates: page.candidates.map(({ source, work }) => ({
-        workItemId: work.id,
-        orgId: work.org_id,
-        factoryProjectId: work.factory_project_id,
-        title: work.title,
-        description: work.description,
-        externalSource: externalSourceOf(source)!,
-        source: toSource(source),
-        createdAt: candidateCreatedAt(source),
-      })),
+      candidates: page.candidates.map(toIntakeCandidate),
       next: page.next,
     };
   }

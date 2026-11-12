@@ -27,10 +27,25 @@ export interface CandidateInput {
   metadata: Record<string, unknown> | null;
   /** When the provider created the record; the list shows the newest first. */
   createdAt?: Date | null;
+  /**
+   * What the caller read of this record before it decided to store it: the candidate it found, or
+   * `null` for none. When the stored record is no longer that, nothing is written. Left out by a
+   * caller that holds the newest fact, as an event does.
+   */
+  expected?: CandidateVersion | null;
 }
 
-/** `carded`: the record already has a card, so nothing was stored. */
-export type CandidateWrite = 'created' | 'updated' | 'unchanged' | 'carded';
+/** One stored state of a candidate. A candidate removed and stored again has another id. */
+export interface CandidateVersion {
+  id: string;
+  revision: number;
+}
+
+/**
+ * `carded`: the record already has a card, so nothing was stored. `stale`: the record was stored,
+ * changed or removed since the caller read it, so nothing was stored either.
+ */
+export type CandidateWrite = 'created' | 'updated' | 'unchanged' | 'carded' | 'stale';
 
 export interface CandidateRows {
   source: WorkItemSourceDbRecord;
@@ -117,8 +132,10 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
   const scope = { org_id: input.orgId, factory_project_id: input.factoryProjectId };
   const where = { ...scope, provider: facts.provider, external_id: facts.externalId };
   const now = new Date();
+  const { expected } = input;
   const existing = await ops.findOne<WorkItemSourceDbRecord>(SOURCES, where);
   if (!existing) {
+    if (expected) return 'stale';
     const id = randomUUID();
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, {
       ...scope,
@@ -155,6 +172,7 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
     return 'created';
   }
   if (existing.candidate !== true) return 'carded';
+  if (expected !== undefined && existing.id !== expected?.id) return 'stale';
 
   const next = {
     url: facts.url,
@@ -165,12 +183,17 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
     metadata: facts.metadata,
   };
   let changed = false;
+  let stale = false;
   let renamed: Pick<WorkItemDbRecord, 'title' | 'description'> | undefined;
   // The marker is part of the filter: a candidate filed since the read above is a card now.
   const source = await ops.updateAtomic<WorkItemSourceDbRecord>(
     SOURCES,
     { id: existing.id, candidate: true },
     async current => {
+      if (expected && current.revision !== expected.revision) {
+        stale = true;
+        return null;
+      }
       // Read under the source's lock, which every candidate write takes before the work item.
       const work = await ops.findOne<WorkItemDbRecord>(WORK_ITEMS, { id: current.work_item_id });
       if (!work) throw new Error(`Candidate source ${current.id} has no work item ${current.work_item_id}.`);
@@ -186,7 +209,8 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
       return { ...next, revision: current.revision + 1, synced_at: now, updated_at: now };
     },
   );
-  if (!source) return (await ops.findOne(SOURCES, where)) ? 'carded' : 'unchanged';
+  if (stale) return 'stale';
+  if (!source) return (await ops.findOne(SOURCES, where)) ? 'carded' : expected ? 'stale' : 'unchanged';
   if (renamed) {
     const { title, description } = renamed;
     await ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: source.work_item_id }, current => ({
@@ -199,19 +223,36 @@ export async function storeCandidate(ops: FactoryStorageOps, input: CandidateInp
   return changed ? 'updated' : 'unchanged';
 }
 
-/** Drop a record from the candidates, e.g. once the provider closed it. A record with a card is untouched. */
+/**
+ * Drop a record from the candidates, e.g. once the provider closed it. A record with a card is
+ * untouched, and so is a candidate that is no longer the `expected` one the caller read.
+ */
 export function removeCandidate(
   ops: FactoryStorageOps,
   scope: { orgId: string; factoryProjectId: string },
   source: ExternalWorkItemSource,
+  expected?: CandidateVersion,
 ): Promise<boolean> {
-  return removeCandidateOf(ops, sourceWhere(scope, source));
+  return removeCandidateOf(ops, sourceWhere(scope, source), expected);
+}
+
+/** The candidate stored for a record, or `null` when it has none: no row, or a card. */
+export async function findCandidate(
+  ops: FactoryStorageOps,
+  scope: { orgId: string; factoryProjectId: string },
+  source: ExternalWorkItemSource,
+): Promise<CandidateRows | null> {
+  const stored = await ops.findOne<WorkItemSourceDbRecord>(SOURCES, { ...sourceWhere(scope, source), candidate: true });
+  const work = stored && (await ops.findOne<WorkItemDbRecord>(WORK_ITEMS, { id: stored.work_item_id }));
+  // A candidate removed between the two reads has no work item left.
+  return work ? { source: stored, work } : null;
 }
 
 /** {@link removeCandidate} for a record named by its source columns. */
 export async function removeCandidateOf(
   ops: FactoryStorageOps,
   source: Pick<WorkItemSourceDbRecord, 'org_id' | 'factory_project_id' | 'provider' | 'external_id'>,
+  expected?: CandidateVersion,
 ): Promise<boolean> {
   const where = {
     org_id: source.org_id,
@@ -221,8 +262,15 @@ export async function removeCandidateOf(
     candidate: true,
   };
   const existing = await ops.findOne<WorkItemSourceDbRecord>(SOURCES, where);
+  if (!existing || (expected && existing.id !== expected.id)) return false;
   // The marker is part of the delete: a candidate filed since the read keeps both of its rows.
-  if (!existing || (await ops.deleteMany(SOURCES, { ...where, id: existing.id })) === 0) return false;
+  // So is the expected revision: one written since the caller's read stays.
+  const removed = await ops.deleteMany(SOURCES, {
+    ...where,
+    id: existing.id,
+    ...(expected ? { revision: expected.revision } : {}),
+  });
+  if (removed === 0) return false;
   await ops.deleteMany(WORK_ITEMS, { id: existing.work_item_id });
   return true;
 }

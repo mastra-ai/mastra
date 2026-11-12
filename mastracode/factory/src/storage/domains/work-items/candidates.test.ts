@@ -167,6 +167,113 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake candidat
     expect(board).not.toHaveBeenCalled();
   });
 
+  describe('for a writer that names the candidate it read', () => {
+    const versionOf = (candidate: { source: { id: string; revision: number } }) => ({
+      id: candidate.source.id,
+      revision: candidate.source.revision,
+    });
+
+    it('stores nothing once the candidate was removed, changed, or removed and stored again', async () => {
+      const { workItems, scope, offer, candidates } = await setup();
+      const store = (number: number, expected: { id: string; revision: number } | null, title: string) =>
+        workItems.storeIntakeCandidate({
+          ...scope,
+          source: issue(number),
+          title,
+          metadata: { state: 'open' },
+          expected,
+        });
+      await offer(issue(1), { state: 'open' }, 'Removed since');
+      await offer(issue(2), { state: 'open' }, 'Changed since');
+      await offer(issue(3), { state: 'open' }, 'Stored again since');
+      const read = new Map((await candidates()).map(candidate => [candidate.title, versionOf(candidate)]));
+
+      await workItems.removeIntakeCandidate({ ...scope, source: issue(1) });
+      await offer(issue(2), { state: 'open' }, 'Changed by an event');
+      await workItems.removeIntakeCandidate({ ...scope, source: issue(3) });
+      await offer(issue(3), { state: 'open' }, 'Stored again by an event');
+
+      expect(await store(1, read.get('Removed since')!, 'From the listing')).toBe('stale');
+      expect(await store(2, read.get('Changed since')!, 'From the listing')).toBe('stale');
+      expect(await store(3, read.get('Stored again since')!, 'From the listing')).toBe('stale');
+      expect((await candidates()).map(candidate => candidate.title).sort()).toEqual([
+        'Changed by an event',
+        'Stored again by an event',
+      ]);
+    });
+
+    it('stores nothing over a candidate it did not read, and stores one where there is still none', async () => {
+      const { workItems, scope, offer, candidates } = await setup();
+      const unread = (number: number) =>
+        workItems.storeIntakeCandidate({
+          ...scope,
+          source: issue(number),
+          title: 'From the listing',
+          metadata: { state: 'open' },
+          expected: null,
+        });
+      await offer(issue(1), { state: 'open' }, 'Stored by an event');
+
+      expect(await unread(1)).toBe('stale');
+      expect(await unread(2)).toBe('created');
+
+      expect((await candidates()).map(candidate => candidate.title).sort()).toEqual([
+        'From the listing',
+        'Stored by an event',
+      ]);
+    });
+
+    it('refreshes the candidate it read while that is still the one stored', async () => {
+      const { workItems, scope, offer, candidates } = await setup();
+      await offer(issue(1), { state: 'open' }, 'Login fails');
+      const [read] = await candidates();
+
+      expect(
+        await workItems.storeIntakeCandidate({
+          ...scope,
+          source: issue(1),
+          title: 'Login fails on Safari',
+          metadata: { state: 'open' },
+          expected: versionOf(read!),
+        }),
+      ).toBe('updated');
+
+      expect((await candidates()).map(candidate => candidate.title)).toEqual(['Login fails on Safari']);
+    });
+
+    it('removes only the candidate it read', async () => {
+      const { workItems, scope, offer, candidates } = await setup();
+      await offer(issue(1), { state: 'open' }, 'Changed since');
+      await offer(issue(2), { state: 'open' }, 'Stored again since');
+      await offer(issue(3), { state: 'open' }, 'Untouched');
+      const read = new Map((await candidates()).map(candidate => [candidate.title, versionOf(candidate)]));
+
+      await offer(issue(1), { state: 'open' }, 'Changed by an event');
+      await workItems.removeIntakeCandidate({ ...scope, source: issue(2) });
+      await offer(issue(2), { state: 'open' }, 'Stored again by an event');
+      const remove = (number: number, title: string) =>
+        workItems.removeIntakeCandidate({ ...scope, source: issue(number), expected: read.get(title)! });
+
+      expect(await remove(1, 'Changed since')).toBe(false);
+      expect(await remove(2, 'Stored again since')).toBe(false);
+      expect(await remove(3, 'Untouched')).toBe(true);
+      expect((await candidates()).map(candidate => candidate.title).sort()).toEqual([
+        'Changed by an event',
+        'Stored again by an event',
+      ]);
+    });
+
+    it('reads the candidate of one record, and none for a record with a card', async () => {
+      const { workItems, scope, offer, file } = await setup();
+      await offer(issue(1), { state: 'open' }, 'Offered');
+      await file(issue(2), { state: 'open' });
+
+      expect(await workItems.getIntakeCandidate({ ...scope, source: issue(1) })).toMatchObject({ title: 'Offered' });
+      expect(await workItems.getIntakeCandidate({ ...scope, source: issue(2) })).toBeNull();
+      expect(await workItems.getIntakeCandidate({ ...scope, source: issue(3) })).toBeNull();
+    });
+  });
+
   it('files a candidate as a card on the same work item', async () => {
     const { offer, file, candidates, cards, sourceRows, boardVersion, announcements } = await setup();
     await offer(issue(1), { state: 'open', labels: ['bug'], author: 'reporter' });

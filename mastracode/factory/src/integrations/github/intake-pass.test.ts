@@ -376,6 +376,85 @@ describe('a GitHub event and the Intake candidates', () => {
   });
 });
 
+describe('a GitHub event that lands while a pass is listing', () => {
+  /** GitHub answers the listing with what was open when it was asked, and the event arrives before the answer does. */
+  const duringTheListing = (t: Awaited<ReturnType<typeof setup>>, event: ParsedGithubWebhook) =>
+    t.github.intake.listIssues.mockImplementationOnce(async () => {
+      const answer = { issues: [...t.open.issues], nextCursor: null };
+      await t.event(event);
+      return answer;
+    });
+
+  it('keeps the issue an opened event stored, which the listing was read too early to hold', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    await t.pass();
+    duringTheListing(t, issueEvent('opened', 42));
+
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 0 });
+
+    const offered = await t.candidates();
+    expect(offered.map(candidate => candidate.title)).toEqual(['Issue 42', 'Issue 1']);
+    await t.fileProposedCards();
+    const [card, ...others] = await t.cards();
+    expect(others).toEqual([]);
+    expect(card?.workItem.id).toBe(offered[0]!.workItemId);
+  });
+
+  it('does not hand the rules a second time an issue the event stored and the listing holds too', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(42, AFTER_LINK)];
+    duringTheListing(t, issueEvent('opened', 42));
+
+    expect(await t.pass()).toMatchObject({ failed: 0, offered: 0, stored: 0 });
+
+    expect(t.offered).toHaveBeenCalledTimes(1);
+    expect(await t.candidates()).toHaveLength(1);
+  });
+
+  it('does not offer again the issue a closed event removed, which the listing still holds', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK), listedIssue(42, AFTER_LINK)];
+    await t.pass();
+    expect(t.offered).toHaveBeenCalledTimes(1);
+    duringTheListing(t, issueEvent('closed', 42));
+
+    expect(await t.pass()).toMatchObject({ failed: 0, offered: 0, stored: 0 });
+
+    expect((await t.candidates()).map(candidate => candidate.title)).toEqual(['Issue 1']);
+    // The closed event went through the rules; the pass handed them nothing more.
+    expect(t.offered).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not store again a closed issue the listing holds with a change', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    await t.pass();
+    t.open.issues = [listedIssue(1, BEFORE_LINK, { labels: ['bug'] })];
+    duringTheListing(t, issueEvent('closed', 1, BEFORE_LINK));
+
+    expect(await t.pass()).toMatchObject({ failed: 0, stored: 0 });
+
+    expect(await t.candidates()).toEqual([]);
+  });
+
+  it('leaves the issue an event closed and opened again, which the listing was read in between to lack', async () => {
+    const t = await setup();
+    t.open.issues = [listedIssue(1, BEFORE_LINK)];
+    await t.pass();
+    t.open.issues = [];
+    t.github.intake.listIssues.mockImplementationOnce(async () => {
+      await t.event(issueEvent('closed', 1, BEFORE_LINK));
+      await t.event({ ...issueEvent('opened', 1, BEFORE_LINK), deliveryId: 'delivery-reopened-1' });
+      return { issues: [], nextCursor: null };
+    });
+
+    expect(await t.pass()).toMatchObject({ failed: 0, removed: 0 });
+
+    expect((await t.candidates()).map(candidate => candidate.title)).toEqual(['Issue 1']);
+  });
+});
+
 describe('the repositories an organization takes issues from', () => {
   it('offers no issue of a linked repository nobody picked as an issue source, and still its pull requests', async () => {
     const t = await setup();

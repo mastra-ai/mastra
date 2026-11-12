@@ -38,7 +38,12 @@ export interface IntakeSettleSummary {
 
 export type CandidateStore = Pick<
   WorkItemsStorage,
-  'listShared' | 'getByProjectSource' | 'listIntakeCandidates' | 'storeIntakeCandidate' | 'removeIntakeCandidate'
+  | 'listShared'
+  | 'getByProjectSource'
+  | 'listIntakeCandidates'
+  | 'getIntakeCandidate'
+  | 'storeIntakeCandidate'
+  | 'removeIntakeCandidate'
 >;
 
 export interface IntakeListing<T> {
@@ -47,10 +52,6 @@ export interface IntakeListing<T> {
   factoryProjectId: string;
   integrationId: string;
   kind: IntakeKind;
-  /** The provider's open records, as listed. */
-  items: readonly T[];
-  /** Whether the listing was read to the end; only then are candidates it lacks removed. */
-  complete: boolean;
   record(item: T): IntakeRecord;
   /** Names a card may hold the record under, beyond its source id (an older id format, a stable provider id). */
   itemKeys?(item: T): readonly string[];
@@ -63,6 +64,17 @@ export interface IntakeListing<T> {
   offer(items: T[]): Promise<unknown>;
   /** The listed records that have a card, for a provider whose cards the listing keeps current. */
   refresh?(items: T[]): Promise<unknown>;
+}
+
+/** A project's candidates being brought in line with one listing of a provider's open records. */
+export interface IntakeSettlement<T> {
+  /** Settle one page of the listing, as soon as the provider has answered it. */
+  page(items: readonly T[]): Promise<void>;
+  /**
+   * End the listing. `complete` says it was read to the end; only then are the candidates it
+   * lacks removed.
+   */
+  finish(complete: boolean): Promise<IntakeSettleSummary>;
 }
 
 async function storedCandidates(listing: IntakeListing<never>): Promise<Map<string, IntakeCandidate>> {
@@ -85,72 +97,97 @@ async function storedCandidates(listing: IntakeListing<never>): Promise<Map<stri
   }
 }
 
+const versionOf = (candidate: IntakeCandidate) => ({ id: candidate.source.id, revision: candidate.source.revision });
+
 /**
- * Bring a project's candidates in line with one listing of a provider's open records. A record
- * with a card is left to the card's own sync, a candidate is refreshed, and a record seen for the
- * first time goes to the rules once when it is eligible: whatever they do not file is kept as a
- * candidate, which is what stops the next pass offering it again.
+ * Start bringing a project's candidates in line with a listing of a provider's open records. Call
+ * this before the first page is asked for: the candidates read here are all the listing may change
+ * or remove. An event that lands while the provider is being listed knows more than the listing
+ * does, so what it stored, changed or removed since is left as the event left it.
+ *
+ * A record with a card is left to the card's own sync, a candidate is refreshed, and a record seen
+ * for the first time goes to the rules once when it is eligible: whatever they do not file is kept
+ * as a candidate, which is what stops the next pass offering it again.
  */
-export async function settleIntakeListing<T>(listing: IntakeListing<T>): Promise<IntakeSettleSummary> {
+export async function openIntakeSettlement<T>(listing: IntakeListing<T>): Promise<IntakeSettlement<T>> {
   const { storage, orgId, factoryProjectId } = listing;
+  const project = { orgId, factoryProjectId };
   const summary: IntakeSettleSummary = { offered: 0, stored: 0, removed: 0 };
-  const stored = await storedCandidates(listing as IntakeListing<never>);
-  if (listing.items.length === 0 && stored.size === 0) return summary;
+  const known = await storedCandidates(listing as IntakeListing<never>);
+  const seen = new Set<string>();
 
-  const carded = new Set<string>();
-  for (const card of await storage.listShared({ orgId, factoryProjectId })) {
-    if (card.externalSource?.integrationId !== listing.integrationId) continue;
-    carded.add(card.externalSource.externalId);
-    for (const key of listing.cardKeys?.(card) ?? []) carded.add(key);
-  }
+  let cards: Promise<Set<string>> | undefined;
+  const carded = () =>
+    (cards ??= storage.listShared(project).then(listed => {
+      const keys = new Set<string>();
+      for (const card of listed) {
+        if (card.externalSource?.integrationId !== listing.integrationId) continue;
+        keys.add(card.externalSource.externalId);
+        for (const key of listing.cardKeys?.(card) ?? []) keys.add(key);
+      }
+      return keys;
+    }));
 
-  const store = async (record: IntakeRecord) => {
-    const written = await storage.storeIntakeCandidate({ orgId, factoryProjectId, ...record });
+  const store = async (record: IntakeRecord, expected: ReturnType<typeof versionOf> | null) => {
+    const written = await storage.storeIntakeCandidate({ ...project, ...record, expected });
     if (written === 'created' || written === 'updated') summary.stored += 1;
   };
 
-  const seen = new Set<string>();
-  const fresh: T[] = [];
-  const held: T[] = [];
-  for (const item of listing.items) {
-    const record = listing.record(item);
-    const id = record.source.externalId;
-    if (seen.has(id)) continue;
-    seen.add(id);
-    if (carded.has(id) || listing.itemKeys?.(item).some(key => carded.has(key))) {
-      held.push(item);
-      continue;
-    }
-    const candidate = stored.get(id);
-    // Nothing is written for a candidate the provider has not changed, which is most of them.
-    if (candidate && candidateIsCurrent(candidate, record)) continue;
-    if (candidate || !listing.eligible(item)) {
-      await store(record);
-      continue;
-    }
-    // A pull request attached to an issue's card is held by that card and is never a candidate.
-    if (await storage.getByProjectSource({ orgId, factoryProjectId, source: record.source })) continue;
-    fresh.push(item);
-  }
-
-  if (held.length > 0) await listing.refresh?.(held);
-  if (fresh.length > 0) {
-    await listing.offer(fresh);
-    summary.offered = fresh.length;
-    // Stored whatever the rules decided: a record they take is filed by a later decision, and the
-    // card adopts its candidate then. One already filed has a card, and storing it is a no-op.
-    for (const item of fresh) await store(listing.record(item));
-  }
-
-  if (listing.complete) {
-    for (const [id, candidate] of stored) {
-      if (seen.has(id)) continue;
-      if (await storage.removeIntakeCandidate({ orgId, factoryProjectId, source: candidate.externalSource })) {
-        summary.removed += 1;
+  return {
+    async page(items) {
+      if (items.length === 0) return;
+      const held: T[] = [];
+      const fresh: T[] = [];
+      const keys = await carded();
+      for (const item of items) {
+        const record = listing.record(item);
+        const id = record.source.externalId;
+        if (seen.has(id)) continue;
+        seen.add(id);
+        if (keys.has(id) || listing.itemKeys?.(item).some(key => keys.has(key))) {
+          held.push(item);
+          continue;
+        }
+        const candidate = known.get(id);
+        if (candidate) {
+          // Nothing is written for a candidate the provider has not changed, which is most of them.
+          if (!candidateIsCurrent(candidate, record)) await store(record, versionOf(candidate));
+          continue;
+        }
+        if (!listing.eligible(item)) {
+          await store(record, null);
+          continue;
+        }
+        // A pull request attached to an issue's card is held by that card and is never a candidate.
+        if (await storage.getByProjectSource({ ...project, source: record.source })) continue;
+        // Stored since the listing began: by an event, whose rules have had the record already.
+        if (await storage.getIntakeCandidate({ ...project, source: record.source })) continue;
+        fresh.push(item);
       }
-    }
-  }
-  return summary;
+
+      if (held.length > 0) await listing.refresh?.(held);
+      if (fresh.length > 0) {
+        await listing.offer(fresh);
+        summary.offered += fresh.length;
+        // Stored whatever the rules decided: a record they take is filed by a later decision, and the
+        // card adopts its candidate then. One already filed has a card, and storing it is a no-op.
+        for (const item of fresh) await store(listing.record(item), null);
+      }
+    },
+    async finish(complete) {
+      if (!complete) return summary;
+      for (const [id, candidate] of known) {
+        if (seen.has(id)) continue;
+        const removed = await storage.removeIntakeCandidate({
+          ...project,
+          source: candidate.externalSource,
+          expected: versionOf(candidate),
+        });
+        if (removed) summary.removed += 1;
+      }
+      return summary;
+    },
+  };
 }
 
 /** What the last pass over one project's records of a provider came to. */
@@ -330,32 +367,14 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
           if (sources.size === 0 && !status) continue;
           summary.projects += 1;
 
-          const items: T[] = [];
-          const imported = new Set<T>();
-          let complete = sources.size === 0;
-          let cursor: string | undefined;
-          for (let page = 0; org && sources.size > 0 && page < INTAKE_PASS_MAX_PAGES; page += 1) {
-            const listed = await org.list(factoryProjectId, [...sources.keys()], cursor);
-            for (const item of listed.items) {
-              items.push(item);
-              if (page < INTAKE_IMPORT_MAX_PAGES) imported.add(item);
-            }
-            if (listed.nextCursor === null) {
-              complete = true;
-              break;
-            }
-            cursor = listed.nextCursor;
-          }
-
           const boundAt = (sourceId: string) => sources.get(sourceId)?.toISOString();
-          const settled = await settleIntakeListing<T>({
+          const imported = new Set<T>();
+          const settlement = await openIntakeSettlement<T>({
             storage,
             orgId,
             factoryProjectId,
             integrationId,
             kind,
-            items,
-            complete,
             record: options.record,
             itemKeys: options.itemKeys,
             cardKeys: options.cardKeys,
@@ -374,6 +393,22 @@ export function createIntakePass<T>(options: IntakePassOptions<T>): IntakePass {
             },
             offer: fresh => options.offer({ orgId, factoryProjectId }, fresh),
           });
+
+          let complete = sources.size === 0;
+          let cursor: string | undefined;
+          for (let page = 0; org && sources.size > 0 && page < INTAKE_PASS_MAX_PAGES; page += 1) {
+            const listed = await org.list(factoryProjectId, [...sources.keys()], cursor);
+            if (page < INTAKE_IMPORT_MAX_PAGES) for (const item of listed.items) imported.add(item);
+            // Settled page by page: a record is stored moments after the provider said it is open,
+            // not once every page after it has been read.
+            await settlement.page(listed.items);
+            if (listed.nextCursor === null) {
+              complete = true;
+              break;
+            }
+            cursor = listed.nextCursor;
+          }
+          const settled = await settlement.finish(complete);
           summary.offered += settled.offered;
           summary.stored += settled.stored;
           summary.removed += settled.removed;
