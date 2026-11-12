@@ -98,6 +98,31 @@ async function releaseOf(storage: Store, key: string) {
   return released.promise;
 }
 
+/**
+ * The `leased` workflow with steps `before` and `after` around a 50 ms sleep whose duration
+ * function waits for the test: `resolving` resolves once it runs, and it returns once `resolve()`
+ * is called. A copy built with `gated: false` returns at once.
+ */
+function gatedSleep() {
+  const resolving = Promise.withResolvers<void>();
+  const gate = Promise.withResolvers<void>();
+  const build = (report: Report, gated = true) =>
+    createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
+      .then(work('before', report))
+      .sleep(async () => {
+        if (gated) {
+          resolving.resolve();
+          await gate.promise;
+        }
+
+        return 50;
+      })
+      .then(work('after', report))
+      .commit() as unknown as Built;
+
+  return { build, resolving: resolving.promise, resolve: () => gate.resolve() };
+}
+
 describe('waking an evented sleep once (#30012)', () => {
   it('wakes a sleep once when the timer of the replica that started it races a recovery restart', async () => {
     const storage = new InMemoryStore();
@@ -500,21 +525,8 @@ describe('waking an evented sleep once (#30012)', () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const seen = observe('leased');
-    const settingUp = Promise.withResolvers<void>();
-    // A dies while its duration function runs; B's resolves at once.
-    const build = (report: Report, replica: string) =>
-      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-        .then(work('before', report))
-        .sleep(async () => {
-          if (replica === 'A') {
-            settingUp.resolve();
-            await new Promise<never>(() => {});
-          }
-
-          return 50;
-        })
-        .then(work('after', report))
-        .commit() as unknown as Built;
+    // A dies while its duration function runs, which never returns; B's returns at once.
+    const sleeps = gatedSleep();
     let sleepEvent: Event | undefined;
     const pubsubA = interceptWorkflowEvents(new EventEmitterPubSub(), event => {
       if (isStepRunAt(event, [1])) {
@@ -523,11 +535,11 @@ describe('waking an evented sleep once (#30012)', () => {
 
       return undefined;
     });
-    const a = await startReplica(storage, build(seen.reporter('A'), 'A'), { pubsub: pubsubA });
-    const b = await startReplica(storage, build(seen.reporter('B'), 'B'), { recovery: { workflows: 'off' } });
+    const a = await startReplica(storage, sleeps.build(seen.reporter('A')), { pubsub: pubsubA });
+    const b = await startReplica(storage, sleeps.build(seen.reporter('B'), false), { recovery: { workflows: 'off' } });
     const run = await a.workflow.createRun();
     startInBackground(run, { n: 1 });
-    await settingUp.promise;
+    await sleeps.resolving;
 
     // A dies: its start lease stays live for one more TTL, and nothing renews it after that.
     await a.mastra.shutdown({ drainTimeout: 0 });
@@ -545,109 +557,72 @@ describe('waking an evented sleep once (#30012)', () => {
     expect(seen.executions).toEqual(['A:before', 'B:after']);
   }, 20_000);
 
-  it('leaves a run canceled while its sleep duration resolved canceled', async () => {
-    const storage = new InMemoryStore();
-    const seen = observe('leased');
-    const resolving = Promise.withResolvers<void>();
-    const resolve = Promise.withResolvers<void>();
-    const build = (report: Report) =>
-      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-        .then(work('before', report))
-        .sleep(async () => {
-          resolving.resolve();
-          await resolve.promise;
-          return 50;
-        })
-        .then(work('after', report))
-        .commit() as unknown as Built;
-    const a = await startReplica(storage, build(seen.reporter('A')), {
-      pubsub: seen.pubsub('A'),
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-    const setUp = releaseOf(storage, sleepStartKey(run.runId, [1]));
-    startInBackground(run, { n: 1 });
-    await resolving.promise;
+  it.each([
+    {
+      while: 'the run is canceled',
+      interfere: async (storage: Store, run: { runId: string; cancel: () => Promise<unknown> }) => {
+        await run.cancel();
+        await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('canceled'));
+      },
+      // The cancel is not undone by setting the run running again.
+      check: async (storage: Store, runId: string) => expect(await runStatus(storage, runId)).toBe('canceled'),
+    },
+    {
+      while: 'another process takes its start lease',
+      // As after A's renewals failed for a lease TTL; that process sets the sleep up itself.
+      interfere: async (storage: Store, run: { runId: string }) => {
+        const store = (await storage.getStore('workflows'))!;
+        await store.claimRunOwnership({
+          runId: sleepStartKey(run.runId, [1]),
+          ownerId: 'another-process',
+          leaseMs: 60_000,
+          force: true,
+        });
+      },
+      check: async (storage: Store, runId: string) => expect(await storedSleeps(storage, runId)).toEqual([]),
+    },
+  ])(
+    'drops a sleep setup when $while while its duration resolves',
+    async ({ interfere, check }) => {
+      const storage = new InMemoryStore();
+      const seen = observe('leased');
+      const sleeps = gatedSleep();
+      const a = await startReplica(storage, sleeps.build(seen.reporter('A')), {
+        pubsub: seen.pubsub('A'),
+        recovery: { workflows: 'off' },
+      });
+      const run = await a.workflow.createRun();
+      const setUp = releaseOf(storage, sleepStartKey(run.runId, [1]));
+      startInBackground(run, { n: 1 });
+      await sleeps.resolving;
 
-    await run.cancel();
-    await vi.waitFor(async () => expect(await runStatus(storage, run.runId)).toBe('canceled'));
-    resolve.resolve();
-    // The setup is over once it released its start lease.
-    await setUp;
+      await interfere(storage, run);
+      sleeps.resolve();
+      // The setup is over once it let go of its start lease.
+      await setUp;
 
-    expect(await runStatus(storage, run.runId)).toBe('canceled');
-    expect(seen.continuations).toEqual([]);
-    expect(seen.executions).toEqual(['A:before']);
-  }, 20_000);
-
-  it('stops a sleep setup whose start lease another process took while its duration resolved', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const seen = observe('leased');
-    const resolving = Promise.withResolvers<void>();
-    const resolve = Promise.withResolvers<void>();
-    const build = (report: Report) =>
-      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-        .then(work('before', report))
-        .sleep(async () => {
-          resolving.resolve();
-          await resolve.promise;
-          return 50;
-        })
-        .then(work('after', report))
-        .commit() as unknown as Built;
-    const a = await startReplica(storage, build(seen.reporter('A')), {
-      pubsub: seen.pubsub('A'),
-      recovery: { workflows: 'off' },
-    });
-    const run = await a.workflow.createRun();
-    const setUp = releaseOf(storage, sleepStartKey(run.runId, [1]));
-    startInBackground(run, { n: 1 });
-    await resolving.promise;
-
-    // Another process takes the start lease over while A's duration function runs, as after A's
-    // renewals failed for a lease TTL, and sets the sleep up itself.
-    await store.claimRunOwnership({
-      runId: sleepStartKey(run.runId, [1]),
-      ownerId: 'another-process',
-      leaseMs: 60_000,
-      force: true,
-    });
-    resolve.resolve();
-    // A's setup is over once it let go of the start lease it lost.
-    await setUp;
-
-    expect(await storedSleeps(storage, run.runId)).toEqual([]);
-    expect(seen.continuations).toEqual([]);
-    expect(seen.executions).toEqual(['A:before']);
-  }, 20_000);
+      await check(storage, run.runId);
+      expect(seen.continuations).toEqual([]);
+      expect(seen.executions).toEqual(['A:before']);
+    },
+    20_000,
+  );
 
   it('keeps a sleep set up after its workers stopped for when they start again', async () => {
     const storage = new InMemoryStore();
     const seen = observe('leased');
-    const resolving = Promise.withResolvers<void>();
-    const resolve = Promise.withResolvers<void>();
     // The sleep's duration resolves only after the drain gave up on it.
-    const build = (report: Report) =>
-      createWorkflow({ id: 'leased', inputSchema: Num, outputSchema: Num })
-        .then(work('before', report))
-        .sleep(async () => {
-          resolving.resolve();
-          await resolve.promise;
-          return 50;
-        })
-        .then(work('after', report))
-        .commit() as unknown as Built;
-    const a = await startReplica(storage, build(seen.reporter('A')), {
+    const sleeps = gatedSleep();
+    const a = await startReplica(storage, sleeps.build(seen.reporter('A')), {
       pubsub: seen.pubsub('A'),
       recovery: { workflows: 'off' },
     });
     const run = await a.workflow.createRun();
     startInBackground(run, { n: 1 });
-    await resolving.promise;
+    await sleeps.resolving;
 
     await a.mastra.stopWorkers({ drainTimeout: 0 });
-    resolve.resolve();
+    sleeps.resolve();
     await vi.waitFor(async () => expect(await storedSleeps(storage, run.runId)).toEqual(['waiting']));
     // Past the sleep's wake time.
     const wakeAt = await storedWakeTime(storage, 'leased', run.runId);
