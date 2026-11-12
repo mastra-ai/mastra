@@ -195,10 +195,12 @@ describe('workflow recovery rule (#28712)', () => {
   it("reads a queued restart's keys again, and leaves the run alone when another instance restarted it meanwhile", async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
-    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: GRACE_MS, workflowConcurrency: 1 });
+    // Long enough that run-2's re-read lands inside the lapsed lease's grace on a loaded machine too.
+    const graceMs = 1_500;
+    const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: graceMs, workflowConcurrency: 1 });
     await persistActiveRun(storage, 'run-1');
     await persistActiveRun(storage, 'run-2');
-    await sleep(GRACE_MS);
+    await sleep(graceMs);
 
     // run-2 waits for run-1's slot. Meanwhile another instance restarts run-2, and the lease it took
     // lapses at once, as one whose workers lag behind would: the run is in its grace period again.
