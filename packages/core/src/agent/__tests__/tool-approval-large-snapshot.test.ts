@@ -13,7 +13,7 @@
  * become durable (keyed to observed persistence, not a fixed deadline) while still
  * rejecting a stale/non-suspended tool call promptly.
  */
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
@@ -167,6 +167,33 @@ describe('approveToolCall with a slow-to-persist (large) suspend snapshot (#2241
     expect(Date.now() - start).toBeLessThan(2000);
 
     expect(executedCalls).not.toContain('Dero Israel');
+  }, 30000);
+
+  it('marks a rejection that only timed out waiting for the suspension to persist', async () => {
+    const storage = new InMemoryStore();
+    await delayAgenticLoopSuspendWrite(storage, 3000);
+    const { agent } = createSetup(storage);
+    const { runId, toolCallId } = await streamToApproval(agent);
+
+    // Each snapshot read moves the clock 5s, so the durability wait runs out
+    // before the delayed parent write lands.
+    const workflows = (await storage.getStore('workflows'))!;
+    const load = workflows.loadWorkflowSnapshot.bind(workflows);
+    vi.useFakeTimers({ toFake: ['Date'] });
+    workflows.loadWorkflowSnapshot = async args => {
+      vi.setSystemTime(Date.now() + 5000);
+      return load(args);
+    };
+    try {
+      await expect(agent.approveToolCall({ runId, toolCallId })).rejects.toMatchObject({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        details: { timedOut: true },
+      });
+    } finally {
+      vi.useRealTimers();
+      workflows.loadWorkflowSnapshot = load;
+    }
+    expect(executedCalls).toEqual([]);
   }, 30000);
 
   it('control: small-snapshot immediate approval resumes without delay', async () => {

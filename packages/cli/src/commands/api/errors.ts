@@ -1,5 +1,6 @@
 export type ApiErrorCode =
   | 'INVALID_JSON'
+  | 'INVALID_INPUT'
   | 'MISSING_INPUT'
   | 'MISSING_ARGUMENT'
   | 'MALFORMED_HEADER'

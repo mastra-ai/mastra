@@ -92,6 +92,8 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanDurationSortSupported,
+  assertObservabilitySpanModelProviderSortSupported,
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilitySpanAggregateModelDimensionsSupported,
   assertObservabilityAggregateTimeToFirstMeasuresSupported,
@@ -770,7 +772,11 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       plan = coreStorage.planSpanQuery(
         { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
+        {
+          scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'),
+          allowSpanDurationOrdering: true,
+          allowSpanModelProviderOrdering: true,
+        },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -789,6 +795,8 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilitySpanModelProviderSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
@@ -1522,9 +1530,30 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
-  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    if (
+      typeof observabilityStore.getFeedbackById !== 'function' ||
+      typeof observabilityStore.updateFeedbackReviewStatus !== 'function'
+    ) {
+      throw new HTTPException(501, {
+        message: 'Feedback review updates require a supported storage adapter and @mastra/core version',
+      });
+    }
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    // In OSS, organizationId is correlation metadata, not an authorization scope.
+    // Its presence in request context must not restrict this review update.
+    const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    if (!existing || (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    const updated = await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_review_status',
+      feedback: { feedbackId, reviewStatus },
+    });
+    return updated;
   },
 });
 
