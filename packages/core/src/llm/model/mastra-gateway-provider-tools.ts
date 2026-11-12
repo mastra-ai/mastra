@@ -49,7 +49,7 @@ export function prepareToolsForMastraGateway(
 
     const isWebSearch = id in NATIVE_WEB_SEARCH_TOOL_IDS;
     if (isWebSearch && Object.keys(args ?? {}).length === 0) {
-      return { ...tool, id: OPENROUTER_WEB_SEARCH_TOOL_ID, name: 'web_search' };
+      return { ...tool, id: OPENROUTER_WEB_SEARCH_TOOL_ID };
     }
 
     throw new MastraError({
