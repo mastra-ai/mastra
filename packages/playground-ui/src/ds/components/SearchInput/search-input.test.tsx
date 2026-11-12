@@ -311,6 +311,38 @@ describe('SearchInput controlled and debounced', () => {
     vi.useRealTimers();
   });
 
+  it('follows navigation back to a search it sent before the parent moved elsewhere', () => {
+    vi.useFakeTimers();
+    function Navigable() {
+      const [value, setValue] = useState('');
+      return (
+        <>
+          <SearchInput label="Search agents" value={value} onValueChange={setValue} debounceMs={300} />
+          <button type="button" onClick={() => setValue('bar')}>
+            To bar
+          </button>
+          <button type="button" onClick={() => setValue('foo')}>
+            To foo
+          </button>
+          <output>{value}</output>
+        </>
+      );
+    }
+    render(<Navigable />);
+    const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });
+
+    fireEvent.change(input, { target: { value: 'foo' } });
+    act(() => vi.advanceTimersByTime(300));
+    fireEvent.click(screen.getByRole('button', { name: 'To bar' }));
+    fireEvent.change(input, { target: { value: 'barx' } });
+    fireEvent.click(screen.getByRole('button', { name: 'To foo' }));
+    act(() => vi.advanceTimersByTime(300));
+
+    expect(input.value).toBe('foo');
+    expect(screen.getByRole('status').textContent).toBe('foo');
+    vi.useRealTimers();
+  });
+
   it('follows a change the parent makes, such as a URL change', () => {
     render(<UrlSearch initial="chef" />);
     const input = screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search agents' });

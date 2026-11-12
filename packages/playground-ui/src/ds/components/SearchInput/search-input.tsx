@@ -103,6 +103,7 @@ export function SearchInput({
       sentRef.current = undefined;
       return;
     }
+    sentRef.current = undefined;
     debouncedChange.cancel();
   }, [value, debouncedChange]);
 
