@@ -259,10 +259,8 @@ export class RedisServerCache extends MastraServerCache {
       );
       return Number(result);
     } catch (error) {
-      // Redis Cluster rejects multi-key scripts whose keys hash to different
-      // slots. The list and counter keys are not hash-tagged (changing that
-      // would rename existing keys), so degrade to the composed path instead
-      // of losing replay caching entirely.
+      // Callers supplying untagged keys can still hit CROSSSLOT. CachingPubSub
+      // supplies co-located keys, but keep the fallback for other cache users.
       if (error instanceof Error && error.message.includes('CROSSSLOT')) {
         this.scriptingDisabled = true;
         this.logger.warn(

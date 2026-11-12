@@ -201,18 +201,16 @@ export class CachingPubSub extends PubSub {
     }
   }
 
-  /**
-   * Get the cache key for a topic's event list
-   */
+  /** Get the cache key for a topic's event list in a Redis Cluster slot shared with its counter. */
   private getCacheKey(topic: string): string {
-    return `${this.keyPrefix}${topic}`;
+    // Encode braces and percent signs so topics cannot create nested tags or collide with one another.
+    const tag = encodeURIComponent(topic) || '%EMPTY';
+    return `${this.keyPrefix}{${tag}}`;
   }
 
-  /**
-   * Get the cache key for a topic's index counter
-   */
+  /** Get the cache key for a topic's index counter in the same Redis slot. */
   private getCounterKey(topic: string): string {
-    return `${this.keyPrefix}${topic}:counter`;
+    return `${this.getCacheKey(topic)}:counter`;
   }
 
   /**

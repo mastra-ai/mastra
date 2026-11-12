@@ -178,7 +178,7 @@ describe('CachingPubSub', () => {
 
         // A counter key would survive the run and leak forever, since nothing
         // clears a topic that was never cached.
-        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+        expect(await cache.get(`pubsub:{${topic}}:counter`)).toBeUndefined();
       });
 
       it('should still deliver localOnly events live to subscribers', async () => {
@@ -277,7 +277,7 @@ describe('CachingPubSub', () => {
         await policyPubsub.publish(uncachedTopic, { type: 'watch', runId: 'run-1', data: {} });
         await new Promise(resolve => setTimeout(resolve, 10));
 
-        expect(await cache.get(`pubsub:${uncachedTopic}:counter`)).toBeUndefined();
+        expect(await cache.get(`pubsub:{${uncachedTopic}}:counter`)).toBeUndefined();
       });
 
       it('should still deliver rejected topics live to subscribers', async () => {
@@ -369,7 +369,7 @@ describe('CachingPubSub', () => {
         expect(receivedEvents).toHaveLength(1);
         expect(receivedEvents[0].index).toBeUndefined();
         expect(await extendPubsub.getHistory(topic)).toHaveLength(0);
-        expect(await cache.get(`pubsub:${topic}:counter`)).toBeUndefined();
+        expect(await cache.get(`pubsub:{${topic}}:counter`)).toBeUndefined();
         expect(onUnlogged).toHaveBeenCalledTimes(1);
         expect(onUnlogged).toHaveBeenCalledWith(topic);
       });
@@ -855,12 +855,54 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Events should be cached under custom prefix
-      const rawCacheValue = await cache.get('custom:test');
+      const rawCacheValue = await cache.get('custom:{test}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
     });
   });
 
   describe('key prefix', () => {
+    it('keeps each cached topic and its counter in the same Redis Cluster slot (#30149)', async () => {
+      const keys: Array<[string, string]> = [];
+      class RecordingCache extends InMemoryServerCache {
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>, ttlMs?: number) {
+          keys.push([listKey, counterKey]);
+          return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+        }
+      }
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), new RecordingCache());
+      const topics = [
+        'events',
+        '{events}',
+        'other-events',
+        'agent.stream.{run-1}',
+        'events{}:other',
+        'events%7B%7D:other',
+        '',
+        '\0',
+        '%00',
+      ];
+
+      for (const topic of topics) {
+        await pubsub.publish(topic, { type: topic, runId: 'run-1', data: {} });
+        expect((await pubsub.getHistory(topic)).map(event => event.type)).toEqual([topic]);
+      }
+
+      expect(keys).toHaveLength(topics.length);
+      for (const [listKey, counterKey] of keys) {
+        // Redis hashes only the first non-empty {...} in each key.
+        const tag = (key: string) => {
+          const open = key.indexOf('{');
+          const close = key.indexOf('}', open + 1);
+          return open >= 0 && close > open + 1 ? key.slice(open + 1, close) : undefined;
+        };
+        expect(tag(listKey)).toBeDefined();
+        expect(tag(counterKey)).toBe(tag(listKey));
+        expect(counterKey).toBe(`${listKey}:counter`);
+      }
+      expect(new Set(keys.map(([listKey]) => listKey)).size).toBe(topics.length);
+      expect(keys[3]![0]).toBe('pubsub:{agent.stream.%7Brun-1%7D}');
+    });
+
     it('should use custom key prefix for cache', async () => {
       const prefixedPubsub = new CachingPubSub(innerPubsub, cache, { keyPrefix: 'myapp:' });
       const topic = 'events';
@@ -869,7 +911,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly
-      const rawCacheValue = await cache.get('myapp:events');
+      const rawCacheValue = await cache.get('myapp:{events}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
       expect(rawCacheValue).toHaveLength(1);
     });
@@ -881,7 +923,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly with default prefix
-      const rawCacheValue = await cache.get('pubsub:events');
+      const rawCacheValue = await cache.get('pubsub:{events}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
     });
   });
@@ -922,7 +964,7 @@ describe('CachingPubSub', () => {
 
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
-      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
       // No index means the failed append never numbered the frame, so the
       // transport-rejection set must stay empty.
       expect([...pubsub.getUndeliveredIndices(topic)]).toEqual([]);
@@ -947,7 +989,7 @@ describe('CachingPubSub', () => {
       await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
 
       expect(callback.mock.calls.map(call => call[0].index)).toEqual([0, 1]);
-      expect(await cache.listLength(`pubsub:${topic}`)).toBe(2);
+      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(2);
     });
 
     describe('after a partial append (index allocated, push failed)', () => {
@@ -995,7 +1037,7 @@ describe('CachingPubSub', () => {
         cache.failNextPush = true;
         await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 2 } });
         await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
-        const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
+        const log = (await cache.listFromTo(`pubsub:{${topic}}`, 0)) as Event[];
         expect(log.map(e => e.index)).toEqual([0, 1, 3]);
         return { cache, inner, pubsub };
       }
@@ -1088,7 +1130,7 @@ describe('CachingPubSub', () => {
       await delayed;
       await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { n: 3 } });
 
-      const log = (await cache.listFromTo(`pubsub:${topic}`, 0)) as Event[];
+      const log = (await cache.listFromTo(`pubsub:{${topic}}`, 0)) as Event[];
       expect(log.map(e => e.index)).toEqual([0, 2, 1, 3]);
 
       expect((await pubsub.getHistory(topic, 0)).map(e => e.index)).toEqual([0, 1, 2, 3]);
@@ -1113,8 +1155,8 @@ describe('CachingPubSub', () => {
 
       expect(indexedSpy).toHaveBeenCalledTimes(1);
       expect(indexedSpy.mock.calls[0]!.slice(0, 3)).toEqual([
-        `pubsub:${topic}`,
-        `pubsub:${topic}:counter`,
+        `pubsub:{${topic}}`,
+        `pubsub:{${topic}}:counter`,
         expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
       ]);
       expect(listPushSpy).not.toHaveBeenCalled();
@@ -1127,7 +1169,7 @@ describe('CachingPubSub', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
       expect(cached).toHaveLength(1);
       expect((cached[0] as any).index).toBe(0);
     });
@@ -1527,8 +1569,8 @@ describe('CachingPubSub', () => {
         createdAt: new Date(),
       } as Event;
       frame.index = await target.listPushIndexed(
-        `pubsub:${topic}`,
-        `pubsub:${topic}:counter`,
+        `pubsub:{${topic}}`,
+        `pubsub:{${topic}}:counter`,
         frame as Omit<Event, 'id' | 'createdAt'>,
       );
       return frame;
@@ -1748,8 +1790,8 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([0, 1, 2]);
 
       // The log's TTL lapses, the run resumes, and numbering restarts at 0.
-      await shared.delete(`pubsub:${topic}`);
-      await shared.delete(`pubsub:${topic}:counter`);
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
       const secondSegment = [await append(shared, 0), await append(shared, 1)];
       for (const frame of secondSegment) await inner.publish(topic, frame);
       await flush();
@@ -1867,8 +1909,8 @@ describe('CachingPubSub', () => {
       // The log expires and the resumed run numbers a new segment from 0. The
       // subscriber captured the old frame 0's id on attach, so the new frame 0's
       // different id is what shows the restart.
-      await shared.delete(`pubsub:${topic}`);
-      await shared.delete(`pubsub:${topic}:counter`);
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
       for (const n of [0, 1]) await inner.publish(topic, await append(shared, n, `segment-2-${n}`));
       await flush();
 
@@ -1890,8 +1932,8 @@ describe('CachingPubSub', () => {
       });
       await flush();
 
-      await shared.delete(`pubsub:${topic}`);
-      await shared.delete(`pubsub:${topic}:counter`);
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
       const frames = [];
       for (const n of [0, 1]) frames.push(await append(shared, n, `segment-2-${n}`));
       // The restart check's read of entry 0 fails once.
@@ -1917,8 +1959,8 @@ describe('CachingPubSub', () => {
       });
       await flush();
 
-      await shared.delete(`pubsub:${topic}`);
-      await shared.delete(`pubsub:${topic}:counter`);
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
       const frames = [];
       for (const n of [0, 1]) frames.push(await append(shared, n, `segment-2-${n}`));
       // The restart check's read of the counter fails once.
@@ -1948,8 +1990,8 @@ describe('CachingPubSub', () => {
 
       // The log expires and the new segment caches its frame 0, but a delayed
       // transport copy of the old frame 0 arrives before the new one is published.
-      await shared.delete(`pubsub:${topic}`);
-      await shared.delete(`pubsub:${topic}:counter`);
+      await shared.delete(`pubsub:{${topic}}`);
+      await shared.delete(`pubsub:{${topic}}:counter`);
       const newFrame0 = await append(shared, 0, 'segment-2-0');
       await inner.publish(topic, oldFrame0);
       await flush();
@@ -2077,8 +2119,8 @@ describe('CachingPubSub', () => {
 
       // Both keys exist and the counter tracks the next index, so a subscriber
       // can tell the log's numbering from a restarted one.
-      expect(await shared.listFromTo(`pubsub:${topic}`, 0)).toHaveLength(1);
-      expect(await shared.get(`pubsub:${topic}:counter`)).toBe(1);
+      expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
     });
 
     it('retains a durable run log for the run-log TTL on every append', async () => {
@@ -2103,8 +2145,8 @@ describe('CachingPubSub', () => {
       // Real timers: the in-memory cache's TTL clock is not faked by vitest.
       await new Promise(resolve => setTimeout(resolve, 60));
 
-      expect(await shared.listFromTo(`pubsub:${runTopic}`, 0)).toHaveLength(1);
-      expect(await shared.get(`pubsub:${runTopic}:counter`)).toBe(1);
+      expect(await shared.listFromTo(`pubsub:{${runTopic}}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:{${runTopic}}:counter`)).toBe(1);
     });
   });
 });
