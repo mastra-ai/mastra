@@ -385,11 +385,10 @@ function withoutCard(cached: BoardSnapshot | BoardPhasesSnapshot, id: string): B
   };
 }
 
-/** Whether a session is parked; `undefined` until the board has been read. */
+/** Whether a session is parked; `undefined` until the cards holding sessions have been read. */
 export function useSessionParked(factoryProjectId: string | undefined, sessionId: string): boolean | undefined {
-  const { baseUrl } = useApiConfig();
-  const { data } = useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectParkedSessions });
-  return data?.has(sessionId);
+  const { data } = useSidebarWorkItemsQuery(factoryProjectId);
+  return data?.parkedSessionIds.includes(sessionId);
 }
 
 /**
