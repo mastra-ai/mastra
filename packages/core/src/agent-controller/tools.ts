@@ -167,15 +167,21 @@ Use this tool when:
     }),
     background,
     execute: async (input, context) => {
+      const runsInBackground = context?.agent?.isBackgroundTask === true;
+      // The task runner stores any returned value as a completed task, so a
+      // background subagent reports failure by throwing. The parent model then
+      // gets the message as the failed tool result.
+      const fail = (content: string, cause?: unknown) => {
+        if (runsInBackground) throw new Error(content, cause === undefined ? undefined : { cause });
+        return { content, isError: true };
+      };
+
       const { agentType, modelId, forked } = input;
       let { task } = input;
       const displayTask = task;
       const definition = subagents.find(s => s.id === agentType);
       if (!definition) {
-        return {
-          content: `Unknown agent type: ${agentType}. Valid types: ${subagentIds.join(', ')}`,
-          isError: true,
-        };
+        return fail(`Unknown agent type: ${agentType}. Valid types: ${subagentIds.join(', ')}`);
       }
 
       const controllerCtx = context?.requestContext?.get('controller') as AgentControllerRequestContext | undefined;
@@ -183,7 +189,6 @@ Use this tool when:
       // A deferred task outlives the parent run, so it stops on the task's own
       // signal (cancel, timeout, shutdown) instead of the run's. An awaited task
       // still blocks the parent run, so it stops on either.
-      const runsInBackground = context?.agent?.isBackgroundTask === true;
       const awaited = runsInBackground && context?.background?.disposition === 'awaited';
       const runSignal = controllerCtx?.abortSignal;
       const taskSignal = context?.abortSignal;
@@ -218,24 +223,16 @@ Use this tool when:
         // are intentionally ignored in this path.
         const parentAgent = opts.getParentAgent?.();
         if (!parentAgent) {
-          return {
-            content: 'Forked subagent requires a parent agent. None is configured on this AgentController.',
-            isError: true,
-          };
+          return fail('Forked subagent requires a parent agent. None is configured on this AgentController.');
         }
         const parentThreadId = controllerCtx?.threadId;
         if (!parentThreadId) {
-          return {
-            content: 'Forked subagent requires an active parent thread; none is set on the AgentController.',
-            isError: true,
-          };
+          return fail('Forked subagent requires an active parent thread; none is set on the AgentController.');
         }
         if (!opts.cloneThreadForFork) {
-          return {
-            content:
-              'Forked subagent requires memory to be configured on the AgentController so the parent thread can be cloned.',
-            isError: true,
-          };
+          return fail(
+            'Forked subagent requires memory to be configured on the AgentController so the parent thread can be cloned.',
+          );
         }
 
         // The parent stream batches message saves through a debounced save
@@ -258,10 +255,10 @@ Use this tool when:
             requestContext: context?.requestContext,
           });
         } catch (err) {
-          return {
-            content: `Failed to clone parent thread for forked subagent: ${err instanceof Error ? err.message : String(err)}`,
-            isError: true,
-          };
+          return fail(
+            `Failed to clone parent thread for forked subagent: ${err instanceof Error ? err.message : String(err)}`,
+            err,
+          );
         }
 
         subagentToRun = parentAgent;
@@ -334,7 +331,7 @@ Use this tool when:
         const controllerModelId = controllerCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
         const maybeModelId = modelId ?? controllerModelId ?? definition.defaultModelId ?? fallbackModelId;
         if (!maybeModelId) {
-          return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
+          return fail('No model ID available for subagent. Configure defaultModelId.');
         }
         resolvedModelId = maybeModelId;
 
@@ -362,10 +359,10 @@ Use this tool when:
         try {
           model = resolveModel(resolvedModelId, { requestContext: subagentRequestContext });
         } catch (err) {
-          return {
-            content: `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
-            isError: true,
-          };
+          return fail(
+            `Failed to resolve model "${resolvedModelId}": ${err instanceof Error ? err.message : String(err)}`,
+            err,
+          );
         }
 
         subagentToRun = new Agent({
@@ -536,7 +533,9 @@ Use this tool when:
           throw reason;
         }
 
+        // In the background an abort this tool didn't receive is a failure, not a user stop.
         const isAbort =
+          !runsInBackground &&
           err instanceof Error &&
           (err.name === 'AbortError' || err.message?.includes('abort') || err.message?.includes('cancel'));
 
@@ -553,7 +552,7 @@ Use this tool when:
         const message = err instanceof Error ? err.message : String(err);
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: message, isError: true, durationMs });
 
-        return { content: `Subagent "${definition.name}" failed: ${message}`, isError: true };
+        return fail(`Subagent "${definition.name}" failed: ${message}`, err);
       }
     },
   });
