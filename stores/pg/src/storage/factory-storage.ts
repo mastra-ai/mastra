@@ -428,7 +428,12 @@ class PgFactoryStorageOps implements FactoryStorageOps {
     const client = await pool.connect();
     let releaseError: Error | undefined;
     try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
+      } catch (error) {
+        releaseError = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      }
       try {
         const result = await run(client);
         await client.query('COMMIT');
@@ -516,7 +521,14 @@ export class PgFactoryStorage extends FactoryStorage {
       let transactionOpen = false;
       let releaseError: Error | undefined;
       try {
-        await client.query(options?.isolationLevel === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN');
+        try {
+          await client.query(
+            options?.isolationLevel === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN',
+          );
+        } catch (error) {
+          releaseError = error instanceof Error ? error : new Error(String(error));
+          throw error;
+        }
         transactionOpen = true;
         const result = await fn(new PgFactoryStorageOps(client, this.#schemas, client));
         await client.query('COMMIT');

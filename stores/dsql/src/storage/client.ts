@@ -167,7 +167,12 @@ export class PoolAdapter implements DbClient {
     const client = await this.$pool.connect();
     let destroyClient = false;
     try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
+      } catch (error) {
+        destroyClient = true;
+        throw error;
+      }
       const txClient = new TransactionClient(client);
       try {
         const result = await callback(txClient);
@@ -184,7 +189,12 @@ export class PoolAdapter implements DbClient {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
           destroyClient = true;
-          this.onRollbackError?.(rollbackError);
+          try {
+            if (this.onRollbackError) this.onRollbackError(rollbackError);
+            else console.error('Failed to rollback transaction:', rollbackError);
+          } catch {
+            // A diagnostic callback must not replace the transaction failure.
+          }
         }
         throw error;
       }

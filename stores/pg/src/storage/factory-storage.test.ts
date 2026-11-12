@@ -113,6 +113,38 @@ describe('PgFactoryStorage capabilities', () => {
     }
   });
 
+  it.each(['withTransaction', 'updateAtomic'] as const)(
+    'destroys the %s client when BEGIN rejects without running the operation',
+    async path => {
+      const storage = new PgFactoryStorage({ connectionString });
+      const beginError = new Error('BEGIN timed out after reaching PostgreSQL');
+      const release = vi.fn();
+      const query = vi.fn().mockRejectedValueOnce(beginError);
+      const pool = storage.authDatabase().pool;
+      try {
+        if (path === 'updateAtomic') {
+          await storage.ensureCollections([{ name: 'atomic_begin_test', columns: { id: { type: 'uuid-pk' } } }]);
+        }
+        const connect = vi.spyOn(pool, 'connect').mockResolvedValue({ query, release } as never);
+        try {
+          const callback = vi.fn(async () => ({}));
+          if (path === 'withTransaction') {
+            await expect(storage.withTransaction(callback)).rejects.toBe(beginError);
+          } else {
+            await expect(storage.ops.updateAtomic('atomic_begin_test', {}, callback)).rejects.toBe(beginError);
+          }
+          expect(callback).not.toHaveBeenCalled();
+          expect(query).toHaveBeenCalledTimes(1);
+          expect(release).toHaveBeenCalledWith(beginError);
+        } finally {
+          connect.mockRestore();
+        }
+      } finally {
+        await storage.close();
+      }
+    },
+  );
+
   it('authDatabase exposes the shared pool tagged as postgres', () => {
     const storage = new PgFactoryStorage({ connectionString });
     const db = storage.authDatabase();

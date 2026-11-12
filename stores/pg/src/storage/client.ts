@@ -168,7 +168,12 @@ export class PoolAdapter implements DbClient {
     const client = await this.$pool.connect();
     let destroyClient = false;
     try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
+      } catch (error) {
+        destroyClient = true;
+        throw error;
+      }
       const txClient = new TransactionClient(client);
       try {
         const result = await callback(txClient);
@@ -185,7 +190,12 @@ export class PoolAdapter implements DbClient {
           await client.query('ROLLBACK');
         } catch (rollbackError) {
           destroyClient = true;
-          this.onRollbackError?.(rollbackError);
+          try {
+            if (this.onRollbackError) this.onRollbackError(rollbackError);
+            else console.error('Failed to rollback transaction:', rollbackError);
+          } catch {
+            // A diagnostic callback must not replace the transaction failure.
+          }
         }
         throw error;
       }
@@ -437,7 +447,12 @@ export class PinnedClientAdapter implements DbClient {
     // Enqueue the entire BEGIN/work/COMMIT block so concurrent callers
     // can't interleave statements inside someone else's transaction.
     return this.#enqueue(async () => {
-      await this.pinnedClient.query('BEGIN');
+      try {
+        await this.pinnedClient.query('BEGIN');
+      } catch (error) {
+        this.#rollbackError = error;
+        throw error;
+      }
       const txClient = new TransactionClient(this.pinnedClient);
       try {
         const result = await callback(txClient);
@@ -450,7 +465,12 @@ export class PinnedClientAdapter implements DbClient {
           await this.pinnedClient.query('ROLLBACK');
         } catch (rollbackError) {
           this.#rollbackError = rollbackError;
-          this.onRollbackError?.(rollbackError);
+          try {
+            if (this.onRollbackError) this.onRollbackError(rollbackError);
+            else console.error('Failed to rollback transaction:', rollbackError);
+          } catch {
+            // A diagnostic callback must not replace the transaction failure.
+          }
         }
         throw error;
       }
