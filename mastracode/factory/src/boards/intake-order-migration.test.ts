@@ -161,6 +161,34 @@ describe('IntakeOrderMeasure', () => {
     expect(audited).toHaveLength(2);
   });
 
+  it('compares with the order as it stands once claimed, when a rule write lands just before the claim', async () => {
+    const { boards, scope } = await project([labelled('ship', 'ship'), labelled('work', 'bug'), everything('work')]);
+    const [ship, bug, all] = await boards.listIntakeRoutes(scope);
+    let moved = false;
+    const storage = {
+      readIntakeOrder: boards.readIntakeOrder.bind(boards),
+      listIntakeRoutes: boards.listIntakeRoutes.bind(boards),
+      recordIntakeOrderMigration: boards.recordIntakeOrderMigration.bind(boards),
+      // Work's `bug` rule moves ahead of Ship's after the order was read, before the claim.
+      claimIntakeOrderMigration: async (claimScope: StoredBoardScope) => {
+        if (!moved) {
+          moved = true;
+          await boards.reorderIntakeRoutes(scope, [bug!.id, ship!.id, all!.id], 'admin');
+        }
+        return boards.claimIntakeOrderMigration(claimScope);
+      },
+    };
+    const measure = new IntakeOrderMeasure({
+      storage,
+      cards: async () => [card(['ship']), card(['ship', 'x']), card(['bug'])],
+      boards: async () => registry,
+      audit: async () => {},
+    });
+
+    expect(await measure.measure(scope)).toMatchObject({ compared: 3, differing: 2 });
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work', 'ship']);
+  });
+
   it('measures again when a rule write lands while it compares, keeping only the fresh result', async () => {
     const { boards, scope } = await project([labelled('ship', 'ship'), labelled('work', 'bug'), everything('work')]);
     let writes = 0;

@@ -1073,7 +1073,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     options: { expectedRevision: number; actor: string },
   ): Promise<StoredIntakeRouteRecord> {
     await this.#transact(async ops => {
-      const row = await findIntakeRoute(ops, scope, id);
+      // Lock first, as every route write does, so it can't deadlock against a reorder.
+      const row = (await lockIntakeRoutes(ops, scope)).find(route => route.id === id);
+      if (!row) throw intakeRouteNotFound(id);
       checkIntakeRouteRevision(row, options.expectedRevision);
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
@@ -1454,12 +1456,6 @@ function catchesEveryNewCard(row: IntakeRouteRow): boolean {
 async function readIntakeRoutes(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<IntakeRouteRow[]> {
   const rows = await ops.findMany<IntakeRouteRow>(INTAKE_ROUTES, scopeWhere(scope));
   return rows.sort((left, right) => left.position - right.position);
-}
-
-async function findIntakeRoute(ops: FactoryStorageOps, scope: StoredBoardScope, id: string): Promise<IntakeRouteRow> {
-  const row = await ops.findOne<IntakeRouteRow>(INTAKE_ROUTES, { ...scopeWhere(scope), id });
-  if (!row) throw intakeRouteNotFound(id);
-  return row;
 }
 
 function intakeRouteNotFound(id: string): StoredBoardError {

@@ -109,13 +109,18 @@ export class IntakeOrderMeasure {
     }
     const claimed = await storage.claimIntakeOrderMigration(scope);
     if (claimed === null) return null;
-    const [routes, cards] = await Promise.all([storage.listIntakeRoutes(scope), this.#deps.cards(scope)]);
+    // Read again: a rule write before the claim re-derived the order; one after it is caught on record.
+    const [current, routes, cards] = await Promise.all([
+      storage.readIntakeOrder(scope, { boards: [...registry.keys()] }),
+      storage.listIntakeRoutes(scope),
+      this.#deps.cards(scope),
+    ]);
     let differing = 0;
     let notRouted = 0;
     const sample = cards.slice(0, INTAKE_ORDER_SAMPLE);
     for (const card of sample) {
       const facts = cardRuleFacts(card);
-      const query = { routes, order: order.boardKeys, facts, registry };
+      const query = { routes, order: current.boardKeys, facts, registry };
       const old = resolveIntake({ ...query, evaluator: 'route-list' });
       const next = resolveIntake({ ...query, evaluator: 'intake-order' });
       if (next.outcome === 'not_routed') notRouted += 1;
