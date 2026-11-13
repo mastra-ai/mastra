@@ -91,7 +91,14 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
     description:
       "Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires, regardless of activity. Modal's maximum is 24 hours (86_400_000).",
     isOptional: true,
-    defaultValue: '300000 (5 minutes)',
+    defaultValue: '300000 (5 minutes), or `idleTimeoutMs` when that is longer',
+  },
+  {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    description:
+      'Idle teardown window in milliseconds. The sandbox is terminated after this long without activity (no open exec or filesystem connection), instead of running to `timeoutMs`. When unset, Modal applies its own default.',
+    isOptional: true,
   },
   {
     name: 'env',
@@ -203,6 +210,8 @@ Get your credentials from the [Modal dashboard](https://modal.com/settings/token
 - **`_start()`**: Attempts to reconnect to an existing running sandbox. If none is found, creates a sandbox from the latest snapshot (if available from a previous `_stop()`), or from the baseImage.
 - **`_stop()`**: Snapshots the filesystem, then terminates the sandbox. Snapshot is kept in memory on the same instance for future starts.
 - **`_destroy()`**: Terminates the sandbox and discards any snapshot.
+
+A sandbox ends either at its `timeoutMs` wall-clock lifetime or after `idleTimeoutMs` without activity, whichever comes first. When `timeoutMs` is not set it defaults to the larger of 5 minutes and `idleTimeoutMs`. Cloning a sandbox with `idleTimeoutMinutes` sets the clone's idle window to that many minutes and raises its lifetime to match, so a clone stays alive while it is in use instead of being terminated mid-command.
 
 ```typescript
 const sandbox = new ModalSandbox({
