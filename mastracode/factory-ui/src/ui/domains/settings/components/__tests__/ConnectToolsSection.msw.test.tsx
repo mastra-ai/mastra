@@ -1,21 +1,29 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { MASTRA_PLATFORM_URL } from '../../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../../factory/services/platformConnect';
 import { ConnectToolsSection } from '../ConnectToolsSection';
 
 const CONNECT_TOOLS = `${TEST_BASE_URL}/web/integrations/platform/connect-tools`;
 
 function serveConnections(connections: ConnectToolConnection[]) {
-  server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ connections })));
+  server.use(http.get(CONNECT_TOOLS, () => HttpResponse.json({ projectId: 'proj_1', connections })));
+}
+
+function signInToOrganization(organizationId: string) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ authenticated: true, user: { userId: 'user-1', organizationId } }),
+    ),
+  );
 }
 
 describe('Mastra Connect tools settings', () => {
-  it('lists attached connections with account and reconnect status, and links to Mastra Platform', async () => {
+  it("lists attached connections with account and reconnect status, and links to the project's Connect page", async () => {
+    signInToOrganization('org_1');
     serveConnections([
       {
         id: 'conn-slack',
@@ -40,9 +48,11 @@ describe('Mastra Connect tools settings', () => {
     expect(screen.getByText('Acme workspace')).toBeInTheDocument();
     expect(screen.getByText('Linear')).toBeInTheDocument();
     expect(screen.getAllByText('Needs reconnecting')).toHaveLength(1);
-    expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
-      'href',
-      MASTRA_PLATFORM_URL,
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
+        'href',
+        'https://projects.mastra.ai/orgs/org_1/projects/proj_1/settings/connect',
+      ),
     );
   });
 
@@ -51,9 +61,10 @@ describe('Mastra Connect tools settings', () => {
     renderWithProviders(<ConnectToolsSection />);
 
     expect(await screen.findByText(/No connections are attached to this Factory's project yet/)).toBeInTheDocument();
+    // Signed out of an organization, Platform's `/org/*` route picks the user's current one.
     expect(screen.getByRole('link', { name: 'Manage in Mastra Platform' })).toHaveAttribute(
       'href',
-      MASTRA_PLATFORM_URL,
+      'https://projects.mastra.ai/org/projects/proj_1/settings/connect',
     );
   });
 
