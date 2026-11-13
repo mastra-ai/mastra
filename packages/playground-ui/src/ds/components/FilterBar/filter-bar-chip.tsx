@@ -211,6 +211,7 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
+  const validationMessage = !draft && typeof item.value === 'string' ? field?.validateInput?.(item.value) : undefined;
   const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
   const label = [
     field?.label ?? item.fieldId,
@@ -237,6 +238,11 @@ export function FilterBarChip({
       <FilterBarChipField />
       <FilterBarChipOperator />
       <FilterBarChipValue />
+      {validationMessage && (
+        <span className={segmentClass} title={validationMessage}>
+          Not applied
+        </span>
+      )}
       {removable && <FilterBarChipRemove />}
     </>
   );
@@ -246,6 +252,8 @@ export function FilterBarChip({
         ref={rootRef}
         role="group"
         aria-label={label}
+        aria-invalid={!!validationMessage || undefined}
+        aria-description={validationMessage}
         // The input already announces the draft's progress through its placeholder.
         aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
@@ -446,7 +454,14 @@ function FieldEditor() {
   const [query, setQuery] = useState('');
 
   const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
-  const fields = useMemo(() => ctx.fields.filter(field => !field.rootOnly || isRoot), [ctx.fields, isRoot]);
+  const fields = useMemo(
+    () =>
+      ctx.fields.filter(field => {
+        if (field.rootOnly && !isRoot) return false;
+        return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
+      }),
+    [ctx.fields, ctx.items, chip.item.id, isRoot],
+  );
 
   const onSelect = useCallback(
     (field: FilterBarField) => {

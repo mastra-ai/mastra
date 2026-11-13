@@ -99,12 +99,15 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
       }),
     [tokens, groups, withContextFields, withOutcomeFields, withModelFields, withTimeToFirstChunk, withTimeToFirstToken],
   );
-  const query: SpanQueryArgs = {
-    timeRange,
-    orderBy: [{ field: sortField, direction: sortDirection }],
-    ...(where ? { where } : {}),
-    ...(filters.textSearch ? { textSearch: filters.textSearch } : {}),
-  };
+  const query = useMemo<SpanQueryArgs>(
+    () => ({
+      timeRange,
+      orderBy: [{ field: sortField, direction: sortDirection }],
+      ...(where ? { where } : {}),
+      ...(filters.textSearch ? { textSearch: filters.textSearch } : {}),
+    }),
+    [timeRange, sortField, sortDirection, where, filters.textSearch],
+  );
 
   const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
     {

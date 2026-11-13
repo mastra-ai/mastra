@@ -141,6 +141,38 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when text search is supported', () => {
+    it('marks an invalid restored search as not applied and lets the user correct it', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('textSearch=ab');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(screen.getByText('Not applied')).toBeTruthy();
+      expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: ab' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'needle' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(screen.queryByText('Not applied')).toBeNull();
+    });
+
+    it('does not offer an existing search field when editing another chip', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error&textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      const original = queries.at(-1);
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      await screen.findByRole('option', { name: 'Span name' });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      expect(queries.at(-1)).toEqual(original);
+    });
+
     it('keeps an empty search chip editable after changing another filter field', async () => {
       setHandlers(spanRowsPage, {
         ...spanQueryCapabilities,
@@ -386,6 +418,37 @@ describe('SpansExplorerBody', () => {
   describe('when a span ends while the page is open', () => {
     afterEach(() => {
       vi.useRealTimers();
+    });
+
+    it('keeps panel span references stable on an unrelated render after merging head rows', async () => {
+      setHandlers(spanRowsPage);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          const body: QuerySpansInput = await request.json();
+          return HttpResponse.json(body.orderBy?.[0]?.field === 'endedAt' ? spanHeadPage : spanRowsPage);
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+      const renderPanel = vi.fn<(args: SpansExplorerPanelArgs) => null>(() => null);
+      const onSelectionChange = vi.fn();
+      const { rerender } = renderWithProviders(
+        <SpansExplorerBody selection={undefined} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
+      );
+      await screen.findByText('agent run: weather');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
+      });
+      await screen.findByText(endedSpan.name);
+      const spans = renderPanel.mock.lastCall?.[0].spans;
+      expect(spans).toContainEqual({ traceId: endedSpan.traceId, spanId: endedSpan.spanId });
+      rerender(
+        <SpansExplorerBody
+          selection={firstListedSpan}
+          onSelectionChange={onSelectionChange}
+          renderPanel={renderPanel}
+        />,
+      );
+      expect(renderPanel.mock.lastCall?.[0].spans).toBe(spans);
     });
 
     it('appears in the list on the next poll', async () => {

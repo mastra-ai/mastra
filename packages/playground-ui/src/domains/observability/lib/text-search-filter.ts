@@ -8,6 +8,7 @@ export const TEXT_SEARCH_FIELD: FilterBarField = {
   icon: SearchIcon,
   operators: ['is'],
   rootOnly: true,
+  singleton: true,
   validateInput: value => (effectiveTextSearch(value) ? undefined : 'Enter between 3 and 256 characters to search'),
 };
 

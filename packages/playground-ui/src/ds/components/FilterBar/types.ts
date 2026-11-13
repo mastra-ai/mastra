@@ -82,6 +82,8 @@ export type FilterBarField = {
   hidden?: boolean;
   /** Only offered at the root, for query options that cannot be nested in boolean groups. */
   rootOnly?: boolean;
+  /** Cannot replace another chip's field when this field already has a chip. */
+  singleton?: boolean;
   /** A validation message prevents committing free text until the input is valid. */
   validateInput?: (value: string) => string | undefined;
   /**

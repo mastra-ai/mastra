@@ -500,6 +500,25 @@ describe('TracesExplorer.Histogram', () => {
     });
   });
   describe('when text search is supported', () => {
+    it('marks an invalid restored search as not applied while retaining the histogram', async () => {
+      setHandlers({ capabilities: traceTextSearchCapabilities });
+      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'ab' } });
+      expect(screen.getByText('Not applied')).toBeTruthy();
+      expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
+      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(chart()).not.toBeNull();
+    });
+
+    it('does not offer an existing search field when editing another chip', async () => {
+      setHandlers({ capabilities: traceTextSearchCapabilities });
+      await renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY, textSearch: 'needle' },
+      });
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      await screen.findByRole('option', { name: 'Trace ID' });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+    });
+
     it('keeps an empty search chip editable after changing another filter field', async () => {
       setHandlers({
         capabilities: traceTextSearchCapabilities,
