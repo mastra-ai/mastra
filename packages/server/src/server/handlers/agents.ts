@@ -442,6 +442,10 @@ async function authorizeRunOwner({
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
 function hasResumableStreams(agent: Agent): boolean {
+  // Older Inngest wrappers inherit false from the plain Agent or lack this capability method.
+  // Keep durable execution detached from HTTP cancellation across package-version mismatches.
+  if (isDurableAgentLike(agent)) return true;
+
   const resumable = agent as unknown as ResumableStreamsAgent;
   return typeof resumable.hasResumableStreams === 'function' && resumable.hasResumableStreams();
 }

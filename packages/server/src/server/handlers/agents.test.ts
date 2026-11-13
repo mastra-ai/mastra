@@ -5137,9 +5137,13 @@ describe('plain Agent resumable streams', () => {
     expect(captured._detachObserverOnCancel).toBe(detaches);
   });
 
-  it('detaches a durable wrapper whose wrapped agent has streams off', async () => {
+  it.each([true, false, undefined])('detaches a durable wrapper reporting stream capability %s', async capability => {
     const inner = plainAgent('wrapped-agent', false);
     const durable = createDurableAgent({ agent: inner, id: 'proxied-durable', name: 'proxied-durable' });
+    // Older Inngest proxies can inherit false from the plain Agent, or lack the method entirely.
+    Object.defineProperty(durable, 'hasResumableStreams', {
+      value: capability === undefined ? undefined : () => capability,
+    });
     const mastra = new Mastra({ agents: { 'proxied-durable': durable as any }, logger: false });
     let captured: any;
     vi.spyOn(durable, 'stream').mockImplementation(async (_messages: any, options: any) => {
