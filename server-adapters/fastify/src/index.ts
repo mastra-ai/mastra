@@ -643,6 +643,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...params.urlParams,
         ...params.queryParams,
         ...(typeof params.body === 'object' ? params.body : {}),
+        requestBody: params.body,
         requestContext: request.requestContext,
         mastra: this.mastra,
         registeredTools: request.registeredTools,

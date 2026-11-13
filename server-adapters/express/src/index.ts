@@ -600,6 +600,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...params.urlParams,
           ...params.queryParams,
           ...(typeof params.body === 'object' ? params.body : {}),
+          requestBody: params.body,
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
           registeredTools: res.locals.registeredTools,

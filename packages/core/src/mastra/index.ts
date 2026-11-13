@@ -5883,6 +5883,10 @@ export class Mastra<
       tools[key] = schemas;
       tools[tool.id] = schemas;
     }
+    const toolProviders: NonNullable<WorkflowRegistryIndex['toolProviders']> = {};
+    for (const [providerId, provider] of Object.entries(this.#editor?.getToolProviders() ?? {})) {
+      toolProviders[providerId] = { supportsResolveToolsVNext: typeof provider.resolveToolsVNext === 'function' };
+    }
     const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
     const refusedAnswerDescription =
       "When the model refuses the question, the answer is { type: 'refusal' } with no choice, score, probability, or probabilities.";
@@ -5976,7 +5980,7 @@ export class Mastra<
       workflows[key] = schemas;
       workflows[workflow.id] = schemas;
     }
-    return { agents, tools, classifiers, workflows };
+    return { agents, tools, toolProviders, classifiers, workflows };
   }
 
   /**
@@ -6050,19 +6054,26 @@ export class Mastra<
     // Save-path is strict (boot-time load is lenient — see #loadDynamicWorkflows).
     // Normalization coerces the wire shape; one validation call per member
     // covers structure, JSON-Schema keywords, references, and schema-flow.
-    const members = defs.map(def => ({
-      normalized: normalizeWorkflowBuilderDefinition({
-        id: def.id,
-        description: def.description,
-        metadata: def.metadata,
-        inputSchema: def.inputSchema,
-        outputSchema: def.outputSchema,
-        stateSchema: def.stateSchema,
-        requestContextSchema: def.requestContextSchema,
-        graph: def.graph,
-        schedule: def.schedule,
+    const store = await this.#storage?.getStore('workflowDefinitions');
+    const members = await Promise.all(
+      defs.map(async def => {
+        const existing = await store?.get(def.id);
+        return {
+          normalized: normalizeWorkflowBuilderDefinition({
+            id: def.id,
+            description: def.description,
+            metadata: def.metadata,
+            inputSchema: def.inputSchema,
+            outputSchema: def.outputSchema,
+            stateSchema: def.stateSchema,
+            requestContextSchema: def.requestContextSchema,
+            graph: def.graph,
+            schedule: def.schedule,
+          }),
+          authorId: existing?.authorId ?? ('authorId' in def && def.authorId !== undefined ? def.authorId : undefined),
+        };
       }),
-    }));
+    );
 
     // Members may nest each other, so the index every member validates against
     // is the live registries plus the bundle itself — not the registry alone.
@@ -6123,14 +6134,13 @@ export class Mastra<
     };
 
     try {
-      for (const { normalized } of ordered) {
-        const { workflow } = await rehydrateWorkflow(normalized, this);
+      for (const { normalized, authorId } of ordered) {
+        const { workflow } = await rehydrateWorkflow({ ...normalized, authorId }, this);
         this.#replaceDynamicWorkflow(workflow as AnyWorkflow, normalized.id);
       }
 
-      const store = await this.#storage?.getStore('workflowDefinitions');
       if (store) {
-        for (const { normalized } of ordered) {
+        for (const { normalized, authorId } of ordered) {
           await store.upsert({
             id: normalized.id,
             description: normalized.description,
@@ -6141,6 +6151,8 @@ export class Mastra<
             requestContextSchema: normalized.requestContextSchema,
             graph: normalized.graph,
             schedule: normalized.schedule,
+            authorId,
+            preserveAuthorId: true,
           });
         }
       }
@@ -6211,6 +6223,7 @@ export class Mastra<
           const { workflow } = await rehydrateWorkflow(
             {
               id: def.id,
+              authorId: def.authorId,
               description: def.description,
               metadata: def.metadata,
               inputSchema: def.inputSchema as Record<string, any>,

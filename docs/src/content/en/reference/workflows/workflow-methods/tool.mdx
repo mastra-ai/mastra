@@ -9,6 +9,8 @@ packages:
 
 The `.tool()` method adds a tool as a declarative step. The tool's own input and output schemas apply, so the previous step's output must satisfy the tool's input schema. Use `.map()` to transform the data if they don't match.
 
+Pass a tool instance or registered tool ID for tools configured directly on `Mastra`. Pass a provider-tool specification to resolve an OAuth-backed tool from a registered `ToolProvider` when the workflow runs.
+
 Unlike wrapping a tool with `createStep()`, `.tool()` records a declarative entry in the workflow graph. This makes the workflow portable: the same graph can be serialized and persisted as a [dynamic workflow](/docs/workflows/dynamic-workflows).
 
 ## Usage example
@@ -23,9 +25,9 @@ workflow.tool(testTool).commit()
   content={[
   {
     name: 'toolOrId',
-    type: 'Tool | string',
+    type: 'Tool | string | ProviderToolStepSpec',
     description:
-      'A tool instance, or the ID of a tool registered on the Mastra instance. When passing an ID, the tool is resolved from the registry at execution time.',
+      'A tool instance, a registered tool ID, or a provider-tool specification containing a provider ID, tool slug, optional connection, and optional JSON Schema snapshots.',
     isOptional: false,
   },
   {
@@ -64,9 +66,41 @@ Pass a string to reference a registered tool without importing it. The tool must
 workflow.tool('lookup-customer', { retries: 2 }).commit()
 ```
 
+## Running a provider tool
+
+Pass a provider-tool specification to resolve one tool from a `ToolProvider` at execution time. This supports provider-managed OAuth connections without registering the resolved tool in the `Mastra` `tools` object:
+
+```typescript filename="src/mastra/workflows/test-workflow.ts"
+workflow
+  .tool({
+    type: 'provider',
+    providerId: 'composio',
+    toolSlug: 'GITHUB_CREATE_ISSUE',
+    connection: {
+      kind: 'invoker',
+      connectionId: 'github-connection',
+      toolkit: 'github',
+    },
+    inputSchema: {
+      type: 'object',
+      properties: {
+        owner: { type: 'string' },
+        repo: { type: 'string' },
+        title: { type: 'string' },
+      },
+      required: ['owner', 'repo', 'title'],
+    },
+  })
+  .commit()
+```
+
+Each provider-tool step resolves exactly one `toolSlug`. An `invoker` connection uses the execution identity. When the provider's default scope is `caller-supplied`, omit `connection` to derive the identity from the run's request context. Persisted dynamic workflows may use an `author` connection, which binds to the workflow owner restored from storage. Code-defined workflows reject `author` connections because they don't have a persisted owner. The provider must implement `resolveToolsVNext()`.
+
+The optional `inputSchema` and `outputSchema` fields are JSON Schema snapshots for graph validation and visual editors. Mastra still resolves and executes the current provider tool at runtime.
+
 ## Persisting tool steps
 
-Workflows built with `.tool()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Only `retries` and `metadata` round-trip through storage. A function-valued `scorers` option throws an error when the workflow is stored.
+Workflows built with `.tool()` serialize to the same declarative entries that [dynamic workflows](/docs/workflows/dynamic-workflows) use. Provider-tool specifications persist as `provider-tool` entries containing the provider ID, tool slug, connection, and optional schema snapshots. Only `retries` and `metadata` round-trip from provider-tool step options. Unlike registered-tool steps, provider-tool steps reject any defined `scorers` option.
 
 ## Related
 

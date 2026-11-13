@@ -2276,7 +2276,7 @@ async function runRoutePipeline(
           ...context,
         }
       : context;
-    return { ok: true, result: await route.handler({ ...params, ...serverContext }) };
+    return { ok: true, result: await route.handler({ ...params, requestBody: body, ...serverContext }) };
   } catch (error) {
     const customResponse = policy.customErrorResponses ? getCustomHTTPExceptionResponse(error) : undefined;
     if (customResponse) {

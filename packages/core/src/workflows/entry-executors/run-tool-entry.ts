@@ -1,5 +1,6 @@
 import type { Mastra } from '../../mastra';
 import { resolveObservabilityContext } from '../../observability';
+import { createToolObserve } from '../../tools/observe';
 import type { ToolStepEntry } from '../types';
 import { resolveEntryActor } from './actor';
 import type { EntryExecuteContext } from './types';
@@ -18,6 +19,14 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     );
   }
 
+  return executeToolWithStepContext(tool, entry.options, ctx);
+}
+
+export async function executeToolWithStepContext(
+  tool: { id: string; execute?: (inputData: any, context: any) => Promise<any> },
+  options: Record<string, unknown> | undefined,
+  ctx: EntryExecuteContext,
+): Promise<unknown> {
   const {
     inputData,
     mastra: ctxMastra,
@@ -38,8 +47,9 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
   const toolContext = {
     mastra: ctxMastra,
     requestContext,
-    actor: resolveEntryActor(entry.options as Record<string, unknown> | undefined, actor),
+    actor: resolveEntryActor(options, actor),
     ...observabilityContext,
+    observe: createToolObserve(observabilityContext.tracing.currentSpan),
     abortSignal,
     writer,
     resumeData,
@@ -54,6 +64,10 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
       setState,
     },
   };
+
+  if (!tool.execute) {
+    throw new Error(`Tool '${tool.id}' does not define an execute function`);
+  }
 
   return tool.execute(inputData, toolContext);
 }

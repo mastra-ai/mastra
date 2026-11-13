@@ -228,6 +228,25 @@ describe('validateDynamicWorkflow', () => {
         ]),
       );
     });
+
+    it('accepts full JSON Schema snapshots on provider-tool entries', () => {
+      const issues = validateDynamicWorkflow(
+        def({
+          graph: [
+            {
+              type: 'provider-tool',
+              id: 'provider-step',
+              providerId: 'composio',
+              toolSlug: 'GITHUB_CREATE_ISSUE',
+              inputSchema: { anyOf: [{ type: 'string' }, { $ref: '#/$defs/input' }] },
+              outputSchema: { oneOf: [{ type: 'object' }, { type: 'null' }] },
+            },
+          ],
+        }),
+      );
+
+      expect(issues).toEqual([]);
+    });
   });
 
   describe('references', () => {
@@ -269,6 +288,43 @@ describe('validateDynamicWorkflow', () => {
           message: expect.stringContaining('not a registered workflow'),
         }),
       ]);
+    });
+
+    it('validates provider-tool references and resolution capability', () => {
+      const graph = [
+        {
+          type: 'provider-tool' as const,
+          id: 'provider-step',
+          providerId: 'composio',
+          toolSlug: 'GITHUB_CREATE_ISSUE',
+        },
+      ];
+
+      expect(validateDynamicWorkflow(def({ graph }), { toolProviders: {} })).toEqual([
+        expect.objectContaining({
+          code: 'missing-reference',
+          path: 'graph.0.providerId',
+          message: expect.stringContaining('not a registered tool provider'),
+        }),
+      ]);
+
+      expect(
+        validateDynamicWorkflow(def({ graph }), {
+          toolProviders: { composio: { supportsResolveToolsVNext: false } },
+        }),
+      ).toEqual([
+        expect.objectContaining({
+          code: 'missing-reference',
+          path: 'graph.0.providerId',
+          message: expect.stringContaining('does not implement resolveToolsVNext'),
+        }),
+      ]);
+
+      expect(
+        validateDynamicWorkflow(def({ graph }), {
+          toolProviders: { composio: { supportsResolveToolsVNext: true } },
+        }),
+      ).toEqual([]);
     });
 
     it('suggests swapping the entry type when an id is registered under the other kind', () => {

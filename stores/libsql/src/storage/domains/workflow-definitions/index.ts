@@ -149,6 +149,10 @@ export class WorkflowDefinitionsLibSQL extends WorkflowDefinitionsStorage {
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
+    const existing = await this.get(input.id);
+    if (input.preserveAuthorId && existing?.authorId !== input.authorId) {
+      throw new Error(`Workflow definition "${input.id}" is owned by a different author.`);
+    }
     // Update — only patch fields present in the input
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;

@@ -26,6 +26,7 @@ export function forEachSingleStepEntry(
       case 'step':
       case 'agent':
       case 'tool':
+      case 'provider-tool':
       case 'classifier':
       case 'mapping':
       case 'workflow':
@@ -80,6 +81,7 @@ export function forEachSingleStepEntryWithPath(
       case 'step':
       case 'agent':
       case 'tool':
+      case 'provider-tool':
       case 'classifier':
       case 'mapping':
       case 'workflow':

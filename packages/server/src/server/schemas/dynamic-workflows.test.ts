@@ -60,6 +60,35 @@ describe('dynamic workflow wire schema — control-flow entry identity fields', 
     }
   });
 
+  it('preserves provider-tool connection and schema snapshots', () => {
+    const providerTool = {
+      type: 'provider-tool' as const,
+      id: 'send-email',
+      providerId: 'composio',
+      toolSlug: 'gmail.send_email',
+      connection: {
+        kind: 'invoker' as const,
+        connectionId: 'gmail-connection',
+        toolkit: 'gmail',
+        label: 'Work',
+        scope: 'per-author' as const,
+      },
+      inputSchema: { type: 'object', properties: { to: { type: 'string' } }, required: ['to'] },
+      outputSchema: { type: 'object', properties: { messageId: { type: 'string' } } },
+      description: 'Send an email',
+      options: { retries: 2, metadata: { title: 'Email' } },
+    };
+
+    const result = dynamicWorkflowDefinitionBodySchema.safeParse({
+      ...baseDefinition,
+      graph: [providerTool, { type: 'parallel', steps: [providerTool] }],
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data!.graph[0]).toEqual(providerTool);
+    expect((result.data!.graph[1] as { steps: unknown[] }).steps[0]).toEqual(providerTool);
+  });
+
   it('still accepts control-flow entries without the optional identity fields', () => {
     const result = dynamicWorkflowDefinitionBodySchema.safeParse({
       ...baseDefinition,

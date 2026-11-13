@@ -22,6 +22,8 @@ function inputSchemaOf(entry: SerializedSingleStepEntry, index: WorkflowRegistry
       );
     case 'tool':
       return index.tools?.[entry.toolId]?.inputSchema;
+    case 'provider-tool':
+      return entry.inputSchema;
     case 'classifier':
       return index.classifiers?.[entry.classifierId]?.inputSchema;
     case 'workflow':
@@ -44,6 +46,7 @@ function entryAtPath(def: WorkflowValidationInput, path: string): SerializedSing
   if (
     entry.type === 'agent' ||
     entry.type === 'tool' ||
+    entry.type === 'provider-tool' ||
     entry.type === 'classifier' ||
     entry.type === 'workflow' ||
     entry.type === 'mapping' ||

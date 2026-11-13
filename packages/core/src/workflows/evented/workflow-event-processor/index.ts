@@ -2208,7 +2208,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     return this.runLeafStep(
       {
         ...args,
-        step: step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+        step: step as Extract<
+          StepFlowEntry,
+          { type: 'step' | 'agent' | 'tool' | 'provider-tool' | 'mapping' | 'loop' | 'foreach' }
+        >,
       },
       control,
     );
@@ -2456,7 +2459,10 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   protected async runLeafStep(
     args: ProcessorArgs & {
-      step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
+      step: Extract<
+        StepFlowEntry,
+        { type: 'step' | 'agent' | 'tool' | 'provider-tool' | 'mapping' | 'loop' | 'foreach' }
+      >;
     },
     control: ControlAtDispatch = {},
   ) {

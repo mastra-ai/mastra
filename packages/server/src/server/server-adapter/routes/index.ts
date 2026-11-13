@@ -60,6 +60,8 @@ export type ServerContext = {
   routePrefix?: string;
   /** The web-standard Request object for accessing headers, cookies, etc. */
   request?: Request;
+  /** The parsed request body before runtime context fields are injected. */
+  requestBody?: unknown;
 };
 
 /**

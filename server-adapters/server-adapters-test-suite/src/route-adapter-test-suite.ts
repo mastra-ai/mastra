@@ -254,6 +254,32 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       });
     });
 
+    describe('Parsed request body preservation', () => {
+      beforeEach(async () => {
+        await setup.adapter.registerRoute(
+          app,
+          createRoute({
+            method: 'PATCH',
+            path: '/test/request-body',
+            responseType: 'json',
+            bodySchema: z.object({ requestContext: z.record(z.string(), z.unknown()).optional() }),
+            handler: async ({ requestBody }) => ({ requestBody }),
+          }),
+        );
+      });
+
+      it('keeps body fields that collide with runtime context', async () => {
+        const response = await executeHttpRequest(app, {
+          method: 'PATCH',
+          path: '/api/test/request-body',
+          body: { requestContext: { tenantId: 'scheduled-tenant' } },
+        });
+
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual({ requestBody: { requestContext: { tenantId: 'scheduled-tenant' } } });
+      });
+    });
+
     describe('Scalar JSON body validation', () => {
       beforeEach(async () => {
         const route = createRoute({

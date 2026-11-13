@@ -47,7 +47,7 @@ export type ResolvedWorkflowAgentStep = ResolvedWorkflowStepBase<
 
 export type ResolvedWorkflowToolStep = ResolvedWorkflowStepBase<
   'tool-step',
-  Extract<SerializedStepFlowEntry, { type: 'tool' }>
+  Extract<SerializedStepFlowEntry, { type: 'tool' | 'provider-tool' }>
 >;
 
 export type ResolvedWorkflowClassifierStep = ResolvedWorkflowStepBase<

@@ -98,6 +98,7 @@ import {
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
+import { buildProviderToolEntry, isProviderToolStepSpec, pickProviderToolStepOptions } from './provider-tool-entry';
 import { loadedStepResults, residentStepResults } from './run-journal';
 import type { ParentStateLink, StateBase } from './run-journal';
 import { claimWorkflowRunOwnership } from './run-ownership';
@@ -114,7 +115,13 @@ import type {
   Step,
   SuspendOptions,
 } from './step';
-import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
+import {
+  createMappingStep,
+  createStepFromAgent,
+  createStepFromClassifier,
+  createStepFromProviderToolEntry,
+  createStepFromTool,
+} from './step-factories';
 import type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
 import { collectPredicateStepRefs, resolveStepOutputs } from './step-refs';
 import type {
@@ -124,6 +131,7 @@ import type {
   ExtractSchemaType,
   MappingConfig,
   PathsToStringProps,
+  ProviderToolStepSpec,
   SerializedSingleStepEntry,
   SerializedStep,
   SerializedStepFlowEntry,
@@ -168,7 +176,13 @@ import {
 // Re-exported so the public `@mastra/core/workflows` surface (and existing
 // `./workflow` imports) are unchanged; the factories live in `step-factories.ts`
 // so the execution engines can use them without importing this module.
-export { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
+export {
+  createMappingStep,
+  createStepFromAgent,
+  createStepFromClassifier,
+  createStepFromProviderToolEntry,
+  createStepFromTool,
+} from './step-factories';
 export type { AgentStepOptions, ClassifierStepOptions } from './step-factories';
 export type { ClassifierStepOutput } from './entry-executors';
 
@@ -2260,6 +2274,7 @@ export class Workflow<
           this.steps[entry.id] = { id: entry.id, component: 'AGENT' } as any;
           return;
         case 'tool':
+        case 'provider-tool':
           this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
           return;
         case 'classifier':
@@ -2282,6 +2297,7 @@ export class Workflow<
       case 'step':
       case 'agent':
       case 'tool':
+      case 'provider-tool':
       case 'classifier':
       case 'mapping':
         register(live);
@@ -2512,7 +2528,26 @@ export class Workflow<
     options?: { retries?: number; scorers?: DynamicArgument<MastraScorers>; metadata?: StepMetadata },
     stepOptions?: { id?: string },
   ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
+  tool(
+    providerTool: ProviderToolStepSpec,
+    options?: { retries?: number; metadata?: StepMetadata },
+    stepOptions?: { id?: string },
+  ): Workflow<TEngineType, TSteps, TWorkflowId, TState, TInput, TOutput, unknown, TRequestContext, TStorageVersion>;
   tool(toolOrId: any, options?: any, stepOptions?: { id?: string }): any {
+    if (isProviderToolStepSpec(toolOrId)) {
+      if (toolOrId.connection?.kind === 'author') {
+        throw new Error(
+          `Provider tool step "${stepOptions?.id || toolOrId.toolSlug}" cannot use an author connection in a code-defined workflow. Persist the workflow as a dynamic workflow so Mastra can bind its owner, or use an invoker connection.`,
+        );
+      }
+      const serializedOptions = pickProviderToolStepOptions(options, stepOptions?.id || toolOrId.toolSlug);
+      const entry = buildProviderToolEntry(toolOrId, serializedOptions, stepOptions?.id);
+      this.stepFlow.push(entry);
+      this.serializedStepFlow.push(entry);
+      this.steps[entry.id] = { id: entry.id, component: 'TOOL' } as any;
+      return this as any;
+    }
+
     const isId = typeof toolOrId === 'string';
     const toolId = isId ? toolOrId : toolOrId.id;
     const id = stepOptions?.id || toolId;

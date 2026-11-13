@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../logger';
 import { MASTRA_RESOURCE_ID_KEY } from '../request-context';
 import type { RequestContext } from '../request-context';
 import type { ToolAction } from '../tools/types';
+import { ToolProviderStepError } from './errors';
 import type { ToolProvider, ToolProviderConnection, ToolProviders } from './types';
 import { SHARED_BUCKET_ID } from './types';
 
@@ -20,6 +21,78 @@ export interface ResolveStoredToolProvidersOpts {
   authorId?: string;
   /** Optional logger for non-fatal per-connection warnings. */
   logger?: IMastraLogger;
+}
+
+export interface ResolveSingleProviderToolOpts extends ResolveStoredToolProvidersOpts {
+  provider: ToolProvider;
+  providerId: string;
+  toolSlug: string;
+  connection?: ToolProviderConnection;
+}
+
+export async function resolveSingleProviderTool({
+  provider,
+  providerId,
+  toolSlug,
+  connection,
+  requestContext,
+  authorId,
+  logger,
+}: ResolveSingleProviderToolOpts): Promise<ToolAction<any, any, any>> {
+  if (!provider.resolveToolsVNext) {
+    throw new ToolProviderStepError(providerId, toolSlug, 'provider does not implement resolveToolsVNext');
+  }
+
+  const toolkit = connection?.toolkit ?? (toolSlug.includes('.') ? toolSlug.split('.')[0] : providerId);
+  if (!toolkit) {
+    throw new ToolProviderStepError(providerId, toolSlug, 'toolkit could not be determined from the tool slug');
+  }
+
+  let resolvedConnection = connection;
+  if (!resolvedConnection) {
+    if (provider.defaultScope !== 'caller-supplied') {
+      throw new ToolProviderStepError(providerId, toolSlug, 'a connection is required for this provider');
+    }
+    const callerId = resolveCallerSuppliedAuthorId(requestContext, logger);
+    resolvedConnection = {
+      kind: 'author',
+      connectionId: callerId,
+      toolkit,
+      scope: 'caller-supplied',
+    };
+  }
+
+  const resolvedAuthorId = resolveConnectionAuthorId(resolvedConnection, authorId, requestContext, logger);
+  if (
+    resolvedConnection.kind === 'author' &&
+    resolvedConnection.scope !== 'shared' &&
+    resolvedConnection.scope !== 'caller-supplied' &&
+    !resolvedAuthorId
+  ) {
+    throw new ToolProviderStepError(providerId, toolSlug, 'workflow owner is required for an author connection');
+  }
+
+  let tools: Record<string, ToolAction<any, any, any>>;
+  try {
+    tools = await provider.resolveToolsVNext({
+      toolSlugs: [toolSlug],
+      toolMeta: { [toolSlug]: { toolkit } },
+      connectionId: resolvedConnection.connectionId,
+      authorId: resolvedAuthorId,
+      kind: resolvedConnection.kind,
+      toolkit,
+      scope: resolvedConnection.scope,
+      requestContext,
+    });
+  } catch (error) {
+    throw new ToolProviderStepError(providerId, toolSlug, 'provider resolution failed', { cause: error });
+  }
+
+  const tool = tools[toolSlug];
+  if (!tool) {
+    throw new ToolProviderStepError(providerId, toolSlug, 'provider did not return the requested tool');
+  }
+  return { ...tool, id: toolSlug } as ToolAction<any, any, any>;
 }
 
 /**

@@ -79,6 +79,7 @@ export type ExecuteFunctionParams<
   writer: ToolStream;
   outputWriter?: OutputWriter;
   validateSchemas?: boolean;
+  validateInputs?: boolean;
 };
 
 export type ConditionFunctionParams<

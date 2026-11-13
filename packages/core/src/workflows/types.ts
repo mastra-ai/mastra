@@ -17,6 +17,7 @@ import type {
 } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
+import type { StorageToolProviderConfigConnection } from '../storage/types';
 import type { OutputSchema } from '../stream';
 import type { SchemaWithValidation } from '../stream/base/schema';
 import type { ChunkType, WorkflowStreamEvent } from '../stream/types';
@@ -780,10 +781,31 @@ export type SerializableClassifierStepOptions = {
   metadata?: StepMetadata;
 };
 
+export type ProviderToolStepFields = {
+  id: string;
+  providerId: string;
+  toolSlug: string;
+  connection?: StorageToolProviderConfigConnection;
+  inputSchema?: Record<string, any>;
+  outputSchema?: Record<string, any>;
+  description?: string;
+  options?: {
+    retries?: number;
+    metadata?: StepMetadata;
+  };
+};
+
+export type ProviderToolStepSpec = Omit<ProviderToolStepFields, 'id' | 'options'> & {
+  type: 'provider';
+};
+
+export type ProviderToolStepEntry = { type: 'provider-tool' } & ProviderToolStepFields;
+
 export type SingleStepEntry<TEngineType = DefaultEngineType> =
   | { type: 'step'; step: Step }
   | { type: 'agent'; id: string; agentId: string; agent?: any; options?: any }
   | { type: 'tool'; id: string; toolId: string; tool?: any; options?: any }
+  | ({ type: 'provider-tool'; ownerId?: string } & ProviderToolStepFields)
   | {
       type: 'classifier';
       id: string;
@@ -805,6 +827,8 @@ export type StepEntry = Extract<SingleStepEntry, { type: 'step' }>;
 export type AgentStepEntry = Extract<SingleStepEntry, { type: 'agent' }>;
 /** The `{ type: 'tool' }` variant of {@link SingleStepEntry}. */
 export type ToolStepEntry = Extract<SingleStepEntry, { type: 'tool' }>;
+/** The `{ type: 'provider-tool' }` variant of {@link SingleStepEntry}. */
+export type ProviderToolEntry = Extract<SingleStepEntry, { type: 'provider-tool' }>;
 /** The `{ type: 'classifier' }` variant of {@link SingleStepEntry}. */
 export type ClassifierStepEntry = Extract<SingleStepEntry, { type: 'classifier' }>;
 /** The `{ type: 'mapping' }` variant of {@link SingleStepEntry}. */
@@ -959,6 +983,7 @@ export type SerializedSingleStepEntry =
       // looked up from the live Mastra instance at rehydration time.
       options?: SerializedStepOptions;
     }
+  | ProviderToolStepEntry
   | {
       type: 'classifier';
       id: string;

@@ -38,6 +38,7 @@ export function getEntryRetries(entry: SingleStepEntry, fallback?: number): numb
       return entry.step.retries ?? fallback;
     case 'agent':
     case 'tool':
+    case 'provider-tool':
     case 'classifier':
       return entry.options?.retries ?? fallback;
     case 'mapping':
@@ -75,7 +76,9 @@ export function getEntryWorkflow(entry: SingleStepEntry): Workflow | null {
  * don't carry a live description (agent descriptions live on the agent itself).
  */
 export function getEntryDescription(entry: SingleStepEntry): string | undefined {
-  return entry.type === 'step' ? entry.step.description : undefined;
+  if (entry.type === 'step') return entry.step.description;
+  if (entry.type === 'provider-tool') return entry.description;
+  return undefined;
 }
 
 /**
@@ -116,6 +119,7 @@ export function getEntrySchemas(
         ? { inputSchema: tool.inputSchema, resumeSchema: tool.resumeSchema, suspendSchema: tool.suspendSchema }
         : {};
     }
+    case 'provider-tool':
     case 'mapping':
       return {};
   }

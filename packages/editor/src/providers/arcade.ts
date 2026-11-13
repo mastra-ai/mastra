@@ -1,3 +1,14 @@
+import { Arcade } from '@arcadeai/arcadejs';
+import { toZodToolSet, executeOrAuthorizeZodTool } from '@arcadeai/arcadejs/lib/index';
+import type { ZodTool, ToolAuthorizationResponse } from '@arcadeai/arcadejs/lib/index';
+import type {
+  ToolDefinition,
+  ExecuteToolResponse,
+  ToolListParams as ArcadeToolListParams,
+} from '@arcadeai/arcadejs/resources';
+
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { StorageToolConfig } from '@mastra/core/storage';
 import type {
   ToolProvider,
   ToolProviderInfo,
@@ -8,17 +19,6 @@ import type {
   ResolveToolProviderToolsOptions,
 } from '@mastra/core/tool-provider';
 import type { ToolAction } from '@mastra/core/tools';
-import type { StorageToolConfig } from '@mastra/core/storage';
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
-
-import { Arcade } from '@arcadeai/arcadejs';
-import type {
-  ToolDefinition,
-  ExecuteToolResponse,
-  ToolListParams as ArcadeToolListParams,
-} from '@arcadeai/arcadejs/resources';
-import { toZodToolSet, executeOrAuthorizeZodTool } from '@arcadeai/arcadejs/lib/index';
-import type { ZodTool, ToolAuthorizationResponse } from '@arcadeai/arcadejs/lib/index';
 
 export interface ArcadeToolProviderConfig {
   /** Arcade AI API key */
@@ -131,6 +131,25 @@ const KNOWN_TOOLKITS: readonly { slug: string; name: string; description?: strin
   { slug: 'ZohoBooksApi', name: 'Zoho Books API', category: 'payments' },
   { slug: 'Zoom', name: 'Zoom', category: 'social' },
 ] as const;
+
+function toInputJsonSchema(tool: ToolDefinition): Record<string, unknown> {
+  const properties: Record<string, Record<string, unknown>> = {};
+  const required: string[] = [];
+
+  for (const param of tool.input?.parameters ?? []) {
+    properties[param.name] = {
+      ...(param.value_schema ?? {}),
+      description: param.description,
+    };
+    if (param.required) required.push(param.name);
+  }
+
+  return {
+    type: 'object',
+    properties,
+    ...(required.length > 0 ? { required } : {}),
+  };
+}
 
 /**
  * Arcade AI tool provider adapter.
@@ -251,6 +270,7 @@ export class ArcadeToolProvider implements ToolProvider {
       name: tool.name,
       description: tool.description,
       toolkit: tool.toolkit?.name,
+      inputSchema: toInputJsonSchema(tool),
     }));
 
     return {
@@ -273,23 +293,7 @@ export class ArcadeToolProvider implements ToolProvider {
       const tool: ToolDefinition = await client.tools.get(toolSlug);
       if (!tool) return null;
 
-      // Convert Arcade's parameter array to a JSON Schema-like object
-      const properties: Record<string, Record<string, unknown>> = {};
-      const required: string[] = [];
-
-      for (const param of tool.input?.parameters ?? []) {
-        properties[param.name] = {
-          ...(param.value_schema ?? {}),
-          description: param.description,
-        };
-        if (param.required) required.push(param.name);
-      }
-
-      return {
-        type: 'object',
-        properties,
-        ...(required.length > 0 ? { required } : {}),
-      };
+      return toInputJsonSchema(tool);
     } catch {
       return null;
     }

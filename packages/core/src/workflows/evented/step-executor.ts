@@ -20,7 +20,13 @@ import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { StepExecutionParentWorkflow } from '../../worker/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
+import {
+  runAgentEntry,
+  runClassifierEntry,
+  runMappingEntry,
+  runProviderToolEntry,
+  runToolEntry,
+} from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { getStepResult, getStepResultAsync } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
@@ -341,6 +347,7 @@ export class StepExecutor extends MastraBase {
                 [STREAM_FORMAT_SYMBOL]: params.format,
                 engine: {},
                 abortSignal: abortController?.signal,
+                validateInputs: params.validateInputs,
                 ...createObservabilityContext(stepTracingContext),
               },
               {
@@ -356,6 +363,8 @@ export class StepExecutor extends MastraBase {
                 return runAgentEntry(entry, executionContext, this.mastra);
               case 'tool':
                 return runToolEntry(entry, executionContext, this.mastra);
+              case 'provider-tool':
+                return runProviderToolEntry(entry, executionContext, this.mastra);
               case 'classifier':
                 return runClassifierEntry(entry, executionContext);
               case 'mapping':

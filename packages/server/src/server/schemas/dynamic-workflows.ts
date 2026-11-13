@@ -80,6 +80,26 @@ const toolEntrySchema = z.object({
   options: stepOptionsSchema,
 });
 
+const providerToolEntrySchema = z.object({
+  type: z.literal('provider-tool'),
+  id: z.string(),
+  providerId: z.string(),
+  toolSlug: z.string(),
+  connection: z
+    .object({
+      kind: z.enum(['author', 'invoker', 'platform']),
+      connectionId: z.string(),
+      toolkit: z.string(),
+      label: z.string().optional(),
+      scope: z.enum(['shared', 'per-author', 'caller-supplied']).optional(),
+    })
+    .optional(),
+  inputSchema: z.record(z.string(), z.unknown()).optional(),
+  outputSchema: z.record(z.string(), z.unknown()).optional(),
+  description: z.string().optional(),
+  options: stepOptionsSchema,
+});
+
 const mappingEntrySchema = z.object({
   type: z.literal('mapping'),
   id: z.string(),
@@ -97,15 +117,22 @@ const workflowEntrySchema = z.object({
 const singleStepEntrySchema = z.discriminatedUnion('type', [
   agentEntrySchema,
   toolEntrySchema,
+  providerToolEntrySchema,
   mappingEntrySchema,
   workflowEntrySchema,
 ]);
 
-const foreachInnerStepSchema = z.discriminatedUnion('type', [agentEntrySchema, toolEntrySchema, workflowEntrySchema]);
+const foreachInnerStepSchema = z.discriminatedUnion('type', [
+  agentEntrySchema,
+  toolEntrySchema,
+  providerToolEntrySchema,
+  workflowEntrySchema,
+]);
 
 const graphEntrySchema = z.discriminatedUnion('type', [
   agentEntrySchema,
   toolEntrySchema,
+  providerToolEntrySchema,
   mappingEntrySchema,
   workflowEntrySchema,
   z.object({

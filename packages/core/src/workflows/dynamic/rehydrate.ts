@@ -7,6 +7,7 @@
 import type { Mastra } from '../../mastra';
 import { cloneWorkflow, createEventedWorkflow, createWorkflow } from '../create';
 import { derivePredicateLabel } from '../predicate';
+import { buildProviderToolEntry } from '../provider-tool-entry';
 import type { WorkflowScheduleConfig } from '../scheduler/types';
 import type { Step } from '../step';
 import { createStepFromAgent, createStepFromTool } from '../step-factories';
@@ -25,6 +26,7 @@ import type { ValidatableStepFlowEntry } from './validate/types';
  */
 export interface DynamicWorkflowGraph {
   id: string;
+  authorId?: string;
   description?: string;
   metadata?: Record<string, unknown>;
   inputSchema: JsonSchema;
@@ -60,6 +62,8 @@ export interface RehydratedWorkflow {
 export type RehydrateWorkflowOptions = JsonSchemaToZodOptions & {
   engineType?: 'default' | 'evented';
 };
+
+type RehydrateEntryOptions = JsonSchemaToZodOptions & { authorId?: string };
 
 export async function rehydrateWorkflow(
   def: DynamicWorkflowGraph,
@@ -100,8 +104,9 @@ export async function rehydrateWorkflow(
     }
   }
 
+  const entryOpts: RehydrateEntryOptions = { ...opts, authorId: def.authorId };
   for (const entry of def.graph) {
-    applyGraphEntry(wf, entry, mastra, opts);
+    applyGraphEntry(wf, entry, mastra, entryOpts);
   }
   const built: any = wf.commit();
   built.origin = 'dynamic';
@@ -112,11 +117,12 @@ function applyGraphEntry(
   wf: any,
   entry: ValidatableStepFlowEntry,
   mastra: Mastra,
-  schemaOpts?: JsonSchemaToZodOptions,
+  schemaOpts?: RehydrateEntryOptions,
 ): void {
   switch (entry.type) {
     case 'agent':
     case 'tool':
+    case 'provider-tool':
     case 'classifier':
       wf.__pushStepFlowEntry(rehydrateSingleEntry(entry, mastra, schemaOpts), entry);
       return;
@@ -291,7 +297,7 @@ function rebuildToolOptions(entry: { options?: SerializedStepOptions }): Record<
 function rehydrateSingleEntry(
   entry: SerializedSingleStepEntry,
   mastra: Mastra,
-  schemaOpts?: JsonSchemaToZodOptions,
+  schemaOpts?: RehydrateEntryOptions,
 ): SingleStepEntry {
   switch (entry.type) {
     case 'agent': {
@@ -317,6 +323,22 @@ function rehydrateSingleEntry(
         );
       }
       return { type: 'tool', id: entry.id, toolId: entry.toolId, tool, options: rebuildToolOptions(entry) };
+    }
+    case 'provider-tool': {
+      const live = buildProviderToolEntry(
+        {
+          type: 'provider',
+          providerId: entry.providerId,
+          toolSlug: entry.toolSlug,
+          connection: entry.connection,
+          inputSchema: entry.inputSchema,
+          outputSchema: entry.outputSchema,
+          description: entry.description,
+        },
+        rebuildToolOptions(entry),
+        entry.id,
+      );
+      return { ...live, ownerId: schemaOpts?.authorId };
     }
     case 'classifier': {
       let classifier;

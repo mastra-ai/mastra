@@ -275,6 +275,7 @@ export class RouteHandlerService {
       ...this.omitReservedKeys(validatedPathParams),
       ...this.omitReservedKeys(validatedQueryParams),
       ...(typeof validatedBody === 'object' && validatedBody !== null ? this.omitReservedKeys(validatedBody) : {}),
+      requestBody: validatedBody,
       ...context,
     };
 

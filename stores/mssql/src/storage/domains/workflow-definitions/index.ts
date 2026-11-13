@@ -191,6 +191,10 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
     input: CreateWorkflowDefinitionInput | UpdateWorkflowDefinitionInput,
     now: Date,
   ): Promise<WorkflowDefinition> {
+    const existing = await this.get(input.id);
+    if (input.preserveAuthorId && existing?.authorId !== input.authorId) {
+      throw new Error(`Workflow definition "${input.id}" is owned by a different author.`);
+    }
     const data: Record<string, any> = { updatedAt: now };
     if ('description' in input && input.description !== undefined) data.description = input.description;
     if ('metadata' in input && input.metadata !== undefined) data.metadata = input.metadata;

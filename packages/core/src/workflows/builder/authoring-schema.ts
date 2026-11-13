@@ -139,6 +139,46 @@ export const workflowBuilderToolEntryInputSchema = workflowBuilderToolEntrySchem
   })
   .describe(TOOL_ENTRY_DESCRIPTION);
 
+const PROVIDER_TOOL_ENTRY_DESCRIPTION =
+  'ToolProvider-backed tool step. Resolves one provider tool deterministically at execution time using the selected OAuth connection. Optional inputSchema/outputSchema snapshots support authoring-time graph validation; the latest provider tool remains authoritative at runtime.';
+
+const providerToolConnectionSchema = z.strictObject({
+  kind: z.enum(['author', 'invoker', 'platform']),
+  connectionId: z.string().min(1),
+  toolkit: z.string().min(1),
+  label: z.string().optional(),
+  scope: z.enum(['shared', 'per-author', 'caller-supplied']).optional(),
+});
+
+const providerToolConnectionInputSchema = providerToolConnectionSchema.extend({
+  label: z.string().nullish(),
+  scope: z.enum(['shared', 'per-author', 'caller-supplied']).nullish(),
+});
+
+export const workflowBuilderProviderToolEntrySchema = z
+  .strictObject({
+    type: z.literal('provider-tool'),
+    id: z.string().min(1).describe('Step id — kebab-case, unique within the workflow.'),
+    providerId: z.string().min(1).describe('Id of a ToolProvider registered on the Mastra Editor.'),
+    toolSlug: z.string().min(1).describe('Provider-qualified tool slug returned by provider discovery.'),
+    connection: providerToolConnectionSchema.optional(),
+    inputSchema: z.unknown().optional().describe('Optional authoring-time JSON Schema snapshot for the tool input.'),
+    outputSchema: z.unknown().optional().describe('Optional authoring-time JSON Schema snapshot for the tool output.'),
+    description: z.string().optional(),
+    options: stepOptionsSchema,
+  })
+  .describe(PROVIDER_TOOL_ENTRY_DESCRIPTION);
+
+export const workflowBuilderProviderToolEntryInputSchema = workflowBuilderProviderToolEntrySchema
+  .extend({
+    connection: providerToolConnectionInputSchema.nullish(),
+    inputSchema: z.unknown().nullish().describe('Optional authoring-time JSON Schema snapshot for the tool input.'),
+    outputSchema: z.unknown().nullish().describe('Optional authoring-time JSON Schema snapshot for the tool output.'),
+    description: z.string().nullish(),
+    options: stepOptionsInputSchema,
+  })
+  .describe(PROVIDER_TOOL_ENTRY_DESCRIPTION);
+
 const CLASSIFIER_ENTRY_DESCRIPTION =
   'Classifier step. Evaluates its complete input with a registered configured classifier and returns { answers, usage }. Route with a following conditional entry using inputData.answers.<question>.choice, inputData.answers.<question>.score, or inputData.answers.<question>.probability. A refused question is { type: "refusal" } with no choice, score, or probability; route refusals with inputData.answers.<question>.type. Use a mapping entry before the classifier to reshape its input.';
 
@@ -260,6 +300,7 @@ export const workflowBuilderNestedWorkflowEntryInputSchema = workflowBuilderNest
 const executableInnerStepSchema = z.union([
   workflowBuilderAgentEntrySchema,
   workflowBuilderToolEntrySchema,
+  workflowBuilderProviderToolEntrySchema,
   workflowBuilderClassifierEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
 ]);
@@ -267,6 +308,7 @@ const executableInnerStepSchema = z.union([
 const executableInnerStepInputSchema = z.union([
   workflowBuilderAgentEntryInputSchema,
   workflowBuilderToolEntryInputSchema,
+  workflowBuilderProviderToolEntryInputSchema,
   workflowBuilderClassifierEntryInputSchema,
   workflowBuilderNestedWorkflowEntryInputSchema,
 ]);
@@ -426,6 +468,7 @@ export const workflowBuilderLoopEntryInputSchema = z
 export const workflowBuilderGraphEntrySchema = z.discriminatedUnion('type', [
   workflowBuilderAgentEntrySchema,
   workflowBuilderToolEntrySchema,
+  workflowBuilderProviderToolEntrySchema,
   workflowBuilderClassifierEntrySchema,
   workflowBuilderMappingEntrySchema,
   workflowBuilderNestedWorkflowEntrySchema,
@@ -440,6 +483,7 @@ export const workflowBuilderGraphEntrySchema = z.discriminatedUnion('type', [
 export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type', [
   workflowBuilderAgentEntryInputSchema,
   workflowBuilderToolEntryInputSchema,
+  workflowBuilderProviderToolEntryInputSchema,
   workflowBuilderClassifierEntryInputSchema,
   workflowBuilderMappingEntryInputSchema,
   workflowBuilderNestedWorkflowEntryInputSchema,
@@ -452,7 +496,7 @@ export const workflowBuilderGraphEntryInputSchema = z.discriminatedUnion('type',
 ]);
 
 const GRAPH_DESCRIPTION =
-  'The complete ordered top-level graph covering all eleven persisted graph families: agent, tool, classifier, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
+  'The complete ordered top-level graph covering all twelve persisted graph families: agent, tool, provider-tool, classifier, mapping, nested workflow, parallel, foreach, sleep, sleepUntil, conditional, and loop. Every adjacent pair must compose: the previous output shape must satisfy the next input schema — insert a mapping step whenever shapes differ. The workflow result is exactly the final top-level entry output, so add an explicit final mapping whenever that output does not match outputSchema.';
 
 const SCHEDULE_DESCRIPTION =
   'Optional declarative cron schedule(s) for the workflow. A single config or an array (array entries must each provide a unique stable id). Persisted with the definition and re-registered on every boot.';

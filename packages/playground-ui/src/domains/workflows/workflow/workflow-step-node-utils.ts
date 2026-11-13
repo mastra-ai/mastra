@@ -102,6 +102,7 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         flow,
       };
     case 'tool':
+    case 'provider-tool':
       return {
         kind: 'tool-step',
         id: flow.id,

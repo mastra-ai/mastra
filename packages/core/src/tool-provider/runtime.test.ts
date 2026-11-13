@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../request-context';
-import { buildConnectionSuffix, resolveStoredToolProviders } from './runtime';
+import { buildConnectionSuffix, resolveSingleProviderTool, resolveStoredToolProviders } from './runtime';
 import type { ResolveToolsOpts, ToolProvider, ToolProviderConnectionScope, ToolProviders } from './types';
 import { SHARED_BUCKET_ID } from './types';
 
@@ -258,6 +258,154 @@ describe('resolveStoredToolProviders — connectionless caller-supplied tools', 
 
     expect(resolved).toEqual({});
     expect(resolveToolsVNext).not.toHaveBeenCalled();
+  });
+});
+
+describe('resolveSingleProviderTool', () => {
+  it('resolves exactly the requested tool with the pinned connection', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+    const tool = { id: 'gmail.fetch_emails', execute: async () => ({ ok: true }) };
+    resolveToolsVNext.mockResolvedValue({ 'gmail.fetch_emails': tool });
+
+    const resolved = await resolveSingleProviderTool({
+      provider,
+      providerId: 'composio',
+      toolSlug: 'gmail.fetch_emails',
+      connection: {
+        kind: 'invoker',
+        connectionId: 'connection-1',
+        toolkit: 'gmail',
+      },
+    });
+
+    expect(resolved).toMatchObject({ id: 'gmail.fetch_emails' });
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolSlugs: ['gmail.fetch_emails'],
+        connectionId: 'connection-1',
+        kind: 'invoker',
+        toolkit: 'gmail',
+      }),
+    );
+  });
+
+  it('passes the workflow owner to author-scoped connections', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+    resolveToolsVNext.mockResolvedValue({
+      'gmail.fetch_emails': { id: 'gmail.fetch_emails', execute: async () => ({ ok: true }) },
+    });
+
+    await resolveSingleProviderTool({
+      provider,
+      providerId: 'composio',
+      toolSlug: 'gmail.fetch_emails',
+      authorId: 'workflow-owner',
+      connection: {
+        kind: 'author',
+        connectionId: 'connection-1',
+        toolkit: 'gmail',
+        scope: 'per-author',
+      },
+    });
+
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorId: 'workflow-owner',
+        kind: 'author',
+        scope: 'per-author',
+      }),
+    );
+  });
+
+  it('requires a workflow owner for per-author connections', async () => {
+    const { provider, resolveToolsVNext } = makeStubProvider();
+
+    await expect(
+      resolveSingleProviderTool({
+        provider,
+        providerId: 'composio',
+        toolSlug: 'gmail.fetch_emails',
+        connection: {
+          kind: 'author',
+          connectionId: 'connection-1',
+          toolkit: 'gmail',
+          scope: 'per-author',
+        },
+      }),
+    ).rejects.toThrow('workflow owner is required for an author connection');
+    expect(resolveToolsVNext).not.toHaveBeenCalled();
+  });
+
+  it('uses the provider id as the toolkit for unqualified management tool slugs', async () => {
+    const { provider: baseProvider, resolveToolsVNext } = makeStubProvider();
+    const provider = { ...baseProvider, defaultScope: 'caller-supplied' as const };
+    resolveToolsVNext.mockResolvedValue({
+      COMPOSIO_MANAGE_CONNECTIONS: { id: 'COMPOSIO_MANAGE_CONNECTIONS', execute: async () => ({ ok: true }) },
+    });
+
+    await resolveSingleProviderTool({
+      provider,
+      providerId: 'composio',
+      toolSlug: 'COMPOSIO_MANAGE_CONNECTIONS',
+      requestContext: requestContext('tenant-user-1'),
+    });
+
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolkit: 'composio',
+        toolMeta: { COMPOSIO_MANAGE_CONNECTIONS: { toolkit: 'composio' } },
+      }),
+    );
+  });
+
+  it('rejects providers that cannot resolve tools with connection context', async () => {
+    const { provider } = makeStubProvider();
+    provider.resolveToolsVNext = undefined;
+
+    await expect(
+      resolveSingleProviderTool({
+        provider,
+        providerId: 'legacy-provider',
+        toolSlug: 'legacy.tool',
+        connection: { kind: 'invoker', connectionId: 'connection-1', toolkit: 'legacy' },
+      }),
+    ).rejects.toThrow('provider does not implement resolveToolsVNext');
+  });
+
+  it('rejects a provider response that omits the requested tool', async () => {
+    const { provider } = makeStubProvider();
+
+    await expect(
+      resolveSingleProviderTool({
+        provider,
+        providerId: 'composio',
+        toolSlug: 'gmail.fetch_emails',
+        connection: { kind: 'invoker', connectionId: 'connection-1', toolkit: 'gmail' },
+      }),
+    ).rejects.toThrow('provider did not return the requested tool');
+  });
+
+  it('derives an unpinned caller-supplied connection from request context', async () => {
+    const { provider: baseProvider, resolveToolsVNext } = makeStubProvider();
+    const provider = { ...baseProvider, defaultScope: 'caller-supplied' as const };
+    resolveToolsVNext.mockResolvedValue({
+      'gmail.fetch_emails': { id: 'gmail.fetch_emails', execute: async () => ({ ok: true }) },
+    });
+
+    await resolveSingleProviderTool({
+      provider,
+      providerId: 'composio',
+      toolSlug: 'gmail.fetch_emails',
+      requestContext: requestContext('tenant-user-1'),
+    });
+
+    expect(resolveToolsVNext).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionId: 'tenant-user-1',
+        authorId: 'tenant-user-1',
+        scope: 'caller-supplied',
+      }),
+    );
   });
 });
 

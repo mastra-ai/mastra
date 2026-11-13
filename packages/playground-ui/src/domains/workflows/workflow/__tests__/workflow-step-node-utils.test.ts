@@ -17,6 +17,16 @@ describe('resolveWorkflowGraphStep', () => {
     [{ type: 'step', step: { ...step('map'), mapConfig: 'return input' } }, 'map-step'],
     [{ type: 'agent', id: 'writer', agentId: 'writer-agent' }, 'agent-step'],
     [{ type: 'tool', id: 'double', toolId: 'double-tool' }, 'tool-step'],
+    [
+      {
+        type: 'provider-tool',
+        id: 'create-issue',
+        providerId: 'composio',
+        toolSlug: 'GITHUB_CREATE_ISSUE',
+        connection: { kind: 'invoker', toolkit: 'github' },
+      },
+      'tool-step',
+    ],
     [{ type: 'classifier', id: 'router', classifierId: 'ticket-router' }, 'classifier-step'],
     [{ type: 'mapping', id: 'map-1', mapConfig: 'return input' }, 'map-step'],
     [{ type: 'foreach', step: stepEntry('each'), opts: { concurrency: 2 } }, 'foreach-step'],
@@ -73,6 +83,16 @@ describe('resolveWorkflowGraphStep', () => {
     const tool = resolveWorkflowGraphStep({ type: 'tool', id: 'double', toolId: 'double-tool' });
     expect(tool.kind).toBe('tool-step');
     expect(tool.flow.type === 'tool' && tool.flow.toolId).toBe('double-tool');
+
+    const providerTool = resolveWorkflowGraphStep({
+      type: 'provider-tool',
+      id: 'create-issue',
+      providerId: 'composio',
+      toolSlug: 'GITHUB_CREATE_ISSUE',
+      connection: { kind: 'invoker', toolkit: 'github' },
+    });
+    expect(providerTool.kind).toBe('tool-step');
+    expect(providerTool.flow.type === 'provider-tool' && providerTool.flow.providerId).toBe('composio');
 
     // Regression: the nested-workflow shim step used to expose the registry key
     // (workflowId) as step.id instead of the declared call-site id.
@@ -134,12 +154,24 @@ describe('resolveWorkflowGraphStep', () => {
       stepGraph: [
         { type: 'agent', id: 'writer', agentId: 'writer-agent' },
         { type: 'tool', id: 'double', toolId: 'double-tool' },
+        {
+          type: 'provider-tool',
+          id: 'create-issue',
+          providerId: 'composio',
+          toolSlug: 'GITHUB_CREATE_ISSUE',
+          connection: { kind: 'invoker', toolkit: 'github' },
+        },
         { type: 'mapping', id: 'map-1', mapConfig: 'return input' },
       ],
     });
 
     const stepNodes = nodes.filter(node => node.type === WORKFLOW_STEP_NODE_TYPE);
-    expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual(['agent-step', 'tool-step', 'map-step']);
+    expect(stepNodes.map(node => node.data.workflowStep.kind)).toEqual([
+      'agent-step',
+      'tool-step',
+      'tool-step',
+      'map-step',
+    ]);
   });
 
   it('builds graph nodes for type:workflow entries and attaches nested stepGraph', () => {

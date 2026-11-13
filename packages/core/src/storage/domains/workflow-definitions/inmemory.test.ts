@@ -45,5 +45,23 @@ describe('InMemoryWorkflowDefinitionsStorage', () => {
       // Unspecified columns survive the partial upsert.
       expect(fetched?.graph).toEqual(graph);
     });
+
+    it('rejects a guarded update from a different author without changing the graph', async () => {
+      await storage.upsert({ ...baseInput(), authorId: 'author-1' });
+      const replacementGraph = [{ type: 'tool', id: 'other-tool', toolId: 'other-tool' }] as any;
+
+      await expect(
+        storage.upsert({
+          ...baseInput(),
+          graph: replacementGraph,
+          authorId: 'author-2',
+          preserveAuthorId: true,
+        }),
+      ).rejects.toThrow('owned by a different author');
+
+      const fetched = await storage.get('wf-1');
+      expect(fetched?.authorId).toBe('author-1');
+      expect(fetched?.graph).toEqual(graph);
+    });
   });
 });

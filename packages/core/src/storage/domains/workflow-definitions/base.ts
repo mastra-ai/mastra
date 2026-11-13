@@ -68,6 +68,8 @@ export interface CreateWorkflowDefinitionInput {
   graph: ValidatableStepFlowEntry[];
   schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[];
   authorId?: string;
+  /** Reject updates when an existing definition belongs to a different author. */
+  preserveAuthorId?: boolean;
 }
 
 /** Input for updating an existing workflow definition. */
@@ -83,6 +85,8 @@ export interface UpdateWorkflowDefinitionInput {
   schedule?: WorkflowScheduleConfig | WorkflowScheduleConfig[] | null;
   status?: 'active' | 'archived';
   authorId?: string;
+  /** Reject updates when an existing definition belongs to a different author. */
+  preserveAuthorId?: boolean;
 }
 
 export interface ListWorkflowDefinitionsInput {

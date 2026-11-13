@@ -42,7 +42,13 @@ import { rebaseNestedState, withoutNestedRunStartState } from './nested-state';
 import { lazyStepResults, RunJournal } from './run-journal';
 import type { StateBase } from './run-journal';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
-import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
+import {
+  createMappingStep,
+  createStepFromAgent,
+  createStepFromClassifier,
+  createStepFromProviderToolEntry,
+  createStepFromTool,
+} from './step-factories';
 import type {
   FormattedWorkflowResult,
   DefaultEngineType,
@@ -82,6 +88,9 @@ export type ExecuteAgentParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'agent' }>;
 };
 export type ExecuteToolParams = Omit<ExecuteStepParams, 'step'> & { entry: Extract<SingleStepEntry, { type: 'tool' }> };
+export type ExecuteProviderToolParams = Omit<ExecuteStepParams, 'step'> & {
+  entry: Extract<SingleStepEntry, { type: 'provider-tool' }>;
+};
 export type ExecuteClassifierParams = Omit<ExecuteStepParams, 'step'> & {
   entry: Extract<SingleStepEntry, { type: 'classifier' }>;
 };
@@ -1572,7 +1581,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       return stepResults.input;
     } else if (step.type === 'step') {
       return stepResults[step.step.id]?.output;
-    } else if (step.type === 'agent' || step.type === 'tool' || step.type === 'classifier' || step.type === 'mapping') {
+    } else if (
+      step.type === 'agent' ||
+      step.type === 'tool' ||
+      step.type === 'provider-tool' ||
+      step.type === 'classifier' ||
+      step.type === 'mapping'
+    ) {
       return stepResults[step.id]?.output;
     } else if (step.type === 'sleep' || step.type === 'sleepUntil') {
       return stepResults[step.id]?.output;
@@ -1631,6 +1646,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       );
     }
     return this.executeStep({ ...rest, step: { ...createStepFromTool(tool as any, entry.options), id: entry.id } });
+  }
+
+  async executeProviderTool(params: ExecuteProviderToolParams): Promise<StepExecutionResult> {
+    const { entry, ...rest } = params;
+    return this.executeStep({
+      ...rest,
+      step: createStepFromProviderToolEntry(entry, this.mastra),
+    });
   }
 
   async executeClassifier(params: ExecuteClassifierParams): Promise<StepExecutionResult> {

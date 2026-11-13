@@ -13,6 +13,7 @@ describe('RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE', () => {
     const mastra = {
       listWorkflows: vi.fn(() => ({ 'test-workflow': workflow })),
       getLogger: vi.fn(() => logger),
+      getStorage: vi.fn(() => undefined),
     } as unknown as Mastra;
 
     const response = await RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE.handler({
@@ -42,6 +43,7 @@ describe('RESTART_WORKFLOW_ROUTE', () => {
     const mastra = {
       listWorkflows: vi.fn(() => ({ 'test-workflow': workflow })),
       getLogger: vi.fn(() => logger),
+      getStorage: vi.fn(() => undefined),
     } as unknown as Mastra;
 
     const response = await RESTART_WORKFLOW_ROUTE.handler({

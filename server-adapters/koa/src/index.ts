@@ -486,6 +486,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       ...params.urlParams,
       ...params.queryParams,
       ...(typeof params.body === 'object' ? params.body : {}),
+      requestBody: params.body,
       requestContext: ctx.state.requestContext,
       mastra: this.mastra,
       tools: ctx.state.tools,

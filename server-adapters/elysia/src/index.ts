@@ -926,6 +926,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         ...params.urlParams,
         ...params.queryParams,
         ...(typeof params.body === 'object' ? params.body : {}),
+        requestBody: params.body,
         requestContext: ctx.requestContext,
         mastra: ctx.mastra,
         registeredTools: ctx.registeredTools,

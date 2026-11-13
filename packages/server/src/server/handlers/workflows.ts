@@ -41,6 +41,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { getWorkflowInfo, WorkflowRegistry } from '../utils';
 import { handleError } from './error';
+import { assertStoredWorkflowExecuteAccess } from './stored-workflow-access';
 import { getEffectiveResourceId, getHandlerFGAProvider, getPublicWorkflowById, validateRunOwnership } from './utils';
 
 /**
@@ -162,6 +163,16 @@ export async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowCo
   }
 
   return { workflow };
+}
+
+async function listExecutableWorkflowFromSystem(context: WorkflowContext & { requestContext: RequestContext }) {
+  const result = await listWorkflowsFromSystem(context);
+  await assertStoredWorkflowExecuteAccess({
+    mastra: context.mastra,
+    workflowId: context.workflowId!,
+    requestContext: context.requestContext,
+  });
+  return result;
 }
 
 // ============================================================================
@@ -582,7 +593,7 @@ export const CREATE_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -630,7 +641,7 @@ export const STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to stream workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -692,7 +703,7 @@ export const RESUME_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to resume workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -749,7 +760,7 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -797,7 +808,7 @@ export const START_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to start run' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -854,7 +865,7 @@ export const OBSERVE_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -918,7 +929,7 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to resume workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -977,7 +988,7 @@ export const RESUME_NO_WAIT_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to resume workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1025,7 +1036,7 @@ export const RESUME_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to resume workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1078,7 +1089,7 @@ export const RESTART_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to restart workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1126,7 +1137,7 @@ export const RESTART_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to restart workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1177,7 +1188,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ASYNC_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1216,7 +1227,7 @@ export const RESTART_ALL_ACTIVE_WORKFLOW_RUNS_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Workflow ID is required' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1257,7 +1268,7 @@ export const TIME_TRAVEL_ASYNC_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to time travel workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1305,7 +1316,7 @@ export const TIME_TRAVEL_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to time travel workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1357,7 +1368,7 @@ export const TIME_TRAVEL_STREAM_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to time travel workflow stream' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1413,7 +1424,7 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to cancel workflow run' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1463,7 +1474,7 @@ export const STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to resume workflow' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
@@ -1522,7 +1533,7 @@ export const OBSERVE_STREAM_LEGACY_WORKFLOW_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'runId required to observe workflow stream' });
       }
 
-      const { workflow } = await listWorkflowsFromSystem({ mastra, workflowId });
+      const { workflow } = await listExecutableWorkflowFromSystem({ mastra, workflowId, requestContext });
 
       if (!workflow) {
         throw new HTTPException(404, { message: 'Workflow not found' });
