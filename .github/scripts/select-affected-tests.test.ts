@@ -11,8 +11,9 @@ const workspacePackages = [
   { id: 's3', name: '@mastra/s3', dependencies: {} },
   { id: 'docker', name: '@mastra/docker', dependencies: {} },
 ];
+const base = { affectedTests: [], fullSuite: false, workspacePackages };
 const route = (input: { changedFiles: string[]; affectedTests?: string[]; fullSuite?: boolean }) =>
-  routeTests({ affectedTests: [], fullSuite: false, workspacePackages, ...input });
+  routeTests({ ...base, ...input });
 
 describe('Prebuild test routing', () => {
   test('the full suite runs every suite and carries no test selection', () => {
@@ -45,17 +46,37 @@ describe('Prebuild test routing', () => {
     expect(result.flags.e2e_changed).toBe(true);
   });
 
-  test('splits 500 or more unit test files across three affected-unit jobs', () => {
+  test('gives large unit test selections more shards, from recorded durations', () => {
     const unitTests = (count: number) => Array.from({ length: count }, (_, i) => `packages/core/src/t${i}.test.ts`);
     const changedFiles = ['packages/core/src/index.ts'];
 
-    expect(route({ changedFiles, affectedTests: unitTests(499) }).unitShards).toEqual([1]);
-    expect(route({ changedFiles, affectedTests: unitTests(500) }).unitShards).toEqual([1, 2, 3]);
+    expect(route({ changedFiles, affectedTests: unitTests(50) }).unitShards).toEqual([1]);
+    const core = route({ changedFiles, affectedTests: unitTests(2_900) }).unitShards;
+    expect(core.length).toBeGreaterThan(3);
+    expect(core).toEqual(Array.from({ length: core.length }, (_, i) => i + 1));
+    expect(core.length).toBeLessThanOrEqual(16);
+    // A few slow files need more shards than many fast ones.
+    const slow = Object.fromEntries(unitTests(50).map(file => [file, 60_000]));
+    expect(
+      routeTests({ ...base, changedFiles, affectedTests: unitTests(50), timings: slow }).unitShards.length,
+    ).toBeGreaterThan(1);
     // E2E tests run in their own job, so they don't count toward the split.
-    const mixed = [...unitTests(499), 'packages/core/src/a.e2e.test.ts'];
-    expect(route({ changedFiles, affectedTests: mixed }).unitShards).toEqual([1]);
+    expect(route({ changedFiles, affectedTests: ['packages/core/src/a.e2e.test.ts'] }).unitShards).toEqual([1]);
     // The full suite shards itself; the affected-unit job doesn't run.
-    expect(route({ changedFiles, affectedTests: unitTests(600), fullSuite: true }).unitShards).toEqual([1]);
+    expect(route({ changedFiles, affectedTests: unitTests(2_900), fullSuite: true }).unitShards).toEqual([1]);
+  });
+
+  test('runs only the stores a change reaches', () => {
+    expect(
+      route({
+        changedFiles: ['stores/pg/src/index.ts'],
+        affectedTests: ['stores/pg/src/index.test.ts', 'stores/libsql/src/shared.test.ts'],
+      }).storeSelection,
+    ).toEqual(['libsql', 'pg']);
+    expect(route({ changedFiles: ['stores/_test-utils/src/index.ts'] }).storeSelection).toBe('all');
+    expect(route({ changedFiles: ['packages/core/package.json'] }).storeSelection).toBe('all');
+    expect(route({ changedFiles: ['stores/pg/package.json'] }).storeSelection).toEqual(['pg']);
+    expect(route({ changedFiles: [], fullSuite: true }).storeSelection).toBe('all');
   });
 
   test('a lockfile-only change starts the suites that install published packages', () => {

@@ -48,41 +48,17 @@ jobs:
           # suite. Every other PR runs only the tests affected by its diff. A fork can pick any
           # branch name, so the release PR head must also live in this repository.
           FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
+        # A workflow_call skips the checkout above and always runs the full suite, so without the
+        # script it only needs to report that.
         run: |
-          echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
-          echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
-
-          # A stacked PR merges into another PR's branch, but its code ends up on main, so
-          # diff it against main to select the same tests the stack will need there.
-          BASE_SHA=$PR_BASE_SHA
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ] && [ "$BASE_REF" != "main" ] && [ "$BASE_REF" != "0.x" ]; then
-            BASE_SHA=$(git merge-base origin/main "$HEAD_SHA")
-            echo "Stacked on $BASE_REF; diffing against main at $BASE_SHA."
-          fi
-          echo "base_sha=$BASE_SHA" >> "$GITHUB_OUTPUT"
-
-          if [ "$FULL_SUITE" = "true" ]; then
-            echo "Full suite requested; running Prebuild."
+          if [ ! -f .github/scripts/detect-changes.bash ]; then
+            echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
+            echo "full_suite=$FULL_SUITE" >> "$GITHUB_OUTPUT"
+            echo "base_sha=$PR_BASE_SHA" >> "$GITHUB_OUTPUT"
             echo "has_code=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-
-          if ! changed_files=$(git diff --name-only "$BASE_SHA...$HEAD_SHA"); then
-            echo "Could not diff the PR; running affected tests fail-closed."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          code_files=$(printf '%s\n' "$changed_files" \
-            | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' \
-            | grep -v '^$' || true)
-          if [ -n "$code_files" ]; then
-            echo "Code changes found; running affected tests."
-            echo "has_code=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Only docs, examples, changesets or explorations changed; skipping Prebuild."
-            echo "has_code=false" >> "$GITHUB_OUTPUT"
-          fi
+          bash .github/scripts/detect-changes.bash
 
   # Deployer changes must come with monorepo E2E coverage (packages/deployer/AGENTS.md).
   # Its own job, not a step in `changes`: a failing `changes` job would skip every test job.
@@ -133,12 +109,16 @@ jobs:
           echo "::error file=${deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications; add or update a monorepo E2E test. See packages/deployer/AGENTS.md."
           exit 1
 
+  # Every test job builds from the Turbo cache this job fills, so they wait for it: without it,
+  # a change to a widely used package (about a quarter of PRs) would be rebuilt in every test job
+  # at once. It starts with the run instead of after `changes`. It stays on 4 vCPU: 8 vCPU builds a
+  # cache-missing @mastra/core in ~70 s instead of ~125 s, but one benchmark run waited 13 minutes
+  # for an 8 vCPU machine. A docs-only PR builds needlessly; that costs about a cent.
   prebuild:
     name: Build
-    needs: changes
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
-    if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
+    if: github.repository == 'mastra-ai/mastra'
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -153,7 +133,7 @@ jobs:
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
-          ref: ${{ needs.changes.outputs.head_sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 2
 
       - name: Setup pnpm and Node.js
@@ -171,13 +151,15 @@ jobs:
       - name: Build
         run: pnpm turbo --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*" build
 
+  # Runs alongside `changes` rather than after it: it works out the same commit range itself, so
+  # the unit test shards can start as soon as their file lists exist.
   affected-tests:
     name: Detect affected tests
-    needs: changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
+    if: github.repository == 'mastra-ai/mastra'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     outputs:
+      has_code: ${{ steps.detect.outputs.has_code }}
       run_full: ${{ steps.compute.outputs.run_full }}
       has_unit_tests: ${{ steps.compute.outputs.has_unit_tests }}
       unit_shards: ${{ steps.compute.outputs.unit_shards }}
@@ -187,6 +169,7 @@ jobs:
       mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
       durable_streams_changed: ${{ steps.compute.outputs.durable_streams_changed }}
       stores_changed: ${{ steps.compute.outputs.stores_changed }}
+      store_selection: ${{ steps.compute.outputs.store_selection }}
       workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
       workspace_packages: ${{ steps.compute.outputs.workspace_packages }}
@@ -203,12 +186,24 @@ jobs:
           # Partial clone: name-only diffs need trees, not blob contents.
           filter: blob:none
 
+      - name: Check for code changes
+        id: detect
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Same rule as the `changes` job.
+          FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
+        run: bash .github/scripts/detect-changes.bash
+
       - name: Setup pnpm and Node.js
+        if: steps.detect.outputs.has_code == 'true'
         uses: ./.github/actions/setup-pnpm-node
         with:
           install-dependencies: false
 
       - name: Install affected-test dependencies
+        if: steps.detect.outputs.has_code == 'true'
         run: pnpm install --frozen-lockfile --ignore-scripts --filter mastra-turbo
 
       # What detection extracts from each file is cached by content hash
@@ -217,19 +212,33 @@ jobs:
       # affected-graph-seed.yml. PRs only restore it, so per-PR runs don't fill
       # the repo's cache quota.
       - name: Restore affected-test extraction cache
+        if: steps.detect.outputs.has_code == 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: ${{ runner.temp }}/affected-graph.json
           key: affected-graph-v1-${{ runner.os }}-${{ github.sha }}
           restore-keys: affected-graph-v1-${{ runner.os }}-
 
+      # Per-file test durations from the last full suite on main (see "Test Report" in
+      # test-suite.yml). They set how many unit test shards a PR gets, and the shards balance
+      # their files by them. Missing or stale timings only make the shards less even.
+      - name: Restore unit test timings
+        if: steps.detect.outputs.has_code == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/test-timings.json
+          key: test-timings-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: test-timings-v1-${{ runner.os }}-
+
       - name: Compute affected test files
         id: compute
+        if: steps.detect.outputs.has_code == 'true'
         env:
-          BASE_SHA: ${{ needs.changes.outputs.base_sha }}
-          HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
-          FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
+          BASE_SHA: ${{ steps.detect.outputs.base_sha }}
+          HEAD_SHA: ${{ steps.detect.outputs.head_sha }}
+          FULL_SUITE: ${{ steps.detect.outputs.full_suite }}
           AFFECTED_TESTS_CACHE: ${{ runner.temp }}/affected-graph.json
+          TEST_TIMINGS: ${{ runner.temp }}/test-timings.json
         run: node .github/scripts/select-affected-tests.cjs
 
       - name: Upload affected-tests artifact
@@ -242,8 +251,8 @@ jobs:
 
   test-suite:
     name: Unit and E2E Tests
-    needs: [changes, prebuild, affected-tests]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success') }}
+    needs: [changes, affected-tests, prebuild]
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || (needs.affected-tests.result == 'success' && needs.prebuild.result == 'success')) }}
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read
@@ -264,7 +273,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     needs: [changes, affected-tests, prebuild]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.affected-tests.result == 'success' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
@@ -279,7 +288,7 @@ jobs:
   mastracode-e2e:
     name: Mastra Code E2E
     needs: [changes, affected-tests, prebuild]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.affected-tests.result == 'success' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
@@ -293,13 +302,14 @@ jobs:
   combined-stores-tests:
     name: Combined Store Tests
     needs: [changes, affected-tests, prebuild]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.affected-tests.result == 'success' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
       id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
+      stores: ${{ needs.affected-tests.outputs.store_selection || 'all' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -312,7 +322,7 @@ jobs:
   workspace-tests:
     name: Workspace Tests
     needs: [changes, affected-tests, prebuild]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.affected-tests.result == 'success' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
@@ -328,7 +338,7 @@ jobs:
   memory-test:
     name: Memory Tests
     needs: [changes, affected-tests, prebuild]
-    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success' }}
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.affected-tests.result == 'success' && needs.prebuild.result == 'success' }}
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read
