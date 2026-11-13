@@ -49,8 +49,8 @@ const SOURCES: Record<
   gitlab: {
     Icon: GitLabIcon,
     example: 'Add pipeline retries',
-    id: '!87',
-    previousId: '!86',
+    id: '#87',
+    previousId: '#86',
     previousExample: 'Split the deploy job',
     kind: 'Issue',
   },

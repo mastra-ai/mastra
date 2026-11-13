@@ -8,7 +8,6 @@ import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModel
 import { providersQueryOptions } from '../../../../hooks/use-providers';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
-import { IntakeBindingConflictError } from '../../factory/services/intake';
 import {
   createFactoryProject,
   deleteFactoryProject,
@@ -43,13 +42,7 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
  * user in onboarding: warn, and leave them to pick sources in Settings › Work Intake. GitHub and
  * GitLab both land here. Only a switch that is on reaches here; with it off, setup writes no intake.
  */
-function warnIntakeNotApplied(error: unknown) {
-  if (error instanceof IntakeBindingConflictError) {
-    toast.warning('This project already feeds another Factory', {
-      description: 'Choose sources in Settings › Work Intake to route some of its issues here.',
-    });
-    return;
-  }
+function warnIntakeNotApplied() {
   toast.warning("Issues won't sync yet", { description: 'Choose sources in Settings › Work Intake.' });
 }
 

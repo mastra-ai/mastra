@@ -14,9 +14,7 @@ import type { SourceControlRepository } from './github';
 
 /**
  * Select the codebase step's repository as an issue source. A GitLab project is routed to the new
- * Factory first, since routed intake needs a binding to feed its board; that rejects with
- * `IntakeBindingConflictError` when another Factory already takes the project, and nothing is
- * selected then.
+ * Factory first, since routed intake needs a binding to feed its board.
  */
 export async function applyCodeHostIntake(
   baseUrl: string,

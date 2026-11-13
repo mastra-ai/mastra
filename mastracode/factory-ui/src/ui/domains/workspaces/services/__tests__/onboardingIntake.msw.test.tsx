@@ -1,15 +1,13 @@
 /**
  * Coverage for the intake writes onboarding makes once the Factory project exists and the Work
- * step's switch is on: both hosts select the repository the same way, a GitLab project is routed
- * to the new Factory first, and a project another Factory already takes is refused before anything
- * is selected.
+ * step's switch is on: both hosts select the repository the same way, and a GitLab project is
+ * routed to the new Factory first.
  */
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { IntakeBindingConflictError } from '../../../factory/services/intake';
 import type { IntakeBindingWrite } from '../../../factory/services/intake';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import { applyCodeHostIntake } from '../onboardingIntake';
@@ -92,30 +90,6 @@ describe('Code-host intake at the end of onboarding', () => {
 
     await route(githubRepo);
 
-    expect(intake.savedConfigs).toEqual([]);
-  });
-
-  it('refuses a GitLab project another Factory already takes', async () => {
-    const intake = stubIntake();
-    server.use(
-      http.put(BINDINGS_URL, () =>
-        HttpResponse.json(
-          {
-            error: 'binding_conflict',
-            message: 'Another factory already takes all issues from this source.',
-            conflicts: [{ factoryProjectId: 'factory-other', labels: null }],
-          },
-          { status: 409 },
-        ),
-      ),
-    );
-
-    const failure = await route(gitlabProject).catch((caught: unknown) => caught);
-
-    expect(failure).toBeInstanceOf(IntakeBindingConflictError);
-    expect((failure as IntakeBindingConflictError).conflicts).toEqual([
-      { factoryProjectId: 'factory-other', labels: null },
-    ]);
     expect(intake.savedConfigs).toEqual([]);
   });
 });
