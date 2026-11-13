@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
 import { BillingError, identifierSchema } from '../billing/contracts.js';
+import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { ConversationStorage } from '../billing/storage/conversations.js';
 import type { StudioAgentRuntime } from './studio-agent-decorator.js';
 
 const text = z.string().min(1).max(8192);
@@ -72,7 +74,7 @@ function validateOptions(value: unknown, depth = 0): void {
     if (!['message', 'messages', 'signal', 'resumeData'].includes(key)) validateOptions(entry, depth + 1);
   }
 }
-const safeFailure = (context: Context, error: unknown) => {
+export const studioChatFailure = (context: Context, error: unknown) => {
   const failure = error instanceof BillingError ? error : new BillingError('invalid_input');
   return context.json(
     { error: { code: failure.code } },
@@ -85,6 +87,96 @@ const safeFailure = (context: Context, error: unknown) => {
           : 400,
   );
 };
+/** Inspect native execution options, never the user's messages or tool input data. */
+function memoryReferences(
+  value: unknown,
+  references: { threads: Set<string>; resources: Set<string>; runs: Set<string>; messages: Set<string> },
+  depth = 0,
+) {
+  if (!value || typeof value !== 'object') return;
+  if (depth > 16) throw new BillingError('invalid_input');
+  for (const [key, entry] of Object.entries(value)) {
+    const target = ['thread', 'threadId', 'mastra__threadId'].includes(key)
+      ? references.threads
+      : ['resource', 'resourceId', 'mastra__resourceId'].includes(key)
+        ? references.resources
+        : ['runId', 'expectedRunId'].includes(key)
+          ? references.runs
+          : undefined;
+    if (target && typeof entry === 'string') target.add(entry);
+    if (key === 'thread' && entry && typeof entry === 'object' && 'id' in entry && typeof entry.id === 'string')
+      references.threads.add(entry.id);
+    // Native message identities can upsert shared storage; inspect identity fields, not their content.
+    if (['message', 'messages', 'signal', 'context'].includes(key)) {
+      for (const message of Array.isArray(entry) ? entry : [entry]) {
+        if (!message || typeof message !== 'object') continue;
+        if (typeof message.id === 'string') references.messages.add(message.id);
+        if (typeof message.threadId === 'string') references.threads.add(message.threadId);
+        if (typeof message.resourceId === 'string') references.resources.add(message.resourceId);
+        if (message.metadata && typeof message.metadata === 'object') {
+          if (typeof message.metadata.threadId === 'string') references.threads.add(message.metadata.threadId);
+          if (typeof message.metadata.resourceId === 'string') references.resources.add(message.metadata.resourceId);
+        }
+      }
+    }
+    if (key === 'scopes' && Array.isArray(entry)) {
+      for (const scope of entry) {
+        if (scope && typeof scope.id === 'string') {
+          if (scope.type === 'thread') references.threads.add(scope.id);
+          if (scope.type === 'resource') references.resources.add(scope.id);
+        }
+      }
+    }
+    if (references.threads.size + references.resources.size + references.runs.size + references.messages.size > 128)
+      throw new BillingError('invalid_input');
+    if (!['message', 'messages', 'signal', 'resumeData', 'data', 'context', 'metadata'].includes(key))
+      memoryReferences(entry, references, depth + 1);
+  }
+}
+export async function protectConversationMemory(
+  context: Context,
+  conversations: ConversationStorage,
+  storage: MastraCompositeStore,
+  path: string,
+) {
+  const references = {
+    threads: new Set<string>(),
+    resources: new Set<string>(),
+    runs: new Set<string>(),
+    messages: new Set<string>(),
+  };
+  for (const match of path.matchAll(/\/(threads|runs)\/([^/]+)/g)) {
+    if (!['subscribe', 'abort', 'signals'].includes(match[2]))
+      (match[1] === 'threads' ? references.threads : references.runs).add(decodeURIComponent(match[2]));
+  }
+  memoryReferences(
+    { threadId: context.req.header('x-thread-id'), resourceId: context.req.header('x-resource-id') },
+    references,
+  );
+  for (const [key, value] of new URL(context.req.url).searchParams) {
+    memoryReferences({ [key]: value }, references);
+    if (['requestContext', 'memory', 'streamOptions', 'filter'].includes(key)) {
+      if (value.length > 32768) throw new BillingError('invalid_input');
+      const decoded = value.trimStart().startsWith('{') ? value : Buffer.from(value, 'base64').toString('utf8');
+      memoryReferences(JSON.parse(decoded), references);
+    }
+  }
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(context.req.method)) {
+    // Clone: the installed native adapter must consume its original body and all options.
+    const body = await context.req.raw.clone().text();
+    if (body) memoryReferences(JSON.parse(body), references);
+  }
+  await conversations.assertUnprotected(
+    {
+      threads: [...references.threads],
+      resources: [...references.resources],
+      runs: [...references.runs],
+      messages: [...references.messages],
+    },
+    storage,
+  );
+  return references;
+}
 /** Exact native text/history/approval proxy. Unrelated routes retain the existing billing boundary. */
 export function studioChatProxy(
   runtime: StudioAgentRuntime,
@@ -106,11 +198,34 @@ export function studioChatProxy(
     const agentRoute = /^\/api\/agents\/([^/]+)(.*)$/.exec(path);
     const memoryRoute = /^\/api\/memory\/(status|config|threads(?:\/([^/]+)(?:\/(messages))?)?)$/.exec(path);
     const canonical = agentRoute ? runtime.aliases.get(decodeURIComponent(agentRoute[1])) : undefined;
-    // Decorated routes must never fall through to ordinary native allowlists.
-    if (!canonical && !path.startsWith('/api/memory/')) return fallback(context, next);
-    if (path.startsWith('/api/memory/') && (!memoryRoute || !runtime.aliases.has(context.req.query('agentId') ?? '')))
-      return context.json({ error: 'billing_gateway_required' }, 403);
+    // Shared native Memory is not scoped by Agent. Protect its references before any ordinary fallback.
     try {
+      if (!canonical && !runtime.aliases.has(context.req.query('agentId') ?? '')) {
+        if (/^\/api\/(agents|memory|workflows)\//.test(path)) {
+          const references = await protectConversationMemory(
+            context,
+            runtime.integration.conversations,
+            runtime.integration.storage,
+            path,
+          );
+          if (path.startsWith('/api/memory/')) {
+            const selected = context.req.query('agentId') ?? '';
+            const ordinaryMemory =
+              memoryRoute &&
+              runtime.ordinaryAgents.has(selected) &&
+              ((method === 'GET' && ['status', 'config'].includes(memoryRoute[1])) ||
+                (method === 'GET' &&
+                  memoryRoute[1].startsWith('threads') &&
+                  (memoryRoute[2] || references.resources.size)) ||
+                (method === 'POST' && memoryRoute[1] === 'threads' && references.resources.size));
+            if (!ordinaryMemory) return context.json({ error: 'billing_gateway_required' }, 403);
+            return next();
+          }
+        }
+        return fallback(context, next);
+      }
+      if (path.startsWith('/api/memory/') && (!memoryRoute || !runtime.aliases.has(context.req.query('agentId') ?? '')))
+        throw new BillingError('forbidden');
       const bearer = /^Bearer ([^\s]+)$/.exec(context.req.header('authorization') ?? '');
       if (!bearer) throw new BillingError('unauthenticated');
       const billing = await runtime.integration.organizations.context({
@@ -185,7 +300,7 @@ export function studioChatProxy(
           (method === 'POST' && memoryRoute[1] === 'threads'));
       if (!allowedAgent && !allowedMemory) throw new BillingError('forbidden');
       context.header('Cache-Control', 'private, no-store');
-      const resourceId = runtime.integration.conversations.resource(billing, agentId);
+      const resourceId = await runtime.integration.conversations.resource(billing, agentId);
       const claimedThread = memoryRoute?.[2]
         ? decodeURIComponent(memoryRoute[2])
         : (body.threadId ?? url.searchParams.get('threadId'));
@@ -225,7 +340,14 @@ export function studioChatProxy(
           ['/send-message', '/signals', '/queue-message', '/threads/subscribe'].includes(suffix) &&
           !runId) ||
         (memoryRoute?.[1] === 'threads' && method === 'POST');
-      const owner = await runtime.integration.conversations.thread(billing, agentId, threadId, !!create);
+      const nativeThread = create ? await (await agent.getMemory())?.getThreadById({ threadId }) : null;
+      const owner = await runtime.integration.conversations.thread(
+        billing,
+        agentId,
+        threadId,
+        !!create,
+        !!nativeThread,
+      );
       const stopping = suffix === '/threads/abort' || /^\/runs\/[^/]+\/abort$/.test(suffix);
       if (!stopping) await runtime.settled(threadId);
       const conversation = runtime.bind({ billing, owner, controller: new AbortController() });
@@ -280,7 +402,7 @@ export function studioChatProxy(
       }
       return runtime.request.run(conversation, next);
     } catch (error) {
-      return safeFailure(context, error);
+      return studioChatFailure(context, error);
     }
   };
 }

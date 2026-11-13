@@ -1,3 +1,4 @@
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MiddlewareHandler } from 'hono';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { BillingHttpGateway } from '../billing/mastra.js';
@@ -10,6 +11,7 @@ export interface StudioBillingIntegration {
   readonly organizations: OrganizationService;
   readonly execution: BillingHttpGateway;
   readonly conversations: ConversationStorage;
+  readonly storage: MastraCompositeStore;
   readonly resources: {
     readonly agents: Readonly<Record<string, AgentResource<any>>>;
     readonly workflows: Readonly<Record<string, WorkflowResource<AnyWorkflow>>>;

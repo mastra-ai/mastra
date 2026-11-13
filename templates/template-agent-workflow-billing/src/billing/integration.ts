@@ -26,6 +26,7 @@ import { createBillingServer } from './server/boundary.js';
 import { ExecutionArtifacts } from './storage/artifacts.js';
 import { validateConfigurationFiles } from './configuration-file.js';
 import { ConversationStorage } from './storage/conversations.js';
+import { protectConversationMemory, studioChatFailure } from '../studio-with-billing/studio-chat-proxy.js';
 import type { StudioServerWrapper } from '../studio-with-billing/studio-wrapper-contracts.js';
 import { Lifecycle } from './lifecycle.js';
 
@@ -263,27 +264,26 @@ export function createBilling(options: BillingOptions) {
                 return false;
               return nativeAccess(canonical) || router.match(method, path)[0].length > 0;
             };
+            const nativeFallback: import('hono').MiddlewareHandler = async (context, next) => {
+              try {
+                // Persisted private conversations remain protected when Studio or its wrapper is removed.
+                const path = canonicalPath(context.req.path);
+                if (!wrapper && /^\/api\/(agents|memory|workflows)\//.test(path))
+                  await protectConversationMemory(context, conversations, current.storage, path);
+                return passthrough(context.req.path, context.req.method)
+                  ? next()
+                  : studio
+                    ? studio.middleware(context, next)
+                    : context.json({ error: 'billing_gateway_required' }, 403);
+              } catch (error) {
+                return studioChatFailure(context, error);
+              }
+            };
             const boundary = createBillingServer({
               organizations,
               execution: current.billing.http,
               commercial: current.commercial,
-              studio:
-                studio || wrapper
-                  ? {
-                      middleware: wrapper
-                        ? wrapper.middleware(apiPrefix, async (context, next) =>
-                            passthrough(context.req.path, context.req.method)
-                              ? next()
-                              : studio
-                                ? studio.middleware(context, next)
-                                : context.json({ error: 'billing_gateway_required' }, 403),
-                          )
-                        : async (context, next) =>
-                            passthrough(context.req.path, context.req.method)
-                              ? next()
-                              : studio!.middleware(context, next),
-                    }
-                  : undefined,
+              studio: { middleware: wrapper ? wrapper.middleware(apiPrefix, nativeFallback) : nativeFallback },
               artifacts: resources.artifacts,
               nativeAccess: passthrough,
               allowNative: true,

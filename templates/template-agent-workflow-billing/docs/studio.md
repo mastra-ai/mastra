@@ -61,6 +61,8 @@ Ask for a three-style illustration kit. Its start tool saves the three prompts a
 
 The optional `X-Billing-Workspace` header chooses a shared workspace; without it, identity resolves the user's personal workspace. Live membership and permission are checked for each request and business action. Conversation history and operation results belong to the exact creator/workspace/agent/thread tuple, including within a shared payer. Editable Request Context cannot change the identity or payer. Changing the workspace header starts a separate ownership scope; it does not grant access to an existing conversation.
 
+Ordinary agents may share that storage, but their native execution, history and subscription routes cannot address a protected conversation's thread, resource, run or stored message identity. This protection remains active in the prepared integration when Studio is disabled or the conversation wrapper is removed. Ordinary agents retain their own memory behavior and application authentication. Shared-memory thread lists require an explicit ordinary resource; global memory listings stay closed. New private resources use a reserved server namespace; existing persisted resource mappings remain readable. An existing native thread without a billing conversation owner cannot be adopted by a decorated agent—start a new conversation instead.
+
 Mastra memory stores transcript content in the existing persistent application storage. Billing keeps only immutable ownership, native message/tool-call references and operation identities. Removing a native Stop snapshot does not remove the billing link. Existing databases upgrade additively; no reset or balance refill occurs.
 
 ## Compose your own conversation agent

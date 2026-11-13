@@ -1,11 +1,32 @@
 import { Hono } from 'hono';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
+import { Memory } from '@mastra/memory';
 import { realpath } from 'node:fs/promises';
 import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { SEND_AGENT_MESSAGE_ROUTE, SEND_TOOL_APPROVAL_ROUTE } from '@mastra/server/handlers/agents';
+import {
+  GENERATE_AGENT_ROUTE,
+  STREAM_GENERATE_ROUTE,
+  SEND_AGENT_MESSAGE_ROUTE,
+  SEND_AGENT_SIGNAL_ROUTE,
+  QUEUE_AGENT_MESSAGE_ROUTE,
+  QUEUE_AGENT_SIGNAL_ROUTE,
+  SEND_TOOL_APPROVAL_ROUTE,
+  SUBSCRIBE_AGENT_THREAD_ROUTE,
+  OBSERVE_AGENT_STREAM_ROUTE,
+  LIST_SUSPENDED_RUNS_ROUTE,
+  ABORT_AGENT_THREAD_ROUTE,
+  ABORT_AGENT_RUN_ROUTE,
+  RECOVER_ROUTE,
+} from '@mastra/server/handlers/agents';
+import {
+  GET_THREAD_BY_ID_ROUTE,
+  LIST_MESSAGES_ROUTE,
+  LIST_THREADS_ROUTE,
+  CREATE_THREAD_ROUTE,
+} from '@mastra/server/handlers/memory';
 import { EXECUTE_TOOL_ROUTE } from '@mastra/server/handlers/tools';
 import { z } from 'zod';
 import { createBilling } from '../../src/billing/integration.js';
@@ -16,11 +37,15 @@ import { createStudioAssistantAgent } from '../../src/mastra/agents/studio-assis
 import { billingSocket } from './http.js';
 
 /** Real generic application using the native public handler, schema transforms and a custom API prefix. */
-export async function studioComposition(root: string, modelUrl: string) {
+export async function studioComposition(
+  root: string,
+  modelUrl: string,
+  options: { wrapper?: boolean; studio?: boolean } = {},
+) {
   const environment = {
     BILLING_MODE: 'local',
     BILLING_PROVIDER: 'local',
-    BILLING_STUDIO_ENABLED: 'true',
+    BILLING_STUDIO_ENABLED: options.studio === false ? 'false' : 'true',
     BILLING_PROJECT_ROOT: await realpath(root),
     OPENAI_BASE_URL: modelUrl,
     OPENAI_API_KEY: 'controlled',
@@ -31,7 +56,16 @@ export async function studioComposition(root: string, modelUrl: string) {
     localAccounts: () => localDemoAccounts(environment, 30),
   });
   const model = { id: 'billing-test/model' as const, api: 'chat' as const, apiKey: 'controlled', url: modelUrl };
-  const publicAgent = new Agent({ id: 'public', name: 'Public', instructions: 'Answer.', model, maxRetries: 0 });
+  const publicAgent = new Agent({
+    id: 'public',
+    name: 'Public',
+    instructions: 'Answer.',
+    model,
+    maxRetries: 0,
+    memory: new Memory({
+      options: { lastMessages: 40, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
+    }),
+  });
   const business = new Agent({
     id: 'analysis',
     name: 'Analysis',
@@ -99,6 +133,18 @@ export async function studioComposition(root: string, modelUrl: string) {
     environment,
   );
   const conversation = wrapper.decorateAgent(original);
+  wrapper.decorateAgent(
+    new Agent({
+      id: 'other-chat',
+      name: 'Other Chat',
+      instructions: 'Answer.',
+      model,
+      maxRetries: 0,
+      memory: new Memory({
+        options: { lastMessages: 40, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
+      }),
+    }),
+  );
   const settings = integration.server(
     {
       apiPrefix: '/private-api',
@@ -121,16 +167,16 @@ export async function studioComposition(root: string, modelUrl: string) {
         }),
       ],
     },
-    { studioWrapper: wrapper },
+    options.wrapper === false ? {} : { studioWrapper: wrapper },
   );
   const mastra = new Mastra({
     agents: {
       ...integration.agents,
-      ...wrapper.agents,
+      ...(options.wrapper === false ? {} : wrapper.agents),
       public: publicAgent,
       'public-alias': publicAgent,
       'paid-alias': business,
-      'chat-alias': conversation,
+      ...(options.wrapper === false ? {} : { 'chat-alias': conversation }),
     },
     workflows: integration.workflows,
     tools: integration.tools,
@@ -143,32 +189,54 @@ export async function studioComposition(root: string, modelUrl: string) {
   for (const middleware of Array.isArray(settings.middleware) ? settings.middleware : [settings.middleware!])
     app.use('*', typeof middleware === 'function' ? middleware : middleware.handler);
   app.get('/status', context => context.json({ ready: true }));
-  app.post('/private-api/agents/:agentId/send-message', async context =>
-    context.json(
-      await SEND_AGENT_MESSAGE_ROUTE.handler({
-        ...(await context.req.json()),
+  // Use installed native handlers with complete options; shared Memory must exercise the real boundary.
+  for (const route of [
+    GENERATE_AGENT_ROUTE,
+    STREAM_GENERATE_ROUTE,
+    SEND_AGENT_MESSAGE_ROUTE,
+    SEND_AGENT_SIGNAL_ROUTE,
+    QUEUE_AGENT_MESSAGE_ROUTE,
+    QUEUE_AGENT_SIGNAL_ROUTE,
+    SEND_TOOL_APPROVAL_ROUTE,
+    SUBSCRIBE_AGENT_THREAD_ROUTE,
+    OBSERVE_AGENT_STREAM_ROUTE,
+    LIST_SUSPENDED_RUNS_ROUTE,
+    ABORT_AGENT_THREAD_ROUTE,
+    ABORT_AGENT_RUN_ROUTE,
+    RECOVER_ROUTE,
+    GET_THREAD_BY_ID_ROUTE,
+    LIST_MESSAGES_ROUTE,
+    LIST_THREADS_ROUTE,
+    CREATE_THREAD_ROUTE,
+  ]) {
+    app.on(route.method, '/private-api' + route.path, async context => {
+      const query = Object.fromEntries(new URL(context.req.url).searchParams);
+      const requestContext = Object.assign(new RequestContext(), {} as Record<string, unknown>);
+      if (query.requestContext) {
+        const encoded = query.requestContext;
+        const values = JSON.parse(encoded.startsWith('{') ? encoded : Buffer.from(encoded, 'base64').toString('utf8'));
+        for (const [key, value] of Object.entries(values)) requestContext.set(key, value);
+      }
+      for (const [header, key] of [
+        ['x-resource-id', 'mastra__resourceId'],
+        ['x-thread-id', 'mastra__threadId'],
+      ]) {
+        const value = context.req.header(header);
+        if (value) requestContext.set(key, value);
+      }
+      const body = route.method === 'POST' ? await context.req.json() : {};
+      const handler = route.handler as (parameters: Record<string, unknown>) => Promise<unknown>;
+      const result = await handler({
+        ...query,
+        ...body,
+        ...context.req.param(),
         mastra,
-        agentId: context.req.param('agentId'),
-        requestContext: Object.assign(new RequestContext(), {} as Record<string, unknown>),
-      }),
-    ),
-  );
-  app.post('/private-api/agents/:agentId/send-tool-approval', async context =>
-    context.json(
-      await SEND_TOOL_APPROVAL_ROUTE.handler({
-        ...(await context.req.json()),
-        mastra,
-        agentId: context.req.param('agentId'),
         abortSignal: context.req.raw.signal,
-        requestContext: Object.assign(new RequestContext(), {} as Record<string, unknown>),
-      }),
-    ),
-  );
-  app.get('/private-api/memory/threads/:threadId/messages', async context =>
-    context.json(
-      await (await conversation.getMemory())!.recall({ threadId: context.req.param('threadId'), perPage: 40 }),
-    ),
-  );
+        requestContext,
+      });
+      return result instanceof ReadableStream ? new Response(result) : context.json(result);
+    });
+  }
   app.post('/private-api/tools/:toolId/execute', async context =>
     context.json(
       await EXECUTE_TOOL_ROUTE.handler({
@@ -180,10 +248,6 @@ export async function studioComposition(root: string, modelUrl: string) {
       }),
     ),
   );
-  app.post('/private-api/agents/:agentId/generate', async context => {
-    const agent = mastra.getAgent(context.req.param('agentId') as keyof ReturnType<typeof mastra.listAgents>);
-    return context.json(await agent.generate((await context.req.json()).messages));
-  });
   app.post('/private-api/workflows/:workflowId/start', async context => {
     const workflow = mastra.getWorkflow(context.req.param('workflowId') as keyof typeof integration.workflows);
     const run = await workflow.createRun();

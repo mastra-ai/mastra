@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { Row, Transaction } from '@libsql/client/node';
 import { BillingError, identifierSchema, parseInput } from '../contracts.js';
 import { boundedJson, fingerprint } from '../accounting.js';
@@ -42,10 +43,58 @@ export class ConversationStorage {
   close() {
     this.database.close();
   }
-  resource(context: BillingContext, agentId: string) {
-    return createHash('sha256')
-      .update(JSON.stringify([context.actorId, context.workspaceId, agentId]))
-      .digest('hex');
+  private newResource(context: BillingContext, agentId: string) {
+    return (
+      'billing-studio:' +
+      createHash('sha256')
+        .update(JSON.stringify([context.actorId, context.workspaceId, agentId]))
+        .digest('hex')
+    );
+  }
+  private async ownerResource(tx: Transaction, context: BillingContext, agentId: string) {
+    const row = (
+      await tx.execute({
+        sql: 'SELECT resource_id FROM billing_studio_threads WHERE actor_id = ? AND workspace_id = ? AND agent_id = ? LIMIT 1',
+        args: [context.actorId, context.workspaceId, agentId],
+      })
+    ).rows[0];
+    // Preserve existing transcripts, including resources created before the reserved namespace.
+    return row ? String(row.resource_id) : this.newResource(context, agentId);
+  }
+  async resource(context: BillingContext, agentId: string) {
+    return this.authorized(context, tx => this.ownerResource(tx, context, agentId));
+  }
+  /** Ordinary native routes can never address a decorated conversation, even as its owner. */
+  async assertUnprotected(
+    references: { threads: string[]; resources: string[]; runs: string[]; messages: string[] },
+    storage: MastraCompositeStore,
+  ) {
+    if (references.resources.some(resource => resource.startsWith('billing-studio:')))
+      throw new BillingError('forbidden');
+    if (references.messages.length) {
+      const memory = await storage.getStore('memory');
+      if (!memory) throw new BillingError('state_unavailable');
+      const { messages } = await memory.listMessagesById({ messageIds: references.messages });
+      references.threads.push(...messages.flatMap(message => (message.threadId ? [message.threadId] : [])));
+      references.resources.push(...messages.flatMap(message => (message.resourceId ? [message.resourceId] : [])));
+    }
+    if (!references.threads.length && !references.resources.length && !references.runs.length) return;
+    return this.database.write(async tx => {
+      for (const [values, table, column] of [
+        [references.threads, 'billing_studio_threads', 'thread_id'],
+        [references.resources, 'billing_studio_threads', 'resource_id'],
+        [references.runs, 'billing_studio_runs', 'run_id'],
+      ] as const) {
+        if (!values.length) continue;
+        const found = (
+          await tx.execute({
+            sql: `SELECT 1 FROM ${table} WHERE ${column} IN (${values.map(() => '?').join(',')}) LIMIT 1`,
+            args: values,
+          })
+        ).rows.length;
+        if (found) throw new BillingError('forbidden');
+      }
+    });
   }
   private async authorized<T>(context: BillingContext, work: (tx: Transaction) => Promise<T>): Promise<T> {
     const identity = await this.organizations.accountingIdentity(context);
@@ -83,15 +132,33 @@ export class ConversationStorage {
       resourceId: String(row.resource_id),
     };
   }
-  async thread(context: BillingContext, agentId: string, threadId: string, create = false): Promise<ConversationOwner> {
+  async thread(
+    context: BillingContext,
+    agentId: string,
+    threadId: string,
+    create = false,
+    existingNativeThread = false,
+  ): Promise<ConversationOwner> {
     parseInput(identifierSchema, agentId);
     parseInput(identifierSchema, threadId);
     return this.authorized(context, async tx => {
-      if (create)
+      if (create) {
+        const linked = (
+          await tx.execute({ sql: 'SELECT 1 FROM billing_studio_threads WHERE thread_id = ?', args: [threadId] })
+        ).rows.length;
+        // A shared Memory thread without our durable owner link is never ours to claim.
+        if (!linked && existingNativeThread) throw new BillingError('forbidden');
         await tx.execute({
           sql: 'INSERT INTO billing_studio_threads VALUES (?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
-          args: [threadId, context.actorId, context.workspaceId, agentId, this.resource(context, agentId)],
+          args: [
+            threadId,
+            context.actorId,
+            context.workspaceId,
+            agentId,
+            await this.ownerResource(tx, context, agentId),
+          ],
         });
+      }
       return this.requireOwner(tx, context, agentId, threadId);
     });
   }

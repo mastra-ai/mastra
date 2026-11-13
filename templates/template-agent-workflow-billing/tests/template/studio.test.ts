@@ -790,6 +790,167 @@ it('Studio native approval and decline use the persisted billed workflow suspens
   ).toMatchObject([{ units: 0 }]);
 }, 180000);
 
+async function sharedMemoryIsolation() {
+  const f = await fixture();
+  const application = await studioComposition(f.root, f.boundary.url);
+  cleanups.push(application.close);
+  const owner = f.manifest.profiles.owner!;
+  const request = async (path: string, body?: unknown, credential?: string, headers: Record<string, string> = {}) => {
+    const response = await fetch(application.url + path, {
+      method: body ? 'POST' : 'GET',
+      headers: {
+        'content-type': 'application/json',
+        ...(credential ? { authorization: `Bearer ${credential}` } : {}),
+        ...headers,
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return { status: response.status, text: await response.text() };
+  };
+  const threadId = 'shared-memory-private';
+  const privateText = 'PRIVATE_SHARED_MEMORY_SENTINEL_73144';
+  expect(
+    (
+      await request(
+        '/private-api/agents/studio-assistant/send-message',
+        { threadId, resourceId: 'ignored', message: privateText },
+        owner.credential,
+      )
+    ).status,
+  ).toBe(200);
+  const memory = (await application.conversation.getMemory())!;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (JSON.stringify(await memory.recall({ threadId, perPage: 40 })).includes('Saved conversation result.')) break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  const thread = (await memory.getThreadById({ threadId }))!;
+  const runs = await waitQuery(
+    f.root,
+    'SELECT run_id FROM billing_studio_runs WHERE thread_id = ?',
+    rows => rows.length > 0,
+    [threadId],
+  );
+  const runId = String(runs[0].run_id);
+  const resourceId = thread.resourceId!;
+  const storedMessage = (await (await memory.storage.getStore('memory'))!.listMessages({ threadId, perPage: 40 }))
+    .messages[0]!;
+  const before = {
+    models: f.boundary.models.length,
+    images: f.boundary.images.length,
+    ledger: await query(f.root, 'SELECT * FROM billing_ledger'),
+  };
+  const attacks: [string, unknown?, Record<string, string>?][] = [];
+  for (const alias of ['public', 'public-alias', 'prepared-public-alias']) {
+    const prefix = `/private-api/agents/${alias}`;
+    for (const memory of [
+      { thread: threadId, resource: resourceId },
+      { thread: { id: threadId }, resource: resourceId },
+      { thread: threadId },
+      { thread: 'ordinary-target', resource: resourceId },
+      { resource: resourceId },
+    ])
+      attacks.push([`${prefix}/generate`, { messages: 'Recall private history.', memory }]);
+    attacks.push(
+      [`${prefix}/stream`, { messages: 'Recall private history.', memory: { thread: threadId, resource: resourceId } }],
+      [
+        `${prefix}/send-message`,
+        {
+          threadId: 'ordinary-target',
+          resourceId: 'ordinary-resource',
+          message: 'Recall private history.',
+          ifIdle: { streamOptions: { memory: { thread: { id: threadId }, resource: resourceId } } },
+        },
+      ],
+      [`${prefix}/signals`, { runId, signal: { type: 'user', contents: 'Recall' } }],
+      [`${prefix}/queue-message`, { threadId, resourceId, message: 'Recall' }],
+      [`${prefix}/threads/subscribe`, { threadId, resourceId, withInitialHistory: true, withRunStatus: true }],
+      [`${prefix}/threads/subscribe`, { threadId, withInitialHistory: false, withRunStatus: true }],
+      [`${prefix}/observe`, { runId }],
+      [`${prefix}/recover`, { runId }],
+      [`${prefix}/runs/${runId}/abort`, {}],
+      [`${prefix}/threads/abort`, { threadId, resourceId }],
+      [`${prefix}/send-tool-approval`, { runId, toolCallId: 'unknown', approved: true }],
+      [`${prefix}/suspended-runs?resourceId=${encodeURIComponent(resourceId)}`],
+      [`${prefix}/suspended-runs?threadId=${threadId}`],
+      [
+        `${prefix}/generate`,
+        { messages: 'Recall', requestContext: { mastra__threadId: threadId, mastra__resourceId: resourceId } },
+      ],
+      [
+        `${prefix}/generate?requestContext=${encodeURIComponent(Buffer.from(JSON.stringify({ mastra__threadId: threadId, mastra__resourceId: resourceId })).toString('base64'))}`,
+        { messages: 'Recall' },
+      ],
+      [
+        `${prefix}/generate`,
+        {
+          messages: [{ id: storedMessage.id, role: 'user', content: 'Move a private message' }],
+          memory: { thread: 'ordinary-identity', resource: 'ordinary-resource' },
+        },
+      ],
+      [
+        `${prefix}/generate`,
+        {
+          messages: 'Recall',
+          context: [{ id: storedMessage.id, role: 'user', content: 'Move private context' }],
+          memory: { thread: 'ordinary-context', resource: 'ordinary-resource' },
+        },
+      ],
+      [`${prefix}/generate`, { messages: 'Recall' }, { 'x-thread-id': threadId }],
+      [`${prefix}/generate`, { messages: 'Recall' }, { 'x-resource-id': resourceId }],
+      [
+        `${prefix}/generate`,
+        { messages: 'Recall', memory: { thread: threadId, resource: resourceId } },
+        { 'content-type': 'text/plain' },
+      ],
+      [
+        `/private-api/memory/threads?agentId=${alias}`,
+        { threadId, resourceId: 'ordinary-resource', title: 'Adopt protected thread' },
+      ],
+      [`/private-api/memory/threads/${threadId}?agentId=${alias}`],
+      [`/private-api/memory/threads/${threadId}/messages?agentId=${alias}`],
+      [`/private-api/memory/threads?agentId=${alias}&resourceId=${encodeURIComponent(resourceId)}`],
+      [`/private-api/memory/threads?agentId=${alias}`],
+      ['/private-api/memory/threads'],
+    );
+  }
+  // Same actor/workspace does not authorize another decorated Agent to adopt this thread.
+  attacks.push(['/private-api/agents/other-chat/send-message', { threadId, resourceId, message: 'Wrong agent' }]);
+  const credentials = [
+    undefined,
+    owner.credential,
+    f.manifest.profiles.member!.credential,
+    f.manifest.profiles.outsider!.credential,
+  ];
+  for (const credential of credentials) {
+    for (const [path, body, headers] of attacks) {
+      const response = await request(path, body, credential, headers);
+      expect(response.status, `${path}: ${response.text}`).toBeGreaterThanOrEqual(400);
+      expect(response.text).not.toContain(privateText);
+    }
+    expect(f.boundary.models).toHaveLength(before.models);
+    expect(f.boundary.images).toHaveLength(before.images);
+  }
+  await query(f.root, 'UPDATE local_credentials SET active = 0 WHERE identity_id = ?', [owner.actorId]);
+  try {
+    for (const alias of ['public', 'public-alias', 'prepared-public-alias']) {
+      const response = await request(
+        `/private-api/agents/${alias}/generate`,
+        { messages: 'Revoked recall', memory: { thread: threadId, resource: resourceId } },
+        owner.credential,
+      );
+      expect(response.status).toBe(403);
+    }
+  } finally {
+    await query(f.root, 'UPDATE local_credentials SET active = 1 WHERE identity_id = ?', [owner.actorId]);
+  }
+  expect(f.boundary.models).toHaveLength(before.models);
+  expect(f.boundary.images).toHaveLength(before.images);
+  expect(await query(f.root, 'SELECT * FROM billing_ledger')).toEqual(before.ledger);
+  expect(
+    JSON.stringify(await (await memory.storage.getStore('memory'))!.listMessages({ threadId, perPage: 40 })),
+  ).toContain(privateText);
+}
+
 it('Studio chat ownership revocation and forged context close native and operation bypasses', async () => {
   const f = await fixture(true);
   const server = await serve(f.root, f.env);
@@ -966,6 +1127,7 @@ it('Studio chat ownership revocation and forged context close native and operati
     expect((await jwtCall(path, body, expired)).status).toBe(401);
   expect(f.boundary.images).toHaveLength(jwtBefore.images);
   expect(f.boundary.models).toHaveLength(jwtBefore.models);
+  await sharedMemoryIsolation();
 }, 180000);
 
 it('Studio configuration files and memory work across setup dev build and restart without framework upgrades', async () => {
@@ -1298,6 +1460,72 @@ it('Studio wrapper composition preserves public SDK results middleware and exist
     calls: '1',
     body: { answer: 'controlled', text: 'Saved conversation result.', finishReason: 'stop', hasUsage: true },
   });
+  // An ordinary Agent sharing persistent Memory must never load another agent's private transcript.
+  const privateText = 'PRIVATE_OWNER_ONLY_COMPOSITION_SENTINEL_73144';
+  await call('/private-api/agents/studio-assistant/send-message', {
+    threadId: 'shared-private-thread',
+    resourceId: 'ignored',
+    message: privateText,
+  });
+  const sharedMemory = (await application.conversation.getMemory())!;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (
+      JSON.stringify(await sharedMemory.recall({ threadId: 'shared-private-thread', perPage: 40 })).includes(
+        'Saved conversation result.',
+      )
+    )
+      break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  const privateThread = (await sharedMemory.getThreadById({ threadId: 'shared-private-thread' }))!;
+  const privateRecords = (
+    await (await sharedMemory.storage.getStore('memory'))!.listMessages({ threadId: privateThread.id, perPage: 40 })
+  ).messages;
+  const privateModels = f.boundary.models.length;
+  const foreignResponse = await fetch(application.url + '/private-api/agents/public/generate', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${f.manifest.profiles.member!.credential}`, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      messages: 'Recall the earlier message.',
+      memory: { thread: privateThread.id, resource: privateThread.resourceId },
+    }),
+  });
+  expect(foreignResponse.status, JSON.stringify(f.boundary.models.slice(privateModels))).toBe(403);
+  expect(f.boundary.models).toHaveLength(privateModels);
+  const privateMessage = (
+    await (await sharedMemory.storage.getStore('memory'))!.listMessages({ threadId: privateThread.id, perPage: 40 })
+  ).messages[0]!;
+  expect(privateMessage, 'Persisted private message for identity collision').toBeDefined();
+  const overwriteResponse = await call(
+    '/private-api/agents/public/generate',
+    {
+      messages: [
+        {
+          id: privateMessage.id,
+          role: 'user',
+          content: 'Overwrite private message from an ordinary thread.',
+          createdAt: new Date().toISOString(),
+          threadId: 'ordinary-overwrite',
+          resourceId: 'ordinary-resource',
+        },
+      ],
+      memory: { thread: 'ordinary-overwrite', resource: 'ordinary-resource' },
+    },
+    false,
+  );
+  expect(
+    (await (await sharedMemory.storage.getStore('memory'))!.listMessagesById({ messageIds: [privateMessage.id] }))
+      .messages[0]!.threadId,
+  ).toBe(privateThread.id);
+  expect(overwriteResponse.status, JSON.stringify(overwriteResponse.body)).toBe(403);
+  expect(
+    (await (await sharedMemory.storage.getStore('memory'))!.listMessages({ threadId: privateThread.id, perPage: 40 }))
+      .messages,
+  ).toEqual(privateRecords);
+  expect(f.boundary.models).toHaveLength(privateModels);
+  expect(
+    JSON.stringify(await sharedMemory.recall({ threadId: privateThread.id, perPage: 40, hideSignals: false })),
+  ).toContain(privateText);
   expect(await call('/private-api/agents/public/generate', { messages: 'Hello public agent' })).toMatchObject({
     status: 200,
     calls: '1',
@@ -1354,6 +1582,140 @@ it('Studio wrapper composition preserves public SDK results middleware and exist
   }
   expect(f.boundary.models).toHaveLength(beforeAliases.models + 4);
   expect(await query(f.root, 'SELECT * FROM billing_ledger')).toEqual(beforeAliases.ledger);
+
+  const unclaimedContext = await application.integration.organizations.context({
+    credential: f.manifest.profiles.outsider!.credential,
+  });
+  const unclaimedResource = await application.integration.conversations.resource(
+    unclaimedContext,
+    application.conversation.id,
+  );
+  const beforeUnclaimed = f.boundary.models.length;
+  expect(
+    (
+      await call(
+        '/private-api/agents/public/generate',
+        {
+          messages: 'Claim reserved resource first',
+          memory: { thread: 'unclaimed-private-resource', resource: unclaimedResource },
+        },
+        false,
+      )
+    ).status,
+  ).toBe(403);
+  expect(f.boundary.models).toHaveLength(beforeUnclaimed);
+  expect(
+    await query(f.root, 'SELECT * FROM billing_studio_threads WHERE actor_id = ?', [
+      f.manifest.profiles.outsider!.actorId,
+    ]),
+  ).toEqual([]);
+  const ordinaryResource = 'ordinary-public-resource';
+  const ordinaryThread = 'ordinary-public-thread';
+  const ordinaryText = 'ORDINARY_OWN_MEMORY_SENTINEL_88421';
+  for (const [alias, messages] of [
+    ['public', ordinaryText],
+    ['prepared-public-alias', 'Recall my ordinary conversation.'],
+  ]) {
+    expect(
+      await call(
+        `/private-api/agents/${alias}/generate`,
+        { messages, memory: { thread: { id: ordinaryThread }, resource: ordinaryResource } },
+        false,
+      ),
+    ).toMatchObject({ status: 200, calls: '1' });
+  }
+  expect(JSON.stringify(f.boundary.models.at(-1)!.body.messages)).toContain(ordinaryText);
+  expect(JSON.stringify(f.boundary.models.at(-1)!.body.messages)).not.toContain(privateText);
+  const ownHistory = await call(
+    `/private-api/memory/threads/${ordinaryThread}/messages?agentId=public&resourceId=${ordinaryResource}`,
+    undefined,
+    false,
+  );
+  expect(ownHistory.status).toBe(200);
+  expect(JSON.stringify(ownHistory.body)).toContain(ordinaryText);
+  expect(JSON.stringify(ownHistory.body)).not.toContain(privateText);
+  const ownList = await call(
+    `/private-api/memory/threads?agentId=public-alias&resourceId=${ordinaryResource}`,
+    undefined,
+    false,
+  );
+  expect(ownList.status).toBe(200);
+  expect(JSON.stringify(ownList.body)).toContain(ordinaryThread);
+  expect(JSON.stringify(ownList.body)).not.toContain(privateThread.id);
+  const ownRuns = await call('/private-api/agents/public/suspended-runs', undefined, false);
+  expect(ownRuns.status).toBe(200);
+  expect(JSON.stringify(ownRuns.body)).not.toContain(privateThread.id);
+  const beforeClaim = f.boundary.models.length;
+  expect(
+    (
+      await call('/private-api/agents/studio-assistant/send-message', {
+        threadId: ordinaryThread,
+        resourceId: ordinaryResource,
+        message: 'Claim another native thread',
+      })
+    ).status,
+  ).toBe(403);
+  expect(f.boundary.models).toHaveLength(beforeClaim);
+  expect(await query(f.root, 'SELECT * FROM billing_studio_threads WHERE thread_id = ?', [ordinaryThread])).toEqual([]);
+  // IDs inside normal user messages are data; the ordinary route retains its native behavior.
+  expect(
+    (
+      await call(
+        '/private-api/agents/public/generate',
+        { messages: `Describe these example IDs: ${privateThread.id} ${privateThread.resourceId}` },
+        false,
+      )
+    ).status,
+  ).toBe(200);
+
+  // A persisted pre-namespace owner binding keeps its actual resource and private transcript.
+  const memberProfile = f.manifest.profiles.member!;
+  const legacyResource = createHash('sha256')
+    .update(JSON.stringify([memberProfile.actorId, memberProfile.workspaceId, application.conversation.id]))
+    .digest('hex');
+  const legacyThread = 'legacy-member-memory';
+  expect(
+    (
+      await call(
+        '/private-api/agents/public/generate',
+        { messages: 'LEGACY_PRIVATE_MEMORY_SENTINEL', memory: { thread: legacyThread, resource: legacyResource } },
+        false,
+      )
+    ).status,
+  ).toBe(200);
+  await query(f.root, 'INSERT INTO billing_studio_threads VALUES (?, ?, ?, ?, ?)', [
+    legacyThread,
+    memberProfile.actorId,
+    memberProfile.workspaceId,
+    application.conversation.id,
+    legacyResource,
+  ]);
+  const legacyResponse = await fetch(application.url + '/private-api/agents/studio-assistant/send-message', {
+    method: 'POST',
+    headers: { authorization: `Bearer ${memberProfile.credential}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ threadId: legacyThread, resourceId: 'ignored', message: 'Continue my saved conversation' }),
+  });
+  expect(legacyResponse.status).toBe(200);
+  await waitQuery(f.root, 'SELECT run_id FROM billing_studio_runs WHERE thread_id = ?', rows => rows.length > 0, [
+    legacyThread,
+  ]);
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (
+      JSON.stringify(await sharedMemory.recall({ threadId: legacyThread, perPage: 40 })).includes(
+        'Saved conversation result.',
+      )
+    )
+      break;
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  expect((await sharedMemory.getThreadById({ threadId: legacyThread }))!.resourceId).toBe(legacyResource);
+  expect(JSON.stringify(f.boundary.models.at(-1)!.body.messages)).toContain('LEGACY_PRIVATE_MEMORY_SENTINEL');
+  const legacyBefore = f.boundary.models.length;
+  for (const memory of [{ thread: legacyThread }, { thread: 'new-ordinary', resource: legacyResource }])
+    expect(
+      (await call('/private-api/agents/public-alias/generate', { messages: 'Legacy bypass', memory }, false)).status,
+    ).toBe(403);
+  expect(f.boundary.models).toHaveLength(legacyBefore);
 
   const usage = await call('/private-api/tools/billing-account/execute', {
     data: { workspaceId: f.manifest.profiles.owner!.workspaceId },
@@ -1420,6 +1782,49 @@ it('Studio wrapper composition preserves public SDK results middleware and exist
   );
   expect(JSON.stringify(transformed)).toContain('[input]source[resume]suffix');
   expect(JSON.stringify(transformed)).not.toContain('[resume][resume]');
+  await application.close();
+  const retainedLedger = await query(f.root, 'SELECT * FROM billing_ledger ORDER BY execution_id');
+  for (const studio of [true, false]) {
+    const rollback = await studioComposition(f.root, f.boundary.url, { wrapper: false, studio });
+    cleanups.push(rollback.close);
+    const beforeRollback = f.boundary.models.length;
+    for (const selectedCredential of [undefined, f.manifest.profiles.member!.credential, credential]) {
+      for (const memory of [
+        { thread: privateThread.id, resource: privateThread.resourceId },
+        { thread: privateThread.id },
+        { thread: 'new-thread', resource: privateThread.resourceId },
+        { thread: legacyThread, resource: legacyResource },
+      ]) {
+        const denied = await fetch(rollback.url + '/private-api/agents/public-alias/generate', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            ...(selectedCredential ? { authorization: `Bearer ${selectedCredential}` } : {}),
+          },
+          body: JSON.stringify({ messages: 'Read retained private history.', memory }),
+        });
+        expect(denied.status).toBe(403);
+        expect(await denied.text()).not.toContain(privateText);
+      }
+    }
+    expect(f.boundary.models).toHaveLength(beforeRollback);
+    const legitimate = await fetch(rollback.url + '/private-api/agents/public/generate', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        messages: 'Recall my retained ordinary conversation.',
+        memory: { thread: ordinaryThread, resource: ordinaryResource },
+      }),
+    });
+    expect(legitimate.status).toBe(200);
+    expect(legitimate.headers.get('x-application-calls')).toBe('1');
+    await legitimate.text();
+    expect(JSON.stringify(f.boundary.models.at(-1)!.body.messages)).toContain(ordinaryText);
+    expect(JSON.stringify(f.boundary.models.at(-1)!.body.messages)).not.toContain(privateText);
+    expect(await query(f.root, 'SELECT * FROM billing_ledger ORDER BY execution_id')).toEqual(retainedLedger);
+    await rollback.close();
+  }
+
   expect(await query(f.root, 'SELECT units FROM billing_ledger ORDER BY units')).toMatchObject([
     { units: 1 },
     { units: 3 },

@@ -14,6 +14,7 @@ export class StudioAgentRuntime {
   private readonly decorated = new WeakMap<object, string>();
   readonly agents: Record<string, AnyAgent> = Object.create(null);
   readonly aliases = new Map<string, string>();
+  readonly ordinaryAgents = new Set<string>();
   approval?: (
     conversation: StudioConversation,
     toolCallId: string,
@@ -140,7 +141,12 @@ export class StudioAgentRuntime {
   }
   alias(id: string, native: AnyAgent) {
     const canonical = this.decorated.get(native);
-    if (!canonical) return false;
+    if (!canonical) {
+      if (!Object.values(this.integration.resources.agents).some(resource => resource.native === native))
+        this.ordinaryAgents.add(id);
+      return false;
+    }
+    this.ordinaryAgents.delete(id);
     const existing = this.aliases.get(id);
     if (existing && existing !== canonical) throw new BillingError('invalid_configuration');
     this.aliases.set(id, canonical);
