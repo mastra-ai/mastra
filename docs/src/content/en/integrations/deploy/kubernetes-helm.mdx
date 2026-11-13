@@ -306,7 +306,7 @@ Before setting `replicaCount` above one or enabling `mastra-server.autoscaling`:
 - Configure a distributed PubSub backend and shared cache. The [Kubernetes guide](/integrations/deploy/kubernetes#configure-shared-infrastructure) uses `RedisStreamsPubSub` and `RedisServerCache`, with `REDIS_URL` stored in the application Secret.
 - Use [durable agents](/docs/harness/durable-agents) for streams, approvals, and runs that must continue when requests reach different pods.
 - Start with one replica to initialize the database schema before scaling. For stricter deployments, initialize the schema in a Kubernetes Job and disable initialization in each pod.
-- Review [worker roles](/docs/deployment/workers#select-workers). Run only one scheduler instance when your application uses scheduled workflows.
+- Review [worker roles](/docs/deployment/workers#select-workers). Multiple scheduler instances are safe, because each schedule occurrence is claimed by one instance.
 
 After those requirements are in place, set resource requests and enable autoscaling:
 
@@ -473,7 +473,7 @@ kubectl rollout restart deploy -n mastra   -l app.kubernetes.io/name=mastra-work
 - Set resource requests via `mastra-server.resources` and `mastra-studio.resources`.
 - Prefer standalone cert-manager and ingress controller installs over the bundled toggles; CRD lifecycle inside an umbrella chart complicates upgrades.
 - Enable multiple replicas only after configuring shared storage, distributed PubSub, shared cache, and the required process roles.
-- When running background workers, set `mastra-server.workers.splitDeployment: true`, run exactly one scheduler, and set `maxmemory-policy` to `noeviction` on Redis or Valkey.
+- When running background workers, set `mastra-server.workers.splitDeployment: true` and set `maxmemory-policy` to `noeviction` on Redis or Valkey.
 - The chart applies hardened defaults: non-root containers, read-only root filesystem, seccomp `RuntimeDefault`, and no service account token automount.
 
 ## Upgrade and uninstall

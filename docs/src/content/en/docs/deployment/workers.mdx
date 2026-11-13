@@ -58,7 +58,14 @@ When a schedule is created at runtime, Mastra publishes a wake event on the PubS
 
 To poll from startup regardless of whether schedules exist (for example, when your processes don't share a PubSub backend), set `scheduler: { enabled: true }` on the worker or run it with `MASTRA_WORKERS=scheduler`.
 
-**Don't run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
+You can run more than one scheduler instance against the same storage. Before it publishes, a scheduler claims each occurrence with a compare-and-swap update of the schedule's next fire time. Only one instance wins the claim, and the others skip that occurrence. The built-in storage adapters (PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, Convex) all perform this update atomically. A custom storage adapter must do the same in `updateScheduleNextFire`, or instances can fire the same occurrence twice.
+
+The claim prevents duplicate publishes of one occurrence. It doesn't make firing exactly-once:
+
+- **Claim and publish aren't one transaction.** If the instance that won the claim crashes, or fails to publish after three attempts, that occurrence is lost. Mastra records a failed publish as a `failed` trigger and doesn't replay it.
+- **Occurrences can overlap.** A new occurrence fires on time even if the run from the previous one hasn't finished.
+
+Extra scheduler instances add availability, not throughput. Each one polls storage on every tick.
 
 ### Background task worker
 
@@ -388,7 +395,7 @@ kubectl scale deployment/orchestration-worker --replicas=3
 kubectl scale deployment/background-task-worker --replicas=2
 ```
 
-Run exactly one scheduler worker. Multiple schedulers polling the same storage can publish duplicate events for a schedule.
+You can run more than one scheduler worker. Each schedule occurrence is claimed by one instance, as described in [Scheduler worker](#scheduler-worker).
 
 ### Health checks
 
@@ -407,7 +414,7 @@ If the API crashes while a step is executing, that work can be lost and the work
 ## Known limitations
 
 - **No dead-letter queue**: Failed events are nacked and retried, but there's no DLQ for events that fail after all retries.
-- **Scheduler is single-instance**: Running multiple scheduler processes causes duplicate schedule fires.
+- **Schedule occurrences can be lost**: If a scheduler crashes or can't publish after claiming an occurrence, that occurrence doesn't fire and isn't replayed.
 - **Runs stuck in "running" after API crash**: A crash during workflow-step execution leaves the run in `running` status without an automatic retry. For [durable agents](/docs/harness/durable-agents), configure `recovery.durableAgents: 'auto'` so a server restart automatically re-drives orphaned runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery) for details.
 
 ## Related
