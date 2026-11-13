@@ -1307,6 +1307,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         'GET',
         `${API_PREFIX}/github-app/installations/${installationId}/repositories?${params}`,
       );
+      // A refresh means the grant may have changed, so a cached full listing
+      // could now miss a repository this narrowed one shows.
+      if (options.fresh) this.#installationReposCache.delete(installationId);
       return result.repositories.map(repository => ({ ...repository, installationId }));
     }
 

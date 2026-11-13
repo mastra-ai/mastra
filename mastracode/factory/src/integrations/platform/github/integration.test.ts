@@ -1104,6 +1104,29 @@ describe('PlatformGithubIntegration', () => {
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
+  it('drops the cached full listing when a narrowed refresh reads a newly granted repository', async () => {
+    const repository = (id: number, name: string) => ({
+      id,
+      owner: 'acme',
+      name,
+      fullName: `acme/${name}`,
+      private: true,
+      defaultBranch: 'main',
+    });
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementationOnce(async () => json({ repositories: [repository(101, 'app')] }))
+      .mockImplementation(async () => json({ repositories: [repository(101, 'app'), repository(102, 'granted')] }));
+    const integration = createIntegration(fetchImpl);
+
+    await integration.listInstallationRepos(7);
+    await integration.listInstallationRepos(7, { fresh: true, limit: 8 });
+
+    await expect(integration.getInstallationRepo(7, 'acme/granted')).resolves.toEqual(
+      expect.objectContaining({ fullName: 'acme/granted', installationId: 7 }),
+    );
+  });
+
   it('evicts the oldest installation listing once the cache bound is reached', async () => {
     vi.useFakeTimers();
     try {
