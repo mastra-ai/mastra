@@ -232,6 +232,12 @@ const runQueueEntrySchema = z.object({
   /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
   state: z.enum(['waiting', 'claimed']),
   type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
+  /**
+   * `interactive`: a reply a person sent on the card's pull request or issue,
+   * claimed ahead of automated runs into its own reserve of slots.
+   * `automated`: everything else.
+   */
+  lane: z.enum(['automated', 'interactive']),
   role: z.string().nullable(),
   /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
   skillName: z.string().nullable(),
@@ -250,12 +256,24 @@ const runQueueEntrySchema = z.object({
 
 export const runQueueResponseSchema = z.object({
   /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
-  slots: z.object({ scope: z.literal('server'), inUse: z.number().int(), cap: z.number().int() }).nullable(),
+  slots: z
+    .object({
+      scope: z.literal('server'),
+      /** Automated run slots, including any a person's reply borrowed once its reserve was full. */
+      inUse: z.number().int(),
+      cap: z.number().int(),
+      /** Slots kept for people's replies, on top of `cap`. */
+      interactive: z.object({ inUse: z.number().int(), cap: z.number().int() }),
+    })
+    .nullable(),
   /** The project's runs holding a slot on any server. */
   running: z.number().int(),
   claimed: z.array(runQueueEntrySchema),
   /** Every waiting run, though `queued` lists at most the oldest 50. */
   queuedCount: z.number().int(),
+  /** `queuedCount` split by lane. */
+  queuedByLane: z.object({ automated: z.number().int(), interactive: z.number().int() }),
+  /** Oldest first. `position` counts within the run's lane: interactive runs are claimed before automated ones. */
   queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
 });
 export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;

@@ -1,4 +1,4 @@
-import { isRunBearingDecision } from '../rules/dispatcher.js';
+import { isInteractiveDecision, isRunBearingDecision } from '../rules/dispatcher.js';
 import { currentStage } from '../rules/transition-service.js';
 import type { Card, FactoryDeferredDecisionRecord, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RunQueueResponse } from './contracts.js';
@@ -6,6 +6,11 @@ import type { RunQueueResponse } from './contracts.js';
 const LISTED_WAITING_RUNS = 50;
 
 type RunQueueEntry = RunQueueResponse['claimed'][number];
+type RunSlots = Omit<NonNullable<RunQueueResponse['slots']>, 'scope'>;
+
+function laneOf(decision: FactoryDeferredDecisionRecord): RunQueueEntry['lane'] {
+  return isInteractiveDecision(decision.decision, decision) ? 'interactive' : 'automated';
+}
 
 /** A lease past its expiry belongs to a server that stopped renewing it: the next claim takes it back. */
 function holdsSlot(decision: FactoryDeferredDecisionRecord, now: Date): boolean {
@@ -33,6 +38,7 @@ function entry(
     decisionId: decision.id,
     state,
     type: payload.type as RunQueueEntry['type'],
+    lane: laneOf(decision),
     role: typeof payload.role === 'string' ? payload.role : null,
     skillName: payload.type === 'invokeSkill' && typeof payload.skillName === 'string' ? payload.skillName : null,
     queuedSince: since.toISOString(),
@@ -49,14 +55,14 @@ function entry(
 }
 
 /**
- * The project's run-bearing decisions in the order the dispatcher claims them (oldest first),
- * split into those waiting for a slot and those a server already holds one for.
+ * The project's run-bearing decisions, oldest first, split into those waiting for a slot and
+ * those a server already holds one for. Each lane is claimed oldest first, interactive first.
  */
 export async function readRunQueue(input: {
   workItems: WorkItemsStorage;
   orgId: string;
   factoryProjectId: string;
-  slots: { inUse: number; cap: number } | undefined;
+  slots: RunSlots | undefined;
   now: Date;
 }): Promise<RunQueueResponse> {
   const { workItems, orgId, factoryProjectId, now } = input;
@@ -66,6 +72,8 @@ export async function readRunQueue(input: {
   const claimed = open.filter(decision => holdsSlot(decision, now));
   const waiting = open.filter(decision => waitsForSlot(decision, now));
   const listed = waiting.slice(0, LISTED_WAITING_RUNS);
+  const waitingLanes = waiting.map(laneOf);
+  const positions = { automated: 0, interactive: 0 };
   const ids = [...claimed, ...listed].flatMap(decision => (decision.workItemId ? [decision.workItemId] : []));
   const cards = new Map((await workItems.listByIds({ orgId, factoryProjectId, ids })).map(card => [card.id, card]));
   return {
@@ -73,6 +81,14 @@ export async function readRunQueue(input: {
     running: claimed.length,
     claimed: claimed.map(decision => entry(decision, 'claimed', cards)),
     queuedCount: waiting.length,
-    queued: listed.map((decision, index) => ({ ...entry(decision, 'waiting', cards), position: index + 1 })),
+    queuedByLane: {
+      automated: waitingLanes.filter(lane => lane === 'automated').length,
+      interactive: waitingLanes.filter(lane => lane === 'interactive').length,
+    },
+    queued: listed.map(decision => {
+      const queued = entry(decision, 'waiting', cards);
+      positions[queued.lane] += 1;
+      return { ...queued, position: positions[queued.lane] };
+    }),
   };
 }

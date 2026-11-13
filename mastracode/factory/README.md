@@ -686,11 +686,21 @@ const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 25 } });
 
 The cap counts per process, not per deployment: three replicas with the default run up to 30 at once.
 
+A reply a person writes on a card's GitHub pull request or issue doesn't wait behind automated runs. Each process keeps 2 more slots for these replies, claims them ahead of automated runs, and lets them borrow a free automated slot once the reserve is full. Change the reserve with `dispatcher.maxInteractiveInFlight`, or `MASTRACODE_DISPATCH_MAX_INTERACTIVE_IN_FLIGHT`; `0` keeps no reserve, though replies are still claimed first:
+
+```ts
+const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 10, maxInteractiveInFlight: 2 } });
+```
+
+A run counts as a reply only when GitHub reports its sender as a user (not a bot), the sender is a trusted collaborator, Factory didn't write it, it would wake the session, and no rule passed it along from another event. Everything else, including GitLab, Linear, Jira and incident.io activity, waits as an automated run.
+
+The caps bound how many slots the dispatcher holds, not how many agents run. With the defaults a process holds up to 12 slots. Pull request activity (`signalActivity`) frees its slot once the session accepts it, so the run it wakes continues outside the cap. Messages you send from the Factory UI or Slack, and approval notices to a following session, go to the session directly and never wait for a slot.
+
 The board shows how many automated runs are waiting, and opens a list of them, oldest first. A waiting card reads `Queued (#3)`. Manual starts take the same slots and are claimed ahead of these runs, but are not listed. `GET /web/factory/projects/:id/run-queue` returns the same data:
 
-- `slots` — this server's `inUse` and `cap`, or `null` when it runs no dispatcher. Other replicas keep their own.
+- `slots` — this server's automated `inUse` and `cap`, with the reply reserve's `interactive.inUse` and `interactive.cap`, or `null` when it runs no dispatcher. A reply that borrowed an automated slot counts in `inUse`. Other replicas keep their own.
 - `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
-- `queuedCount` and `queued` — every automated run waiting for a slot, and the oldest 50 with their `position`, card, phase and the skill they will run. A retry still backing off is not waiting yet.
+- `queuedCount` and `queued` — every run waiting for a slot, and the oldest 50 with their `lane` (`interactive` for a person's reply, else `automated`), `position` within that lane, card, phase and the skill they will run. `queuedByLane` splits `queuedCount` by lane. A retry still backing off is not waiting yet.
 
 ### The `factory-work-item` signal
 

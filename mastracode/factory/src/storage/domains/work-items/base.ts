@@ -455,8 +455,14 @@ export interface FactoryLeaseClaimInput {
 }
 
 export interface FactoryDeferredDecisionClaimInput extends FactoryLeaseClaimInput {
-  /** Restrict the claim by decision payload; rejected rows are never leased. */
-  decisionFilter?: (decision: Record<string, unknown>) => boolean;
+  /** Restrict the claim by decision payload and who caused it; rejected rows are never leased. */
+  decisionFilter?: (decision: Record<string, unknown>, provenance: FactoryDecisionProvenance) => boolean;
+}
+
+/** Who caused a deferred decision: the rule actor, and the decisions it follows from. */
+export interface FactoryDecisionProvenance {
+  actor: Record<string, unknown> | null;
+  causalChain: FactoryDeferredDecisionRecord['causalChain'];
 }
 
 export interface FactoryLeaseIdentity {
@@ -994,6 +1000,11 @@ function decisionSourceKey(decision: unknown): string | null {
 function decisionRowPayload(decision: unknown): Record<string, unknown> {
   const parsed = typeof decision === 'string' ? safeJsonParse(decision) : decision;
   return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+}
+
+function jsonRowValue<T>(value: unknown, is: (parsed: unknown) => parsed is T): T | undefined {
+  const parsed = typeof value === 'string' ? safeJsonParse(value) : value;
+  return is(parsed) ? parsed : undefined;
 }
 
 function safeJsonParse(value: string): unknown {
@@ -3045,7 +3056,21 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   async claimDeferredDecisions(input: FactoryDeferredDecisionClaimInput): Promise<FactoryDeferredDecisionRecord[]> {
     const filter = input.decisionFilter;
-    const accept = filter ? (row: GovernanceDbRow) => filter(decisionRowPayload(row.decision)) : undefined;
+    const accept = filter
+      ? (row: GovernanceDbRow) =>
+          filter(decisionRowPayload(row.decision), {
+            actor:
+              jsonRowValue(
+                row.actor,
+                (value): value is Record<string, unknown> =>
+                  typeof value === 'object' && value !== null && !Array.isArray(value),
+              ) ?? null,
+            causalChain:
+              jsonRowValue(row.causal_chain, (value): value is FactoryDecisionProvenance['causalChain'] =>
+                Array.isArray(value),
+              ) ?? [],
+          })
+      : undefined;
     return this.#claimLeases('factory_deferred_decisions', input, toDeferredDecision, accept);
   }
 

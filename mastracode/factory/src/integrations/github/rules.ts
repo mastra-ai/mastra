@@ -395,12 +395,12 @@ export function sweepTrustLookup(
 
 async function githubActor(
   github: GithubRulesIntegration,
-  input: { installationId: number; repository: string; login: string; factoryAuthored: boolean },
+  input: { installationId: number; repository: string; login: string; factoryAuthored: boolean; human: boolean },
 ): Promise<FactoryRuleActor> {
   // The actor bit is recomputed on every event, so a failed lookup can read
   // untrusted for this one delivery instead of failing the ingest.
   const trusted = await trustedCollaborator(github, input).catch(() => false);
-  return { type: 'github', login: input.login, trusted, factoryAuthored: input.factoryAuthored };
+  return { type: 'github', login: input.login, trusted, factoryAuthored: input.factoryAuthored, human: input.human };
 }
 
 interface FactoryPullRequestProvenanceData {
@@ -778,6 +778,9 @@ export class GithubRules {
       repository: repositoryName,
       login,
       factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
+      // GitHub types every webhook sender. Only `User` is a person: an app or a
+      // review bot can hold write access too, so trust alone does not say who wrote it.
+      human: string(object(parsed.payload.sender)?.type) === 'User',
     });
     // A marked handoff comment is ignored only when Factory authored it: a
     // human may quote the marker to add an investigation lead, and a custom

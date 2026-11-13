@@ -431,6 +431,13 @@ export type { FactorySandboxStart } from './workspace.js';
 export interface MastraFactoryDispatcherConfig {
   /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
+  /**
+   * Run slots one server process keeps for a person's reply on a card's GitHub
+   * pull request or issue, on top of `maxInFlight`, so the reply wakes its
+   * session without waiting behind automated runs. Defaults to 2; `0` keeps no
+   * reserve, though replies are still claimed ahead of automated runs.
+   */
+  maxInteractiveInFlight?: number;
 }
 
 const CONTROLLER_ID = 'code';
@@ -2186,6 +2193,7 @@ export class MastraFactory {
                 boards: boards,
                 ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
+                maxInteractiveInFlight: this.#config.dispatcher?.maxInteractiveInFlight,
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;

@@ -212,7 +212,18 @@ export interface FactoryRuleItemContext {
 export type FactoryRuleActor =
   | { type: 'human'; id: string }
   | { type: 'agent'; bindingId: string; role: string }
-  | { type: 'github'; login: string; trusted: boolean; factoryAuthored: boolean }
+  | {
+      type: 'github';
+      login: string;
+      trusted: boolean;
+      factoryAuthored: boolean;
+      /**
+       * Whether GitHub typed the sender as a person (`User`), not an app or bot.
+       * Absent on events Factory synthesizes itself and on actors recorded before
+       * it existed: neither says a person sent them.
+       */
+      human?: boolean;
+    }
   | { type: 'gitlab'; username: string; trusted: boolean; factoryAuthored: boolean }
   | { type: 'system'; id: string };
 
