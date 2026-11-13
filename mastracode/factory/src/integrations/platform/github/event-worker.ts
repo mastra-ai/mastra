@@ -94,6 +94,18 @@ export interface PlatformGithubEventWorkerConfig {
    * GitHub org.
    */
   sourceControl: GithubReconcileRepositorySource;
+  /**
+   * Subscribes to changes of the linked repository set and returns the
+   * unsubscribe. With it the worker reads the set from storage once, and again
+   * only after a change, so a poll that finds no events costs no storage reads.
+   * Without it every poll re-reads the set.
+   */
+  onRepositoriesChanged?: (listener: () => void) => () => void;
+  /**
+   * False while changes made on other replicas cannot reach this one; the
+   * worker then re-reads the set on every poll. Defaults to true.
+   */
+  repositoryChangesShared?: () => boolean;
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
@@ -137,6 +149,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
   readonly #now: () => number;
   readonly #dispatch: typeof dispatchGithubWebhook;
   readonly #sourceControl: GithubReconcileRepositorySource;
+  readonly #onRepositoriesChanged: ((listener: () => void) => () => void) | undefined;
+  readonly #repositoryChangesShared: () => boolean;
   readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
@@ -152,6 +166,9 @@ export class PlatformGithubEventWorker extends MastraWorker {
   #lastIssueReconcileAt = Number.NEGATIVE_INFINITY;
   #lastPullRequestDiscoveryAt = Number.NEGATIVE_INFINITY;
   #settings: PlatformGithubEventWorkerSettings = { version: 1, repositories: {} };
+  #unsubscribeRepositoryChanges: (() => void) | undefined;
+  #repositories: Repository[] | undefined;
+  #repositoryChanges = 0;
 
   constructor(config: PlatformGithubEventWorkerConfig) {
     super();
@@ -197,6 +214,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#now = config.now ?? Date.now;
     this.#dispatch = config.dispatch ?? dispatchGithubWebhook;
     this.#sourceControl = config.sourceControl;
+    this.#onRepositoriesChanged = config.onRepositoriesChanged;
+    this.#repositoryChangesShared = config.repositoryChangesShared ?? (() => true);
   }
 
   async init(deps: WorkerDeps): Promise<void> {
@@ -210,6 +229,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    // Nothing was listening while stopped, and a read that was in flight
+    // during stop() may have cached its result after stop() returned.
+    this.#repositoryChanges += 1;
+    this.#repositories = undefined;
+    this.#unsubscribeRepositoryChanges = this.#onRepositoriesChanged?.(() => {
+      this.#repositoryChanges += 1;
+      this.#repositories = undefined;
+    });
     this.#running = true;
     this.deps.logger.info('Platform GitHub event polling started', {
       intervalMs: this.#intervalMs,
@@ -224,6 +251,8 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (this.#timer) clearTimeout(this.#timer);
     this.#timer = undefined;
     this.#stopLeaseRenewal();
+    this.#unsubscribeRepositoryChanges?.();
+    this.#unsubscribeRepositoryChanges = undefined;
     await this.#inFlight;
     if (this.#hasLease) {
       await this.#leaseProvider.releaseLease(this.#leaseKey(), this.#leaseOwner).catch(() => undefined);
@@ -303,7 +332,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
   }
 
   async #poll(): Promise<number> {
-    const repositories = await this.#discoverRepositories();
+    const repositories = await this.#linkedRepositories();
     let retryInMs = this.#pollEventsEnabled ? this.#intervalMs : this.#reconcileCadence();
 
     if (this.#pollEventsEnabled) {
@@ -348,8 +377,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       this.#reconcileIssuesFactoryState && now - this.#lastIssueReconcileAt >= this.#issueReconcileIntervalMs,
     );
     const discoverPullRequests = Boolean(
-      this.#discoverPullRequests &&
-        now - this.#lastPullRequestDiscoveryAt >= this.#pullRequestDiscoveryIntervalMs,
+      this.#discoverPullRequests && now - this.#lastPullRequestDiscoveryAt >= this.#pullRequestDiscoveryIntervalMs,
     );
     const syncDependabot = Boolean(
       this.#syncDependabotAlerts && now - this.#lastDependabotSyncAt >= this.#dependabotSyncIntervalMs,
@@ -359,6 +387,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (reconcilePullRequests) this.#lastPullRequestReconcileAt = now;
     if (reconcileIssues) this.#lastIssueReconcileAt = now;
     if (discoverPullRequests) this.#lastPullRequestDiscoveryAt = now;
+    if (reconcilePullRequests || reconcileIssues) await this.#refreshRepositoryNames(repositories);
 
     const targets: ReconcileRepository[] = repositories.flatMap(repository =>
       repository.fullName
@@ -460,6 +489,43 @@ export class PlatformGithubEventWorker extends MastraWorker {
         this.deps?.logger.error('Platform GitHub issue reconcile failed', {
           repositories: targets.length,
           durationMs: Date.now() - startedAt,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+  }
+
+  async #linkedRepositories(): Promise<Repository[]> {
+    const cacheable = Boolean(this.#unsubscribeRepositoryChanges) && this.#repositoryChangesShared();
+    if (this.#repositories && cacheable) return this.#repositories;
+    const changes = this.#repositoryChanges;
+    const repositories = await this.#discoverRepositories();
+    // A change announced during the read may be missing from it, so that read
+    // is used for this poll only and the next poll reads again.
+    this.#repositories = cacheable && changes === this.#repositoryChanges ? repositories : undefined;
+    return repositories;
+  }
+
+  /**
+   * Takes each repository's current name from the platform. A rename is not a
+   * Factory write, so nothing announces it; the stored slug only catches up
+   * when someone lists the installation's repositories again. Runs with the
+   * hourly sweeps, one platform call per installation and no storage reads.
+   */
+  async #refreshRepositoryNames(repositories: Repository[]): Promise<void> {
+    for (const installationId of new Set(repositories.map(repository => repository.installationId))) {
+      try {
+        const { repositories: current } = await this.#client.request<{
+          repositories: Array<{ id: number; fullName: string }>;
+        }>('GET', `${API_PREFIX}/installations/${installationId}/repositories`);
+        const names = new Map(current.map(repository => [repository.id, repository.fullName]));
+        for (const repository of repositories) {
+          const name = repository.installationId === installationId ? names.get(repository.id) : undefined;
+          if (name) repository.fullName = name;
+        }
+      } catch (error) {
+        this.deps?.logger.warn('Platform GitHub repository name refresh failed', {
+          installationId,
           error: error instanceof Error ? error.message : String(error),
         });
       }
