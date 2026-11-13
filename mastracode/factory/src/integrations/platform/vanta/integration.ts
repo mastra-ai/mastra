@@ -81,7 +81,11 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     const byId = new Map<string, VantaVulnerability>();
     for (const connection of await this.#activeConnections()) {
       let cursor: string | null = null;
-      for (let page = 0; page < MAX_PAGES; page++) {
+      for (let page = 0; ; page++) {
+        if (page === MAX_PAGES) {
+          // A cut-off list would read as the rest being resolved.
+          throw new Error(`Vanta connection ${connection.id} has more than ${MAX_PAGES} pages of vulnerabilities.`);
+        }
         const query = new URLSearchParams({ isDeactivated: 'false', pageSize: String(PAGE_SIZE) });
         if (cursor) query.set('pageCursor', cursor);
         const result: VantaVulnerabilityPage = await this.#client.request<VantaVulnerabilityPage>(
@@ -101,7 +105,8 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     if (!ingest) return [];
     const { projects, intake } = ctx.storage;
     const sync = createVantaSync({
-      listVulnerabilities: async () => ((await this.#activeConnections()).length ? this.listVulnerabilities() : []),
+      connected: async () => (await this.#activeConnections()).length > 0,
+      listVulnerabilities: () => this.listVulnerabilities(),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>
         (await intake.getConfig({ orgId, integrationIds: [this.id] }))[this.id]?.enabled ?? false,
