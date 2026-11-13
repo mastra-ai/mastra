@@ -35,7 +35,8 @@ describe('workflow run ownership across processes on a shared LibSQL file', () =
     const workflow = createOwnedWorkflow(async runId => {
       executedByB.push(runId);
     });
-    replicaB = new Mastra({ logger: false, storage, workflows: { workflow } });
+    // A zero grace leaves only the lease to keep replica B off a run, which is what these tests check.
+    replicaB = new Mastra({ logger: false, storage, workflows: { workflow }, recovery: { workflowGraceMs: 0 } });
   });
 
   afterEach(async () => {
