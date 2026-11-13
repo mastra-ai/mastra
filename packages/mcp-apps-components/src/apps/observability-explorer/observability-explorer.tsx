@@ -38,6 +38,8 @@ import {
   metricsArgsToFilters,
   whereToTraceFilters,
 } from './opened-filters';
+import { readViewId, useViewSync } from './view-sync';
+import type { SteeredView } from './view-sync';
 
 type Args = Record<string, unknown>;
 type View = 'traces' | 'spans' | 'threads' | 'logs' | 'metrics';
@@ -241,7 +243,20 @@ const VIEW_LABELS: Record<View, string> = {
  * The views the store supports and this caller's tools serve, as tabs. Metrics drilldowns switch to the traces
  * or logs tab, opened on the drilldown's filters.
  */
-function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClearQuery: () => void }) {
+function Views({
+  app,
+  opened,
+  onClearQuery,
+  trace: openTrace,
+  onCloseTrace,
+}: {
+  app: App;
+  opened: Opened;
+  onClearQuery: () => void;
+  /** A trace the model opened over the tabs. */
+  trace?: { traceId: string; spanId?: string };
+  onCloseTrace: () => void;
+}) {
   const trace = useObservabilityViews({ current: 'traces', features: FEATURES });
   const { data, isLoading } = useObservabilityCapabilities();
   const [view, setView] = useState<View>(opened.view);
@@ -267,6 +282,26 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
     setView(to);
   };
   const logFilter = opened.filter?.logs;
+
+  if (openTrace) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="flex items-center justify-end pr-2">
+          <AppToolbar />
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto">
+          <TraceView
+            key={`${openTrace.traceId}:${openTrace.spanId ?? ''}`}
+            app={app}
+            traceId={openTrace.traceId}
+            spanId={openTrace.spanId}
+            backLabel={`Back to ${VIEW_LABELS[current]}`}
+            onBack={onCloseTrace}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <AppState
@@ -321,8 +356,25 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
   );
 }
 
-function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opened; studioUrl?: string }) {
-  const [opened, setOpened] = useState(initial);
+/** The tool call that opened the explorer, which a view the model hasn't changed still shows. */
+type Opening = { tool?: string; args?: Args };
+
+function Explorer({
+  app,
+  opening,
+  studioUrl,
+  viewId,
+}: {
+  app: App;
+  opening: Opening;
+  studioUrl?: string;
+  viewId?: string;
+}) {
+  const [opened, setOpened] = useState(() => toOpened(opening.tool, opening.args));
+  // What the model last set the view to show, if it changed it; the user's reports say it back.
+  const [steered, setSteered] = useState<SteeredView>();
+  const [trace, setTrace] = useState<{ traceId: string; spanId?: string }>();
+  const [generation, setGeneration] = useState(0);
   const filter = useRef(opened.filter);
   filter.current = opened.filter;
   const customFetch = useMemo(() => createMcpFetch(app, () => filter.current), [app]);
@@ -336,13 +388,32 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
     void queryClient.resetQueries();
   };
 
+  // The model changed the view: reopen it on the new tool call (the opening one when it only opened a trace).
+  const report = useViewSync(app, viewId, state => {
+    const next = state.tool ? toOpened(state.tool, state.args) : toOpened(opening.tool, opening.args);
+    filter.current = next.filter;
+    setOpened(next);
+    setSteered(state.tool ? { tool: state.tool, args: state.args } : undefined);
+    setTrace(state.traceId ? { traceId: state.traceId, spanId: state.spanId } : undefined);
+    setGeneration(g => g + 1);
+    void queryClient.resetQueries();
+  });
+  const onContext = (context: string) => void report({ ...steered, ...trace, context });
+
   return (
     <QueryClientProvider client={queryClient}>
       <MastraReactProvider baseUrl="https://mcp-app.mastra.invalid" customFetch={customFetch}>
         <TooltipProvider>
-          <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
+          <AppHost app={app} name="observability explorer" studioUrl={studioUrl} onContext={onContext}>
             <AppFrame fixed>
-              <Views app={app} opened={opened} onClearQuery={clearQuery} />
+              <Views
+                key={generation}
+                app={app}
+                opened={opened}
+                onClearQuery={clearQuery}
+                trace={trace}
+                onCloseTrace={() => setTrace(undefined)}
+              />
             </AppFrame>
           </AppHost>
         </TooltipProvider>
@@ -358,18 +429,20 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
  * with the trace viewer's timeline.
  */
 export function ObservabilityExplorer() {
-  const [opened, setOpened] = useState<Opened>();
+  const [opening, setOpening] = useState<Opening>();
   const [studioUrl, setStudioUrl] = useState<string>();
+  const [viewId, setViewId] = useState<string>();
   const { app, error } = useApp({
     appInfo: { name: 'Mastra observability explorer', version: __PACKAGE_VERSION__ },
     capabilities: {},
     onAppCreated: app => {
       const tool = () => app.getHostContext()?.toolInfo?.tool.name;
-      app.ontoolinput = ({ arguments: args }) => setOpened(current => current ?? toOpened(tool(), args));
+      app.ontoolinput = ({ arguments: args }) => setOpening(current => current ?? { tool: tool(), args });
       // Hosts may skip the input; the result still means the tool ran.
       app.ontoolresult = result => {
         setStudioUrl(readStudioUrl(result));
-        setOpened(current => current ?? toOpened(tool(), undefined));
+        setViewId(readViewId(result));
+        setOpening(current => current ?? { tool: tool() });
       };
       app.onhostcontextchanged = context => applyTheme(context.theme);
     },
@@ -385,7 +458,7 @@ export function ObservabilityExplorer() {
       </AppFrame>
     );
   }
-  if (!app || !opened) {
+  if (!app || !opening) {
     return (
       <AppFrame>
         <div className="flex min-h-25 items-center justify-center">
@@ -394,5 +467,5 @@ export function ObservabilityExplorer() {
       </AppFrame>
     );
   }
-  return <Explorer app={app} opened={opened} studioUrl={studioUrl} />;
+  return <Explorer app={app} opening={opening} studioUrl={studioUrl} viewId={viewId} />;
 }

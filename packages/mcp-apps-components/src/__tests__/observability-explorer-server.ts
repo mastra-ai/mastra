@@ -130,8 +130,13 @@ function capabilities(traceQuery: boolean, logs: boolean) {
  * them: `query_traces` with core's request schema, `list_traces` with integer paging. With `logs`, the store
  * also keeps logs and the caller can read them through `list_logs`, filtered by `level`.
  */
+/** A view's record, as the built-in server keeps it in its cache. */
+export type ViewRecord = { version: number; by: 'model' | 'app'; state: Record<string, any> | null };
+
 export function observabilityExplorerServer({ traceQuery, logs = false }: { traceQuery: boolean; logs?: boolean }) {
   const calls: { tool: string; args: Record<string, any> }[] = [];
+  /** The one open view's record; tests change it as the model's steering would. */
+  const view: ViewRecord = { version: 0, by: 'model', state: null };
   const record = (tool: string, args: Record<string, any>) => calls.push({ tool, args });
 
   const queryTools = {
@@ -196,6 +201,25 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
           tools: { logs, metrics: false },
         }),
       }),
+      sync_observability_view: createTool({
+        id: 'sync_observability_view',
+        description: "The explorer's own sync",
+        inputSchema: z.object({
+          viewId: z.string(),
+          since: z.number().optional(),
+          base: z.number().optional(),
+          state: z.record(z.string(), z.any()).optional(),
+        }),
+        execute: async args => {
+          if (args.state) {
+            record('sync_observability_view', args);
+            if (args.base !== view.version) throw new Error(`View changed since version ${args.base}`);
+            Object.assign(view, { version: view.version + 1, by: 'app', state: args.state });
+            return { version: view.version };
+          }
+          return view.version > (args.since ?? -1) ? { ...view } : { version: view.version };
+        },
+      }),
       get_trace: createTool({
         id: 'get_trace',
         description: 'Reads a trace',
@@ -207,5 +231,5 @@ export function observabilityExplorerServer({ traceQuery, logs = false }: { trac
       }),
     },
   });
-  return { server, calls };
+  return { server, calls, view };
 }

@@ -1,3 +1,4 @@
+import { InMemoryServerCache } from '@mastra/core/cache';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMCPToolset, ServerMCPConfig, ServerMCPPrimitiveFilter } from '@mastra/core/server';
 
@@ -24,6 +25,8 @@ export interface ResolvedBuiltinMCPConfig {
   readOnly: boolean;
   /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
   apps: boolean;
+  /** Whether the model may change what an open observability explorer shows (state kept in the server cache). */
+  appSteering: boolean;
   /** Studio's base URL, sent to MCP Apps for "Open in Studio" links. */
   studioUrl?: string;
   enumLimit: number;
@@ -42,6 +45,15 @@ const warnedPath = new WeakSet<Mastra>();
 
 function isDev(): boolean {
   return process.env.MASTRA_DEV === 'true';
+}
+
+/**
+ * Whether Mastra's server cache is something other than the in-memory default, which only one process sees.
+ * Steered view state must reach whichever instance the open view's next poll lands on.
+ */
+function hasSharedCache(mastra: Mastra): boolean {
+  const cache = mastra.getServerCache?.();
+  return Boolean(cache) && !(cache instanceof InMemoryServerCache);
 }
 
 function getMCPConfig(mastra: Mastra): ServerMCPConfig {
@@ -148,6 +160,7 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     toolsets,
     readOnly,
     apps: config.apps ?? true,
+    appSteering: config.appSteering ?? (isDev() || hasSharedCache(mastra)),
     studioUrl: resolveStudioUrl(mastra, config),
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },

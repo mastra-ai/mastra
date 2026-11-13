@@ -179,6 +179,11 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * on the client's later requests.
    */
   appsRequireClientSupport?: boolean;
+  /**
+   * Tools the model uses to act on app views a host already shows (such as changing what one displays). They
+   * are listed and callable only for clients the server serves apps to; others have no views to act on.
+   */
+  appViewTools?: string[];
   /** Custom JSON Schema validator, for runtimes where the SDK default is unavailable. */
   jsonSchemaValidator?: jsonSchemaValidator;
   cacheHints?: MCPServerCacheHints;
@@ -328,6 +333,7 @@ export class MCPServer extends MCPServerBase {
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
   private readonly appsRequireClientSupport: boolean;
+  private readonly appViewTools: ReadonlySet<string>;
   /** 2025-era instances serving a request that carries an apps session id (see `withAppsSession`). */
   private readonly legacyAppClients = new WeakSet<Server>();
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
@@ -365,6 +371,7 @@ export class MCPServer extends MCPServerBase {
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
     this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
+    this.appViewTools = new Set(config.appViewTools);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -1091,7 +1098,7 @@ export class MCPServer extends MCPServerBase {
       const apps = this.servesApps(server, ctx);
       return {
         tools: entries
-          .filter(([, tool]) => apps || !isAppOnly(tool.mcp?._meta))
+          .filter(([name, tool]) => apps || (!isAppOnly(tool.mcp?._meta) && !this.appViewTools.has(name)))
           .map(([name, tool]) => this.toMCPTool(name, tool, apps)),
       };
     });
@@ -1102,7 +1109,8 @@ export class MCPServer extends MCPServerBase {
       // `name` comes from the client, so names like `constructor` must not resolve to Object.prototype members.
       const known = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
       // A client that may not see apps does not know their app-only tools either.
-      const tool = known && (apps || !isAppOnly(known.mcp?._meta)) ? known : undefined;
+      const tool =
+        known && (apps || (!isAppOnly(known.mcp?._meta) && !this.appViewTools.has(name))) ? known : undefined;
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
         // The spec makes an unknown tool a protocol error; `isError` is for a tool that ran and failed.

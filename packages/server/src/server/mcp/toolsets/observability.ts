@@ -45,7 +45,9 @@ import type { Args, CatalogueKit, ModelSummary } from '../catalogue';
 import { toolError } from '../catalogue';
 import { fitRows } from '../result-size';
 import { compact, hoistRepeated, object, str, toJSONSchema } from '../schema';
+import type { SteerableTool } from '../view-state';
 import { summarizeLogs, summarizeMetrics, summarizeTrace, summarizeTraces } from './observability-summary';
+import { addViewSteeringTools } from './view-steering';
 
 const COMBINATORS = ['anyOf', 'oneOf', 'allOf', 'not'] as const;
 const DELTA_POLLING = ['mode', 'after', 'limit'];
@@ -359,5 +361,15 @@ export function addObservabilityTools(kit: CatalogueKit) {
         return call(GET_METRIC_NAMES, { query: { prefix, limit } }, signal);
       },
     );
+  }
+
+  // The explorer's tools, with what the model reads of each: the model can show any of them in an open view.
+  if (explorer && config.appSteering) {
+    const steerable = new Map<SteerableTool, ModelSummary>();
+    if (offered(QUERY_TRACES)) steerable.set('query_traces', summarizeTraces('traces'));
+    if (offered(LIST_TRACES_ROUTE)) steerable.set('list_traces', summarizeTraces('spans'));
+    if (offered(LIST_LOGS)) steerable.set('list_logs', summarizeLogs);
+    if (Object.values(metricRoutes).every(offered)) steerable.set('analyze_metrics', summarizeMetrics);
+    if (steerable.size > 0) addViewSteeringTools(kit, steerable);
   }
 }

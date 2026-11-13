@@ -239,3 +239,51 @@ it('asks the model about the log open in the side panel', async () => {
   expect(contexts.at(-1)).not.toMatch(/filters, as Studio URL params: [^.]*logId/);
   expect(messages[0]).toMatch(/What caused it\?$/);
 });
+
+const POLL = { timeout: 5_000 };
+
+it('follows the model steering an open view, and reports what the user then has on screen', async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() }, { meta: { 'mastra/viewId': 'view-1' } });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+
+  // The model shows error logs instead: the view, polling, switches to them without a new tool call opening it.
+  Object.assign(mcp.view, { version: 1, by: 'model', state: { tool: 'list_logs', args: { level: 'error' } } });
+  expect(await screen.findByText('Carrier lookup failed for order 42', undefined, POLL)).toBeTruthy();
+  expect(screen.getByRole('tab', { name: 'Logs', selected: true })).toBeTruthy();
+  expect(screen.queryByText('Forecast fetched for Lisbon')).toBeNull();
+
+  // It reports what's on screen against the version it shows, keeping the model's list.
+  await waitFor(() => {
+    const report = mcp.calls.find(call => call.tool === 'sync_observability_view' && call.args.base === 1);
+    expect(report?.args).toMatchObject({
+      viewId: 'view-1',
+      base: 1,
+      state: { tool: 'list_logs', args: { level: 'error' }, context: expect.stringContaining('Logs tab') },
+    });
+  }, POLL);
+  const reported = mcp.view.version;
+
+  // The model opens a trace over the logs; the user closes it, and the view says so.
+  Object.assign(mcp.view, {
+    version: reported + 1,
+    by: 'model',
+    state: { tool: 'list_logs', args: { level: 'error' }, traceId: 'trace-1' },
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'Back to Logs' }, POLL));
+  await waitFor(() => {
+    const last = mcp.calls.filter(call => call.tool === 'sync_observability_view').at(-1);
+    expect(last?.args.base).toBe(reported + 1);
+    expect(last?.args.state).not.toHaveProperty('traceId');
+  }, POLL);
+  expect(mcp.view.by).toBe('app');
+}, 20_000);
+
+it("doesn't poll a view the server gave no id", async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  await openList(mcp, 'query_traces', { timeRange: lastHour() });
+  expect(await screen.findByText('weather-agent')).toBeTruthy();
+  await new Promise(resolve => setTimeout(resolve, 2_000));
+  expect(mcp.calls.some(call => call.tool === 'sync_observability_view')).toBe(false);
+  expect(mcp.view.version).toBe(0);
+});
