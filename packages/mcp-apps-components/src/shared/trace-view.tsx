@@ -80,7 +80,7 @@ function SpanPanel({
 
 function errorMessage(span: LightSpanRecord): string | undefined {
   const { error } = span as { error?: unknown };
-  if (!error) return undefined;
+  if (error == null) return undefined;
   const message = typeof error === 'object' && 'message' in error ? error.message : error;
   return typeof message === 'string' ? message.slice(0, 300) : 'unknown error';
 }
@@ -119,7 +119,15 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
   const [selectedSpanId, setSelectedSpanId] = useState(spanId);
   useEffect(() => {
     setSpans(trace.spans);
-    if (trace.nextOffset !== undefined) void loadRest(app, trace).then(setSpans);
+    if (trace.nextOffset === undefined) return;
+    // A newer trace can arrive while the rest of this one loads; its spans must not replace the newer trace's.
+    let current = true;
+    void loadRest(app, trace).then(rest => {
+      if (current) setSpans(rest);
+    });
+    return () => {
+      current = false;
+    };
   }, [app, trace]);
 
   const hierarchicalSpans = useMemo(() => formatHierarchicalSpans(spans), [spans]);

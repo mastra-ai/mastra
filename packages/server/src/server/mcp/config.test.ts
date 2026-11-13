@@ -103,6 +103,8 @@ describe('resolveBuiltinMCPConfig studioUrl', () => {
       'https://devbox.local:443',
     );
     expect(studioUrl({ studioHost: 'studio.local' })).toBe('http://studio.local:4111');
+    expect(studioUrl({ host: '::1' })).toBe('http://[::1]:4111');
+    expect(studioUrl({ studioHost: '[::1]' })).toBe('http://[::1]:4111');
     expect(studioUrl({ mcp: { studioUrl: false } })).toBeUndefined();
   });
 

@@ -169,7 +169,9 @@ function resolveStudioUrl(mastra: Mastra, config: ServerMCPConfig): string | und
   if (!isDev()) return undefined;
   const server = mastra.getServer();
   const bound = server?.host && server.host !== '0.0.0.0' && server.host !== '::' ? server.host : undefined;
-  const host = server?.studioHost ?? bound ?? 'localhost';
+  const name = server?.studioHost ?? bound ?? 'localhost';
+  // An IPv6 address goes in brackets in a URL.
+  const host = name.includes(':') && !name.startsWith('[') ? `[${name}]` : name;
   const port = server?.studioPort ?? server?.port ?? 4111;
   const base = (server?.studioBase ?? '/').replace(/\/+$/, '');
   return `${server?.studioProtocol ?? 'http'}://${host}:${port}${base}`;

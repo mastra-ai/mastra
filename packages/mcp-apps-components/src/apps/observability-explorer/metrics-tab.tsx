@@ -40,6 +40,12 @@ import { useState } from 'react';
 /** Where a dashboard drilldown goes: the Studio URL's search params, which the traces and logs tabs read. */
 export type Drilldown = { to: 'traces' | 'logs'; params: URLSearchParams };
 
+type MetricsProps = {
+  onDrilldown: (drilldown: Drilldown) => void;
+  /** Whether the Logs tab is there to drill into. */
+  logs: boolean;
+};
+
 const isTimeRangeItem = (item: FilterBarItem) => item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID;
 
 function MetricsFilterBar({ fields }: { fields: FilterBarField[] }) {
@@ -64,21 +70,24 @@ function MetricsFilterBar({ fields }: { fields: FilterBarField[] }) {
   );
 }
 
-function MetricsCards({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) => void }) {
+function MetricsCards({ onDrilldown, logs }: MetricsProps) {
   const { datePreset, customRange, dimensionalFilter } = useMetrics();
   const layout = useMetricsLayout();
   const base = { preset: datePreset, customRange, dashboardFilter: dimensionalFilter };
   const search = (url: string) => new URL(url, 'https://mcp-app.mastra.invalid').searchParams;
   const openTraces = (scope: DrilldownScope = {}) =>
     onDrilldown({ to: 'traces', params: search(buildTracesDrilldownUrl({ ...base, scope })) });
-  const openLogs = (scope: DrilldownScope = {}) =>
-    onDrilldown({ to: 'logs', params: search(buildLogsDrilldownUrl({ ...base, scope })) });
+  // Without the Logs tab, the cards leave out their "open errors in logs" actions.
+  const openLogs = logs
+    ? (scope: DrilldownScope = {}) =>
+        onDrilldown({ to: 'logs', params: search(buildLogsDrilldownUrl({ ...base, scope })) })
+    : undefined;
   const agent = EntityType.AGENT;
 
   const agentRuns = (
     <AgentRunsCard
       onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })}
-      onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
+      onViewErrors={openLogs && (() => openLogs({ rootEntityType: agent, status: 'error' }))}
       onFailureTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
     />
   );
@@ -118,7 +127,7 @@ function MetricsCards({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) => 
         <MetricsGrid.Item>
           <TraceVolumeCard
             onViewTraces={rootEntityType => openTraces({ rootEntityType })}
-            onViewErrors={rootEntityType => openLogs({ rootEntityType, status: 'error' })}
+            onViewErrors={openLogs && (rootEntityType => openLogs({ rootEntityType, status: 'error' }))}
             onEntityClick={(rootEntityType, entityName) => openTraces({ rootEntityType, entityName })}
           />
         </MetricsGrid.Item>
@@ -136,7 +145,7 @@ function MetricsCards({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) => 
   );
 }
 
-function MetricsContent({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) => void }) {
+function MetricsContent(props: MetricsProps) {
   const { error } = useAgentRunsKpiMetrics(useMetricsFilters());
   const { data: tags } = useTags();
   const { data: entityNames } = useEntityNames();
@@ -159,7 +168,7 @@ function MetricsContent({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) =
       {error ? (
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
       ) : (
-        <MetricsCards onDrilldown={onDrilldown} />
+        <MetricsCards {...props} />
       )}
     </div>
   );
@@ -170,7 +179,7 @@ function MetricsContent({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) =
  * tab with the same filters Studio would put in their URL. Filters aren't saved between visits, since hosts
  * sandbox apps away from storage.
  */
-export function MetricsTab({ onDrilldown }: { onDrilldown: (drilldown: Drilldown) => void }) {
+export function MetricsTab(props: MetricsProps) {
   const [preset, setPreset] = useState<DatePreset>('24h');
   const [customRange, setCustomRange] = useState<DateRange>();
   const [filterTokens, setFilterTokens] = useState<PropertyFilterToken[]>([]);
@@ -186,7 +195,7 @@ export function MetricsTab({ onDrilldown }: { onDrilldown: (drilldown: Drilldown
       customRange={customRange}
       onCustomRangeChange={setCustomRange}
     >
-      <MetricsContent onDrilldown={onDrilldown} />
+      <MetricsContent {...props} />
     </MetricsProvider>
   );
 }

@@ -60,6 +60,16 @@ function summary(heading: string, lines: string[], output: Row, footer = DETAILS
 /** Trace rows: `query_traces` returns them under `traces`, `list_traces` (root spans) under `spans`. */
 export function summarizeTraces(key: 'traces' | 'spans') {
   return (output: Row) => {
+    // `query_traces` grouped by thread returns the threads that matched, under `groups`.
+    if (Array.isArray(output.groups)) {
+      const groups = rowsOf(output, 'groups');
+      return summary(
+        `${groups.length} threads matched (threadId):`,
+        groups.map(group => `- ${cells(group.threadId)}`),
+        output,
+        'Call query_traces with a threadId filter for the traces in a thread.',
+      );
+    }
     const rows = rowsOf(output, key);
     return summary(
       `${rows.length} traces, shown to the user in the observability explorer (traceId | entity | status | started | duration):`,
@@ -127,5 +137,56 @@ export function summarizeTrace(output: Row): string {
     ...lines,
     ...rest,
     'Call get_span with the traceId and a spanId for its full input, output, and attributes.',
+  ].join('\n');
+}
+
+const num = (value: unknown) => (typeof value === 'number' ? String(Math.round(value * 1000) / 1000) : undefined);
+
+/** A series as its range and endpoints: the app charts every point. */
+function seriesLine(label: string, series: Row): string {
+  const points = rowsOf(series, 'points').filter(point => typeof point.value === 'number');
+  if (!points.length) return `- ${label}: no data`;
+  const values = points.map(point => point.value as number);
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  return `- ${label}: ${points.length} points from ${String(first.timestamp)} (${num(first.value)}) to ${String(last.timestamp)} (${num(last.value)}), min ${num(Math.min(...values))}, max ${num(Math.max(...values))}`;
+}
+
+/** `analyze_metrics` results, by op: an aggregate, breakdown groups, or time series / percentile series. */
+export function summarizeMetrics(output: Row): string {
+  const footer = 'The user sees these metrics charted in the observability explorer.';
+  if (Array.isArray(output.groups)) {
+    const groups = rowsOf(output, 'groups');
+    return summary(
+      `${groups.length} groups (dimensions | value | cost):`,
+      groups.map(group => {
+        const dimensions = isRow(group.dimensions)
+          ? Object.entries(group.dimensions)
+              .map(([key, value]) => `${key}=${String(value)}`)
+              .join(', ')
+          : undefined;
+        return `- ${cells(dimensions, num(group.value), num(group.estimatedCost) && `${num(group.estimatedCost)} ${group.costUnit ?? ''}`.trim())}`;
+      }),
+      output,
+      footer,
+    );
+  }
+  if (Array.isArray(output.series)) {
+    const series = rowsOf(output, 'series');
+    return summary(
+      `${series.length} series:`,
+      series.map(line => seriesLine(typeof line.name === 'string' ? line.name : `p${num(line.percentile)}`, line)),
+      output,
+      footer,
+    );
+  }
+  return [
+    `Value: ${num(output.value) ?? 'no data'}`,
+    ...(output.previousValue != null ? [`Previous period: ${num(output.previousValue)}`] : []),
+    ...(output.changePercent != null ? [`Change: ${num(output.changePercent)}%`] : []),
+    ...(output.estimatedCost != null
+      ? [`Estimated cost: ${num(output.estimatedCost)} ${output.costUnit ?? ''}`.trim()]
+      : []),
+    footer,
   ].join('\n');
 }

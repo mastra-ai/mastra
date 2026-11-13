@@ -45,7 +45,7 @@ import type { Args, CatalogueKit, ModelSummary } from '../catalogue';
 import { toolError } from '../catalogue';
 import { fitRows } from '../result-size';
 import { compact, hoistRepeated, object, str, toJSONSchema } from '../schema';
-import { summarizeLogs, summarizeTrace, summarizeTraces } from './observability-summary';
+import { summarizeLogs, summarizeMetrics, summarizeTrace, summarizeTraces } from './observability-summary';
 
 const COMBINATORS = ['anyOf', 'oneOf', 'allOf', 'not'] as const;
 const DELTA_POLLING = ['mode', 'after', 'limit'];
@@ -170,7 +170,6 @@ export function addObservabilityTools(kit: CatalogueKit) {
   // JSON as before. The explorer learns what it can show through the observability toolset's app-only tools.
   const explorer =
     kit.apps.observabilityExplorer && offered(GET_CAPABILITIES) ? kit.apps.observabilityExplorer : undefined;
-  const explorerLink = explorer ? { meta: { ui: { resourceUri: explorer } } } : undefined;
   // An app renders the full rows, so the model reads one line per row (see observability-summary.ts).
   const opensIn = (app: string | undefined, summary: ModelSummary) =>
     app ? { meta: { ui: { resourceUri: app } }, summary } : undefined;
@@ -290,11 +289,9 @@ export function addObservabilityTools(kit: CatalogueKit) {
           ['kind'],
         ),
         (args, signal) => {
-          const { kind, ...query } = args;
-          const route =
-            typeof kind === 'string' && Object.hasOwn(values, kind) ? values[kind as keyof typeof values] : undefined;
-          if (!route) throw new Error(`Unknown kind "${String(kind)}". Use one of: ${Object.keys(values).join(', ')}.`);
-          return call(route, { query }, signal);
+          // The input schema only lets through a `kind` that names a route.
+          const { kind, ...query } = args as { kind: keyof typeof values };
+          return call(values[kind], { query }, signal);
         },
         appOnly,
       );
@@ -330,7 +327,7 @@ export function addObservabilityTools(kit: CatalogueKit) {
         },
         options,
       );
-    analyze(metricRoutes, explorerLink);
+    analyze(metricRoutes, opensIn(explorer, summarizeMetrics));
     analyze({
       aggregate: GET_SCORE_AGGREGATE,
       breakdown: GET_SCORE_BREAKDOWN,

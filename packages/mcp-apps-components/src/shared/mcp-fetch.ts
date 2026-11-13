@@ -17,6 +17,8 @@ type ToolRoute = {
   args: (match: RegExpMatchArray, input: Args) => Args;
   /** The response's row list, for paging around rows the server cut to fit one tool result. */
   rows?: string;
+  /** The same, for a list paged by `page` and `perPage` rather than a cursor. */
+  offsetRows?: string;
   /** Takes the opened query's filters: its trace predicate, or its log filters. */
   filtered?: boolean | 'logs';
   /** No tool returns a full trace; it's assembled from the light trace and `get_span` per span. */
@@ -80,7 +82,13 @@ const ROUTES: ToolRoute[] = [
     tool: 'get_trace',
     args: match => ({ traceId: decodeURIComponent(match[1]!) }),
   },
-  { method: 'GET', path: /^\/observability\/traces(\/light)?$/, tool: 'list_traces', args: input },
+  {
+    method: 'GET',
+    path: /^\/observability\/traces(\/light)?$/,
+    tool: 'list_traces',
+    args: input,
+    offsetRows: 'spans',
+  },
   {
     method: 'GET',
     path: /^\/observability\/traces\/([^/]+)$/,
@@ -90,7 +98,14 @@ const ROUTES: ToolRoute[] = [
   },
   { method: 'GET', path: /^\/observability\/scores$/, tool: 'list_scores', args: input },
   { method: 'GET', path: /^\/observability\/feedback$/, tool: 'list_feedback', args: input },
-  { method: 'GET', path: /^\/observability\/logs$/, tool: 'list_logs', args: input, filtered: 'logs' },
+  {
+    method: 'GET',
+    path: /^\/observability\/logs$/,
+    tool: 'list_logs',
+    args: input,
+    filtered: 'logs',
+    offsetRows: 'logs',
+  },
   {
     method: 'POST',
     path: /^\/observability\/metrics\/(aggregate|breakdown|timeseries|percentiles)$/,
@@ -171,11 +186,42 @@ async function call(app: App, tool: string, args: Args): Promise<unknown> {
  * paging early. Asking again for only the rows that fit returns the same rows with their cursor.
  */
 async function callPage(app: App, route: ToolRoute, args: Args): Promise<unknown> {
+  if (route.offsetRows) return callOffsetPage(app, route.tool, route.offsetRows, args);
   const result = (await call(app, route.tool, args)) as Args | undefined;
   const rows = route.rows && result?.truncated ? result[route.rows] : undefined;
   const page = args.page as { limit?: number } | undefined;
   if (!Array.isArray(rows) || rows.length === 0 || !page || rows.length >= (page.limit ?? Infinity)) return result;
   return call(app, route.tool, { ...args, page: { ...page, limit: rows.length } });
+}
+
+type OffsetPage = Args & { pagination?: { hasMore?: boolean } };
+
+/**
+ * The same for a list paged by `page` and `perPage`: the rest of a cut page is read as smaller pages that tile
+ * it, sized to a divisor of `perPage` no larger than the rows that fit, and returned as the page asked for.
+ */
+async function callOffsetPage(app: App, tool: string, key: string, args: Args): Promise<unknown> {
+  const result = (await call(app, tool, args)) as OffsetPage | undefined;
+  const rows = result?.truncated ? result[key] : undefined;
+  const { page = 0, perPage } = args as { page?: number; perPage?: unknown };
+  if (!Array.isArray(rows) || rows.length === 0 || typeof perPage !== 'number' || rows.length >= perPage) {
+    return result;
+  }
+  let size = rows.length;
+  while (perPage % size !== 0) size--;
+  const all: unknown[] = [];
+  let last: OffsetPage | undefined;
+  for (let part = 0; part < perPage / size; part++) {
+    last = (await callOffsetPage(app, tool, key, {
+      ...args,
+      page: (page * perPage) / size + part,
+      perPage: size,
+    })) as OffsetPage;
+    const partRows = (last[key] as unknown[] | undefined) ?? [];
+    all.push(...partRows);
+    if (!last.pagination?.hasMore || partRows.length < size) break;
+  }
+  return { ...last, [key]: all, pagination: { ...last!.pagination, page, perPage } };
 }
 
 /** `get_trace` pages long traces by `nextOffset`; Studio's light trace has every span. */

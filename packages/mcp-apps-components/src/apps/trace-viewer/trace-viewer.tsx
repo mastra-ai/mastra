@@ -28,8 +28,10 @@ export function TraceViewer() {
       app.ontoolresult = result => {
         const value = readResult(result);
         setStudioUrl(readStudioUrl(result));
-        if (isLightTrace(value)) setTrace(value);
-        else setProblem(result.isError ? 'The trace could not be loaded.' : 'The tool returned no trace.');
+        if (isLightTrace(value)) {
+          setTrace(value);
+          setProblem(undefined);
+        } else setProblem(result.isError ? 'The trace could not be loaded.' : 'The tool returned no trace.');
       };
       app.onhostcontextchanged = context => applyTheme(context.theme);
     },

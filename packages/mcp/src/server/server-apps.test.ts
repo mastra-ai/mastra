@@ -1,7 +1,9 @@
 import { createTool } from '@mastra/core/tools';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { TaskRequester } from '../client/tasks/requester';
+import { tasksCapabilityEntry } from '../shared/tasks';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import type { ServedHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
@@ -214,6 +216,10 @@ describe('tool result transform told whether the caller is served apps', () => {
     await served.close();
   });
 
+  beforeEach(() => {
+    seen.length = 0;
+  });
+
   it('lets an app caller send the model a summary and the app the full output', async () => {
     const client = await connectClient(served.url, declaresUi);
     try {
@@ -221,6 +227,7 @@ describe('tool result transform told whether the caller is served apps', () => {
       expect(result.content).toEqual([{ type: 'text', text: '50 rows, shown in the viewer.' }]);
       expect((result.structuredContent as { rows: unknown[] }).rows).toHaveLength(50);
       expect(result._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
+      expect(seen).toEqual([true]);
     } finally {
       await client.close();
     }
@@ -233,9 +240,67 @@ describe('tool result transform told whether the caller is served apps', () => {
       expect(result.structuredContent).toBeUndefined();
       const [block] = result.content as { type: string; text: string }[];
       expect(JSON.parse(block!.text).rows).toHaveLength(50);
-      expect(seen).toEqual([true, false]);
+      expect(seen).toEqual([false]);
     } finally {
       await client.close();
     }
+  });
+});
+
+describe('tool task results', () => {
+  let served: ServedHTTP;
+  const clients: Client[] = [];
+
+  beforeAll(async () => {
+    served = await serveHTTP(
+      new MCPServer({
+        name: 'Apps',
+        version: '1.0.0',
+        appsRequireClientSupport: true,
+        appResources: { 'ui://viewer': { name: 'Viewer', html: '<h1>viewer</h1>' } },
+        tasks: { tools: { list: 'always' } },
+        tools: {
+          list: createTool({
+            id: 'list',
+            description: 'Lists rows',
+            inputSchema: z.object({}),
+            mcp: { _meta: { ui: { resourceUri: 'ui://viewer' } } },
+            execute: async () => ({ rows: [] }),
+          }),
+        },
+      }),
+    );
+  });
+
+  afterAll(async () => {
+    await Promise.all(clients.map(client => client.close()));
+    await served.close();
+  });
+
+  /** Calls `list` as a task, as a client declaring Tasks (and the UI extension, with `ui`), and reads its result. */
+  async function taskResult(ui: boolean) {
+    const extensions = { ...tasksCapabilityEntry(), ...(ui ? declaresUi.capabilities.extensions : {}) };
+    const response = await rawRequest(served.url, {
+      method: 'tools/call',
+      params: { name: 'list', arguments: {} },
+      capabilities: { extensions },
+      headers: { 'mcp-name': 'list' },
+    });
+    const { result } = await response.json();
+    expect(result).toMatchObject({ resultType: 'task' });
+    const client = await connectClient(served.url);
+    clients.push(client);
+    const tasks = new TaskRequester(client);
+    for (let i = 0; i < 200; i++) {
+      const task = await tasks.get(result.taskId);
+      if (task.status === 'completed') return task.result as { _meta?: Record<string, unknown> };
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+    throw new Error('task never completed');
+  }
+
+  it("keeps the app link for a caller that renders apps and drops it for one that doesn't", async () => {
+    expect((await taskResult(true))._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
+    expect((await taskResult(false))._meta?.ui).toBeUndefined();
   });
 });

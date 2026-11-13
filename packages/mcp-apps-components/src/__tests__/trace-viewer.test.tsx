@@ -8,7 +8,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
 import { TraceViewer } from '../apps/trace-viewer/trace-viewer';
 import { serveAndConnect } from './greeting-server';
-import { traceServer } from './trace-server';
+import { traceServer, traceSpans } from './trace-server';
 
 const hosts: Awaited<ReturnType<typeof serveAndConnect>>[] = [];
 afterEach(async () => {
@@ -97,6 +97,36 @@ it('says so when get_trace failed', async () => {
   expect(await screen.findByText('The trace could not be loaded.')).toBeTruthy();
 });
 
+it('shows a trace that arrives after one that failed', async () => {
+  const bridge = await openTrace(traceServer(), 'missing');
+  expect(await screen.findByText('The trace could not be loaded.')).toBeTruthy();
+
+  const loaded = await hosts.at(-1)!.client.callTool({ name: 'get_trace', arguments: { traceId: 'trace-1' } });
+  await bridge.sendToolResult(loaded as Parameters<AppBridge['sendToolResult']>[0]);
+
+  expect(await spanRow("tool: 'get-weather'")).toBeTruthy();
+  expect(screen.queryByText('The trace could not be loaded.')).toBeNull();
+});
+
+it("keeps a newer trace when the rest of an older one's pages arrive after it", async () => {
+  let release!: () => void;
+  const mcp = traceServer({ pageSize: 1, pagesHeld: new Promise<void>(resolve => (release = resolve)) });
+  const bridge = await openTrace(mcp, 'trace-1');
+  expect(await spanRow("agent run: 'weather-agent'")).toBeTruthy();
+
+  const newer = { ...traceSpans[0]!, traceId: 'trace-2', name: "agent run: 'support-agent'" };
+  await bridge.sendToolResult({
+    content: [{ type: 'text', text: JSON.stringify({ traceId: 'trace-2', spanCount: 1, spans: [newer] }) }],
+  });
+  expect(await spanRow("agent run: 'support-agent'")).toBeTruthy();
+
+  release();
+  await waitFor(() => expect(mcp.calls.map(call => call.args.offset)).toEqual([undefined, 1, 2]));
+  await new Promise(resolve => setTimeout(resolve, 50));
+  expect(screen.queryByLabelText("View details for span llm: 'gpt-5'")).toBeNull();
+  expect(await spanRow("agent run: 'support-agent'")).toBeTruthy();
+});
+
 it("follows the host's theme", async () => {
   await openTrace(traceServer(), 'trace-1', { theme: 'light' });
 
@@ -183,6 +213,18 @@ it('goes fullscreen and back when the host offers it', async () => {
   fireEvent.click(await screen.findByRole('button', { name: 'Fullscreen' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Exit fullscreen' }));
   await waitFor(() => expect(requested).toEqual(['fullscreen', 'inline']));
+  expect(await screen.findByRole('button', { name: 'Fullscreen' })).toBeTruthy();
+});
+
+it('follows the display mode a host answers with, when it sends no context change', async () => {
+  const bridge = await openTrace(traceServer(), 'trace-1', {
+    displayMode: 'inline',
+    availableDisplayModes: ['inline', 'fullscreen'],
+  });
+  bridge.onrequestdisplaymode = async ({ mode }) => ({ mode });
+
+  fireEvent.click(await screen.findByRole('button', { name: 'Fullscreen' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Exit fullscreen' }));
   expect(await screen.findByRole('button', { name: 'Fullscreen' })).toBeTruthy();
 });
 

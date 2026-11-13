@@ -170,7 +170,8 @@ function TracesTab({
     .filter(Boolean)
     .join(' ');
   return (
-    <AppState context={context} studioPath={`/traces?${params}`}>
+    // Studio's trace page can't apply the model's leftover query, so it would show more than this list.
+    <AppState context={context} studioPath={query ? null : `/traces?${params}`}>
       <div className="flex min-h-0 flex-1 flex-col">
         {query && <OpenedQueryBar query={query} onClear={onClearQuery} />}
         <TracesExplorer
@@ -303,7 +304,7 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
         )}
         {views.includes('metrics') && (
           <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
-            <MetricsTab onDrilldown={drilldown} />
+            <MetricsTab onDrilldown={drilldown} logs={views.includes('logs')} />
           </TabContent>
         )}
       </Tabs>

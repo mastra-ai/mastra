@@ -203,7 +203,8 @@ export function LogsTab({ app, initialParams, banner }: { app: App; initialParam
     .filter(Boolean)
     .join(' ');
   return (
-    <AppState context={context} studioPath={`/logs?${searchParams}`}>
+    // While the model's leftover query (the banner) applies, Studio's logs page would show more than this list.
+    <AppState context={context} studioPath={banner ? null : `/logs?${searchParams}`}>
       <div className="flex h-full min-h-0 flex-col">
         {banner}
         <div className="flex flex-col gap-2 p-3">

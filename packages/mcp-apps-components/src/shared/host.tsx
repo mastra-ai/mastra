@@ -11,8 +11,11 @@ export function readStudioUrl(result: { _meta?: Record<string, unknown> }): stri
   return typeof url === 'string' && /^https?:\/\//.test(url) ? url.replace(/\/+$/, '') : undefined;
 }
 
-/** What one view on screen reports: a line for the model, and the matching Studio page. */
-type Part = { depth: number; context?: string; studioPath?: string };
+/**
+ * What one view on screen reports: a line for the model, and the matching Studio page. `studioPath: null` says
+ * Studio has no page that shows the view, so no outer view's page stands in for it.
+ */
+type Part = { depth: number; context?: string; studioPath?: string | null };
 
 type Host = {
   app: App;
@@ -20,6 +23,8 @@ type Host = {
   depth: number;
   report: (id: string, part: Part | undefined) => void;
   studioPath?: string;
+  displayMode?: McpUiDisplayMode;
+  setDisplayMode: (mode: McpUiDisplayMode) => void;
 };
 
 const HostContext = createContext<Host | undefined>(undefined);
@@ -68,7 +73,16 @@ export function AppHost({
   const ordered = [...parts.values()].sort((a, b) => a.depth - b.depth);
   const lines = ordered.flatMap(part => (part.context ? [part.context] : []));
   const context = lines.length > 0 ? [`The user has Mastra's ${name} open.`, ...lines].join('\n') : undefined;
-  const studioPath = [...ordered].reverse().find(part => part.studioPath)?.studioPath;
+  const studioPath = [...ordered].reverse().find(part => part.studioPath !== undefined)?.studioPath ?? undefined;
+
+  const [displayMode, setDisplayMode] = useState(() => app.getHostContext()?.displayMode);
+  useEffect(() => {
+    const onChange = (context: { displayMode?: McpUiDisplayMode }) => {
+      if (context.displayMode) setDisplayMode(context.displayMode);
+    };
+    app.addEventListener('hostcontextchanged', onChange);
+    return () => app.removeEventListener('hostcontextchanged', onChange);
+  }, [app]);
 
   useEffect(() => {
     if (!context || !app.getHostCapabilities()?.updateModelContext) return;
@@ -79,7 +93,10 @@ export function AppHost({
     return () => clearTimeout(timer);
   }, [app, context]);
 
-  const host = useMemo(() => ({ app, studioUrl, depth: 0, report, studioPath }), [app, studioUrl, report, studioPath]);
+  const host = useMemo(
+    () => ({ app, studioUrl, depth: 0, report, studioPath, displayMode, setDisplayMode }),
+    [app, studioUrl, report, studioPath, displayMode],
+  );
   return <HostContext.Provider value={host}>{children}</HostContext.Provider>;
 }
 
@@ -90,7 +107,7 @@ export function AppState({
   children,
 }: {
   context?: string;
-  studioPath?: string;
+  studioPath?: string | null;
   children?: ReactNode;
 }) {
   const host = useHost();
@@ -105,16 +122,7 @@ export function AppState({
 
 /** The host's display mode, which changes when the user or the app goes fullscreen. */
 export function useDisplayMode(): McpUiDisplayMode | undefined {
-  const { app } = useHost();
-  const [mode, setMode] = useState(() => app.getHostContext()?.displayMode);
-  useEffect(() => {
-    const onChange = (context: { displayMode?: McpUiDisplayMode }) => {
-      if (context.displayMode) setMode(context.displayMode);
-    };
-    app.addEventListener('hostcontextchanged', onChange);
-    return () => app.removeEventListener('hostcontextchanged', onChange);
-  }, [app]);
-  return mode;
+  return useHost().displayMode;
 }
 
 /** The app's frame: a fixed height inline, the whole screen in fullscreen. */
@@ -125,8 +133,7 @@ export function AppFrame({ children }: { children: ReactNode }) {
 
 /** "Open in Studio" for what's on screen, and a fullscreen toggle, for whichever the host supports. */
 export function AppToolbar() {
-  const { app, studioUrl, studioPath } = useHost();
-  const mode = useDisplayMode();
+  const { app, studioUrl, studioPath, displayMode: mode, setDisplayMode } = useHost();
   const canFullscreen = app.getHostContext()?.availableDisplayModes?.includes('fullscreen') ?? false;
   const canOpenLinks = Boolean(app.getHostCapabilities()?.openLinks);
   const studioLink = studioUrl && studioPath && canOpenLinks ? `${studioUrl}${studioPath}` : undefined;
@@ -144,7 +151,13 @@ export function AppToolbar() {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => void app.requestDisplayMode({ mode: fullscreen ? 'inline' : 'fullscreen' }).catch(() => {})}
+          onClick={() =>
+            void app
+              .requestDisplayMode({ mode: fullscreen ? 'inline' : 'fullscreen' })
+              // A host may answer with the mode it switched to and send no context change.
+              .then(result => setDisplayMode(result.mode))
+              .catch(() => {})
+          }
         >
           {fullscreen ? 'Exit fullscreen' : 'Fullscreen'}
         </Button>

@@ -108,3 +108,55 @@ it('offers logs and metrics only when the store supports them and the caller’s
   expect(result.capabilities).toMatchObject({ logs: false, metrics: true, deltaPolling: false, traceQuery: true });
   expect(result).not.toHaveProperty('tools');
 });
+
+/**
+ * `list_logs` over 15 logs, cutting any page past `fits` rows as the built-in server does when rows don't fit in
+ * one tool result: it keeps the first rows, says it cut them, and drops the pagination.
+ */
+function cuttingLogsServer(fits: number) {
+  const logs = Array.from({ length: 15 }, (_, index) => ({ message: `log ${index}`, level: 'info' }));
+  const calls: Args[] = [];
+  const server = new MCPServer({
+    id: 'observability',
+    name: 'Observability',
+    version: '1.0.0',
+    tools: {
+      list_logs: createTool({
+        id: 'list_logs',
+        description: 'list_logs',
+        inputSchema: z.object({ page: z.number().int(), perPage: z.number().int() }).passthrough(),
+        execute: async ({ page, perPage }) => {
+          calls.push({ page, perPage });
+          const rows = logs.slice(page * perPage, (page + 1) * perPage);
+          if (rows.length > fits) {
+            return { logs: rows.slice(0, fits), truncated: `Only the first ${fits} of ${rows.length} logs fit.` };
+          }
+          const hasMore = (page + 1) * perPage < logs.length;
+          return { logs: rows, pagination: { total: logs.length, page, perPage, hasMore } };
+        },
+      }),
+    },
+  });
+  return { server, calls };
+}
+
+it('reads the rest of a log page the server cut to fit, keeping the page Studio asked for', async () => {
+  const mcp = cuttingLogsServer(4);
+  const client = await studioClient(mcp as unknown as ReturnType<typeof observabilityServer>);
+
+  const first = await client.listLogsVNext({ pagination: { page: 0, perPage: 10 } });
+  expect(first.logs.map(log => log.message)).toEqual(Array.from({ length: 10 }, (_, index) => `log ${index}`));
+  expect(first.pagination).toMatchObject({ page: 0, perPage: 10, hasMore: true });
+
+  const second = await client.listLogsVNext({ pagination: { page: 1, perPage: 10 } });
+  expect(second.logs.map(log => log.message)).toEqual(['log 10', 'log 11', 'log 12', 'log 13', 'log 14']);
+  expect(second.pagination).toMatchObject({ page: 1, perPage: 10, hasMore: false });
+  // Page 1 of 10, cut to 4 rows, is read as pages of 2 (the largest divisor of 10 that fits), from row 10 until
+  // the logs run out.
+  expect(mcp.calls.slice(-4)).toEqual([
+    { page: 1, perPage: 10 },
+    { page: 5, perPage: 2 },
+    { page: 6, perPage: 2 },
+    { page: 7, perPage: 2 },
+  ]);
+});

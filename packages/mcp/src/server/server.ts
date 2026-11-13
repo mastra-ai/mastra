@@ -277,6 +277,8 @@ type ToolTaskContext = {
   requestContext: Record<string, unknown>;
   /** The answered `input_required` round the creating `tools/call` carried, if any. */
   resume?: { resumeData: unknown; suspendPayload: unknown };
+  /** Whether the creating caller is served MCP Apps; its result drops app links when not. */
+  apps?: boolean;
 };
 
 /**
@@ -1139,6 +1141,7 @@ export class MCPServer extends MCPServerBase {
           try {
             return await this.startToolTask(ctx, requestContext, name, args, taskMode, {
               resume,
+              apps,
               rootSpan: trace.requestSpan,
             });
           } catch (error) {
@@ -1154,7 +1157,7 @@ export class MCPServer extends MCPServerBase {
         };
         let execution: MCPToolExecutionResultV2;
         if (asTask) {
-          const raced = await this.runWithinSyncWindow(ctx, requestContext, name, tool, args, taskMode, options);
+          const raced = await this.runWithinSyncWindow(ctx, requestContext, name, tool, args, taskMode, options, apps);
           if ('task' in raced) return raced.task;
           execution = raced.execution;
         } else {
@@ -1221,6 +1224,7 @@ export class MCPServer extends MCPServerBase {
     args: unknown,
     taskMode: ResolvedToolTaskMode,
     options: RunToolOptions & { mcp: MCPToolExecutionContext },
+    apps: boolean,
   ): Promise<{ execution: MCPToolExecutionResultV2 } | { task: CallToolResult }> {
     const controller = new AbortController();
     const requestSignal = ctx.mcpReq.signal;
@@ -1257,6 +1261,7 @@ export class MCPServer extends MCPServerBase {
       return {
         task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
           rootSpan: options.tracingContext?.currentSpan as Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+          apps,
           resume:
             options.resumeData === undefined
               ? undefined
@@ -1265,7 +1270,7 @@ export class MCPServer extends MCPServerBase {
             outcome: settled.then((outcome): Promise<MCPTaskAttemptOutcome> | MCPTaskAttemptOutcome =>
               'error' in outcome
                 ? this.toolErrorOutcome(name, outcome.error)
-                : this.toTaskOutcome(name, tool, outcome.execution, requestContext),
+                : this.toTaskOutcome(name, tool, outcome.execution, requestContext, apps),
             ),
             abort: reason => controller.abort(reason),
           }),
@@ -1301,10 +1306,12 @@ export class MCPServer extends MCPServerBase {
     taskMode: ResolvedToolTaskMode,
     {
       resume,
+      apps,
       initialAttempt,
       rootSpan,
     }: {
       resume?: ToolTaskContext['resume'];
+      apps: boolean;
       /** The request's span, which becomes the task's root. */
       rootSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
       initialAttempt?: () => NonNullable<MCPTaskRunOptions['initialAttempt']>;
@@ -1315,6 +1322,7 @@ export class MCPServer extends MCPServerBase {
       args,
       requestContext: this.persistTaskRequestContext(name, requestContext),
       ...(resume && { resume }),
+      apps,
     };
     const params = {
       ttlMs: taskMode.ttlMs,
@@ -1419,7 +1427,8 @@ export class MCPServer extends MCPServerBase {
               suspendPayload,
               tracingContext: span ? { currentSpan: span } : undefined,
             });
-            return await this.toTaskOutcome(name, tool, execution, requestContext);
+            // Tasks recorded before `apps` existed kept their app links.
+            return await this.toTaskOutcome(name, tool, execution, requestContext, context.apps !== false);
           } catch (error) {
             return this.toolErrorOutcome(name, error);
           }
@@ -1536,6 +1545,7 @@ export class MCPServer extends MCPServerBase {
     tool: InternalCoreTool,
     execution: MCPToolExecutionResultV2,
     requestContext: RequestContext,
+    apps: boolean,
   ): Promise<MCPTaskAttemptOutcome> {
     if (execution.status === 'suspended') {
       this.logger.debug(`Tool task '${name}' requires client input.`);
@@ -1557,7 +1567,8 @@ export class MCPServer extends MCPServerBase {
       );
     }
     try {
-      return completed(await this.completedToolResult(name, tool, execution.output, requestContext));
+      const result = await this.completedToolResult(name, tool, execution.output, requestContext, apps);
+      return completed(apps ? result : { ...result, _meta: withoutUiMeta(result._meta) });
     } catch (error) {
       return this.toolErrorOutcome(name, error);
     }

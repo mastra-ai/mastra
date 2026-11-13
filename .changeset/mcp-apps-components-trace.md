@@ -8,3 +8,17 @@ Added two MCP Apps built from Studio's observability pages, served by the built-
 - **Observability explorer** (`@mastra/mcp-apps-components/observability-explorer`): Studio's Traces, Spans, Threads, Logs, and Metrics pages as tabs, with filters, time range, sort, paging, and drilldowns from metrics into traces or logs. Selecting a row opens it on the timeline. The model's query filters show up as filter-bar chips; conditions the bar can't represent stay applied and are listed above the list.
 
 Both apps work with the conversation in hosts that support it. They tell the model which trace, span, filters, or log are open. **Ask about this** buttons on a trace, span, or log send a message about it, and the apps have a **Fullscreen** button and, when the server sends Studio's URL, an **Open in Studio** button. Apps also report the package version to the host when they connect.
+
+To serve them from your own `MCPServer`, register them as app resources:
+
+```ts
+import { MCPServer } from '@mastra/mcp';
+import { traceViewerApp } from '@mastra/mcp-apps-components/trace-viewer';
+
+const server = new MCPServer({
+  name: 'my-server',
+  version: '1.0.0',
+  tools,
+  appResources: { 'ui://mastra/trace-viewer': traceViewerApp },
+});
+```

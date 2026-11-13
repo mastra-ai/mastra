@@ -189,6 +189,25 @@ it('tells the model the tab, filters, and opened trace on screen, and links each
   await waitFor(() => expect(links.at(-1)).toBe('http://studio.test/traces?traceId=trace-2'));
 });
 
+it("links to Studio only once the conversation's leftover conditions, which Studio can't apply, are cleared", async () => {
+  const mcp = observabilityExplorerServer({ traceQuery: true });
+  await openList(
+    mcp,
+    'query_traces',
+    { timeRange: lastHour(), textSearch: 'refund' },
+    { capabilities: { openLinks: {} }, meta: { 'mastra/studioUrl': 'http://studio.test' } },
+  );
+
+  expect(
+    await screen.findByText("Also filtered by conditions from the conversation that the filter bar can't show."),
+  ).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Open in Studio' })).toBeNull();
+
+  fireEvent.click(screen.getByRole('button', { name: 'Clear' }));
+
+  expect(await screen.findByRole('button', { name: 'Open in Studio' })).toBeTruthy();
+});
+
 it('asks the model about the log open in the side panel', async () => {
   const mcp = observabilityExplorerServer({ traceQuery: true, logs: true });
   const messages: string[] = [];

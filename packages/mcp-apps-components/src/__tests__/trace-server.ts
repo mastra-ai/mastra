@@ -37,9 +37,14 @@ export const traceSpans = [
 
 /**
  * The tools the trace viewer uses, answering as the built-in server does: `get_trace` returns light spans,
- * `pageSize` at a time with a `nextOffset` while more remain, and `get_span` returns one span in full.
+ * `pageSize` at a time with a `nextOffset` while more remain, and `get_span` returns one span in full. Pages after
+ * the first wait for `pagesHeld`, when given.
  */
-export function traceServer({ pageSize = traceSpans.length, appResources = {} as AppResources } = {}) {
+export function traceServer({
+  pageSize = traceSpans.length,
+  appResources = {} as AppResources,
+  pagesHeld,
+}: { pageSize?: number; appResources?: AppResources; pagesHeld?: Promise<void> } = {}) {
   const calls: { tool: string; args: Record<string, unknown> }[] = [];
   const server = new MCPServer({
     id: 'traces',
@@ -54,6 +59,7 @@ export function traceServer({ pageSize = traceSpans.length, appResources = {} as
         mcp: { _meta: { ui: { resourceUri: TRACE_VIEWER_URI } } },
         execute: async args => {
           calls.push({ tool: 'get_trace', args });
+          if (args.offset !== undefined) await pagesHeld;
           if (args.traceId !== 'trace-1') throw new Error(`Trace ${args.traceId} not found`);
           const offset = args.offset ?? 0;
           const spans = traceSpans.slice(offset, offset + pageSize);

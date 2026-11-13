@@ -259,6 +259,22 @@ it('opens logs and metrics in the observability explorer, telling it which of th
     await client.callTool({ name: 'list_observability_values', arguments: { kind: 'entityNames' } }),
   );
   expect(names).toContain('helper');
+  const unknown = await client
+    .callTool({ name: 'list_observability_values', arguments: { kind: 'constructor' } })
+    .catch((error: Error) => ({ isError: true, content: [{ type: 'text', text: error.message }] }));
+  expect(unknown.isError).toBe(true);
+  expect(JSON.stringify(unknown.content)).toMatch(/kind/);
+
+  // The explorer charts the metrics; the model reads them as a few lines of text.
+  const metrics = await client.callTool({
+    name: 'analyze_metrics',
+    arguments: { op: 'breakdown', name: ['mastra_agent_duration_ms'], aggregation: 'count', groupBy: ['entityName'] },
+  });
+  expect(metrics.isError).toBeFalsy();
+  expect(metrics.structuredContent).toMatchObject({ groups: expect.any(Array) });
+  const summary = (metrics.content as { text: string }[])[0]!.text;
+  expect(summary).toMatch(/^\d+ groups/);
+  expect(() => JSON.parse(summary)).toThrow();
 });
 
 it("tells the observability explorer metrics aren't served without the analytics toolset", async () => {
