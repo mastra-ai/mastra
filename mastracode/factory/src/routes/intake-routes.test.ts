@@ -36,7 +36,7 @@ const ADMIN = 'admin-user';
 const MEMBER = 'member-user';
 const SIGNED_OUT = 'signed-out';
 
-const TRUSTED = { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] };
+const TRUSTED = { operator: 'AND', conditions: [{ field: 'item.trusted', operator: 'equals', value: true }] };
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] };
 const WORK = { boardKey: 'work' };
 const TRIAGE = { boardKey: 'work', phaseKey: 'triage' };

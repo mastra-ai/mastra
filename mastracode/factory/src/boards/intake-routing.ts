@@ -4,6 +4,7 @@ import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { isPullRequestEvent } from './board-events.js';
 import type { BoardEventFacts, RouteArrivals } from './board-events.js';
 import { arrivalKind, arrivalKinds, eventRuleFacts, LEGACY_ARRIVAL_EVENT } from './board-events.js';
 import { cardRuleFacts } from './card-facts.js';
@@ -422,7 +423,15 @@ export function resolveEventRoute(
   board: InstalledBoard,
   options: { registry: BoardRegistry; carriesPullRequest?: boolean; onSkip?: (skipped: SkippedEventRoute) => void },
 ): { board: string; phase: string; routeId: string } | undefined {
-  const facts: RuleFacts = { ...cardFacts, ...eventRuleFacts(event) };
+  const { 'pullRequest.trusted': workingPullRequestTrusted, ...rest } = cardFacts;
+  // On a pull request event, `pullRequest.trusted` is that pull request's author, not the card's
+  // working pull request's; an event that doesn't say is untrusted.
+  const pullRequestTrusted = isPullRequestEvent(event.type) ? event.pullRequestTrusted : workingPullRequestTrusted;
+  const facts: RuleFacts = {
+    ...rest,
+    ...(pullRequestTrusted !== undefined ? { 'pullRequest.trusted': pullRequestTrusted } : {}),
+    ...eventRuleFacts(event),
+  };
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;

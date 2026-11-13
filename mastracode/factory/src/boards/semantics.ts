@@ -201,6 +201,27 @@ export function hasPullRequest(item: SourcedItem & { readonly source?: string })
   );
 }
 
+/**
+ * Card metadata listing the attached pull requests whose author had no write access, as
+ * `<provider>:<externalId>`. Before any author's pull request could join a card only trusted
+ * ones did, so a source missing from the list is trusted.
+ */
+export const UNTRUSTED_PULL_REQUESTS_KEY = 'untrustedPullRequests';
+
+/** The key {@link UNTRUSTED_PULL_REQUESTS_KEY} lists a source under. */
+export function pullRequestTrustKey(source: Pick<WorkItemSourceRow, 'provider' | 'externalId'>): string {
+  return `${source.provider}:${source.externalId}`;
+}
+
+/** Whether a pull request attached to the card was opened by someone with write access (or by Factory). */
+export function trustedPullRequestSource(
+  item: { readonly metadata?: Record<string, unknown> | null },
+  source: Pick<WorkItemSourceRow, 'provider' | 'externalId'>,
+): boolean {
+  const untrusted = item.metadata?.[UNTRUSTED_PULL_REQUESTS_KEY];
+  return !(Array.isArray(untrusted) && untrusted.includes(pullRequestTrustKey(source)));
+}
+
 /** The newest still-open pull request on a card other than `except`, for re-pointing `openPullRequestNumber`. */
 export function newestOpenPullRequestNumber(item: SourcedItem, except?: number): number | null {
   const open = pullRequestSources(item).filter(

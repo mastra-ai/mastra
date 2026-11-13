@@ -8,6 +8,7 @@ import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/boa
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
+import { currentRuleGroup } from '../../../rules/rule-group.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import type { RetiredAutomationSettings } from '../projects/base.js';
 import {
@@ -445,8 +446,10 @@ function toPhaseRecord(row: PhaseRow): StoredPhaseRecord {
     runner: row.runner,
     nextPhases: row.next_phases,
     autoStart: row.auto_start,
-    autoStartWhen: row.auto_start_when,
-    exitTool: row.exit_tool,
+    autoStartWhen: currentRuleGroup(row.auto_start_when),
+    exitTool: row.exit_tool?.autoApproveWhen
+      ? { ...row.exit_tool, autoApproveWhen: currentRuleGroup(row.exit_tool.autoApproveWhen) }
+      : row.exit_tool,
     tools: row.tools ?? null,
   };
 }
@@ -1408,7 +1411,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     name: row.name,
     enabled: row.enabled,
     position: row.position,
-    when: row.when_condition,
+    when: currentRuleGroup(row.when_condition),
     target: {
       boardKey: row.board_key,
       phaseKey: row.phase_key,

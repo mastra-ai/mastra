@@ -4847,6 +4847,11 @@ describe('GithubRules with outside work in Intake', () => {
       const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
       expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'work', stage: 'pr-review' } });
       expect(item?.stages).toEqual(['pr-review']);
+      // The pusher is a maintainer, but the routes' `pullRequest.trusted` is the pull request's author.
+      expect(transition?.decision.event).toEqual({
+        type: 'pull_request.synchronized',
+        pullRequestTrusted: 'authorTrusted' in metadata && metadata.authorTrusted,
+      });
     });
 
     // Triage runs once: a comment on a card a person moved to Triage starts nothing, whoever wrote it.

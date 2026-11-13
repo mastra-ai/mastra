@@ -22,7 +22,7 @@ type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkIt
 
 const TRUSTED = {
   operator: 'AND',
-  conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+  conditions: [{ field: 'item.trusted', operator: 'equals', value: true }],
 } as const;
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] } as const;
 

@@ -15,7 +15,7 @@ export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
     operator: 'AND',
     conditions: [
       { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
-      { field: 'author.trusted', operator: 'equals', value: false },
+      { field: 'item.trusted', operator: 'equals', value: false },
     ],
   },
   target: { boardKey: 'work', phaseKey: 'intake' },
@@ -132,7 +132,7 @@ export const CLOSES_ISSUE_INTAKE_ROUTE: StoredIntakeRouteInput = {
     operator: 'AND',
     conditions: [
       { field: 'source.kind', operator: 'equals', value: 'pull_request' },
-      { field: 'author.trusted', operator: 'equals', value: true },
+      { field: 'item.trusted', operator: 'equals', value: true },
       { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
       { field: 'closedIssue.phase', operator: 'in', value: ['intake'] },
       { field: 'closedIssue.hasPullRequest', operator: 'equals', value: false },

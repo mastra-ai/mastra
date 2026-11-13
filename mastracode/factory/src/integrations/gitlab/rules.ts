@@ -10,6 +10,9 @@ import {
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   intakeTarget,
+  isPullRequestCard,
+  sourceExternalId,
+  trustedPullRequestSource,
   rulePhaseField,
   withBoardClosure,
   withBoardFlow,
@@ -24,8 +27,10 @@ import {
   routeEventDecision,
   selectEventRule,
   withoutRouteEvent,
+  withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { NotRoutedLookup } from '../../rules/event-rules.js';
+import { authorTrusted } from '../../rules/types.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -315,6 +320,25 @@ interface GitLabRulesOptions {
 interface ProjectTarget {
   target: ExternalRepositoryProjectTarget;
   connectionIds: string[];
+}
+
+
+/**
+ * Whether the delivery's merge request comes from someone with write access, or from Factory: its
+ * own card's stamp, the stamp recorded when it joined the card, else its author's access now.
+ */
+export function gitlabMergeRequestTrusted(context: Pick<FactoryGitLabRuleContext, 'mergeRequest' | 'item'>): boolean {
+  const { mergeRequest, item } = context;
+  if (!mergeRequest) return false;
+  if (mergeRequest.factoryAuthored) return true;
+  if (item && isPullRequestCard(item)) return authorTrusted(item.metadata);
+  const attached = item
+    ? pullRequestSources(item).find(
+        source => source.integrationId === 'gitlab' && sourceExternalId(source) === mergeRequest.sourceKey,
+      )
+    : undefined;
+  if (item && attached) return trustedPullRequestSource(item, attached);
+  return mergeRequest.authorTrusted === true;
 }
 
 export class GitLabRules {
@@ -1076,6 +1100,10 @@ export class GitLabRules {
         ...decisions,
         { ...cardUpdateDecision(input.ingressIdentity, update, input.actor.type === 'gitlab' && input.actor.factoryAuthored) },
       ];
+    }
+    if (context.mergeRequest) {
+      const trusted = gitlabMergeRequestTrusted(context);
+      decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
     }
 
     // The item's current labels and assignees go on its own card in the same write as the update,

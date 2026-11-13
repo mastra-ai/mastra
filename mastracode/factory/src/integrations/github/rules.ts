@@ -12,6 +12,8 @@ import {
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   intakeTarget,
+  isPullRequestCard,
+  trustedPullRequestSource,
   rulePhaseField,
   withBoardClosure,
   withBoardFlow,
@@ -30,6 +32,7 @@ import {
   routeEventDecision,
   selectEventRule,
   withoutRouteEvent,
+  withPullRequestTrust,
 } from '../../rules/event-rules.js';
 import type { CardUpdateStatus, NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
@@ -40,6 +43,7 @@ import type {
   FactoryRuleDecision,
   FactorySignalActivityDecision,
 } from '../../rules/types.js';
+import { authorTrusted } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
@@ -196,6 +200,31 @@ function openedByAuthor(
     },
     login,
   };
+}
+
+/**
+ * Whether the delivery's pull request comes from someone with write access, or from Factory: its
+ * own card's stamp, the stamp recorded when it joined the card, else its author acting now.
+ */
+export function githubPullRequestTrusted(
+  context: Pick<FactoryGithubRuleContext, 'pullRequest' | 'item' | 'repository' | 'actor'>,
+): boolean {
+  const { pullRequest, item } = context;
+  if (!pullRequest) return false;
+  if (pullRequest.factoryAuthored) return true;
+  if (item && isPullRequestCard(item)) return authorTrusted(item.metadata);
+  const attached = item
+    ? pullRequestSources(item).find(source =>
+        isRepositoryPullRequest(source, context.repository.id, context.repository.fullName, pullRequest.number),
+      )
+    : undefined;
+  if (item && attached) return trustedPullRequestSource(item, attached);
+  return (
+    context.actor.type === 'github' &&
+    context.actor.trusted &&
+    pullRequest.author !== undefined &&
+    context.actor.login === pullRequest.author
+  );
 }
 
 /** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
@@ -1345,6 +1374,10 @@ export class GithubRules {
             factoryProjectId: project.factoryProjectId,
           })) ?? activitySignalFor(context);
         if (routed) decisions = [{ ...routed }];
+      }
+      if (context.pullRequest) {
+        const trusted = githubPullRequestTrusted(context);
+        decisions = decisions.map(entry => withPullRequestTrust(entry, trusted));
       }
 
       const committed = await this.options.storage.commitRuleEvaluation({

@@ -1,10 +1,10 @@
 import type { RuleFacts } from '../rules/rule-group.js';
 import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
-import { pullRequestSources } from '../work-items/change-requests.js';
+import { pullRequestSources, reviewedPullRequest } from '../work-items/change-requests.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
-import { newestOpenPullRequestNumber } from './semantics.js';
+import { newestOpenPullRequestNumber, trustedPullRequestSource } from './semantics.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;
@@ -36,6 +36,16 @@ export function cardRuleFacts(
   const pointer = metadata.openPullRequestNumber;
   const pullRequest =
     typeof pointer === 'number' ? pointer : newestOpenPullRequestNumber({ workItem: item.workItem ?? null });
+  // Whether the card's working pull request comes from someone with write access: a pull
+  // request's own card is its author; an issue card's is the attached one it works on.
+  const working =
+    source?.type === 'pull-request' ? undefined : reviewedPullRequest({ ...item, workItem: item.workItem ?? null });
+  const pullRequestTrusted =
+    source?.type === 'pull-request'
+      ? authorTrusted(item.metadata)
+      : working
+        ? trustedPullRequestSource(item, working)
+        : undefined;
   const author = source
     ? ((stored ?? normalized)?.author ?? null)
     : typeof metadata.author === 'string'
@@ -64,7 +74,8 @@ export function cardRuleFacts(
     ...(key !== null ? { 'item.key': key } : {}),
     ...(state !== null ? { 'item.state': state } : {}),
     'item.assignees': assignees(source ? providerMetadata : metadata),
-    'author.trusted': authorTrusted(item.metadata),
+    'item.trusted': authorTrusted(item.metadata),
+    ...(pullRequestTrusted !== undefined ? { 'pullRequest.trusted': pullRequestTrusted } : {}),
     // The open change request: the one Factory opened for the card, else its own or an attached open one.
     ...(pullRequest !== null ? { 'item.pullRequest': pullRequest } : {}),
     'item.hasPullRequest': attachedOpenPullRequest,

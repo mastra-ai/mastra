@@ -51,7 +51,7 @@ const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
 const TRUSTED = {
   operator: 'AND' as const,
-  conditions: [{ field: 'author.trusted', operator: 'equals' as const, value: true }],
+  conditions: [{ field: 'item.trusted', operator: 'equals' as const, value: true }],
 };
 
 function route(name: string, overrides: Partial<StoredIntakeRouteInput> = {}): StoredIntakeRouteInput {
@@ -517,6 +517,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     await boards.deleteIntakeRoute(scope, catchAll.id, { expectedRevision: catchAll.revision });
     expect(await names(boards, scope)).toEqual(expected.slice(0, -1));
     expect(await names(other, scope)).toEqual(expected.slice(0, -1));
+  });
+
+  it('reads a route condition saved as author.trusted as item.trusted', async () => {
+    const { boards, scope } = await setup();
+    const saved = await boards.createIntakeRoute(
+      scope,
+      {
+        name: 'Old trust field',
+        when: { operator: 'OR', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] },
+        target: { boardKey: 'work' },
+      },
+      'admin',
+    );
+    expect((await boards.getIntakeRoute(scope, saved.id))?.when).toEqual({
+      operator: 'OR',
+      conditions: [{ field: 'item.trusted', operator: 'equals', value: true }],
+    });
   });
 
   it('reads back every field of a route, and fills the defaults', async () => {

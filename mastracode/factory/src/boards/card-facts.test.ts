@@ -40,7 +40,7 @@ describe('provider facts', () => {
     expect(facts).toMatchObject({
       'item.labels': ['docs'],
       'item.author': 'writer',
-      'author.trusted': true,
+      'item.trusted': true,
     });
   });
 
@@ -56,7 +56,7 @@ describe('provider facts', () => {
       expect(facts).toMatchObject({
         'item.labels': labels,
         'item.author': 'provider-author',
-        'author.trusted': false,
+        'item.trusted': false,
       });
     },
   );
@@ -70,7 +70,7 @@ describe('provider facts', () => {
     expect(facts).toMatchObject({
       'item.labels': ['bug'],
       'item.author': 'provider-author',
-      'author.trusted': true,
+      'item.trusted': true,
     });
   });
 });
@@ -272,7 +272,7 @@ describe('item.hasPullRequest and item.hasIssue', () => {
   });
 });
 
-describe('author.trusted', () => {
+describe('item.trusted', () => {
   it.each([
     ['authorTrusted true', true],
     ['factoryAuthored true', true],
@@ -282,7 +282,8 @@ describe('author.trusted', () => {
     ['no metadata', false],
   ])('is %s → %s', (stamps, trusted) => {
     const facts = cardRuleFacts({ title: 'Fix', metadata: STAMPS[stamps]!, externalSource: SOURCES['github issue']! });
-    expect(facts['author.trusted']).toBe(trusted);
+    expect(facts['item.trusted']).toBe(trusted);
+    expect(facts).not.toHaveProperty('author.trusted');
   });
 
   it('only counts a literal true stamp, not a truthy one', () => {
@@ -291,7 +292,7 @@ describe('author.trusted', () => {
       metadata: { authorTrusted: 'true', factoryAuthored: 1 },
       externalSource: SOURCES['github issue']!,
     });
-    expect(facts['author.trusted']).toBe(false);
+    expect(facts['item.trusted']).toBe(false);
   });
 });
 

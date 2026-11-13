@@ -107,7 +107,7 @@ function boardIdentifier(value: unknown, label: string): string {
 
 function boardEvent(value: unknown, label: string): BoardEventFacts {
   if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
-  assertExactKeys(value, ['type', 'reason', 'labels', 'assignees'], `${label} event`);
+  assertExactKeys(value, ['type', 'reason', 'labels', 'assignees', 'pullRequestTrusted'], `${label} event`);
   const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
   const reason =
     value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
@@ -116,7 +116,16 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   }
   const labels = itemChange(value.labels, `${label} event labels`);
   const assignees = itemChange(value.assignees, `${label} event assignees`);
-  return { type, ...(reason ? { reason } : {}), ...(labels ? { labels } : {}), ...(assignees ? { assignees } : {}) };
+  if (value.pullRequestTrusted !== undefined && typeof value.pullRequestTrusted !== 'boolean') {
+    throw new FactoryRuleValidationError(`${label} event pullRequestTrusted must be a boolean.`);
+  }
+  return {
+    type,
+    ...(reason ? { reason } : {}),
+    ...(labels ? { labels } : {}),
+    ...(assignees ? { assignees } : {}),
+    ...(typeof value.pullRequestTrusted === 'boolean' ? { pullRequestTrusted: value.pullRequestTrusted } : {}),
+  };
 }
 
 const MAX_CHANGED_NAMES = 100;

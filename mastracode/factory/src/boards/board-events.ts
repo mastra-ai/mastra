@@ -195,6 +195,8 @@ export interface BoardEventFacts {
   reason?: CloseReason;
   labels?: ItemChange;
   assignees?: ItemChange;
+  /** On a pull request event: whether that pull request's author has write access (or is Factory). */
+  pullRequestTrusted?: boolean;
 }
 
 /** The facts a route's `when` reads from an event. */
@@ -259,7 +261,6 @@ export const LEGACY_RULE_FIELDS = [
   'item.state',
   'source.integration',
   'item.pullRequest',
-  'author.trusted',
   'event.type',
   ...CLOSED_ISSUE_RULE_FIELDS,
 ] as const;
