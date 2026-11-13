@@ -20,6 +20,7 @@ export default defineConfig({
           include: ['src/scorers/llm/**/*.test.ts'],
           exclude: ['**/node_modules/**', '**/dist/**'],
           setupFiles: ['dotenv/config', '@internal/test-utils/setup'],
+          env: { MASTRA_TEST_REAL_RETRY_DELAYS: '1' },
           sequence: { groupOrder: 101 },
         },
       },
