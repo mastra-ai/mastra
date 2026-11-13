@@ -14,6 +14,7 @@ const createSessionCalls = vi.hoisted<
 // Captures the AgentController constructor initialState so tests can assert on
 // which settings.json values were seeded into session state.
 const controllerInitialStates = vi.hoisted<Array<Record<string, unknown>>>(() => []);
+const agentConfigs = vi.hoisted<Array<Record<string, unknown>>>(() => []);
 const authCredentials = vi.hoisted(() => new Map<string, Record<string, unknown>>());
 
 vi.mock('@mastra/core/llm', () => ({
@@ -30,6 +31,13 @@ vi.mock('@mastra/core/llm', () => ({
 vi.mock('@mastra/core/agent', () => ({
   Agent: class {},
   SignalProvider: class {},
+}));
+
+vi.mock('@mastra/core/coding-agent', () => ({
+  createCodingAgent: (config: Record<string, unknown>) => {
+    agentConfigs.push(config);
+    return {};
+  },
 }));
 
 vi.mock('@mastra/core/agent-controller', () => ({
@@ -229,6 +237,27 @@ vi.mock('./utils/maintenance-lock.js', () => ({
   UNKNOWN_OWNER: -1,
 }));
 
+describe('code agent scorers', () => {
+  beforeEach(() => {
+    agentConfigs.length = 0;
+  });
+
+  it('registers no scorers by default', async () => {
+    const { createMastraCode } = await import('./index.js');
+    await createMastraCode();
+
+    expect(agentConfigs.at(-1)).not.toHaveProperty('scorers');
+  });
+
+  it('passes caller-provided scorers to the coding agent', async () => {
+    const { createMastraCode } = await import('./index.js');
+    const scorers = () => ({});
+    await createMastraCode({ scorers });
+
+    expect(agentConfigs.at(-1)?.scorers).toBe(scorers);
+  });
+});
+
 describe('createMastraCode startup performance', () => {
   it('does not wait for background gateway sync before returning storage warnings', async () => {
     const [{ syncGateways }, { createStorage }] = await Promise.all([
@@ -313,6 +342,53 @@ describe('storage maintenance exclusion', () => {
 
     await expect(createMastraCode()).rejects.toBe(failure);
     expect(unregisterSession).toHaveBeenCalled();
+  });
+});
+
+describe('scores storage domain', () => {
+  it('discards score writes by default without retaining them', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+    const result = await createMastraCode();
+    const scores = await result.storage.getStore('scores');
+
+    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
+    const saved = await scores!.saveScore({
+      scorerId: 'custom',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(saved.score.id).toEqual(expect.any(String));
+    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
+  });
+
+  it('persists score writes when explicitly enabled', async () => {
+    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
+    const { createMastraCode } = await import('./index.js');
+    const result = await createMastraCode({
+      storage: new InMemoryStore({ id: 'persistent-scores' }),
+      storageBackend: 'libsql',
+      disableScoreStorage: false,
+    });
+    const scores = await result.storage.getStore('scores');
+
+    expect(scores).not.toBeInstanceOf(DiscardingScoresStorage);
+    const saved = await scores!.saveScore({
+      scorerId: 'custom',
+      entityId: 'thread-1',
+      runId: 'run-1',
+      output: { ok: true },
+      score: 1,
+      scorer: {},
+      source: 'LIVE',
+      entity: {},
+    });
+    expect(await scores!.getScoreById({ id: saved.score.id })).toMatchObject({ scorerId: 'custom' });
   });
 });
 

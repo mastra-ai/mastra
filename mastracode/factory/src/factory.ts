@@ -23,6 +23,7 @@ import { existsSync } from 'node:fs';
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import type { MastraCodeConfig } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
@@ -248,6 +249,10 @@ export interface MastraFactoryConfig {
    * one connection, every feature on.
    */
   storage: FactoryStorage;
+  /** Scorers for the mounted code agent. None run by default. */
+  scorers?: MastraCodeConfig['scorers'];
+  /** Disable persistence of rich scorer results. Default: true. */
+  disableScoreStorage?: boolean;
   /**
    * Vector store instance for recall search — `PgVector` (`@mastra/pg`) on
    * the same database as `storage`. Omitted → the SDK mount's default vector
@@ -1885,6 +1890,8 @@ export class MastraFactory {
           gitBranch: '',
         },
         storage: storage.getMastraStorage(),
+        ...(this.#config.scorers ? { scorers: this.#config.scorers } : {}),
+        disableScoreStorage: this.#config.disableScoreStorage ?? true,
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.
