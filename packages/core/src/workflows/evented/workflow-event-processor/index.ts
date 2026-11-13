@@ -195,8 +195,12 @@ function readForeachResult(
 const WORKFLOW_CONTROL_TOPIC = 'workflow.control';
 const WORKFLOW_CONTROL_ABORT = 'workflow.control.abort';
 
-/** Control-path state taken by `#dispatch` before its state load for a `workflow.step.run`. */
-type ControlAtDispatch = { ready?: boolean; missedAborts?: number };
+/**
+ * Control-path state taken by `#dispatch` before its state load for a
+ * `workflow.step.run`, and `storedRun`, the snapshot that load read (`null`
+ * when the run has none).
+ */
+type ControlAtDispatch = { ready?: boolean; missedAborts?: number; storedRun?: WorkflowRunState | null };
 
 /** A `workflow.fail` still to publish. `failRun` overrides the run of the event that failed. */
 type PendingFailure = { error: Error; publishAttempts: number; failRun?: Omit<ProcessorArgs, 'workflow'> };
@@ -2220,7 +2224,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // result can both continue the run from it. A broker's reclaim hands a dead worker's message to
     // one consumer, so in practice a finished occurrence sees a single late delivery.
     const store = await this.#finishedCheckStore(workflow);
-    const finished = store ? await this.#finishedOccurrence(args, leaf, { store }) : 'run';
+    const finished = store ? await this.#finishedOccurrence(args, leaf, { store, snapshot: control.storedRun }) : 'run';
     const logger = this.mastra.getLogger();
     const occurrence = { workflowId, runId, executionPath };
 
@@ -2359,22 +2363,31 @@ export class WorkflowEventProcessor extends EventProcessor {
    * is a duplicate, or the step end arguments that continue the run from the
    * saved result. See {@link finishedOccurrence}.
    *
-   * `store` is the one {@link #finishedCheckStore} returned. A resume of the
-   * step and time travel run it again on purpose and skip the check. With
-   * `deferToGuards` (the default), records the store's step guards stamped
-   * are left to those guards on the deliveries they arbitrate.
+   * `store` is the one {@link #finishedCheckStore} returned, and `snapshot` the
+   * run's snapshot when the caller already read it for this delivery; without
+   * it the check reads the run. A resume of the step and time travel run it
+   * again on purpose and skip the check. With `deferToGuards` (the default),
+   * records the store's step guards stamped are left to those guards on the
+   * deliveries they arbitrate.
    */
   async #finishedOccurrence(
     args: ProcessorArgs,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-    { store, deferToGuards = true }: { store: WorkflowsStorage; deferToGuards?: boolean },
+    {
+      store,
+      snapshot: loaded,
+      deferToGuards = true,
+    }: { store: WorkflowsStorage; snapshot?: WorkflowRunState | null; deferToGuards?: boolean },
   ): Promise<'run' | 'drop' | ProcessorArgs> {
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
     if (args.timeTravel || args.resumeSteps?.[0] === leafId) {
       return 'run';
     }
 
-    const snapshot = await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
+    const snapshot =
+      loaded !== undefined
+        ? loaded
+        : await store.loadWorkflowSnapshot({ workflowName: args.workflowId, runId: args.runId });
     const outcome = finishedOccurrence({
       step,
       executionPath: args.executionPath,
@@ -2828,7 +2841,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         // exists while the whole run sits in 'suspended'. Read-then-write
         // narrows the race window rather than closing it — closing it needs
         // an expectedStatus compare-and-set on `updateWorkflowResults` across
-        // all storage adapters.
+        // all storage adapters. Read again rather than reusing the dispatch's snapshot, so a
+        // suspension saved since then is seen.
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
@@ -5427,6 +5441,9 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId: workflowData.workflowId,
       runId: workflowData.runId,
     });
+    if (type === 'workflow.step.run') {
+      control.storedRun = currentState ?? null;
+    }
 
     if (currentState?.status === 'canceled' && type !== 'workflow.end' && type !== 'workflow.cancel') {
       return;
