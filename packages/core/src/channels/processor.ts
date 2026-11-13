@@ -113,7 +113,7 @@ function channelLines(ctx: ChannelContext, textHidden: boolean, tools: Record<st
     'You are in a public channel or thread. Not every message is directed at you.',
     `A message marked mentioned="true" tags you directly. Always ${reply} to it, even when it asks for nothing yet: if it only says more is coming, acknowledge it in one short line (e.g. "Got it — standing by for the details.").`,
     `For any other message, only ${reply} when you are replied to or your input is clearly needed (e.g. a direct question to you, or a task you were asked to do).`,
-    'If users appear to be talking to each other, showing your previous output to a third party, reacting to your output, or having a side conversation, stay silent. Staying silent is the correct and preferred action — it is not rude or unhelpful.',
+    'For messages that do not mention you, if users appear to be talking to each other, showing your previous output to a third party, reacting to your output, or having a side conversation, stay silent. Staying silent is the correct and preferred action — it is not rude or unhelpful.',
     textHidden
       ? 'To stay silent, post nothing. Do NOT post acknowledgements like "Got it" or "Noted" to messages that do not mention you, or apologies for staying quiet.'
       : 'To stay silent, respond with an empty message. Do NOT narrate the situation. Do NOT write bracketed status notes like "[no response needed]" or "[empty message — user is showing the report to someone else]". Do NOT acknowledge messages that do not mention you with text like "Got it" or "Noted". Do NOT apologize for staying quiet. An empty response is a first-class action, not a fallback.',

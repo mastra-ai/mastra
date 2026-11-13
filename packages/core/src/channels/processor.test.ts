@@ -158,6 +158,7 @@ describe('ChatChannelProcessor', () => {
 
     expect(prompt).toContain('A message marked mentioned="true" tags you directly. Always respond with text to it');
     expect(prompt).toContain('Got it — standing by for the details.');
+    expect(prompt).toContain('For messages that do not mention you, if users appear to be talking to each other');
     expect(prompt).toContain('Do NOT acknowledge messages that do not mention you');
   });
 
