@@ -165,4 +165,5 @@ export const isolatedTestFiles = [
   'src/workspace/sandbox/local-sandbox.browser-safety.test.ts', // vi.mock,reset-modules
   'src/workspace/sandbox/local-sandbox.test.ts', // vi.mock,env
   'src/workspace/skills/skill-versioning.test.ts', // global
+  'src/workspace/skills/workspace-skills-allowed-roots.test.ts', // vi.mock
 ];

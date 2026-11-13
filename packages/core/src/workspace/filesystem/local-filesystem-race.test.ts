@@ -146,6 +146,41 @@ describe('LocalFilesystem contained reads during symlink replacement (#27892)', 
     expect(race.onRootRealpath).toBeUndefined();
   });
 
+  // Technical: after the first operation, containment re-resolves only the
+  // cached root that holds the path (#30224); swaps must still be caught there.
+  it('rejects an outside file swapped in after an earlier read of the same file', async () => {
+    await expect(local.readFile('a.txt', { encoding: 'utf-8' })).resolves.toBe('safe');
+    swapLeaf(path.join(outside, 'a.txt'));
+    await expect(local.readFile('a.txt', { encoding: 'utf-8' })).rejects.toThrow(PermissionError);
+    expect(race.onRootRealpath).toBeUndefined();
+  });
+
+  it('rejects a configured root replaced after an earlier read', async () => {
+    await expect(local.readFile('a.txt', { encoding: 'utf-8' })).resolves.toBe('safe');
+    race.onRootRealpath = async () => {
+      await fs.rename(root, path.join(temp, 'old-workspace'));
+      await fs.symlink(outside, root);
+    };
+    await expect(local.readFile('a.txt', { encoding: 'utf-8' })).rejects.toThrow(PermissionError);
+    expect(race.onRootRealpath).toBeUndefined();
+  });
+
+  it('does not re-allow an allowed path removed while a read was checking it', async () => {
+    const allowed = path.join(temp, 'allowed');
+    await fs.mkdir(allowed);
+    await fs.writeFile(path.join(allowed, 'notes.md'), 'allowed');
+    const withAllowed = new LocalFilesystem({ basePath: root, contained: true, allowedPaths: [allowed] });
+    const notes = path.join(allowed, 'notes.md');
+    await expect(withAllowed.readFile(notes, { encoding: 'utf-8' })).resolves.toBe('allowed');
+
+    race.root = allowed;
+    race.onRootRealpath = async () => withAllowed.setAllowedPaths([]);
+    await withAllowed.readFile(notes, { encoding: 'utf-8' });
+    expect(race.onRootRealpath).toBeUndefined();
+
+    await expect(withAllowed.readFile(notes, { encoding: 'utf-8' })).rejects.toThrow(PermissionError);
+  });
+
   it('preserves stat and exists on files that cannot be opened for reading', async () => {
     race.denyOpen = true;
     const file = path.join(root, 'a.txt');
