@@ -40,7 +40,7 @@
     "@mastra/evals": "1.10.5",
     "@types/node": "^22.20.1",
     "concurrently": "9.2.1",
-    "hono": "4.13.13",
+    "hono": "4.13.16",
     "mastra": "1.33.0",
     "oxfmt": "0.72.0",
     "typescript": "^5.9.3",
