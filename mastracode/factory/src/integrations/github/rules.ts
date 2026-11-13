@@ -1083,11 +1083,8 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(
-      evaluated,
-      await cardIngressId(this.options.storage, deliveryIdentity, evaluated),
-      pullRequestOpened,
-    );
+    const primaryIdentity = await cardIngressId(this.options.storage, deliveryIdentity, evaluated);
+    const primary = await evaluate(evaluated, primaryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -1235,8 +1232,14 @@ export class GithubRules {
         ? relatedItem
         : undefined;
     const companion = linked ?? authoringItem;
+    // When the authoring card's record has cards on other boards, the arrival already took the
+    // card's suffixed identity; the card's own evaluation then takes one of its own.
+    const companionIdentity = `${deliveryIdentity}:${companion?.id}`;
     const secondary = companion
-      ? await evaluate(companion, `${deliveryIdentity}:${companion.id}`)
+      ? await evaluate(
+          companion,
+          companionIdentity === primaryIdentity ? `${companionIdentity}:authoring` : companionIdentity,
+        )
       : undefined;
     await stampClosed(secondary?.status);
     // The record's cards on other boards run their own rules for it, each under its own identity.

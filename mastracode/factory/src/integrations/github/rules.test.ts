@@ -3491,6 +3491,81 @@ describe('GithubRules', () => {
     );
   });
 
+  it('answers a pull request opening for both of the authoring card\'s evaluations when its issue has a card on another board', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      pullRequestOpened: context => {
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+          return defaultGithubRules.pullRequestOpened(context);
+        return {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:work-item-review`,
+          source: context.item.source,
+          sourceKey: context.item.sourceKey,
+          title: context.item.title,
+          url: context.item.url,
+          board: 'work',
+          stage: 'review',
+          skipRules: true,
+        };
+      },
+    });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'feature', threadId: 'session-issue-42' } },
+        metadata: {},
+      },
+    });
+    await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: work.item.id,
+      board: 'security',
+      stage: 'triage',
+      userId: 'user-1',
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: olderWork(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-two-boards'));
+    await service.ingest(pullRequest('opened', 'delivery-two-boards'));
+
+    const keys = (await workItems.listDeferredDecisions('org-1', project.id))
+      .filter(entry => entry.workItemId === work.item.id)
+      .map(entry => (entry.decision as { idempotencyKey?: string }).idempotencyKey);
+    // The arrival and the item's own evaluation each commit once, under identities of their own.
+    expect(keys).toHaveLength(2);
+    expect(keys).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/:pull-request-intake$/),
+        expect.stringMatching(/:work-item-review$/),
+      ]),
+    );
+  });
+
   it('moves the item that authored a pull request into review when it opens, and files the pull request on that card', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
       pullRequestOpened: context => {
