@@ -12,6 +12,7 @@ import { createHash } from 'node:crypto';
 
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
+import { DEFAULT_BOARD_ID } from '../../../boards/default-board.js';
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
@@ -37,8 +38,17 @@ import type { BoardScope } from './board-version.js';
 import { Cards, splitCardRows } from './cards.js';
 import { LEASE_TABLES, trackClaimableWrites } from './claimable-work.js';
 import type { FactoryClaimableWorkScope } from './claimable-work.js';
-import { LEGACY_REST_PHASE, LEGACY_TRIAGE_PHASE, LEGACY_WORK_BOARD, readReviewBoardInUse } from './legacy-review.js';
+import {
+  LEGACY_REST_PHASE,
+  LEGACY_REVIEW_BOARD,
+  LEGACY_TRIAGE_PHASE,
+  LEGACY_WORK_BOARD,
+  readReviewBoardInUse,
+  releaseLegacyReviewCards,
+} from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
+import { backfillSourceLinks, fanOutSourceFacts, linkedItems, lockSourceGroup } from './source-links.js';
+import type { SourceLinkBackfillReport } from './source-links.js';
 import type {
   WorkItemRow as ProviderWorkItemRow,
   WorkItemDbRecord,
@@ -50,11 +60,15 @@ import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA,
   FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
   FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
+
+/** `factory_work_item_split_state` row recording that every source has its owner's link. */
+const SOURCE_LINKS_MARKER_ID = 'source-links';
 
 export type { FactoryClaimableWorkScope } from './claimable-work.js';
 
@@ -91,6 +105,8 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'linear-issue' ||
     value === 'jira-issue' ||
     value === 'incidentio-follow-up' ||
+    value === 'github-dependabot-alert' ||
+    value === 'vanta-vulnerability' ||
     value === 'manual'
   );
 }
@@ -221,6 +237,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'unsupported_provider_item',
   'notification_delivery_failed',
   'run_terminal_event_missing',
+  'run_incomplete',
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
@@ -235,6 +252,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_configuration_invalid',
   'run_credentials_unavailable',
   'run_user_unauthenticated',
+  'factory_org_key_missing',
   'run_failed',
   'unknown',
 ] as const;
@@ -540,6 +558,8 @@ export interface BoardItemRow {
   stageHistory: WorkItemStageEntry[];
   sessions: WorkItemSessions;
   metadata: Record<string, unknown> | null;
+  /** When the card last changed. A reader that keeps the board tells its copy of the card by it. */
+  changedAt?: Date | null;
   /** Authoritative verdict written by the bound triage run. */
   triageType: FactoryTriageType | null;
   /**
@@ -618,8 +638,8 @@ export const FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** Why a session follows a work item: it filed it, started a role on it, or asked to. */
-export type WorkItemSubscriptionReason = 'created' | 'started' | 'subscribed';
+/** Why a session follows a work item: it filed it, moved it, started a role on it, or asked to. */
+export type WorkItemSubscriptionReason = 'created' | 'moved' | 'started' | 'subscribed';
 
 /** A session following a work item, so it hears what happens to it. */
 export interface WorkItemSubscription {
@@ -699,6 +719,7 @@ export interface WorkItemDbRow extends Record<string, unknown> {
   created_by: string;
   created_at: Date;
   updated_at: Date;
+  changed_at?: Date | null;
 }
 
 /**
@@ -782,10 +803,16 @@ function toWorkItem(row: WorkItemDbRow): Card {
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    changedAt: row.changed_at ?? null,
   };
 }
 
 const toRow = toWorkItem;
+
+/** The external record a card row was filed from, or the card itself for native work. */
+function primarySourceId(row: WorkItemDbRow): string {
+  return row.work_item_sources?.[0]?.id ?? row.id;
+}
 
 function patchColumns(changes: Partial<Card>): Partial<WorkItemDbRow> {
   return {
@@ -843,6 +870,27 @@ export class WorkItemSourceConflictError extends Error {
 
   constructor(readonly ownerWorkItemId: string) {
     super(`The source already belongs to work item ${ownerWorkItemId}.`);
+  }
+}
+
+/** A board already holds a card for the external record this card was filed from. */
+export class WorkItemAlreadyOnBoardError extends Error {
+  readonly code = 'work_item_already_on_board';
+
+  constructor(
+    readonly board: string,
+    readonly cardId: string,
+  ) {
+    super(`Board ${board} already holds card ${cardId} for this item.`);
+  }
+}
+
+/** Only a card filed from an external record can be put on another board yet. */
+export class WorkItemHasNoSourceError extends Error {
+  readonly code = 'work_item_has_no_source';
+
+  constructor(readonly cardId: string) {
+    super(`Card ${cardId} has no external source to share with another board.`);
   }
 }
 
@@ -1335,11 +1383,57 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
+  /** Whether sources written before links existed may still lack their owner's link. */
+  get sourceLinkBackfillPending(): boolean {
+    return this.#sourceLinksPending;
+  }
+
+  #sourceLinksPending = false;
+
+  /**
+   * Link every source to its owning work item, carrying the source's facts, then mark the pass
+   * done. Reads fall back to source rows meanwhile, so this only makes the links authoritative.
+   * Returns null once done.
+   */
+  async backfillSourceLinks({ signal }: { signal?: AbortSignal } = {}): Promise<SourceLinkBackfillReport | null> {
+    if (this.#legacyMode) return null;
+    if (await super.ops.findOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: SOURCE_LINKS_MARKER_ID })) {
+      this.#sourceLinksPending = false;
+      return null;
+    }
+    const report = await backfillSourceLinks(
+      { ops: super.ops, withTransaction: fn => this.#withTransaction(fn) },
+      { signal },
+    );
+    if (!report.aborted) {
+      await super.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
+        id: SOURCE_LINKS_MARKER_ID,
+        legacy_updated_at: null,
+        legacy_id: null,
+        completed_at: new Date(),
+      });
+      this.#sourceLinksPending = false;
+    }
+    return report;
+  }
+
   /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
   readonly #reviewRedundant = new Set<string>();
 
+  #ownReviewBoard: ReviewBoardInUse | undefined;
+
+  /**
+   * Tells cards apart from the retired Review board's: where `owned` answers true the project has
+   * a board of its own under `review`, and the cards stored on it are that board's.
+   */
+  useOwnReviewBoard(owned: ReviewBoardInUse): void {
+    this.#ownReviewBoard = owned;
+  }
+
   /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
   readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    // Asked every time: a project can make or delete a board of its own under `review` at any moment.
+    if (await this.#ownReviewBoard?.(ops, scope)) return true;
     const key = `${scope.orgId}\0${scope.factoryProjectId}`;
     if (this.#reviewRedundant.has(key)) return false;
     const inUse = await readReviewBoardInUse(ops, scope, {
@@ -1352,12 +1446,33 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   };
 
   /**
-   * Whether the project still uses the retired Review board: it holds a card stored on Review
-   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
-   * other project Review is redundant and its cards read as Work.
+   * Whether cards stored on `review` stay there: the project has a board of its own under that
+   * key, or still uses the retired Review board (it holds a card stored on Review that isn't Done
+   * or Canceled) and keeps it. In any other project Review is redundant and its cards read as Work.
    */
   reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
     return this.#reviewInUse(this.#db, scope);
+  }
+
+  /**
+   * Leaves `review` to a board about to take it: stores the Work placement of the cards the
+   * retired Review board left there, through `ops`, so it happens in the board write's
+   * transaction. See {@link releaseLegacyReviewCards} for `open`.
+   */
+  async releaseReviewCards(
+    ops: FactoryStorageOps,
+    scope: ReviewBoardScope,
+    { open }: { open: 'refuse' | 'move' },
+  ): Promise<void> {
+    const rewritten = await releaseLegacyReviewCards(
+      ops,
+      scope,
+      // Legacy cards not copied yet still count.
+      { split: !this.#legacyMode, legacy: this.#legacyMode || this.#split.pending },
+      open,
+    );
+    // An open card that moved was listed on Review until now.
+    if (rewritten > 0) await bumpBoardVersions(ops, [scope]);
   }
 
   constructor() {
@@ -1431,6 +1546,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEMS_SCHEMA,
       FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+      FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA,
       FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
       FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA,
       FACTORY_BOARD_ITEMS_SCHEMA,
@@ -1449,6 +1565,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       await migrateWorkItemSplit(this.storage, { dryRun: true, ops: super.ops, log: logSplit });
       return;
     }
+    this.#sourceLinksPending = !(await super.ops.findOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {
+      id: SOURCE_LINKS_MARKER_ID,
+    }));
     const [marker, newest] = await Promise.all([readWorkItemSplitMarker(super.ops), readLegacyWatermark(super.ops)]);
     const finished = !newest || (marker !== null && sameWatermark(marker.watermark, newest));
     // The factory copies open cards once boards load, and the rest in the background.
@@ -1562,7 +1681,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
     expectedRevision?: number;
   }): Promise<void> {
-    await this.#withTransaction(ops => this.#syncWorkItemSource(ops, params));
+    await this.#withTransaction(async ops => {
+      await this.#syncWorkItemSource(ops, params);
+    });
   }
 
   async #syncWorkItemSource(
@@ -1575,8 +1696,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       patch,
       expectedRevision,
     }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
-  ): Promise<void> {
-    await ops.updateAtomic<WorkItemSourceDbRecord>(
+  ): Promise<Date | undefined> {
+    const where = { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId };
+    const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, where);
+    // Lock every card reading the source before the source itself, the order every card write takes them in.
+    const holders = source ? (await linkedItems(ops, [source])).get(source.id)!.map(link => link.workItemId) : [];
+    if (holders.length > 1) await lockSourceGroup(ops, holders);
+    else if (source)
+      await ops.updateAtomic(FACTORY_BOARD_ITEMS_SCHEMA.name, { work_item_id: source.work_item_id }, () => null);
+    let synced = false;
+    const written = await ops.updateAtomic<WorkItemSourceDbRecord>(
       FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
       { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
       current => {
@@ -1585,6 +1714,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         }
         const next = typeof patch === 'function' ? patch(current) : patch;
         if (!next) return null;
+        synced = true;
         const { metadata, ...facts } = next;
         // Raw provider state can be 'closed' while normalized state is 'merged'.
         const nextMetadata =
@@ -1613,6 +1743,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         };
       },
     );
+    // Every card of the record shows these facts but no card row moved: store them on each work
+    // item and stamp each card so a board reload rereads it.
+    if (!written || !synced) return undefined;
+    const changed_at = new Date();
+    await fanOutSourceFacts(ops, written, { now: changed_at });
+    return changed_at;
   }
 
   /**
@@ -1692,6 +1828,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
     return this.#withTransaction(async ops => {
       let previous = emptyPrior();
+      let stamped: Date | undefined;
       const row = await this.#cards(ops, { transaction: true }).updateAtomic({ org_id: orgId, id }, async current => {
         previous = priorState(current);
         const item = toWorkItem(current);
@@ -1708,7 +1845,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         const adapter = workItemProviderAdapter(item.externalSource);
         const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
         if (Object.keys(split.provider ?? {}).length > 0) {
-          await this.#syncWorkItemSource(ops, {
+          stamped = await this.#syncWorkItemSource(ops, {
             orgId,
             factoryProjectId: item.factoryProjectId,
             provider: source.provider,
@@ -1748,8 +1885,54 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
         });
       });
-      return row ? { item: toWorkItem(row), previous } : null;
+      if (!row) return null;
+      if (patch.title !== undefined) await this.#fanOutWork(ops, row, { title: patch.title });
+      const item = toWorkItem(row);
+      // `row` was read before the source's sync stamped it; a write of the card itself stamps later.
+      const changedAt = stamped && !(item.changedAt && item.changedAt > stamped) ? stamped : item.changedAt;
+      return { item: { ...item, changedAt }, previous };
     });
+  }
+
+  /**
+   * Copy a provider's title and description to the other cards filed from the same record, so
+   * they read the same. A person's edit of one card goes through `update` and stays on it.
+   */
+  async #fanOutWork(
+    ops: FactoryStorageOps,
+    row: WorkItemDbRow,
+    work: { title?: string; description?: string | null },
+  ): Promise<void> {
+    if (this.#legacyMode) return;
+    const origin = row.work_item_sources?.[0];
+    if (!origin || origin.role === 'attached') return;
+    const source = await ops.findOne<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, { id: origin.id });
+    if (!source) return;
+    const own = row.work_item?.id;
+    const siblings = (await linkedItems(ops, [source]))
+      .get(source.id)!
+      .filter(link => link.role === 'origin' && link.workItemId !== own)
+      .map(link => link.workItemId)
+      .sort();
+    const now = new Date();
+    const changed: string[] = [];
+    for (const id of siblings) {
+      await ops.updateAtomic<WorkItemDbRecord>(FACTORY_WORK_ITEMS_SCHEMA.name, { id }, current => {
+        const title = work.title !== undefined && work.title !== current.title;
+        const description = work.description !== undefined && work.description !== current.description;
+        if (!title && !description) return null;
+        changed.push(id);
+        return {
+          ...(title ? { title: work.title } : {}),
+          ...(description ? { description: work.description } : {}),
+          revision: current.revision + 1,
+          updated_at: now,
+        };
+      });
+    }
+    if (changed.length) {
+      await ops.updateMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { work_item_id: { in: changed } }, { changed_at: now });
+    }
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -2001,6 +2184,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItem);
   }
 
+  /** The ids deleted after `from`. */
+  #removedSince(scope: CollectionWhere, from: Date) {
+    return super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
+      orderBy: [['deleted_at', 'asc']],
+      cursor: { values: [from] },
+    });
+  }
+
   /**
    * `previous` updated with the cards changed or deleted since `since`. Reads from a few seconds
    * earlier so a writer whose clock runs behind this one is still caught.
@@ -2013,10 +2204,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         orderBy: [['changed_at', 'asc']],
         cursor: { values: [from] },
       }),
-      super.ops.findMany<{ id: string }>(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, scope, {
-        orderBy: [['deleted_at', 'asc']],
-        cursor: { values: [from] },
-      }),
+      this.#removedSince(scope, from),
     ]);
     if (rows.length === 0 && tombstones.length === 0) return [...previous];
     const changed = new Map(rows.map(row => [row.id, toWorkItem(row)]));
@@ -2054,15 +2242,51 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
-  /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
-  async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
+  /**
+   * {@link listShared} for a reader that keeps the board between reads. `cursor` names this read.
+   * Sent back as `since`, it adds what moved since that read: `changed`, the listed cards written
+   * since, and `removed`, the ids no longer listed. Without them only the whole list answers: no
+   * cursor or one this didn't issue, or a board showing Review cards, which move without a write.
+   */
+  async listSharedSince(scope: { orgId: string; factoryProjectId: string; since?: string }): Promise<{
+    items: readonly Card[];
+    cursor?: string;
+    changed?: Card[];
+    removed?: string[];
+  }> {
+    const { items, readFrom } = await this.#listCached(scope.orgId, scope.factoryProjectId);
+    if (readFrom === undefined || items.some(card => card.board === LEGACY_REVIEW_BOARD)) return { items };
+    const cursor = String(readFrom);
+    if (scope.since === undefined) return { items, cursor };
+    // The reader holds this very list.
+    if (scope.since === cursor) return { items, cursor, changed: [], removed: [] };
+    // Answered from `items`, the list `cursor` names, so the two agree: a write that list doesn't
+    // hold yet is left for the read that sends `cursor` back.
+    const from = new Date(Number(scope.since) - LIST_DELTA_CLOCK_SKEW_MS);
+    const gone = await this.#removedSince({ org_id: scope.orgId, factory_project_id: scope.factoryProjectId }, from);
+    const removed = new Set(gone.map(row => row.id));
+    const changed = items.filter(card => {
+      removed.delete(card.id);
+      return card.changedAt && new Date(card.changedAt) > from;
+    });
+    return { items, cursor, changed, removed: [...removed] };
+  }
+
+  /**
+   * `cached` is true when `items` is shared with other callers, which callers that mutate must clone.
+   * `readFrom` is when the read that produced a cached `items` began.
+   */
+  async #listCached(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<{ items: Card[]; cached: boolean; readFrom?: number }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
     const hit = this.#listCache.get(key);
     if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
-      return { items: hit.items, cached: true };
+      return { items: hit.items, cached: true, readFrom: hit.readFrom };
     }
     if (!version) {
       const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
@@ -2071,13 +2295,16 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     }
     const inFlight = this.#listInFlight.get(key);
     if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
-      return { items: await inFlight.items, cached: true };
+      return { items: await inFlight.items, cached: true, readFrom: inFlight.startedAt };
     }
     const startedAt = Date.now();
     // Within the TTL a version change only needs the cards changed since the last read; the TTL
-    // still forces a full read as a backstop for anything a delta could miss.
+    // still forces a full read as a backstop for anything a delta could miss. A board showing
+    // Review cards is read whole: closing its last open one moves the others without writing them.
+    const delta =
+      hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS && !hit.items.some(card => card.board === LEGACY_REVIEW_BOARD);
     const read = (
-      hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS
+      delta
         ? this.#listDelta(orgId, factoryProjectId, hit.items, hit.readFrom)
         : this.#listWithOps(super.ops, orgId, factoryProjectId)
     ).then(deepFreeze);
@@ -2088,7 +2315,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         this.#listCache.delete(key);
         this.#listCache.set(key, {
           version,
-          takenAt: hit && startedAt - hit.takenAt < LIST_CACHE_TTL_MS ? hit.takenAt : Date.now(),
+          takenAt: delta ? hit.takenAt : Date.now(),
           readFrom: startedAt,
           items,
         });
@@ -2096,7 +2323,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           this.#listCache.delete(this.#listCache.keys().next().value!);
         }
       }
-      return { items, cached: true };
+      return { items, cached: true, readFrom: startedAt };
     } finally {
       if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
     }
@@ -2216,7 +2443,58 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await this.#cards(this.#db, { transaction: false }).findMany({
       source_key: externalSourceKey(source),
     });
-    return rows.length === 1 ? toWorkItem(rows[0]!) : null;
+    // Cards of one record on several boards share its source; only several records are ambiguous.
+    const records = new Set(rows.map(row => primarySourceId(row)));
+    return records.size === 1 ? toWorkItem(rows[0]!) : null;
+  }
+
+  /** Every card filed from or linked to one external record in a project, the first one filed first. */
+  async listByProjectSource({
+    orgId,
+    factoryProjectId,
+    source,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    source: ExternalWorkItemSource;
+  }): Promise<Card[]> {
+    const rows = await this.#cards(this.#db, { transaction: false }).findMany({
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      source_key: externalSourceKey(source),
+    });
+    return rows.map(toWorkItem);
+  }
+
+  /**
+   * Put a card for the same external record on another board: a new work item and card, linked
+   * to the record (and any pull request joined to it), landing on `stage`. Throws
+   * {@link WorkItemAlreadyOnBoardError} when the board already holds one and
+   * {@link WorkItemHasNoSourceError} for a card with no external record.
+   */
+  async linkWorkItemToBoard({
+    orgId,
+    id,
+    board,
+    stage,
+    userId,
+  }: {
+    orgId: string;
+    id: string;
+    board: string;
+    stage: string;
+    userId: string;
+  }): Promise<Card | null> {
+    const result = await this.#withTransaction(ops =>
+      this.#cards(ops, { transaction: true }).linkToBoard(
+        { org_id: orgId, id },
+        { board, stage, by: userId, now: new Date() },
+      ),
+    );
+    if (!result) return null;
+    if ('alreadyOn' in result) throw new WorkItemAlreadyOnBoardError(board, result.alreadyOn);
+    if ('noSource' in result) throw new WorkItemHasNoSourceError(id);
+    return toWorkItem(result.row);
   }
 
   /**
@@ -2240,6 +2518,39 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       factory_project_id: factoryProjectId,
     });
     return row ? toRow(row) : null;
+  }
+
+  /**
+   * The ingress identity a card evaluates an event under. A record with one card uses the event's
+   * own identity, as before cards could share a record; a record with several gives each card the
+   * identity suffixed with its id. Which one a card gets never depends on the record's other cards
+   * once an evaluation is stored: a card keeps an identity it already evaluated under, and the
+   * event's own identity stays with the card that stored it, so deleting that card does not hand
+   * its evaluation to another. An evaluation stored before the record had a card belongs to the
+   * record's first card, which the event filed; cards added later evaluate under their own.
+   */
+  async cardIngressIdentity({
+    orgId,
+    factoryProjectId,
+    base,
+    cardId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    base: string;
+    cardId: string | undefined;
+  }): Promise<string> {
+    if (!cardId) return base;
+    const own = `${base}:${cardId}`;
+    const stored = await this.getTransitionResultByIngress(orgId, factoryProjectId, base);
+    if (stored?.itemId === cardId) return base;
+    if (await this.getTransitionResultByIngress(orgId, factoryProjectId, own)) return own;
+    if (typeof stored?.itemId === 'string') return own;
+    const card = await this.get({ orgId, id: cardId });
+    if (!card?.externalSource) return base;
+    const cards = await this.listByProjectSource({ orgId, factoryProjectId, source: card.externalSource });
+    if (cards.length <= 1) return base;
+    return stored && cards[0]?.id === cardId ? base : own;
   }
 
   async getTransitionResultByIngress(
@@ -3285,6 +3596,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
+  /** The binding an `agent:<bindingId>` actor names, active or revoked. Identifies; never authorizes. */
+  async findRunBindingById(input: {
+    orgId: string;
+    factoryProjectId: string;
+    id: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    // Actor ids are free text and the id column is a uuid on Postgres.
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.id)) return null;
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.id,
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+    });
+    return row ? toBinding(row) : null;
+  }
+
   /** Resolve exact active agent authority; partial session matches never authorize. */
   async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
     const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
@@ -3796,11 +4123,14 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const key = externalSourceKey(input.externalSource);
     const reuse = async (): Promise<UpsertWorkItemResult | null> => {
       if (!key) return null;
-      const existing = await this.#cards(ops, { transaction: true }).findOne({
+      // One card per board for a record: refile onto the card on the named board, else the first filed.
+      const linked = await this.#cards(ops, { transaction: true }).findMany({
         org_id: orgId,
         factory_project_id: factoryProjectId,
         source_key: key,
       });
+      const existing =
+        (input.board != null && linked.find(card => (card.board ?? DEFAULT_BOARD_ID) === input.board)) || linked[0];
       if (!existing) return null;
       if (reuseMode === 'preserve') {
         return { created: false, item: toWorkItem(existing), previous: priorState(existing) };
@@ -3808,7 +4138,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
       let previous = emptyPrior();
       const updated = await this.#cards(ops, { transaction: true }).updateAtomic(
-        { org_id: orgId, factory_project_id: factoryProjectId, source_key: key },
+        { org_id: orgId, factory_project_id: factoryProjectId, source_key: key, id: existing.id },
         async current => {
           previous = priorState(current);
           const fullPatch = input.parentWorkItemId === null ? { ...input, parentWorkItemId: undefined } : input;
@@ -3839,7 +4169,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         // must see the reuse; pending rules keep their revision.
         { touch: reuseMode === 'non-stage' },
       );
-      return updated ? { item: toWorkItem(updated), created: false, previous } : null;
+      if (!updated) return null;
+      await this.#fanOutWork(ops, updated, { title: input.title, description: input.description });
+      return { item: toWorkItem(updated), created: false, previous };
     };
 
     const reused = await reuse();
@@ -4063,6 +4395,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItemSubscription);
   }
 
+  /** Every follow link in a Factory, earliest first: which session follows which work item. */
+  async listProjectSubscriptions({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<WorkItemSubscription[]> {
+    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toWorkItemSubscription);
+  }
+
   /** The work items one session follows in a Factory, earliest first. */
   async listSessionSubscriptions({
     orgId,
@@ -4116,7 +4469,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       const deleted = await this.#cards(ops, { transaction: true }).deleteMany(where);
       if (deleted === 0) return null;
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
-      if (purgeRuleState && existing.external_source?.externalId) {
+      // Rule state is keyed by the record, so it goes only with the record's last card.
+      const remaining =
+        existing.source_key !== null &&
+        (await this.#cards(ops, { transaction: true }).findOne({
+          org_id: orgId,
+          factory_project_id: existing.factory_project_id,
+          source_key: existing.source_key,
+        }));
+      if (purgeRuleState && existing.external_source?.externalId && !remaining) {
         await this.#purgeRuleState(ops, {
           orgId,
           factoryProjectId: existing.factory_project_id,

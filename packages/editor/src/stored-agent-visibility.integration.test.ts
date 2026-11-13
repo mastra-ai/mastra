@@ -1,0 +1,767 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { LLMock } from '@copilotkit/aimock';
+import { serve } from '@hono/node-server';
+import { Agent } from '@mastra/core/agent';
+import type { RoleDefinition } from '@mastra/core/auth/ee';
+import { StaticRBACProvider } from '@mastra/core/auth/ee';
+import { Mastra } from '@mastra/core/mastra';
+import { SimpleAuth } from '@mastra/core/server';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import { MastraServer } from '@mastra/hono';
+import { LibSQLStore } from '@mastra/libsql';
+import { Hono } from 'hono';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+
+import { MastraEditor } from './index';
+
+type User = { id: string; role: string };
+
+const PRIVATE = 'alice-private';
+const PUBLIC = 'alice-public';
+const LEGACY = 'legacy-unowned';
+const PRIVATE_WS = 'alice-private-ws';
+const REPLY = 'hello from the mock model';
+
+const thread = { resourceId: 'bob', threadId: 'bob-thread' };
+// Signals target a run that doesn't exist, so the public-twin calls never start a run that would outlive the test.
+const missingRun = { runId: 'some-run' };
+const RUN_CONTROL_ROUTES: [string, (id: string) => string, unknown][] = [
+  ['POST', id => `/agents/${id}/observe`, { runId: 'some-run' }],
+  ['POST', id => `/agents/${id}/runs/some-run/abort`, {}],
+  ['POST', id => `/agents/${id}/threads/abort`, thread],
+  ['POST', id => `/agents/${id}/threads/signals/cancel`, { ...thread, signalIds: ['s1'] }],
+  ['POST', id => `/agents/${id}/threads/subscribe`, thread],
+  ['POST', id => `/agents/${id}/signals`, { ...missingRun, signal: { type: 'user-message', contents: 'hi' } }],
+  ['POST', id => `/agents/${id}/send-message`, { ...missingRun, message: 'say hi' }],
+  ['POST', id => `/agents/${id}/queue-message`, { ...missingRun, message: 'say hi' }],
+  ['POST', id => `/agents/${id}/queue-signal`, { ...missingRun, signal: { type: 'user-message', contents: 'hi' } }],
+  [
+    'POST',
+    id => `/agents/${id}/stream-until-idle`,
+    { messages: 'say hi', memory: { thread: 'bob-thread', resource: 'bob' } },
+  ],
+  ['GET', id => `/agents/${id}/suspended-runs`, undefined],
+  ['POST', id => `/agents/${id}/resume-stream`, { runId: 'some-run', resumeData: {} }],
+  ['POST', id => `/agents/${id}/resume-stream-until-idle`, { runId: 'some-run', resumeData: {} }],
+  ['POST', id => `/agents/${id}/recover`, { runId: 'some-run' }],
+  ['POST', id => `/agents/${id}/approve-tool-call`, { runId: 'some-run', toolCallId: 't1' }],
+  ['POST', id => `/agents/${id}/decline-tool-call`, { runId: 'some-run', toolCallId: 't1' }],
+  ['POST', id => `/agents/${id}/clone`, {}],
+  ['POST', id => `/agents/${id}/instructions/enhance`, { instructions: 'x', comment: 'y' }],
+];
+
+const USERS: Record<string, User> = {
+  alice: { id: 'alice', role: 'builder' },
+  bob: { id: 'bob', role: 'member' },
+  admin: { id: 'admin', role: 'admin' },
+  grantee: { id: 'grantee', role: 'grantee' },
+  scheduler: { id: 'scheduler', role: 'scheduler' },
+  carol: { id: 'carol', role: 'editor' },
+  dave: { id: 'dave', role: 'operator' },
+};
+
+const ROLES: RoleDefinition[] = [
+  {
+    id: 'builder',
+    name: 'Builder',
+    permissions: ['*:read', '*:execute', 'stored-agents:write', 'stored-agents:delete'],
+  },
+  { id: 'member', name: 'Member', permissions: ['*:read', '*:execute'] },
+  { id: 'admin', name: 'Admin', permissions: ['*'] },
+  { id: 'grantee', name: 'Grantee', permissions: ['*:read', '*:execute', `stored-agents:read:${PRIVATE}`] },
+  { id: 'scheduler', name: 'Scheduler', permissions: ['*:read', '*:execute', 'schedules:write'] },
+  // Can change agents' runtime model, but owns no stored agents.
+  { id: 'operator', name: 'Operator', permissions: ['*:read', '*:execute', 'agents:write'] },
+  // A second builder: can write, publish and delete stored agents, but only their own.
+  {
+    id: 'editor',
+    name: 'Editor',
+    permissions: ['*:read', '*:execute', 'stored-agents:write', 'stored-agents:publish', 'stored-agents:delete'],
+  },
+];
+
+async function startServer(mastra: Mastra) {
+  const app = new Hono();
+  await new MastraServer({ app, mastra }).init();
+  const server = serve({ fetch: app.fetch, port: 0 });
+  await new Promise(resolve => server.once('listening', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('no address');
+  return {
+    url: `http://localhost:${address.port}`,
+    close: () => new Promise<void>(resolve => server.close(() => resolve())),
+  };
+}
+
+/**
+ * Private stored agents must stay private on `/api/agents/*` (and the other routes that resolve agents by id), the same
+ * way they already are on `/api/stored/agents/*`. Real MastraEditor + LibSQL + SimpleAuth/RBAC + Hono over a socket;
+ * the model is aimock at the wire level, so "B's call never reached the model" is asserted on the boundary.
+ */
+describe('stored agent visibility on /api/agents', () => {
+  let dir: string;
+  let storage: LibSQLStore;
+  let llm: LLMock;
+  let server: { url: string; close: () => Promise<void> };
+  const previousBaseUrl = process.env.OPENAI_BASE_URL;
+  const previousKey = process.env.OPENAI_API_KEY;
+
+  beforeAll(async () => {
+    llm = new LLMock({ port: 0 });
+    await llm.start();
+    process.env.OPENAI_BASE_URL = `${llm.url.replace(/\/+$/, '')}/v1`;
+    process.env.OPENAI_API_KEY = 'aimock-test-key';
+
+    dir = await mkdtemp(join(tmpdir(), 'stored-agent-visibility-'));
+    storage = new LibSQLStore({ id: 'stored-agent-visibility', url: `file:${join(dir, 'mastra.db')}` });
+    const mastra = new Mastra({
+      logger: false,
+      storage,
+      agents: {
+        helper: new Agent({ id: 'helper', name: 'helper', instructions: 'test', model: 'openai/gpt-4o-mini' }),
+      },
+      editor: new MastraEditor(),
+      server: {
+        auth: new SimpleAuth<User>({ tokens: USERS, mapUserToResourceId: user => user.id }),
+        rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+      },
+    });
+    server = await startServer(mastra);
+
+    const model = { provider: 'openai', name: 'gpt-4o-mini' };
+    for (const [id, visibility] of [
+      [PRIVATE, 'private'],
+      [PUBLIC, 'public'],
+    ] as const) {
+      const created = await http('alice', 'POST', '/stored/agents', {
+        id,
+        name: id,
+        instructions: 'Be brief.',
+        model,
+        visibility,
+      });
+      expect(created.status).toBe(200);
+    }
+    const withWorkspace = await http('alice', 'POST', '/stored/agents', {
+      id: PRIVATE_WS,
+      name: PRIVATE_WS,
+      instructions: 'Be brief.',
+      model,
+      visibility: 'private',
+      workspace: {
+        type: 'inline',
+        config: {
+          name: 'alice-secret-workspace',
+          filesystem: { provider: 'local', config: { basePath: join(dir, 'ws') } },
+        },
+      },
+    });
+    expect(withWorkspace.status, withWorkspace.text).toBe(200);
+    // Rows created before ownership existed have no author and stay visible to everyone.
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore!.create({ agent: { id: LEGACY, name: LEGACY, instructions: 'Be brief.', model } as any });
+  });
+
+  afterEach(() => {
+    llm.clearFixtures();
+    llm.clearRequests();
+  });
+
+  afterAll(async () => {
+    await server?.close();
+    await llm?.stop();
+    await rm(dir, { recursive: true, force: true });
+    // Assigning undefined would store the string "undefined", so remove variables that weren't set before.
+    if (previousBaseUrl === undefined) delete process.env.OPENAI_BASE_URL;
+    else process.env.OPENAI_BASE_URL = previousBaseUrl;
+    if (previousKey === undefined) delete process.env.OPENAI_API_KEY;
+    else process.env.OPENAI_API_KEY = previousKey;
+  });
+
+  async function http(token: string | null, method: string, path: string, body?: unknown, base = server.url) {
+    const response = await fetch(`${base}/api${path}`, {
+      method,
+      headers: {
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    const text = await response.text();
+    let json: any;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      json = undefined;
+    }
+    return { status: response.status, text, json };
+  }
+
+  const reply = () => llm.on({ endpoint: 'chat' }, { content: REPLY });
+  const generate = (token: string | null, id: string, base?: string) =>
+    http(token, 'POST', `/agents/${id}/generate`, { messages: 'say hi' }, base);
+  const stream = (token: string | null, id: string) =>
+    http(token, 'POST', `/agents/${id}/stream`, { messages: 'say hi' });
+
+  describe("another user (bob) cannot see or use alice's private stored agent", () => {
+    it('is not listed in GET /agents, while public, legacy and code agents still are', async () => {
+      const list = await http('bob', 'GET', '/agents');
+      expect(list.status).toBe(200);
+      expect(Object.keys(list.json)).not.toContain(PRIVATE);
+      expect(Object.keys(list.json)).toEqual(expect.arrayContaining(['helper', PUBLIC, LEGACY]));
+    });
+
+    it.each([
+      ['GET /agents/:id', () => http('bob', 'GET', `/agents/${PRIVATE}`)],
+      ['POST /agents/:id/generate', () => generate('bob', PRIVATE)],
+      ['POST /agents/:id/stream', () => stream('bob', PRIVATE)],
+      ['GET /agents/:id/voice/speakers', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/speakers`)],
+      ['POST /v1/responses', () => http('bob', 'POST', '/v1/responses', { agent_id: PRIVATE, input: 'say hi' })],
+      ['GET /.well-known/:id/agent-card.json', () => http('bob', 'GET', `/.well-known/${PRIVATE}/agent-card.json`)],
+    ])('%s returns 404 and never reaches the model', async (_name, call) => {
+      reply();
+      const result = await call();
+      expect(result.status).toBe(404);
+      expect(llm.getRequests()).toHaveLength(0);
+    });
+
+    it.each([PUBLIC, LEGACY])('can still read and call %s', async id => {
+      reply();
+      expect((await http('bob', 'GET', `/agents/${id}`)).status).toBe(200);
+      const result = await generate('bob', id);
+      expect(result.status).toBe(200);
+      expect(result.json.text).toBe(REPLY);
+    });
+  });
+
+  describe.each(['alice', 'admin', 'grantee'])('%s (owner / admin bypass / scoped read grant)', user => {
+    it('sees the private agent in GET /agents/:id, and in GET /agents exactly when GET /stored/agents lists it', async () => {
+      expect((await http(user, 'GET', `/agents/${PRIVATE}`)).status).toBe(200);
+
+      // A grant scoped to one agent id opens that agent by id; like /stored/agents, it doesn't add it to listings.
+      const listed = user !== 'grantee';
+      const stored = await http(user, 'GET', '/stored/agents');
+      expect(stored.json.agents.map((agent: { id: string }) => agent.id).includes(PRIVATE)).toBe(listed);
+      const list = await http(user, 'GET', '/agents');
+      expect(Object.keys(list.json).includes(PRIVATE)).toBe(listed);
+    });
+
+    it('can generate and stream with the private agent', async () => {
+      reply();
+      const generated = await generate(user, PRIVATE);
+      expect(generated.status).toBe(200);
+      expect(generated.json.text).toBe(REPLY);
+
+      const streamed = await stream(user, PRIVATE);
+      expect(streamed.status).toBe(200);
+      expect(streamed.text).toContain('hello');
+      expect(llm.getRequests().length).toBeGreaterThanOrEqual(2);
+    });
+  });
+
+  // Once someone has used it, the editor registers the hydrated agent on Mastra, so it's reachable through
+  // `mastra.getAgentById`/`listAgents` too. The check must hold there as well.
+  describe('after the private agent has been hydrated by its owner', () => {
+    beforeAll(async () => {
+      llm.on({ endpoint: 'chat' }, { content: REPLY });
+      expect((await generate('alice', PRIVATE)).status).toBe(200);
+      llm.clearFixtures();
+      llm.clearRequests();
+    });
+
+    it('bob still does not see it in GET /agents', async () => {
+      const list = await http('bob', 'GET', '/agents');
+      expect(Object.keys(list.json)).not.toContain(PRIVATE);
+      expect(Object.keys(list.json)).toEqual(expect.arrayContaining(['helper', PUBLIC, LEGACY]));
+    });
+
+    it.each([
+      ['GET /agents/:id', () => http('bob', 'GET', `/agents/${PRIVATE}`)],
+      ['POST /agents/:id/generate', () => generate('bob', PRIVATE)],
+      ['POST /agents/:id/stream', () => stream('bob', PRIVATE)],
+      ['GET /agents/:id/voice/listener', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/listener`)],
+    ])('bob gets 404 on %s and never reaches the model', async (_name, call) => {
+      reply();
+      expect((await call()).status).toBe(404);
+      expect(llm.getRequests()).toHaveLength(0);
+    });
+
+    // The memory routes fall back to Mastra's storage (or answer `config: null`) for an agent id they can't resolve,
+    // so a hidden agent has to get that same answer; a 404 there would tell bob the private id exists.
+    it('bob gets the same memory route responses for the private agent as for an agent that does not exist', async () => {
+      const missing = 'no-such-agent';
+      const probes: Array<[string, string, string, unknown?]> = [
+        ['GET', '/memory/status', 'resourceId=bob&threadId=bob-thread'],
+        ['GET', '/memory/config', ''],
+        ['GET', '/memory/observational-memory', 'resourceId=bob&threadId=bob-thread'],
+        ['POST', '/memory/observational-memory/buffer-status', '', { resourceId: 'bob', threadId: 'bob-thread' }],
+        ['GET', '/memory/threads', 'resourceId=bob'],
+        ['GET', '/memory/threads/bob-thread', ''],
+        ['GET', '/memory/threads/bob-thread/messages', ''],
+        ['GET', '/memory/threads/bob-thread/working-memory', 'resourceId=bob'],
+        ['POST', '/memory/save-messages', '', { messages: [] }],
+        ['POST', '/memory/threads', '', { resourceId: 'bob', threadId: 'bob-probe', title: 'probe' }],
+        ['PATCH', '/memory/threads/bob-thread', '', { title: 'probe' }],
+        ['POST', '/memory/threads/bob-thread/clone', '', {}],
+        ['POST', '/memory/threads/bob-thread/working-memory', '', { workingMemory: 'probe', resourceId: 'bob' }],
+        ['POST', '/memory/messages/delete', '', { messageIds: ['no-such-message'] }],
+        ['GET', '/memory/search', 'searchQuery=hi&resourceId=bob'],
+        ['DELETE', '/memory/threads/bob-thread', ''],
+      ];
+      const differences = [];
+      for (const [method, path, query, body] of probes) {
+        const call = (agentId: string) =>
+          http('bob', method, `${path}?agentId=${agentId}${query ? `&${query}` : ''}`, body);
+        const forMissing = await call(missing);
+        const forHidden = await call(PRIVATE);
+        const normalize = (r: { status: number; text: string }) => ({
+          status: r.status,
+          body: r.text.replaceAll(PRIVATE, '<id>').replaceAll(missing, '<id>'),
+        });
+        if (JSON.stringify(normalize(forHidden)) !== JSON.stringify(normalize(forMissing))) {
+          differences.push({
+            route: `${method} ${path}`,
+            hidden: normalize(forHidden),
+            missing: normalize(forMissing),
+          });
+        }
+      }
+      expect(differences).toEqual([]);
+      // The owner still resolves her agent instead of getting the missing-agent answer.
+      const forOwner = await http('alice', 'GET', `/memory/search?agentId=${PRIVATE}&searchQuery=hi&resourceId=alice`);
+      const ownerMissing = await http(
+        'alice',
+        'GET',
+        `/memory/search?agentId=${missing}&searchQuery=hi&resourceId=alice`,
+      );
+      expect(ownerMissing.json).toEqual({ error: 'Agent not found' });
+      expect(forOwner.json).not.toEqual({ error: 'Agent not found' });
+    });
+
+    // A missing skill and a hidden agent are both 404; the body tells them apart ("Not found" = access denied, as on
+    // /stored/agents). Before the fix the agent resolved and bob got the skill lookup's own 404.
+    it('bob gets the access-denied 404 on GET /agents/:id/skills/:skillName', async () => {
+      const denied = await http('bob', 'GET', `/agents/${PRIVATE}/skills/missing`);
+      expect(denied.status).toBe(404);
+      expect(denied.json).toEqual({ error: 'Not found' });
+      const owner = await http('alice', 'GET', `/agents/${PRIVATE}/skills/missing`);
+      expect(owner.json).not.toEqual({ error: 'Not found' });
+    });
+
+    // The run-control routes (observe/abort/signals/messages/resume/recover/...) resolve the agent before looking up
+    // the run or thread, so bob gets the access-denied 404 ("Not found") instead of the route's own result, and the
+    // same request on the public twin gets past the check. The thread subscription never ends, so only its status is
+    // read; every other response is drained so no run outlives the test.
+    it.each(RUN_CONTROL_ROUTES)('bob gets the access-denied 404 on %s %s', async (method, path, body) => {
+      const call = async (id: string) => {
+        const response = await fetch(`${server.url}/api${path(id)}`, {
+          method,
+          headers: { authorization: 'Bearer bob', ...(body ? { 'content-type': 'application/json' } : {}) },
+          ...(body ? { body: JSON.stringify(body) } : {}),
+        });
+        if (path(id).endsWith('/subscribe') && response.status !== 404) {
+          await response.body?.cancel();
+          return { status: response.status };
+        }
+        const text = await response.text();
+        return { status: response.status, json: response.status === 404 ? JSON.parse(text) : undefined };
+      };
+      reply();
+
+      expect(await call(PRIVATE)).toEqual({ status: 404, json: { error: 'Not found' } });
+      expect(llm.getRequests()).toHaveLength(0);
+      expect(await call(PUBLIC)).not.toEqual({ status: 404, json: { error: 'Not found' } });
+    });
+
+    it('a user who can create schedules cannot schedule it', async () => {
+      const body = (agentId: string) => ({ agentId, cron: '0 0 1 1 *', prompt: 'say hi' });
+      expect((await http('scheduler', 'POST', '/schedules', body(PRIVATE))).status).toBe(404);
+      expect((await http('scheduler', 'POST', '/schedules', body(PUBLIC))).status).toBe(200);
+    });
+
+    // Schedules have no owner of their own; they inherit the visibility of the agent they run.
+    it("another user's schedules of it are hidden and can't be changed or fired", async () => {
+      const create = (agentId: string) =>
+        http('admin', 'POST', '/schedules', { agentId, cron: '0 0 1 1 *', prompt: 'secret plan' });
+      // Creating a schedule only accepts agents already loaded into Mastra.
+      expect((await http('admin', 'GET', `/agents/${PUBLIC}`)).status).toBe(200);
+      const hidden = (await create(PRIVATE)).json.id as string;
+      const shared = (await create(PUBLIC)).json.id as string;
+      expect([hidden, shared]).toEqual([expect.any(String), expect.any(String)]);
+
+      const listed = (await http('scheduler', 'GET', '/schedules')).json.schedules.map((s: { id: string }) => s.id);
+      expect(listed).toContain(shared);
+      expect(listed).not.toContain(hidden);
+      expect((await http('scheduler', 'GET', `/schedules?agentId=${PRIVATE}`)).json.schedules).toEqual([]);
+
+      const calls: Array<[string, string, unknown?]> = [
+        ['GET', ''],
+        ['GET', '/triggers'],
+        ['PATCH', '', { prompt: 'changed' }],
+        ['POST', '/pause'],
+        ['POST', '/resume'],
+        ['POST', '/run'],
+      ];
+      reply();
+      for (const [method, suffix, body] of calls) {
+        const res = await http('scheduler', method, `/schedules/${hidden}${suffix}`, body);
+        expect(res, `${method} ${suffix}`).toMatchObject({ status: 404, json: { error: 'Schedule not found' } });
+      }
+      expect(llm.getRequests()).toHaveLength(0);
+      expect((await http('scheduler', 'GET', `/schedules/${shared}`)).status).toBe(200);
+      expect((await http('scheduler', 'POST', `/schedules/${shared}/pause`)).status).toBe(200);
+      expect((await http('alice', 'GET', `/schedules/${hidden}`)).json.prompt).toBe('secret plan');
+    });
+
+    it('alice still lists and calls it', async () => {
+      reply();
+      expect(Object.keys((await http('alice', 'GET', '/agents')).json)).toContain(PRIVATE);
+      const result = await generate('alice', PRIVATE);
+      expect(result.status).toBe(200);
+      expect(result.json.text).toBe(REPLY);
+    });
+  });
+
+  // Version routes serve the agent's full config and change which config is live, so they follow the same rules as
+  // GET/PATCH/DELETE /stored/agents/:id.
+  describe('/stored/agents/:id/versions', () => {
+    let versionId: string;
+    beforeAll(async () => {
+      const versions = await http('alice', 'GET', `/stored/agents/${PRIVATE}/versions`);
+      expect(versions.status).toBe(200);
+      versionId = versions.json.versions[0].id;
+    });
+
+    it.each([
+      ['GET versions', () => `/stored/agents/${PRIVATE}/versions`],
+      ['GET versions/:id', () => `/stored/agents/${PRIVATE}/versions/${versionId}`],
+      ['GET versions/compare', () => `/stored/agents/${PRIVATE}/versions/compare?from=${versionId}&to=${versionId}`],
+    ])("bob gets 404 on %s for alice's private agent and sees none of its config", async (_name, path) => {
+      const result = await http('bob', 'GET', path());
+      expect(result.status).toBe(404);
+      expect(result.text).not.toContain('Be brief.');
+    });
+
+    it("another builder can't create, activate, restore or delete versions of alice's private agent", async () => {
+      const base = `/stored/agents/${PRIVATE}/versions`;
+      expect((await http('carol', 'POST', base, { changeMessage: 'carol' })).status).toBe(404);
+      expect((await http('carol', 'POST', `${base}/${versionId}/activate`)).status).toBe(404);
+      expect((await http('carol', 'POST', `${base}/${versionId}/restore`)).status).toBe(404);
+      expect((await http('carol', 'DELETE', `${base}/${versionId}`)).status).toBe(404);
+      // Nothing changed: still exactly alice's one version.
+      const versions = await http('alice', 'GET', base);
+      expect(versions.json.versions.map((v: { id: string }) => v.id)).toEqual([versionId]);
+    });
+
+    it('public visibility lets others read versions but not change them', async () => {
+      const base = `/stored/agents/${PUBLIC}/versions`;
+      const versions = await http('carol', 'GET', base);
+      expect(versions.status).toBe(200);
+      expect((await http('carol', 'POST', base, { changeMessage: 'carol' })).status).toBe(404);
+    });
+
+    it('the owner and the write role still work on their own agents', async () => {
+      const created = await http('alice', 'POST', `/stored/agents/${PRIVATE}/versions`, { changeMessage: 'alice' });
+      expect(created.status).toBe(200);
+      const own = await http('carol', 'POST', '/stored/agents', {
+        id: 'carol-own',
+        name: 'carol-own',
+        instructions: 'Be brief.',
+        model: { provider: 'openai', name: 'gpt-4o-mini' },
+      });
+      expect(own.status).toBe(200);
+      const mine = await http('carol', 'GET', '/stored/agents/carol-own/versions');
+      expect(mine.status).toBe(200);
+      const ownVersion = mine.json.versions[0].id;
+      expect((await http('carol', 'POST', `/stored/agents/carol-own/versions/${ownVersion}/activate`)).status).toBe(
+        200,
+      );
+    });
+  });
+
+  // A clone is a new stored agent, so like POST /stored/agents it belongs to the caller, never to a body-supplied id.
+  describe('POST /agents/:id/clone', () => {
+    it("alice's clone of her private agent is owned by her and stays private to bob", async () => {
+      const clone = await http('alice', 'POST', `/agents/${PRIVATE}/clone`, { newId: 'alice-private-copy' });
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json).toMatchObject({ id: 'alice-private-copy', authorId: 'alice', visibility: 'private' });
+
+      expect((await http('bob', 'GET', '/agents/alice-private-copy')).status).toBe(404);
+      expect((await http('bob', 'GET', '/stored/agents/alice-private-copy')).status).toBe(404);
+      expect(Object.keys((await http('bob', 'GET', '/agents')).json)).not.toContain('alice-private-copy');
+      expect((await http('alice', 'GET', '/agents/alice-private-copy')).status).toBe(200);
+    });
+
+    it("bob can't assign his clone to alice by passing her authorId", async () => {
+      const clone = await http('bob', 'POST', `/agents/${PUBLIC}/clone`, { newId: 'bob-copy', authorId: 'alice' });
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json).toMatchObject({ id: 'bob-copy', authorId: 'bob', visibility: 'private' });
+      expect((await http('alice', 'GET', '/stored/agents/bob-copy')).status).toBe(404);
+    });
+  });
+
+  // Handlers that search across every registered agent (here: the workspace list) must skip hidden stored agents too.
+  it("bob's GET /workspaces does not surface the workspace of alice's private agent after she used it", async () => {
+    reply();
+    expect((await generate('alice', PRIVATE_WS)).status).toBe(200);
+    const mine = await http('alice', 'GET', '/workspaces');
+    expect(mine.text).toContain(PRIVATE_WS);
+    const theirs = await http('bob', 'GET', '/workspaces');
+    expect(theirs.status).toBe(200);
+    expect(theirs.text).not.toContain(PRIVATE_WS);
+    expect(theirs.text).not.toContain('alice-secret-workspace');
+
+    // The by-id routes read and write the workspace's files, so knowing its id must not be enough either.
+    const workspaceId = (mine.json.workspaces as Array<{ id: string; agentId?: string }>).find(
+      w => w.agentId === PRIVATE_WS,
+    )!.id;
+    // Bob gets exactly what a workspace id that doesn't exist gets.
+    const byId = [
+      ['GET', (id: string) => `/workspaces/${id}`],
+      ['GET', (id: string) => `/workspaces/${id}/fs/list?path=.`],
+      ['GET', (id: string) => `/workspaces/${id}/fs/stat?path=.`],
+      ['POST', (id: string) => `/workspaces/${id}/fs/write`, { path: '/bob.txt', content: 'hi' }],
+      ['GET', (id: string) => `/workspaces/${id}/skills`],
+    ] as const;
+    const expectHidden = async () => {
+      for (const [method, path, body] of byId) {
+        const real = await http('bob', method, path(workspaceId), body);
+        const missing = await http('bob', method, path('inline-000000000000'), body);
+        expect({ status: real.status, json: real.json }, `${method} ${path(workspaceId)}`).toEqual({
+          status: missing.status,
+          json: missing.json,
+        });
+      }
+      const own = await http('alice', 'GET', `/workspaces/${workspaceId}/fs/list?path=.`);
+      expect(own.status, own.text).toBe(200);
+    };
+    await expectHidden();
+
+    // Editing the agent unregisters it from Mastra, but its workspace stays in the workspace registry.
+    expect((await http('alice', 'PATCH', `/stored/agents/${PRIVATE_WS}`, { description: 'edited' })).status).toBe(200);
+    const afterEdit = await http('bob', 'GET', '/workspaces');
+    expect(afterEdit.status).toBe(200);
+    expect(afterEdit.text).not.toContain(PRIVATE_WS);
+    expect(afterEdit.text).not.toContain('alice-secret-workspace');
+    expect((await http('alice', 'GET', '/workspaces')).text).toContain(PRIVATE_WS);
+    await expectHidden();
+
+    // Deleting the agent leaves no stored record to check its registered workspace against.
+    expect((await http('alice', 'DELETE', `/stored/agents/${PRIVATE_WS}`)).status).toBe(200);
+    for (const user of ['bob', 'alice'] as const) {
+      const afterDelete = await http(user, 'GET', '/workspaces');
+      expect(afterDelete.status).toBe(200);
+      expect(afterDelete.text).not.toContain(PRIVATE_WS);
+      expect(afterDelete.text).not.toContain('alice-secret-workspace');
+    }
+  });
+
+  it("changing a stored agent's live model needs edit access to it, not just execute", async () => {
+    // Public lets dave run alice's agent, but swapping its shared in-memory model would change it for everyone.
+    for (const path of [`/agents/${PUBLIC}/model`, `/agents/${PUBLIC}/model/reset`]) {
+      const denied = await http('dave', 'POST', path, { provider: 'openai', modelId: 'gpt-4o' });
+      expect(denied, path).toMatchObject({ status: 404, json: { error: 'Not found' } });
+    }
+    // Code agents and legacy unowned stored agents keep working as before.
+    for (const id of ['helper', LEGACY]) {
+      expect(
+        (await http('dave', 'POST', `/agents/${id}/model`, { provider: 'openai', modelId: 'gpt-4o' })).status,
+      ).toBe(200);
+      expect((await http('dave', 'POST', `/agents/${id}/model/reset`)).status).toBe(200);
+    }
+    expect((await http('admin', 'POST', `/agents/${PUBLIC}/model/reset`)).status).toBe(200);
+  });
+
+  it('GET /agents lists every visible stored agent when there are more than 100', async () => {
+    const manyStorage = new LibSQLStore({ id: 'many-stored-agents', url: `file:${join(dir, 'many.db')}` });
+    const many = await startServer(
+      new Mastra({
+        logger: false,
+        storage: manyStorage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: USERS, mapUserToResourceId: user => user.id }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    try {
+      const model = { provider: 'openai', name: 'gpt-4o-mini' };
+      await manyStorage.init();
+      const store = (await manyStorage.getStore('agents'))!;
+      await store.create({
+        agent: {
+          id: 'old-public',
+          name: 'old-public',
+          instructions: 'x',
+          model,
+          authorId: 'alice',
+          visibility: 'public',
+        },
+      } as any);
+      // Newer rows sort first, so 105 of carol's private agents fill the first page of the stored list.
+      const carols = Array.from({ length: 105 }, (_, i) => `carol-${String(i).padStart(3, '0')}`);
+      for (const id of carols) {
+        await store.create({
+          agent: { id, name: id, instructions: 'x', model, authorId: 'carol', visibility: 'private' },
+        } as any);
+      }
+
+      const bob = await http('bob', 'GET', '/agents', undefined, many.url);
+      expect(bob.status).toBe(200);
+      expect(Object.keys(bob.json)).toContain('old-public');
+      expect(Object.keys(bob.json).filter(id => id.startsWith('carol-'))).toEqual([]);
+
+      const carol = await http('carol', 'GET', '/agents', undefined, many.url);
+      expect(Object.keys(carol.json)).toEqual(expect.arrayContaining([...carols, 'old-public']));
+      const admin = await http('admin', 'GET', '/agents', undefined, many.url);
+      expect(Object.keys(admin.json)).toEqual(expect.arrayContaining([...carols, 'old-public']));
+    } finally {
+      await many.close();
+    }
+  }, 60_000);
+
+  it('bob racing alice on the first load of her private agent still gets 404 on every request', async () => {
+    // A fresh server has nothing hydrated yet, so every request below takes the cold stored-agent path at once.
+    const cold = await startServer(
+      new Mastra({
+        logger: false,
+        storage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: USERS, mapUserToResourceId: user => user.id }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    // Model a networked store (e.g. Postgres) so the concurrent hydrations overlap; local-file LibSQL is too fast.
+    const agentsStore = (await storage.getStore('agents'))!;
+    const getByIdResolved = agentsStore.getByIdResolved.bind(agentsStore);
+    agentsStore.getByIdResolved = async (...args) => {
+      await new Promise(resolve => setTimeout(resolve, 30));
+      return getByIdResolved(...args);
+    };
+    try {
+      reply();
+      const [aliceRead, ...bobCalls] = await Promise.all([
+        http('alice', 'GET', `/agents/${PRIVATE}`, undefined, cold.url),
+        ...Array.from({ length: 10 }, () => http('bob', 'GET', `/agents/${PRIVATE}`, undefined, cold.url)),
+        ...Array.from({ length: 5 }, () => generate('bob', PRIVATE, cold.url)),
+      ]);
+      expect(aliceRead!.status).toBe(200);
+      expect(bobCalls.map(call => call.status)).toEqual(bobCalls.map(() => 404));
+      expect(bobCalls.map(call => call.text).join()).not.toContain('Be brief.');
+      expect(llm.getRequests()).toHaveLength(0);
+    } finally {
+      agentsStore.getByIdResolved = getByIdResolved;
+      await cold.close();
+    }
+  });
+
+  // Without `mapUserToResourceId`, an auth provider can sign in a user with no id. Their clone would have no owner,
+  // which makes it public, so cloning is refused rather than publishing a copy of a private agent.
+  it("a signed-in caller without an id can't clone an agent", async () => {
+    const nameless = await startServer(
+      new Mastra({
+        logger: false,
+        storage,
+        editor: new MastraEditor(),
+        server: {
+          auth: new SimpleAuth<User>({ tokens: { nameless: { id: '', role: 'admin' } } }),
+          rbac: new StaticRBACProvider<User>({ roles: ROLES, getUserRoles: user => [user.role] }),
+        },
+      }),
+    );
+    try {
+      const res = await http('nameless', 'POST', `/agents/${PRIVATE}/clone`, { newId: 'nameless-copy' }, nameless.url);
+      expect(res.status, res.text).toBe(403);
+      expect((await http('admin', 'GET', '/stored/agents/nameless-copy')).status).toBe(404);
+    } finally {
+      await nameless.close();
+    }
+  });
+
+  it("deleting a code agent's stored override keeps the code agent's own workspace", async () => {
+    const overrideStorage = new LibSQLStore({
+      id: 'code-agent-override',
+      url: `file:${join(dir, 'code-agent-override.db')}`,
+    });
+    const workspace = new Workspace({
+      id: 'code-ws',
+      name: 'code-ws',
+      filesystem: new LocalFilesystem({ basePath: join(dir, 'code-ws') }),
+    });
+    const open = await startServer(
+      new Mastra({
+        logger: false,
+        storage: overrideStorage,
+        editor: new MastraEditor(),
+        agents: {
+          support: new Agent({
+            id: 'support',
+            name: 'support',
+            instructions: 'test',
+            model: 'openai/gpt-4o-mini',
+            workspace,
+          }),
+        },
+      }),
+    );
+    try {
+      const listed = async () =>
+        ((await http(null, 'GET', '/workspaces', undefined, open.url)).json.workspaces as { id: string }[]).map(
+          w => w.id,
+        );
+      expect(await listed()).toContain('code-ws');
+
+      const override = await http(
+        null,
+        'POST',
+        '/stored/agents',
+        {
+          id: 'support',
+          name: 'support',
+          instructions: 'Overridden.',
+          model: { provider: 'openai', name: 'gpt-4o-mini' },
+        },
+        open.url,
+      );
+      expect(override.status, override.text).toBe(200);
+      const deleted = await http(null, 'DELETE', '/stored/agents/support', undefined, open.url);
+      expect(deleted.status, deleted.text).toBe(200);
+
+      expect(await listed()).toContain('code-ws');
+      const byId = await http(null, 'GET', '/workspaces/code-ws', undefined, open.url);
+      expect(byId.status, byId.text).toBe(200);
+    } finally {
+      await open.close();
+    }
+  });
+
+  it('without auth configured, every stored agent stays listable and callable', async () => {
+    const open = await startServer(new Mastra({ logger: false, storage, editor: new MastraEditor() }));
+    try {
+      reply();
+      const list = await http(null, 'GET', '/agents', undefined, open.url);
+      expect(Object.keys(list.json)).toEqual(expect.arrayContaining([PRIVATE, PUBLIC, LEGACY]));
+      const result = await generate(null, PRIVATE, open.url);
+      expect(result.status).toBe(200);
+      expect(result.json.text).toBe(REPLY);
+
+      // With no caller to own it, a clone keeps the body-supplied authorId as before.
+      const clone = await http(
+        null,
+        'POST',
+        `/agents/${PUBLIC}/clone`,
+        { newId: 'open-copy', authorId: 'someone' },
+        open.url,
+      );
+      expect(clone.status, clone.text).toBe(200);
+      expect(clone.json.authorId).toBe('someone');
+    } finally {
+      await open.close();
+    }
+  });
+});

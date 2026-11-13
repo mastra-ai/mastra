@@ -37,7 +37,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { InlineSkill } from '@mastra/core/skills';
-import type { FactoryStorage } from '@mastra/core/storage';
+import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -52,6 +52,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
@@ -63,7 +64,7 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { occupiedPhasesOf, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
+import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
@@ -85,10 +86,12 @@ import {
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
+import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -122,6 +125,11 @@ import { createFactoryTransitionTools } from './rules/tools.js';
 import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
+import {
+  controllerRunInFlight,
+  createContextSandboxStops,
+  createTerminalSandboxStops,
+} from './sandbox/context-sandboxes.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { CachedSandboxEnvs } from './sandbox/sandbox-env-cache.js';
@@ -421,6 +429,7 @@ export type { FactorySandboxStart } from './workspace.js';
  * limit shared across deployments.
  */
 export interface MastraFactoryDispatcherConfig {
+  /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
 }
 
@@ -576,7 +585,10 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeBoardChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -637,8 +649,11 @@ export class MastraFactory {
    * so the definition is checked as an edit is; a new key gets none (no tool, source-closed or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
-   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `reserved_board` for the
-   * retired Review board's key, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `phase_in_use` when cards
+   * sit in a phase it removes, `board_in_use` when the key is `review` and the retired Review board
+   * still has an open card in the project, `project_not_found`). Projects are written one at a
+   * time and the call stops at the first one that refuses: the projects before it keep the board,
+   * so fix what was refused and run it again.
    * Available after `prepare()`.
    *
    * @example
@@ -671,7 +686,7 @@ export class MastraFactory {
     }
     const { writes, boards, projects, audit } = store;
     const input = writes.validate(board);
-    // Work and app boards are stored per project like any other; the retired Review board's key is reserved.
+    // Work and app boards are stored per project like any other.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -853,7 +868,6 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -889,8 +903,41 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    // Background sweeps read their cards from memory until a board changes;
+    // the bus carries this replica's changes to the others.
+    const keptCards = new KeptCards({ projects: factoryProjectsStorage, workItems: workItemsStorage });
+    this.#keptCards = keptCards;
+    const boardChangeOrigin = globalThis.crypto.randomUUID();
+    workItemsStorage.onBoardChanged(scope => {
+      touchFeed(eventBus, scope);
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    // Deleting a project leaves its cards behind, so the sweeps hear of it separately.
+    factoryProjectsStorage.onDeleted(project => {
+      const scope = { orgId: project.orgId, factoryProjectId: project.id };
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    this.#unsubscribeBoardChanges = subscribeBoardChanges(eventBus, boardChangeOrigin, scope =>
+      keptCards.changed(scope),
+    ).then(
+      unsubscribe => {
+        keptCards.trustAnnouncements();
+        return unsubscribe;
+      },
+      error => {
+        console.warn(
+          `[factory] subscribing to board changes failed; background sweeps read every board from the database: ${error instanceof Error ? error.message : error}`,
+        );
+        return undefined;
+      },
+    );
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Event polling keeps its repository list in memory; the bus tells the
+    // polling replica about links made on another one.
+    this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -969,6 +1016,8 @@ export class MastraFactory {
       );
     }
 
+    // Cards on a board of the project's own under `review` are that board's, not the retired Review board's.
+    workItemsStorage.useOwnReviewBoard(ownReviewBoard(this.#boards, { stored: storage.isDomainReady('boards') }));
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
     if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
@@ -981,6 +1030,8 @@ export class MastraFactory {
         ...(storage.isDomainReady('work-items')
           ? {
               reviewBoardInUse: (scope: StoredBoardScope) => workItemsStorage.reviewBoardInUse(scope),
+              releaseReviewCards: (ops: FactoryStorageOps, scope: StoredBoardScope) =>
+                workItemsStorage.releaseReviewCards(ops, scope, { open: 'move' }),
               occupiedPhases: occupiedPhasesOf(workItemsStorage),
             }
           : {}),
@@ -1150,16 +1201,28 @@ export class MastraFactory {
         }
       });
     }
-    if (workItemsStorage.legacyBackfillPending) {
+    if (workItemsStorage.legacyBackfillPending || workItemsStorage.sourceLinkBackfillPending) {
       const controller = new AbortController();
+      const splitPending = workItemsStorage.legacyBackfillPending;
       this.#workItemSplitBackfill = {
         controller,
-        promise: timedPhase('background.migrate.workItemSplit', () =>
-          backfillUntilDone(
-            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
-            controller.signal,
-          ),
-        ),
+        promise: (async () => {
+          if (splitPending) {
+            await timedPhase('background.migrate.workItemSplit', () =>
+              backfillUntilDone(
+                () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+                controller.signal,
+              ),
+            );
+          }
+          // After the split, so cards it copies are linked in the same pass.
+          await timedPhase('background.migrate.sourceLinks', () =>
+            backfillUntilDone(
+              () => workItemsStorage.backfillSourceLinks({ signal: controller.signal }),
+              controller.signal,
+            ),
+          );
+        })(),
       };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
@@ -1179,23 +1242,11 @@ export class MastraFactory {
         : undefined;
     const retireTerminalSessions =
       sessionRetirement && workItemsReady
-        ? async ({ orgId, workItemId }: { orgId: string; workItemId: string }) => {
-            const item = await workItemsStorage.get({ orgId, id: workItemId });
-            if (!item) return;
-            const sessionIds = [...new Set(Object.values(item.sessions).map(session => session.sessionId))];
-            await Promise.all(
-              sessionIds.map(async sessionId => {
-                const sourceControl = await sourceControlSessions.getSourceControlBySessionId(sessionId);
-                if (!sourceControl) return;
-                await sessionRetirement.retireSession({
-                  sourceControl,
-                  orgId,
-                  sessionId,
-                  deleteSession: false,
-                });
-              }),
-            );
-          }
+        ? createTerminalSandboxStops({
+            workItems: workItemsStorage,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+          })
         : undefined;
     // Terminal-stage cleanup: ingest any trailing tool results from the item's
     // bound threads, then revoke the bindings so completed items leave the
@@ -1318,6 +1369,20 @@ export class MastraFactory {
             ...(args.actor.type === 'agent' ? { initiatingBindingId: args.actor.bindingId } : {}),
           })
       : retireTerminalSessions;
+    // Leaving a context's last phase stops that context's sandbox; coming back resumes it.
+    const stopLeftContextSandbox =
+      sessionRetirement && workItemsReady
+        ? createContextSandboxStops({
+            workItems: workItemsStorage,
+            boards,
+            sessions: sourceControlSessions,
+            retirement: sessionRetirement,
+            // `this.#prepared` is assigned below; transitions only run long after.
+            runInFlight: controllerRunInFlight(async sessionId =>
+              this.#prepared?.base.controller.getSession(sessionId),
+            ),
+          })
+        : undefined;
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
@@ -1325,6 +1390,7 @@ export class MastraFactory {
           storage: workItemsStorage,
           audit: auditDomain,
           ...(onTerminalStage ? { onTerminalStage } : {}),
+          ...(stopLeftContextSandbox ? { onContextLeft: stopLeftContextSandbox } : {}),
           onTransitionCommitted: (() => {
             const notifyStageChange = createStageChangeNotifier({
               workItems: workItemsStorage,
@@ -2087,7 +2153,12 @@ export class MastraFactory {
             publicOrigin,
             stateSigner,
             sandbox: sandboxConfig,
-            ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
+            ...(environmentBuilds
+              ? {
+                  onRepositoryPush: environmentBuilds.onRepositoryPush,
+                  onEnvironmentSaved: environmentBuilds.onEnvironmentSaved,
+                }
+              : {}),
             sessionRetirement,
             moveThread: async ({ threadId, resourceId }) => {
               // The sessions' own Memory, so a moved thread takes its observation vectors along.
@@ -2116,6 +2187,7 @@ export class MastraFactory {
               ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
               : {}),
             factoryTransitionService: transitionService,
+            runSlots: () => this.#dispatcher?.runSlots(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
@@ -2131,6 +2203,7 @@ export class MastraFactory {
                   return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
+                reconcileRunBinding: binding => factoryProcessor?.reconcileBinding(binding) ?? Promise.resolve(),
                 prepareBinding,
                 ...(githubIntegration
                   ? {
@@ -2185,6 +2258,7 @@ export class MastraFactory {
             sandboxEnvs: sandboxEnvsStorage,
             writable: !secretsUnencrypted,
             audit: auditDomain,
+            ...(environmentBuilds ? { onEnvironmentSaved: environmentBuilds.onEnvironmentSaved } : {}),
           }).routes(),
           ...buildFeedEventsRoutes({ auth: routeAuth, projects: factoryProjectsStorage, pubsub: eventBus }),
           ...auditDomain.routes(),
@@ -2319,6 +2393,7 @@ export class MastraFactory {
               threadId: session.thread.getId(),
               ...request,
             }),
+          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
       observeSessionThreadStamp(session);
@@ -2428,8 +2503,11 @@ export class MastraFactory {
               integrations: integrationRegistrations,
               configVersion,
               boardRegistry: this.#projectBoards ?? this.#boards,
+              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
               factoryReady,
               domains,
+              // The Platform GitHub lane only receives pushes through its polling worker.
+              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,
@@ -2488,7 +2566,13 @@ export class MastraFactory {
       this.#unsubscribeDispatchWakes = undefined;
       const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
       this.#unsubscribeSandboxEnvChanges = undefined;
+      const unsubscribeBoardChanges = this.#unsubscribeBoardChanges;
+      this.#unsubscribeBoardChanges = undefined;
+      await unsubscribeBoardChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
+      const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
+      this.#unsubscribeLinkedRepositoryChanges = undefined;
+      await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

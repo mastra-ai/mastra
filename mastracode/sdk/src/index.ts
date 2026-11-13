@@ -76,8 +76,10 @@ import { fastMode } from './agents/modes/explore.js';
 import { createPlanMode } from './agents/modes/plan.js';
 import {
   createGitRefReminderReader,
+  createGitRefReminderReaderAsync,
   instructionSourcePaths,
   loadSessionInstructions,
+  loadSessionInstructionsAsync,
   sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
 import { builtinSubagents } from './agents/subagents/index.js';
@@ -1085,6 +1087,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const value = metadata?.[key];
       if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
     }
+    // Permission rules belong to each thread. A woken thread the session isn't
+    // holding is judged by its own saved rules. Without saved rules it uses the
+    // initial rules, as core does for a thread it opens.
+    if (session.thread.getId() !== threadId) {
+      baseState.permissionRules = (metadata?.permissionRules as MastraCodeState['permissionRules'] | undefined) ??
+        config?.initialState?.permissionRules ?? { categories: {}, tools: {} };
+    }
     let notificationState = baseState;
     const getNotificationState = () => ({ ...notificationState });
     const setNotificationState = async (updates: Partial<MastraCodeState>) => {
@@ -1144,7 +1153,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       requestContext,
       maxSteps: 1000,
       savePerStep: false,
-      requireToolApproval: notificationState.yolo !== true,
+      // Same policy as a turn the controller starts: only calls the thread's
+      // rules don't allow pause for approval, and the rest run in parallel.
+      requireToolApproval:
+        notificationState.yolo === true
+          ? false
+          : ({ toolName }: { toolName: string }) => session.resolveToolApproval(toolName, requestContext) !== 'allow',
+      toolCallConcurrency: { strategy: 'called' as const },
       modelSettings: { temperature: 1 },
     };
   };
@@ -1253,7 +1268,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         if (state?.untrustedCheckout !== true || typeof state?.baseRef !== 'string') return undefined;
         const projectPath = state?.projectPath ?? project.rootPath;
         const [primary] = sessionInstructionRoots(projectPath, state.instructionRoots);
-        const reader = createGitRefReminderReader(primary!, state.baseRef);
+        const reader =
+          'supportsAsyncInstructionReaders' in AgentsMDInjector
+            ? createGitRefReminderReaderAsync(primary!, state.baseRef)
+            : createGitRefReminderReader(primary!, state.baseRef);
         if (primary === projectPath) return reader;
         // The base ref covers the session's own checkout only; the other
         // checkouts under the working directory are never read off disk.
@@ -1267,6 +1285,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           ...reader,
           pathExists: filePath => !outsidePrimary(filePath) && reader.pathExists(filePath),
           isDirectory: filePath => !outsidePrimary(filePath) && reader.isDirectory(filePath),
+          readFile: filePath => {
+            if (outsidePrimary(filePath)) throw new Error(`Not found at ref ${state.baseRef}: ${filePath}`);
+            return reader.readFile(filePath);
+          },
         };
       },
       getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -1276,13 +1298,16 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // dedup stays consistent on untrusted checkouts and across roots.
         const untrusted = state?.untrustedCheckout === true && typeof state?.baseRef === 'string';
         const roots = sessionInstructionRoots(projectPath, state?.instructionRoots);
-        const sources = loadSessionInstructions({
+        const options = {
           workingDir: projectPath,
           instructionRoots: state?.instructionRoots,
           untrustedCheckout: untrusted,
           baseRef: untrusted ? state?.baseRef : undefined,
-        });
-        return instructionSourcePaths(sources, roots);
+        };
+        if (!('supportsAsyncInstructionReaders' in AgentsMDInjector)) {
+          return instructionSourcePaths(loadSessionInstructions(options), roots);
+        }
+        return loadSessionInstructionsAsync(options).then(sources => instructionSourcePaths(sources, roots));
       },
     }),
   ];

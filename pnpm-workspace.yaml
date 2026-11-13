@@ -215,11 +215,11 @@ minimumReleaseAgeExclude:
   # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
   - svgo@3.3.5
-  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
-  - '@hono/node-server@2.0.10 || 2.0.5'
+  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5 || 2.1.6 || 2.1.7
+  - '@hono/node-server@2.0.10 || 2.0.5 || 2.1.6 || 2.1.7'
   - '@hono/node-server@1.19.17'
-  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
-  - hono@4.13.5
+  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories) || 4.13.16 || 4.13.17
+  - hono@4.13.5 || 4.13.16 || 4.13.17
   - hono@4.13.7
   # Security bump: tinypool 2.2.0, image-size 2.0.4, mysql2 3.24.4
   - tinypool@2.2.0
@@ -326,6 +326,8 @@ minimumReleaseAgeExclude:
   - serialize-javascript@7.1.4
   # Renovate security update: follow-redirects@1.16.2
   - follow-redirects@1.16.2
+  # Renovate security update: basic-ftp@6.2.4
+  - basic-ftp@6.2.4
 trustPolicyExclude:
   # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
   # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
@@ -426,7 +428,7 @@ overrides:
   path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.12.2
+  e2b>undici8: npm:undici@8.12.4
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -450,7 +452,7 @@ overrides:
   # Vanta 2026-10-21: AIKIDO-2026-930319 (powershell-utils <0.2.1); open 11.0.4 moves to wsl-utils 1 + powershell-utils ^0.2.1
   open@>=11.0.0 <11.0.4: 11.0.4
   # Vanta 2026-10-09: AIKIDO-2026-901222 fixed in 4.13.11
-  hono@<4.13.13: 4.13.13
+  hono@<4.13.13: 4.13.16
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.4
@@ -476,6 +478,10 @@ overrides:
   # effect 4.0.0-beta (via @opencode-ai/plugin, dev-only in integrations/opencode), which declares ^4.1.1 on every
   # beta; 5.x keeps the same parse(input) API (new opt-in options only). Floor raised from <4.1.2 -> 4.2.0.
   toml@<5.0.1: 5.0.1
+  # Vanta 2026-11-11 (Dependabot #3443, effect >=4.0.0-beta.0 <4.0.0-beta.103, fixed in beta.103): @opencode-ai/plugin
+  # pins effect exactly (1.14.48 -> beta.59; even latest 1.19.5 -> beta.83), dev-only in integrations/opencode.
+  # Same 4.0.0-beta prerelease line; parent-scoped so nothing else is affected.
+  '@opencode-ai/plugin>effect': 4.0.0-beta.103
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   # Vanta 2026-10-20 (CVE-2026-104844 / GHSA-rj75-hqrm-r3gf, fixed only in 7.1.6): these parents are on their
@@ -500,7 +506,7 @@ overrides:
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': 2.3.1
   # Vanta 2026-10-28: GHSA-f897-62hf-6gxq (MCP HTTP transports: no body-size / batch-length limit); published @mastra/mcp 1.18 pins node 2.0.0; 2.1.1 is the fixed release whose peer range (server ^2.3.0) matches its server 2.3.1
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
-  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.6
   # Vanta 2026-11-02: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (serveStatic double-decode, >=1.19.10 <2.1.3; fixed only in 2.1.3).
   # The MCP SDK and @modelcontextprotocol/node already declare `^1.19.9 || ^2.x`; resolve them onto the 2.x line the
   # server adapters/deployer already use (2.x only drops Node 18 and the unused /vercel entry).
@@ -632,7 +638,8 @@ overrides:
   'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1.0.25'
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   # Vanta 2026-10-20: raised to 8.12.2 (AIKIDO-2026-159850/393834/846025/559914/609286/634008/740957, fixed in 8.12.2)
-  'undici@<8.12.2': 8.12.2
+  # Vanta 2026-11-12: raised to 8.12.4 (GHSA-mqg3-3v4r-cm32 High, -7xg3-fphp-28hg, -5rm8-gv32-r954, -9v6h-8rgp-m69f, -3g9m-rv3r-w5w2, -r4pc-4jcp-7pqc; all >=8.0.0 <8.12.4)
+  'undici@<8.12.4': 8.12.4
   # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
   # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
   # bundles for global fetch (7.x), and undici 8 rejects that handler with
@@ -644,7 +651,7 @@ overrides:
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
-  'basic-ftp@<6.2.1': 6.2.1
+  'basic-ftp@<6.2.1': 6.2.4
   # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
   # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
   # fast-xml-parser 5.10.1, style-to-object 1.0.11).

@@ -1,7 +1,7 @@
 import type { McpServerInfo, McpServerTaskSurface, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -107,7 +107,14 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
           Available tools
         </Txt>
         <div className="max-w-120 flex-1">
-          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" shortcutDisabled />
+          <SearchInput
+            size="sm"
+            debounceMs={300}
+            className="max-w-120"
+            onValueChange={setSearch}
+            label="Search tools"
+            placeholder="Search by name"
+          />
         </div>
       </div>
 

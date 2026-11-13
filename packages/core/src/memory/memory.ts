@@ -140,6 +140,12 @@ export abstract class MastraMemory extends MastraBase {
   protected threadConfig: MemoryConfigInternal = { ...memoryDefaultOptions };
   private readonly hasExplicitLastMessages: boolean;
   #mastra?: Mastra;
+  #agentName?: string;
+  /**
+   * Set once more than one agent has resolved this memory. A shared memory has no
+   * single owner, so its missing-storage diagnostic omits the agent name.
+   */
+  #agentNameShared = false;
 
   constructor(config: { id?: string; name: string } & SharedMemoryConfig) {
     super({ component: 'MEMORY', name: config.name });
@@ -254,6 +260,21 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
   }
 
   /**
+   * Internal method used by an Agent to record that it resolved this memory, so
+   * missing-storage diagnostics can name the agent when the memory has no
+   * attached Mastra instance. When several agents share one memory the name is
+   * left out, since the failing access cannot be attributed to a single agent.
+   * @internal
+   */
+  __registerAgent(agentName: string): void {
+    if (this.#agentName === undefined) {
+      this.#agentName = agentName;
+    } else if (this.#agentName !== agentName) {
+      this.#agentNameShared = true;
+    }
+  }
+
+  /**
    * Delete a thread's live event stream from the registered Mastra pubsub.
    * Call after the thread itself is deleted: nothing else ever clears an
    * open-ended thread topic, so without this it lingers until the pubsub's
@@ -275,8 +296,10 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
 
   get storage() {
     if (!this._storage) {
+      const agentLabel =
+        !this.#mastra && this.#agentName !== undefined && !this.#agentNameShared ? `[Agent:${this.#agentName}] ` : '';
       throw new Error(
-        `Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
+        `${agentLabel}Memory requires a storage provider to function. Add a storage configuration to Memory or to your Mastra instance.${
           this.#mastra
             ? ''
             : ' If this memory belongs to an agent that should inherit storage from Mastra, register the agent with that Mastra instance (for example, via mastra.addAgent(agent)). Standalone agents must configure storage directly on Memory.'

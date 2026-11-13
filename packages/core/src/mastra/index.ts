@@ -89,6 +89,7 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import { readPositiveIntEnv } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
@@ -113,7 +114,7 @@ import {
 } from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
-import { computeNextFire } from '../workflows/scheduler/cron';
+import { computeNextFire, toEpochMs } from '../workflows/scheduler/cron';
 import type { AnyWorkspace, RegisteredWorkspace, Workspace } from '../workspace';
 import {
   declaredSchedulesOf,
@@ -906,8 +907,10 @@ export class Mastra<
   #classifiers?: TClassifiers;
   #tools?: TTools;
   #processors?: TProcessors;
-  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
-    new Map();
+  #processorConfigurations: Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
+  > = new Map();
   #memory?: TMemory;
   #knowledge: TKnowledge;
   #workspace?: Workspace;
@@ -2352,14 +2355,19 @@ export class Mastra<
         const definitionHash = computeScheduleDefinitionHash(workflowsById.get(workflowId)?.serializedStepGraph);
         if (definitionHash) target.definitionHash = definitionHash;
 
-        // A declarative cadence can outlive its final occurrence (e.g. a
-        // year-pinned cron that has already passed). Compute the timing before
-        // writing: the row is registered as `completed` rather than skipped, so
-        // the deployment stays self-consistent instead of retrying a doomed
-        // write on every boot.
-        const computeTiming = () => {
-          const next = computeNextFire({ cron: cfg.cron, timezone: cfg.timezone, nextFireAt: now }, now);
-          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' } as const;
+        const runAt = cfg.runAt !== undefined ? toEpochMs(cfg.runAt) : undefined;
+        const endAt = cfg.endAt !== undefined ? toEpochMs(cfg.endAt) : undefined;
+        const cron = cfg.cron ?? '';
+        // A one-off whose `runAt` has already passed is recorded as completed
+        // rather than fired, so a fresh deploy never runs a stale one-off. A
+        // declarative cadence can outlive its final occurrence (e.g. a
+        // year-pinned cron that has already passed): that row is registered as
+        // `completed` rather than skipped, so the deployment stays
+        // self-consistent instead of retrying a doomed write on every boot.
+        const computeTiming = (): { nextFireAt: number; status: 'active' | 'completed' } => {
+          if (runAt !== undefined) return { nextFireAt: runAt, status: runAt > now ? 'active' : 'completed' };
+          const next = computeNextFire({ cron, timezone: cfg.timezone, endAt, nextFireAt: now }, now);
+          return { nextFireAt: next.nextFireAt, status: next.completed ? 'completed' : 'active' };
         };
 
         if (!existing) {
@@ -2367,8 +2375,10 @@ export class Mastra<
           await schedulesStore.createSchedule({
             id: scheduleId,
             target,
-            cron: cfg.cron,
+            cron,
             timezone: cfg.timezone,
+            ...(runAt !== undefined ? { runAt } : {}),
+            ...(endAt !== undefined ? { endAt } : {}),
             status: timing.status,
             nextFireAt: timing.nextFireAt,
             createdAt: now,
@@ -2384,17 +2394,23 @@ export class Mastra<
         // recomputed cadence is the exception: it re-arms a completed row when
         // it has future occurrences, and completes it when it does not.
         const patch: ScheduleUpdate = {};
-        const cronChanged = existing.cron !== cfg.cron;
+        const cronChanged = existing.cron !== cron;
         const timezoneChanged = (existing.timezone ?? undefined) !== (cfg.timezone ?? undefined);
+        const runAtChanged = (existing.runAt ?? undefined) !== runAt;
+        const endAtChanged = (existing.endAt ?? undefined) !== endAt;
 
-        if (cronChanged) patch.cron = cfg.cron;
+        if (cronChanged) patch.cron = cron;
         if (timezoneChanged) patch.timezone = cfg.timezone;
+        // Adapters clear the column when the key is present but undefined.
+        if (runAtChanged) patch.runAt = runAt;
+        if (endAtChanged) patch.endAt = endAt;
         if (!targetsEqual(existing.target, target)) patch.target = target;
         if (!metadataEqual(existing.metadata, cfg.metadata)) patch.metadata = cfg.metadata;
 
-        // Cron or timezone change invalidates the stored nextFireAt — recompute
-        // from now so we don't fire on the old schedule.
-        if (cronChanged || timezoneChanged) {
+        // Any timing change invalidates the stored nextFireAt — recompute from
+        // now so we don't fire on the old schedule, and re-arm or complete the
+        // row per the recomputed cadence.
+        if (cronChanged || timezoneChanged || runAtChanged || endAtChanged) {
           const timing = computeTiming();
           patch.nextFireAt = timing.nextFireAt;
           if (timing.status === 'completed') patch.status = 'completed';
@@ -2943,6 +2959,7 @@ export class Mastra<
                 source: 'agent',
                 agentId: durableAgent.id ?? agentKey,
                 agentName: durableAgent.name,
+                agentSource: underlyingAgent.source,
               });
             }
           })
@@ -3038,6 +3055,11 @@ export class Mastra<
       });
     }
 
+    // Set the source first: registering the agent records it on the agent's processor configurations
+    if (options?.source) {
+      mastraAgent.source = options.source;
+    }
+
     // Initialize the agent
     mastraAgent.__setLogger(this.#logger);
     mastraAgent.__registerMastra(this);
@@ -3048,11 +3070,6 @@ export class Mastra<
       tts: this.#tts,
       vectors: this.#vectors,
     });
-
-    // Set the source if provided
-    if (options?.source) {
-      mastraAgent.source = options.source;
-    }
 
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
@@ -3089,6 +3106,7 @@ export class Mastra<
               source: 'agent',
               agentId: mastraAgent.id ?? agentKey,
               agentName: mastraAgent.name,
+              agentSource: mastraAgent.source,
             });
           }
         })
@@ -3498,6 +3516,18 @@ export class Mastra<
     this.setStudio(fsStudio);
   }
 
+  /** Drops an agent's processor configurations; registering the agent again re-adds them. */
+  #removeProcessorConfigurations(agentId: string): void {
+    for (const [processorId, configs] of this.#processorConfigurations) {
+      const remaining = configs.filter(c => c.agentId !== agentId);
+      if (remaining.length === 0) {
+        this.#processorConfigurations.delete(processorId);
+      } else if (remaining.length !== configs.length) {
+        this.#processorConfigurations.set(processorId, remaining);
+      }
+    }
+  }
+
   /**
    * Removes an agent from the Mastra instance by its key or ID.
    * Used when stored agents are updated/deleted to allow fresh data to be loaded.
@@ -3526,6 +3556,7 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
@@ -3540,10 +3571,13 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
 
+    // An agent attached to Mastra without being registered (a sub-agent) still registers processor configurations.
+    this.#removeProcessorConfigurations(keyOrId);
     return false;
   }
 
@@ -3828,7 +3862,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string; agentSource?: DefinitionSource },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
@@ -3853,6 +3887,7 @@ export class Mastra<
       source,
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+      ...(source === 'agent' && metadata?.agentSource ? { agentSource: metadata.agentSource } : {}),
     };
   }
 
@@ -5374,8 +5409,15 @@ export class Mastra<
    * @param processor - The processor instance
    * @param agentId - The ID of the agent that uses this processor
    * @param type - Whether this is an input or output processor
+   * @param source - Where the agent is defined. Configurations of stored agents stay marked as stored, so they can
+   *   be told apart from code agents' configurations after the stored agent is gone.
    */
-  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+  public addProcessorConfiguration(
+    processor: Processor,
+    agentId: string,
+    type: 'input' | 'output',
+    source?: DefinitionSource,
+  ): void {
     const processorId = processor.id;
     if (!this.#processorConfigurations.has(processorId)) {
       this.#processorConfigurations.set(processorId, []);
@@ -5383,9 +5425,11 @@ export class Mastra<
     const configs = this.#processorConfigurations.get(processorId)!;
 
     // Check if this exact configuration already exists
-    const exists = configs.some(c => c.agentId === agentId && c.type === type);
-    if (!exists) {
-      configs.push({ processor, agentId, type });
+    const existing = configs.find(c => c.agentId === agentId && c.type === type);
+    if (!existing) {
+      configs.push({ processor, agentId, type, ...(source && { source }) });
+    } else if (source === 'stored') {
+      existing.source = 'stored';
     }
   }
 
@@ -5397,7 +5441,7 @@ export class Mastra<
    */
   public getProcessorConfigurations(
     processorId: string,
-  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }> {
     return this.#processorConfigurations.get(processorId) || [];
   }
 
@@ -5408,7 +5452,7 @@ export class Mastra<
    */
   public listProcessorConfigurations(): Map<
     string,
-    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
   > {
     return this.#processorConfigurations;
   }
@@ -7581,7 +7625,10 @@ export class Mastra<
    * pubsub is flushed.
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'stopWorkers');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'stopWorkers',
+    );
     // One deadline for the whole call. Each worker's transport drain and the
     // push-event drain below typically wait on the same stuck step, so giving
     // each phase the full budget would multiply the worst-case stop time.
@@ -8022,7 +8069,10 @@ export class Mastra<
    * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'shutdown',
+    );
 
     // `drainTimeout` is a single deadline shared by every drain in this method
     // (evented runs here, then worker transports and push events inside

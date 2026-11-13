@@ -36,7 +36,8 @@ interface AddApiKeyDialogProps {
    */
   defaultScope?: KeyScope;
   fixedScope?: KeyScope;
-  onClose: () => void;
+  /** `saved` is true when the dialog closes because the key was saved, false on cancel. */
+  onClose: (saved: boolean) => void;
 }
 
 /** Dialog for adding or updating a provider API key, with an org/user scope choice when auth is enabled. */
@@ -72,12 +73,12 @@ export function AddApiKeyDialog({
         envVar: provider.envVar,
         ...(authEnabled ? { scope } : {}),
       });
-      onClose();
+      onClose(true);
     } catch {}
   };
 
   const close = () => {
-    if (!saveKeyMutation.isPending) onClose();
+    if (!saveKeyMutation.isPending) onClose(false);
   };
 
   return (

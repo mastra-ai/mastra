@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../../boards/index.js';
 
+import { groupedRepositoryAccess } from '../../../environment/repository-access.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
 import type { IntegrationContext } from '../../base.js';
 
@@ -858,7 +859,7 @@ describe('PlatformGithubIntegration', () => {
         orgId: 'org-1',
         repositoryIds: repositories.map(repository => repository.id),
       });
-      expect(access).toEqual({
+      expect(access).toMatchObject({
         cloneUrl: 'https://github.com/acme/app.git',
         authorization: { scheme: 'bearer', token: 'ghs_environment' },
       });
@@ -882,6 +883,29 @@ describe('PlatformGithubIntegration', () => {
       });
       expect(again).toBe(access);
       expect(fetchImpl).toHaveBeenCalledTimes(1);
+    });
+
+    it("returns each repository's access under the group token without widening its own token", async () => {
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockResolvedValueOnce(json({ token: 'ghs_environment', expiresAt: '2026-07-21T18:00:00Z' }))
+        .mockResolvedValueOnce(json({ token: 'ghs_docs_only', expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, repositories } = await seed(fetchImpl);
+      const [app, docs] = repositories;
+
+      const group = await integration.versionControl.getRepositoriesAccess!({
+        orgId: 'org-1',
+        repositoryIds: [app!.id, docs!.id],
+      });
+      expect(group?.repositories?.[docs!.id]).toEqual({
+        cloneUrl: 'https://github.com/acme/docs.git',
+        authorization: { scheme: 'bearer', token: 'ghs_environment' },
+      });
+
+      // A caller asking for one repository still gets a token for that repository only.
+      const own = await integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: docs!.id });
+      expect(own.authorization?.token).toBe('ghs_docs_only');
+      expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body)).repositories).toEqual(['docs']);
     });
 
     it('declines a set spanning two installations without minting', async () => {
@@ -923,6 +947,34 @@ describe('PlatformGithubIntegration', () => {
         }),
       ).resolves.toBeUndefined();
       expect(fetchImpl).not.toHaveBeenCalled();
+    });
+
+    it('serves an eleven-repository environment from two tokens', async () => {
+      let minted = 0;
+      const fetchImpl = vi
+        .fn<typeof fetch>()
+        .mockImplementation(async () => json({ token: `ghs_${++minted}`, expiresAt: '2026-07-21T18:00:00Z' }));
+      const { integration, acme } = await seed(fetchImpl);
+      const many = await integration.versionControl.registerRepositories({
+        orgId: 'org-1',
+        installationId: acme.id,
+        repositories: Array.from({ length: 11 }, (_, index) => ({
+          externalId: String(300 + index),
+          slug: `acme/repo-${index}`,
+          defaultBranch: 'main',
+        })),
+      });
+      const access = groupedRepositoryAccess(
+        integration.versionControl,
+        'org-1',
+        many.map(repository => repository.id),
+      );
+
+      const results = await Promise.all(many.map(repository => access(repository.id)));
+
+      expect(fetchImpl).toHaveBeenCalledTimes(2);
+      expect(results.map(result => result.cloneUrl)).toEqual(many.map(r => `https://github.com/${r.slug}.git`));
+      expect(new Set(results.slice(0, 10).map(result => result.authorization?.token)).size).toBe(1);
     });
   });
 
@@ -1054,7 +1106,7 @@ describe('PlatformGithubIntegration', () => {
       expect(fetchImpl).toHaveBeenCalledTimes(1);
 
       // Expired grants re-mint through the platform.
-      vi.advanceTimersByTime(5 * 60_000 + 1_000);
+      vi.advanceTimersByTime(20 * 60_000 + 1_000);
       await integration.versionControl.getRepositoryAccess(input);
       expect(fetchImpl).toHaveBeenCalledTimes(2);
     } finally {
@@ -1521,6 +1573,62 @@ describe('PlatformGithubIntegration', () => {
       userGithubUsername: null,
       reason: 'not_connected',
     });
+  });
+
+  it.each([
+    {
+      scenario: 'says Platform withheld a personal install instead of reporting nothing installed',
+      installations: [],
+      expected: { connected: false, reason: 'personal_install_hidden' },
+    },
+    {
+      scenario: 'stays ready when another installation is usable beside the withheld personal one',
+      installations: [
+        { installationId: 7, accountLogin: 'acme', accountType: 'Organization', suspendedAt: null, usable: true },
+      ],
+      expected: { connected: true, reason: 'ready' },
+    },
+  ])('$scenario', async ({ installations, expected }) => {
+    const seed = await createPlatformStorageForTests();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      const url = String(input);
+      if (url.includes('/github-app/installations')) {
+        return json({
+          installations,
+          pendingRequests: [],
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        });
+      }
+      if (url.includes('/github-app/user-connection')) {
+        return json({ error: 'Not found' }, 404);
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const integration = createIntegration(fetchImpl);
+    const context = {
+      auth: fakeAuth(),
+      sandbox: { enabled: true, provider: 'stub' },
+      storage: {
+        generic: seed.integrations.forIntegration('github'),
+        sourceControl: seed.sourceControl.forIntegration('github'),
+        projects: seed.projects,
+        intake: seed.intake,
+      },
+      controller: {},
+      stateSigner: {},
+      baseUrl: 'https://factory.example',
+    } as unknown as IntegrationContext;
+    integration.initialize?.({ storage: context.storage.generic, projects: context.storage.projects });
+    integration.versionControl.initialize({ storage: context.storage.sourceControl });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('webAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, integration.routes(context));
+
+    const status = await app.request('/web/github/status');
+    await expect(status.json()).resolves.toMatchObject(expected);
   });
 
   it('defaults the integrations API URL and requires a platform credential', () => {

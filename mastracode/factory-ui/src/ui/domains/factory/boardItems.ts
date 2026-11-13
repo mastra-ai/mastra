@@ -36,11 +36,6 @@ export function sourceMetadata(item: Pick<WorkItem, 'metadata' | 'workItem'>): R
   };
 }
 
-export function metadataLabels(metadata: Record<string, unknown>): string[] {
-  if (!Array.isArray(metadata.labels)) return [];
-  return metadata.labels.filter((label): label is string => typeof label === 'string');
-}
-
 export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
   if (!metadata.labelColors || typeof metadata.labelColors !== 'object' || Array.isArray(metadata.labelColors))
     return {};
@@ -202,16 +197,6 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
-/** When a card last entered its board's completed phase, if it sits there now. */
-export function doneAt(
-  item: Pick<WorkItem, 'stages' | 'stageHistory'>,
-  completed: string | undefined,
-): number | undefined {
-  if (completed === undefined || !item.stages.includes(completed)) return undefined;
-  const entry = item.stageHistory.findLast(candidate => candidate.stage === completed);
-  return entry && Date.parse(entry.enteredAt);
-}
-
 /** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;
@@ -236,16 +221,6 @@ export function workItemMeta(item: WorkItem): readonly string[] {
   if (key === undefined) return [SOURCE_LABELS[item.source], age];
   const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
   return [key, ...(owner ? [owner] : []), age];
-}
-
-/** Free-text card match over what names it on the board: its title and its issue key. */
-export function cardMatchesSearch(
-  card: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'title'>,
-  query: string,
-): boolean {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return true;
-  return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
 }
 
 /**

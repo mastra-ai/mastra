@@ -15,8 +15,8 @@ export const hostedProjects: LinearProject[] = [
 
 export const hostedIssues: LinearIssue[] = [
   linearIssue('ENG-101', docsWatchId, 'DocsWatch: new documentation request'),
-  // A card filed before project metadata was available must use its live issue.
-  linearIssue('ENG-103', docsWatchId, 'DocsWatch: legacy planning card'),
+  // Already filed: the board shows its card, not the issue.
+  linearIssue('ENG-103', docsWatchId, 'DocsWatch: filed planning issue'),
   linearIssue('ENG-301', otherWorkspaceProjectId, 'Other workspace card'),
   linearIssue('ENG-401', null, 'Unassigned project'),
 ].map(issue => ({
@@ -31,8 +31,6 @@ export const hostedCards = wireSourceCards.map(item => {
       title: 'Other workspace card',
       metadata: { ...item.metadata, linearProjectId: otherWorkspaceProjectId },
     };
-  if (item.id === 'ENG-103')
-    return { ...item, title: 'DocsWatch: legacy planning card', metadata: { labels: ['feature'] } };
   if (item.metadata.linearProjectId !== 'project-a') return item;
   return { ...item, metadata: { ...item.metadata, linearProjectId: docsWatchId } };
 });

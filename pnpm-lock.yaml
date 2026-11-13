@@ -117,7 +117,7 @@ overrides:
   path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.12.2
+  e2b>undici8: npm:undici@8.12.4
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -134,7 +134,7 @@ overrides:
   '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 8.0.1
   dompurify@>=3.0.0 <3.4.17: 3.4.17
   open@>=11.0.0 <11.0.4: 11.0.4
-  hono@<4.13.13: 4.13.13
+  hono@<4.13.13: 4.13.16
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.4
@@ -154,6 +154,7 @@ overrides:
   browserslist@<=4.28.6: 4.28.7
   deepmerge-ts@<8.0.0: 8.0.0
   toml@<5.0.1: 5.0.1
+  '@opencode-ai/plugin>effect': 4.0.0-beta.103
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   '@tailwindcss/typography>postcss-selector-parser': 7.1.6
@@ -170,7 +171,7 @@ overrides:
   '@modelcontextprotocol/server-legacy@>=2.0.0 <2.3.1': 2.3.1
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': 2.3.1
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
-  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.6
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.6
   '@modelcontextprotocol/node>@hono/node-server': 2.1.6
   '@bufbuild/protobuf@>=2.0.0 <2.13.0': 2.13.0
@@ -287,13 +288,13 @@ overrides:
   which-collection: npm:@socketregistry/which-collection@^1.0.8
   which-typed-array: npm:@socketregistry/which-typed-array@^1.0.9
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1.0.25
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
   '@qdrant/js-client-rest>undici': 6.29.1
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
   protobufjs@<8.8.0: 8.8.0
   nanoid@<5.1.16: 5.1.16
-  basic-ftp@<6.2.1: 6.2.1
+  basic-ftp@<6.2.1: 6.2.4
   modern-tar@<0.7.7: 0.7.7
   '@opentelemetry/configuration>yaml': 2.9.1
   smol-toml@<1.9.0: 1.9.0
@@ -615,8 +616,8 @@ importers:
         specifier: ^1.7.18
         version: 1.7.18(@opentelemetry/api@1.10.0)(mongodb@7.8.0(@aws-sdk/credential-providers@3.1161.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.10))(mysql2@3.24.6(@types/node@22.19.15))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(vitest@5.1.0)
       hono:
-        specifier: 4.13.13
-        version: 4.13.13
+        specifier: 4.13.16
+        version: 4.13.16
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -689,8 +690,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/auth
       hono:
-        specifier: 4.13.13
-        version: 4.13.13
+        specifier: 4.13.16
+        version: 4.13.16
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -799,7 +800,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -823,7 +824,7 @@ importers:
         version: 5.1.0(vitest@5.1.0)
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -837,8 +838,8 @@ importers:
   auth/okta:
     dependencies:
       hono:
-        specifier: 4.13.13
-        version: 4.13.13
+        specifier: 4.13.16
+        version: 4.13.16
       jose:
         specifier: ^6.2.12
         version: 6.2.15
@@ -950,8 +951,8 @@ importers:
         specifier: ^0.7.1
         version: 0.7.1(@workos-inc/node@8.13.0)(typescript@7.0.2)
       hono:
-        specifier: 4.13.13
-        version: 4.13.13
+        specifier: 4.13.16
+        version: 4.13.16
       lru-cache:
         specifier: ^11.5.3
         version: 11.5.3
@@ -1175,8 +1176,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1225,8 +1226,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1250,8 +1251,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -2032,7 +2033,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/ai-sdk-v5':
         specifier: workspace:*
         version: link:../../../packages/_vendored/ai_v5
@@ -2059,7 +2060,7 @@ importers:
         version: 7.2.0
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       vitest:
         specifier: 'catalog:'
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -2482,7 +2483,7 @@ importers:
         version: 2.1.0
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       posthog-node:
         specifier: ^5.57.1
         version: 5.61.2(@opentelemetry/api@1.10.0)(rxjs@7.8.2)
@@ -2490,6 +2491,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3313,7 +3317,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.11.0
-        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
+        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -3793,8 +3797,8 @@ importers:
         specifier: workspace:*
         version: link:../../_internal-core
       hono:
-        specifier: 4.13.13
-        version: 4.13.13
+        specifier: 4.13.16
+        version: 4.13.16
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -4407,6 +4411,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4631,7 +4638,7 @@ importers:
         version: link:../core
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       prettier:
         specifier: 3.9.10
         version: 3.9.10
@@ -4706,10 +4713,10 @@ importers:
         version: 1.20.3
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       hono-openapi:
         specifier: ^1.5.0
-        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.16)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
+        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       ignore:
         specifier: ^7.0.14
         version: 7.0.14
@@ -4995,7 +5002,7 @@ importers:
         version: 8.1.0
       '@hono/node-ws':
         specifier: ^1.3.1
-        version: 1.3.1(@hono/node-server@2.1.6(hono@4.13.16))(bufferutil@4.1.0)(hono@4.13.16)
+        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)
       '@mastra/server':
         specifier: workspace:*
         version: link:../server
@@ -5046,7 +5053,7 @@ importers:
         version: 4.14.3
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       local-pkg:
         specifier: ^1.2.1
         version: 1.2.1
@@ -5074,13 +5081,13 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@hono/standard-validator':
         specifier: ^0.3.0
-        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.16)
+        version: 0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.17)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.16)
+        version: 0.5.3(hono@4.13.17)
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
@@ -5128,7 +5135,7 @@ importers:
         version: 2.1.0
       hono-openapi:
         specifier: ^1.5.0
-        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.16)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
+        version: 1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -5169,9 +5176,12 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -5198,7 +5208,7 @@ importers:
         version: 22.19.15
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5596,7 +5606,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5623,7 +5633,7 @@ importers:
         version: 10.1.0
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5648,7 +5658,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -5678,7 +5688,7 @@ importers:
         version: 10.1.0
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -6443,6 +6453,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       arktype:
         specifier: ^2.2.9
         version: 2.2.9
@@ -6475,7 +6488,7 @@ importers:
     dependencies:
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -6507,6 +6520,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -6672,8 +6688,8 @@ importers:
   pubsub/valkey-streams:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.139
@@ -6962,7 +6978,7 @@ importers:
     dependencies:
       '@hono/node-ws':
         specifier: ^1.3.1
-        version: 1.3.1(@hono/node-server@2.1.6(hono@4.13.16))(bufferutil@4.1.0)(hono@4.13.16)
+        version: 1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
@@ -6981,10 +6997,10 @@ importers:
         version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@hono/swagger-ui':
         specifier: ^0.5.3
-        version: 0.5.3(hono@4.13.16)
+        version: 0.5.3(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7000,9 +7016,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/duckdb':
+        specifier: workspace:*
+        version: link:../../stores/duckdb
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7020,7 +7042,7 @@ importers:
         version: 8.18.2
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7114,7 +7136,7 @@ importers:
         version: link:../../packages/server
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -7218,7 +7240,7 @@ importers:
     devDependencies:
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7236,7 +7258,7 @@ importers:
         version: 22.19.15
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7255,18 +7277,27 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@mastra/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/observability':
+        specifier: workspace:*
+        version: link:../../observability/mastra
       '@mastra/server':
         specifier: workspace:*
         version: link:../../packages/server
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7289,6 +7320,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
+      '@hono/node-server':
+        specifier: ^2.1.3
+        version: 2.1.7(hono@4.13.17)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7298,12 +7332,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/server-adapters-test-suite':
+        specifier: workspace:*
+        version: link:../server-adapters-test-suite
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7351,7 +7388,7 @@ importers:
         version: link:../../packages/core
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -8635,8 +8672,8 @@ importers:
   stores/valkey:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9539,7 +9576,7 @@ importers:
         version: 1.10.0
       inngest:
         specifier: ^4.26.1
-        version: 4.26.2(@opentelemetry/core@3.0.0(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.16)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
+        version: 4.26.2(@opentelemetry/core@3.0.0(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.17)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^1.3.24
@@ -9552,7 +9589,7 @@ importers:
         version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
-        version: 2.1.6(hono@4.13.16)
+        version: 2.1.7(hono@4.13.17)
       '@internal/core':
         specifier: workspace:*
         version: link:../../packages/_internal-core
@@ -9618,7 +9655,7 @@ importers:
         version: 7.1.0
       hono:
         specifier: ^4.13.13
-        version: 4.13.16
+        version: 4.13.17
       inngest-cli:
         specifier: ^1.49.0
         version: 1.49.0(encoding@0.1.14)(supports-color@10.2.2)
@@ -10204,7 +10241,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(45711e3aa834b72476cf632c2aa8c95a)
+        version: 1.9.0(519b038371ca29931797926b7e91c792)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -14933,31 +14970,37 @@ packages:
     resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
-      hono: 4.13.13
+      hono: 4.13.16
+
+  '@hono/node-server@2.1.7':
+    resolution: {integrity: sha512-Wr0E6S+v2Bw9FkpGNP5BQ5QbJvclUa06UVehd65WFZe6XeJwbrKQQ5wPDevc0IC+QyzbO7v3Llh5uo45IZcSnA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      hono: 4.13.16
 
   '@hono/node-ws@1.3.1':
     resolution: {integrity: sha512-vo/MwCnpJAVHBkGzWjCJ28wF45fYHAfbPZcH2rodZODHtch2GHA94KtMfusmVycTUtsLAsaNsHhtY6P8X3RQsA==}
     engines: {node: '>=18.14.1'}
     peerDependencies:
       '@hono/node-server': 1.19.15
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@hono/standard-validator@0.3.0':
     resolution: {integrity: sha512-tHLKEjKXDcHImj0XTFWW4Hr0ev+1G5GxnBZrGdpg/7NLy9s9meFPTSCOkw++ZzZKom3FjrMw2e0nFQpPPvwUVQ==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@hono/standard-validator@0.4.1':
     resolution: {integrity: sha512-Q0+1dgMKAXEvsmJ5FNoamwnfrf/I5JNnKn7WzfynH8nJlNe1lNOW1+vlKpEQZbrBLEgmxIeys6HjRotDvZzq+A==}
     peerDependencies:
       '@standard-schema/spec': ^1.0.0
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@hono/swagger-ui@0.5.3':
     resolution: {integrity: sha512-Hn90DOOJ62ICJQplQvCDVpi9Jcn6EhtRaiffyJIS53wA5RmRLtMCDQGVc0bor8vQD7JIwpkweWjs+3cycp+IvA==}
     peerDependencies:
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@hookform/resolvers@3.10.0':
     resolution: {integrity: sha512-79Dv+3mDF7i+2ajj7SkypSKHhl1cbln1OGavqrsF7p6mbUv11xpqpacPsGDCTRvCSjEEIez2ef1NveSVL3b0Ag==}
@@ -21910,42 +21953,42 @@ packages:
     peerDependencies:
       valibot: ^1.5.0
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
-    resolution: {integrity: sha512-DC6T0oYkyFnVIMABnmdtB2ZViJXMNMT8VtPQi4dniLBMbQJVS0BFO735bzDLkONZqnOf4lSRQMk+UYhUSE2n8Q==}
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
+    resolution: {integrity: sha512-6kmFsyBrMj8kRF72ZiKpLsT0WZrRQdM3P2p9vJskRaXbRiMGmLVoqj8vv1tYcu/xRr7bI6aEONOlwKbHojRLkQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
-    resolution: {integrity: sha512-3XNRg2gwHpDGfpLm7og4cBCR9vvldd3z1OgqK4EBB75XSkx9gFXgcmIR8JYHiz9pnjv4FkeTCU6/WIPDCW7iTw==}
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
+    resolution: {integrity: sha512-2RgllAJlYvoKirMKDIseYfX7LNFOF06UohqRB4LM2U3Y9mjE/ssNrPy+netFYdqz0aWcgYajzCMr2jXeckmoEg==}
     cpu: [x64]
     os: [darwin]
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
-    resolution: {integrity: sha512-D3AnYqMefXaaZJLPa4Q5A506On0/zg2ikI+YKWQsVXSgegf+YRXMrjfYqXa+LQD8s8jMMlZB/FAmSr4g+iv3CQ==}
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
+    resolution: {integrity: sha512-EVWT7VT9porB670AxjQ+b/g/Dx5Nm/GaMy9irCzdDdnnTOwPyHvK1kPFzMATNuyDgXd5L504i99u8iHL1GpDEw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
-    resolution: {integrity: sha512-LIzxQhWhoPPIbYAy86moO1RA+SyFkNTxDPfR67MnGIZ7eaiFG9dfPfSdLC/LUN53D+/tbtaQYeyFxK3mNr3lcQ==}
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
+    resolution: {integrity: sha512-CFTrYPWIrh+k66eqH3/FvUlMZ4S7p328iFTK+qsHxyYH3CnhAmKMaOHcptFKz5n7ypT8L/XuOBl+NIQgUrJGQA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
-    resolution: {integrity: sha512-VUXP852lmBp09WSG1/Yd9SFoATUW+MRRVaXhFabQkRlHm/7sm/0X9K2xyU5j41OeoHYK6Zne7YyGIyE1zgkV4Q==}
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
+    resolution: {integrity: sha512-osWsmJ+cg2iZjjNZ5IHQUMg/Xb/TQVyBvDxKA11vpLuEFMulQYfUfw+LWo0PwnG2mGJGKHhDnZ8KZAJpd03LWQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
-    resolution: {integrity: sha512-KVRvCMBEFiyOkxgOy6KDC3M4QmpSOnRZa39mkOx/nZwP/9fFzuJ3g0RTGVcLQ75RqRSexqitE4MuG8IpUKjn5w==}
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
+    resolution: {integrity: sha512-gJCma4s3j3AUQk3k2Kcxe3ImWpla4e9jr41f1w9VwZd6CkWuZQdk1PsLpdROvtaBxUiRiq+RZvvLKvGf0md1Kg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide@2.5.1':
-    resolution: {integrity: sha512-vtYyMJ2L42RH5CgBNtG2ffupNxu8c6KTzWvhXsUI2zChIFJQwUcuHuEdqXeOjTJZ9XfWs1E4w1TMiwnZSqGlkw==}
+  '@valkey/valkey-glide@2.5.2':
+    resolution: {integrity: sha512-8d3m2NyveQ2Ws4OUd7Zz3zsPP835Nqi4Rm3ZMoLdUjTfnEJejIMPJGR8b09foiPEG4GXV9j+QWyDRuM9VHOuVw==}
     engines: {node: '>=16'}
 
   '@vercel/analytics@1.6.1':
@@ -22874,8 +22917,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  basic-ftp@6.2.1:
-    resolution: {integrity: sha512-bK67isD+lKq46AU8vNtjvMaT2ZqAOAmNCbxUHlFBRD4k15NWxyEjmaKtZPlgce58So4BNTjITGQOVTjL9y0ECA==}
+  basic-ftp@6.2.4:
+    resolution: {integrity: sha512-6ACKOQxSlv5xka4i03ujfncNr9qp5yZNK3u0+yUFTAU4HfG5AeztCC9+R1I9dm8oq+1vt4RZ7cIRTBrdHqL2mw==}
     engines: {node: '>=10.0.0'}
 
   batch@0.6.1:
@@ -24560,8 +24603,8 @@ packages:
   ee-first@1.1.1:
     resolution: {integrity: sha512-WMwm9LhRUo+WUaRN+vRuETqG89IgZphVSNkdFgeb6sS/E4OrDIN7t48CAewSHXc6C8lefD8KKfr5vY61brQlow==}
 
-  effect@4.0.0-beta.59:
-    resolution: {integrity: sha512-xyUDLeHSe8d6lWGOvR6Fgn2HL6gYeTZ/S4Jzk9uc4ZUxMPPsNZlNXrvk0C7/utQFzeX7uAWcVnG2BjbA0SRoAA==}
+  effect@4.0.0-beta.103:
+    resolution: {integrity: sha512-pE8TxF4m2tQzVI+77dIlm3s+81TACV1AiX1JEkvY+zVuxgQQ8aGSkqXNJF6b/ST+coCSk5cUdbULpQ7sm4oHyw==}
 
   efrt@2.9.0:
     resolution: {integrity: sha512-ZMAvlcu4AfmtJ4K/0hs0uofVUZPSeLG/w4yOyZawQLl9YEy8iDKIxIIPsUAlS907clC7bgD17e73vi5unwNE/g==}
@@ -25150,7 +25193,7 @@ packages:
       '@supabase/storage-js': ^2.105.4
       '@vercel/blob': ^2.4.0
       ai: ^6.0.0
-      basic-ftp: 6.2.1
+      basic-ftp: 6.2.4
       box-typescript-sdk-gen: ^1.19.1
       cloudinary: ^2.10.0
       convex: ^1.16.0
@@ -25798,14 +25841,14 @@ packages:
   hono-openapi@1.5.0:
     resolution: {integrity: sha512-7pRGQbFLBSy+SmCKHIZB3a8pzalnsYflvGRXyS1P7vucEGlkL23QitQ++wNCuMT25Q3TbGH2JUuTdYnWMY/GIw==}
     peerDependencies:
-      hono: 4.13.13
-
-  hono@4.13.13:
-    resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
-    engines: {node: '>=16.9.0'}
+      hono: 4.13.16
 
   hono@4.13.16:
     resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
+    engines: {node: '>=16.9.0'}
+
+  hono@4.13.17:
+    resolution: {integrity: sha512-vZIcbkvjOR5hHRWERbGkr8fGfF0GGM1ooYkuH448iO3b2AdVEr3AXZSw4Z3Kn+1L5z0CVoVeyV29VGYmFh05kQ==}
     engines: {node: '>=16.9.0'}
 
   hookable@6.1.2:
@@ -26073,6 +26116,10 @@ packages:
     resolution: {integrity: sha512-IBTdIkzZNOpqm7q3dRqJvMaldXjDHWkEDfrwGEQTs5eaQMWV+djAhR+wahyNNMAa+qpbDUhBMVt4ZKNwpPm7xQ==}
     engines: {node: ^20.17.0 || >=22.9.0}
 
+  ini@7.0.0:
+    resolution: {integrity: sha512-ifK0CgjALofS5bkrcTy4RaQ9Vx2Knf/eLeIO+NaswQEpH1UblrtTSCIvN71qQDMq0PeQ/SSPojvEJp9vvvfr+w==}
+    engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
+
   inline-style-parser@0.2.9:
     resolution: {integrity: sha512-IttN8BqKLxzUrnTqHI+/hwAJQItBAUjdoHERCDv+oOuX48VP6bzW8+QjOXSfoevzq3YrYAwX1uLHp8TqO9yIeg==}
 
@@ -26090,7 +26137,7 @@ packages:
       express: '>=4.19.2'
       fastify: '>=4.21.0'
       h3: '>=1.8.1'
-      hono: 4.13.13
+      hono: 4.13.16
       koa: '>=2.14.2'
       next: '>=12.0.0'
       react: '>=18.0.0'
@@ -27679,8 +27726,8 @@ packages:
     resolution: {integrity: sha512-prUB8+Gc/1rEzaNo+3Rjo0Hdi6gFjQ9Td0mDsvAIkSGUyp6EADdEBiU71ZP5Mj4jCG+vai0qSNV+yisQAMYuSQ==}
     hasBin: true
 
-  msgpackr@1.12.1:
-    resolution: {integrity: sha512-4EUH9tQHnMmEgzW/MdAP0KIfa1T9AF+htl0ffe2n5vb2EKn9y2co8ccpgWko6S52Jy1PQZKwRnx5/KkYjtd9MQ==}
+  msgpackr@2.1.4:
+    resolution: {integrity: sha512-TvP18sX5U3MXoHHSUZen/FagaNTEJObyb8OlnJcNbqN6Ux/oCwYJrHhCOzi31bItyW/Efz1IDnRDKQ23j4ZuvA==}
 
   mssql@12.7.13:
     resolution: {integrity: sha512-RwNhOEU1A7vCbKmkZapbfLk31fKFByrEnK2eDPIw/rlloLUxNhuCcWj4CmXvyHiyjIjI0TMZWid20PAGoRX4xA==}
@@ -28119,7 +28166,7 @@ packages:
       '@smithy/hash-node': '>=4.3.0 <5'
       '@smithy/signature-v4': '>=5.4.0 <6'
       google-auth-library: '>=9.15.1 <12'
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0
       zod: 4.6.7
     peerDependenciesMeta:
@@ -31037,6 +31084,7 @@ packages:
 
   tldts-core@7.4.20:
     resolution: {integrity: sha512-C630TWXZCZmLq0F2bW4QqwnaaxCQ/svpAqvJwnC4JvgEM5ohhBnGsEzTLSOXcN+xjz+kEaHS5uoWIw2klnqd0A==}
+    deprecated: Partial release, see https://github.com/remusao/tldts/issues/2735. Use >=7.4.22.
 
   tldts@6.1.86:
     resolution: {integrity: sha512-WMi/OQ2axVTf/ykqCQgXiIct+mSQDFdH2fkwhPwgEwvJ1kSzZRiinb0zF2Xb8u4+OqPChmyI6MEu4EezNJz+FQ==}
@@ -31385,12 +31433,8 @@ packages:
     resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
-    engines: {node: '>=22.19.0'}
-
-  undici@8.12.3:
-    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -32739,7 +32783,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@3.0.44(zod@4.6.7)':
@@ -32747,7 +32791,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@3.0.45(zod@4.6.7)':
@@ -32755,7 +32799,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
     optional: true
 
@@ -32764,7 +32808,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@4.0.64(zod@4.6.7)':
@@ -32772,7 +32816,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@5.0.72(zod@4.6.7)':
@@ -32781,7 +32825,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@5.0.74(zod@4.6.7)':
@@ -32790,7 +32834,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@1.1.3':
@@ -35582,11 +35626,11 @@ snapshots:
       '@composio/json-schema-to-zod': 0.3.2(zod@4.6.7)
       '@types/json-schema': 7.0.15
       is-fs-case-sensitive: 2.0.0
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       picocolors: 1.1.1
       pusher-js: 8.6.0
       semver: 7.8.6
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
@@ -36202,7 +36246,7 @@ snapshots:
       discord-api-types: 0.38.57
       magic-bytes.js: 1.13.1
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
 
   '@discordjs/util@1.2.0':
     dependencies:
@@ -36238,7 +36282,7 @@ snapshots:
       jose: 6.2.12
       openapi-fetch: 0.17.0
       p-retry: 7.1.0
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
@@ -37474,7 +37518,7 @@ snapshots:
       ms: 2.1.3
       secure-json-parse: 3.0.2
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - supports-color
 
@@ -38367,36 +38411,36 @@ snapshots:
 
   '@hey-api/types@0.1.4': {}
 
-  '@hono/node-server@2.1.6(hono@4.13.13)':
-    dependencies:
-      hono: 4.13.13
-
   '@hono/node-server@2.1.6(hono@4.13.16)':
     dependencies:
       hono: 4.13.16
 
-  '@hono/node-ws@1.3.1(@hono/node-server@2.1.6(hono@4.13.16))(bufferutil@4.1.0)(hono@4.13.16)':
+  '@hono/node-server@2.1.7(hono@4.13.17)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.16)
-      hono: 4.13.16
+      hono: 4.13.17
+
+  '@hono/node-ws@1.3.1(@hono/node-server@2.1.7(hono@4.13.17))(bufferutil@4.1.0)(hono@4.13.17)':
+    dependencies:
+      '@hono/node-server': 2.1.7(hono@4.13.17)
+      hono: 4.13.17
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
 
-  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.16)':
+  '@hono/standard-validator@0.3.0(@standard-schema/spec@1.1.0)(hono@4.13.17)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.16
+      hono: 4.13.17
 
-  '@hono/standard-validator@0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.16)':
+  '@hono/standard-validator@0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)':
     dependencies:
       '@standard-schema/spec': 1.1.0
-      hono: 4.13.16
+      hono: 4.13.17
 
-  '@hono/swagger-ui@0.5.3(hono@4.13.16)':
+  '@hono/swagger-ui@0.5.3(hono@4.13.17)':
     dependencies:
-      hono: 4.13.16
+      hono: 4.13.17
 
   '@hookform/resolvers@3.10.0(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))':
     dependencies:
@@ -39842,7 +39886,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       jose: 6.2.12
-      undici: 8.12.2
+      undici: 8.12.4
       yaml: 2.9.1
       zod: 4.6.7
     transitivePeerDependencies:
@@ -39899,19 +39943,19 @@ snapshots:
 
   '@modelcontextprotocol/node@2.1.1(@modelcontextprotocol/server@2.3.1)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       '@modelcontextprotocol/server': 2.3.1
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@modelcontextprotocol/node@2.1.2(@modelcontextprotocol/server@2.4.0)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       '@modelcontextprotocol/server': 2.4.0
-      hono: 4.13.13
+      hono: 4.13.16
 
   '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@3.25.76)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -39921,7 +39965,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.13
+      hono: 4.13.16
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -39935,7 +39979,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -39945,7 +39989,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.13
+      hono: 4.13.16
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -39959,7 +40003,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.2(@cfworker/json-schema@4.1.4)(supports-color@10.2.2)(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.1.6(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.16)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
@@ -39969,7 +40013,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       express-rate-limit: 8.7.3(express@5.3.0(supports-color@10.2.2))(supports-color@10.2.2)
-      hono: 4.13.13
+      hono: 4.13.16
       jose: 6.2.12
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -40567,7 +40611,7 @@ snapshots:
   '@opencode-ai/plugin@1.14.48':
     dependencies:
       '@opencode-ai/sdk': 1.14.48
-      effect: 4.0.0-beta.59
+      effect: 4.0.0-beta.103
       zod: 4.6.7
 
   '@opencode-ai/sdk@1.14.48':
@@ -44632,7 +44676,7 @@ snapshots:
   '@turbopuffer/turbopuffer@0.10.18':
     dependencies:
       pako: 2.2.0
-      undici: 8.12.2
+      undici: 8.12.4
 
   '@tursodatabase/database-common@0.4.4': {}
 
@@ -45479,35 +45523,35 @@ snapshots:
       valibot: 1.5.0(typescript@7.0.2)
     optional: true
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide@2.5.1':
+  '@valkey/valkey-glide@2.5.2':
     dependencies:
       long: 5.3.2
       protobufjs: 8.8.0
     optionalDependencies:
-      '@valkey/valkey-glide-darwin-arm64': 2.5.1
-      '@valkey/valkey-glide-darwin-x64': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-musl': 2.5.1
-      '@valkey/valkey-glide-linux-x64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-x64-musl': 2.5.1
+      '@valkey/valkey-glide-darwin-arm64': 2.5.2
+      '@valkey/valkey-glide-darwin-x64': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-musl': 2.5.2
+      '@valkey/valkey-glide-linux-x64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-x64-musl': 2.5.2
 
   '@vercel/analytics@1.6.1(react@19.3.1)':
     optionalDependencies:
@@ -45535,7 +45579,7 @@ snapshots:
       ms: 2.1.3
       picocolors: 1.1.1
       tar-stream: 3.1.7
-      undici: 8.12.2
+      undici: 8.12.4
       xdg-app-paths: 5.1.0
       zod: 4.6.7
     transitivePeerDependencies:
@@ -46626,7 +46670,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.35: {}
 
-  basic-ftp@6.2.1: {}
+  basic-ftp@6.2.4: {}
 
   batch@0.6.1: {}
 
@@ -47100,7 +47144,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 8.12.2
+      undici: 8.12.4
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -48332,7 +48376,7 @@ snapshots:
       lodash.snakecase: 4.1.1
       magic-bytes.js: 1.13.1
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -48474,7 +48518,7 @@ snapshots:
       openapi-fetch: 0.17.0
       platform: 1.3.6
       tar: 7.5.22
-      undici: 8.12.3
+      undici: 8.12.4
 
   eastasianwidth@0.2.0: {}
 
@@ -48506,17 +48550,17 @@ snapshots:
 
   ee-first@1.1.1: {}
 
-  effect@4.0.0-beta.59:
+  effect@4.0.0-beta.103:
     dependencies:
       '@standard-schema/spec': 1.1.0
       fast-check: 4.10.2
       find-my-way-ts: 0.1.6
-      ini: 6.0.0
+      ini: 7.0.0
       kubernetes-types: 1.30.0
-      msgpackr: 1.12.1
+      msgpackr: 2.1.4
       multipasta: 0.2.9
       toml: 5.0.1
-      uuid: 13.0.1
+      uuid: 14.0.3
       yaml: 2.9.1
 
   efrt@2.9.0: {}
@@ -49307,7 +49351,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  files-sdk@1.9.0(45711e3aa834b72476cf632c2aa8c95a):
+  files-sdk@1.9.0(519b038371ca29931797926b7e91c792):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.7
@@ -49323,7 +49367,7 @@ snapshots:
       '@opentelemetry/api': 1.10.0
       '@supabase/storage-js': 2.118.0
       ai: 6.0.322(zod@4.6.7)
-      basic-ftp: 6.2.1
+      basic-ftp: 6.2.4
       convex: 1.49.0(bufferutil@4.1.0)(react@19.3.1)
       google-auth-library: 10.9.1(supports-color@10.2.2)
       openai: 6.49.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
@@ -49674,7 +49718,7 @@ snapshots:
 
   get-uri@6.0.5(supports-color@10.2.2):
     dependencies:
-      basic-ftp: 6.2.1
+      basic-ftp: 6.2.4
       data-uri-to-buffer: 6.0.2
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
@@ -50182,14 +50226,14 @@ snapshots:
     dependencies:
       parse-passwd: 1.0.0
 
-  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.16)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
+  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
     dependencies:
-      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.16)
+      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)
       '@standard-community/standard-json': 0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       '@standard-community/standard-openapi': 0.2.11(@standard-community/standard-json@0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@6.0.3)))(arktype@2.2.9)(valibot@1.5.0(typescript@6.0.3))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(arktype@2.2.9)(openapi-types@12.1.3)(valibot@1.5.0(typescript@6.0.3))(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       '@types/json-schema': 7.0.15
-      hono: 4.13.16
+      hono: 4.13.17
       openapi-types: 12.1.3
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
@@ -50202,14 +50246,14 @@ snapshots:
       - zod-openapi
       - zod-to-json-schema
 
-  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.16)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
+  hono-openapi@1.5.0(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(hono@4.13.17)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7):
     dependencies:
-      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.16)
+      '@hono/standard-validator': 0.4.1(@standard-schema/spec@1.1.0)(hono@4.13.17)
       '@standard-community/standard-json': 0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7)
       '@standard-community/standard-openapi': 0.2.11(@standard-community/standard-json@0.3.7(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.8.0(valibot@1.5.0(typescript@7.0.2)))(arktype@2.2.9)(valibot@1.5.0(typescript@7.0.2))(zod-to-json-schema@3.25.2(zod@4.6.7))(zod@4.6.7))(@standard-schema/spec@1.1.0)(arktype@2.2.9)(openapi-types@12.1.3)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7)
       '@standard-schema/spec': 1.1.0
       '@types/json-schema': 7.0.15
-      hono: 4.13.16
+      hono: 4.13.17
       openapi-types: 12.1.3
     transitivePeerDependencies:
       - '@valibot/to-json-schema'
@@ -50222,9 +50266,9 @@ snapshots:
       - zod-openapi
       - zod-to-json-schema
 
-  hono@4.13.13: {}
-
   hono@4.13.16: {}
+
+  hono@4.13.17: {}
 
   hookable@6.1.2: {}
 
@@ -50494,6 +50538,8 @@ snapshots:
 
   ini@6.0.0: {}
 
+  ini@7.0.0: {}
+
   inline-style-parser@0.2.9: {}
 
   inngest-cli@1.49.0(encoding@0.1.14)(supports-color@10.2.2):
@@ -50506,7 +50552,7 @@ snapshots:
       - encoding
       - supports-color
 
-  inngest@4.26.2(@opentelemetry/core@3.0.0(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.16)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7):
+  inngest@4.26.2(@opentelemetry/core@3.0.0(@opentelemetry/api@1.10.0))(encoding@0.1.14)(express@5.3.0(supports-color@10.2.2))(fastify@5.12.8)(hono@4.13.17)(koa@3.3.0)(react@19.3.1)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7):
     dependencies:
       '@bufbuild/protobuf': 2.13.0
       '@inngest/ai': 0.1.8
@@ -50534,7 +50580,7 @@ snapshots:
     optionalDependencies:
       express: 5.3.0(supports-color@10.2.2)
       fastify: 5.12.8
-      hono: 4.13.16
+      hono: 4.13.17
       koa: 3.3.0
       react: 19.3.1
       typescript: 7.0.2
@@ -50851,7 +50897,7 @@ snapshots:
       parse5: 8.1.0
       saxes: 6.0.0
       tough-cookie: 6.0.2
-      undici: 8.12.2
+      undici: 8.12.4
       w3c-xmlserializer: 6.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -51095,14 +51141,14 @@ snapshots:
 
   kysely@0.29.8: {}
 
-  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
+  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/exporter-trace-otlp-proto': 0.300.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.10.0)
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       ws: 8.22.0(bufferutil@4.1.0)
 
   latest-version@7.0.0:
@@ -52206,7 +52252,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.12.2
+      undici: 8.12.4
       workerd: 1.20261023.1
       ws: 8.22.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -52219,7 +52265,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.12.2
+      undici: 8.12.4
       workerd: 1.20261103.1
       ws: 8.22.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -52369,7 +52415,7 @@ snapshots:
       '@msgpackr-extract/msgpackr-extract-win32-x64': 3.0.6
     optional: true
 
-  msgpackr@1.12.1:
+  msgpackr@2.1.4:
     optionalDependencies:
       msgpackr-extract: 3.0.6
 
@@ -52884,12 +52930,12 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
 
-  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.92
       '@smithy/signature-v4': 5.7.5
       google-auth-library: 11.3.2(supports-color@10.2.2)
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
 
@@ -57067,9 +57113,7 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@8.12.2: {}
-
-  undici@8.12.3: {}
+  undici@8.12.4: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -57834,7 +57878,7 @@ snapshots:
       '@wdio/utils': 9.33.1(supports-color@10.2.2)
       deepmerge-ts: 8.0.2
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bare-abort-controller

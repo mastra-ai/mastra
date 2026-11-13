@@ -61,6 +61,7 @@ import {
   untilIdleHandlesBackgroundTask,
 } from '../loop/shared/stream-until-idle-helpers';
 import type { AgentLoopResumeClaim } from '../loop/types';
+import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -164,6 +165,7 @@ import { validateToolInput } from '../tools/validation';
 import type { DynamicArgument } from '../types';
 import { makeCoreTool, createMastraProxy, ensureToolProperties, deepMerge } from '../utils';
 import type { ToolOptions } from '../utils';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import { slugify } from '../utils/slugify';
 import type { IMastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
@@ -215,6 +217,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
+import { detachFullStreamOnEnd } from './durable/observe-full-stream';
 import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
@@ -812,6 +815,24 @@ function definedToolHooks(hooks: ToolHooks | null | undefined): ToolHooks | unde
 function withDefinedToolHooks<T extends { hooks?: ToolHooks | null }>(options: T | undefined): T | undefined {
   if (options?.hooks === undefined) return options;
   return { ...options, hooks: definedToolHooks(options.hooks) };
+}
+
+/** Tool sources slower than this are named on the `agent:prepare-tools` span. */
+const SLOW_TOOL_SOURCE_MS = 100;
+
+/**
+ * Assistant messages in a delegating agent's context that keep content once tool calls
+ * and tool results are removed. Reasoning still counts, so this matches the iteration
+ * delegation hooks saw before `stripParentToolParts` also dropped reasoning (#29276).
+ */
+function countParentAssistantSteps(messages: ModelMessage[]): number {
+  return messages.filter(
+    message =>
+      (message as { id?: string }).id !== 'om-continuation' &&
+      message.role === 'assistant' &&
+      (!Array.isArray(message.content) ||
+        message.content.some(part => part.type !== 'tool-call' && part.type !== 'tool-result')),
+  ).length;
 }
 
 /**
@@ -2270,11 +2291,7 @@ export class Agent<
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
     | Record<string, SubAgent<string, TRequestContext>>
     | Promise<Record<string, SubAgent<string, TRequestContext>>> {
-    const agentsToUse = this.#agents
-      ? typeof this.#agents === 'function'
-        ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
-        : this.#agents
-      : {};
+    const agentsToUse = this.#agents ? resolveDynamicArgument(this.#agents, { requestContext }) : {};
 
     return resolveMaybePromise(agentsToUse, agents => {
       if (!agents) {
@@ -2361,9 +2378,7 @@ export class Agent<
     requestContext: RequestContext,
   ): Promise<ErrorProcessorOrWorkflow[] | undefined> {
     if (!this.#errorProcessors) return undefined;
-    return typeof this.#errorProcessors === 'function'
-      ? await this.#errorProcessors({ requestContext: requestContext as RequestContext<TRequestContext> })
-      : this.#errorProcessors;
+    return resolveDynamicArgument(this.#errorProcessors, { requestContext });
   }
 
   #withErrorProcessorDefaults(configured: ErrorProcessorOrWorkflow[] | undefined): ErrorProcessorOrWorkflow[] {
@@ -2649,11 +2664,9 @@ export class Agent<
     const configuredProcessors = configuredProcessorOverrides
       ? configuredProcessorOverrides
       : this.#outputProcessors
-        ? typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({
-              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-            })
-          : this.#outputProcessors
+        ? await resolveDynamicArgument(this.#outputProcessors, {
+            requestContext: requestContext || new RequestContext(),
+          })
         : [];
 
     // Get memory output processors (with deduplication)
@@ -2690,11 +2703,9 @@ export class Agent<
     const configuredProcessors = configuredProcessorOverrides
       ? configuredProcessorOverrides
       : this.#inputProcessors
-        ? typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({
-              requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-            })
-          : this.#inputProcessors
+        ? await resolveDynamicArgument(this.#inputProcessors, {
+            requestContext: requestContext || new RequestContext(),
+          })
         : [];
 
     // Get memory input processors (with deduplication)
@@ -2833,9 +2844,7 @@ export class Agent<
 
     // Get raw input processors (before combining into workflow)
     const configuredInputProcessors = this.#inputProcessors
-      ? typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-        : this.#inputProcessors
+      ? await resolveDynamicArgument(this.#inputProcessors, { requestContext: ctx })
       : [];
 
     // Get memory input processors
@@ -2851,9 +2860,7 @@ export class Agent<
 
     // Get raw output processors (before combining into workflow)
     const configuredOutputProcessors = this.#outputProcessors
-      ? typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-        : this.#outputProcessors
+      ? await resolveDynamicArgument(this.#outputProcessors, { requestContext: ctx })
       : [];
 
     // Get memory output processors
@@ -2879,12 +2886,9 @@ export class Agent<
   public async listConfiguredInputProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
     if (!this.#inputProcessors) return [];
 
-    const configuredProcessors =
-      typeof this.#inputProcessors === 'function'
-        ? await this.#inputProcessors({
-            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-          })
-        : this.#inputProcessors;
+    const configuredProcessors = await resolveDynamicArgument(this.#inputProcessors, {
+      requestContext: requestContext || new RequestContext(),
+    });
 
     return configuredProcessors;
   }
@@ -2899,12 +2903,9 @@ export class Agent<
   public async listConfiguredOutputProcessors(requestContext?: RequestContext): Promise<OutputProcessorOrWorkflow[]> {
     if (!this.#outputProcessors) return [];
 
-    const configuredProcessors =
-      typeof this.#outputProcessors === 'function'
-        ? await this.#outputProcessors({
-            requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-          })
-        : this.#outputProcessors;
+    const configuredProcessors = await resolveDynamicArgument(this.#outputProcessors, {
+      requestContext: requestContext || new RequestContext(),
+    });
 
     return configuredProcessors;
   }
@@ -2933,19 +2934,13 @@ export class Agent<
 
     let inputProcessorIds: string[] = [];
     if (this.#inputProcessors) {
-      const processors =
-        typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-          : this.#inputProcessors;
+      const processors = await resolveDynamicArgument(this.#inputProcessors, { requestContext: ctx });
       inputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
     let outputProcessorIds: string[] = [];
     if (this.#outputProcessors) {
-      const processors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext: ctx as RequestContext<TRequestContext> })
-          : this.#outputProcessors;
+      const processors = await resolveDynamicArgument(this.#outputProcessors, { requestContext: ctx });
       outputProcessorIds = processors.map(p => p.id).filter(Boolean);
     }
 
@@ -2965,10 +2960,9 @@ export class Agent<
 
     // Get input processors (static or from function)
     if (this.#inputProcessors) {
-      const inputProcessors =
-        typeof this.#inputProcessors === 'function'
-          ? await this.#inputProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
-          : this.#inputProcessors;
+      const inputProcessors = await resolveDynamicArgument(this.#inputProcessors, {
+        requestContext: new RequestContext(),
+      });
 
       const combined = this.combineProcessorsIntoWorkflow(inputProcessors, `${this.id}-input-processor`);
       for (const p of combined) {
@@ -2980,10 +2974,9 @@ export class Agent<
 
     // Get output processors (static or from function)
     if (this.#outputProcessors) {
-      const outputProcessors =
-        typeof this.#outputProcessors === 'function'
-          ? await this.#outputProcessors({ requestContext: new RequestContext() as RequestContext<TRequestContext> })
-          : this.#outputProcessors;
+      const outputProcessors = await resolveDynamicArgument(this.#outputProcessors, {
+        requestContext: new RequestContext(),
+      });
 
       const combined = this.combineProcessorsIntoWorkflow(outputProcessors, `${this.id}-output-processor`);
       for (const p of combined) {
@@ -3072,8 +3065,8 @@ export class Agent<
     if (typeof memoryConfig !== 'function') {
       resolvedMemory = memoryConfig;
     } else {
-      const result = memoryConfig({
-        requestContext: requestContext as RequestContext<TRequestContext>,
+      const result = resolveDynamicArgument(memoryConfig, {
+        requestContext,
         mastra: this.#mastra,
       });
       resolvedMemory = await Promise.resolve(result);
@@ -3092,6 +3085,11 @@ export class Agent<
         throw mastraError;
       }
     }
+
+    // Record which agent resolved this memory so missing-storage diagnostics can
+    // name it when the agent was never attached to a Mastra instance. Memory-like
+    // objects that do not implement the hook are left untouched.
+    resolvedMemory.__registerAgent?.(this.name);
 
     if (this.#mastra && resolvedMemory) {
       resolvedMemory.__registerMastra(this.#mastra);
@@ -3161,8 +3159,8 @@ export class Agent<
         return this.#workspace;
       }
 
-      const result = this.#workspace({
-        requestContext: requestContext as RequestContext<TRequestContext>,
+      const result = resolveDynamicArgument(this.#workspace, {
+        requestContext,
         mastra: this.#mastra,
       });
       const resolvedWorkspace = await Promise.resolve(result);
@@ -3184,6 +3182,7 @@ export class Agent<
           source: 'agent',
           agentId: this.id,
           agentName: this.name,
+          agentSource: this.source,
         });
       }
 
@@ -3323,7 +3322,7 @@ export class Agent<
     let workflowRecord;
     if (typeof this.#workflows === 'function') {
       workflowRecord = await Promise.resolve(
-        this.#workflows({ requestContext: requestContext as RequestContext<TRequestContext>, mastra: this.#mastra }),
+        resolveDynamicArgument(this.#workflows, { requestContext, mastra: this.#mastra }),
       );
     } else {
       workflowRecord = this.#workflows ?? {};
@@ -3361,8 +3360,8 @@ export class Agent<
       return this.#scorers;
     }
 
-    const result = this.#scorers({
-      requestContext: requestContext as RequestContext<TRequestContext>,
+    const result = resolveDynamicArgument(this.#scorers, {
+      requestContext,
       mastra: this.#mastra,
     });
     return resolveMaybePromise(result, scorers => {
@@ -3414,8 +3413,8 @@ export class Agent<
     }
 
     if (typeof this.#voice === 'function') {
-      const resolved = await this.#voice({
-        requestContext: (requestContext ?? new RequestContext()) as RequestContext<TRequestContext>,
+      const resolved = await resolveDynamicArgument(this.#voice, {
+        requestContext: requestContext ?? new RequestContext(),
         mastra: this.#mastra,
       });
       return resolved ?? new DefaultVoice();
@@ -3470,8 +3469,8 @@ export class Agent<
     | AgentInstructions
     | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
-      const result = this.#instructions({
-        requestContext: requestContext as RequestContext<TRequestContext>,
+      const result = resolveDynamicArgument(this.#instructions, {
+        requestContext,
         mastra: this.#mastra,
       });
       return resolveMaybePromise(result, instructions => {
@@ -3614,8 +3613,8 @@ export class Agent<
     if (typeof this.#metadata !== 'function') {
       return this.#metadata;
     }
-    const result = this.#metadata({
-      requestContext: requestContext as RequestContext<TRequestContext>,
+    const result = resolveDynamicArgument(this.#metadata, {
+      requestContext,
       mastra: this.#mastra,
     });
     return resolveMaybePromise(result, m => m);
@@ -3764,8 +3763,8 @@ export class Agent<
       return this.#defaultOptions;
     }
 
-    const result = this.#defaultOptions({
-      requestContext: requestContext as RequestContext<TRequestContext>,
+    const result = resolveDynamicArgument(this.#defaultOptions, {
+      requestContext,
       mastra: this.#mastra,
     });
 
@@ -3808,10 +3807,7 @@ export class Agent<
       return this.#defaultNetworkOptions;
     }
 
-    const result = this.#defaultNetworkOptions({
-      requestContext: requestContext as RequestContext<TRequestContext>,
-      mastra: this.#mastra,
-    });
+    const result = resolveDynamicArgument(this.#defaultNetworkOptions, { requestContext, mastra: this.#mastra });
 
     return resolveMaybePromise(result, options => {
       if (!options) {
@@ -3881,8 +3877,8 @@ export class Agent<
       return resolveToolList(this.#tools as ToolsInput | undefined);
     }
 
-    const result = this.#tools({
-      requestContext: requestContext as RequestContext<TRequestContext>,
+    const result = resolveDynamicArgument(this.#tools, {
+      requestContext,
       mastra: this.#mastra,
     });
 
@@ -4088,8 +4084,8 @@ export class Agent<
   ): Promise<ResolvedModelSelection> {
     // If it's a dynamic function, resolve it
     if (typeof modelConfig === 'function') {
-      const resolved = await modelConfig({
-        requestContext: requestContext as RequestContext<TRequestContext>,
+      const resolved = await resolveDynamicArgument(modelConfig, {
+        requestContext,
         mastra: this.#mastra,
       });
 
@@ -4454,7 +4450,7 @@ export class Agent<
           }
         }
         // Always register the configuration with agent context
-        mastra.addProcessorConfiguration(processor, this.id, 'input');
+        mastra.addProcessorConfiguration(processor, this.id, 'input', this.source);
       });
     }
 
@@ -4470,7 +4466,7 @@ export class Agent<
           }
         }
         // Always register the configuration with agent context
-        mastra.addProcessorConfiguration(processor, this.id, 'output');
+        mastra.addProcessorConfiguration(processor, this.id, 'output', this.source);
       });
     }
 
@@ -4522,6 +4518,7 @@ export class Agent<
       fork.#primitives = this.#primitives;
     }
 
+    fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
     // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
@@ -4786,6 +4783,7 @@ export class Agent<
         source: 'agent',
         agentId: this.id,
         agentName: this.name,
+        agentSource: this.source,
       });
     }
   }
@@ -5934,8 +5932,24 @@ export class Agent<
    * so sending references to them causes model providers to reject or
    * mishandle the request.
    *
+   * Provider-executed tool results are stripped too. When a provider runs a tool
+   * itself (OpenAI hosted tool search, Anthropic server tools) AI SDK v5 places the
+   * tool_result part in the *same assistant message* as its tool_call, so removing only
+   * the call leaves an orphaned result that providers reject — "No tool call found for
+   * tool search output with call_id ...". Client-executed results live in `role: 'tool'`
+   * messages instead and are already dropped below.
+   *
    * This function removes those parts while preserving all other
    * conversation context (user messages, assistant text, etc.).
+   *
+   * Reasoning parts are removed from assistant messages too. The parent's
+   * reasoning is replayable only as part of the parent's own unmodified
+   * responses: once tool calls and tool messages are removed,
+   * `@ai-sdk/anthropic` merges the now-adjacent assistant steps into one
+   * message, and Anthropic rejects any signed thinking (`signature` /
+   * `redactedData`) in it as a modified thinking block (#29276). The forwarded
+   * context never ends in a tool-use continuation, so no provider requires
+   * thinking blocks in it.
    * @internal
    */
   private stripParentToolParts(messages: ModelMessage[]): ModelMessage[] {
@@ -5950,7 +5964,9 @@ export class Agent<
         }
 
         if (message.role === 'assistant' && Array.isArray(message.content)) {
-          const filtered = message.content.filter(part => part.type !== 'tool-call');
+          const filtered = message.content.filter(
+            part => part.type !== 'tool-call' && part.type !== 'tool-result' && part.type !== 'reasoning',
+          );
           if (filtered.length === 0) return null;
           return { ...message, content: filtered };
         }
@@ -6060,8 +6076,10 @@ export class Agent<
             let fullSubAgentMessages = sanitizedMessages as unknown as MastraDBMessage[];
 
             // Derive iteration from the number of assistant messages (rough approximation)
-            // Each iteration typically produces an assistant message
-            const derivedIteration = Math.max(1, sanitizedMessages.filter(m => m.role === 'assistant').length);
+            // Each iteration typically produces an assistant message. Counted on the parent
+            // context with tool parts removed but reasoning kept, so dropping reasoning from
+            // the forwarded context doesn't change what delegation hooks see.
+            const derivedIteration = Math.max(1, countParentAssistantSteps(contextMessages));
 
             // The sub-agent run gets its own RequestContext map derived from the
             // parent's entries, excluding run-scoped identity keys. This isolates
@@ -7599,192 +7617,253 @@ export class Agent<
     let modelSnapshot: Promise<MastraLanguageModel | MastraLegacyLanguageModel> | undefined;
     const getResolvedModel = () => (modelSnapshot ??= Promise.resolve(model ?? this.getModel({ requestContext })));
 
-    const assignedTools = await this.listAssignedTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
+    // Tool sources resolve before the first model call; name the slow ones so a trace shows what held the run up.
+    const prepareSpan = observabilityContext.tracingContext?.currentSpan?.createChildSpan({
+      type: SpanType.GENERIC,
+      name: 'agent:prepare-tools',
     });
-
-    const memoryTools = await this.listMemoryTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      memoryConfig,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const toolsetTools = await this.listToolsets({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      toolsets: toolsets!,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const clientSideTools = await this.listClientTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      clientTools: clientTools!,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      model,
-      getModel: getResolvedModel,
-    });
-
-    // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
-    // tools when the serialized client copy overwrites them below. Normal
-    // server-executed tools never hand hooks to client-controlled input. Copy
-    // instead of mutating so a future cache inside listClientTools cannot leak
-    // hooks across requests.
-    const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
-    for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
-      const serverTool = serverDeclaredTools[name];
-      if (!serverTool || serverTool.execute) continue;
-      const preserveOnOutput = !clientSideTool.onOutput && typeof serverTool.onOutput === 'function';
-      const preserveToModelOutput = !clientSideTool.toModelOutput && typeof serverTool.toModelOutput === 'function';
-      if (preserveOnOutput || preserveToModelOutput) {
-        clientSideTools[name] = {
-          ...clientSideTool,
-          ...(preserveOnOutput ? { onOutput: serverTool.onOutput } : {}),
-          ...(preserveToModelOutput ? { toModelOutput: serverTool.toModelOutput } : {}),
-        };
+    const slowSourcesMs: Record<string, number> = {};
+    let failedSource: string | undefined;
+    const traced = async <T extends object>(source: string, list: () => Promise<T>): Promise<T> => {
+      const startedAt = Date.now();
+      try {
+        return await list();
+      } catch (error) {
+        failedSource = source;
+        throw error;
+      } finally {
+        const elapsed = Date.now() - startedAt;
+        if (elapsed >= SLOW_TOOL_SOURCE_MS) slowSourcesMs[source] = elapsed;
       }
+    };
+
+    let allTools: Record<string, CoreTool>;
+    try {
+      const assignedTools = await traced('assigned', () =>
+        this.listAssignedTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          model,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const memoryTools = await traced('memory', () =>
+        this.listMemoryTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          memoryConfig,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const toolsetTools = await traced('toolsets', () =>
+        this.listToolsets({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          toolsets: toolsets!,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const clientSideTools = await traced('client', () =>
+        this.listClientTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          clientTools: clientTools!,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          model,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      // Preserve `onOutput` and `toModelOutput` from server-declared execute-less
+      // tools when the serialized client copy overwrites them below. Normal
+      // server-executed tools never hand hooks to client-controlled input. Copy
+      // instead of mutating so a future cache inside listClientTools cannot leak
+      // hooks across requests.
+      const serverDeclaredTools = { ...assignedTools, ...toolsetTools };
+      for (const [name, clientSideTool] of Object.entries(clientSideTools)) {
+        const serverTool = serverDeclaredTools[name];
+        if (!serverTool || serverTool.execute) continue;
+        const preserveOnOutput = !clientSideTool.onOutput && typeof serverTool.onOutput === 'function';
+        const preserveToModelOutput = !clientSideTool.toModelOutput && typeof serverTool.toModelOutput === 'function';
+        if (preserveOnOutput || preserveToModelOutput) {
+          clientSideTools[name] = {
+            ...clientSideTool,
+            ...(preserveOnOutput ? { onOutput: serverTool.onOutput } : {}),
+            ...(preserveToModelOutput ? { toModelOutput: serverTool.toModelOutput } : {}),
+          };
+        }
+      }
+
+      const agentTools = await traced('agents', () =>
+        this.listAgentTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          methodType,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          delegation,
+          backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const workflowTools = await traced('workflows', () =>
+        this.listWorkflowTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          methodType,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const workspaceTools = await traced('workspace', () =>
+        this.listWorkspaceTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const knowledgeTools = await traced('knowledge', () =>
+        this.listKnowledgeTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const configuredInputProcessors =
+        inputProcessors ??
+        (await traced('input-processor-config', () => this.listConfiguredInputProcessors(requestContext)));
+      const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
+      const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
+
+      const skillTools = await traced('skills', () =>
+        this.listSkillTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const browserTools = await traced('browser', () =>
+        this.listBrowserTools({
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      const requestResolvedTools = {
+        ...assignedTools,
+        ...memoryTools,
+        ...toolsetTools,
+        ...clientSideTools,
+        ...agentTools,
+        ...workflowTools,
+        ...workspaceTools,
+        ...knowledgeTools,
+        ...skillTools,
+        ...browserTools,
+      };
+
+      const inputProcessorLoadedTools = await traced('input-processors', () =>
+        this.listInputProcessorLoadedTools({
+          processors: configuredInputProcessors,
+          tools: requestResolvedTools,
+          memoryConfig,
+          runMessages,
+          runId,
+          resourceId,
+          threadId,
+          requestContext,
+          ...observabilityContext,
+          mastraProxy,
+          outputWriter,
+          autoResumeSuspendedTools,
+          backgroundTaskEnabled,
+          getModel: getResolvedModel,
+        }),
+      );
+
+      allTools = {
+        ...requestResolvedTools,
+        ...inputProcessorLoadedTools,
+      };
+      prepareSpan?.end({
+        output: {
+          toolCount: Object.keys(allTools).length,
+          ...(Object.keys(slowSourcesMs).length > 0 ? { slowSourcesMs } : {}),
+        },
+      });
+    } catch (error) {
+      // Covers every tool source and the skill detection between them, so the span never stays open.
+      prepareSpan?.error({
+        error: error instanceof Error ? error : new Error(String(error)),
+        endSpan: true,
+        metadata: { ...(failedSource ? { failedSource } : {}), slowSourcesMs },
+      });
+      throw error;
     }
-
-    const agentTools = await this.listAgentTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      delegation,
-      backgroundTaskEnabled: backgroundTaskPolicy?.allowDelegationDispatch ?? backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const workflowTools = await this.listWorkflowTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      methodType,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const workspaceTools = await this.listWorkspaceTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const knowledgeTools = await this.listKnowledgeTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const configuredInputProcessors = inputProcessors ?? (await this.listConfiguredInputProcessors(requestContext));
-    const hasOnDemandProcessor = hasOnDemandSkillDiscoveryProcessor(configuredInputProcessors);
-    const hasSkillsProcessor = hasEagerSkillsProcessor(configuredInputProcessors);
-
-    const skillTools = await this.listSkillTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      suppressEagerSkillTools: hasOnDemandProcessor && !hasSkillsProcessor,
-      getModel: getResolvedModel,
-    });
-
-    const browserTools = await this.listBrowserTools({
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const requestResolvedTools = {
-      ...assignedTools,
-      ...memoryTools,
-      ...toolsetTools,
-      ...clientSideTools,
-      ...agentTools,
-      ...workflowTools,
-      ...workspaceTools,
-      ...knowledgeTools,
-      ...skillTools,
-      ...browserTools,
-    };
-
-    const inputProcessorLoadedTools = await this.listInputProcessorLoadedTools({
-      processors: configuredInputProcessors,
-      tools: requestResolvedTools,
-      memoryConfig,
-      runMessages,
-      runId,
-      resourceId,
-      threadId,
-      requestContext,
-      ...observabilityContext,
-      mastraProxy,
-      outputWriter,
-      autoResumeSuspendedTools,
-      backgroundTaskEnabled,
-      getModel: getResolvedModel,
-    });
-
-    const allTools = {
-      ...requestResolvedTools,
-      ...inputProcessorLoadedTools,
-    };
 
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
@@ -8125,13 +8204,7 @@ export class Agent<
     requestContext: RequestContext,
   ): Promise<T | undefined> {
     if (value === undefined) return undefined;
-    if (typeof value === 'function') {
-      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
-        requestContext,
-        mastra: this.#mastra,
-      });
-    }
-    return value;
+    return await resolveDynamicArgument(value, { requestContext, mastra: this.#mastra });
   }
 
   /**
@@ -8348,7 +8421,9 @@ export class Agent<
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
-    const throwNotSuspended = (): never => {
+    // `timedOut` marks a run that may still suspend on the target once its snapshot is durable,
+    // so callers can retry it instead of treating the tool call as answered.
+    const throwNotSuspended = (timedOut = false): never => {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
         domain: ErrorDomain.AGENT,
@@ -8359,6 +8434,7 @@ export class Agent<
           method,
           runId,
           toolCallId,
+          ...(timedOut ? { timedOut } : {}),
         },
       });
     };
@@ -8404,7 +8480,7 @@ export class Agent<
       throwNotSuspended();
     }
 
-    return throwNotSuspended();
+    return throwNotSuspended(true);
   }
 
   /**
@@ -10017,7 +10093,7 @@ export class Agent<
     });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
-        defaultOptions as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
         (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<any> & {
         model?: DynamicArgument<MastraModelConfig>;
@@ -10992,7 +11068,7 @@ export class Agent<
     });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
-        defaultOptions as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(defaultOptions, streamOptions) as Record<string, unknown>,
         (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT> & {
         model?: DynamicArgument<MastraModelConfig>;
@@ -11342,7 +11418,7 @@ export class Agent<
     });
 
     const mergedStreamOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
+      withDefaultToolCallConcurrencyLimit(defaultOptions, streamOptions) as Record<string, unknown>,
       (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
     validateModelTimeoutSettings(mergedStreamOptions.modelSettings?.timeout);
@@ -11453,6 +11529,9 @@ export class Agent<
         });
       }
 
+      // A parked run whose thread lease lapsed must hold it again before it runs: a successor that now holds the
+      // thread refuses this resume instead of running beside it, and the run stays parked.
+      await agentThreadStreamRuntime.reacquireParkedRunLease(runId, threadStreamPubSub);
       await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
         this as Agent<any, any, any, any>,
         loopStreamOptions as unknown as AgentExecutionOptions<OUTPUT>,
@@ -11579,7 +11658,7 @@ export class Agent<
     });
 
     const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
+      withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
       (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);
@@ -11662,6 +11741,9 @@ export class Agent<
         });
       }
 
+      // A parked run whose thread lease lapsed must hold it again before it runs: a successor that now holds the
+      // thread refuses this resume instead of running beside it, and the run stays parked.
+      await agentThreadStreamRuntime.reacquireParkedRunLease(runId, this.getPubSub());
       const result = await this.#execute({
         ...loopOptions,
         actor,
@@ -12309,7 +12391,7 @@ export class Agent<
     if (typeof instructions === 'string') {
       return instructions;
     }
-    const result = instructions({ requestContext, mastra: this.#mastra });
+    const result = resolveDynamicArgument(instructions, { requestContext, mastra: this.#mastra });
     return resolveMaybePromise(result, resolvedInstructions => {
       return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
     });
@@ -12422,36 +12504,7 @@ export class Agent<
     // This output belongs to this observer alone: a consumer that stops reading
     // fullStream detaches the subscription (MastraModelOutput only drops the
     // cancelled reader's listeners).
-    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
-    Object.defineProperty(output, 'fullStream', {
-      configurable: true,
-      get(this: typeof output) {
-        // `this` is the real instance (the destructurable proxy reads getters
-        // with its target as receiver); the proxy itself can't reach private fields.
-        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
-        return new ReadableStream<ChunkType<TOutput>>({
-          async pull(controller) {
-            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
-            try {
-              result = await reader.read();
-            } catch (error) {
-              detach();
-              throw error;
-            }
-            if (result.done) {
-              detach();
-              controller.close();
-            } else {
-              controller.enqueue(result.value);
-            }
-          },
-          cancel(reason) {
-            detach();
-            return reader.cancel(reason);
-          },
-        });
-      },
-    });
+    detachFullStreamOnEnd(output, detach);
 
     try {
       await stream.ready;
