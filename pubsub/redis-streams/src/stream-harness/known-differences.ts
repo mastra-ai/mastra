@@ -1,3 +1,4 @@
+import { ENGINES } from './types';
 import type { Cause, Engine, LayoutName, ReaderName } from './types';
 
 /**
@@ -64,12 +65,14 @@ export const BASELINES: Record<string, string> = {
   // Abort timing determines the text boundary; compare frame types, not partial text.
   'observer-cleanup': 'start,step-start,text-start,text-delta[Watched.],text-end,step-finish,finish',
   abort: 'start,step-start,text-start,text-delta,abort,finish',
+  'direct-abort': 'start,step-start,text-start,text-delta,abort,finish',
   'key-cleanup': 'start,step-start,text-start,text-delta[Done.],text-end,step-finish,finish',
 };
 
 /** Plain's value of each fact a scenario records (single frames, compared with plain only). */
 export const FACT_BASELINES: Record<string, Partial<Record<ReaderName, string>>> = {
   abort: { ack: 'ack[status=200 aborted=true]' },
+  'direct-abort': { 'abort-result': 'abort-result[returned=true unknown=false]' },
   'generate-abort': { ack: 'ack[status=200 aborted=true]', generate: 'generate[finish=aborted text=empty]' },
   'generate-partial-abort': {
     ack: 'ack[status=200 aborted=true]',
@@ -369,13 +372,25 @@ export const OBSERVATIONS: readonly Observation[] = [
   obs('observer-cleanup', DURABLE, ['observe-0'], '(timeout)', OBSERVER_DELETES_HISTORY, { layouts: SPLIT }),
   obs('observer-cleanup', DURABLE, ['topic'], '', OBSERVER_DELETES_HISTORY, { layouts: SPLIT }),
 
-  obs('abort', ['plain', ...DURABLE], ['topic'], 'start,step-start,text-start,text-delta,finish', ABORT_TOPIC),
+  ...['abort', 'direct-abort'].flatMap(scenario => [
+    obs(scenario, ENGINES, ['topic'], 'start,step-start,text-start,text-delta,finish', ABORT_TOPIC),
+    obs(scenario, ENGINES, ['thread'], 'start,step-start,text-start,text-delta,abort', THREAD_ENDS_AT_TERMINAL),
+  ]),
   obs(
-    'abort',
-    ['plain', ...DURABLE],
-    ['thread'],
-    'start,step-start,text-start,text-delta,abort',
-    THREAD_ENDS_AT_TERMINAL,
+    'direct-abort',
+    ENGINES,
+    ['abort-result'],
+    'abort-result[returned=false unknown=false]',
+    {
+      ticket: 'COR-1330',
+      cause: 'plain-layer',
+      evidence:
+        'agent/agent.ts:10569-10576 sends the remote abort request but returns false; durable delegates to it ' +
+        'and checks only local execution (agent/durable/durable-agent.ts:2922-2932). The split fixture calls ' +
+        'abortRunStream directly: every engine returns false while live and observe readers receive abort,finish. ' +
+        'The same-process control returns true and an unknown run returns false.',
+    },
+    { layouts: SPLIT },
   ),
   obs('key-cleanup', PLAIN, ['keys'], BUS_KEYS, REMAINING_KEYS, { layouts: OVER_BUS }),
   obs('key-cleanup', ['durable'], ['keys'], DURABLE_KEYS, DURABLE_REMAINING_KEYS, { layouts: OVER_BUS }),

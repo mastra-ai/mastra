@@ -161,6 +161,14 @@ export const SCENARIOS: Record<string, Scenario> = {
     readers: [...READERS, 'ack'],
     ignoreText: true,
   },
+  'direct-abort': {
+    name: 'direct-abort',
+    prompt: `${marker('direct-abort')} Talk slowly.`,
+    script: llm => llm.on({ endpoint: 'chat', predicate: hasMarker('direct-abort') }, { content: LONG_ANSWER }, CRAWL),
+    flow: 'abort',
+    readers: [...READERS, 'abort-result'],
+    ignoreText: true,
+  },
   'generate-abort': {
     name: 'generate-abort',
     prompt: `${marker('generate-abort')} Talk slowly.`,
@@ -230,6 +238,7 @@ export const SCENARIO_GROUPS = {
     'run-id-reuse',
     'observer-cleanup',
     'abort',
+    'direct-abort',
     'generate-abort',
     'generate-partial-abort',
     'resume-generate-abort',

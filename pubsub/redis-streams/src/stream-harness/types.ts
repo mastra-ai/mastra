@@ -41,7 +41,7 @@ export type StreamReader = (typeof READERS)[number] | 'live-resume';
  * - `generate`: how the caller's `generate()` ended.
  * - `keys`: the run's Redis/Valkey keys and their TTLs, some time after the run.
  */
-export const FACTS = ['ack', 'generate', 'keys'] as const;
+export const FACTS = ['ack', 'abort-result', 'generate', 'keys'] as const;
 export type Fact = (typeof FACTS)[number];
 export type ReaderName = StreamReader | Fact;
 export const isFact = (reader: string): reader is Fact => (FACTS as readonly string[]).includes(reader);

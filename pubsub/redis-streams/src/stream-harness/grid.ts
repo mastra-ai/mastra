@@ -157,10 +157,30 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
     await turn.event('text-started');
     await sleep(800);
-    const ack = await httpAbort(nodes.port, AGENT_ID, runId);
+    let acknowledgement: RunCapture;
+    if (scenario.name === 'direct-abort') {
+      expect(nodes.publisher.events.some(e => e.type === 'stream-done' && e.id === turn.id)).toBe(false);
+      const unknownId = randomUUID();
+      nodes.reader.send({ cmd: 'abort', id: unknownId, runId: randomUUID() });
+      const unknown = await nodes.reader.next(e => e.type === 'aborted' && e.id === unknownId);
+      const abortId = randomUUID();
+      nodes.reader.send({ cmd: 'abort', id: abortId, runId });
+      const result = await nodes.reader.next(e => e.type === 'aborted' && e.id === abortId);
+      acknowledgement = {
+        'abort-result': [{ type: 'abort-result', shape: `returned=${result.result} unknown=${unknown.result}` }],
+      };
+    } else {
+      acknowledgement = { ack: await httpAbort(nodes.port, AGENT_ID, runId) };
+    }
     const live = await turn.live;
     const observe = await mid;
-    return { live, 'observe-mid': observe, ...(await readBack(nodes, runId)), thread: await stopThread(), ack };
+    return {
+      live,
+      'observe-mid': observe,
+      ...(await readBack(nodes, runId)),
+      thread: await stopThread(),
+      ...acknowledgement,
+    };
   },
 
   /** As `abort`, for a run started with `generate()`; 1.3s after the call (0.8s into the text). */
