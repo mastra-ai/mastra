@@ -17,7 +17,7 @@ import {
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
-import { applyCodeHostIntake } from '../services/onboardingIntake';
+import { routeCodeHostIntake } from '../services/onboardingIntake';
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
@@ -40,16 +40,17 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
 
 /**
  * The Factory exists and its repository is linked by now, so a secondary intake failure must not
- * strand the user in onboarding: warn, and leave them to pick sources in Settings › Intake.
+ * strand the user in onboarding: warn, and leave them to pick sources in Settings › Work Intake.
+ * Only a link with the switch on reaches here; with it off, setup writes no intake at all.
  */
 function warnIntakeNotApplied(error: unknown) {
   if (error instanceof IntakeBindingConflictError) {
     toast.warning('This project already feeds another Factory', {
-      description: 'Choose sources in Settings › Intake to route some of its issues here.',
+      description: 'Choose sources in Settings › Work Intake to route some of its issues here.',
     });
     return;
   }
-  toast.warning("Issues won't sync yet", { description: 'Choose sources in Settings › Intake.' });
+  toast.warning("Issues won't sync yet", { description: 'Choose sources in Settings › Work Intake.' });
 }
 
 export function useCompleteFactorySetup({ local }: { local: boolean }) {
@@ -65,6 +66,9 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const setup = parsed.data;
       const repo = setup.repository;
       const modelScope = setup.modelScope;
+      // Read from the raw draft: the completion schema strips fields it doesn't know. Only an
+      // explicit `false` turns the switch off, so the link selects the repository by default.
+      const codeHostSync = draft.codeHostSync !== false;
       const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
         queryClient.query({ ...providersQueryOptions(client), staleTime: 0 }),
@@ -105,6 +109,8 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await link.mutateAsync({
         factoryProjectId: factory.id,
         repo,
+        // The Work step already asked: off means the repository is never selected in the first place.
+        selectIntake: codeHostSync,
         onLinked: async linked => {
           const onboardingLinks = [...new Set([...previouslyLinked, linked.projectRepositoryId])];
           // Record the new link before cleanup can fail, including across a reload and another repo choice.
@@ -118,13 +124,9 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
         plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
-        // Read from the raw draft: the completion schema strips fields it doesn't know.
-        // Read from the raw draft: the completion schema strips fields it doesn't know.
-        applyCodeHostIntake(baseUrl, {
-          factoryProjectId: factory.id,
-          repository: repo,
-          enabled: draft.codeHostSync !== false,
-        }).catch(warnIntakeNotApplied),
+        codeHostSync
+          ? routeCodeHostIntake(baseUrl, { factoryProjectId: factory.id, repository: repo }).catch(warnIntakeNotApplied)
+          : undefined,
       ]);
       return factory.id;
     },

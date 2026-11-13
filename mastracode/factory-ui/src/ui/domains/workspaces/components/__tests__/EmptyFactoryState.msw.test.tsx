@@ -193,6 +193,25 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
   return writes;
 }
 
+/**
+ * Intake endpoints backed by a config that survives the run, so what setup wrote can be read back
+ * the way Settings › Work Intake reads it.
+ */
+function registerIntake(initial: Record<string, unknown> = {}) {
+  const stored: Record<string, unknown> = { ...initial };
+  const saved: unknown[] = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: stored })),
+    http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      const body = z.record(z.string(), z.unknown()).parse(await request.json());
+      saved.push(body);
+      Object.assign(stored, body);
+      return HttpResponse.json({ config: stored });
+    }),
+  );
+  return { saved, stored };
+}
+
 /** Create factory, once the Model section has resolved every required choice. */
 async function enabledCreateButton() {
   const button = await screen.findByRole('button', { name: 'Create factory' });
@@ -294,17 +313,22 @@ describe('Draft Factory onboarding', () => {
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
   }, 20_000);
 
-  it('keeps the codebase repository out of intake when the Work step switch is off', async () => {
+  it('selects the codebase repository on the way in when the Work step switch is on', async () => {
     registerSetup();
-    const stored: Record<string, unknown> = {};
-    server.use(
-      // Intake config the server would serve afterwards, so the assertions read what Settings › Intake reads.
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: stored })),
-      http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
-        Object.assign(stored, z.record(z.string(), z.unknown()).parse(await request.json()));
-        return HttpResponse.json({ config: stored });
-      }),
-    );
+    registerIntake();
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    // Linking does the selecting, which is what feeds the board until the switch says otherwise.
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toEqual(['octo/hello']);
+  });
+
+  it('leaves an already-syncing repository selected when the Work step switch is off', async () => {
+    registerSetup();
+    // The organization's selection before onboarding already holds the repository this setup links.
+    const intake = registerIntake({ github: { enabled: true, sourceIds: ['octo/hello', 'octo/teammate'] } });
     seedOnboarding('model', {
       modelScope: 'factory',
       repository: repo,
@@ -316,9 +340,30 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
-    // Linking selects the repository on its way in, so the switch only has to drop the selection;
-    // the organization-wide switch stays as linking left it.
-    expect((await fetchIntakeConfig(TEST_BASE_URL)).github).toEqual({ enabled: true, sourceIds: null });
+    // Switching off only undoes what this setup did, so nothing is written at all: the repository
+    // is never selected and another Factory's or another member's selection is left alone.
+    expect(intake.saved).toEqual([]);
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toEqual(['octo/hello', 'octo/teammate']);
+  });
+
+  it('never starts syncing a repository the Work step switch left off', async () => {
+    registerSetup();
+    // Nothing is selected before onboarding, so "off" must not select the repository either: the
+    // link is told to skip its selection, which leaves the intake config untouched.
+    const intake = registerIntake();
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: repo,
+      workConfirmed: true,
+      codeHostSync: false,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(intake.saved).toEqual([]);
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
   });
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
