@@ -2465,6 +2465,9 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#projectBoards ?? this.#boards,
+          ...(this.#projectBoards
+            ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
+            : {}),
           factoryReady,
           domains,
           ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
@@ -2503,6 +2506,9 @@ export class MastraFactory {
               integrations: integrationRegistrations,
               configVersion,
               boardRegistry: this.#projectBoards ?? this.#boards,
+              ...(this.#projectBoards
+                ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
+                : {}),
               ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
               factoryReady,
               domains,

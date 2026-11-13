@@ -584,6 +584,7 @@ export function buildIntegrationContext(
     | 'users'
     | 'factoryStorage'
     | 'integrationStorage'
+    | 'storedBoards'
     | 'sourceControlStorage'
     | 'integrations'
   > & {
@@ -647,6 +648,7 @@ export function buildIntegrationContext(
             configVersion: deps.configVersion,
             workItems: deps.domains.workItems,
             boards: deps.boardRegistry,
+            ...(deps.storedBoards ? { intakeRoutes: deps.storedBoards.storage } : {}),
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
           },
         }
