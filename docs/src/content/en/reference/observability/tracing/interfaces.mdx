@@ -1047,7 +1047,7 @@ interface WorkflowStepAttributes {
 }
 ```
 
-`AgentRunAttributes`, `WorkflowRunAttributes`, and `WorkflowStepAttributes` don't include agent or workflow identifiers. Read them from the span's `entityType`, `entityId`, and `entityName` fields. On a `WORKFLOW_STEP` span, `entityId` is the step ID, and `entityName` is inherited from the enclosing workflow. To get the workflow ID, read `entityId` from the enclosing `WORKFLOW_RUN` span. If `WORKFLOW_RUN` spans are excluded from export, for example through `excludeSpanTypes`, the step inherits `entityName` from the nearest exported ancestor instead. That ancestor can be an agent span, or there can be none, so `entityName` doesn’t reliably name the workflow in that case.
+`AgentRunAttributes`, `WorkflowRunAttributes`, and `WorkflowStepAttributes` don't include agent or workflow identifiers. Read them from the span's `entityType`, `entityId`, and `entityName` fields. On a `WORKFLOW_STEP` span, `entityId` is the step ID, and `entityName` is inherited from the enclosing workflow. To get the workflow ID, read `entityId` from the enclosing `WORKFLOW_RUN` span. If `excludeSpanTypes` excludes `WORKFLOW_RUN` spans, the step inherits `entityName` from the nearest ancestor that isn’t excluded instead. That ancestor can be an agent span, or there can be none, so `entityName` doesn’t reliably name the workflow in that case.
 
 ### `UsageStats`
 
