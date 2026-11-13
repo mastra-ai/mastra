@@ -10,6 +10,8 @@ const unitEnv = {
   GOOGLE_GENERATIVE_AI_API_KEY: '',
   ANTHROPIC_API_KEY: '',
   OPENAI_API_KEY: '',
+  // Short drain/poll/pacing waits in product code; see src/utils/test-waits.ts.
+  MASTRA_TEST_FAST_WAITS: '1',
 };
 
 export default defineConfig({
