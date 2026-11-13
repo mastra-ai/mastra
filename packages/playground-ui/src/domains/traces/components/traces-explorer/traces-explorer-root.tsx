@@ -198,13 +198,12 @@ export function TracesExplorerRoot({
       updateFilters(next);
     };
     const filtersActions: TracesFiltersActions = {
-      setTextSearch: value => updateFilters({ ...latest.current.filters, textSearch: value || undefined }),
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
-      setFilterTokens: (tokens, groups) => {
+      setFilterTokens: (tokens, groups, options) => {
         const { filters: base, scopedFieldIds: scoped } = latest.current;
         const scopeTokens = base.tokens.filter(token => scoped.has(token.fieldId));
-        updateFilters(applyFilterTokens(base, [...scopeTokens, ...tokens], groups));
+        updateFilters({ ...applyFilterTokens(base, [...scopeTokens, ...tokens], groups), ...options });
       },
       setDatePreset: preset => pickRange(applyDatePreset(latest.current.filters, preset)),
       setDate: (value, end) => pickRange(applyDate(latest.current.filters, value, end)),

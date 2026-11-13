@@ -9,7 +9,6 @@ import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import { ObservabilityTextSearch } from '@/domains/observability/components/observability-text-search';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
@@ -140,14 +139,9 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
             {urlState && <ObservabilitySavedViews page="spans" {...urlState} columns={columns} />}
             <ActionRow>
               <ActionRow.Start>
-                {withTextSearch && (
-                  <ObservabilityTextSearch
-                    label="Search spans"
-                    value={filters.searchValue}
-                    onValueChange={filters.setTextSearch}
-                  />
-                )}
                 <SpansFilterBar
+                  textSearch={filters.searchValue}
+                  onTextSearchChange={withTextSearch ? filters.setTextSearch : undefined}
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
                   dateTo={filters.dateTo}

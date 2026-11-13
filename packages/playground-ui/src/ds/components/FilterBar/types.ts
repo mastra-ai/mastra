@@ -80,6 +80,10 @@ export type FilterBarField = {
   strict?: boolean;
   /** Never offered in the input's field step; existing chips for it still render with the field label. */
   hidden?: boolean;
+  /** Only offered at the root, for query options that cannot be nested in boolean groups. */
+  rootOnly?: boolean;
+  /** A validation message prevents committing free text until the input is valid. */
+  validateInput?: (value: string) => string | undefined;
   /**
    * Free-text entry point. The field stays offered in the input's field step whatever the
    * query, so typed text never dead-ends on "No matching field"; picking it with text typed

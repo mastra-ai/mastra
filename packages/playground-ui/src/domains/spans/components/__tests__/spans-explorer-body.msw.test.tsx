@@ -141,6 +141,45 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when text search is supported', () => {
+    it('applies, edits and removes a contains-text chip without losing the other filters', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanAggregateCapabilities,
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => HttpResponse.json(spanCountsAggregate({ to: new Date().toISOString() }))),
+      );
+      const { queries } = renderBodyAtUrl('filter.status=error');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      const originalWhere = queries.at(-1)?.where;
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      fireEvent.change(input, { target: { value: 'NEEDLE' } });
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.keyDown(input, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      expect(queries.at(-1)?.where).toEqual(originalWhere);
+      expect(currentSearchParams().get('textSearch')).toBe('NEEDLE');
+      expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
+
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: NEEDLE' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'x'.repeat(257) } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('NEEDLE');
+      fireEvent.change(editor, { target: { value: 'updated' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'updated'));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
+      await waitFor(() => expect(queries.at(-1)).not.toHaveProperty('textSearch'));
+      expect(currentSearchParams().has('textSearch')).toBe(false);
+      expect(queries.at(-1)?.where).toEqual(originalWhere);
+      await screen.findByRole('region', { name: 'Spans over time' });
+    });
+
     it('restores search from the URL without requesting an unfiltered histogram', async () => {
       setHandlers(spanRowsPage, {
         ...spanAggregateCapabilities,
@@ -156,7 +195,8 @@ describe('SpansExplorerBody', () => {
       const { queries } = renderBodyAtUrl('textSearch=needle');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
       expect(queries.at(-1)).toHaveProperty('textSearch', 'needle');
-      expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search spans' }).value).toBe('needle');
+      expect(screen.getByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(screen.getByText('needle')).toBeTruthy();
       expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
       expect(aggregate).not.toHaveBeenCalled();
     });
@@ -168,7 +208,11 @@ describe('SpansExplorerBody', () => {
       const { queries } = renderBodyAtUrl('textSearch=needle');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
       expect(queries.at(-1)).not.toHaveProperty('textSearch');
-      expect(screen.queryByRole('searchbox', { name: 'Search spans' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Remove Contains text filter' })).toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
     });
   });
 

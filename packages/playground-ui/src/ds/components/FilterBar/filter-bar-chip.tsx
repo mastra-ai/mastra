@@ -445,6 +445,9 @@ function FieldEditor() {
   const chip = useChip();
   const [query, setQuery] = useState('');
 
+  const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
+  const fields = useMemo(() => ctx.fields.filter(field => !field.rootOnly || isRoot), [ctx.fields, isRoot]);
+
   const onSelect = useCallback(
     (field: FilterBarField) => {
       const allowed = ctx.getFieldOperators(field);
@@ -465,7 +468,7 @@ function FieldEditor() {
       segment="field"
       ariaLabel="Field"
       label={chip.field?.label ?? chip.item.fieldId}
-      items={ctx.fields}
+      items={fields}
       itemToString={fieldLabel}
       filter={matchesQueryFilter}
       value={chip.field}
@@ -586,6 +589,9 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
+      {step.validationMessage && (
+        <ComboboxPrimitive.Status className={comboboxStyles.empty}>{step.validationMessage}</ComboboxPrimitive.Status>
+      )}
       {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"

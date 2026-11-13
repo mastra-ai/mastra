@@ -14,7 +14,6 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
   const toolbar = (
     <ActionRow>
       <ActionRow.Start>
-        <TracesExplorer.Search />
         <TracesExplorer.FilterBar />
       </ActionRow.Start>
       <ActionRow.End>

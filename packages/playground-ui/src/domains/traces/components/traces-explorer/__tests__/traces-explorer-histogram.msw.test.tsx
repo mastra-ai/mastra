@@ -120,7 +120,6 @@ function Harness({
         features={features}
         rootSource={rootSource}
       >
-        <TracesExplorer.Search />
         <TracesExplorer.FilterBar />
         <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
           <TracesExplorer.List />
@@ -508,16 +507,22 @@ describe('TracesExplorer.Histogram', () => {
         },
       });
       const result = await renderExplorer();
-      const search = screen.getByRole('searchbox', { name: 'Search traces' });
+      const search = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(search);
+      fireEvent.change(search, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
       onAggregate.mockClear();
       fireEvent.change(search, { target: { value: 'needle' } });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      fireEvent.keyDown(search, { key: 'Enter' });
       await waitFor(() =>
         expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
       );
       await settle(result.queryClient);
       expect(chart()).toBeNull();
       expect(onAggregate).not.toHaveBeenCalled();
-      fireEvent.change(search, { target: { value: '' } });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0].where).toBeUndefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
       await waitFor(() => expect(chart()).not.toBeNull());
       await settle(result.queryClient);
       expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
@@ -528,7 +533,10 @@ describe('TracesExplorer.Histogram', () => {
     it('does not expose a search control', async () => {
       setHandlers();
       await renderExplorer();
-      expect(screen.queryByRole('searchbox', { name: 'Search traces' })).toBeNull();
+      const input = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: 'Contains text' } });
+      expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
     });
   });
 
@@ -550,11 +558,17 @@ describe('TracesExplorer.Histogram', () => {
         },
       });
       const result = await renderExplorer();
-      fireEvent.change(screen.getByRole('searchbox', { name: 'Search traces' }), { target: { value: '  ab  ' } });
+      const search = screen.getByRole('combobox', { name: 'Add filter' });
+      fireEvent.focus(search);
+      fireEvent.change(search, { target: { value: 'Contains text' } });
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      fireEvent.change(search, { target: { value: '  ab  ' } });
+      fireEvent.keyDown(search, { key: 'Enter' });
       expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
+      fireEvent.keyDown(search, { key: 'Escape' });
       await settle(result.queryClient);
       expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
-      expect(chart()).not.toBeNull();
+      expect(screen.getByRole('region', { name: 'Traces over time', hidden: true })).toBeTruthy();
     });
   });
 
