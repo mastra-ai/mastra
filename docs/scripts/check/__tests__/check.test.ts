@@ -399,6 +399,10 @@ describe('runChecks', () => {
         }),
       ])
 
+      const single = await runChecks({ rootDir, rules: ['mastra/vale-mastra-headings'] })
+      expect(single.summary).toMatchObject({ ok: false, errors: 1 })
+      expect(single.findings.map(f => f.ruleId)).toEqual(['mastra/vale-unavailable'])
+
       const skipped = await runChecks({ rootDir, categories: ['prose'], skipVale: true })
       expect(skipped.findings.map(f => f.ruleId)).not.toContain('mastra/vale-unavailable')
     } finally {
