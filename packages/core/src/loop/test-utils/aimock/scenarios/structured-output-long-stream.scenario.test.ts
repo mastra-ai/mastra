@@ -54,13 +54,13 @@ describeForAllEngines('AIMock loop scenario: long structured-output stream', eng
       structuredOutput: { schema },
       collectChunks: true,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat' }, { content: '{"answer":"abc"}' }, { chunkSize: 1 });
+        llm.on({ endpoint: 'chat' }, { content: '{"answer":"a c"}' }, { chunkSize: 1 });
       },
     });
 
     const partials = ((chunks ?? []) as ChunkType[])
       .filter(c => c.type === 'object')
       .map(c => (c as { object: unknown }).object);
-    expect(partials).toEqual([{}, { answer: '' }, { answer: 'a' }, { answer: 'ab' }, { answer: 'abc' }]);
+    expect(partials).toEqual([{}, { answer: '' }, { answer: 'a' }, { answer: 'a ' }, { answer: 'a c' }]);
   });
 });

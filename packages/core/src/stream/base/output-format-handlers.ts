@@ -657,12 +657,11 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   let lastTextChunk: ChunkType<OUTPUT> | undefined;
 
   // Partial parsing reprocesses the whole accumulated text, so parsing on every
-  // delta is quadratic. Skip whitespace-only deltas and, once the text is large,
+  // delta is quadratic. Once the text is large, skip whitespace-only deltas and
   // only re-parse after it has grown by a fixed fraction (amortized linear).
   const shouldParsePartial = (delta: string) =>
-    !/^\s*$/.test(delta) &&
-    (accumulatedText.length <= PARTIAL_PARSE_EAGER_LIMIT ||
-      pendingChars * PARTIAL_PARSE_GROWTH_DIVISOR >= accumulatedText.length);
+    accumulatedText.length <= PARTIAL_PARSE_EAGER_LIMIT ||
+    (!/^\s*$/.test(delta) && pendingChars * PARTIAL_PARSE_GROWTH_DIVISOR >= accumulatedText.length);
 
   async function parsePartial(
     chunk: ChunkType<OUTPUT>,
