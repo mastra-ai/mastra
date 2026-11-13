@@ -6,7 +6,7 @@ settings:
 
 overrides:
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
-  hono@<4.13.11: 4.13.11
+  hono@<4.13.18: 4.13.18
   postcss@<8.5.23: 8.5.23
   undici@<8.12.4: 8.12.4
   yargs@<18.1.0: 18.2.0
@@ -70,8 +70,8 @@ importers:
         specifier: 22.20.5
         version: 22.20.5
       hono:
-        specifier: 4.13.11
-        version: 4.13.11
+        specifier: 4.13.18
+        version: 4.13.18
       mastra:
         specifier: link:../../packages/cli
         version: link:../../packages/cli
@@ -458,8 +458,8 @@ packages:
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
 
-  hono@4.13.11:
-    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   json-schema@0.4.0:
@@ -923,7 +923,7 @@ snapshots:
   fsevents@2.3.3:
     optional: true
 
-  hono@4.13.11: {}
+  hono@4.13.18: {}
 
   json-schema@0.4.0: {}
 
