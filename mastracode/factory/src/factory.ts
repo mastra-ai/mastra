@@ -2556,6 +2556,9 @@ export class MastraFactory {
     } else if (eventRoutes.length > 0) {
       integrationWorkers.push(
         new PlatformEventsWorker({
+          // Built from env like every auto-installed Platform integration's client, so it reads
+          // the same project they list. An explicit integration given its own `connect` config
+          // for another project would get no events here.
           events: createPlatformConnectClient().events,
           storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
           routes: eventRoutes,

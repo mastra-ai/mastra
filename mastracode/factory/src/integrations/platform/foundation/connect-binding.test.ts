@@ -192,7 +192,7 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
 
     expect(await jira.linkOrgConnections()).toEqual({ linked: ['conn-unlinked'], needsLinking: [] });
     expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-reauth')).toBe(0);
-    expect(await jira.unlinkedOrgConnections()).toEqual([]);
+    expect(await jira.unlinkedOrgConnections(await jira.listConnections({ fresh: true }))).toEqual([]);
   });
 
   it("links the org's unlinked global connections for its providers, once", async () => {

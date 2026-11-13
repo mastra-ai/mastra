@@ -290,7 +290,7 @@ describe('Vanta sync through the Factory project connections', () => {
     expect(vanta.needsLinking).toEqual([{ connectionId: 'conn-refused', reason: expect.any(String) }]);
   });
 
-  it('closes no cards when a Vanta connection appears in the org after boot linking', async () => {
+  it('links a Vanta connection that appears after boot, skipping only the sync that found it', async () => {
     const platform = await startFakePlatform();
     platform.orgConnections = [{ id: 'conn-linked', integrationId: 'vanta', status: 'active' }];
     platform.proxy = vulnerabilityPages([{ id: 'vuln-new' }]);
@@ -299,10 +299,34 @@ describe('Vanta sync through the Factory project connections', () => {
     await vi.waitFor(() => expect(platform.linked.has('conn-linked')).toBe(true));
 
     platform.orgConnections.push({ id: 'conn-later', integrationId: 'vanta', status: 'active' });
+    expect(await vanta.syncOnce(ctx)).toMatchObject({ projects: 0, checked: 0, closed: 0 });
+    expect(commits).not.toHaveBeenCalled();
+    expect(platform.linked.has('conn-later')).toBe(true);
+    expect(vanta.needsLinking).toEqual([]);
+
+    await vanta.syncOnce(ctx);
+    expect(platform.requests.some(request => request.path.startsWith('/v2/connections/conn-later/proxy'))).toBe(true);
+  });
+
+  it('reads a connection linked elsewhere since its listing was cached', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-linked', integrationId: 'vanta', status: 'active' }];
+    const onlyNew = vulnerabilityPages([{ id: 'vuln-new' }]);
+    const onlyFiled = vulnerabilityPages([{ id: 'vuln-filed' }]);
+    platform.proxy = (connectionId, path, query) =>
+      connectionId === 'conn-later' ? onlyFiled(connectionId, path, query) : onlyNew(connectionId, path, query);
+    const { vanta, ctx } = await setup(platform);
+    vanta.workers(ctx);
+    await vi.waitFor(() => expect(platform.linked.has('conn-linked')).toBe(true));
+    await vanta.listConnections();
+
+    // Another replica, or the Platform UI, links a new connection to the project.
+    platform.orgConnections.push({ id: 'conn-later', integrationId: 'vanta', status: 'active' });
+    platform.linked.add('conn-later');
     const summary = await vanta.syncOnce(ctx);
 
-    expect(summary).toMatchObject({ projects: 0, checked: 0, closed: 0 });
-    expect(commits).not.toHaveBeenCalled();
+    expect(platform.requests.some(request => request.path.startsWith('/v2/connections/conn-later/proxy'))).toBe(true);
+    expect(summary).toMatchObject({ closed: 0 });
   });
 
   it('closes no cards when Vanta fails partway through the vulnerability pages', async () => {

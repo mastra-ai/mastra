@@ -281,14 +281,16 @@ export class PlatformConnectBinding {
   }
 
   /**
-   * Org connections for these provider keys that the project listing doesn't
-   * show: links that were refused or failed, and connections made outside the
-   * Factory since it last linked. Reads both listings fresh.
+   * Org connections for these provider keys missing from `projectConnections`:
+   * links that were refused or failed, and connections made outside the
+   * Factory since it last linked. Pass the listing the caller acts on, so a
+   * connection linked in between can't hide from both.
    */
-  async unlinkedOrgConnections(): Promise<string[]> {
-    const candidates = await this.#orgCandidates();
-    const linked = new Set((await this.connect.listConnections()).map(connection => connection.id));
-    return candidates.filter(connection => !linked.has(connection.id)).map(connection => connection.id);
+  async unlinkedOrgConnections(projectConnections: readonly PlatformConnection[]): Promise<string[]> {
+    const linked = new Set(projectConnections.map(connection => connection.id));
+    return (await this.#orgCandidates())
+      .filter(connection => !linked.has(connection.id))
+      .map(connection => connection.id);
   }
 
   async #orgCandidates(): Promise<ProjectConnection[]> {
