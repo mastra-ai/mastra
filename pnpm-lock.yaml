@@ -304,7 +304,7 @@ overrides:
   handlebars@<4.7.10: 4.7.10
   follow-redirects@<1.16.1: 1.16.2
 
-packageExtensionsChecksum: sha256-yMZu7uISCbNFDYNHbDOtWUcy2yX/tKwP1bqwhA37HZI=
+packageExtensionsChecksum: sha256-KZt6bkM7Rf/iCkXQ5Wb36HnDAYVjAg7vYoTf32AN9y8=
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
@@ -10043,7 +10043,7 @@ importers:
 
   workspaces/daytona:
     dependencies:
-      '@daytonaio/sdk':
+      '@daytona/sdk':
         specifier: ^0.226.1
         version: 0.226.1(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
     devDependencies:
@@ -13582,11 +13582,11 @@ packages:
   '@daytona/api-client@0.226.1':
     resolution: {integrity: sha512-5FYC/KqEc1qq7fxl2j9a1Ialnejp/b8aTTGPu9CIL1Ya29ycT57Y0F/wLIV+jUYMLU3lUmeXt93mzi/34XsU+g==}
 
+  '@daytona/sdk@0.226.1':
+    resolution: {integrity: sha512-5L0Ta4aWI+WRbC2ZyuJVtdOB+RXrteaj1SQY8H2cr4OgdZ1gSAh4qad8b8tkUtT1iCTAyBavvEvvRmKg5OWyKA==}
+
   '@daytona/toolbox-api-client@0.226.1':
     resolution: {integrity: sha512-eOZ2n9s4I3Y0XX/eVF6N4AqKjYMF9vxucAEnGZyXq+1EUV1jNSumlLoFuW9su355Mwpqy4CVr/v4lVRjFE9BCg==}
-
-  '@daytonaio/sdk@0.226.1':
-    resolution: {integrity: sha512-QPmhS0ZfkvJSrj5cjsseD1p57aKrscg1M3aXU6G5URg2aKiwUdPgVESNtiIR6zpV1fBSqJI97WN2Z1tiM3jBcA==}
 
   '@deepgram/captions@1.2.0':
     resolution: {integrity: sha512-8B1C/oTxTxyHlSFubAhNRgCbQ2SQ5wwvtlByn8sDYZvdDtdn/VE2yEPZ4BvUnrKWmsbTQY6/ooLV+9Ka2qmDSQ==}
@@ -36155,14 +36155,7 @@ snapshots:
       - debug
       - supports-color
 
-  '@daytona/toolbox-api-client@0.226.1(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
-    dependencies:
-      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - debug
-      - supports-color
-
-  '@daytonaio/sdk@0.226.1(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
+  '@daytona/sdk@0.226.1(bufferutil@4.1.0)(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@aws-sdk/client-s3': 3.1161.0
       '@aws-sdk/lib-storage': 3.1161.0(@aws-sdk/client-s3@3.1161.0)
@@ -36195,6 +36188,13 @@ snapshots:
       - debug
       - supports-color
       - utf-8-validate
+
+  '@daytona/toolbox-api-client@0.226.1(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)':
+    dependencies:
+      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - debug
+      - supports-color
 
   '@deepgram/captions@1.2.0':
     dependencies:
