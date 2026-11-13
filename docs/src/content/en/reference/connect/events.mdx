@@ -31,7 +31,7 @@ A [`ConnectClient`](/reference/connect/connect-client) exposes the same client a
 
 ## Constructor parameters
 
-`new EventsClient(options?)` accepts every [`ConnectClientOptions`](/reference/connect/tools#connectclientoptions) field (`accessToken`, `orgId`, `projectId`, `fetch`), plus:
+`new EventsClient(options?)` accepts every [`ConnectClientOptions`](/reference/connect/tools#connectclientoptions) field (`accessToken`, `orgId`, `projectId`, `resourceId`, `fetch`), plus:
 
 <PropertiesTable
   content={[
@@ -53,14 +53,15 @@ A [`ConnectClient`](/reference/connect/connect-client) exposes the same client a
   {
     name: 'maxReconnectDelayMs',
     type: 'number',
-    description: 'Longest delay between reconnect attempts.',
+    description: "Longest delay between reconnect attempts, including a server's `Retry-After`.",
     isOptional: true,
     defaultValue: '30000',
   },
   {
     name: 'idleTimeoutMs',
     type: 'number',
-    description: 'Reconnect when nothing arrives for this long. The server sends a keep-alive every 15 seconds.',
+    description:
+      "Reconnect when nothing arrives for this long. The server sends a keep-alive every 15 seconds. Time your code spends handling an event doesn't count.",
     isOptional: true,
     defaultValue: '45000',
   },
@@ -166,7 +167,7 @@ The subscription is an async iterable. Iterate it once.
 
 ### Reconnects and errors
 
-The subscription reconnects, with growing delays, when the server ends the stream, the network fails, the service is unavailable, or the stream goes idle. It resumes after `cursor`, so no events are skipped.
+The subscription reconnects, with growing delays, when the server ends the stream, the network fails, the service is unavailable, or the stream goes idle. A `Retry-After` on a 429 or 503 response sets the minimum wait. It resumes after `cursor`, so no events are skipped while the service still holds that position.
 
 Delivery is at least once. After a reconnect or a restart, an event can arrive again, so make handlers safe to repeat. `sourceEventId` helps you detect duplicates.
 

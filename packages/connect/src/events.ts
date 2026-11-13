@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 import { resolveClient, stripTrailingSlashes } from './client.js';
 import type { ConnectClientOptions, ResolvedClient } from './client.js';
-import { MastraConnectError } from './errors.js';
+import { MastraConnectError, parseRetryAfterMs } from './errors.js';
 
 const DEFAULT_EVENTS_URL = 'https://events.mastra.ai';
 const REGIONAL_EVENTS_URLS: Record<'us' | 'eu', string> = {
@@ -17,6 +17,10 @@ const DEFAULT_RECONNECT_DELAY_MS = 1_000;
 const DEFAULT_MAX_RECONNECT_DELAY_MS = 30_000;
 /** Three missed 15s server pings. */
 const DEFAULT_IDLE_TIMEOUT_MS = 45_000;
+/** Floor for a server-sent `retry`, so `retry: 0` can't cause a reconnect hot loop. */
+const MIN_SERVER_RETRY_MS = 100;
+/** Longest line the parser buffers; well above the largest provider webhook. */
+const MAX_LINE_LENGTH = 32 * 1024 * 1024;
 
 export interface EventsClientOptions extends ConnectClientOptions {
   /**
@@ -85,10 +89,27 @@ const topicEventSchema = z.object({
 /** Resolves the events service base URL from options and the environment. */
 export function resolveEventsUrl(options?: { eventsUrl?: string }): string {
   const explicit = options?.eventsUrl?.trim() || process.env.MASTRA_EVENTS_API_URL?.trim();
-  if (explicit) return stripTrailingSlashes(explicit);
+  if (explicit) {
+    let url: URL;
+    try {
+      url = new URL(explicit);
+    } catch {
+      throw new MastraConnectError('invalid_options', `Invalid events service URL '${explicit}'.`);
+    }
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+      throw new MastraConnectError('invalid_options', `Invalid events service URL '${explicit}': expected http(s).`);
+    }
+    return stripTrailingSlashes(explicit);
+  }
   const region = process.env.MASTRA_PLATFORM_REGION?.trim().toLowerCase();
   if (region === 'us' || region === 'eu') return REGIONAL_EVENTS_URLS[region];
   return DEFAULT_EVENTS_URL;
+}
+
+function assertPositiveMs(name: string, value: number | undefined): void {
+  if (value !== undefined && !(Number.isFinite(value) && value > 0)) {
+    throw new MastraConnectError('invalid_options', `Invalid ${name}: expected a positive number of milliseconds.`);
+  }
 }
 
 /**
@@ -115,6 +136,9 @@ export class EventsClient {
   readonly #options: EventsClientOptions;
 
   constructor(options: EventsClientOptions = {}) {
+    assertPositiveMs('reconnectDelayMs', options.reconnectDelayMs);
+    assertPositiveMs('maxReconnectDelayMs', options.maxReconnectDelayMs);
+    assertPositiveMs('idleTimeoutMs', options.idleTimeoutMs);
     this.#client = resolveClient(options);
     this.#eventsUrl = resolveEventsUrl(options);
     this.#options = options;
@@ -155,6 +179,7 @@ export class EventsClient {
     const url = `${this.#eventsUrl}/v1/projects/${encodeURIComponent(projectId)}/topics/${encodeURIComponent(topic)}`;
     return new EventSubscription<T>({
       url,
+      projectId,
       client: this.#client,
       after: options.after,
       signal: options.signal,
@@ -194,6 +219,7 @@ function toConnectEvent(event: TopicEvent): ConnectEvent {
 
 interface SubscriptionInit<T> {
   url: string;
+  projectId: string;
   client: ResolvedClient;
   after?: string;
   signal?: AbortSignal;
@@ -216,6 +242,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   #rejectReady!: (error: unknown) => void;
   #cursor: string | undefined;
   #iterating = false;
+  readonly #onCallerAbort = () => this.close();
 
   constructor(init: SubscriptionInit<T>) {
     this.#init = init;
@@ -228,7 +255,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     this.#ready.catch(() => {});
     if (init.signal) {
       if (init.signal.aborted) this.close();
-      else init.signal.addEventListener('abort', () => this.close(), { once: true });
+      else init.signal.addEventListener('abort', this.#onCallerAbort, { once: true });
     }
   }
 
@@ -248,6 +275,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   /** Ends the subscription; a pending iteration finishes cleanly. */
   close(): void {
     if (this.#abort.signal.aborted) return;
+    this.#init.signal?.removeEventListener('abort', this.#onCallerAbort);
     this.#abort.abort();
     this.#rejectReady(new MastraConnectError('invalid_options', 'Event subscription closed before it was ready.'));
   }
@@ -264,18 +292,24 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     const closed = this.#abort.signal;
     let attempt = 0;
     let serverRetryMs: number | undefined;
+    let retryAfterMs: number | undefined;
     try {
       while (!closed.aborted) {
         const connection = new AbortController();
         const abortConnection = () => connection.abort();
         closed.addEventListener('abort', abortConnection, { once: true });
         let idleTimer: ReturnType<typeof setTimeout> | undefined;
-        const touch = () => {
-          clearTimeout(idleTimer);
-          idleTimer = setTimeout(abortConnection, this.#init.idleTimeoutMs);
+        const idle = {
+          touch: () => {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(abortConnection, this.#init.idleTimeoutMs);
+          },
+          // The consumer may hold an event for a long time; that isn't a silent stream.
+          pause: () => clearTimeout(idleTimer),
         };
         try {
-          touch();
+          retryAfterMs = undefined;
+          idle.touch();
           // Transport failures, idle timeouts and retryable statuses all fall
           // through to the backoff below; fatal statuses throw.
           const response = await this.#init.client
@@ -285,11 +319,12 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
           if (response && (!response.ok || !response.body)) {
             await response.body?.cancel().catch(() => {});
             this.#throwIfFatal(response);
+            retryAfterMs = parseRetryAfterMs(response);
           } else if (response?.body) {
             yield* this.#readStream(
               response.body,
-              touch,
-              retry => (serverRetryMs = retry),
+              idle,
+              retry => (serverRetryMs = Math.max(retry, MIN_SERVER_RETRY_MS)),
               () => (attempt = 0),
             );
             if (closed.aborted) return;
@@ -299,7 +334,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
           connection.abort();
           closed.removeEventListener('abort', abortConnection);
         }
-        await this.#backoff(attempt++, serverRetryMs);
+        await this.#backoff(attempt++, serverRetryMs, retryAfterMs);
       }
     } catch (error) {
       this.#rejectReady(error);
@@ -312,13 +347,13 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   /** Yields one stream's events until it ends, errors, or sends an `error` frame. */
   async *#readStream(
     body: ReadableStream<Uint8Array>,
-    touch: () => void,
+    idle: { touch: () => void; pause: () => void },
     onRetry: (ms: number) => void,
     onReady: () => void,
   ): AsyncGenerator<T, void, undefined> {
     const closed = this.#abort.signal;
     try {
-      for await (const frame of parseServerSentEvents(body, touch)) {
+      for await (const frame of parseServerSentEvents(body, idle.touch)) {
         if (frame.retry !== undefined) onRetry(frame.retry);
         if (frame.event === 'ready') {
           if (frame.id !== undefined) this.#cursor = frame.id;
@@ -328,8 +363,10 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
           const event = parseTopicEvent(frame.data);
           const mapped = this.#init.map(event);
           this.#cursor = event.id;
+          idle.pause();
           yield mapped;
           if (closed.aborted) return;
+          idle.touch();
         } else if (frame.event === 'error') {
           return;
         }
@@ -343,6 +380,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   #headers(): Record<string, string> {
     const headers: Record<string, string> = {
       ...this.#init.client.headers,
+      'x-mastra-project-id': this.#init.projectId,
       accept: 'text/event-stream',
       'cache-control': 'no-store',
     };
@@ -379,11 +417,14 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     }
   }
 
-  async #backoff(attempt: number, serverRetryMs: number | undefined): Promise<void> {
+  async #backoff(attempt: number, serverRetryMs: number | undefined, retryAfterMs: number | undefined): Promise<void> {
+    const { maxReconnectDelayMs } = this.#init;
     const base = this.#init.reconnectDelayMs ?? serverRetryMs ?? DEFAULT_RECONNECT_DELAY_MS;
-    const ceiling = Math.min(this.#init.maxReconnectDelayMs, base * 2 ** Math.min(attempt, 20));
+    const ceiling = Math.min(maxReconnectDelayMs, base * 2 ** Math.min(attempt, 20));
     // Jitter in [ceiling/2, ceiling] spreads reconnects after a server restart.
-    const delay = ceiling / 2 + Math.random() * (ceiling / 2);
+    const jittered = ceiling / 2 + Math.random() * (ceiling / 2);
+    // A Retry-After on a 429/503 is a floor, capped so it can't stall the stream indefinitely.
+    const delay = Math.max(jittered, Math.min(retryAfterMs ?? 0, maxReconnectDelayMs));
     await sleep(delay, this.#abort.signal);
   }
 }
@@ -429,6 +470,11 @@ export interface ServerSentEvent {
  * across chunks. A final block without its terminating blank line is
  * discarded, as the spec requires. `onChunk` runs for every chunk received,
  * including keep-alive comments.
+ *
+ * One deliberate difference from the spec: a block dispatches when it has any
+ * field (`event`, `data`, `id` or `retry`), not only when it has `data`, so a
+ * `retry`-only block still reaches the caller. Lines longer than 32 MiB throw
+ * `invalid_response`.
  */
 export async function* parseServerSentEvents(
   body: ReadableStream<Uint8Array>,
@@ -449,10 +495,12 @@ export async function* parseServerSentEvents(
       const { value, done } = await reader.read();
       if (done) return;
       onChunk?.();
+      // The leftover from the last chunk holds no line break, so scanning resumes where it ended.
+      const scanFrom = buffer.length;
       buffer += decoder.decode(value, { stream: true });
 
       let start = 0;
-      for (let i = 0; i < buffer.length; i++) {
+      for (let i = scanFrom; i < buffer.length; i++) {
         const char = buffer[i];
         if (char === '\n' && skipLeadingLf && i === start) {
           // Second half of a CRLF split across chunks.
@@ -501,9 +549,13 @@ export async function* parseServerSentEvents(
           hasField = true;
         } else if (field === 'retry') {
           if (/^\d+$/.test(fieldValue)) retry = Number(fieldValue);
+          hasField = true;
         }
       }
       buffer = buffer.slice(start);
+      if (buffer.length > MAX_LINE_LENGTH) {
+        throw new MastraConnectError('invalid_response', 'The events service sent a line longer than 32 MiB.');
+      }
     }
   } finally {
     await reader.cancel().catch(() => {});

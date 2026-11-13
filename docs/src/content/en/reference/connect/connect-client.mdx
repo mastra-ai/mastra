@@ -159,7 +159,7 @@ Calls the provider through the platform proxy and returns its parsed body. The p
 
 ### `proxyWithResponse(connectionId, request)`
 
-Same as `proxy()`, but resolves to `{ status, headers, body }` so you can read the provider's status and headers.
+Same as `proxy()`, but resolves to `{ data, status, headers }` so you can read the provider's status and headers. `data` is the parsed body.
 
 ### `createConnectSession(integrationId, input?)`
 
@@ -191,7 +191,8 @@ Calls a platform route that the typed methods don't cover, and returns the parse
   {
     name: 'init.headers',
     type: 'Record<string, string>',
-    description: 'Extra headers for this call only. Authorization headers are ignored.',
+    description:
+      'Extra headers for this call only. Authorization, organization, project, and resource headers are ignored.',
     isOptional: true,
   },
   {
