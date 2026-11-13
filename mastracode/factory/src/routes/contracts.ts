@@ -177,6 +177,11 @@ const intakeRouteListResponseSchema = z.object({
   /** Whether the caller may add, edit, reorder, or delete routes. */
   canEdit: z.boolean(),
 });
+const intakeRerouteResponseSchema = z.object({
+  total: z.number().int(),
+  moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
+});
+const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -1214,6 +1219,20 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: intakeRoutePathSchema,
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
+  },
+  intakeRouteReroutePreview: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Untouched cards the project's intake routes would now file on a different board",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteResponseSchema,
+  },
+  intakeRouteRerouteApply: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Move untouched cards to the start of the board the project's intake routes now file them on",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteApplyResponseSchema,
   },
   intakeRouteReorder: {
     method: 'POST',
