@@ -41,7 +41,7 @@
     "@mastra/client-js": "link:../../client-sdks/client-js",
     "@mastra/hono": "link:../../server-adapters/hono",
     "@types/node": "22.20.5",
-    "hono": "^4.13.7",
+    "hono": "^4.13.16",
     "mastra": "link:../../packages/cli",
     "tinyexec": "^1.2.4",
     "typescript": "^7.0.2",
