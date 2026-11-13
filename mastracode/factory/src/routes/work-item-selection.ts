@@ -1,3 +1,4 @@
+import { sourceExternalId } from '../boards/semantics.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardSearchText } from '../work-items/card-search-text.js';
 import { hasEveryWord, searchWords } from '../work-items/search-words.js';
@@ -34,13 +35,19 @@ export function unstartedCards(board: readonly Card[], query: string, limit: num
   return { cards: matches.slice(0, limit).map(({ card }) => card), total: matches.length };
 }
 
-/** The cards filed from one of `sources`, each a source id or a URL, in board order. */
+/**
+ * The cards filed from one of `sources`, each a source id or a URL, in board order. A pull request
+ * attached to an issue card counts as filed on that card.
+ */
 export function cardsFiledFrom(board: readonly Card[], sources: readonly string[]): Card[] {
   const wanted = new Set(sources);
   return board.filter(card =>
-    [card.externalSource?.externalId, card.externalSource?.url, card.workItem.url].some(
-      key => typeof key === 'string' && wanted.has(key),
-    ),
+    [
+      card.externalSource?.externalId,
+      card.externalSource?.url,
+      card.workItem.url,
+      ...card.workItem.sources.flatMap(source => [sourceExternalId(source), source.url]),
+    ].some(key => typeof key === 'string' && wanted.has(key)),
   );
 }
 
