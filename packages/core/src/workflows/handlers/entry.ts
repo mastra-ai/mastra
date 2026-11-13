@@ -39,7 +39,7 @@ function publishStepEvent(
  * all relevant branch steps are now complete and build the appropriate block-level result.
  *
  * For parallel blocks every step must complete; for conditional blocks only the steps
- * that were actually executed (have entries in stepResults) are considered.
+ * that were actually executed (have a non-`skipped` result in stepResults) are considered.
  */
 function buildResumedBlockResult(
   entrySteps: StepFlowEntry[],
@@ -48,7 +48,11 @@ function buildResumedBlockResult(
   opts?: { onlyExecutedSteps?: boolean },
 ): any {
   const stepsToCheck = opts?.onlyExecutedSteps
-    ? entrySteps.filter(s => isSingleStepEntry(s) && stepResults[getSingleStepEntryId(s)] !== undefined)
+    ? entrySteps.filter(s => {
+        if (!isSingleStepEntry(s)) return false;
+        const status = stepResults[getSingleStepEntryId(s)]?.status;
+        return status !== undefined && status !== 'skipped';
+      })
     : entrySteps;
 
   const allComplete = stepsToCheck.every(s => {

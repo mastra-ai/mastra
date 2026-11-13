@@ -581,6 +581,15 @@ export async function executeConditional(
     });
   }
 
+  // Consume the arm index from the time-travel path once the conditional has selected and
+  // reconciled its arm, mirroring `executeParallel`. Without this the same `timeTravel` object
+  // reaches the following entries with a stale, non-empty `executionPath`; they then believe they
+  // are still the travel target, break early and return `{}` instead of running. Must come after
+  // the `stepsToRun` filter and the skipped-arm reconciliation above, which both read the path.
+  if (timeTravel && timeTravel.executionPath.length > 0) {
+    timeTravel.executionPath.shift();
+  }
+
   // Update conditional span with evaluation results
   conditionalSpan?.update({
     attributes: {
@@ -594,12 +603,6 @@ export async function executeConditional(
       const stepId = getSingleStepEntryId(step);
       const currStepResult = stepResults[stepId];
       const isRestartStep = restart ? !!restart.activeStepsPath[stepId] : undefined;
-
-      if (currStepResult && timeTravel && timeTravel.executionPath.length > 0) {
-        if (timeTravel.steps[0] !== stepId) {
-          return currStepResult;
-        }
-      }
 
       if (currStepResult && ['success', 'failed'].includes(currStepResult.status) && isRestartStep === undefined) {
         return currStepResult;
