@@ -30,9 +30,8 @@ import type {
   ResolvedClient,
 } from './client.js';
 import { MastraConnectError } from './errors.js';
-import { EventsClient } from './events.js';
+import { EventsClient, resolveEventsUrl } from './events.js';
 
-/** Default per-request timeout for {@link ConnectClient} calls. */
 /** Auth and identity headers the client sets; per-call headers can't override them. */
 const RESERVED_REQUEST_HEADERS = new Set([
   'authorization',
@@ -42,7 +41,18 @@ const RESERVED_REQUEST_HEADERS = new Set([
   RESOURCE_ID_HEADER,
 ]);
 
+/** Default per-request timeout for {@link ConnectClient} calls. */
 export const DEFAULT_CONNECT_CLIENT_TIMEOUT_MS = 15_000;
+
+/** Largest delay `setTimeout` honors; larger values fire almost immediately. */
+const MAX_TIMER_MS = 2_147_483_647;
+
+function withoutReservedHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
+  if (!headers) return headers;
+  return Object.fromEntries(
+    Object.entries(headers).filter(([name]) => !RESERVED_REQUEST_HEADERS.has(name.toLowerCase())),
+  );
+}
 
 export interface ConnectClientConfig extends ConnectClientOptions {
   /**
@@ -102,12 +112,14 @@ export class ConnectClient {
 
   constructor(config: ConnectClientConfig = {}) {
     const timeoutMs = config.timeoutMs ?? DEFAULT_CONNECT_CLIENT_TIMEOUT_MS;
-    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0 || timeoutMs > MAX_TIMER_MS) {
       throw new MastraConnectError(
         'invalid_options',
-        `Invalid timeoutMs: expected a positive number, got ${timeoutMs}.`,
+        `Invalid timeoutMs: expected a positive number up to ${MAX_TIMER_MS}, got ${timeoutMs}.`,
       );
     }
+    // Fail fast on a bad events URL rather than on first `events` access.
+    resolveEventsUrl(config);
     const resolved = resolveClient(config);
     this.#config = config;
     this.#client = { ...resolved, baseUrl: stripVersionSuffix(resolved.baseUrl), timeoutMs };
@@ -175,12 +187,15 @@ export class ConnectClient {
 
   /** Calls the provider through the connection proxy and returns its parsed body. */
   proxy(connectionId: string, request: ProxyRequestOptions): Promise<unknown> {
-    return proxyRequest(this.#client, connectionId, request);
+    return proxyRequest(this.#client, connectionId, { ...request, headers: withoutReservedHeaders(request.headers) });
   }
 
   /** Like {@link proxy}, but also returns the provider's status and headers. */
   proxyWithResponse(connectionId: string, request: ProxyRequestOptions): Promise<ProxyResponse> {
-    return proxyRequestWithResponse(this.#client, connectionId, request);
+    return proxyRequestWithResponse(this.#client, connectionId, {
+      ...request,
+      headers: withoutReservedHeaders(request.headers),
+    });
   }
 
   /** Starts a connect session whose connection is born linked to the project. */

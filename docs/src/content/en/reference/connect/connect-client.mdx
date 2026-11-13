@@ -39,7 +39,7 @@ The client reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from the
     name: 'timeoutMs',
     type: 'number',
     description:
-      "Timeout in milliseconds for every call this client makes, including proxy calls. A call that takes longer throws `MastraConnectError` with code `timeout`. Event streams are long-lived and ignore it. `tools()` and `channels()` aren't affected.",
+      "Timeout in milliseconds for every call this client makes, including proxy calls and reading the response body. Raise it for large proxy downloads. A call that takes longer throws `MastraConnectError` with code `timeout`. Event streams are long-lived and ignore it. `tools()` and `channels()` aren't affected.",
     isOptional: true,
     defaultValue: '15000',
   },
@@ -137,7 +137,7 @@ Calls the provider through the platform proxy and returns its parsed body. The p
   {
     name: 'request.headers',
     type: 'Record<string, string>',
-    description: 'Extra headers. Authorization headers are dropped.',
+    description: 'Extra headers. Authorization, organization, project, and resource headers are dropped.',
     isOptional: true,
   },
   { name: 'request.body', type: 'unknown', description: 'Request body. Objects are sent as JSON.', isOptional: true },
