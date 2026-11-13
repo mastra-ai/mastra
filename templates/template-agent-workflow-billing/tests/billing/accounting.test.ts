@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { agentExecutionInputSchema } from '../../src/billing/agent-execution.js';
 import { BillingGateway } from '../../src/billing/gateway.js';
 import type { UsageEvent } from '../../src/billing/contracts.js';
 import type { BoundedExecutor, ExecutorOutcome, Json } from '../../src/billing/accounting.js';
@@ -15,6 +16,35 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
+it('agent payload validation rejects malformed requests before reserving credit', async () => {
+  let computes = 0;
+  const f = await fixture(charges[1], {
+    run: async () => {
+      computes++;
+      return succeeded;
+    },
+  });
+  const gateway = new BillingGateway(f.organizations, f.storage, f.provider, f.config, [
+    { ...f.registered, inputSchema: agentExecutionInputSchema },
+  ]);
+  for (const input of [
+    { prompt: '', adapterVersion: 'v1' },
+    { prompt: 'x'.repeat(8193), adapterVersion: 'v1' },
+    { prompt: 'hello', adapterVersion: 'invalid version' },
+  ]) {
+    await expect(gateway.execute(f.context, f.request('invalid-payload', input))).rejects.toMatchObject({
+      code: 'invalid_input',
+    });
+  }
+  expect(computes).toBe(0);
+  expect((await f.observer.execute('SELECT id FROM billing_executions')).rows).toEqual([]);
+  expect(
+    (await gateway.execute(f.context, f.request('invalid-payload', { prompt: 'hello', adapterVersion: 'v1' }))).billing
+      .billedUnits,
+  ).toBe(3);
+  expect(computes).toBe(1);
+});
+
 type Charge = ReturnType<typeof configuration>['resourcePolicies'][number]['policy']['charge'];
 const charges: Charge[] = [
   { type: 'none' },

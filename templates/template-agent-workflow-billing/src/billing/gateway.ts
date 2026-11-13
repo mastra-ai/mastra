@@ -83,6 +83,7 @@ export class BillingGateway {
         Object.freeze({
           resourceId: executor.resourceId,
           operation: executor.operation,
+          inputSchema: executor.inputSchema,
           measurements: Object.freeze(measurements),
           execute: executor.execute.bind(executor),
         }),
@@ -100,7 +101,8 @@ export class BillingGateway {
     lifecycle?: { executionId: string; version: number; configuration?: ReturnType<BillingGateway['resource']> },
   ): Promise<BillingResponse> {
     const request = parseInput(executionRequestSchema, input);
-    const projection = request.input;
+    const executor = this.executors.get(`${request.resourceId}:${request.operation}`);
+    const projection = executor?.inputSchema ? parseInput(executor.inputSchema, request.input) : request.input;
     const identity = await this.organizations.accountingIdentity(context);
     const claim = {
       identity,
@@ -115,7 +117,6 @@ export class BillingGateway {
     const resource =
       lifecycle?.configuration ??
       this.configuration.resourcePolicies.find(resource => resource.id === request.resourceId);
-    const executor = this.executors.get(`${request.resourceId}:${request.operation}`);
     if (!resource || !executor) throw new BillingError('unsupported');
     if (this.provider.reservations && prepaid(resource.policy)) {
       const admission = await this.storage.claimReservation(claim, resource, lifecycle);

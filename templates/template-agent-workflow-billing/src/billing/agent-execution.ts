@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { withinExecution } from './execution-scope.js';
 import type { FullOutput } from '@mastra/core/stream';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { Json, ExecutorOutcome } from './accounting.js';
+import type { ExecutorOutcome } from './accounting.js';
 import type { BillingGateway } from './gateway.js';
 import type { OrganizationService, BillingContext } from './organizations.js';
 import type { AccountingStorage } from './storage/accounting.js';
@@ -12,6 +12,12 @@ import type { SafeGenerateOptions } from './mastra-resources.js';
 import type { AgentRegistry, AgentResult, GenerationResponse } from './execution-types.js';
 import { MeasurementCollector } from './measurement.js';
 import type { InvocationContext } from './invocation-context.js';
+
+export const agentExecutionInputSchema = z.strictObject({
+  prompt: z.string().min(1).max(8192),
+  adapterVersion: identifierSchema,
+});
+export type AgentExecutionInput = z.infer<typeof agentExecutionInputSchema>;
 
 export class AgentExecution<Agents extends AgentRegistry> {
   private readonly immediateAgents = new Map<string, FullOutput<any>>();
@@ -167,12 +173,8 @@ export class AgentExecution<Agents extends AgentRegistry> {
       throw error;
     }
   }
-  async execute(id: string, input: Json, executionId: string): Promise<ExecutorOutcome> {
+  async execute(id: string, request: AgentExecutionInput, executionId: string): Promise<ExecutorOutcome> {
     const resource = this.options.agents[id];
-    const request = parseInput(
-      z.strictObject({ prompt: z.string().min(1).max(8192), adapterVersion: identifierSchema }),
-      input,
-    );
     const identity = this.context.identity.getStore();
     if (!identity) throw new BillingError('state_unavailable');
     const collector = new MeasurementCollector(

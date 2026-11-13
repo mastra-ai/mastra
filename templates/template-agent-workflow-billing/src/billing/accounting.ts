@@ -82,6 +82,7 @@ export type ExecutorOutcome = z.input<typeof outcomeSchema>;
 export interface BoundedExecutor {
   readonly resourceId: string;
   readonly operation: z.infer<typeof operationSchema>;
+  readonly inputSchema?: z.ZodType<Json>;
   readonly measurements: readonly {
     readonly key: string;
     readonly maxUnits: number;

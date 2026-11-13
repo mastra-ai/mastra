@@ -11,7 +11,8 @@ import type { OrganizationService, BillingContext } from './organizations.js';
 import type { AccountingStorage } from './storage/accounting.js';
 import type { WorkflowStorage } from './storage/workflows.js';
 import type { AgentRegistry, WorkflowRegistry, WorkflowResponse } from './execution-types.js';
-import { AgentExecution } from './agent-execution.js';
+import type { AgentExecutionInput } from './agent-execution.js';
+import { AgentExecution, agentExecutionInputSchema } from './agent-execution.js';
 import { WorkflowExecution } from './workflow-execution.js';
 import { InvocationContext } from './invocation-context.js';
 export type { GenerationResponse, WorkflowResponse } from './execution-types.js';
@@ -55,8 +56,9 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
       executors.push({
         resourceId: id,
         operation: 'generate',
+        inputSchema: agentExecutionInputSchema,
         measurements: [],
-        execute: (input, budget) => this.agentExecution.execute(id, input, budget.executionId),
+        execute: (input, budget) => this.agentExecution.execute(id, input as AgentExecutionInput, budget.executionId),
       });
     for (const id of Object.keys(options.workflows))
       executors.push({
