@@ -1,10 +1,8 @@
 /**
- * Coverage for the one intake write onboarding makes once the Factory project exists: a GitLab
- * project is routed to the new Factory, since routed intake needs a binding to feed its board, and
- * a project another Factory already takes is refused rather than routed.
- *
- * GitHub needs nothing here, because the link already selected the repository — and when the Work
- * step's switch is off the link skips that selection, so neither endpoint is written at all.
+ * Coverage for the intake writes onboarding makes once the Factory project exists and the Work
+ * step's switch is on: both hosts select the repository the same way, a GitLab project is routed
+ * to the new Factory first, and a project another Factory already takes is refused before anything
+ * is selected.
  */
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
@@ -14,7 +12,7 @@ import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { IntakeBindingConflictError } from '../../../factory/services/intake';
 import type { IntakeBindingWrite } from '../../../factory/services/intake';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
-import { routeCodeHostIntake } from '../onboardingIntake';
+import { applyCodeHostIntake } from '../onboardingIntake';
 import type { GithubRepo, SourceControlRepository } from '../github';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
@@ -48,10 +46,11 @@ const gitlabProject: GitLabRepository = {
 };
 
 /** Stub both intake endpoints, so a write to either is recorded rather than reaching the network. */
-function stubIntake() {
+function stubIntake(initial: Record<string, unknown> = {}) {
   const savedConfigs: unknown[] = [];
   const savedBindings: IntakeBindingWrite[] = [];
   server.use(
+    http.get(CONFIG_URL, () => HttpResponse.json({ config: initial })),
     http.put(CONFIG_URL, async ({ request }) => {
       savedConfigs.push(await request.json());
       return HttpResponse.json({ config: {} });
@@ -65,19 +64,19 @@ function stubIntake() {
 }
 
 const route = (repository: SourceControlRepository) =>
-  routeCodeHostIntake(TEST_BASE_URL, { factoryProjectId: 'factory-1', repository });
+  applyCodeHostIntake(TEST_BASE_URL, { factoryProjectId: 'factory-1', repository });
 
 describe('Code-host intake at the end of onboarding', () => {
-  it('writes nothing for a GitHub repository, which the link already selected', async () => {
+  it('selects a GitHub repository as an issue source without routing it', async () => {
     const intake = stubIntake();
 
     await route(githubRepo);
 
-    expect(intake.savedConfigs).toEqual([]);
+    expect(intake.savedConfigs).toEqual([{ github: { enabled: true, sourceIds: ['acme/widgets'] } }]);
     expect(intake.savedBindings).toEqual([]);
   });
 
-  it('routes a GitLab project to the new Factory', async () => {
+  it('routes a GitLab project to the new Factory and selects it', async () => {
     const intake = stubIntake();
 
     await route(gitlabProject);
@@ -85,6 +84,14 @@ describe('Code-host intake at the end of onboarding', () => {
     expect(intake.savedBindings).toEqual([
       { integrationId: 'gitlab', sourceId: 'gitlab-source-1', factoryProjectId: 'factory-1' },
     ]);
+    expect(intake.savedConfigs).toEqual([{ gitlab: { enabled: true, sourceIds: ['gitlab-source-1'] } }]);
+  });
+
+  it('keeps sources other members picked and skips the write when the repository is already selected', async () => {
+    const intake = stubIntake({ github: { enabled: true, sourceIds: ['acme/widgets', 'acme/other'] } });
+
+    await route(githubRepo);
+
     expect(intake.savedConfigs).toEqual([]);
   });
 

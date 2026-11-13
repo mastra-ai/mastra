@@ -2,12 +2,14 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
 import { fetchIntakeConfig } from '../../../factory/services/intake';
+import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabProject } from '../../../factory/services/gitlab';
 import {
   ONBOARDING_FACTORY_KEY,
@@ -55,6 +57,7 @@ function renderOnboarding() {
         <Route path="/onboarding" element={<EmptyFactoryState onDismissGithubCallback={() => {}} />} />
         <Route path="/factories/:id" element={<h1>Factory ready</h1>} />
       </Routes>
+      <Toaster />
     </MemoryRouter>,
   );
 }
@@ -321,7 +324,7 @@ describe('Draft Factory onboarding', () => {
     renderOnboarding();
     await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
-    // Linking does the selecting, which is what feeds the board until the switch says otherwise.
+    // Setup selects the linked repository, which is what feeds the board.
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toEqual(['octo/hello']);
   });
 
@@ -348,8 +351,8 @@ describe('Draft Factory onboarding', () => {
 
   it('never starts syncing a repository the Work step switch left off', async () => {
     registerSetup();
-    // Nothing is selected before onboarding, so "off" must not select the repository either: the
-    // link is told to skip its selection, which leaves the intake config untouched.
+    // Nothing is selected before onboarding, so "off" must not select the repository either, which
+    // leaves the intake config untouched.
     const intake = registerIntake();
     seedOnboarding('model', {
       modelScope: 'factory',
@@ -364,6 +367,32 @@ describe('Draft Factory onboarding', () => {
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(intake.saved).toEqual([]);
     expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
+  });
+
+  it.each([
+    ['GitHub', 'intake'],
+    ['GitLab', 'routing'],
+  ] as const)('finishes setup with a warning when the %s issue source cannot be saved', async (host, failing) => {
+    const writes = registerSetup();
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/${failing === 'intake' ? 'config' : 'bindings'}`, async ({ request }) => {
+        writes.push({ path: failing, body: await request.json() });
+        return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
+      }),
+    );
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: host === 'GitLab' ? gitLabProjectRepository(gitlabProject)! : repo,
+      workConfirmed: true,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    // The Factory and its link exist by now, so both hosts finish setup and point to Settings.
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(await screen.findByText("Issues won't sync yet")).toBeInTheDocument();
+    expect(writes.some(item => item.path === failing)).toBe(true);
   });
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
@@ -546,7 +575,7 @@ describe('Draft Factory onboarding', () => {
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
 
-  it.each(['intake', 'model'] as const)(
+  it.each(['model'] as const)(
     'replaces only its own repository link when the codebase changes after a failed %s save',
     async failure => {
       const writes = registerSetup(failure);

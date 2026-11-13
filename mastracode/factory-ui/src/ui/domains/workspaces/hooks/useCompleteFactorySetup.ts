@@ -17,7 +17,7 @@ import {
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
-import { routeCodeHostIntake } from '../services/onboardingIntake';
+import { applyCodeHostIntake } from '../services/onboardingIntake';
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
@@ -39,9 +39,9 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
 }
 
 /**
- * The Factory exists and its repository is linked by now, so a secondary intake failure must not
- * strand the user in onboarding: warn, and leave them to pick sources in Settings › Work Intake.
- * Only a link with the switch on reaches here; with it off, setup writes no intake at all.
+ * The Factory exists and its repository is linked by now, so an intake failure must not strand the
+ * user in onboarding: warn, and leave them to pick sources in Settings › Work Intake. GitHub and
+ * GitLab both land here. Only a switch that is on reaches here; with it off, setup writes no intake.
  */
 function warnIntakeNotApplied(error: unknown) {
   if (error instanceof IntakeBindingConflictError) {
@@ -67,7 +67,7 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       const repo = setup.repository;
       const modelScope = setup.modelScope;
       // Read from the raw draft: the completion schema strips fields it doesn't know. Only an
-      // explicit `false` turns the switch off, so the link selects the repository by default.
+      // explicit `false` turns the switch off, so the repository is selected by default.
       const codeHostSync = draft.codeHostSync !== false;
       const plan = onboardingModelPlan(setup);
       const [providers, catalogs] = await Promise.all([
@@ -109,8 +109,8 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await link.mutateAsync({
         factoryProjectId: factory.id,
         repo,
-        // The Work step already asked: off means the repository is never selected in the first place.
-        selectIntake: codeHostSync,
+        // Setup selects the repository itself after the link, so GitHub and GitLab fail the same way.
+        selectIntake: false,
         onLinked: async linked => {
           const onboardingLinks = [...new Set([...previouslyLinked, linked.projectRepositoryId])];
           // Record the new link before cleanup can fail, including across a reload and another repo choice.
@@ -125,13 +125,16 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
         updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
         plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
         codeHostSync
-          ? routeCodeHostIntake(baseUrl, { factoryProjectId: factory.id, repository: repo }).catch(warnIntakeNotApplied)
+          ? applyCodeHostIntake(baseUrl, { factoryProjectId: factory.id, repository: repo }).catch(warnIntakeNotApplied)
           : undefined,
       ]);
       return factory.id;
     },
     onSuccess: async factoryId => {
-      await queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.intakeConfig() }),
+      ]);
       clearOnboardingFlow();
       void navigate(`/factories/${factoryId}`);
     },
