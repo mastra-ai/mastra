@@ -35,6 +35,7 @@ import { z } from 'zod/v4';
 import { OBSERVABILITY_DATE_PRESETS } from './apps/observability-widget/tool';
 import type { ObservabilityDatePreset } from './apps/observability-widget/tool';
 import { widgetIssues } from './dashboard-views';
+import { editableIssues } from './observability-editable';
 
 /*
  * The model writes a dashboard in an authoring shape that `toObservabilityDashboard` turns into the
@@ -583,6 +584,13 @@ export type ObservabilityDraftOptions = {
   kinds?: readonly DashboardBuiltInWidgetKind[];
   /** Whether a dashboard can set `defaults.filters`. Defaults to `true`; with `false`, `defaults` takes only `datePreset`. */
   dashboardFilters?: boolean;
+  /**
+   * Limits drafts to what Mastra Cloud's widget editor edits and saves unchanged: its figures,
+   * two-read formulas, dimension filters and splits. Display settings it doesn't hold
+   * (`rangeTotal`, `emptyWhenZero`, a total's `format`, dimension columns, `unpricedWhen`) leave
+   * the schema. Defaults to `false`.
+   */
+  editable?: boolean;
 };
 
 /** The schemas a model writes a widget or a whole dashboard with, built from one catalog. */
@@ -635,6 +643,11 @@ export function createObservabilityDraftSchemas(
   ) =>
     z.strictObject({ label, description, ...shape }).superRefine((draft, context) => {
       if (!draftIssues(draft as unknown as T, context)) return;
+      if (options.editable) {
+        const issues = editableIssues(kind, draft);
+        for (const { path, message } of issues) context.addIssue({ code: 'custom', path, message });
+        if (issues.length) return;
+      }
       const view = TO_VIEW[kind](draft as never);
       if (view.queries.length > DASHBOARD_MAX_QUERIES_PER_VIEW) {
         return report(context, [
@@ -665,6 +678,8 @@ export function createObservabilityDraftSchemas(
   );
 
   const { total: storedTotal } = timeseriesOptionsSchema.shape;
+  const editable = options.editable === true;
+  const totalValue = z.enum(['total', 'peak']);
   const timeseries = viewOf<ObservabilityTimeseriesDraft>(
     'timeseries',
     {
@@ -674,26 +689,40 @@ export function createObservabilityDraftSchemas(
           z.strictObject({
             ...fieldsOf(timeseriesSeriesSchema, ['dataKey', 'value', 'rangeTotal']),
             value: chartValue,
-            rangeTotal: rangeValue
-              .optional()
-              .describe("The series' number over the whole range, shown beside the card's title."),
+            ...(editable
+              ? {}
+              : {
+                  rangeTotal: rangeValue
+                    .optional()
+                    .describe("The series' number over the whole range, shown beside the card's title."),
+                }),
           }),
         )
         .min(1),
-      total: z
-        .strictObject({
-          value: z
-            .union([z.enum(['total', 'peak']), rangeValue])
-            .describe(
-              '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is); or a number over the range.',
+      total: (editable
+        ? z.strictObject({
+            value: totalValue.describe(
+              '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is).',
             ),
-          format: (storedTotal.unwrap() as z.ZodObject).shape.format as z.ZodType,
-        })
-        .optional()
-        .describe("The card's total, beside its title. Ignored when a series has a `rangeTotal`."),
-      emptyWhenZero: rangeValue
-        .optional()
-        .describe('Empty when this is zero over the range; by default, when every plotted value is zero.'),
+          })
+        : z
+            .strictObject({
+              value: z
+                .union([totalValue, rangeValue])
+                .describe(
+                  '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is); or a number over the range.',
+                ),
+              format: (storedTotal.unwrap() as z.ZodObject).shape.format as z.ZodType,
+            })
+            .describe("The card's total, beside its title. Ignored when a series has a `rangeTotal`.")
+      ).optional(),
+      ...(editable
+        ? {}
+        : {
+            emptyWhenZero: rangeValue
+              .optional()
+              .describe('Empty when this is zero over the range; by default, when every plotted value is zero.'),
+          }),
     },
     () => true,
     view => timeseriesIssues(view.options as never, view.queries as never),
@@ -702,26 +731,35 @@ export function createObservabilityDraftSchemas(
   const columnOptions = Object.fromEntries(
     tableColumnOptionsSchema.options.map(option => [option.shape.type.value, option as z.ZodObject]),
   ) as Record<ColumnType, z.ZodObject>;
+  const columnTypes = editable ? COLUMN_TYPES.filter(type => type !== 'dimension') : COLUMN_TYPES;
   const column = oneKeyOf<ObservabilityColumnDraft>(
-    COLUMN_TYPES,
+    columnTypes,
     'A column',
     z.strictObject({
-      id: z.string().min(1).optional().describe("Needed only for another column's `unpricedWhen` to name it."),
+      ...(editable
+        ? {}
+        : { id: z.string().min(1).optional().describe("Needed only for another column's `unpricedWhen` to name it.") }),
       label: z.string().optional(),
       sort: z
         .enum(['asc', 'desc'])
         .optional()
         .describe('Sorts the table by this column. Without one, it sorts by its emphasized value column, descending.'),
       name: z.strictObject(fieldsOf(columnOptions.name, ['type'])).optional(),
-      dimension: z.strictObject(fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn'])).optional(),
+      ...(editable
+        ? {}
+        : { dimension: z.strictObject(fieldsOf(columnOptions.dimension, ['type', 'query', 'joinOn'])).optional() }),
       value: oneKeyOf<Draft>(
         tableCases.keys,
         'A value column',
         z.strictObject({
-          ...fieldsOf(columnOptions.value, ['type', 'value']),
-          unpricedWhen: (columnOptions.value.shape.unpricedWhen as z.ZodType).describe(
-            '`usd` only: the `id` of the column whose value above 0 makes a missing price read "Not priced".',
-          ),
+          ...fieldsOf(columnOptions.value, ['type', 'value', 'unpricedWhen']),
+          ...(editable
+            ? {}
+            : {
+                unpricedWhen: (columnOptions.value.shape.unpricedWhen as z.ZodType).describe(
+                  '`usd` only: the `id` of the column whose value above 0 makes a missing price read "Not priced".',
+                ),
+              }),
           ...tableCases.shape,
         }),
       )
@@ -734,7 +772,7 @@ export function createObservabilityDraftSchemas(
         .optional()
         .describe("The emphasized value's % change against the window before; its reads set `compare`."),
     }),
-  ).describe(`Exactly one of ${keysList(COLUMN_TYPES)} names the column's type and holds its options.`);
+  ).describe(`Exactly one of ${keysList(columnTypes)} names the column's type and holds its options.`);
   const table = viewOf<ObservabilityTableDraft>(
     'table',
     { ...fieldsOf(tableOptionsSchema, ['defaultSort', 'rowDrilldown']), columns: z.array(column).min(1) },
