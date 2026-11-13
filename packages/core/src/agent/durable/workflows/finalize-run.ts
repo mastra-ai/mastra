@@ -5,6 +5,7 @@ import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-
 import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import { checkThreadFGA } from '../../../memory/thread-fga';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { OutputResult } from '../../../processors';
@@ -23,6 +24,7 @@ import type { Agent } from '../../agent';
 import { convertMessages, coreContentToString, MessageList } from '../../message-list';
 import type { SerializedMessageListState } from '../../message-list/state';
 import { isTerminalToolInvocationState } from '../../message-list/utils/tool-invocation-state';
+import { setPersistencePolicy } from '../../save-queue/persistence-policy';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
@@ -177,12 +179,17 @@ export async function runDurableFinishSideEffects({
   const effectiveRequestContext = restoreRequestContext(initData.requestContextEntries, requestContext);
   // Snapshots drop MastraMemory (it holds a live instance), but memory processors read
   // memoryConfig (e.g. readOnly) from it. Restore it from durable state when it's missing.
-  if (!effectiveRequestContext.has('MastraMemory') && durableState?.threadId) {
-    effectiveRequestContext.set('MastraMemory', {
-      thread: { id: durableState.threadId },
-      resourceId: durableState.resourceId,
-      memoryConfig: durableState.memoryConfig,
-    });
+  if (!effectiveRequestContext.has('MastraMemory')) {
+    const memoryContext =
+      durableState?.explicitMemoryContext ??
+      (durableState?.threadId
+        ? {
+            thread: { id: durableState.threadId },
+            resourceId: durableState.resourceId,
+            memoryConfig: durableState.memoryConfig,
+          }
+        : undefined);
+    if (memoryContext) effectiveRequestContext.set('MastraMemory', memoryContext);
   }
   // Deserialize into the run's existing MessageList when there is one. MastraModelOutput
   // holds that instance and reads it during final processing, so swapping in a new one
@@ -197,6 +204,29 @@ export async function runDurableFinishSideEffects({
   if (registryEntry) {
     registryEntry.messageList = messageList;
   }
+  setPersistencePolicy(messageList, {
+    readOnly: !!durableState?.memoryConfig?.readOnly,
+    getMemoryStorage: async () => (registryEntry?.memory ?? rebuiltMemory)?.storage.getStore('memory'),
+    memoryThreadId: durableState?.threadId,
+    authorize: async (threadId, resourceId) => {
+      const targets = new Map([[threadId, resourceId]]);
+      if (durableState?.threadId && durableState.threadId !== threadId) {
+        targets.set(durableState.threadId, durableState.resourceId);
+      }
+      for (const [id, targetResourceId] of targets) {
+        await checkThreadFGA({
+          mastra,
+          user: effectiveRequestContext.get('user'),
+          threadId: id,
+          resourceId: targetResourceId,
+          agentId: initData.agentId,
+          requestContext: effectiveRequestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+          actor: initData.options?.actor,
+        });
+      }
+    },
+  });
 
   // The caller-side MastraModelOutput only sees the finish event after this step has
   // persisted messages, and remote/recovered runs have no caller at all. Attach the
@@ -564,12 +594,17 @@ export async function runDurableDeadlineOutputPass({
 }): Promise<void> {
   const durableState = initData.state;
   const requestContext = restoreRequestContext(initData.requestContextEntries, entry.requestContext);
-  if (!requestContext.has('MastraMemory') && durableState?.threadId) {
-    requestContext.set('MastraMemory', {
-      thread: { id: durableState.threadId },
-      resourceId: durableState.resourceId,
-      memoryConfig: durableState.memoryConfig,
-    });
+  if (!requestContext.has('MastraMemory')) {
+    const memoryContext =
+      durableState?.explicitMemoryContext ??
+      (durableState?.threadId
+        ? {
+            thread: { id: durableState.threadId },
+            resourceId: durableState.resourceId,
+            memoryConfig: durableState.memoryConfig,
+          }
+        : undefined);
+    if (memoryContext) requestContext.set('MastraMemory', memoryContext);
   }
   const memoryContext = requestContext.get('MastraMemory') as
     | { thread?: { id?: string }; resourceId?: string; memoryConfig?: { readOnly?: boolean } }
@@ -580,7 +615,7 @@ export async function runDurableDeadlineOutputPass({
   // The output processors save the turn (MessageHistory) to the thread the run or its request context
   // names, so the caller needs write access to each first. A denial skips the whole save.
   const resourceId = durableState?.resourceId ?? memoryContext?.resourceId;
-  if (entry.memory && resourceId) {
+  if (resourceId) {
     const threadIds = new Set([durableState?.threadId, memoryContext?.thread?.id].filter(Boolean) as string[]);
     try {
       for (const threadId of threadIds) {
@@ -618,6 +653,29 @@ export async function runDurableDeadlineOutputPass({
       messageListState,
     ),
   );
+  setPersistencePolicy(messageList, {
+    readOnly: !!durableState?.memoryConfig?.readOnly,
+    getMemoryStorage: async () => entry.memory?.storage.getStore('memory'),
+    memoryThreadId: durableState?.threadId,
+    authorize: async (threadId, targetResourceId) => {
+      const targets = new Map([[threadId, targetResourceId]]);
+      if (durableState?.threadId && durableState.threadId !== threadId) {
+        targets.set(durableState.threadId, durableState.resourceId);
+      }
+      for (const [id, resourceId] of targets) {
+        await checkThreadFGA({
+          mastra,
+          user: requestContext.get('user'),
+          threadId: id,
+          resourceId,
+          agentId: initData.agentId,
+          requestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+          actor: initData.options?.actor,
+        });
+      }
+    },
+  });
   // Untargeted processor data lands on the reply, as at finish; resolved before the cut-off text is added.
   const replyMessageId = resolveOutputMessageSkippingCompletionChecks(messageList)?.id ?? initData.messageId;
   let inFlightMessageId: string | undefined;

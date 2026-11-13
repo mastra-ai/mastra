@@ -1564,7 +1564,9 @@ export class DurableAgent<
     // `requestContextEntries` contains caller state captured before preparation
     // installed the run's framework-managed memory context. Rebuild that entry
     // from persisted run state so recovery never inherits a caller/parent thread.
-    if (threadId && resourceId) {
+    if (workflowInput.state?.explicitMemoryContext) {
+      requestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+    } else if (threadId && resourceId) {
       requestContext.set('MastraMemory', {
         thread: { id: threadId },
         resourceId,
@@ -3805,13 +3807,19 @@ export class DurableAgent<
           }
         : options?.memory;
 
+      const preparationRequestContext: RequestContext =
+        options?.requestContext ?? snapshotRequestContext ?? new RequestContext();
+      if (workflowInput.state?.explicitMemoryContext) {
+        preparationRequestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+      }
+
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
         [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
-        requestContext: options?.requestContext ?? snapshotRequestContext,
+        requestContext: preparationRequestContext,
         memory,
         // Restore the original run's flag from the persisted snapshot so a
         // cross-process resume still returns scoringData; caller override wins.
@@ -5969,7 +5977,9 @@ export class DurableAgent<
       const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
       memoryInfo = threadId && resourceId ? { threadId, resourceId } : undefined;
 
-      if (threadId && resourceId) {
+      if (workflowInput.state?.explicitMemoryContext) {
+        requestContext.set('MastraMemory', workflowInput.state.explicitMemoryContext);
+      } else if (threadId && resourceId) {
         requestContext.set('MastraMemory', {
           thread: { id: threadId },
           resourceId,

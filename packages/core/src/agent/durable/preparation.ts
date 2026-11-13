@@ -557,7 +557,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }));
     threadExists = true;
     requestContext.set('MastraMemory', { thread: threadObject, resourceId, memoryConfig });
-  } else {
+  } else if (memory) {
     // This run has no complete per-request memory context. Clear any
     // MastraMemory inherited from a caller-provided requestContext (e.g. a
     // parent agent's context during sub-agent delegation) so processor
@@ -721,6 +721,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       }
     }
   }
+
+  const explicitContext = !memory
+    ? (requestContext.get('MastraMemory') as
+        | { thread?: { id?: string }; resourceId?: string; memoryConfig?: MemoryConfig }
+        | undefined)
+    : undefined;
+  const explicitMemoryContext = explicitContext?.thread?.id
+    ? {
+        thread: { id: explicitContext.thread.id },
+        resourceId: explicitContext.resourceId,
+        memoryConfig: explicitContext.memoryConfig,
+      }
+    : undefined;
 
   // Snapshot the request context AFTER input processors have run so their
   // writes reach the durable run (#23904) — cross-process engines rebuild the
@@ -1003,6 +1016,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     },
     state: {
       memoryConfig,
+      explicitMemoryContext,
       threadId,
       resourceId,
       threadExists,

@@ -10,6 +10,7 @@ import { resolveCurrentSpan } from '../../observability/utils';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../tools/payload-transform';
 import type { IdGeneratorContext } from '../../types';
 import { safeStringify } from '../../utils/safe-stringify';
+import { inheritPersistencePolicy } from '../save-queue/persistence-policy';
 import { createSignal, isCreatedAgentSignal, isTransientSignalMessage, mastraDBMessageToSignal } from '../signals';
 import type { CreatedAgentSignal } from '../signals';
 import { AIV4Adapter, AIV5Adapter, AIV6Adapter } from './adapters';
@@ -682,11 +683,13 @@ export class MessageList {
 
   /** @internal */
   public clone(): MessageList {
-    return new MessageList({
+    const clone = new MessageList({
       generateMessageId: this.generateMessageId,
       logger: this.logger,
       filterIncompleteToolCalls: this.filterIncompleteToolCalls,
     }).deserialize(this.serialize());
+    inheritPersistencePolicy(this, clone);
+    return clone;
   }
 
   /**

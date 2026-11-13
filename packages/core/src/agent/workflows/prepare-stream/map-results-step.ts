@@ -19,6 +19,7 @@ import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { setPersistencePolicy } from '../../save-queue/persistence-policy';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
@@ -49,7 +50,11 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
+  authorizeMemory: (
+    permission: MastraFGAPermissionInput,
+    threadId: string,
+    resourceId: string | undefined,
+  ) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -85,6 +90,19 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // Class instances written to runScope by upstream steps. These never travel
     // through inputData because the evented engine JSON-serializes step outputs.
     const messageList = runScope.getOrThrow(MESSAGE_LIST_KEY);
+    setPersistencePolicy(messageList, {
+      readOnly: !!memoryConfig?.readOnly,
+      getMemoryStorage: async () => memory?.storage.getStore('memory'),
+      memoryThreadId: memoryData.thread?.id ?? threadIdFromArgs,
+      authorize: async (threadId, resolvedResourceId) => {
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId, resolvedResourceId);
+        const runThreadIds = new Set([memoryData.thread?.id, threadIdFromArgs].filter(Boolean));
+        for (const id of runThreadIds) {
+          if (id === threadId) continue;
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, id!, resourceId);
+        }
+      },
+    });
     const convertedTools = runScope.get(CONVERTED_TOOLS_KEY);
 
     let threadCreatedByStep = false;
@@ -127,7 +145,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           options.savePerStep && !isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (memoryData.thread?.id) {
-            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id, resourceId);
           }
           await ensureThreadExists();
 
@@ -358,7 +376,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
           );
           for (const threadId of threadIds) {
-            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId, resourceId);
           }
         },
         // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
@@ -483,7 +501,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   : payload.text || '';
 
               if (!memoryConfig?.readOnly && result.threadId) {
-                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId, resourceId);
               }
               await capabilities.executeOnFinish({
                 termination: agentLoopTermination({

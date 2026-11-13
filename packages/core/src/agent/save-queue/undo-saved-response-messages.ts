@@ -2,6 +2,7 @@ import type { IMastraLogger } from '../../logger';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfigInternal } from '../../memory/types';
 import type { MastraDBMessage, MessageList } from '../message-list';
+import { undoProcessorPersistence } from './persistence-policy';
 import type { SaveQueueManager } from './index';
 
 /**
@@ -33,6 +34,11 @@ export async function undoSavedResponseMessages({
   logger: IMastraLogger;
   runId: string;
 }) {
+  try {
+    await undoProcessorPersistence(messageList);
+  } catch (error) {
+    logger.error('Failed to undo processor persistence after an output processor tripwire', { error, runId });
+  }
   if (!memory || !threadId || memoryConfig?.readOnly) return;
 
   const earlierTurnIds = messageList.getRememberedAndInputMessageIds();

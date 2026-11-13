@@ -99,6 +99,8 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   // client. The trusted-actor FGA gate keys off `organizationId`, so a
   // body-supplied value must not be merged into the request context.
   'organizationId',
+  // Only trusted server code may select the memory context used by processors.
+  'MastraMemory',
 ] as const;
 
 const RESERVED_CONTEXT_KEYS: ReadonlySet<string> = new Set(RESERVED_REQUEST_CONTEXT_KEYS);

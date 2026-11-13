@@ -38,7 +38,7 @@ describe('isReservedRequestContextKey', () => {
   });
 
   it('reserves every key in the shared reserved-key list', () => {
-    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(14);
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toHaveLength(15);
     expect(new Set(RESERVED_REQUEST_CONTEXT_KEYS).size).toBe(RESERVED_REQUEST_CONTEXT_KEYS.length);
     expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(
       expect.arrayContaining([
@@ -47,6 +47,7 @@ describe('isReservedRequestContextKey', () => {
         MASTRA_INHERITED_MEMORY_KEY,
         'mastra__factoryMemorySettings',
         'organizationId',
+        'MastraMemory',
       ]),
     );
     for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
