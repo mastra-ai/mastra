@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { MessageList } from '../message-list';
 import type { MastraDBMessage } from '../state/types';
+import { serverComputedParts } from '../utils/server-computed-parts';
 
 /**
  * Stored history loads underneath whatever the current run already holds.
@@ -267,6 +268,82 @@ describe('a client-sent assistant message only contributes tool outcomes', () =>
       args: { color: 'green' },
     });
     expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({ openai: { itemId: 'fc_1' } });
+  });
+
+  // Regression test for GitHub issue #25744: applyClientToolModelOutput caches the
+  // server-computed toModelOutput projection at providerMetadata.mastra.modelOutput on the
+  // live client result, but reconciliation rebuilt the outcome part with only type and
+  // toolInvocation, so the prompt fell back to the raw result after memory recall.
+  async function reconcileOutcome({ vetted }: { vetted: boolean }) {
+    const live = withToolState('assistant', 2, {
+      state: 'result',
+      args: { color: 'green' },
+      result: { images: [{ mediaType: 'image/png', data: 'c25hcHNob3Q=' }] },
+    });
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    const ingested = list.get.input.db()[0]!.content.parts[0]!;
+    // The shape applyClientToolModelOutput writes in place before memory reconciles,
+    // plus client-supplied metadata that must NOT survive.
+    ingested.providerMetadata = {
+      client: { edited: true },
+      mastra: {
+        modelOutputComputed: true,
+        modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+      },
+    };
+    if (vetted) serverComputedParts.add(ingested);
+    list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
+    return list;
+  }
+
+  it('keeps the server-computed toModelOutput mapping when the client sends an outcome', async () => {
+    const list = await reconcileOutcome({ vetted: true });
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toEqual({
+      mastra: {
+        modelOutputComputed: true,
+        modelOutput: { type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] },
+      },
+    });
+
+    const prompt = await list.get.all.aiV5.llmPrompt();
+    const toolMessage = prompt.find(message => message.role === 'tool');
+    const output =
+      Array.isArray(toolMessage?.content) && toolMessage.content[0]?.type === 'tool-result'
+        ? toolMessage.content[0].output
+        : undefined;
+    expect(output).toEqual({ type: 'content', value: [{ type: 'text', text: 'MAPPED SNAPSHOT' }] });
+  });
+
+  it('drops mapping markers the server did not compute on that part', async () => {
+    // e.g. a server tool's call left pending, or a tool missing from this agent: the hook
+    // never vetted the client's markers, so they must not be persisted onto the stored call.
+    const list = await reconcileOutcome({ vetted: false });
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toBeUndefined();
+  });
+
+  it('drops mapping markers on an outcome that is not a result', () => {
+    // The mapping hook only enriches (and strips) `result` parts, so markers on any other
+    // outcome can only have come from the client and must not reach the stored copy.
+    const live = withToolState('assistant', 2, { state: 'output-error', errorText: 'denied by browser' } as any);
+    const livePart = live.content.parts[0]!;
+    if (livePart.type === 'tool-invocation') {
+      livePart.providerMetadata = {
+        mastra: { modelOutputComputed: true, modelOutput: { type: 'text', value: 'FORGED' } },
+      };
+    }
+
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(live, 'input');
+    list.add(withToolState('assistant', 1, { state: 'call', args: { color: 'green' } }), 'memory');
+
+    const [part] = list.get.all.db()[0]!.content.parts;
+    expect(part?.type === 'tool-invocation' && part.toolInvocation.state).toBe('output-error');
+    expect(part?.type === 'tool-invocation' && part.providerMetadata).toBeUndefined();
   });
 
   it('does not let a client complete a provider-executed call', () => {
