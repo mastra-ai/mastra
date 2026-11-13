@@ -1,4 +1,3 @@
-import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
 import { createContext, useContext } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
@@ -8,6 +7,11 @@ import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '@/d
 import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
+import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
@@ -60,7 +64,7 @@ export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelP
   return (
     <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
       <Icon size="xs" className="text-muted-foreground">
-        <ClipboardList />
+        <IconClipboard2 />
       </Icon>
       <Txt as="span" variant="caption" tone="muted">
         {children}
@@ -113,7 +117,7 @@ export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
       aria-label="Copy plan"
       onClick={handleCopy}
     >
-      {isCopied ? <CheckIcon /> : <CopyIcon />}
+      {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
     </Button>
   );
 }
@@ -271,7 +275,7 @@ export function PlanExpandButton({ className, variant = 'default', ...props }: P
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}
-      icon={isExpanded ? <Minimize2 /> : <Maximize2 />}
+      icon={isExpanded ? <IconMinimize45 /> : <IconExpand45 />}
     >
       {isExpanded ? 'Collapse plan' : 'Expand plan'}
     </Button>

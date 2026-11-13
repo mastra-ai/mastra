@@ -2,10 +2,19 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, FolderPlus, Image, Plus, Trash2 } from 'lucide-react';
+import { IconFileBend } from '@mastra/playground-ui/icons/central/IconFileBend';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+
+import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
+import { IconFolderAddRight } from '@mastra/playground-ui/icons/central/IconFolderAddRight';
+import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
+import { IconImages1 } from '@mastra/playground-ui/icons/central/IconImages1';
+import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import type { MouseEvent, ReactNode } from 'react';
 import { useCallback, useRef, useState } from 'react';
-
 import type { InMemoryFileNode } from '../agent-edit-page/utils/form-validation';
 import { STRUCTURAL_IDS } from './skill-file-tree-utils';
 
@@ -24,29 +33,29 @@ function getFileIcon(name: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-badge-blue-indicator" />;
+      return <IconScript className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-badge-amber-indicator" />;
+      return <IconJson className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-muted-foreground" />;
+      return <IconFileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-badge-purple-indicator" />;
+      return <IconImages1 className="text-badge-purple-indicator" />;
     default:
-      return <File className="text-muted-foreground" />;
+      return <IconFileBend className="text-muted-foreground" />;
   }
 }
 
 function getFolderIcon(isOpen: boolean): ReactNode {
   return isOpen ? (
-    <FolderOpen className="text-badge-amber-indicator" />
+    <IconFolderOpen className="text-badge-amber-indicator" />
   ) : (
-    <Folder className="text-badge-amber-indicator" />
+    <IconFolder1 className="text-badge-amber-indicator" />
   );
 }
 
@@ -96,7 +105,7 @@ function FolderAddAction({ tooltip, onClick }: { tooltip: string; onClick: () =>
   return (
     <span className="opacity-0 group-hover:opacity-100">
       <Button size="icon-sm" variant="ghost" tooltip={tooltip} onClick={onClick}>
-        <Plus />
+        <IconPlusLarge />
       </Button>
     </span>
   );
@@ -106,10 +115,10 @@ function FolderActions({ onAddFile, onAddFolder }: { onAddFile: () => void; onAd
   return (
     <span className="flex opacity-0 group-hover:opacity-100">
       <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={onAddFile}>
-        <Plus />
+        <IconPlusLarge />
       </Button>
       <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={onAddFolder}>
-        <FolderPlus />
+        <IconFolderAddRight />
       </Button>
     </span>
   );
@@ -127,7 +136,7 @@ function FileDeleteAction({ nodeId, onRemove }: { nodeId: string; onRemove: (id:
           onRemove(nodeId);
         }}
       >
-        <Trash2 />
+        <IconTrashCan />
       </Button>
     </span>
   );
@@ -168,10 +177,10 @@ function UserNodeList({
                 !readOnly && (
                   <span className="flex opacity-0 group-hover:opacity-100">
                     <Button size="icon-sm" variant="ghost" tooltip="New file" onClick={() => onAddFile(node.id)}>
-                      <Plus />
+                      <IconPlusLarge />
                     </Button>
                     <Button size="icon-sm" variant="ghost" tooltip="New folder" onClick={() => onAddFolder(node.id)}>
-                      <FolderPlus />
+                      <IconFolderAddRight />
                     </Button>
                     <Button
                       size="icon-sm"
@@ -182,7 +191,7 @@ function UserNodeList({
                         onRemove(node.id);
                       }}
                     >
-                      <Trash2 />
+                      <IconTrashCan />
                     </Button>
                   </span>
                 )

@@ -3,7 +3,8 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LogOut, SunMoon } from 'lucide-react';
+import { SunMoon } from 'lucide-react';
+import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { useApiConfig } from '../../../../../api/config';
 import { useFactoryAuth } from '../../../../../hooks/useFactoryAuth';
 import { accountName } from '../../../auth/services/accountName';
@@ -51,7 +52,7 @@ export function OnboardingAccountMenu() {
         />
         <DropdownMenu.Separator />
         <DropdownMenu.Item onClick={() => signOutOfOnboarding(baseUrl)}>
-          <LogOut aria-hidden="true" />
+          <IconArrowBoxLeft aria-hidden="true" />
           Sign out
         </DropdownMenu.Item>
       </DropdownMenu.Content>

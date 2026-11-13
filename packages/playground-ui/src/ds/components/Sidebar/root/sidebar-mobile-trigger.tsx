@@ -1,6 +1,6 @@
-import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useSidebar } from './sidebar-context';
+import { IconBarsThree } from '@/ds/icons/central/IconBarsThree';
 import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
@@ -41,7 +41,7 @@ export function SidebarMobileTrigger({
         className,
       )}
     >
-      {icon ?? <MenuIcon className="size-5" />}
+      {icon ?? <IconBarsThree className="size-5" />}
     </button>
   );
 }

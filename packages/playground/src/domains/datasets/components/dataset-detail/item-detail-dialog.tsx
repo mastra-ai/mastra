@@ -7,22 +7,20 @@ import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import type { SideDialogRootProps } from '@mastra/playground-ui/components/SideDialog';
 import { TextAndIcon, getShortId } from '@mastra/playground-ui/components/Text';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconEraser } from '@mastra/playground-ui/icons/central/IconEraser';
+import { IconFileArrowRightIn } from '@mastra/playground-ui/icons/central/IconFileArrowRightIn';
+import { IconFileArrowRightOut } from '@mastra/playground-ui/icons/central/IconFileArrowRightOut';
+import { IconHashtag } from '@mastra/playground-ui/icons/central/IconHashtag';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import {
-  HashIcon,
-  FileInputIcon,
-  FileOutputIcon,
-  TagIcon,
-  RouteIcon,
-  BracesIcon,
-  Pencil,
-  Trash2,
-  Eraser,
-  Check,
-  X,
-} from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 export interface ItemDetailDialogProps {
@@ -219,18 +217,18 @@ export function ItemDetailDialog({
     >
       <SideDialog.Top>
         <TextAndIcon>
-          <HashIcon /> {getShortId(item.id)}
+          <IconHashtag /> {getShortId(item.id)}
         </TextAndIcon>
         <SideDialog.Nav onNext={toNextItem()} onPrevious={toPreviousItem()} />
         {!isEditing && (
           <div className="ml-auto flex items-center gap-2">
-            <Button size="sm" onClick={handleEdit} icon={<Pencil />}>
+            <Button size="sm" onClick={handleEdit} icon={<IconPencil />}>
               Edit
             </Button>
-            <Button size="sm" onClick={handleDelete} icon={<Trash2 />}>
+            <Button size="sm" onClick={handleDelete} icon={<IconTrashCan />}>
               Delete
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<Eraser />}>
+            <Button variant="destructive" size="sm" onClick={() => setShowPurgeConfirm(true)} icon={<IconEraser />}>
               Purge data
             </Button>
           </div>
@@ -292,7 +290,7 @@ export function ItemDetailDialog({
                 preventDefault, which would hide the pending state and a failed
                 purge behind a toast. */}
             <Button
-              icon={<Trash2 />}
+              icon={<IconTrashCan />}
               variant="primary"
               size="lg"
               onClick={() => void handlePurgeConfirm()}
@@ -319,10 +317,10 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
     <>
       <SideDialog.Header>
         <SideDialog.Heading>
-          <FileInputIcon /> Dataset Item
+          <IconFileArrowRightIn /> Dataset Item
         </SideDialog.Heading>
         <TextAndIcon>
-          <HashIcon /> {item.id}
+          <IconHashtag /> {item.id}
         </TextAndIcon>
       </SideDialog.Header>
 
@@ -346,25 +344,29 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
           ]}
         />
 
-        <SideDialog.CodeSection title="Input" icon={<FileInputIcon />} codeStr={JSON.stringify(item.input, null, 2)} />
+        <SideDialog.CodeSection
+          title="Input"
+          icon={<IconFileArrowRightIn />}
+          codeStr={JSON.stringify(item.input, null, 2)}
+        />
 
         {item.groundTruth !== null && item.groundTruth !== undefined && (
           <SideDialog.CodeSection
             title="Ground Truth"
-            icon={<FileOutputIcon />}
+            icon={<IconFileArrowRightOut />}
             codeStr={JSON.stringify(item.groundTruth, null, 2)}
           />
         )}
 
         {trajectoryDisplay && (
-          <SideDialog.CodeSection title="Expected Trajectory" icon={<RouteIcon />} codeStr={trajectoryDisplay} />
+          <SideDialog.CodeSection title="Expected Trajectory" icon={<IconDirection1 />} codeStr={trajectoryDisplay} />
         )}
 
         {requestContextDisplay && (
-          <SideDialog.CodeSection title="Request Context" icon={<BracesIcon />} codeStr={requestContextDisplay} />
+          <SideDialog.CodeSection title="Request Context" icon={<IconCodeBrackets />} codeStr={requestContextDisplay} />
         )}
 
-        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<TagIcon />} codeStr={metadataDisplay} />}
+        {metadataDisplay && <SideDialog.CodeSection title="Metadata" icon={<IconTag />} codeStr={metadataDisplay} />}
       </div>
     </>
   );
@@ -408,7 +410,7 @@ function EditModeContent({
     <>
       <SideDialog.Header>
         <SideDialog.Heading>
-          <Pencil /> Edit Item
+          <IconPencil /> Edit Item
         </SideDialog.Heading>
       </SideDialog.Header>
 
@@ -459,10 +461,10 @@ function EditModeContent({
         </Field>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button icon={<X />} onClick={onCancel} disabled={isSaving}>
+          <Button icon={<IconCrossMedium />} onClick={onCancel} disabled={isSaving}>
             Cancel
           </Button>
-          <Button icon={<Check />} variant="primary" onClick={onSave} disabled={isSaving}>
+          <Button icon={<IconCheckmark1 />} variant="primary" onClick={onSave} disabled={isSaving}>
             {isSaving ? 'Saving...' : 'Save changes'}
           </Button>
         </div>

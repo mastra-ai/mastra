@@ -1,8 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
-import { ChevronDown, StarIcon } from 'lucide-react';
+import { Star } from 'lucide-react';
 import { ExperimentIdLink } from './experiment-id-link';
 import { useComparedExperimentIds } from './use-compared-experiment-ids';
 
@@ -31,7 +32,7 @@ export function CompareCrumbSwitcher() {
         closeDelay={100}
         render={
           <Button type="button" variant="ghost" size="icon-sm" aria-label="Show compared experiments">
-            <ChevronDown />
+            <IconChevronBottom />
           </Button>
         }
       />
@@ -46,7 +47,7 @@ export function CompareCrumbSwitcher() {
                 role={index === 0 ? 'baseline' : 'contender'}
                 trailing={
                   index === 0 && (
-                    <Badge variant="purple" size="sm" icon={<StarIcon className="fill-current" />}>
+                    <Badge variant="purple" size="sm" icon={<Star className="fill-current" />}>
                       Baseline
                     </Badge>
                   )

@@ -1,11 +1,13 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { Check, CircleDashed, Code2 } from 'lucide-react';
 import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
 import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import { SketchLabel } from './SketchLabel';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCode } from '@mastra/playground-ui/icons/central/IconCode';
 
 const SOURCES = {
   linear: {
@@ -71,7 +73,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       </SketchLabel>
       <SketchLabel x={28} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <CircleDashed className="text-muted-foreground size-3" />
+          <IconCircleDashed className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             To do
           </Txt>
@@ -79,7 +81,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       </SketchLabel>
       <SketchLabel x={148} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <Code2 className="text-muted-foreground size-3" />
+          <IconCode className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             Build
           </Txt>
@@ -87,7 +89,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       </SketchLabel>
       <SketchLabel x={268} y={162} width={104}>
         <div className="flex items-center gap-1.5">
-          <Check className="text-muted-foreground size-3" />
+          <IconCheckmark1 className="text-muted-foreground size-3" />
           <Txt variant="meta" tone="muted">
             Review
           </Txt>

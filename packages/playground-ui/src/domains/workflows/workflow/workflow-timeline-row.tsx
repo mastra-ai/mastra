@@ -1,37 +1,35 @@
-import {
-  ArrowDownToLine,
-  ArrowUpFromLine,
-  Check,
-  CircleSlash,
-  CircleX,
-  CornerDownRight,
-  CircleHelp,
-  Loader2,
-  Pause,
-  SkipForward,
-  Timer,
-} from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import type { Step } from '../context/use-current-run';
 import { workflowStatusTone, workflowStatusToneBar, workflowStatusToneText } from '../workflow-status-tone';
 import type { TimelineRow } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowUpWall } from '@/ds/icons/central/IconArrowUpWall';
+import { IconArrowWallDown } from '@/ds/icons/central/IconArrowWallDown';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconQuestionmarkCircle } from '@/ds/icons/central/IconQuestionmarkCircle';
+import { IconSkip } from '@/ds/icons/central/IconSkip';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/utils/cn';
 import { formatDuration } from '@/utils/duration';
 
 const statusPresentation = {
-  success: { label: 'Completed', icon: Check },
-  failed: { label: 'Failed', icon: CircleX },
-  suspended: { label: 'Needs input', icon: Pause },
-  waiting: { label: 'Waiting', icon: Timer },
-  paused: { label: 'Paused', icon: Pause },
-  skipped: { label: 'Skipped', icon: SkipForward },
+  success: { label: 'Completed', icon: IconCheckmark1 },
+  failed: { label: 'Failed', icon: IconCircleX },
+  suspended: { label: 'Needs input', icon: IconPause },
+  waiting: { label: 'Waiting', icon: IconStopwatch },
+  paused: { label: 'Paused', icon: IconPause },
+  skipped: { label: 'Skipped', icon: IconSkip },
   running: { label: 'Running', icon: Loader2 },
-  canceled: { label: 'Canceled', icon: CircleSlash },
-} satisfies Record<Step['status'], { label: string; icon: typeof Check }>;
+  canceled: { label: 'Canceled', icon: IconCircleBanSign },
+} satisfies Record<Step['status'], { label: string; icon: typeof IconCheckmark1 }>;
 
-const unknownStatus = { label: 'Status unavailable', icon: CircleHelp };
+const unknownStatus = { label: 'Status unavailable', icon: IconQuestionmarkCircle };
 
 export interface WorkflowTimelineRowProps {
   row: TimelineRow;
@@ -100,7 +98,7 @@ export function WorkflowTimelineRow({
           </Txt>
           {row.isNestedEntry && (
             <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
-              <CornerDownRight aria-hidden className="size-3 shrink-0" />
+              <IconArrowCornerDownRight aria-hidden className="size-3 shrink-0" />
               <span className="truncate">{parentPath}</span>
             </Txt>
           )}
@@ -144,7 +142,7 @@ export function WorkflowTimelineRow({
           disabled={row.step.input === undefined}
           onClick={event => onOpenInput(row, event.currentTarget)}
         >
-          <ArrowDownToLine />
+          <IconArrowWallDown />
         </Button>
         <Button
           type="button"
@@ -154,7 +152,7 @@ export function WorkflowTimelineRow({
           disabled={row.step.output === undefined}
           onClick={event => onOpenOutput(row, event.currentTarget)}
         >
-          <ArrowUpFromLine />
+          <IconArrowUpWall />
         </Button>
       </div>
     </div>

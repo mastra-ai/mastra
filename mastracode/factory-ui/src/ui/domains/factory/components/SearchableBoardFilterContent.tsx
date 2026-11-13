@@ -1,12 +1,12 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { menuEmptyClass, menuSearchClasses } from '@mastra/playground-ui/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
-import { SearchIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { BoardFilterOptions } from './BoardFilterOptions';
 import type { BoardFilterOptionsProps } from './BoardFilterOptions';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 
 export function SearchableBoardFilterContent({
   label,
@@ -47,7 +47,7 @@ export function SearchableBoardFilterContent({
       onKeyDownCapture={keepTypingInSearch}
       header={
         <div className={menuSearchClasses.header}>
-          <SearchIcon className={menuSearchClasses.icon} aria-hidden />
+          <IconMagnifyingGlass className={menuSearchClasses.icon} aria-hidden />
           <input
             ref={searchRef}
             type="text"

@@ -3,8 +3,9 @@
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { AlertTriangleIcon, CheckCircleIcon } from 'lucide-react';
 import type { CsvValidationResult, RowValidationResult } from '../../utils/csv-validation';
 
 interface ValidationReportProps {
@@ -23,7 +24,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
   if (invalidCount === 0) {
     return (
       <div className={cn('flex items-center gap-2 text-success-indicator', className)}>
-        <CheckCircleIcon className="h-4 w-4" />
+        <IconCircleCheck className="h-4 w-4" />
         <Txt as="span" variant="body" className="block">
           All {totalRows} row{totalRows !== 1 ? 's' : ''} valid
         </Txt>
@@ -35,7 +36,7 @@ export function ValidationReport({ result, className }: ValidationReportProps) {
     <div className={cn('space-y-3', className)}>
       {/* Summary warning */}
       <div className="flex items-center gap-2 text-warning-foreground">
-        <AlertTriangleIcon className="h-4 w-4" />
+        <IconExclamationTriangle className="h-4 w-4" />
         <Txt as="span" variant="body" className="block">
           {invalidCount} of {totalRows} rows will be skipped (validation failed)
         </Txt>

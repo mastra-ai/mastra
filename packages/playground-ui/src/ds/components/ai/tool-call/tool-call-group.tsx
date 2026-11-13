@@ -1,4 +1,3 @@
-import { FoldVertical, X } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { presentTool } from './tool-presentation';
 import {
@@ -19,6 +18,8 @@ import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { Metadata } from '@/ds/components/Metadata';
 import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowsHide } from '@/ds/icons/central/IconArrowsHide';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface ToolCallGroupStep {
   toolName: string;
@@ -47,7 +48,7 @@ export function ToolCallGroup({ steps, leading, children }: ToolCallGroupProps) 
         <ActivityHeader>
           <ActivityLeading>{leading}</ActivityLeading>
           <ActivityIcon>
-            <FoldVertical size={14} aria-hidden className="text-placeholder" />
+            <IconArrowsHide size={14} aria-hidden className="text-placeholder" />
           </ActivityIcon>
           <ActivityLabel>{steps.length} steps</ActivityLabel>
           {live && live.description ? (
@@ -83,7 +84,9 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
   }
   const failed = steps.filter(step => step.status === 'error').length;
   const errorIndicator =
-    failed > 0 ? <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" /> : null;
+    failed > 0 ? (
+      <IconCrossMedium size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+    ) : null;
   // Older consumers only supply visual status, which cannot distinguish completed from interrupted calls.
   if (steps.some(step => step.hasResult === undefined)) return errorIndicator;
 

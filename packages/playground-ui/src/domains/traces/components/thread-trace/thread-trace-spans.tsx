@@ -1,5 +1,4 @@
 import { useTraceSpans } from '@mastra/react/hooks/traces';
-import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
@@ -11,6 +10,7 @@ import { useThreadTraceRow } from './thread-trace-row-context';
 import { Button } from '@/ds/components/Button';
 import { CollapsibleBox } from '@/ds/components/CollapsibleBox';
 import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
+import { IconMinimize45 } from '@/ds/icons/central/IconMinimize45';
 import { cn } from '@/lib/utils';
 
 /**
@@ -79,7 +79,7 @@ export function ThreadTraceSpans({ className, timelineClassName, ...props }: Thr
       </div>
       {isExpanded && overflows && !isActive && (
         <div className="flex justify-center pb-2">
-          <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => setExpanded(false)}>
+          <Button size="sm" variant="ghost" icon={<IconMinimize45 />} onClick={() => setExpanded(false)}>
             Collapse
           </Button>
         </div>

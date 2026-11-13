@@ -1,18 +1,23 @@
-import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
 import { Children } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { Button } from '../Button/Button';
 import './notice.css';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconLightBulb } from '@/ds/icons/central/IconLightBulb';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 
 const variantConfig: Record<NoticeVariant, { icon: ReactNode; iconClass: string }> = {
-  success: { icon: <LightbulbIcon />, iconClass: 'text-success-indicator' },
-  destructive: { icon: <OctagonAlertIcon />, iconClass: 'text-destructive-indicator' },
-  warning: { icon: <TriangleAlertIcon />, iconClass: 'text-warning-foreground' },
-  info: { icon: <InfoIcon />, iconClass: 'text-info-indicator' },
-  note: { icon: <FileTextIcon />, iconClass: 'text-muted-foreground' },
+  success: { icon: <IconLightBulb />, iconClass: 'text-success-indicator' },
+  destructive: { icon: <IconExclamationCircle />, iconClass: 'text-destructive-indicator' },
+  warning: { icon: <IconExclamationTriangle />, iconClass: 'text-warning-foreground' },
+  info: { icon: <IconCircleInfo />, iconClass: 'text-info-indicator' },
+  note: { icon: <IconFileText />, iconClass: 'text-muted-foreground' },
 };
 
 function hasContent(content: ReactNode) {
@@ -81,7 +86,7 @@ export function NoticeRoot({
           tooltip="Dismiss notice"
           onClick={onDismiss}
         >
-          <XIcon />
+          <IconCrossMedium />
         </Button>
       )}
     </div>

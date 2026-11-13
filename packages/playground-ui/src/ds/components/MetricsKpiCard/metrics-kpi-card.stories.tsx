@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon, CoinsIcon, GaugeIcon, HashIcon } from 'lucide-react';
 import { CompactNumber } from '../CompactNumber';
 import { MetricsKpiCard } from './metrics-kpi-card';
+import { IconCoins } from '@/ds/icons/central/IconCoins';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const meta: Meta<typeof MetricsKpiCard> = {
   title: 'Metrics/MetricsKpiCard',
@@ -18,7 +21,7 @@ export const WithPositiveChange: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>
             <CompactNumber value={12310} />
@@ -35,7 +38,7 @@ export const WithNegativeChange: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconHashtag />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2k</MetricsKpiCard.Value>
           <MetricsKpiCard.Change comparison="vs previous 24h" changePct={-12.5} prevValue="9.4k" />
@@ -50,7 +53,7 @@ export const LowerIsBetter: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconCoins />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>
             <CompactNumber value={1284.37} currency="USD" />
@@ -68,7 +71,7 @@ export const NoPreviousValue: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<GaugeIcon />}>Avg Score</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconGauge />}>Avg Score</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>—</MetricsKpiCard.Value>
         </MetricsKpiCard.ValueRow>
@@ -81,7 +84,7 @@ export const GridOfCards: Story = {
   render: () => (
     <div className="flex flex-wrap gap-4">
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>
             <CompactNumber value={12310} />
@@ -91,13 +94,13 @@ export const GridOfCards: Story = {
         <MetricsKpiCard.Footer detail="41 runs today" prevValue="10,676" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<CoinsIcon />}>Model cost</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconCoins />}>Model cost</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>—</MetricsKpiCard.Value>
         </MetricsKpiCard.ValueRow>
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<HashIcon />}>Tokens</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconHashtag />}>Tokens</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>8.2k</MetricsKpiCard.Value>
           <MetricsKpiCard.Change comparison="vs previous 24h" changePct={-12.5} prevValue="9.4k" />
@@ -105,7 +108,7 @@ export const GridOfCards: Story = {
         <MetricsKpiCard.Footer detail="62% input tokens" prevValue="9.4k" />
       </MetricsKpiCard>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<GaugeIcon />}>Avg Score</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconGauge />}>Avg Score</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>0.85</MetricsKpiCard.Value>
           <MetricsKpiCard.Change comparison="vs previous 24h" changePct={3.1} prevValue="0.82" />
@@ -121,7 +124,7 @@ export const PreviousValueInRow: Story = {
   render: () => (
     <div style={{ width: '20rem' }}>
       <MetricsKpiCard>
-        <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+        <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
         <MetricsKpiCard.ValueRow>
           <MetricsKpiCard.Value>
             <CompactNumber value={12310} />
@@ -145,7 +148,7 @@ export const Loading: Story = {
       {[true, false].map(isLoading => (
         <div key={String(isLoading)} style={{ width: '20rem' }}>
           <MetricsKpiCard>
-            <MetricsKpiCard.Label icon={<BotIcon />}>Agent runs</MetricsKpiCard.Label>
+            <MetricsKpiCard.Label icon={<IconRobot />}>Agent runs</MetricsKpiCard.Label>
             <MetricsKpiCard.ValueRow isLoading={isLoading}>
               <MetricsKpiCard.Value>
                 <CompactNumber value={12310} />

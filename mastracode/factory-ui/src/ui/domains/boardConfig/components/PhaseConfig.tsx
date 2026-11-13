@@ -17,7 +17,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
 
-import { BookOpen, Bot, FileText, Flag, Pencil, Play, Route, Trash2 } from 'lucide-react';
+import { Flag } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -36,6 +36,13 @@ import {
 import type { RuleField } from '../boardDraft';
 import { PhaseMoves } from './PhaseMoves';
 import { PhaseStep, PhaseSteps } from './PhaseSteps';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconDirection1 } from '@mastra/playground-ui/icons/central/IconDirection1';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
@@ -195,7 +202,7 @@ export function PhaseConfig({
   );
   const remove = onRemove && (
     <div>
-      <Button variant="ghost" icon={<Trash2 />} onClick={onRemove}>
+      <Button variant="ghost" icon={<IconTrashCan />} onClick={onRemove}>
         Remove {phase.name}
       </Button>
     </div>
@@ -213,7 +220,7 @@ export function PhaseConfig({
   return (
     <div className="flex flex-col gap-8">
       <PhaseSteps label={`How ${phase.name} runs`}>
-        <PhaseStep icon={<Play />} title="Starts">
+        <PhaseStep icon={<IconPlay />} title="Starts">
           <SettingsContainer>
             <SettingsRow label="Start on its own" disabled={disabled}>
               <Switch
@@ -243,7 +250,7 @@ export function PhaseConfig({
           </SettingsContainer>
         </PhaseStep>
 
-        <PhaseStep icon={<Bot />} title="Agent runs">
+        <PhaseStep icon={<IconRobot />} title="Agent runs">
           <PhaseField
             title="Instructions"
             description={`Added to the agent's prompt when the phase starts.${countNear(instructions.length, MAX_INSTRUCTIONS)}`}
@@ -337,7 +344,7 @@ export function PhaseConfig({
                   >
                     <SelectTrigger variant="ghost" size="sm" aria-label={`${phase.name} skill`} className="-ml-2 w-fit">
                       <span className="flex min-w-0 items-center gap-2">
-                        <BookOpen aria-hidden className="text-muted-foreground size-4 shrink-0" />
+                        <IconBook aria-hidden className="text-muted-foreground size-4 shrink-0" />
                         <span className="truncate">{skillName ?? 'No skill'}</span>
                       </span>
                     </SelectTrigger>
@@ -355,7 +362,7 @@ export function PhaseConfig({
                     <Button
                       size="sm"
                       variant="ghost"
-                      icon={skillsEditable ? <Pencil /> : <FileText />}
+                      icon={skillsEditable ? <IconPencil /> : <IconFileText />}
                       aria-label={`${skillsEditable ? 'Edit' : 'View'} ${skill.name}`}
                       className="ml-auto"
                       onClick={() => setOpenSkill(skill)}
@@ -474,7 +481,7 @@ export function PhaseConfig({
           )}
         </PhaseStep>
 
-        <PhaseStep icon={<Route />} title="Allowed moves">
+        <PhaseStep icon={<IconDirection1 />} title="Allowed moves">
           {moves}
         </PhaseStep>
       </PhaseSteps>

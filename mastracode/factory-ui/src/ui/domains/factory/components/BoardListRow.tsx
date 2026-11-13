@@ -6,13 +6,14 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical, Maximize2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, RefCallback } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { BOARD_LIST_ROW_LAYOUT_CLASS } from '../boardLayout';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
@@ -150,7 +151,7 @@ export function BoardListRow({
             }}
             className={REVEAL_ROW_CONTROLS}
           >
-            <Maximize2 size={13} aria-hidden />
+            <IconExpand45 size={13} aria-hidden />
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -165,7 +166,7 @@ export function BoardListRow({
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >
-                  <EllipsisVertical size={13} aria-hidden />
+                  <IconDotGrid1x3Vertical size={13} aria-hidden />
                 </Button>
               }
             />

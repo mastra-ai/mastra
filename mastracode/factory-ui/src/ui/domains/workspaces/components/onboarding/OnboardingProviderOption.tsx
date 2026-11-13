@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
@@ -61,7 +61,7 @@ export function OnboardingProviderOption({
           </Txt>
         )}
       </span>
-      {selected && <Check aria-hidden="true" className="size-4 shrink-0" />}
+      {selected && <IconCheckmark1 aria-hidden="true" className="size-4 shrink-0" />}
     </button>
   );
 }

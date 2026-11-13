@@ -1,12 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
-import { Loader2, Settings, X, LogOut } from 'lucide-react';
+
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
-
 import { useLogout } from '../hooks';
 import { useRoleImpersonation } from '../hooks/use-role-impersonation';
 import { UserAvatar } from './user-avatar';
@@ -102,7 +105,7 @@ export function UserMenu({ user }: UserMenuProps) {
                   <Txt as="span" variant="body" className="flex-1 capitalize">
                     {role.name}
                   </Txt>
-                  {isActive && <X className="h-3.5 w-3.5 text-muted-foreground" />}
+                  {isActive && <IconCrossMedium className="h-3.5 w-3.5 text-muted-foreground" />}
                 </button>
               );
             })}
@@ -121,12 +124,12 @@ export function UserMenu({ user }: UserMenuProps) {
             variant="ghost"
             className="w-full justify-start"
             onClick={() => setOpen(false)}
-            icon={<Settings />}
+            icon={<IconSettingsGear1 />}
           >
             Settings
           </Button>
           <Button
-            icon={<LogOut />}
+            icon={<IconArrowBoxLeft />}
             variant="ghost"
             onClick={() => handleLogout()}
             disabled={isPending}

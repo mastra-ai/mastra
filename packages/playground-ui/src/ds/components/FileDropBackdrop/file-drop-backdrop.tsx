@@ -1,9 +1,9 @@
-import { CloudUploadIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import { EmptyState } from '../EmptyState';
+import { IconCloudUpload } from '@/ds/icons/central/IconCloudUpload';
 
 // Matches `--duration-normal` so the fade-out finishes before the backdrop unmounts.
 const EXIT_DURATION_MS = 200;
@@ -123,7 +123,7 @@ export function FileDropBackdrop({
             data-state={isDragging ? 'open' : 'closed'}
             className="pointer-events-none fixed inset-0 z-50 animate-in bg-background/80 backdrop-blur-md fade-in-0 [--tw-animation-duration:var(--duration-normal)] data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:fill-mode-forwards"
           >
-            <EmptyState variant="fill" iconSlot={<CloudUploadIcon />} titleSlot={label} descriptionSlot={description} />
+            <EmptyState variant="fill" iconSlot={<IconCloudUpload />} titleSlot={label} descriptionSlot={description} />
           </div>,
           document.body,
         )}

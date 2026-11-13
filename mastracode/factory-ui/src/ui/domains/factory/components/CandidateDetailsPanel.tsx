@@ -4,7 +4,6 @@ import { Popover, PopoverContent } from '@mastra/playground-ui/components/Popove
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { EllipsisVertical, Minimize2, PencilLine } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import { useRef, useState } from 'react';
@@ -17,6 +16,9 @@ import { CardSourceDescription } from './BoardCardDetails';
 import { CardActions } from './BoardCardParts';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CardDetailsPanel } from './CardDetailsPanel';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconMinimize45 } from '@mastra/playground-ui/icons/central/IconMinimize45';
+import { IconPencilLine } from '@mastra/playground-ui/icons/central/IconPencilLine';
 
 export function CandidateDetailsPanel({
   candidate,
@@ -79,7 +81,7 @@ export function CandidateDetailsPanel({
                 aria-label={`Collapse ${candidate.title}`}
                 onClick={morph.closeDetails}
               >
-                <Minimize2 size={13} aria-hidden />
+                <IconMinimize45 size={13} aria-hidden />
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger
@@ -90,7 +92,7 @@ export function CandidateDetailsPanel({
                       size="icon-sm"
                       aria-label={`All actions for ${candidate.title}`}
                     >
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />
@@ -110,7 +112,7 @@ export function CandidateDetailsPanel({
                   data-card-morph="reveal"
                   onClick={() => setPromptOpen(true)}
                 >
-                  <PencilLine size={13} aria-hidden />
+                  <IconPencilLine size={13} aria-hidden />
                   Custom prompt…
                 </Button>
               </CardActions>

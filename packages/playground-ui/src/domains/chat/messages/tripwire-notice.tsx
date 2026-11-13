@@ -1,10 +1,14 @@
 import type { TripwireMetadata } from '@mastra/react';
-import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
+import { ShieldAlert } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@/ds/components/Badge';
 import { Code } from '@/ds/components/Code';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconTag } from '@/ds/icons/central/IconTag';
 
 export interface TripwireNoticeProps {
   reason: string;
@@ -30,7 +34,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               onClick={() => setIsExpanded(!isExpanded)}
               className="flex w-fit items-center gap-1.5 opacity-70 transition-opacity hover:opacity-100"
             >
-              {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+              {isExpanded ? <IconChevronBottom className="size-3.5" /> : <IconChevronRight className="size-3.5" />}
               <Txt as="span" variant="caption">
                 Details
               </Txt>
@@ -40,7 +44,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
               <div className="flex flex-col gap-2">
                 {tripwire.retry !== undefined && (
                   <div className="flex items-center gap-2">
-                    <RefreshCw className="size-3.5 shrink-0 opacity-70" />
+                    <IconArrowRotateClockwise className="size-3.5 shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
                       Retry
                     </Txt>
@@ -52,7 +56,7 @@ export const TripwireNotice = ({ reason, tripwire }: TripwireNoticeProps) => {
 
                 {tripwire.processorId && (
                   <div className="flex items-center gap-2">
-                    <Tag className="size-3.5 shrink-0 opacity-70" />
+                    <IconTag className="size-3.5 shrink-0 opacity-70" />
                     <Txt as="span" variant="caption">
                       Processor
                     </Txt>

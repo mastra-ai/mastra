@@ -1,10 +1,12 @@
 import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow, useStore } from '@xyflow/react';
-import { Maximize, Minus, Plus } from 'lucide-react';
 import { forwardRef } from 'react';
 import { workflowCameraDuration } from './workflow-camera-duration';
 import { Button } from '@/ds/components/Button';
 import { Slider } from '@/ds/components/Slider';
+import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
+import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import { cn } from '@/utils/cn';
 
 export const ZoomSlider = forwardRef<
@@ -31,7 +33,7 @@ export const ZoomSlider = forwardRef<
         disabled={zoom <= minZoom}
         onClick={() => zoomOut({ duration: workflowCameraDuration() })}
       >
-        <Minus />
+        <IconMinusLarge />
       </Button>
       {!compact && (
         <Slider
@@ -55,7 +57,7 @@ export const ZoomSlider = forwardRef<
         disabled={zoom >= maxZoom}
         onClick={() => zoomIn({ duration: workflowCameraDuration() })}
       >
-        <Plus />
+        <IconPlusLarge />
       </Button>
       <Button
         size="sm"
@@ -70,7 +72,7 @@ export const ZoomSlider = forwardRef<
         tooltip="Fit view"
         onClick={onFitView ?? (() => fitView({ duration: workflowCameraDuration(), maxZoom: 1 }))}
       >
-        <Maximize />
+        <IconFullscreen1 />
       </Button>
     </Panel>
   );

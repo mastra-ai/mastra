@@ -1,4 +1,3 @@
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { ModelPickerPanel } from './model-picker-panel';
@@ -8,6 +7,7 @@ import { Button } from '@/ds/components/Button';
 import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
 import { formatModelName } from '@/utils/model';
@@ -95,7 +95,7 @@ export function ModelPicker({
           </span>
         </>
       )}
-      <ChevronDown aria-hidden className="shrink-0" size={12} />
+      <IconChevronBottom aria-hidden className="shrink-0" size={12} />
     </>
   );
   const panel = (

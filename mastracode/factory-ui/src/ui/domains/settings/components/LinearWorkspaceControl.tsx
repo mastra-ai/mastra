@@ -10,12 +10,12 @@ import {
   DialogTitle,
 } from '@mastra/playground-ui/components/Dialog';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
 import type { LinearWorkspaceConnection } from '../../factory/services/linear';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 
 export function LinearWorkspaceControl({
   workspace,
@@ -28,7 +28,12 @@ export function LinearWorkspaceControl({
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button size="sm" icon={<Link2 />} aria-label={`Reconnect ${workspace.name}`} onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        icon={<IconChainLink1 />}
+        aria-label={`Reconnect ${workspace.name}`}
+        onClick={() => setOpen(true)}
+      >
         Reconnect
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>

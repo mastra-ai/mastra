@@ -1,17 +1,4 @@
-import {
-  ArrowLeft,
-  ArrowRight,
-  FileText,
-  Folder,
-  Hash,
-  Link2,
-  ListTree,
-  Network,
-  PanelLeftClose,
-  PanelLeftOpen,
-  SquareArrowOutUpRight,
-  X,
-} from 'lucide-react';
+import { Network } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
@@ -49,6 +36,17 @@ import { Skeleton, SkeletonText } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tree } from '@/ds/components/Tree';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
+import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconSidebarLeftArrow } from '@/ds/icons/central/IconSidebarLeftArrow';
+import { IconSidebarWideLeftArrow } from '@/ds/icons/central/IconSidebarWideLeftArrow';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { Icon } from '@/ds/icons/Icon';
 import { menuItemButtonClass } from '@/ds/primitives/menu-item';
 import { frameSurfaceStyle, overlaySurfaceStyle, raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -477,7 +475,7 @@ function ChildPageItems({
     ) : (
       <Tree.File key={child.id} id={child.id}>
         <Tree.Icon className="text-muted-foreground">
-          <FileText />
+          <IconFileText />
         </Tree.Icon>
         <ChildPageLabel page={child} />
       </Tree.File>
@@ -515,12 +513,12 @@ function ChildPageFolder({
             aria-label={`Open ${page.name}`}
             onClick={() => onOpen(page.id)}
           >
-            <ArrowRight />
+            <IconArrowRight />
           </Button>
         }
       >
         <Tree.Icon className="text-muted-foreground">
-          <Folder />
+          <IconFolder1 />
         </Tree.Icon>
         <ChildPageLabel page={page} />
         {page.childCount ? (
@@ -635,7 +633,7 @@ function MentionPopup({
           className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
           onClick={onClose}
         >
-          <X size={14} aria-hidden />
+          <IconCrossMedium size={14} aria-hidden />
         </button>
       </div>
       <div className="min-h-0 overflow-y-auto">
@@ -1204,9 +1202,9 @@ export function KnowledgePageExplorer({
   const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
   const views: Array<{ value: KnowledgeExplorerView; label: string; icon: ReactNode; narrowOnly?: boolean }> = [
-    { value: 'tree', label: 'Tree', icon: <ListTree />, narrowOnly: true },
+    { value: 'tree', label: 'Tree', icon: <IconCodeTree />, narrowOnly: true },
     { value: 'graph', label: 'Graph', icon: <Network />, narrowOnly: false },
-    { value: 'page', label: 'Page', icon: <FileText />, narrowOnly: false },
+    { value: 'page', label: 'Page', icon: <IconFileText />, narrowOnly: false },
   ];
 
   const tabValue = explorerTab(view, showPage);
@@ -1248,7 +1246,7 @@ export function KnowledgePageExplorer({
           ref={hidePagesButton}
           onClick={() => toggleTree(false)}
         >
-          <PanelLeftClose />
+          <IconSidebarWideLeftArrow />
         </Button>
       </DataPanel.HeaderActions>
     </DataPanel.Header>
@@ -1381,7 +1379,7 @@ export function KnowledgePageExplorer({
               ref={showPagesButton}
               onClick={() => toggleTree(true)}
             >
-              <PanelLeftOpen />
+              <IconSidebarLeftArrow />
             </Button>
           ) : null}
           {showPage ? (
@@ -1428,7 +1426,7 @@ export function KnowledgePageExplorer({
                       disabled={!backTo}
                       onClick={goBack}
                     >
-                      <ArrowLeft />
+                      <IconArrowLeft />
                     </Button>
                     <Button
                       aria-label="All links"
@@ -1440,7 +1438,7 @@ export function KnowledgePageExplorer({
                       className={allLinks ? '[--control-icon:var(--foreground)]' : undefined}
                       onClick={() => setAllLinks(current => !current)}
                     >
-                      <Link2 />
+                      <IconChainLink1 />
                     </Button>
                     <Button
                       aria-label="Link counts"
@@ -1452,7 +1450,7 @@ export function KnowledgePageExplorer({
                       className={dotCounts ? '[--control-icon:var(--foreground)]' : undefined}
                       onClick={() => setDotCounts(current => !current)}
                     >
-                      <Hash />
+                      <IconHashtag />
                     </Button>
                   </ButtonsGroup>
                 </div>
@@ -1527,7 +1525,7 @@ export function KnowledgePageExplorer({
                               openPage(drawerShownId);
                             }}
                           >
-                            <SquareArrowOutUpRight />
+                            <IconSquareArrowTopRight />
                           </Button>
                           <DataPanel.CloseButton
                             icon="x"

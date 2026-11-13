@@ -1,6 +1,6 @@
-import { ExternalLinkIcon } from 'lucide-react';
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 
 export const NoWorkflowsInfo = () => (
   <EmptyState
@@ -16,7 +16,7 @@ export const NoWorkflowsInfo = () => (
         variant="ghost"
         render={<a href="https://mastra.ai/docs/workflows/overview" target="_blank" rel="noopener noreferrer" />}
 
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
         Workflows documentation
       </Button>

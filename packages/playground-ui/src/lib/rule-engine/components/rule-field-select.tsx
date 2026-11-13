@@ -1,4 +1,3 @@
-import { Braces, Hash, List, ToggleLeft, Type } from 'lucide-react';
 import * as React from 'react';
 
 import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
@@ -6,6 +5,11 @@ import type { FieldOption, RuleFieldSelectProps } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFontStyle } from '@/ds/icons/central/IconFontStyle';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconToggle } from '@/ds/icons/central/IconToggle';
 import { cn } from '@/lib/utils';
 
 /**
@@ -14,17 +18,17 @@ import { cn } from '@/lib/utils';
 const getFieldTypeIcon = (type: string): React.ReactNode => {
   switch (type) {
     case 'object':
-      return <Braces />;
+      return <IconCodeBrackets />;
     case 'array':
-      return <List />;
+      return <IconListBullets />;
     case 'number':
     case 'integer':
-      return <Hash />;
+      return <IconHashtag />;
     case 'boolean':
-      return <ToggleLeft />;
+      return <IconToggle />;
     case 'string':
     default:
-      return <Type />;
+      return <IconFontStyle />;
   }
 };
 

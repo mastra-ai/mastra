@@ -3,7 +3,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Bell, CircleDot } from 'lucide-react';
+import { IconBell } from '@mastra/playground-ui/icons/central/IconBell';
+import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -56,9 +57,9 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
     return { state: 'closed', icon: <PullRequestStatusIcon status="closed" size={13} decorative /> };
   }
   if (action === 'opened' || action === 'reopened') {
-    return { state: 'open', icon: <CircleDot size={13} />, className: 'text-success-indicator' };
+    return { state: 'open', icon: <IconCircleRecord size={13} />, className: 'text-success-indicator' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'text-warning-foreground' };
+  return { state: 'notification', icon: <IconBell size={13} />, className: 'text-warning-foreground' };
 }
 
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {

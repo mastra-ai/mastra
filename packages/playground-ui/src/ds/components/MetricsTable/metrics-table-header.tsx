@@ -1,11 +1,12 @@
-import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
 import { useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { MetricsTableSortDirection } from './metrics-table-types';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 
-const SORT_ICON = { asc: ArrowUpIcon, desc: ArrowDownIcon };
+const SORT_ICON = { asc: IconArrowUp, desc: IconArrowDown };
 
 export const FOCUS =
   'focus-visible:outline-1 focus-visible:outline-solid focus-visible:outline-border-focus focus-visible:-outline-offset-1';

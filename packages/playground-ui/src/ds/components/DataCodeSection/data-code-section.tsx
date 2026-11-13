@@ -2,7 +2,6 @@ import { Chunk } from '@codemirror/merge';
 import { RangeSetBuilder, Text } from '@codemirror/state';
 import { Decoration, EditorView } from '@codemirror/view';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
-import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -11,6 +10,10 @@ import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { IconAlignmentJustify } from '@/ds/icons/central/IconAlignmentJustify';
+import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
+import { IconExpand } from '@/ds/icons/central/IconExpand';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -163,7 +166,7 @@ export function DataCodeSection({
                 tooltip="Search code"
                 onClick={() => setSearchMinimized(false)}
               >
-                <SearchIcon />
+                <IconMagnifyingGlass />
               </Button>
             ) : (
               <SearchInput
@@ -185,11 +188,11 @@ export function DataCodeSection({
                 tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
               >
-                {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+                {showAsMultilineText ? <IconAlignmentLeft /> : <IconAlignmentJustify />}
               </Button>
             )}
             <Button size="icon-md" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
-              <ExpandIcon />
+              <IconExpand />
             </Button>
           </ButtonsGroup>
         </div>
@@ -241,7 +244,7 @@ export function DataCodeSection({
                       tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                       onClick={() => setExpandedMultiline(v => !v)}
                     >
-                      {expandedMultiline ? <AlignLeftIcon /> : <AlignJustifyIcon />}
+                      {expandedMultiline ? <IconAlignmentLeft /> : <IconAlignmentJustify />}
                     </Button>
                   )}
                 </ButtonsGroup>

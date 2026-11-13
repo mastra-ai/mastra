@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
-import { RotateCcw } from 'lucide-react';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 import { Fragment } from 'react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
@@ -54,7 +54,12 @@ export function IntakeSection() {
     return (
       <SettingsContainer>
         <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void configQuery.refetch()}
+          >
             Retry
           </Button>
         </SettingsRow>

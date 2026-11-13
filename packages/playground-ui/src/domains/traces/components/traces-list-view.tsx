@@ -1,5 +1,4 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ListFilterIcon } from 'lucide-react';
 import { useRef } from 'react';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
@@ -18,6 +17,7 @@ import { splitColumns } from '@/ds/components/DataList/shared';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
 import { cn } from '@/lib/utils';
@@ -317,7 +317,7 @@ export function TracesListView({
                       className={cn('flex min-w-0 items-center gap-1 rounded-sm hover:text-foreground', focusRing)}
                     >
                       <span className="min-w-0 truncate">{label}</span>
-                      <ListFilterIcon aria-hidden className="size-[1.2em] shrink-0" />
+                      <IconFilter2 aria-hidden className="size-[1.2em] shrink-0" />
                     </button>
                   }
                 />

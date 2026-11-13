@@ -1,13 +1,14 @@
-import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
 import { Txt } from '@/ds/components/Txt';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconCircleX } from '@/ds/icons/central/IconCircleX';
 import { cn } from '@/lib/utils';
 
 type EmptyStateTone = 'default' | 'error';
 
 const defaultIconByTone: Record<EmptyStateTone, React.ReactNode> = {
-  default: <CircleSlashIcon />,
-  error: <CircleXIcon />,
+  default: <IconCircleBanSign />,
+  error: <IconCircleX />,
 };
 
 const iconColorByTone: Record<EmptyStateTone, string> = {

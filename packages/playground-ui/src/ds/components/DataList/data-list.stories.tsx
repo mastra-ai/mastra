@@ -1,11 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Pencil, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListSort } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
 import { Button } from '@/ds/components/Button';
 import { Status } from '@/ds/components/StatusIndicators';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { useTableKeydown } from '@/lib/keyboard';
 
 const meta: Meta<typeof DataList> = {
@@ -247,7 +248,7 @@ export const WithActions: Story = {
               aria-label={`Edit ${item.name}`}
               onClick={event => event.stopPropagation()}
             >
-              <Pencil />
+              <IconPencil />
             </Button>
             <Button
               type="button"
@@ -257,7 +258,7 @@ export const WithActions: Story = {
               aria-label={`Delete ${item.name}`}
               onClick={event => event.stopPropagation()}
             >
-              <Trash2 />
+              <IconTrashCan />
             </Button>
           </DataList.ActionsCell>
         </DataList.RowWrapper>

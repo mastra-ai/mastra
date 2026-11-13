@@ -1,6 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
-import { Plus } from 'lucide-react';
 import type { ContextType, ReactNode } from 'react';
 import { useEffect, useContext, useState } from 'react';
 
@@ -17,6 +16,7 @@ import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import { useLinkComponent } from '@/lib/framework';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -77,7 +77,7 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
       tooltip="New workflow run"
       onClick={onClick}
     >
-      <Plus />
+      <IconPlusLarge />
     </Button>
   );
 }

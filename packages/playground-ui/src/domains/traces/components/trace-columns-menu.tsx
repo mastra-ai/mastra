@@ -1,4 +1,3 @@
-import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -29,6 +28,8 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Txt } from '@/ds/components/Txt';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 const EMPTY_KEYS: readonly string[] = [];
 
@@ -122,7 +123,7 @@ export function TraceColumnsMenu({
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger disabled={disabled} size="icon-sm" tooltip="Columns">
-          <Columns3Icon aria-hidden />
+          <IconColumns3 aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
@@ -189,7 +190,7 @@ export function TraceColumnsMenu({
               ))}
               {withMetadata && (
                 <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
-                  <PlusIcon aria-hidden />
+                  <IconPlusLarge aria-hidden />
                   Add metadata column
                 </DropdownMenu.Item>
               )}

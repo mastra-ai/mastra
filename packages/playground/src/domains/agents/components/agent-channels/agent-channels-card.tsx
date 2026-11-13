@@ -2,11 +2,11 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardTitle } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
 import { useMastraClient } from '@mastra/react';
 import { useChannelPlatforms } from '@mastra/react/hooks/agents';
 import type { ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useQueries } from '@tanstack/react-query';
-import { Plug } from 'lucide-react';
 import { PlatformIcon } from './platform-icons';
 import { useConnectChannelAction } from '@/domains/agents/hooks/use-connect-channel-action';
 import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
@@ -72,7 +72,13 @@ function ChannelAction({
           Pending
         </Badge>
       ) : null}
-      <Button icon={<Plug />} size="sm" variant="default" onClick={() => connect(agentId)} disabled={isConnecting}>
+      <Button
+        icon={<IconPlugin1 />}
+        size="sm"
+        variant="default"
+        onClick={() => connect(agentId)}
+        disabled={isConnecting}
+      >
         {isConnecting ? 'Connecting...' : 'Connect'}
       </Button>
     </li>

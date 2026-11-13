@@ -1,5 +1,4 @@
 import { useMastraClient } from '@mastra/react';
-import { DatabaseIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
 import { useDatasetSaveContext } from '../context/dataset-save-context-value';
 import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
@@ -21,6 +20,7 @@ import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
@@ -191,7 +191,7 @@ function DatasetSaveActionInner({ messageText }: DatasetSaveActionProps) {
         className={cn(quietTextHover, 'bg-transparent')}
         onClick={handleClick}
       >
-        <DatabaseIcon className="size-4" />
+        <IconServer1 className="size-4" />
       </Button>
       <DatasetSaveDialog
         open={dialogOpen}
@@ -260,7 +260,7 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
           'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
         )}
       >
-        {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
+        {isFetching ? <Spinner className="size-3.5" /> : <IconServer1 className="size-3.5" />}
         <Txt as="span" variant="meta" className="block">
           Save full conversation to dataset
         </Txt>

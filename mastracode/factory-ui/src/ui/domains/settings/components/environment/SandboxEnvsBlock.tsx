@@ -22,12 +22,13 @@ import { Table } from '@mastra/playground-ui/components/Table';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { MoreHorizontal, Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 
 import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hooks/useSandboxEnvs';
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { SandboxEnv, SandboxEnvAppliesTo } from '../../../workspaces/services/sandbox-envs';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 const MASK = '••••••••••••';
 
@@ -58,7 +59,7 @@ export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {
 
   return (
     <>
-      <Button size="sm" icon={<Plus />} disabled={!data?.writable} onClick={() => setOpen(true)}>
+      <Button size="sm" icon={<IconPlusLarge />} disabled={!data?.writable} onClick={() => setOpen(true)}>
         Add variable
       </Button>
       {open && data && <SandboxEnvDialog envs={data.envs} mutations={mutations} onClose={() => setOpen(false)} />}
@@ -161,7 +162,7 @@ export function SandboxEnvsBlock({ factoryId }: { factoryId: string }) {
                       <DropdownMenu.Trigger
                         render={
                           <Button variant="ghost" size="icon-sm" aria-label={`${env.name} actions`}>
-                            <MoreHorizontal />
+                            <IconDotGrid1x3Horizontal />
                           </Button>
                         }
                       />

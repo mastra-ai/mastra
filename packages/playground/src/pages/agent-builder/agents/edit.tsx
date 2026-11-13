@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { useAuthCapabilities } from '@mastra/react/hooks/auth';
 import { useAllProviderTools } from '@mastra/react/hooks/tool-providers';
-import { Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { FormProvider, useForm, useFormContext, useFormState, useWatch } from 'react-hook-form';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -193,7 +193,7 @@ const MobileInitialCtas = () => {
         Chat with my agent
       </Button>
       <Button
-        icon={<Settings2 />}
+        icon={<IconSettingsSliderHor />}
         onClick={() => startViewTransition(() => next())}
         data-testid="agent-builder-mobile-initial-cta-config"
       >

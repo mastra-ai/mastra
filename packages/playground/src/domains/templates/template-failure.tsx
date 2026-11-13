@@ -1,8 +1,9 @@
 import { Code } from '@mastra/playground-ui/components/Code';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconEmojiSad } from '@mastra/playground-ui/icons/central/IconEmojiSad';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { FrownIcon, AlertTriangleIcon } from 'lucide-react';
 import { Container } from './shared';
 
 type TemplateFailureProps = {
@@ -29,12 +30,12 @@ export function TemplateFailure({ errorMsg, validationErrors }: TemplateFailureP
   const getIconAndTitle = () => {
     if (isValidationError) {
       return {
-        icon: <AlertTriangleIcon className="text-warning-foreground" />,
+        icon: <IconExclamationTriangle className="text-warning-foreground" />,
         title: 'Template Installed with Warnings',
       };
     }
     return {
-      icon: <FrownIcon />,
+      icon: <IconEmojiSad />,
       title: 'Template Installation Failed',
     };
   };

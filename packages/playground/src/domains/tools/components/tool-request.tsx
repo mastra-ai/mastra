@@ -3,13 +3,15 @@ import { Field, FieldError } from '@mastra/playground-ui/components/Field';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { RequestContextEntityType } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconInputForm } from '@mastra/playground-ui/icons/central/IconInputForm';
+import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { FormSubmitRow } from '@mastra/playground-ui/lib/form/components/form-submit-row';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
 import { isEmptyZodObject } from '@mastra/playground-ui/lib/form/is-empty-zod-object';
 import { getFormShapeError, parseJsonDraft, validateJsonDraft } from '@mastra/playground-ui/lib/form/json-draft';
 import { SettingsContainer, SettingsGroup, SettingsTitle } from '@mastra/playground-ui/new/settings';
-import { Braces, FormInput, PlayIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ZodType } from 'zod';
 import { ToolSectionHeader } from './tool-section-header';
@@ -63,7 +65,7 @@ export function ToolRequest({
   const submitProps = {
     isSubmitLoading: isRunning,
     submitButtonLabel: 'Run',
-    submitButtonIcon: <PlayIcon />,
+    submitButtonIcon: <IconPlay />,
     submitButtonVariant: 'primary',
   } as const;
 
@@ -77,13 +79,13 @@ export function ToolRequest({
               <TabList size="md">
                 <Tab value="form" disabled={isRunning}>
                   <Icon size="sm">
-                    <FormInput />
+                    <IconInputForm />
                   </Icon>
                   Form
                 </Tab>
                 <Tab value="json" disabled={isRunning}>
                   <Icon size="sm">
-                    <Braces />
+                    <IconCodeBrackets />
                   </Icon>
                   JSON
                 </Tab>

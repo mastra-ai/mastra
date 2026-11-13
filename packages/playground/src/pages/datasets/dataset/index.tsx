@@ -5,10 +5,16 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AddDatasetItemDialog } from '@mastra/playground-ui/domains/datasets';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { ExperimentsIcon } from '@mastra/playground-ui/icons/ExperimentsIcon';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItems } from '@mastra/react/hooks/datasets';
-import { ArrowLeft, Braces, Copy, MoreVertical, Pencil, Plus, Trash2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { Link, useParams, useNavigate, useSearchParams } from 'react-router';
@@ -95,7 +101,7 @@ function DatasetPage() {
           titleSlot="Dataset not found"
           descriptionSlot={`No dataset with id "${datasetId}".`}
           actionSlot={
-            <Button render={<Link to="/datasets" />} icon={<ArrowLeft />}>
+            <Button render={<Link to="/datasets" />} icon={<IconArrowLeft />}>
               Back to datasets
             </Button>
           }
@@ -135,7 +141,7 @@ function DatasetPage() {
   const headerActions = (
     <>
       {hasItems && (
-        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<Plus />}>
+        <Button variant="ghost" size="sm" onClick={() => setExperimentDialogOpen(true)} icon={<IconPlusLarge />}>
           New experiment
         </Button>
       )}
@@ -149,24 +155,24 @@ function DatasetPage() {
           Experiments
         </Button>
       )}
-      <Button variant="ghost" size="sm" onClick={() => setSchemaDialogOpen(true)} icon={<Braces />}>
+      <Button variant="ghost" size="sm" onClick={() => setSchemaDialogOpen(true)} icon={<IconCodeBrackets />}>
         Schema
       </Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="Dataset actions menu">
-            <MoreVertical />
+            <IconDotGrid1x3Vertical />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" className="w-48">
           <DropdownMenu.Item onSelect={() => void navigate(`/datasets/${datasetId}/edit`)}>
-            <Pencil /> Edit dataset
+            <IconPencil /> Edit dataset
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => setDuplicateDialogOpen(true)}>
-            <Copy /> Duplicate dataset
+            <IconSquareBehindSquare1 /> Duplicate dataset
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={() => setDeleteDialogOpen(true)} variant="destructive">
-            <Trash2 /> Delete dataset
+            <IconTrashCan /> Delete dataset
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>

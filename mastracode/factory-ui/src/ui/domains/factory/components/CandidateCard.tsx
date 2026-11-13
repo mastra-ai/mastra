@@ -2,7 +2,6 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowUpRight, EllipsisVertical } from 'lucide-react';
 import type { ReactElement } from 'react';
 import { useId } from 'react';
 
@@ -21,6 +20,8 @@ import { actionIcon } from './BoardIcons';
 import { CandidateCardRows } from './CandidateCardRows';
 import { CandidateDetailsPanel } from './CandidateDetailsPanel';
 import { CandidateListRow } from './CandidateListRow';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
 // Acting on it is what files the record.
 export function CandidateCard({
@@ -63,7 +64,7 @@ export function CandidateCard({
       </DropdownMenu.Item>
     )),
     <DropdownMenu.Item key="source" render={<a href={candidate.url} target="_blank" rel="noreferrer" />}>
-      <ArrowUpRight aria-hidden />
+      <IconArrowUpRight aria-hidden />
       <span>{externalLinkLabel(candidate.source)}</span>
     </DropdownMenu.Item>,
   ];
@@ -136,7 +137,7 @@ export function CandidateCard({
                       aria-label={`Actions for ${candidate.title}`}
                       className={REVEAL_ON_CARD_HOVER}
                     >
-                      <EllipsisVertical size={13} aria-hidden />
+                      <IconDotGrid1x3Vertical size={13} aria-hidden />
                     </Button>
                   }
                 />

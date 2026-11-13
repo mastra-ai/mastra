@@ -5,11 +5,17 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronTop } from '@mastra/playground-ui/icons/central/IconChevronTop';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { IconWrite } from '@mastra/playground-ui/icons/central/IconWrite';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useObservationalMemory, useMemoryConfig, useThread, useMemory } from '@mastra/react/hooks/memory';
-import { ChevronDown, ChevronUp, Eye, MessageSquare, NotebookPen, Search, ExternalLink } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AgentCapabilitiesFooter } from './agent-capabilities-footer';
@@ -251,7 +257,7 @@ export function MemorySidebarBody({
                 descriptionSlot="Conversations are only saved as threads when the agent has memory configured."
                 actionSlot={
                   <Button
-                    icon={<ExternalLink />}
+                    icon={<IconSquareArrowTopRight />}
                     render={
                       <a href="https://mastra.ai/docs/memory/overview" target="_blank" rel="noopener noreferrer" />
                     }
@@ -292,9 +298,9 @@ export function MemorySidebarBody({
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronBottom className="h-4 w-4 shrink-0 text-muted-foreground" />
                 ) : (
-                  <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <IconChevronTop className="h-4 w-4 shrink-0 text-muted-foreground" />
                 )}
               </span>
 
@@ -303,13 +309,13 @@ export function MemorySidebarBody({
                   {/* Memory setup at a glance: filled badge = on, faded = off */}
                   <span data-testid="memory-config-badges" className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <ConfigBadge
-                      icon={MessageSquare}
+                      icon={IconBubble2}
                       tooltip={recentMessages.description}
                       enabled={recentMessages.enabled}
                       value={recentMessages.maxMessages}
                     />
                     <ConfigBadge
-                      icon={Search}
+                      icon={IconMagnifyingGlass}
                       tooltip={
                         semanticRecallOn
                           ? 'Semantic recall is on and retrieves relevant past messages'
@@ -318,7 +324,7 @@ export function MemorySidebarBody({
                       enabled={semanticRecallOn}
                     />
                     <ConfigBadge
-                      icon={NotebookPen}
+                      icon={IconWrite}
                       tooltip={
                         workingMemoryOn
                           ? 'Working memory is on and persists notes across the conversation'
@@ -327,7 +333,7 @@ export function MemorySidebarBody({
                       enabled={workingMemoryOn}
                     />
                     <ConfigBadge
-                      icon={Eye}
+                      icon={IconEyeOpen}
                       tooltip={
                         observationalOn
                           ? 'Observational memory is on and learns from the conversation'

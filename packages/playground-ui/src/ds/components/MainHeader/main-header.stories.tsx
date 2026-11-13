@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BotIcon, Edit2Icon } from 'lucide-react';
 import { Button } from '../Button';
 import { CopyButton } from '../CopyButton';
 import { TextAndIcon } from '../Text';
 import { TooltipProvider } from '../Tooltip';
 import { MainHeader } from './main-header';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const meta: Meta<typeof MainHeader> = {
   title: 'Layout/MainHeader',
@@ -23,13 +24,13 @@ export const Default: Story = {
       <MainHeader>
         <MainHeader.Column>
           <MainHeader.Title>
-            <BotIcon /> Agents <CopyButton content="Agents" />
+            <IconRobot /> Agents <CopyButton content="Agents" />
           </MainHeader.Title>
           <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
         </MainHeader.Column>
         <MainHeader.Column>
           <Button>
-            <Edit2Icon />
+            <IconPencil />
             Edit
           </Button>
         </MainHeader.Column>
@@ -54,7 +55,7 @@ export const WithIcon: Story = {
     <MainHeader>
       <MainHeader.Column>
         <MainHeader.Title>
-          <BotIcon /> Agents
+          <IconRobot /> Agents
         </MainHeader.Title>
         <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
       </MainHeader.Column>
@@ -67,11 +68,11 @@ export const WithIcons: Story = {
     <MainHeader>
       <MainHeader.Column>
         <MainHeader.Title>
-          <BotIcon /> Agents
+          <IconRobot /> Agents
         </MainHeader.Title>
         <MainHeader.Description>
           <TextAndIcon>
-            <BotIcon />
+            <IconRobot />
             Create and manage AI agents for your workflows
           </TextAndIcon>
         </MainHeader.Description>
@@ -86,7 +87,7 @@ export const Loading: Story = {
     <MainHeader>
       <MainHeader.Column>
         <MainHeader.Title isLoading>
-          <BotIcon /> Agents
+          <IconRobot /> Agents
         </MainHeader.Title>
         <MainHeader.Description isLoading>Create and manage AI agents for your workflows</MainHeader.Description>
       </MainHeader.Column>
@@ -99,7 +100,7 @@ export const LongDescription: Story = {
     <MainHeader>
       <MainHeader.Column>
         <MainHeader.Title>
-          <BotIcon /> Agents
+          <IconRobot /> Agents
         </MainHeader.Title>
         <MainHeader.Description>
           Configure your data storage settings including database connections, caching strategies, and backup schedules.
@@ -115,13 +116,13 @@ export const WithSecondColumn: Story = {
     <MainHeader>
       <MainHeader.Column>
         <MainHeader.Title>
-          <BotIcon /> Agents
+          <IconRobot /> Agents
         </MainHeader.Title>
         <MainHeader.Description>Create and manage AI agents for your workflows</MainHeader.Description>
       </MainHeader.Column>
       <MainHeader.Column>
         <Button>
-          <Edit2Icon />
+          <IconPencil />
           Edit
         </Button>
       </MainHeader.Column>

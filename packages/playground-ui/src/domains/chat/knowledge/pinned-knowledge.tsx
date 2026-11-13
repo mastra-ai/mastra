@@ -1,10 +1,10 @@
-import { Pin } from 'lucide-react';
 import { useState } from 'react';
 import { KnowledgePageLink } from './knowledge-links';
 import type { PinnedKnowledge, PinnedRow } from './pinned-knowledge-data';
 import { ActivityItem } from '@/ds/components/ai/activity';
 import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
+import { IconPin } from '@/ds/icons/central/IconPin';
 
 const CHANGE_MARK = { add: '+', change: '~', remove: '−' } as const;
 const CHANGE_LABEL = { add: 'Added', change: 'Changed', remove: 'Removed' } as const;
@@ -102,7 +102,7 @@ export function PinnedKnowledgeActivity({ pinned, defaultOpen }: { pinned: Pinne
   const label = pinned.mode === 'snapshot' ? 'Pinned knowledge' : 'Pinned knowledge updated';
   return (
     <ActivityItem
-      icon={<Pin className="text-badge-amber-indicator" aria-hidden />}
+      icon={<IconPin className="text-badge-amber-indicator" aria-hidden />}
       label={label}
       detail={summary(pinned)}
       badges={<Badge size="xs">{pinned.mode}</Badge>}

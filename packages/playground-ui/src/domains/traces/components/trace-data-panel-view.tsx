@@ -1,16 +1,4 @@
-import {
-  ChartGanttIcon,
-  CircleGaugeIcon,
-  DownloadIcon,
-  Link2Icon,
-  ListTreeIcon,
-  Loader2Icon,
-  MessageSquareReplyIcon,
-  MessageSquareTextIcon,
-  SaveIcon,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react';
+import { Loader2Icon, MessageSquareReplyIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Group, Panel, useGroupRef } from 'react-resizable-panels';
@@ -31,6 +19,15 @@ import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
@@ -195,7 +192,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <MessageSquareTextIcon />
+              <IconBubbleText />
             </Icon>
             <span className="@max-[501px]:sr-only">Messages</span>
           </>
@@ -327,7 +324,7 @@ export function TraceDataPanelView({
     <>
       {!isOnTracePage && LinkComponent && traceHref && (
         <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={traceHref} />}>
-          <Link2Icon />
+          <IconChainLink1 />
         </Button>
       )}
       <Button
@@ -337,14 +334,14 @@ export function TraceDataPanelView({
         disabled={isDownloadingTrace}
         onClick={() => downloadTraceJson(traceId)}
       >
-        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <IconArrowInbox />}
       </Button>
     </>
   );
 
   const scoreAction = onEvaluateTrace && (
     <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
-      <CircleGaugeIcon />
+      <IconGauge />
       Score trace
     </Button>
   );
@@ -449,7 +446,7 @@ export function TraceDataPanelView({
                       tooltip="Add the full trace to a dataset"
                       onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
                     >
-                      <SaveIcon />
+                      <IconFloppyDisk1 />
                       Add to dataset
                     </Button>
                   )}
@@ -508,7 +505,7 @@ export function TraceDataPanelView({
                   // bottom rule is its only edge, and keyboard focus lights that rule like a
                   // field's rim. The view switch stays as flat square icons.
                   <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-                    <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                    <IconMagnifyingGlass aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
                     <input
                       type="search"
                       aria-label="Search spans"
@@ -525,14 +522,14 @@ export function TraceDataPanelView({
                         className="rounded-md"
                         onClick={() => setQuery('')}
                       >
-                        <XIcon />
+                        <IconCrossMedium />
                       </Button>
                     )}
                     <div role="group" aria-label="Span view" className="flex shrink-0 items-center gap-0.5">
                       {(
                         [
-                          ['tree', 'Span tree', <ListTreeIcon key="tree" />],
-                          ['timeline', 'Timeline', <ChartGanttIcon key="timeline" />],
+                          ['tree', 'Span tree', <IconCodeTree key="tree" />],
+                          ['timeline', 'Timeline', <IconGanttChart key="timeline" />],
                         ] as const
                       ).map(([view, label, icon]) => (
                         <Button

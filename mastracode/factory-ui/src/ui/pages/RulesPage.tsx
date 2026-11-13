@@ -8,7 +8,7 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleCheck, CircleDashed, CirclePause, CircleSlash, CircleX, ListFilter, Repeat } from 'lucide-react';
+import { CirclePause } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
@@ -24,13 +24,19 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/f
 import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
 import { RULE_DECISION_GROUPS, ruleDecisionGroup } from '../domains/factory/ruleDecisionGroups';
 import type { RuleDecisionGroupKey } from '../domains/factory/ruleDecisionGroups';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
+import { IconCircleX } from '@mastra/playground-ui/icons/central/IconCircleX';
+import { IconFilter2 } from '@mastra/playground-ui/icons/central/IconFilter2';
+import { IconArrowsRepeat } from '@mastra/playground-ui/icons/central/IconArrowsRepeat';
 
 const GROUP_PRESENTATION: Record<RuleDecisionGroupKey, { label: string; icon: LucideIcon }> = {
-  all: { label: 'All effects', icon: ListFilter },
-  active: { label: 'Active', icon: CircleDashed },
+  all: { label: 'All effects', icon: IconFilter2 },
+  active: { label: 'Active', icon: IconCircleDashed },
   proposed: { label: 'Awaiting approval', icon: CirclePause },
-  failed: { label: 'Failed', icon: CircleX },
-  succeeded: { label: 'Succeeded', icon: CircleCheck },
+  failed: { label: 'Failed', icon: IconCircleX },
+  succeeded: { label: 'Succeeded', icon: IconCircleCheck },
 };
 
 const DECISION_GROUPS = RULE_DECISION_GROUPS.map(group => ({ ...group, ...GROUP_PRESENTATION[group.key] }));
@@ -39,14 +45,14 @@ const STATUS_STYLE: Record<
   FactoryDecisionStatus,
   { icon: LucideIcon; tone: BadgeVariant; label: string; live?: true }
 > = {
-  pending: { icon: CircleDashed, tone: 'info', label: 'queued' },
+  pending: { icon: IconCircleDashed, tone: 'info', label: 'queued' },
   proposed: { icon: CirclePause, tone: 'warning', label: 'awaiting approval' },
-  dismissed: { icon: CircleSlash, tone: 'neutral', label: 'dismissed' },
-  superseded: { icon: CircleSlash, tone: 'neutral', label: 'superseded' },
-  leased: { icon: CircleDashed, tone: 'cyan', label: 'running', live: true },
-  retry: { icon: CircleDashed, tone: 'orange', label: 'retrying', live: true },
-  succeeded: { icon: CircleCheck, tone: 'success', label: 'done' },
-  failed: { icon: CircleX, tone: 'destructive', label: 'failed' },
+  dismissed: { icon: IconCircleBanSign, tone: 'neutral', label: 'dismissed' },
+  superseded: { icon: IconCircleBanSign, tone: 'neutral', label: 'superseded' },
+  leased: { icon: IconCircleDashed, tone: 'cyan', label: 'running', live: true },
+  retry: { icon: IconCircleDashed, tone: 'orange', label: 'retrying', live: true },
+  succeeded: { icon: IconCircleCheck, tone: 'success', label: 'done' },
+  failed: { icon: IconCircleX, tone: 'destructive', label: 'failed' },
 };
 
 /** Rule decisions and their durable queued effects for the active Factory. */
@@ -135,7 +141,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
         <EmptyState
           className="min-h-0 flex-1"
           as="h3"
-          iconSlot={<ListFilter aria-hidden />}
+          iconSlot={<IconFilter2 aria-hidden />}
           titleSlot={hasDecisionFilter ? 'No matching rule effects' : 'No rule effects yet'}
           descriptionSlot={
             hasDecisionFilter
@@ -224,7 +230,7 @@ function DecisionRow({
         {label}
       </Badge>
       {decision.attempts > 1 ? (
-        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<Repeat aria-hidden />} title="Attempts">
+        <Badge size="xs" variant="neutral" emphasis="subtle" icon={<IconArrowsRepeat aria-hidden />} title="Attempts">
           {decision.attempts}
         </Badge>
       ) : null}

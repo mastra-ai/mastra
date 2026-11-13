@@ -1,11 +1,12 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, ChevronDown } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { useActiveRunResourceIds } from '../../../../hooks/useActiveRunResources';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import type { CardContextSession } from '../boardItems';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 export function cardSessionPath(factoryId: string, session: CardContextSession): string {
   return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
@@ -26,7 +27,7 @@ export function SessionContextMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" size="icon-sm" aria-label="Switch session">
-        <ChevronDown aria-hidden />
+        <IconChevronBottom aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="min-w-48">
         {sessions.map(session => {
@@ -51,7 +52,7 @@ export function SessionContextMenu({
                   current
                 </Txt>
               )}
-              {open ? <Check aria-hidden /> : null}
+              {open ? <IconCheckmark1 aria-hidden /> : null}
             </DropdownMenu.Item>
           );
         })}

@@ -2,7 +2,6 @@
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PinIcon, PinOffIcon } from 'lucide-react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
@@ -43,6 +42,8 @@ import type {
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconUnpin } from '@/ds/icons/central/IconUnpin';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
@@ -122,7 +123,7 @@ const pinning =
         onClick={() => onPin(widget, !pinned)}
         className={pinned ? undefined : onCardHover}
       >
-        {pinned ? <PinOffIcon /> : <PinIcon />}
+        {pinned ? <IconUnpin /> : <IconPin />}
       </MetricsCard.Action>
     );
   };

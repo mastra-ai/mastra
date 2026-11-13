@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { Link } from 'lucide-react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ModelPicker } from '../../../domains/llm/model-picker';
 import type { ModelPickerProvider } from '../../../domains/llm/model-picker-types';
 import { ComposerAttachMenu } from './composer-attach-menu';
+import { IconChainLink1 } from '@/ds/icons/central/IconChainLink1';
 
 const PHONE_QUERY = '(max-width: 639px)';
 
@@ -70,7 +70,10 @@ describe('composer sheets on phones', () => {
   it('opens the attach menu as a drawer with the sources and extra actions', async () => {
     const onUrl = vi.fn();
     render(
-      <ComposerAttachMenu onFiles={() => {}} actions={[{ label: 'From a URL…', icon: <Link />, onSelect: onUrl }]} />,
+      <ComposerAttachMenu
+        onFiles={() => {}}
+        actions={[{ label: 'From a URL…', icon: <IconChainLink1 />, onSelect: onUrl }]}
+      />,
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));

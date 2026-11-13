@@ -1,4 +1,4 @@
-import { ListTree } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 
-export const TraceIcon = (props: LucideProps) => <ListTree size={16} {...props} />;
+export const TraceIcon = (props: LucideProps) => <IconCodeTree size={16} {...props} />;

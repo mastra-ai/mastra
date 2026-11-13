@@ -1,10 +1,12 @@
-import { Camera, FileText, Images, Plus } from 'lucide-react';
+import { Camera, Images } from 'lucide-react';
 import { Fragment, useRef, useState } from 'react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { Button } from '@/ds/components/Button';
 import { DIALOG_DRAWER_BREAKPOINT_PX } from '@/ds/components/Dialog/dialog-shell';
 import { Drawer, DrawerContent, DrawerTitle, DrawerTrigger } from '@/ds/components/Drawer';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import { useIsMobile } from '@/hooks/use-is-mobile';
 import { cn } from '@/utils/cn';
 
@@ -31,7 +33,7 @@ const SOURCES = [
   // `capture` is ignored on desktop browsers, so the camera entry only shows where it opens a camera.
   { key: 'camera', label: 'Camera', icon: <Camera />, className: 'pointer-fine:hidden' },
   { key: 'photos', label: 'Photos', icon: <Images /> },
-  { key: 'files', label: 'Files', icon: <FileText /> },
+  { key: 'files', label: 'Files', icon: <IconFileText /> },
 ];
 
 /**
@@ -93,7 +95,7 @@ export function ComposerAttachMenu({
             aria-label={label}
             render={
               <Button variant="ghost" size={size} tooltip={label}>
-                <Plus />
+                <IconPlusLarge />
               </Button>
             }
           />
@@ -132,7 +134,7 @@ export function ComposerAttachMenu({
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger variant="ghost" size={size} aria-label={label} tooltip={label} disabled={disabled}>
-          <Plus />
+          <IconPlusLarge />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content side="top" align="start">
           {entries.map((entry, index) => (

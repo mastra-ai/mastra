@@ -1,5 +1,6 @@
-import { Braces, FormInput } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconInputForm } from '@/ds/icons/central/IconInputForm';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
@@ -31,8 +32,8 @@ export function WorkflowInputTypeToggle({
   const iconClassName = compact ? 'h-3 w-3' : 'h-4 w-4';
   const options: InputTypeOption[] = [
     ...(includeSimple ? [{ value: 'simple' as const, label: 'Simple' }] : []),
-    { value: 'form', label: 'Form', icon: <FormInput className={iconClassName} /> },
-    { value: 'json', label: 'JSON', icon: <Braces className={iconClassName} /> },
+    { value: 'form', label: 'Form', icon: <IconInputForm className={iconClassName} /> },
+    { value: 'json', label: 'JSON', icon: <IconCodeBrackets className={iconClassName} /> },
   ];
 
   return (

@@ -1,6 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
-import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import type { MessageMetadata } from '@/domains/chat';
@@ -26,6 +25,7 @@ import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { ToolCallMono } from '@/ds/components/ai/tool-call';
 import { Button } from '@/ds/components/Button';
 import { CodeEditor } from '@/ds/components/CodeEditor';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -151,7 +151,7 @@ const WorkflowBadgeExtended = ({ workflowId, workflow, runId }: WorkflowBadgeExt
           Go to workflow
         </Button>
         {runId && (
-          <Button icon={<Eye />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
+          <Button icon={<IconEyeOpen />} render={<Link href={`/workflows/${workflowId}/graph/${runId}`} />}>
             See run
           </Button>
         )}

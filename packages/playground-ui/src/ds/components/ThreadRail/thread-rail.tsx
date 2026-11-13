@@ -1,4 +1,3 @@
-import { FileText } from 'lucide-react';
 import * as React from 'react';
 
 import type { ThreadRailTurn } from './thread-rail-turns';
@@ -6,6 +5,7 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
@@ -394,7 +394,7 @@ function ThreadRailPreviewContent({
               key={file}
               className="inline-flex max-w-44 items-center gap-1.5 truncate"
             >
-              <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              <IconFileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </Txt>
           ))}

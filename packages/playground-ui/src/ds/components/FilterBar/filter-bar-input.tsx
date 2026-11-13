@@ -1,5 +1,4 @@
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { BracesIcon, ListFilterIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { flushSync } from 'react-dom';
@@ -16,6 +15,8 @@ import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { comboboxTriggerClass } from '@/ds/components/Combobox/combobox-styles';
 import { Kbd } from '@/ds/components/Kbd/kbd';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputFocusBorderWithin, unstyledFormElementStyle } from '@/ds/primitives/form-element';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
@@ -36,7 +37,7 @@ const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
   id: ADVANCED_FIELD_ID,
   label: 'Advanced filter…',
-  icon: BracesIcon,
+  icon: IconCodeBrackets,
   operators: [],
 };
 
@@ -347,7 +348,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="shrink-0" />
+          <IconFilter2 aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;

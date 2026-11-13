@@ -1,8 +1,9 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
-import { Plug, Settings2 } from 'lucide-react';
 import { useState } from 'react';
 import { ChannelDialog } from './publish-channel-dialogs/channel-dialog';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
@@ -58,7 +59,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
 
         {!platform.isConfigured ? (
           <Button
-            icon={<Settings2 />}
+            icon={<IconSettingsSliderHor />}
             size="sm"
             variant="ghost"
             disabled
@@ -68,7 +69,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : installation ? (
           <Button
-            icon={<Settings2 />}
+            icon={<IconSettingsSliderHor />}
             size="sm"
             variant="default"
             onClick={() => setDialogOpen(true)}
@@ -78,7 +79,7 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
           </Button>
         ) : (
           <Button
-            icon={<Plug />}
+            icon={<IconPlugin1 />}
             size="sm"
             variant="default"
             onClick={handleConnect}

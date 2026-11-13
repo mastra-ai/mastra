@@ -1,7 +1,7 @@
 import { RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
@@ -64,7 +64,7 @@ export function OnboardingChoiceRow({
       </span>
       {selected && (
         <span className="onboarding-enter flex h-5 shrink-0 items-center">
-          <Check aria-hidden="true" className="size-4" />
+          <IconCheckmark1 aria-hidden="true" className="size-4" />
         </span>
       )}
     </label>

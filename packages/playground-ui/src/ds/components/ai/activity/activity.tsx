@@ -1,4 +1,3 @@
-import { X } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
@@ -8,6 +7,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/compon
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 type ActivityStatus = 'idle' | 'running' | 'error';
@@ -325,7 +325,7 @@ export const ActivityHeadline = ({
       <ActivitySpacer className={cn(hasBadges && 'flex-none')} />
       {status === 'error' && (
         <ActivityTrailing>
-          <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+          <IconCrossMedium size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
         </ActivityTrailing>
       )}
       <ActivityDisclosure />

@@ -1,4 +1,3 @@
-import { HardDrive } from 'lucide-react';
 import type { DataMessagePart } from '../tool-card';
 import { parseToolArgs, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
@@ -9,6 +8,7 @@ import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-bad
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { presentTool, ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { Txt } from '@/ds/components/Txt';
+import { IconStorage } from '@/ds/icons/central/IconStorage';
 
 export interface FileTreeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
@@ -85,7 +85,7 @@ export const FileTreeBadge = ({
             {workspace?.filesystem && (
               <WorkspaceLink
                 href={workspace.id ? `/workspaces/${workspace.id}?path=${encodeURIComponent(path)}` : '/workspaces'}
-                icon={<HardDrive className="size-3 shrink-0" aria-hidden />}
+                icon={<IconStorage className="size-3 shrink-0" aria-hidden />}
               >
                 {workspace.name || workspace.filesystem.name}
               </WorkspaceLink>

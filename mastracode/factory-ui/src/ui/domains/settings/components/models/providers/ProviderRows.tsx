@@ -2,7 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { Box, Plus } from 'lucide-react';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import type { ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
@@ -21,7 +22,7 @@ export function ProviderRows({
       {children}
       <li>
         <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
-          <Plus aria-hidden="true" />
+          <IconPlusLarge aria-hidden="true" />
           Add provider
         </Button>
       </li>
@@ -44,7 +45,7 @@ export function ProviderOptionRow({
 }) {
   return (
     <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
-      <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />
+      <ProviderBrandIcon provider={provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
       <span className="flex min-w-0 flex-1 flex-col">
         <Txt as="span" variant="caption" className="truncate">
           {providerDisplayName(provider)}

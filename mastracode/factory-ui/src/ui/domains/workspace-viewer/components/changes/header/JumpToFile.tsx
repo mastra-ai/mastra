@@ -1,13 +1,13 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { pluralize } from '@mastra/playground-ui/utils/string';
-import { ListTree } from 'lucide-react';
 import { useState } from 'react';
 
 import type { WorkspaceChangesScope } from '../../../../../../api/types';
 import { useWorkspacePatches } from '../../../../../../hooks/use-fs';
 import type { RepositoryProviders } from '../tree/change-tree';
 import { ChangeTree } from '../tree/ChangeTree';
+import { IconCodeTree } from '@mastra/playground-ui/icons/central/IconCodeTree';
 
 interface JumpToFileProps {
   workspacePath: string;
@@ -40,7 +40,7 @@ export function JumpToFile({ workspacePath, scope, visible, repositoryProviders,
         tooltip="Jump to file"
         aria-label={`Jump to file, ${pluralize(fileCount, 'file')}`}
       >
-        <ListTree />
+        <IconCodeTree />
         <span className="tabular-nums">{fileCount}</span>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-[min(24rem,calc(100vw-1.5rem))] p-0">

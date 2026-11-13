@@ -1,20 +1,7 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ArrowLeft,
-  Bot,
-  Brain,
-  Bug,
-  Building2,
-  Cable,
-  CircleUserRound,
-  GitBranch,
-  Inbox,
-  Palette,
-  SlidersHorizontal,
-  Wrench,
-} from 'lucide-react';
+import { Cable } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
@@ -22,6 +9,17 @@ import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
 import type { SettingsSection } from '../settingsSections';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
+import { IconColorPalette } from '@mastra/playground-ui/icons/central/IconColorPalette';
+import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
+import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
+import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -44,13 +42,13 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'account',
         label: SETTINGS_SECTION_LABELS.account,
-        icon: CircleUserRound,
+        icon: IconCirclePerson,
         searchText: 'my account profile identity email authentication session log out sign out user',
       },
       {
         id: 'preferences',
         label: SETTINGS_SECTION_LABELS.preferences,
-        icon: Palette,
+        icon: IconColorPalette,
         searchText: 'preferences general theme appearance color scheme completion sound',
       },
       {
@@ -68,27 +66,27 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'models',
         label: SETTINGS_SECTION_LABELS.models,
-        icon: Bot,
+        icon: IconRobot,
         searchText:
           'models default model your models factory models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',
         label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
+        icon: IconBrain,
         searchText:
           'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'tools',
         label: SETTINGS_SECTION_LABELS.tools,
-        icon: Wrench,
+        icon: IconMaintenance,
         searchText: 'tools mastra connect connections integrations sessions platform project approval',
       },
       {
         id: 'behavior',
         label: SETTINGS_SECTION_LABELS.behavior,
-        icon: SlidersHorizontal,
+        icon: IconSettingsSliderHor,
         searchText: 'behavior auto approve tools smart editing notifications permissions read edit execute mcp',
       },
     ],
@@ -100,28 +98,28 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'repositories',
         label: SETTINGS_SECTION_LABELS.repositories,
-        icon: GitBranch,
+        icon: IconBranch,
         searchText:
           'repositories source control git branches remotes code worktrees clone order pre-clone setup teardown github gitlab',
       },
       {
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
-        icon: Inbox,
+        icon: IconInboxEmpty,
         searchText:
           'work intake sources tasks issues pull requests github gitlab linear jira incident feed sync connect routes routing new cards board catch-all',
       },
       {
         id: 'factory',
         label: SETTINGS_SECTION_LABELS.factory,
-        icon: Building2,
+        icon: IconBuildings,
         searchText:
           'factory project organization manage environment sandbox resources cpu memory workdir workspace setup builds templates triggers remove delete danger',
       },
       {
         id: 'debug',
         label: SETTINGS_SECTION_LABELS.debug,
-        icon: Bug,
+        icon: IconBug,
         searchText: 'debug versions packages release build node mastra core factory installed running',
       },
     ],
@@ -146,9 +144,9 @@ export function SettingsNavigation() {
   return (
     <>
       <Sidebar.NavList>
-        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <IconArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
-            <ArrowLeft aria-hidden="true" />
+            <IconArrowLeft aria-hidden="true" />
             <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
           </button>
         </Sidebar.NavLink>

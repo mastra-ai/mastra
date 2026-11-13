@@ -98,6 +98,40 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 </Button>
 ```
 
+### Central Icons
+
+New interface icons come from [Central Icons](https://iconists.co/central), in one style: round, outlined, 2px corners, 2px stroke (`@central-icons-react/round-outlined-radius-2-stroke-2`). Use them for every interface icon. `lucide-react` remains only where Central has no matching glyph, such as `Unplug` or `CirclePause`, for the `Loader2` spinner, and for filled stars, which would need a second Central style. Brand and product icons, such as `OpenAIIcon` or `AgentIcon`, stay as their own components.
+
+Each icon is its own module under `@mastra/playground-ui/icons/central/`. Wrap it in `Icon` for the standard sizes, the same as any other icon. Icons are decorative (`aria-hidden`) unless you pass `aria-label`. Prefer labelling the button or link that contains them.
+
+```tsx
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
+
+<Icon size="sm">
+  <IconMagnifyingGlass />
+</Icon>;
+```
+
+The **Icons/All Icons** Storybook story shows every icon available.
+
+#### Adding an icon
+
+The icons are committed to this package, so installing and building need no license key. Adding one requires Mastra's Central Icons license key, from the `CENTRAL MASTRA` item in 1Password.
+
+1. Find the name in Central's [icon list](https://iconists.co/central) or in the Central Figma library, for example `IconArrowRight`.
+2. From `packages/playground-ui`, run the generator with the key and the names to add:
+
+   ```bash
+   CENTRAL_LICENSE_KEY=<key> pnpm icons:central IconArrowRight IconCalendar
+   ```
+
+   It checks the key with Central, installs the pinned package in a temporary directory, writes one TSX module per icon to `src/ds/icons/central/`, and adds the names to `central-icons.json`. Running it with no names regenerates the current set, for example after raising `version` in `central-icons.json`.
+
+3. Commit `src/ds/icons/central/`. Don't edit the generated files by hand.
+
+Only add icons from this one style, and only icons a screen uses. The license covers icons inside Mastra's products. It doesn't cover the complete library, or offering the icons on their own as an icon set or download. See [CENTRAL-ICONS-LICENSE.md](./CENTRAL-ICONS-LICENSE.md). Never commit the license key.
+
 ### Tool icons
 
 `presentTool` from `@mastra/playground-ui/components/ai/tool-call` gives a tool call its label,

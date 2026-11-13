@@ -1,16 +1,6 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ArrowRightLeft,
-  BookOpen,
-  Check,
-  ChevronDown,
-  GripVertical,
-  Plus,
-  SlidersHorizontal,
-  SquareKanban,
-} from 'lucide-react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
 import type { ComponentProps, KeyboardEvent, PointerEvent, ReactNode } from 'react';
@@ -29,6 +19,14 @@ import { boardCardMovesPath, boardConfigPath, boardSkillsPath, newBoardPath } fr
 import type { BoardConfigLocation } from '../boardConfigPaths';
 import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
+import { IconArrowRightLeft } from '@mastra/playground-ui/icons/central/IconArrowRightLeft';
+import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 /**
  * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Card moves,
@@ -43,7 +41,7 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, mo
         <ConfigLink
           to={boardSkillsPath(factoryId, boardId)}
           isActive={skills === true}
-          icon={<BookOpen />}
+          icon={<IconBook />}
           label="Skills"
         />
       </Sidebar.NavList>
@@ -52,13 +50,13 @@ export function BoardConfigNavigation({ factoryId, boardId, phaseKey, skills, mo
         <ConfigLink
           to={boardConfigPath(factoryId, boardId)}
           isActive={!phaseKey && !skills && !moves}
-          icon={<SlidersHorizontal />}
+          icon={<IconSettingsSliderHor />}
           label="General"
         />
         <ConfigLink
           to={boardCardMovesPath(factoryId, boardId)}
           isActive={moves === true}
-          icon={<ArrowRightLeft />}
+          icon={<IconArrowRightLeft />}
           label="Card moves"
         />
       </Sidebar.NavList>
@@ -104,11 +102,11 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
         size="sm"
         className="w-full min-w-0 justify-start gap-2"
       >
-        <SquareKanban aria-hidden />
+        <IconKanbanView aria-hidden />
         <Txt tone="ink" as="span" variant="body" className="min-w-0 flex-1 truncate text-left">
           {title}
         </Txt>
-        <ChevronDown aria-hidden size={14} className="text-muted-foreground shrink-0" />
+        <IconChevronBottom aria-hidden size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {boards.map(other => (
@@ -116,16 +114,16 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
             key={other.id}
             render={<Link to={boardConfigPath(factoryId, other.id)} onClick={() => overlays.close('sidebar')} />}
           >
-            <SquareKanban />
+            <IconKanbanView />
             <span className="min-w-0 flex-1 truncate">{other.id === boardId ? title : other.title}</span>
-            {other.id === boardId && <Check aria-label="Open board" />}
+            {other.id === boardId && <IconCheckmark1 aria-label="Open board" />}
           </DropdownMenu.Item>
         ))}
         {response?.canEdit && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item render={<Link to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}>
-              <Plus />
+              <IconPlusLarge />
               New board
             </DropdownMenu.Item>
           </>
@@ -297,7 +295,7 @@ function PhaseIcon({ movable, children }: { movable: boolean; children: ReactNod
       <span className="grid place-items-center group-focus-within/phase:invisible group-hover/phase:invisible pointer-coarse:invisible">
         {children}
       </span>
-      <GripVertical
+      <IconDotGrid2x3
         aria-hidden
         className="text-muted-foreground invisible size-4 group-focus-within/phase:visible group-hover/phase:visible pointer-coarse:visible"
       />

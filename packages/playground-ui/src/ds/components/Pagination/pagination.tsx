@@ -1,7 +1,9 @@
 import { useRender } from '@base-ui/react/use-render';
-import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import { cloneElement, isValidElement } from 'react';
 import type { ComponentProps, MouseEvent, ReactElement } from 'react';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
 import { Icon } from '@/ds/icons/Icon';
 import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { raisedControlSurfaceStyle } from '@/ds/primitives/form-element';
@@ -98,7 +100,7 @@ export function PaginationPrevious({ text = 'Prev', ...props }: PaginationPrevio
   return (
     <PaginationLink {...props}>
       <Icon size="sm" aria-hidden>
-        <ChevronLeft />
+        <IconChevronLeft />
       </Icon>
       {text}
     </PaginationLink>
@@ -112,7 +114,7 @@ export function PaginationNext({ text = 'Next', ...props }: PaginationNextProps)
     <PaginationLink {...props}>
       {text}
       <Icon size="sm" aria-hidden>
-        <ChevronRight />
+        <IconChevronRight />
       </Icon>
     </PaginationLink>
   );
@@ -128,7 +130,7 @@ export function PaginationEllipsis({ className, ...props }: PaginationEllipsisPr
       {...props}
     >
       <Icon size="sm" aria-hidden>
-        <Ellipsis />
+        <IconDotGrid1x3Horizontal />
       </Icon>
       <span className="sr-only">More pages</span>
     </span>

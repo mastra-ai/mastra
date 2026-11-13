@@ -1,9 +1,10 @@
-import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { Field, FieldError } from '@/ds/components/Field';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
 import { cn } from '@/lib/utils';
 
@@ -65,10 +66,17 @@ export function CommentEditor({
           className="block field-sizing-content max-h-40 w-full resize-none overflow-y-auto rounded-lg border border-border bg-background px-2 pt-1.5 pb-9 text-caption zoom-safe-text text-foreground outline-none focus:border-border-strong"
         />
         <div className="absolute inset-x-px bottom-px flex items-center justify-end gap-1 rounded-b-lg bg-background px-1.5 pt-1 pb-1.5">
-          <Button icon={<X />} type="button" variant="ghost" size="sm" disabled={isPending} onClick={onClose}>
+          <Button
+            icon={<IconCrossMedium />}
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={isPending}
+            onClick={onClose}
+          >
             Cancel
           </Button>
-          <Button icon={<Check />} type="button" size="sm" disabled={!canSave} onClick={save}>
+          <Button icon={<IconCheckmark1 />} type="button" size="sm" disabled={!canSave} onClick={save}>
             {isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>

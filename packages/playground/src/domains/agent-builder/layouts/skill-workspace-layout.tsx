@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowLeftIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useNavigate } from 'react-router';
@@ -52,7 +52,7 @@ export const SkillWorkspaceLayout = ({
           tooltip="Skills list"
           data-testid="skill-edit-back-button"
         >
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
         <div className="flex min-w-0 flex-1 items-center gap-3">
           <Txt as="p" variant="body" tone="ink" className="min-w-0 truncate">

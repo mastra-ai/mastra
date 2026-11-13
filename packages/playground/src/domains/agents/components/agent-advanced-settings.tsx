@@ -3,12 +3,15 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCodeBrackets } from '@mastra/playground-ui/icons/central/IconCodeBrackets';
+import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatJSON, isValidJson } from '@mastra/playground-ui/utils/formatting';
-import { Braces, CopyIcon, SaveIcon, CheckIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useAgentSettings } from '@/domains/agents/context/agent-context';
 
@@ -225,7 +228,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     aria-label="Format provider options"
                   >
                     <Icon>
-                      <Braces />
+                      <IconCodeBrackets />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -236,7 +239,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                 <TooltipTrigger asChild>
                   <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
                     <Icon>
-                      <CopyIcon />
+                      <IconSquareBehindSquare1 />
                     </Icon>
                   </button>
                 </TooltipTrigger>
@@ -252,7 +255,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                       className={buttonClass}
                       aria-label="Save provider options"
                     >
-                      <Icon>{saved ? <CheckIcon /> : <SaveIcon />}</Icon>
+                      <Icon>{saved ? <IconCheckmark1 /> : <IconFloppyDisk1 />}</Icon>
                     </button>
                   </TooltipTrigger>
                   <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>

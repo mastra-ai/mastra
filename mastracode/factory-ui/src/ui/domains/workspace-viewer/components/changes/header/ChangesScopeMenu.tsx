@@ -1,8 +1,8 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ChevronDown } from 'lucide-react';
 import { useState } from 'react';
 
 import type { WorkspaceChangesScope } from '../../../../../../api/types';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 const SCOPE_LABELS: Record<WorkspaceChangesScope, string> = {
   branch: 'Branch changes',
@@ -27,7 +27,7 @@ export function ChangesScopeMenu({ scope, onScopeChange }: ChangesScopeMenuProps
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenu.Trigger variant="ghost" size="sm" className="min-w-0">
         <span className="truncate">{SCOPE_LABELS[scope]}</span>
-        <ChevronDown aria-hidden />
+        <IconChevronBottom aria-hidden />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start">
         <DropdownMenu.RadioOptions options={SCOPE_OPTIONS} value={scope} onValueChange={pickScope} />

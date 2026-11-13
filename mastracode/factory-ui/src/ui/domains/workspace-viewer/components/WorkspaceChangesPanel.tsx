@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
@@ -13,6 +12,7 @@ import { ChangesScopeMenu } from './changes/header/ChangesScopeMenu';
 import { ChangesTotals } from './changes/header/ChangesTotals';
 import { JumpToFile } from './changes/header/JumpToFile';
 import type { RepositoryProviders } from './changes/tree/change-tree';
+import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
 
 interface WorkspaceChangesPanelProps {
   workspacePath: string;
@@ -40,7 +40,7 @@ export function WorkspaceChangesPanel({
     >
       <div className="border-border flex min-h-10 items-center gap-1 border-b px-1.5 py-1">
         <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
-          <ArrowLeft />
+          <IconArrowLeft />
         </Button>
         <ChangesScopeMenu scope={scope} onScopeChange={setScope} />
         <ChangesTotals workspacePath={workspacePath} scope={scope} visible={visible} />

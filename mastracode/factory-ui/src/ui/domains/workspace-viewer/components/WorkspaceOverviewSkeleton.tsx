@@ -1,7 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { FileDiff, NotepadText } from 'lucide-react';
+import { FileDiff } from 'lucide-react';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
 
 /** Mirrors the compact overview while the session's authorized details resolve. */
 export function WorkspaceOverviewSkeleton() {
@@ -13,7 +14,7 @@ export function WorkspaceOverviewSkeleton() {
         <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-16" className="ml-auto" />
       </Button>
       <Button disabled className="w-full justify-start" size="sm" variant="ghost">
-        <NotepadText />
+        <IconNotepad />
         <span>Files</span>
       </Button>
     </aside>

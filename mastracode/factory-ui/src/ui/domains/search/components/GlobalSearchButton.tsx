@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Search } from 'lucide-react';
-
 import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
+import { IconMagnifyingGlass } from '@mastra/playground-ui/icons/central/IconMagnifyingGlass';
 
 export function GlobalSearchButton({ id }: { id: string }) {
   const { openSearch } = useGlobalSearchControls();
@@ -16,7 +15,7 @@ export function GlobalSearchButton({ id }: { id: string }) {
       tooltip="Search and navigate"
       onClick={event => openSearch(event.currentTarget)}
     >
-      <Search />
+      <IconMagnifyingGlass />
     </Button>
   );
 }

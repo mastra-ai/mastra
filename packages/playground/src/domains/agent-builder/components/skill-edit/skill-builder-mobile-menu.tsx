@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Globe, LockIcon, MoreVerticalIcon } from 'lucide-react';
-import { useFormContext, useWatch } from 'react-hook-form';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
 
+import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { useFormContext, useWatch } from 'react-hook-form';
 import { useVisibilityChange } from '../../hooks/use-visibility-change-skill';
 import { DeleteSkillMenuItem } from './delete-skill-action';
 import type { SkillEditFormValues } from '@/domains/agent-builder/hooks/use-autosave-skill';
@@ -33,7 +35,7 @@ export function SkillBuilderMobileMenu({
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <Button size="icon-sm" variant="ghost" tooltip="More actions" data-testid="skill-builder-mobile-menu-trigger">
-            <MoreVerticalIcon />
+            <IconDotGrid1x3Vertical />
           </Button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
@@ -67,7 +69,7 @@ function VisibilityMenuItem({ skillId, disabled }: VisibilityMenuItemProps) {
             requestChange('public');
           }}
         >
-          <Globe />
+          <IconGlobe />
           <span>Add to library</span>
         </DropdownMenu.Item>
       ) : (
@@ -79,7 +81,7 @@ function VisibilityMenuItem({ skillId, disabled }: VisibilityMenuItemProps) {
             requestChange('private');
           }}
         >
-          <LockIcon />
+          <IconLock />
           <span>Remove from library</span>
         </DropdownMenu.Item>
       )}

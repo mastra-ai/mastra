@@ -1,7 +1,7 @@
-import { CopyIcon, CheckIcon } from 'lucide-react';
-
 import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export type CopyButtonProps = {
@@ -42,7 +42,7 @@ export function CopyButton({
       tooltip={isCopied ? 'Copied!' : tooltip}
       aria-label={isCopied ? 'Copied!' : tooltip}
     >
-      {isCopied ? <CheckIcon /> : <CopyIcon />}
+      {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
     </Button>
   );
 }

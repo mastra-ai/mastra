@@ -1,10 +1,10 @@
-import { Database } from 'lucide-react';
 import { useState } from 'react';
 import type { MouseEventHandler } from 'react';
 import { WorkflowCodeContent } from './workflow-code-dialog-content';
 import { Button } from '@/ds/components/Button';
 import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
 import { Txt } from '@/ds/components/Txt';
+import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
@@ -43,7 +43,7 @@ export const WorkflowEdgeDataButton = ({
           surfaceStateLayerStyle,
           'h-7 rounded-lg px-2 text-foreground aria-pressed:bg-[linear-gradient(var(--fill),var(--fill))]',
         )}
-        icon={<Database className="text-muted-foreground" />}
+        icon={<IconServer1 className="text-muted-foreground" />}
       >
         Data
       </Button>

@@ -1,4 +1,3 @@
-import { ArrowLeftIcon } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 import { Button } from '../../../ds/components/Button';
@@ -14,6 +13,7 @@ import { FlameGraph } from './flame-graph';
 import type { ZoomRange } from './flame-graph';
 import { ObservationDetailView } from './observation-detail-view';
 import { ThreadContextProgress } from './thread-context-progress';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 
 export interface MemoryStudioPanelProps {
   messages: MemoryMessage[];
@@ -96,7 +96,7 @@ export function MemoryStudioPanel({
     <div className="flex size-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2.5">
         <Button type="button" variant="ghost" size="icon-sm" tooltip="Back to memory" onClick={() => onClose?.()}>
-          <ArrowLeftIcon />
+          <IconArrowLeft />
         </Button>
         <span className="flex min-w-0 items-center gap-1.5 text-foreground">
           <MemoryIcon className="size-4 shrink-0" />

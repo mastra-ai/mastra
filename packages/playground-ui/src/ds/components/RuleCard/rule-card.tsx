@@ -1,8 +1,9 @@
-import { CornerDownRight, GripVertical } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Input } from '@/ds/components/Input';
 import type { InputProps } from '@/ds/components/Input';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconDotGrid2x3 } from '@/ds/icons/central/IconDotGrid2x3';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { textStyle } from '@/ds/primitives/text';
 import { focusRing } from '@/ds/primitives/transitions';
@@ -57,7 +58,7 @@ export function RuleCardDragHandle({ className, ...props }: RuleCardDragHandlePr
       )}
       {...props}
     >
-      <GripVertical aria-hidden className="size-4" />
+      <IconDotGrid2x3 aria-hidden className="size-4" />
     </button>
   );
 }
@@ -128,7 +129,7 @@ export function RuleCardOutcome({ label, className, children, ...props }: RuleCa
       <span
         className={cn(textStyle({ variant: 'caption', tone: 'muted' }), 'mr-2 flex h-control-sm items-center gap-1.5')}
       >
-        <CornerDownRight aria-hidden className="size-3.5 shrink-0" />
+        <IconArrowCornerDownRight aria-hidden className="size-3.5 shrink-0" />
         {label}
       </span>
       {children}

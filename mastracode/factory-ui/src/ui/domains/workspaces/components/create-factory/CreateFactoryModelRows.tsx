@@ -3,8 +3,6 @@ import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPale
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
-import { RefreshCw } from 'lucide-react';
-
 import type { ProviderInfo } from '../../../../../api/types';
 import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { SharedCredentialNotice } from '../../../settings/components/SharedCredentialNotice';
@@ -13,6 +11,7 @@ import { preferredFactoryModel, useProviderModels } from '../../hooks/useProvide
 import { MastraGatewayCreditsNotice } from '../MastraGatewayCreditsNotice';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 export interface CreateFactoryModelRowsProps {
   provider: ProviderInfo;
@@ -90,7 +89,7 @@ export function CreateFactoryModelRows({
       )}
       <CommandGroup heading="Provider">
         <CommandPaletteItem
-          icon={<RefreshCw />}
+          icon={<IconArrowRotateClockwise />}
           title="Change provider"
           subtitle={providerDisplayName(provider.provider)}
           value="change-provider"

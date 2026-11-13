@@ -6,9 +6,9 @@ import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { DynamicForm } from '@mastra/playground-ui/lib/form/dynamic-form';
-import { ListChecksIcon } from 'lucide-react';
 import { z } from 'zod';
 import { eventRequestErrorMessage } from '../../hooks/use-mcp-server-events';
 import {
@@ -32,7 +32,7 @@ export function McpTaskDrawer({ serverId }: { serverId: string }) {
       <DataPanel.Header>
         <DataPanel.Heading>
           <Icon size="sm" className="text-muted-foreground">
-            <ListChecksIcon />
+            <IconChecklist />
           </Icon>
           <span className="truncate">{task ? `${task.surface} task` : 'Task'}</span>
         </DataPanel.Heading>

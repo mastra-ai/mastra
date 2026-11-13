@@ -3,9 +3,9 @@ import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playgro
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { AlertTriangleIcon } from 'lucide-react';
 import { WorkflowRunStatusInline } from './workflow-run-status-inline';
 
 export interface ScheduleTriggersListProps {
@@ -90,7 +90,7 @@ export function ScheduleTriggersList({
                     variant="caption"
                     className="inline-flex items-center gap-1.5 whitespace-nowrap text-destructive-foreground"
                   >
-                    <AlertTriangleIcon size={14} />
+                    <IconExclamationTriangle size={14} />
                     publish failed
                   </Txt>
                 ) : t.run ? (
@@ -109,7 +109,7 @@ export function ScheduleTriggersList({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex text-destructive-foreground">
-                        <AlertTriangleIcon size={14} />
+                        <IconExclamationTriangle size={14} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{errorMessage}</TooltipContent>
@@ -125,7 +125,7 @@ export function ScheduleTriggersList({
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="inline-flex text-info-indicator">
-                        <AlertTriangleIcon size={14} />
+                        <IconExclamationTriangle size={14} />
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>Published {driftValue} after the scheduled fire time</TooltipContent>

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
@@ -11,6 +10,7 @@ import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
 
 export function GithubIntakeSection({
   config,
@@ -58,7 +58,7 @@ export function GithubIntakeSection({
           <Button
             size="sm"
             variant="ghost"
-            icon={<RotateCcw />}
+            icon={<IconArrowRotateCounterClockwise />}
             disabled={statusQuery.isFetching}
             onClick={() => void statusQuery.refetch()}
           >

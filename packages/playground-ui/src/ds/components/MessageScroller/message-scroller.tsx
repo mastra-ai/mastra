@@ -1,4 +1,3 @@
-import { ArrowDownIcon } from 'lucide-react';
 import * as React from 'react';
 
 import {
@@ -37,6 +36,7 @@ import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
 import { createVisibilityStore } from './message-scroller-visibility-store';
 
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
@@ -903,7 +903,7 @@ export const MessageScrollerButton = React.forwardRef<HTMLButtonElement, Message
       >
         {children ?? (
           <>
-            <ArrowDownIcon className="size-4" aria-hidden />
+            <IconArrowDown className="size-4" aria-hidden />
             <span className="sr-only">{direction === 'end' ? 'Scroll to end' : 'Scroll to start'}</span>
           </>
         )}

@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Check, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -13,6 +12,12 @@ import {
 import type { GithubPatKind } from '../../workspaces/services/github';
 import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
 export function GithubPatBlock() {
@@ -38,7 +43,7 @@ function TokenRows() {
   if (statusQuery.error) {
     return (
       <SettingsRow label="GitHub CLI tokens" errorMsg={statusQuery.error.message}>
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+        <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={() => void statusQuery.refetch()}>
           Retry
         </Button>
       </SettingsRow>
@@ -100,7 +105,7 @@ function TokenRow({
         <Button
           ref={editButton}
           size="sm"
-          icon={configured ? <Pencil /> : <Plus />}
+          icon={configured ? <IconPencil /> : <IconPlusLarge />}
           disabled={removeMutation.isPending}
           onClick={() => setEditing(true)}
         >
@@ -109,7 +114,7 @@ function TokenRow({
         {configured && (
           <Button
             size="sm"
-            icon={<Trash2 />}
+            icon={<IconTrashCan />}
             disabled={removeMutation.isPending}
             onClick={() => removeMutation.mutate()}
           >
@@ -161,13 +166,13 @@ function TokenEditor({
           }}
         />
         <div className="flex items-center gap-2">
-          <Button size="sm" icon={<X />} disabled={saveMutation.isPending} onClick={onClose}>
+          <Button size="sm" icon={<IconCrossMedium />} disabled={saveMutation.isPending} onClick={onClose}>
             Cancel
           </Button>
           <Button
             variant="primary"
             size="sm"
-            icon={<Check />}
+            icon={<IconCheckmark1 />}
             disabled={saveMutation.isPending || !draft.trim()}
             onClick={save}
           >

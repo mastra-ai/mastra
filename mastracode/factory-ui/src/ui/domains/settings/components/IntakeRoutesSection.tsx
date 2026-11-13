@@ -29,7 +29,6 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, MoreHorizontal, Plus, Trash2 } from 'lucide-react';
 import { Fragment, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
@@ -66,6 +65,11 @@ import {
 import { SettingsSubsection } from './SettingsSubsection';
 import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
+import { IconArrowDown } from '@mastra/playground-ui/icons/central/IconArrowDown';
+import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 const ROUTE_WHEN_SCHEMA = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
 const STALE_CODES = new Set(['revision_mismatch', 'intake_route_set_mismatch', 'intake_route_not_found']);
@@ -573,20 +577,20 @@ function RouteCard({
             <DropdownMenu.Trigger
               render={
                 <Button variant="ghost" size="icon-sm" aria-label={`${route.name} actions`}>
-                  <MoreHorizontal />
+                  <IconDotGrid1x3Horizontal />
                 </Button>
               }
             />
             <DropdownMenu.Content align="end">
               <DropdownMenu.Item disabled={!canMoveUp} onClick={() => onMove(-1)}>
-                <ArrowUp /> Move up
+                <IconArrowUp /> Move up
               </DropdownMenu.Item>
               <DropdownMenu.Item disabled={!canMoveDown} onClick={() => onMove(1)}>
-                <ArrowDown /> Move down
+                <IconArrowDown /> Move down
               </DropdownMenu.Item>
               <DropdownMenu.Separator />
               <DropdownMenu.Item variant="destructive" onClick={onRemove}>
-                <Trash2 /> Delete
+                <IconTrashCan /> Delete
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>
@@ -1081,7 +1085,7 @@ function RouteList({
           </div>
         ) : (
           <div className="pl-4">
-            <RuleAddButton icon={<Plus />} onClick={() => setAdding(true)}>
+            <RuleAddButton icon={<IconPlusLarge />} onClick={() => setAdding(true)}>
               {scope.kind === 'moves' ? 'Add card move' : 'Add route'}
             </RuleAddButton>
           </div>

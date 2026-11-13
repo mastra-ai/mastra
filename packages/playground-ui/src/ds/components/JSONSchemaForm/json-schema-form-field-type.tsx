@@ -1,4 +1,3 @@
-import { Type, Hash, ToggleLeft, AlignLeft, Braces, List } from 'lucide-react';
 import * as React from 'react';
 import { Field, FieldLabel } from '../Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
@@ -6,6 +5,12 @@ import type { SelectTriggerProps } from '../Select/select';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import type { FieldType } from './types';
 import { Icon } from '@/ds/icons';
+import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconFontStyle } from '@/ds/icons/central/IconFontStyle';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconToggle } from '@/ds/icons/central/IconToggle';
 import { cn } from '@/lib/utils';
 
 const TYPE_OPTIONS = [
@@ -14,7 +19,7 @@ const TYPE_OPTIONS = [
     label: 'String',
     icon: (
       <Icon size="xs">
-        <Type />
+        <IconFontStyle />
       </Icon>
     ),
   },
@@ -23,7 +28,7 @@ const TYPE_OPTIONS = [
     label: 'Number',
     icon: (
       <Icon size="xs">
-        <Hash />
+        <IconHashtag />
       </Icon>
     ),
   },
@@ -32,7 +37,7 @@ const TYPE_OPTIONS = [
     label: 'Boolean',
     icon: (
       <Icon size="xs">
-        <ToggleLeft />
+        <IconToggle />
       </Icon>
     ),
   },
@@ -41,7 +46,7 @@ const TYPE_OPTIONS = [
     label: 'Text',
     icon: (
       <Icon size="xs">
-        <AlignLeft />
+        <IconAlignmentLeft />
       </Icon>
     ),
   },
@@ -50,7 +55,7 @@ const TYPE_OPTIONS = [
     label: 'Object',
     icon: (
       <Icon size="xs">
-        <Braces />
+        <IconCodeBrackets />
       </Icon>
     ),
   },
@@ -59,7 +64,7 @@ const TYPE_OPTIONS = [
     label: 'Array',
     icon: (
       <Icon size="xs">
-        <List />
+        <IconListBullets />
       </Icon>
     ),
   },

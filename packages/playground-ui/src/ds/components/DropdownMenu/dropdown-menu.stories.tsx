@@ -1,28 +1,25 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  ArrowUpDown,
-  CircleDashed,
-  Cloud,
-  CreditCard,
-  Keyboard,
-  LifeBuoy,
-  LogOut,
-  Mail,
-  MessageSquare,
-  Plus,
-  RotateCcw,
-  Settings,
-  Settings2,
-  User,
-  UserPlus,
-  UserRound,
-  Users,
-} from 'lucide-react';
 import { useState } from 'react';
 import { GithubIcon } from '../../icons/GithubIcon';
 import { Button } from '../Button';
 import { DropdownMenu } from './dropdown-menu';
 import type { DropdownMenuRadioOption } from './dropdown-menu';
+import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconCircleDashed } from '@/ds/icons/central/IconCircleDashed';
+import { IconCloud } from '@/ds/icons/central/IconCloud';
+import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
+import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
+import { IconKeyboard } from '@/ds/icons/central/IconKeyboard';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSettingsSliderHor } from '@/ds/icons/central/IconSettingsSliderHor';
+import { IconSortArrowUpDown } from '@/ds/icons/central/IconSortArrowUpDown';
+import { IconUser } from '@/ds/icons/central/IconUser';
+import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
+import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 
 const meta: Meta<typeof DropdownMenu> = {
   title: 'Elements/DropdownMenu',
@@ -70,7 +67,7 @@ export const Variants: Story = {
           ))}
           <DropdownMenu>
             <DropdownMenu.Trigger variant={variant} size="icon-md" tooltip="More actions">
-              <Settings />
+              <IconSettingsGear1 />
             </DropdownMenu.Trigger>
             {menuItems}
           </DropdownMenu>
@@ -96,11 +93,11 @@ export const Compact: Story = {
       <DropdownMenu.Trigger render={<Button size="sm">Open menu</Button>} />
       <DropdownMenu.Content size="sm" className="w-max min-w-0">
         <DropdownMenu.Item size="sm">
-          <User />
+          <IconUser />
           Profile
         </DropdownMenu.Item>
         <DropdownMenu.Item size="sm">
-          <Settings />
+          <IconSettingsGear1 />
           Settings
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -129,24 +126,24 @@ export const WithIcons: Story = {
       <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <User />
+          <IconUser />
           <span>Profile</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Settings />
+          <IconSettingsGear1 />
           <span>Settings</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <CreditCard />
+          <IconCreditCard1 />
           <span>Billing</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Keyboard />
+          <IconKeyboard />
           <span>Keyboard shortcuts</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -163,17 +160,17 @@ export const WithLabelsAndGroups: Story = {
         <DropdownMenu.Separator />
         <DropdownMenu.Group>
           <DropdownMenu.Item>
-            <User />
+            <IconUser />
             <span>Profile</span>
             <DropdownMenu.Shortcut>Ctrl+P</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Billing</span>
             <DropdownMenu.Shortcut>Ctrl+B</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <Settings />
+            <IconSettingsGear1 />
             <span>Settings</span>
             <DropdownMenu.Shortcut>Ctrl+S</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
@@ -181,22 +178,22 @@ export const WithLabelsAndGroups: Story = {
         <DropdownMenu.Separator />
         <DropdownMenu.Group>
           <DropdownMenu.Item>
-            <Users />
+            <IconUserDuo />
             <span>Team</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </DropdownMenu.Item>
           <DropdownMenu.Item>
-            <Plus />
+            <IconPlusLarge />
             <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LogOut />
+          <IconArrowBoxLeft />
           <span>Log out</span>
           <DropdownMenu.Shortcut>Ctrl+Q</DropdownMenu.Shortcut>
         </DropdownMenu.Item>
@@ -289,26 +286,26 @@ export const WithRadioSubs: Story = {
     return (
       <DropdownMenu>
         <DropdownMenu.Trigger size="icon-sm" variant={changed ? 'default' : 'ghost'} tooltip="List properties">
-          <Settings2 aria-hidden />
+          <IconSettingsSliderHor aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end">
           <DropdownMenu.RadioSub
             label="Sort"
-            icon={<ArrowUpDown aria-hidden />}
+            icon={<IconSortArrowUpDown aria-hidden />}
             options={listSortOptions}
             value={sort}
             onValueChange={setSort}
           />
           <DropdownMenu.RadioSub
             label="Owner"
-            icon={<UserRound aria-hidden />}
+            icon={<IconUser aria-hidden />}
             options={ownerScopeOptions}
             value={owner}
             onValueChange={setOwner}
           />
           <DropdownMenu.RadioSub
             label="Status"
-            icon={<CircleDashed aria-hidden />}
+            icon={<IconCircleDashed aria-hidden />}
             options={itemStatusOptions}
             value={status}
             onValueChange={setStatus}
@@ -322,7 +319,7 @@ export const WithRadioSubs: Story = {
               setStatus(DEFAULT_ITEM_STATUS);
             }}
           >
-            <RotateCcw aria-hidden />
+            <IconArrowRotateCounterClockwise aria-hidden />
             <span>Reset to default</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>
@@ -337,42 +334,42 @@ export const WithSubMenu: Story = {
       <DropdownMenu.Trigger>Open Menu</DropdownMenu.Trigger>
       <DropdownMenu.Content className="w-56">
         <DropdownMenu.Item>
-          <Mail />
+          <IconEmail1 />
           <span>Email</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <MessageSquare />
+          <IconBubble2 />
           <span>Message</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Sub>
           <DropdownMenu.SubTrigger>
-            <UserPlus />
+            <IconUserAdd />
             <span>Invite users</span>
           </DropdownMenu.SubTrigger>
           <DropdownMenu.SubContent>
             <DropdownMenu.Item>
-              <Mail />
+              <IconEmail1 />
               <span>Email</span>
             </DropdownMenu.Item>
             <DropdownMenu.Item>
-              <MessageSquare />
+              <IconBubble2 />
               <span>Message</span>
             </DropdownMenu.Item>
             <DropdownMenu.Separator />
             <DropdownMenu.Item>
-              <Plus />
+              <IconPlusLarge />
               <span>More...</span>
             </DropdownMenu.Item>
           </DropdownMenu.SubContent>
         </DropdownMenu.Sub>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item>
-          <Cloud />
+          <IconCloud />
           <span>API</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -397,7 +394,7 @@ export const WithManyItems: Story = {
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>
-              <UserPlus />
+              <IconUserAdd />
               <span>Nested (many)</span>
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent>
@@ -422,12 +419,12 @@ export const WithDisabledItems: Story = {
           <span>GitHub</span>
         </DropdownMenu.Item>
         <DropdownMenu.Item disabled>
-          <Cloud />
+          <IconCloud />
           <span>Deploy (coming soon)</span>
         </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item>
-          <LifeBuoy />
+          <IconRescueRing />
           <span>Support</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
@@ -447,12 +444,12 @@ export const KitchenSink: Story = {
           <DropdownMenu.Label>Account</DropdownMenu.Label>
           <DropdownMenu.Item>Plain item</DropdownMenu.Item>
           <DropdownMenu.Item>
-            <User />
+            <IconUser />
             <span>With icon</span>
             <DropdownMenu.Shortcut>⇧⌘P</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
           <DropdownMenu.Item disabled>
-            <CreditCard />
+            <IconCreditCard1 />
             <span>Disabled</span>
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
@@ -469,23 +466,23 @@ export const KitchenSink: Story = {
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>
-              <UserPlus />
+              <IconUserAdd />
               <span>Sub menu</span>
             </DropdownMenu.SubTrigger>
             <DropdownMenu.SubContent>
               <DropdownMenu.Item>
-                <Mail />
+                <IconEmail1 />
                 <span>Email</span>
               </DropdownMenu.Item>
               <DropdownMenu.Item>
-                <MessageSquare />
+                <IconBubble2 />
                 <span>Message</span>
               </DropdownMenu.Item>
             </DropdownMenu.SubContent>
           </DropdownMenu.Sub>
           <DropdownMenu.Separator />
           <DropdownMenu.Item variant="destructive">
-            <LogOut />
+            <IconArrowBoxLeft />
             <span>Destructive</span>
           </DropdownMenu.Item>
         </DropdownMenu.Content>

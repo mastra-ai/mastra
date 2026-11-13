@@ -11,7 +11,7 @@ import {
   SettingsRow,
   SettingsSkeleton,
 } from '@mastra/playground-ui/new/settings';
-import { ExternalLink } from 'lucide-react';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
@@ -92,7 +92,7 @@ function ManageLink({ projectId }: { projectId: string }) {
   const auth = useFactoryAuth();
   const href = platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
   return (
-    <Button size="sm" iconEnd={<ExternalLink />} render={<a href={href} target="_blank" rel="noreferrer" />}>
+    <Button size="sm" iconEnd={<IconSquareArrowTopRight />} render={<a href={href} target="_blank" rel="noreferrer" />}>
       Manage in Mastra Platform
     </Button>
   );

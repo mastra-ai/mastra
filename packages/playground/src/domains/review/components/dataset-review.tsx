@@ -21,13 +21,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
+import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
 import { useDatasetMutations, useDataset, useScoresByExperimentId } from '@mastra/react/hooks/datasets';
 import { useInfiniteCompletedItems, useInfiniteReviewItems } from '@mastra/react/hooks/review';
-import { CheckCircle, EllipsisIcon, GaugeIcon, Sparkles, Trash2, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { ProposalTag } from './proposal-tag';
@@ -477,7 +482,7 @@ export function DatasetReview({
               </Select>
             )}
             {hasActiveFilters && (
-              <Button onClick={resetFilters} size="sm" variant="default" icon={<XIcon />}>
+              <Button onClick={resetFilters} size="sm" variant="default" icon={<IconCrossMedium />}>
                 Reset
               </Button>
             )}
@@ -494,7 +499,7 @@ export function DatasetReview({
               onClick={() => onCreateScorer?.(filteredItems.map(item => ({ input: item.input, output: item.output })))}
             >
               <Icon size="xs">
-                <GaugeIcon />
+                <IconGauge />
               </Icon>
               Create scorer
             </Button>
@@ -509,26 +514,26 @@ export function DatasetReview({
                 onRemoveTag={handleBulkRemoveTag}
                 onNewTag={tag => handleBulkTag(tag)}
               />
-              <Button variant="primary" onClick={handleBulkComplete} icon={<CheckCircle />}>
+              <Button variant="primary" onClick={handleBulkComplete} icon={<IconCircleCheck />}>
                 Mark as reviewed
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
                   <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
-                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
+                    {isAnalyzing ? <Spinner className="h-4 w-4" /> : <IconDotGrid1x3Horizontal />}
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
                   <DropdownMenu.Item onSelect={openAnalyzeDialog}>
                     <Icon size="xs">
-                      <Sparkles />
+                      <IconSparklesTwo />
                     </Icon>
                     Analyze
                   </DropdownMenu.Item>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
                     <Icon size="xs">
-                      <Trash2 />
+                      <IconTrashCan />
                     </Icon>
                     Remove from queue
                   </DropdownMenu.Item>

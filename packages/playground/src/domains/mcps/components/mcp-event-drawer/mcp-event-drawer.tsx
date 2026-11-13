@@ -1,6 +1,6 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
+import { IconPodcast1 } from '@mastra/playground-ui/icons/central/IconPodcast1';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { RadioIcon } from 'lucide-react';
 import { useEventDrawerParam } from '../../hooks/use-event-drawer-param';
 import { McpEventDrawerBody } from './mcp-event-drawer-body';
 
@@ -13,7 +13,7 @@ export function McpEventDrawer({ serverId }: { serverId: string }) {
       <DataPanel.Header>
         <DataPanel.Heading>
           <Icon size="sm" className="text-muted-foreground">
-            <RadioIcon />
+            <IconPodcast1 />
           </Icon>
           <span className="truncate">{eventName}</span>
         </DataPanel.Heading>

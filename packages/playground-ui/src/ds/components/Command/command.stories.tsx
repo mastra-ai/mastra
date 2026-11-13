@@ -1,23 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  BarChart3,
-  Bot,
-  Box,
-  Calculator,
-  Calendar,
-  CreditCard,
-  Folder,
-  GitBranch,
-  LifeBuoy,
-  ListTree,
-  MessageSquare,
-  Rocket,
-  Settings,
-  Shield,
-  Smile,
-  User,
-  Wrench,
-} from 'lucide-react';
 import * as React from 'react';
 
 import { Badge } from '../Badge';
@@ -36,6 +17,23 @@ import {
   CommandSeparator,
   CommandShortcut,
 } from './command';
+import { IconBox } from '@/ds/icons/central/IconBox';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconCalculator } from '@/ds/icons/central/IconCalculator';
+import { IconCalendar1 } from '@/ds/icons/central/IconCalendar1';
+import { IconChart6 } from '@/ds/icons/central/IconChart6';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
+import { IconEmojiSmile } from '@/ds/icons/central/IconEmojiSmile';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
+import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
+import { IconRobot } from '@/ds/icons/central/IconRobot';
+import { IconRocket } from '@/ds/icons/central/IconRocket';
+import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconShield } from '@/ds/icons/central/IconShield';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof Command> = {
   title: 'Composite/Command',
@@ -80,32 +78,32 @@ export const Default: Story = {
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
           <CommandItem>
-            <Calendar className={iconClassName} />
+            <IconCalendar1 className={iconClassName} />
             <span>Calendar</span>
           </CommandItem>
           <CommandItem>
-            <Smile className={iconClassName} />
+            <IconEmojiSmile className={iconClassName} />
             <span>Search Emoji</span>
           </CommandItem>
           <CommandItem>
-            <Calculator className={iconClassName} />
+            <IconCalculator className={iconClassName} />
             <span>Calculator</span>
           </CommandItem>
         </CommandGroup>
         <CommandSeparator />
         <CommandGroup heading="Settings">
           <CommandItem>
-            <User className={iconClassName} />
+            <IconUser className={iconClassName} />
             <span>Profile</span>
             <CommandShortcut>⌘P</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <CreditCard className={iconClassName} />
+            <IconCreditCard1 className={iconClassName} />
             <span>Billing</span>
             <CommandShortcut>⌘B</CommandShortcut>
           </CommandItem>
           <CommandItem>
-            <Settings className={iconClassName} />
+            <IconSettingsGear1 className={iconClassName} />
             <span>Settings</span>
             <CommandShortcut>⌘S</CommandShortcut>
           </CommandItem>
@@ -132,19 +130,19 @@ export const InlineVercelStyle: Story = {
           <CommandEmpty>No results found.</CommandEmpty>
           <CommandGroup heading="Projects">
             <InlineResult
-              icon={<Settings className="size-3.5" />}
+              icon={<IconSettingsGear1 className="size-3.5" />}
               title="Settings"
               subtitle="Mastra"
               value="settings mastra account billing"
             />
             <InlineResult
-              icon={<Rocket className="size-3.5" />}
+              icon={<IconRocket className="size-3.5" />}
               title="mastra-cloud-admin"
               subtitle="Project"
               value="mastra cloud admin project"
             />
             <InlineResult
-              icon={<GitBranch className="size-3.5" />}
+              icon={<IconBranch className="size-3.5" />}
               title="codex/eu-residency-ux-plan"
               subtitle="platform-admin-portal"
               value="codex eu residency ux plan platform admin portal"
@@ -153,19 +151,19 @@ export const InlineVercelStyle: Story = {
           <CommandSeparator />
           <CommandGroup heading="Commands">
             <InlineResult
-              icon={<Shield className="size-3.5" />}
+              icon={<IconShield className="size-3.5" />}
               title="Deployments"
               subtitle="mastra-docs-1.x"
               value="deployments mastra docs"
             />
             <InlineResult
-              icon={<Settings className="size-3.5" />}
+              icon={<IconSettingsGear1 className="size-3.5" />}
               title="On-Demand Concurrent Builds"
               subtitle="Mastra / Build and Deployment / Settings"
               value="on demand concurrent builds mastra build deployment settings"
             />
             <InlineResult
-              icon={<Bot className="size-3.5" />}
+              icon={<IconRobot className="size-3.5" />}
               title="Navigation Assistant"
               subtitle="Search projects, routes, and commands"
               value="navigation assistant search projects routes commands"
@@ -208,32 +206,32 @@ export const WithDialog: Story = {
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calendar className={iconClassName} />
+                <IconCalendar1 className={iconClassName} />
                 <span>Calendar</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Smile className={iconClassName} />
+                <IconEmojiSmile className={iconClassName} />
                 <span>Search Emoji</span>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Calculator className={iconClassName} />
+                <IconCalculator className={iconClassName} />
                 <span>Calculator</span>
               </CommandItem>
             </CommandGroup>
             <CommandSeparator />
             <CommandGroup heading="Settings">
               <CommandItem onSelect={() => setOpen(false)}>
-                <User className={iconClassName} />
+                <IconUser className={iconClassName} />
                 <span>Profile</span>
                 <CommandShortcut>⌘P</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <CreditCard className={iconClassName} />
+                <IconCreditCard1 className={iconClassName} />
                 <span>Billing</span>
                 <CommandShortcut>⌘B</CommandShortcut>
               </CommandItem>
               <CommandItem onSelect={() => setOpen(false)}>
-                <Settings className={iconClassName} />
+                <IconSettingsGear1 className={iconClassName} />
                 <span>Settings</span>
                 <CommandShortcut>⌘S</CommandShortcut>
               </CommandItem>
@@ -350,9 +348,9 @@ export const InDialogWithDisabledRows: Story = {
               <CommandGroup heading="Available">
                 {['Slack', 'GitHub', 'Linear'].map(name => (
                   <CommandItem key={name} onSelect={() => setPicked(name)}>
-                    <Calendar className={iconClassName} />
+                    <IconCalendar1 className={iconClassName} />
                     <span className="flex-1">{name}</span>
-                    <Badge size="sm" variant="purple" icon={<Wrench />}>
+                    <Badge size="sm" variant="purple" icon={<IconMaintenance />}>
                       Tools
                     </Badge>
                   </CommandItem>
@@ -361,7 +359,7 @@ export const InDialogWithDisabledRows: Story = {
               <CommandGroup heading="Coming soon">
                 {['HubSpot', 'Discord'].map(name => (
                   <CommandItem key={name} disabled onSelect={() => setPicked(name)}>
-                    <MessageSquare className={iconClassName} />
+                    <IconBubble2 className={iconClassName} />
                     <span className="flex-1">{name}</span>
                   </CommandItem>
                 ))}
@@ -379,7 +377,7 @@ export const InDialogWithDisabledRows: Story = {
 
 const InsetFooter = () => (
   <>
-    <Button variant="ghost" size="sm" icon={<MessageSquare />}>
+    <Button variant="ghost" size="sm" icon={<IconBubble2 />}>
       Send feedback
     </Button>
     <span className="flex items-center gap-1.5">
@@ -396,44 +394,44 @@ const InsetResults = ({ search }: { search: string }) => (
     <CommandEmpty>No pages, projects, or commands match.</CommandEmpty>
     <CommandGroup heading="Observability">
       <CommandItem>
-        <BarChart3 />
+        <IconChart6 />
         Metrics
       </CommandItem>
       <CommandItem>
-        <ListTree />
+        <IconCodeTree />
         Traces
       </CommandItem>
     </CommandGroup>
     <CommandGroup heading="Infrastructure">
       <CommandItem>
-        <Box />
+        <IconBox />
         Deploys
       </CommandItem>
       <CommandItem>
-        <Settings />
+        <IconSettingsGear1 />
         Settings
       </CommandItem>
     </CommandGroup>
     <CommandGroup heading="Projects">
       <CommandItem>
-        <Folder />
+        <IconFolder1 />
         Support agent
         <CommandShortcut>Current</CommandShortcut>
       </CommandItem>
       <CommandItem>
-        <Folder />
+        <IconFolder1 />
         Research workflow
       </CommandItem>
     </CommandGroup>
     <CommandGroup heading="Help" forceMount={search.length > 0}>
       {search && (
         <CommandItem forceMount value={`ask ai ${search}`}>
-          <Bot />
+          <IconRobot />
           Ask AI: “{search}”<CommandShortcut>⌘ ↵</CommandShortcut>
         </CommandItem>
       )}
       <CommandItem forceMount={search.length > 0} value="help contact support">
-        <LifeBuoy />
+        <IconRescueRing />
         Contact support
       </CommandItem>
     </CommandGroup>

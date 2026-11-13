@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CircleCheckIcon, LoaderIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { AgentIcon } from '../../icons/AgentIcon';
 import { DatasetsIcon } from '../../icons/DatasetsIcon';
@@ -13,6 +12,8 @@ import { Header } from '../Header';
 import { Txt } from '../Txt';
 import { Breadcrumb, Crumb } from './Breadcrumb';
 import { crumbSwitcherTriggerProps } from './crumb-switcher';
+import { IconCircleCheck } from '@/ds/icons/central/IconCircleCheck';
+import { IconLoader } from '@/ds/icons/central/IconLoader';
 
 const meta: Meta<typeof Breadcrumb> = {
   title: 'Navigation/Breadcrumb',
@@ -192,10 +193,10 @@ export const AllAppUsages: Story = {
         <Crumb as="a" to="/experiments" icon={<DatasetsIcon />}>
           Experiments
         </Crumb>
-        <Crumb as="a" to="/experiments/nightly" icon={<CircleCheckIcon className="text-success-indicator" />}>
+        <Crumb as="a" to="/experiments/nightly" icon={<IconCircleCheck className="text-success-indicator" />}>
           Nightly regression
         </Crumb>
-        <Crumb as="span" isCurrent icon={<LoaderIcon className="animate-spin" />}>
+        <Crumb as="span" isCurrent icon={<IconLoader className="animate-spin" />}>
           item-0042
         </Crumb>
       </Usage>

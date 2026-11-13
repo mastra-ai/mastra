@@ -1,6 +1,6 @@
-import { RotateCcwIcon } from 'lucide-react';
 import type { MouseEventHandler } from 'react';
 import { Button } from '@/ds/components/Button/Button';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
 
 export type ClearFiltersButtonProps = {
   onClick: MouseEventHandler<HTMLButtonElement>;
@@ -16,7 +16,7 @@ export type ClearFiltersButtonProps = {
 export function ClearFiltersButton({ onClick, label = 'Clear filters', disabled }: ClearFiltersButtonProps) {
   return (
     <Button type="button" size="icon-sm" aria-label={label} tooltip={label} onClick={onClick} disabled={disabled}>
-      <RotateCcwIcon />
+      <IconArrowRotateCounterClockwise />
     </Button>
   );
 }

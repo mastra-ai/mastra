@@ -1,4 +1,3 @@
-import { Plus, RotateCcw } from 'lucide-react';
 import { useDeferredValue, useState } from 'react';
 import type { KeyboardEvent, ReactNode } from 'react';
 import { ModelPickerOption } from './model-picker-option';
@@ -21,6 +20,8 @@ import {
   CommandSeparator,
 } from '@/ds/components/Command';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowRotateCounterClockwise } from '@/ds/icons/central/IconArrowRotateCounterClockwise';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/utils/cn';
 import { compareModelReleaseDates } from '@/utils/model';
@@ -181,7 +182,7 @@ export function ModelPickerPanel({
                     render={addProvider.render}
                     onClick={onAddProvider}
                   >
-                    <Plus aria-hidden />
+                    <IconPlusLarge aria-hidden />
                   </Button>
                 ) : undefined
               }
@@ -238,7 +239,7 @@ export function ModelPickerPanel({
                 <CommandSeparator />
                 <CommandGroup>
                   <CommandItem value="action:reset" keywords={['reset', 'default', 'model']} onSelect={reset.onClick}>
-                    <RotateCcw aria-hidden />
+                    <IconArrowRotateCounterClockwise aria-hidden />
                     <span>{reset.label}</span>
                   </CommandItem>
                 </CommandGroup>

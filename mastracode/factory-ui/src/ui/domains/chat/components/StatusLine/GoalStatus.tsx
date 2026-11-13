@@ -1,6 +1,5 @@
-import { Target } from 'lucide-react';
-
 import { useChatRuntime } from '../../context/useChatRuntime';
+import { IconTarget } from '@mastra/playground-ui/icons/central/IconTarget';
 
 /** Goal lifecycle indicator; hidden when there is no goal or it is done. */
 export function GoalStatus() {
@@ -10,7 +9,7 @@ export function GoalStatus() {
 
   return (
     <span className="text-badge-pink-indicator [&_svg]:text-badge-pink-indicator inline-flex items-center gap-1">
-      <Target size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
+      <IconTarget size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
     </span>
   );
 }

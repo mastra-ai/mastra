@@ -3,10 +3,12 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
-import { FileJson, Upload, RefreshCw } from 'lucide-react';
-import { useCallback, useState } from 'react';
+import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
+import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { useCallback, useState } from 'react';
 import { MAX_IMPORT_LABEL } from '../../utils/json-validation';
 import type { JSONImportValidation, JSONPreviewRow } from '../../utils/json-validation';
 
@@ -143,7 +145,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
         className="absolute inset-0 cursor-pointer opacity-0"
       />
       <div className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted-foreground">
-        <Upload className="size-4" />
+        <IconArrowOutOfBox className="size-4" />
       </div>
       <div className="flex flex-col gap-1">
         <Txt tone="ink">Drop a JSON file here</Txt>
@@ -185,14 +187,20 @@ function FileCard({
   return (
     <div data-testid="json-file-card" className="rounded-lg border border-border">
       <div className="flex items-center gap-2 px-3 py-2">
-        <FileJson className="size-4 shrink-0 text-muted-foreground" />
+        <IconJson className="size-4 shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" font="mono" className="min-w-0 flex-1 truncate">
           {file.name}
         </Txt>
         <Txt as="span" variant="meta" tone="muted" className="shrink-0">
           {formatFileSize(file.size)}
         </Txt>
-        <Button icon={<RefreshCw />} variant="ghost" size="sm" onClick={onReplace} disabled={isImporting}>
+        <Button
+          icon={<IconArrowRotateClockwise />}
+          variant="ghost"
+          size="sm"
+          onClick={onReplace}
+          disabled={isImporting}
+        >
           Replace
         </Button>
       </div>

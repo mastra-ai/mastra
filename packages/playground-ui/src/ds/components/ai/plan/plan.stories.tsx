@@ -1,6 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon, MessageSquareText, XIcon } from 'lucide-react';
-
 import { Button } from '../../Button';
 import { TooltipProvider } from '../../Tooltip';
 import {
@@ -21,6 +19,9 @@ import {
   PlanStatus,
   PlanTitle,
 } from './plan';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 const planMarkdown = `## Implementation
 
@@ -155,7 +156,7 @@ export const WithStatusAndActions: Story = {
           <PlanControls>
             <PlanActionGroup className="justify-end">
               <Button type="button" variant="primary" size="icon-sm" tooltip="Reject plan" aria-label="Reject plan">
-                <XIcon />
+                <IconCrossMedium />
               </Button>
             </PlanActionGroup>
             <PlanExpandButton />
@@ -167,10 +168,10 @@ export const WithStatusAndActions: Story = {
                 tooltip="Request changes"
                 aria-label="Request changes"
               >
-                <MessageSquareText />
+                <IconBubbleText />
               </Button>
               <Button type="button" variant="primary" size="icon-sm" tooltip="Approve plan" aria-label="Approve plan">
-                <CheckIcon />
+                <IconCheckmark1 />
               </Button>
             </PlanActionGroup>
           </PlanControls>

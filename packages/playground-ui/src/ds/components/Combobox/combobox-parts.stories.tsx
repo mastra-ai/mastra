@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Filter } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { Dialog, DialogBody, DialogCancel, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../Dialog';
@@ -26,6 +25,7 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from './combobox-parts';
+import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
 
 type Option = { value: string; label: string; kind?: 'Agent' | 'Workflow' | 'Scorer'; description?: string };
 
@@ -392,7 +392,7 @@ export const CompactTrigger: Story = {
           </ComboboxContent>
         </ComboboxRoot>
         <ComboboxRoot items={agents} value={filter} onValueChange={setFilter} autoHighlight>
-          <ComboboxTrigger variant="ghost" size="icon-md" icon={<Filter />} aria-label="Filter by agent">
+          <ComboboxTrigger variant="ghost" size="icon-md" icon={<IconFilter1 />} aria-label="Filter by agent">
             <ComboboxValue placeholder="All agents" />
           </ComboboxTrigger>
           <ComboboxContent align="end">

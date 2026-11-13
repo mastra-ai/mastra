@@ -5,7 +5,6 @@ import type { ModelPickerProvider } from '@mastra/playground-ui/domains/llm';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { KeyRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
@@ -26,6 +25,7 @@ import { useOrganizationScopedFactory } from './useOrganizationScopedFactory';
 import { ModelThinkingGroup } from './ModelThinkingGroup';
 import { SessionThinkingIcon } from './SessionThinkingIcon';
 import { SessionThinkingSettings } from './SessionThinkingSettings';
+import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
 
 function groupByProvider(models: AvailableModelOption[]): [string, AvailableModelOption[]][] {
   const groups = new Map<string, AvailableModelOption[]>();
@@ -101,7 +101,7 @@ interface ModelMenuProps {
 }
 
 const renderProviderIcon = (provider: string) => (
-  <ProviderBrandIcon provider={provider} fallback={<KeyRound className="size-3.5" />} />
+  <ProviderBrandIcon provider={provider} fallback={<IconKey1 className="size-3.5" />} />
 );
 
 function ModelMenu({
