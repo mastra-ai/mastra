@@ -68,17 +68,17 @@ A `tool_<id>` entry uses the tool's own `mcp.annotations` when the tool defines 
 | `list_threads` | `agentId`, `resourceId`, `page`, `perPage` | `GET /memory/threads` | `memory:read` |
 | `get_thread` | `threadId*`, `agentId` | `GET /memory/threads/:threadId` | `memory:read` |
 | `list_messages` | `threadId*`, `agentId`, `page`, `perPage` | `GET /memory/threads/:threadId/messages` | `memory:read` |
-| `search_memory` | `agentId*`, `searchQuery*`, `resourceId`, `threadId`, `limit` | `GET /memory/search` | `memory:read` |
 | `get_memory_status` | `agentId*`, `resourceId`, `threadId` | `GET /memory/status`, `GET /memory/config` | `memory:read` |
 | `get_observations` | `agentId*`, `threadId`, `resourceId`, `waitForPending` | `GET /memory/observational-memory` | `memory:read` |
+| `get_working_memory` | `agentId*`, `threadId`, `resourceId` | `GET /memory/threads/:threadId/working-memory`, `GET /memory/working-memory` | `memory:read` |
 | `create_thread` | `agentId*`, `resourceId`, `title`, `metadata`, `threadId` | `POST /memory/threads` | `memory:write` |
 | `update_thread` | `threadId*`, `agentId*`, `title`, `metadata` | `PATCH /memory/threads/:threadId` | `memory:write` |
 | `clone_thread` | `threadId*`, `agentId*`, `newThreadId`, `title`, `metadata`, `messageLimit` | `POST /memory/threads/:threadId/clone` | `memory:execute` |
-| `save_messages` | `agentId*`, `messages*` | `POST /memory/save-messages` | `memory:write` |
 
 - `resourceId` defaults to the caller when `server.auth` sets `mapUserToResourceId`, and a caller can't read or write another resource's threads, messages, or Observational Memory. Without `mapUserToResourceId`, the tools use the `resourceId` the client sends, so set `mapUserToResourceId` to keep memory private. [FGA](/docs/auth/fga) protects threads, but `get_observations` called with only a `resourceId` isn't covered by the default FGA routes.
 - `get_observations` reads resource-scoped Observational Memory when `threadId` is left out. `waitForPending: true` waits up to 30 seconds for pending observations, and is only offered when the caller may call `POST /memory/observational-memory/buffer-status`, which needs `memory:write`.
-- `search_memory` returns up to 20 results unless `limit` is set.
+- `get_working_memory` reads working memory without changing it. With a thread, it reads `GET /memory/threads/:threadId/working-memory`; a thread set in the request context takes precedence over the `threadId` argument. Without a thread, it reads the resource's working memory from `GET /memory/working-memory`, which needs a `resourceId` from the argument or the caller's mapped resource, and returns a 400 when the agent's working memory is thread-scoped. With [FGA](/docs/auth/fga), the resource read checks `memory:read` on resource type `resource`, using the caller's mapped resource before the `resourceId` argument.
+- The memory toolset doesn't save messages or run semantic search. Use the HTTP routes `POST /memory/save-messages` and `GET /memory/search` for those.
 
 ## `observability`
 
