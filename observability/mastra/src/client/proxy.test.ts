@@ -255,6 +255,49 @@ describe('ingest happy path', () => {
 });
 
 describe('client span timestamp rejection (OBS-935)', () => {
+  it.each([-1, -0.001, 0, 1])('validates execution duration %s before dispatch', async executionDurationMs => {
+    const events: ObservabilityEvent[] = [];
+    const instance = new DefaultObservabilityInstance({
+      name: 'duration-validation',
+      serviceName: 'test',
+      exporters: [
+        {
+          name: 'capture',
+          exportTracingEvent: async event => {
+            events.push(event);
+          },
+          onMetricEvent: event => {
+            events.push(event);
+          },
+          onLogEvent: event => {
+            events.push(event);
+          },
+          flush: async () => {},
+          shutdown: async () => {},
+        },
+      ],
+    });
+    try {
+      createClientObservabilityProxy({ resolveInstance: () => instance }).receive(
+        {
+          executionDurationMs,
+          spans: spansPayload([makeSpan()]),
+          logs: logsPayload([{ traceId: TRACE_ID, timeUnixNano: '1000000', body: { stringValue: 'test' } }]),
+        },
+        carrier(),
+      );
+      await instance.flush();
+      if (executionDurationMs < 0) {
+        expect(events).toEqual([]);
+      } else {
+        expect(events.map(event => event.type)).toEqual(['span_started', 'span_ended', 'log', 'metric']);
+        expect(events.at(-1)).toMatchObject({ metric: { value: executionDurationMs } });
+      }
+    } finally {
+      await instance.shutdown();
+    }
+  });
+
   it.each([
     [1500000, '1600000'],
     ['1500000', 1600000],

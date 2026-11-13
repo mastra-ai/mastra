@@ -160,6 +160,11 @@ class ClientObservabilityProxyImpl implements ClientObservabilityProxy {
       return;
     }
 
+    if (typeof payload.executionDurationMs === 'number' && payload.executionDurationMs < 0) {
+      this.#warn('Client observability payload contains a negative execution duration; dropping.');
+      return;
+    }
+
     // All validation passed; emit through the bus.
     for (const decoded of decodedSpans) {
       const exported = buildExportedSpan(decoded);

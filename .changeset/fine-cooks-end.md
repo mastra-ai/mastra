@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Reject spans whose end time precedes their start time before exporting or ingesting client telemetry.
+Clamp reversed live span timestamps to zero duration so exporters receive completion events. Reject client telemetry with reversed timestamps or negative execution durations.

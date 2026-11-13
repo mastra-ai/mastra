@@ -162,23 +162,6 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
    * and can be drained via flush().
    */
   emit(event: ObservabilityEvent, shouldHandle?: (handler: ObservabilityHandler) => boolean): void {
-    if ('exportedSpan' in event) {
-      const span = event.exportedSpan;
-      if (span.endTime && span.endTime < span.startTime) {
-        this.logger.warn('[ObservabilityBus] Rejected span: endTime precedes startTime', {
-          traceId: span.traceId,
-          spanId: span.id,
-        });
-        // A started event may already have allocated bridge state.
-        try {
-          this.bridge?.releaseSpan?.(span.id, span.traceId);
-        } catch (error) {
-          this.logger.error('[ObservabilityBus] Bridge releaseSpan error', error);
-        }
-        return;
-      }
-    }
-
     // Sanitize free-form payload fields on non-tracing signals before
     // fanning out. Tracing events are already deep-cleaned at span
     // construction, so cleanEvent() returns them unchanged.
