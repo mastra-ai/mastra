@@ -90,14 +90,15 @@ const topicEventSchema = z.object({
 export function resolveEventsUrl(options?: { eventsUrl?: string }): string {
   const explicit = options?.eventsUrl?.trim() || process.env.MASTRA_EVENTS_API_URL?.trim();
   if (explicit) {
+    // The URL may carry credentials, so error messages never echo it.
     let url: URL;
     try {
       url = new URL(explicit);
     } catch {
-      throw new MastraConnectError('invalid_options', `Invalid events service URL '${explicit}'.`);
+      throw new MastraConnectError('invalid_options', 'Invalid events service URL: not an absolute URL.');
     }
     if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-      throw new MastraConnectError('invalid_options', `Invalid events service URL '${explicit}': expected http(s).`);
+      throw new MastraConnectError('invalid_options', 'Invalid events service URL: expected http or https.');
     }
     return stripTrailingSlashes(explicit);
   }
@@ -106,9 +107,15 @@ export function resolveEventsUrl(options?: { eventsUrl?: string }): string {
   return DEFAULT_EVENTS_URL;
 }
 
+/** Largest delay `setTimeout` honors; larger values fire almost immediately. */
+const MAX_TIMER_MS = 2_147_483_647;
+
 function assertPositiveMs(name: string, value: number | undefined): void {
-  if (value !== undefined && !(Number.isFinite(value) && value > 0)) {
-    throw new MastraConnectError('invalid_options', `Invalid ${name}: expected a positive number of milliseconds.`);
+  if (value !== undefined && !(Number.isFinite(value) && value > 0 && value <= MAX_TIMER_MS)) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid ${name}: expected a positive number of milliseconds up to ${MAX_TIMER_MS}.`,
+    );
   }
 }
 
@@ -253,10 +260,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     });
     // Callers that never await `ready` must not see an unhandled rejection.
     this.#ready.catch(() => {});
-    if (init.signal) {
-      if (init.signal.aborted) this.close();
-      else init.signal.addEventListener('abort', this.#onCallerAbort, { once: true });
-    }
+    if (init.signal?.aborted) this.close();
   }
 
   /** The last delivered event id, or the start cursor before any event. */
@@ -285,6 +289,11 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
       throw new MastraConnectError('invalid_options', 'An event subscription can only be iterated once.');
     }
     this.#iterating = true;
+    // Attached only while iterating, so a subscription that is never iterated holds no listener.
+    if (!this.#abort.signal.aborted) {
+      if (this.#init.signal?.aborted) this.close();
+      else this.#init.signal?.addEventListener('abort', this.#onCallerAbort, { once: true });
+    }
     return this.#run();
   }
 
@@ -482,7 +491,9 @@ export async function* parseServerSentEvents(
 ): AsyncGenerator<ServerSentEvent, void, undefined> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
-  let buffer = '';
+  // Text after the last line break, kept as chunks so a long line isn't re-copied on every chunk.
+  let pending: string[] = [];
+  let pendingLength = 0;
   let event = '';
   let data: string[] = [];
   let id: string | undefined;
@@ -495,9 +506,19 @@ export async function* parseServerSentEvents(
       const { value, done } = await reader.read();
       if (done) return;
       onChunk?.();
-      // The leftover from the last chunk holds no line break, so scanning resumes where it ended.
-      const scanFrom = buffer.length;
-      buffer += decoder.decode(value, { stream: true });
+      const decoded = decoder.decode(value, { stream: true });
+      if (!decoded.includes('\n') && !decoded.includes('\r')) {
+        pending.push(decoded);
+        pendingLength += decoded.length;
+        if (pendingLength > MAX_LINE_LENGTH) {
+          throw new MastraConnectError('invalid_response', 'The events service sent a line longer than 32 MiB.');
+        }
+        continue;
+      }
+      // The pending text holds no line break, so scanning resumes where it ended.
+      const scanFrom = pendingLength;
+      pending.push(decoded);
+      const buffer = pending.join('');
 
       let start = 0;
       for (let i = scanFrom; i < buffer.length; i++) {
@@ -552,8 +573,10 @@ export async function* parseServerSentEvents(
           hasField = true;
         }
       }
-      buffer = buffer.slice(start);
-      if (buffer.length > MAX_LINE_LENGTH) {
+      const rest = buffer.slice(start);
+      pending = [rest];
+      pendingLength = rest.length;
+      if (pendingLength > MAX_LINE_LENGTH) {
         throw new MastraConnectError('invalid_response', 'The events service sent a line longer than 32 MiB.');
       }
     }

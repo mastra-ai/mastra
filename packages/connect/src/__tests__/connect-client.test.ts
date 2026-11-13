@@ -132,10 +132,12 @@ describe('ConnectClient configuration', () => {
     );
   });
 
-  it('rejects a non-positive timeout', () => {
-    expect(() => new ConnectClient({ accessToken: TOKEN, timeoutMs: 0 })).toThrow(
-      expect.objectContaining({ code: 'invalid_options' }),
-    );
+  it('rejects a non-positive timeout or one setTimeout cannot honor', () => {
+    for (const timeoutMs of [0, 2 ** 31]) {
+      expect(() => new ConnectClient({ accessToken: TOKEN, timeoutMs })).toThrow(
+        expect.objectContaining({ code: 'invalid_options' }),
+      );
+    }
   });
 
   it('throws missing_project_id for project calls without a project', async () => {
@@ -227,6 +229,19 @@ describe('ConnectClient.proxy', () => {
     expect(call!.headers.get('authorization')).toBe(`Bearer ${TOKEN}`);
     expect(call!.headers.get('content-type')).toBe('application/json');
     expect(JSON.parse(call!.body!)).toEqual({ query: '{ viewer { id } }' });
+  });
+
+  it('drops identity headers from proxied requests', async () => {
+    const { fetchMock, calls } = recordingFetch(() => Response.json({}));
+    const client = makeClient(fetchMock);
+    const headers = { 'X-Mastra-Resource-Id': 'user_other', 'X-Mastra-Project-Id': 'proj_other', 'x-trace': 't1' };
+    await client.proxy('c_1', { method: 'GET', path: 'me', headers });
+    await client.proxyWithResponse('c_1', { method: 'GET', path: 'me', headers });
+    for (const call of calls) {
+      expect(call.headers.get('x-mastra-resource-id')).toBeNull();
+      expect(call.headers.get('x-mastra-project-id')).toBe('proj_1');
+      expect(call.headers.get('x-trace')).toBe('t1');
+    }
   });
 
   it('returns provider status and headers from proxyWithResponse', async () => {
