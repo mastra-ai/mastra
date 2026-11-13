@@ -135,8 +135,10 @@ export function useDisplayMode(): McpUiDisplayMode | undefined {
 export function AppFrame({ children, fixed = false }: { children: ReactNode; fixed?: boolean }) {
   const fullscreen = useContext(HostContext)?.displayMode === 'fullscreen';
   const shape = fullscreen
-    ? `h-screen ${frameFillStyle}`
-    : `m-1 rounded-studio-frame p-px ${fixed ? 'h-[44rem]' : ''} ${frameSurfaceStyle}`;
+    ? `h-screen p-2 ${frameFillStyle}`
+    : // Inset by Studio's frame inset so the tab pills sit concentric with the card's corners, and keep the
+      // card off the iframe's edges so its outline and shadow aren't clipped.
+      `m-2 rounded-studio-frame p-2 ${fixed ? 'h-[44rem]' : ''} ${frameSurfaceStyle}`;
   return (
     <div data-slot="mcp-app-frame" className={`flex flex-col overflow-hidden ${shape}`}>
       {children}
