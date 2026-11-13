@@ -593,6 +593,8 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry | ProjectBoardSource;
+    /** Project-aware boards for integration runtime rerouting; new-card placement still uses code boards. */
+    runtimeBoards?: BoardRegistry | ProjectBoardSource;
     /** Passed for the workers' context only: routes do not sweep. */
     keptCards?: CardSource;
     factoryReady: boolean;
@@ -647,7 +649,7 @@ export function buildIntegrationContext(
           runtime: {
             configVersion: deps.configVersion,
             workItems: deps.domains.workItems,
-            boards: deps.boardRegistry,
+            boards: deps.runtimeBoards ?? deps.boardRegistry,
             ...(deps.storedBoards ? { intakeRoutes: deps.storedBoards.storage } : {}),
             ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
           },
@@ -829,6 +831,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
         boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
+        runtimeBoards: deps.boardRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),

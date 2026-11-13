@@ -460,12 +460,24 @@ export interface GithubRulesOptions {
 /** Identity under which label and assignee syncs are recorded. */
 const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
-async function refreshPullRequestLabels(options: GithubRulesOptions, card: Card, labels: string[]): Promise<boolean> {
-  if (!card.externalSource) return false;
-  const sourceId = providerExternalId(card.externalSource);
-  const source = card.workItem.sources.find(row => row.externalId === sourceId);
-  if (!source) return false;
+async function refreshPullRequestLabels(
+  options: GithubRulesOptions,
+  card: Card,
+  source: WorkItemSourceRow,
+  labels: string[],
+): Promise<boolean> {
   const sourceChanged = !sameStrings(source.labels, labels);
+  if (card.externalSource?.type !== 'pull-request') {
+    if (!sourceChanged) return false;
+    await options.storage.syncWorkItemSource({
+      orgId: card.orgId,
+      factoryProjectId: card.factoryProjectId,
+      provider: source.provider,
+      externalId: source.externalId,
+      patch: current => (sameStrings(current.labels, labels) ? null : { labels }),
+    });
+    return true;
+  }
   const metadataChanged = !sameStrings(card.workItem.metadata?.labels, labels);
   if (!sourceChanged && !metadataChanged && !options.intakeRoutes) return false;
   if (sourceChanged) {
@@ -679,10 +691,15 @@ export class GithubRules {
       undefined,
       null,
     );
-    if (!card || reconcilablePullRequestNumber(card, { id: repositoryId, fullName: repositoryName }) !== pullRequestNumber) {
-      return { status: 'ignored' };
-    }
-    const changed = await refreshPullRequestLabels(this.options, card, labelNames(pullRequest.labels));
+    if (!card) return { status: 'ignored' };
+    const repository = { id: repositoryId, fullName: repositoryName };
+    const primary = card.externalSource;
+    const source =
+      primary && reconcilablePullRequestNumber(card, repository) === pullRequestNumber
+        ? card.workItem.sources.find(row => row.externalId === providerExternalId(primary))
+        : attachedPullRequestSource(card, repositoryId, repositoryName, pullRequestNumber);
+    if (!source) return { status: 'ignored' };
+    const changed = await refreshPullRequestLabels(this.options, card, source, labelNames(pullRequest.labels));
     return { status: changed ? 'committed' : 'ignored' };
   }
 
@@ -2063,9 +2080,8 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, Card[]>;
-      // Open pull requests attached to an issue's card. Their facts live on their own source, so
-      // the sweep only replays a missed close; the rules settle the source and the card.
-      let attachedOpen: Set<number>;
+      // Open pull requests attached to an issue's card carry their own source facts.
+      let attachedOpen: Map<number, Array<{ card: Card; source: WorkItemSourceRow }>>;
       let unanswered: Array<{ item: Card; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
@@ -2074,7 +2090,7 @@ export function createGithubPullRequestReconciler(
         });
         if (projects.length === 0) continue;
         cardsByNumber = new Map<number, Card[]>();
-        attachedOpen = new Set<number>();
+        attachedOpen = new Map();
         unanswered = [];
         for (const project of projects) {
           await rules.loadBoards(project);
@@ -2088,7 +2104,11 @@ export function createGithubPullRequestReconciler(
             if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(toBoardSource(options.boards).forProject(item), item)) {
               for (const source of pullRequestSources(item)) {
                 const number = attachedPullRequestNumber(source, repository);
-                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
+                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) {
+                  const entries = attachedOpen.get(number) ?? [];
+                  entries.push({ card: item, source });
+                  attachedOpen.set(number, entries);
+                }
               }
             }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
@@ -2146,7 +2166,11 @@ export function createGithubPullRequestReconciler(
           }
           for (const card of cards) {
             if (state.state === 'closed') continue;
-            if (state.labels) await refreshPullRequestLabels(options, card, state.labels);
+            const primary = card.externalSource;
+            if (state.labels && primary) {
+              const source = card.workItem.sources.find(row => row.externalId === providerExternalId(primary));
+              if (source) await refreshPullRequestLabels(options, card, source, state.labels);
+            }
             const metadata = { ...card.workItem.metadata, ...card.metadata };
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
@@ -2216,7 +2240,7 @@ export function createGithubPullRequestReconciler(
           recordFailure(repository, error, pullRequestNumber);
         }
       }
-      for (const pullRequestNumber of attachedOpen) {
+      for (const [pullRequestNumber, attachments] of attachedOpen) {
         if (cardsByNumber.has(pullRequestNumber)) continue;
         try {
           const state = await fetchPullRequest({
@@ -2225,7 +2249,15 @@ export function createGithubPullRequestReconciler(
             number: pullRequestNumber,
           });
           summary.checked += 1;
-          if (state?.state !== 'closed') continue;
+          if (!state) continue;
+          if (state.state !== 'closed') {
+            if (state.labels) {
+              for (const { card, source } of attachments) {
+                await refreshPullRequestLabels(options, card, source, state.labels);
+              }
+            }
+            continue;
+          }
           await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
           await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
