@@ -4485,6 +4485,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             metadata: {
               ...(prevResult as any).metadata,
               startedBy: stepResults[stepId]?.metadata?.startedBy,
+              // A loop over this nested workflow keeps its own count; never the child's inner-loop count.
+              iterationCount: stepResults[stepId]?.metadata?.iterationCount,
               nestedRunId,
             },
           }),
