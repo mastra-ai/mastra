@@ -68,7 +68,11 @@ interface PrepareMemoryStepOptions<OUTPUT = undefined> {
   memoryConfig?: MemoryConfigInternal;
   memory?: MastraMemory;
   isResume?: boolean;
-  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
+  authorizeMemory: (
+    permission: MastraFGAPermissionInput,
+    threadId: string,
+    resourceId: string | undefined,
+  ) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -181,7 +185,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
         await executeWithContext({
           span: threadSpan,
           fn: async () => {
-            await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id);
+            await authorizeMemory(MastraFGAPermissions.MEMORY_READ, thread.id, resourceId);
             existingThread = await memory.getThreadById({ threadId: thread.id });
 
             if (existingThread) {
@@ -195,7 +199,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
                 (!existingThread.metadata && thread.metadata) ||
                 (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
               ) {
-                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id, resourceId);
                 threadObject = await memory.saveThread({
                   thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
                   memoryConfig,
@@ -208,7 +212,7 @@ export function createPrepareMemoryStep<OUTPUT = undefined>({
               // This is required because output processors (like MessageHistory) may call
               // saveMessages() before executeOnFinish(), and some storage backends (like PostgresStore)
               // validate that the thread exists before saving messages.
-              await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id);
+              await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, thread.id, resourceId);
               threadObject = await memory.createThread({
                 threadId: thread?.id,
                 metadata: thread.metadata,

@@ -50,7 +50,11 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
-  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string, resourceId?: string) => Promise<void>;
+  authorizeMemory: (
+    permission: MastraFGAPermissionInput,
+    threadId: string,
+    resourceId: string | undefined,
+  ) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -91,9 +95,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
       getMemoryStorage: async () => memory?.storage.getStore('memory'),
       memoryThreadId: memoryData.thread?.id ?? threadIdFromArgs,
       authorize: async (threadId, resolvedResourceId) => {
-        const threadIds = new Set([threadId, memoryData.thread?.id, threadIdFromArgs].filter(Boolean));
-        for (const id of threadIds) {
-          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, id!, resolvedResourceId);
+        await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId, resolvedResourceId);
+        const runThreadIds = new Set([memoryData.thread?.id, threadIdFromArgs].filter(Boolean));
+        for (const id of runThreadIds) {
+          if (id === threadId) continue;
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, id!, resourceId);
         }
       },
     });
@@ -139,7 +145,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           options.savePerStep && !isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
           if (memoryData.thread?.id) {
-            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id, resourceId);
           }
           await ensureThreadExists();
 
@@ -370,7 +376,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
             [memoryContext?.thread?.id, memoryData.thread?.id, result.threadId].filter((id): id is string => !!id),
           );
           for (const threadId of threadIds) {
-            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId);
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, threadId, resourceId);
           }
         },
         // Like the finish path, a tripwire at the deadline removes what was already saved. Undo from the
@@ -495,7 +501,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                   : payload.text || '';
 
               if (!memoryConfig?.readOnly && result.threadId) {
-                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId, resourceId);
               }
               await capabilities.executeOnFinish({
                 termination: agentLoopTermination({

@@ -209,13 +209,16 @@ export async function runDurableFinishSideEffects({
     getMemoryStorage: async () => (registryEntry?.memory ?? rebuiltMemory)?.storage.getStore('memory'),
     memoryThreadId: durableState?.threadId,
     authorize: async (threadId, resourceId) => {
-      const threadIds = new Set([threadId, durableState?.threadId].filter(Boolean));
-      for (const id of threadIds) {
+      const targets = new Map([[threadId, resourceId]]);
+      if (durableState?.threadId && durableState.threadId !== threadId) {
+        targets.set(durableState.threadId, durableState.resourceId);
+      }
+      for (const [id, targetResourceId] of targets) {
         await checkThreadFGA({
           mastra,
           user: effectiveRequestContext.get('user'),
-          threadId: id!,
-          resourceId,
+          threadId: id,
+          resourceId: targetResourceId,
           agentId: initData.agentId,
           requestContext: effectiveRequestContext,
           permission: MastraFGAPermissions.MEMORY_WRITE,
@@ -655,12 +658,16 @@ export async function runDurableDeadlineOutputPass({
     getMemoryStorage: async () => entry.memory?.storage.getStore('memory'),
     memoryThreadId: durableState?.threadId,
     authorize: async (threadId, targetResourceId) => {
-      for (const id of new Set([threadId, durableState?.threadId].filter((id): id is string => !!id))) {
+      const targets = new Map([[threadId, targetResourceId]]);
+      if (durableState?.threadId && durableState.threadId !== threadId) {
+        targets.set(durableState.threadId, durableState.resourceId);
+      }
+      for (const [id, resourceId] of targets) {
         await checkThreadFGA({
           mastra,
           user: requestContext.get('user'),
           threadId: id,
-          resourceId: targetResourceId,
+          resourceId,
           agentId: initData.agentId,
           requestContext,
           permission: MastraFGAPermissions.MEMORY_WRITE,

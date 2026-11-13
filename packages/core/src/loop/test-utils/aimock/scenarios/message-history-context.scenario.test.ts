@@ -122,6 +122,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
       'missing-resource',
       'redirect-denied',
       'conflicting-threads',
+      'conflicting-threads-missing-resource',
       'run-denied',
       'input-redirect',
       'input-read-only',
@@ -143,6 +144,11 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
           const threadId = `history-${engine}-${terminal}-${variant}`;
           const runThreadId = `${threadId}-run`;
           const resourceId = 'history-resource';
+          const conflictingThreads =
+            variant === 'conflicting-threads' || variant === 'conflicting-threads-missing-resource';
+          const missingResource = variant === 'missing-resource' || variant === 'conflicting-threads-missing-resource';
+          const runResourceId = conflictingThreads ? 'run-resource' : resourceId;
+          const authorizations: { threadId: string; resourceId: unknown }[] = [];
           const events: string[] = [];
           const saveMessages = storage.saveMessages.bind(storage);
           storage.saveMessages = async args => {
@@ -162,7 +168,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
           requestContext.set('user', { id: 'reader' });
           requestContext.set('MastraMemory', {
             thread: { id: variant === 'input-redirect' ? `${threadId}-original` : threadId },
-            ...(variant === 'missing-resource' ? {} : { resourceId }),
+            ...(missingResource ? {} : { resourceId }),
             ...(variant === 'context-read-only' ? { memoryConfig: { readOnly: true } } : {}),
           });
           const deniedThread =
@@ -171,9 +177,13 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
           const fga: IFGAProvider = {
             check: async () => true,
             filterAccessible: async (_user, resources) => resources,
-            require: async (_user, { permission, resource }) => {
+            require: async (_user, { permission, resource, context }) => {
               if (String(permission) !== 'memory:write') return;
               events.push(`authorize:${resource.id}`);
+              authorizations.push({ threadId: resource.id, resourceId: context?.resourceId });
+              if (conflictingThreads && resource.id === runThreadId && context?.resourceId !== runResourceId) {
+                throw new Error('Run thread authorized with the wrong resource');
+              }
               if (denied && resource.id === deniedThread) throw new Error('History write denied');
             },
           };
@@ -200,10 +210,11 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                 return messageList;
               },
             });
-          if (variant === 'missing-resource')
+          if (missingResource)
             processors.push({
               id: 'retain-message-resource',
-              processOutputResult: ({ messageList }) => {
+              processOutputResult: ({ messageList, requestContext }) => {
+                requestContext.set('MastraMemory', { thread: { id: threadId } });
                 for (const message of messageList.get.all.db()) message.resourceId = resourceId;
                 return messageList;
               },
@@ -257,15 +268,14 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
                 ? variant === 'memory-redirect-tripwire'
                   ? runThreadId
                   : threadId
-                : variant === 'conflicting-threads' || variant === 'run-denied'
+                : conflictingThreads || variant === 'run-denied'
                   ? runThreadId
                   : undefined,
-              resourceId:
-                memory || variant === 'conflicting-threads' || variant === 'run-denied' ? resourceId : undefined,
+              resourceId: memory || conflictingThreads || variant === 'run-denied' ? runResourceId : undefined,
               defaultOptions: {
                 memory: {
-                  ...(variant === 'conflicting-threads' || variant === 'run-denied'
-                    ? { thread: runThreadId, resource: resourceId }
+                  ...(conflictingThreads || variant === 'run-denied'
+                    ? { thread: runThreadId, resource: runResourceId }
                     : {}),
                   ...(variant === 'read-only' ? { options: { readOnly: true } } : {}),
                 },
@@ -303,7 +313,7 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
             }
             if (
               variant === 'allowed' ||
-              variant === 'conflicting-threads' ||
+              conflictingThreads ||
               variant === 'missing-resource' ||
               variant === 'input-redirect'
             ) {
@@ -311,7 +321,12 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
               expect(messages.every(message => message.resourceId === resourceId)).toBe(true);
               expect(events.indexOf(`authorize:${threadId}`)).toBeGreaterThanOrEqual(0);
               expect(events.indexOf(`authorize:${threadId}`)).toBeLessThan(events.indexOf('save'));
-              if (variant === 'conflicting-threads') {
+              if (conflictingThreads) {
+                expect(authorizations).toContainEqual({
+                  threadId,
+                  resourceId: missingResource ? undefined : resourceId,
+                });
+                expect(authorizations).toContainEqual({ threadId: runThreadId, resourceId: runResourceId });
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeGreaterThanOrEqual(0);
                 expect(events.indexOf(`authorize:${runThreadId}`)).toBeLessThan(events.indexOf('save'));
               }
