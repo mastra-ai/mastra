@@ -65,12 +65,14 @@ function linkFacts(source: WorkItemSourceDbRecord, now: Date) {
 }
 
 /**
- * Whether a link's facts are current. A release before links carried facts syncs only the source
+ * Whether a link's facts are current. A source never synced from its provider holds only facts
+ * copied in (by the split, which an older replica may run again at any time), and links copy them
+ * from it, so the source row is read. A release before links carried facts syncs only the source
  * row, moving its `synced_at` past the link's, so the source row is read until the next sync.
  */
 function linkIsCurrent(link: WorkItemSourceLinkDbRecord, source: WorkItemSourceDbRecord): boolean {
-  if (!link.facts_synced_at) return false;
-  return !source.synced_at || new Date(link.facts_synced_at).getTime() >= new Date(source.synced_at).getTime();
+  if (!link.facts_synced_at || !source.synced_at) return false;
+  return new Date(link.facts_synced_at).getTime() >= new Date(source.synced_at).getTime();
 }
 
 /**
