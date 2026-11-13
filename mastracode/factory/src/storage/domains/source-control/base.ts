@@ -174,6 +174,10 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       origin_thread_id: { type: 'text', nullable: true },
       // When the origin muted this side session's reports; null while it gets them.
       origin_muted_at: { type: 'timestamp', nullable: true },
+      // A person approved, in the turn that started this side session, one follow-up role start on its report.
+      follow_up_approved_by: { type: 'text', nullable: true },
+      follow_up_approved_at: { type: 'timestamp', nullable: true },
+      follow_up_used_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
@@ -388,6 +392,11 @@ export interface SourceControlSession {
   originThreadId: string | null;
   /** When the origin muted this side session's reports; null while they are delivered. */
   originMutedAt: Date | null;
+  /** The person who approved one follow-up role start when this side session reports; null when nobody did. */
+  followUpApprovedBy: string | null;
+  followUpApprovedAt: Date | null;
+  /** When the origin used that approval; it is single-use. */
+  followUpUsedAt: Date | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -568,6 +577,13 @@ export interface SourceControlStorageHandle {
     rename(args: { sessionId: string; title: string }): Promise<void>;
     /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
     setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+    /** Record that `userId` approved one follow-up role start on this side session's report. */
+    approveFollowUp(args: { sessionId: string; userId: string }): Promise<void>;
+    /**
+     * Use the follow-up approval, or with `used: false` give it back. True only when this call changed it,
+     * so two racing starts cannot both use it.
+     */
+    setFollowUpUsed(args: { sessionId: string; used: boolean }): Promise<boolean>;
     /** Change who can see the session while `expectedUserId` still owns it. Null when it does not exist or changed owner. */
     setVisibility(args: {
       sessionId: string;
@@ -687,6 +703,9 @@ interface SessionDbRow extends Record<string, unknown> {
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
   origin_muted_at?: Date | null;
+  follow_up_approved_by?: string | null;
+  follow_up_approved_at?: Date | null;
+  follow_up_used_at?: Date | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
@@ -811,6 +830,9 @@ function toSession(row: SessionDbRow): SourceControlSession {
     originSessionId: row.origin_session_id ?? null,
     originThreadId: row.origin_thread_id ?? null,
     originMutedAt: row.origin_muted_at ?? null,
+    followUpApprovedBy: row.follow_up_approved_by ?? null,
+    followUpApprovedAt: row.follow_up_approved_at ?? null,
+    followUpUsedAt: row.follow_up_used_at ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -1684,6 +1706,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
+        approveFollowUp: async ({ sessionId, userId }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            follow_up_approved_by: userId,
+            follow_up_approved_at: new Date(),
+            follow_up_used_at: null,
+            updated_at: new Date(),
+          }));
+        },
+        setFollowUpUsed: async ({ sessionId, used }) => {
+          let changed = false;
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, row => {
+            if (!row.follow_up_approved_at || Boolean(row.follow_up_used_at) === used) return null;
+            changed = true;
+            return { follow_up_used_at: used ? new Date() : null, updated_at: new Date() };
+          });
+          return changed;
+        },
         setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
           const row = await db().updateAtomic<SessionDbRow>(
             SESSIONS,
@@ -1747,6 +1786,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
               origin_muted_at: null,
+              follow_up_approved_by: null,
+              follow_up_approved_at: null,
+              follow_up_used_at: null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,

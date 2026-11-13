@@ -60,6 +60,8 @@ export interface SourceControlSessionLookup {
   listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
   rename(args: { sessionId: string; title: string }): Promise<void>;
   setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+  approveFollowUp(args: { sessionId: string; userId: string }): Promise<void>;
+  setFollowUpUsed(args: { sessionId: string; used: boolean }): Promise<boolean>;
   markFirstMessage(args: { sessionId: string }): Promise<void>;
   markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
 }
@@ -97,6 +99,9 @@ export function createSourceControlSessionLookup(
       (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
     rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
     setOriginMuted: async args => (await resolve(args.sessionId))?.sourceControl.sessions.setOriginMuted(args),
+    approveFollowUp: async args => (await resolve(args.sessionId))?.sourceControl.sessions.approveFollowUp(args),
+    setFollowUpUsed: async args =>
+      (await resolve(args.sessionId))?.sourceControl.sessions.setFollowUpUsed(args) ?? false,
     markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
     markFirstMeaningfulExec: async args =>
       (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
