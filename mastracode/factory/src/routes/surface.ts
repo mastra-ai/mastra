@@ -931,9 +931,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
-          integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
-            integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
-          ),
+          integrations: (deps.integrations ?? []).flatMap(({ integration }) => [
+            ...(integration.intake ? [{ id: integration.id, intake: integration.intake }] : []),
+            ...(integration.additionalIntakes ?? []),
+          ]),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.knowledgeEnabled
