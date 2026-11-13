@@ -1,4 +1,5 @@
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { imagePolicies } from '../support/image-configuration.js';
 import { createImageApplication } from '../support/image-application.js';
 import { fork } from 'node:child_process';
 import { billingPolicySchema } from '../../src/billing/policy-configuration.js';
@@ -210,14 +211,11 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     const configuration = {
       ...invalid.configuration,
       resourcePolicies: [
-        { ...invalid.configuration.resourcePolicies[0], id: 'weather-agent' },
+        imagePolicies[0],
         {
-          id: 'weather-report',
-          kind: 'workflow',
-          operations: ['start', 'resume', 'cancel'],
+          ...imagePolicies[1],
           policy: {
-            version: 'invalid-budget',
-            charge: { type: 'credits', meter: 'credits', units: 2 },
+            ...imagePolicies[1].policy,
             reservationBudget: { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 5000 },
           },
         },
@@ -238,6 +236,32 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       }).then(app => app.close()),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
     expect(invalid.requests).toEqual([]);
+    const validConfiguration = {
+      ...configuration,
+      resourcePolicies: [
+        configuration.resourcePolicies[0],
+        {
+          ...configuration.resourcePolicies[1],
+          policy: {
+            ...configuration.resourcePolicies[1].policy,
+            reservationBudget: { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 2_000_000 },
+          },
+        },
+      ],
+    };
+    const validApplication = await createImageApplication({
+      environment: {
+        BILLING_PROVIDER: 'autumn',
+        BILLING_MODE: 'production',
+        BILLING_JWT_CONFIGURATION: JSON.stringify(invalid.jwtConfiguration),
+        BILLING_DATABASE_URL: invalid.database.url,
+        BILLING_PROJECT_ROOT: invalid.database.directory,
+        BILLING_CONFIGURATION: JSON.stringify(validConfiguration),
+        OPENAI_API_KEY: 'controlled',
+      },
+      billingProvider: await AutumnBillingProvider.open({ url: invalid.database.url }, invalid.options),
+    });
+    await validApplication.close();
 
     const f = await fixture();
     f.behavior.balance = 3;
