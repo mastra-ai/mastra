@@ -27,7 +27,6 @@ import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
-  CyberRefusalHandler,
   isBadRequestError,
   ProviderHistoryCompat,
   StreamErrorRetryProcessor,
@@ -70,6 +69,7 @@ import {
   getDynamicModel,
   getGoalJudgeModel,
   resolveModel,
+  resolveRequestThinkingLevel,
 } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -94,6 +94,7 @@ import {
   isStreamCutAfterResponse,
   MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
+import { MastraCodeCyberRefusalHandler } from './auth/cyber-refusal-fallback.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
@@ -1246,8 +1247,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // the resolver below: the resolver runs before every LLM call, and rebuilding
   // stateful processors per request would reset them.
   const staticConfiguredInputProcessors = Array.isArray(config?.inputProcessors) ? config.inputProcessors : [];
+  // One instance in the input, output and error lanes: the output and error
+  // lanes see the refusal, the input lane runs the rest of the turn on the
+  // fallback model.
+  const cyberRefusals = new MastraCodeCyberRefusalHandler({
+    resolveModel: async (modelId, requestContext) => {
+      const controller = requestContext.get('controller') as
+        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+        | undefined;
+      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+      const thinkingLevel = resolveRequestThinkingLevel(
+        modeless ? { state: controller?.state } : controller,
+        config?.settingsPath,
+        hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.({ requestContext }),
+      );
+      return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
+    },
+  });
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...staticConfiguredInputProcessors,
+    cyberRefusals,
     new PlanRejectionAbortProcessor(),
     ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
@@ -1555,7 +1574,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const resolveProcessors = (configured: OutputProcessor[]) => [
         // Anthropic cyber refusals finish a step instead of throwing, so they are
         // handled here; OpenAI's throw and are handled in the error lane below.
-        new CyberRefusalHandler(),
+        cyberRefusals,
         ...configured,
         ...readPluginProcessors().output.map(entry => entry.value),
         ...(pluginSignalLane?.getOutputProcessors() ?? []),
@@ -1579,7 +1598,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // Same ordering reason: OpenAI surfaces some cyber refusals as retryable
       // 5xx errors, and a blind retry would resend the request without the
       // `continue` nudge and spend the one retry this handler allows.
-      new CyberRefusalHandler(),
+      cyberRefusals,
       new StreamErrorRetryProcessor({
         matchers: [
           // Account rotation owns a stream the provider cut after accepting the

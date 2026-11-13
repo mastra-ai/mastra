@@ -1117,6 +1117,59 @@ describe('model-route fallback parts', () => {
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
   });
 
+  it('does not announce a hop when the session model is not the route head', async () => {
+    // getDynamicModel gives core one model here (the session model isn't
+    // route[0]), so a hop announced now would point at a model core can't reach.
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'cerebras/llama-3.3-70b',
+      entries: [
+        { id: 'pack-a', label: 'A', modelId: 'anthropic/claude-sonnet-4-5' },
+        { id: 'pack-b', label: 'B', modelId: 'cerebras/llama-3.3-70b' },
+        { id: 'pack-c', label: 'C', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const args = makeArgs({
+      error: apiError(500, { url: 'https://api.cerebras.ai/v1/chat/completions' }),
+      requestContext: route.requestContext,
+    });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    await processor.processAPIError(args as never);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toBeUndefined();
+  });
+
+  it('does not announce a hop when the pending entry and pending model disagree', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-sonnet-4-5',
+      entries: [
+        { id: 'pack-a', label: 'A', modelId: 'anthropic/claude-sonnet-4-5' },
+        { id: 'pack-b', label: 'B', modelId: 'cerebras/llama-3.3-70b' },
+        { id: 'pack-c', label: 'C', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    // Pending says "run pack-b" but names another model, so getDynamicModel
+    // runs that model alone.
+    route.state.mastracodePendingModelFallback = {
+      fromEntryId: 'pack-a',
+      toEntryId: 'pack-b',
+      toModelId: 'cerebras/qwen-3-32b',
+      threadId: 'thread-1',
+      reason: 'persistent-outage',
+      at: '2026-11-02T00:00:00.000Z',
+    };
+    const args = makeArgs({
+      error: apiError(500, { url: 'https://api.cerebras.ai/v1/chat/completions' }),
+      requestContext: route.requestContext,
+    });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    await processor.processAPIError(args as never);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+  });
+
   it('throws TripWire for a never-rotate error while a route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({

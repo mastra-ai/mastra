@@ -27,11 +27,13 @@ export function removeCustomPackFromSettings(settings: GlobalSettings, packId: s
     settings.onboarding.modePackId = null;
   }
 
-  const fallbacks = settings.models.packFallbacks ?? {};
-  settings.models.packFallbacks = Object.fromEntries(
-    Object.entries(fallbacks).filter(
-      ([sourcePackId, targetPackId]) => sourcePackId !== packId && targetPackId !== packId,
-    ),
-  );
+  const withoutPack = (fallbacks: Record<string, string> | undefined) =>
+    Object.fromEntries(
+      Object.entries(fallbacks ?? {}).filter(
+        ([sourcePackId, targetPackId]) => sourcePackId !== packId && targetPackId !== packId,
+      ),
+    );
+  settings.models.packFallbacks = withoutPack(settings.models.packFallbacks);
+  settings.models.packCyberFallbacks = withoutPack(settings.models.packCyberFallbacks);
   delete settings.models.packAccountPreferences?.[packId];
 }
