@@ -9,6 +9,13 @@ export type MastraConnectErrorCode =
   | 'unsupported_credential_type'
   | 'no_active_connection'
   | 'platform_error'
+  // A `ConnectClient` call exceeded its `timeoutMs`.
+  | 'timeout'
+  // The events service rejected the resume cursor (expired or out of range).
+  // Restart the subscription without a cursor and reconcile.
+  | 'invalid_cursor'
+  // A response did not match the documented contract.
+  | 'invalid_response'
   // Raised at tool-execute time when the caller supplies a connection_name
   // that does not match any active connection for the provider. Recovery is
   // to call `<provider>__list_connections` and retry with a valid name.
@@ -29,8 +36,23 @@ export class MastraConnectError extends Error {
    * carries an HTTP status.
    */
   readonly response?: { status: number };
+  /**
+   * The platform's RFC-7807 problem `type` (for example
+   * `connection_needs_reauth`). Only set when the platform itself produced the
+   * error, so a provider error that happens to carry a `type` field is never
+   * mistaken for a platform condition.
+   */
+  readonly problemCode?: string;
+  /**
+   * Whether the error came from the Mastra platform itself or was passed
+   * through from the upstream provider by the connection proxy. Unset for
+   * errors raised client-side (invalid options, transport failures).
+   */
+  readonly source?: MastraConnectErrorSource;
+  /** Delay the server asked for via `Retry-After`, on 429 and 503 responses. */
+  readonly retryAfterMs?: number;
 
-  constructor(code: MastraConnectErrorCode, message: string, options?: { status?: number; detail?: string }) {
+  constructor(code: MastraConnectErrorCode, message: string, options?: MastraConnectErrorOptions) {
     super(message);
     this.name = 'MastraConnectError';
     this.code = code;
@@ -39,7 +61,37 @@ export class MastraConnectError extends Error {
     if (typeof options?.status === 'number') {
       this.response = { status: options.status };
     }
+    if (options?.problemCode) this.problemCode = options.problemCode;
+    if (options?.source) this.source = options.source;
+    if (options?.retryAfterMs !== undefined) this.retryAfterMs = options.retryAfterMs;
   }
+}
+
+export type MastraConnectErrorSource = 'platform' | 'provider';
+
+export interface MastraConnectErrorOptions {
+  status?: number;
+  detail?: string;
+  problemCode?: string;
+  source?: MastraConnectErrorSource;
+  retryAfterMs?: number;
+}
+
+/**
+ * Reads `Retry-After` from a 429 or 503 response. The header is either a
+ * number of seconds or an HTTP date; anything else (or any other status)
+ * yields undefined.
+ */
+export function parseRetryAfterMs(response: Response, now: number = Date.now()): number | undefined {
+  if (response.status !== 429 && response.status !== 503) return undefined;
+  const value = response.headers.get('retry-after')?.trim();
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value) * 1000;
+  // HTTP dates always name a weekday (RFC 9110); this keeps `Date.parse` from accepting bare numbers like "1.5".
+  if (!/^[a-z]{3,9},? /i.test(value)) return undefined;
+  const date = Date.parse(value);
+  if (Number.isNaN(date)) return undefined;
+  return Math.max(0, date - now);
 }
 
 /**
@@ -78,6 +130,7 @@ function extractFirstArrayMessage(errors: unknown[]): string | undefined {
 }
 
 interface ProblemJson {
+  type?: string;
   title?: string;
   status?: number;
   detail?: string;
@@ -100,7 +153,20 @@ interface ProblemJson {
  */
 export async function extractProblemDetail(
   response: Response,
-): Promise<{ detail?: string; code?: string; isProblemJson: boolean }> {
+  secret?: string,
+): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
+  const problem = await readProblemDetail(response);
+  // A server that echoes the request's bearer token must not leak it into
+  // error messages and logs.
+  if (secret && problem.detail?.includes(secret)) {
+    return { ...problem, detail: problem.detail.split(secret).join('[REDACTED]') };
+  }
+  return problem;
+}
+
+async function readProblemDetail(
+  response: Response,
+): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
   const contentType = response.headers.get('content-type') ?? '';
   // Platform-originated errors are identified strictly by the RFC-7807 content
   // type. A provider error body that merely *looks* problem-shaped (e.g.
@@ -117,36 +183,38 @@ export async function extractProblemDetail(
           ? data.error.code
           : undefined;
       const code = typeof data.code === 'string' ? data.code : undefined;
+      // The RFC-7807 problem type; the platform's machine-readable condition.
+      const type = typeof data.type === 'string' && data.type ? data.type : undefined;
       for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
         if (typeof value === 'string' && value) {
-          return { detail: truncate(value), code, isProblemJson };
+          return { detail: truncate(value), code, type, isProblemJson };
         }
         // OpenAI and similar providers nest the message: `{ "error": { "message": "..." } }`.
         if (field === 'error' && value && typeof value === 'object') {
           const message = value.message;
           if (typeof message === 'string' && message) {
-            return { detail: truncate(message), code, isProblemJson };
+            return { detail: truncate(message), code, type, isProblemJson };
           }
         }
       }
       // Jira: `{ errorMessages: ["..."], errors: {} }`.
       if (Array.isArray(data.errorMessages)) {
         const message = data.errorMessages.find(entry => typeof entry === 'string' && entry);
-        if (typeof message === 'string') return { detail: truncate(message), code, isProblemJson };
+        if (typeof message === 'string') return { detail: truncate(message), code, type, isProblemJson };
       }
       if (Array.isArray(data.errors)) {
         const message = extractFirstArrayMessage(data.errors);
-        if (message) return { detail: truncate(message), code, isProblemJson };
+        if (message) return { detail: truncate(message), code, type, isProblemJson };
       } else if (data.errors && typeof data.errors === 'object') {
         // Jira: `{ errorMessages: [], errors: { summary: "Field required" } }`.
         const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
-        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, isProblemJson };
+        if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, type, isProblemJson };
       }
       // Graph sometimes returns an empty message (e.g. a 401 `UnknownError`);
       // its code is then the only diagnostic it offers.
-      if (nestedCode) return { detail: truncate(nestedCode), code, isProblemJson };
-      return { code, isProblemJson };
+      if (nestedCode) return { detail: truncate(nestedCode), code, type, isProblemJson };
+      return { code, type, isProblemJson };
     }
   } catch {
     // Non-JSON body: fall through without echoing it.

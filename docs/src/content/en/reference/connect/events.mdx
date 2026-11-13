@@ -1,0 +1,233 @@
+---
+title: 'Reference: EventsClient | Connect'
+description: 'API reference for EventsClient in @mastra/connect: subscribe to a Mastra platform project topic, receive provider events from connections, and resume from a cursor without gaps.'
+packages:
+  - '@mastra/connect'
+---
+
+# EventsClient
+
+`EventsClient` reads a Mastra platform project's topics from the events service as a stream. Its main use is the `connect` topic, which carries the webhooks your project's connections receive, such as a new Linear issue or a GitHub pull request. Use it to react to provider changes as they happen instead of polling.
+
+The client reconnects on its own and resumes from the last event it delivered. Give it a cursor store and it saves each event you finish handling, so a restarted process resumes where it stopped.
+
+## Usage example
+
+```typescript title="src/events.ts"
+import { EventsClient } from '@mastra/connect'
+
+const events = new EventsClient()
+const subscription = events.connectEvents({
+  cursorStore: {
+    load: () => db.get('events-cursor'),
+    save: cursor => db.set('events-cursor', cursor),
+  },
+  onGap: () => resyncFromProviders(),
+})
+
+for await (const event of subscription) {
+  if (!event.unverified) {
+    await handle(event.integrationId, event.eventType, event.payload)
+  }
+}
+```
+
+The subscription saves an event when your loop asks for the next one, including when your loop body finishes after the subscription closed. If handling an event throws, or you `break` out of the loop, that event isn't saved and is delivered again after a restart. An error thrown by `load()`, `save()`, or `onGap` ends the subscription and is thrown from the loop.
+
+A [`ConnectClient`](/reference/connect/connect-client) exposes the same client as `connect.events`, sharing its credentials and project.
+
+## Constructor parameters
+
+`new EventsClient(options?)` accepts every [`ConnectClientOptions`](/reference/connect/tools#connectclientoptions) field (`accessToken`, `orgId`, `projectId`, `resourceId`, `fetch`), plus:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'eventsUrl',
+    type: 'string',
+    description:
+      'Events service base URL. Falls back to `MASTRA_EVENTS_API_URL`, then `https://events.us.mastra.ai` or `https://events.eu.mastra.ai` from `MASTRA_PLATFORM_REGION`, then `https://events.mastra.ai`.',
+    isOptional: true,
+  },
+  {
+    name: 'reconnectDelayMs',
+    type: 'number',
+    description:
+      'First reconnect delay. Later attempts double it, with random jitter. Defaults to the delay the server suggests.',
+    isOptional: true,
+    defaultValue: '1000',
+  },
+  {
+    name: 'maxReconnectDelayMs',
+    type: 'number',
+    description: "Longest delay between reconnect attempts, including a server's `Retry-After`.",
+    isOptional: true,
+    defaultValue: '30000',
+  },
+  {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    description:
+      "Reconnect when nothing arrives for this long. The server sends a keep-alive every 15 seconds. Time your code spends handling an event doesn't count.",
+    isOptional: true,
+    defaultValue: '45000',
+  },
+]}
+/>
+
+## Methods
+
+### `subscribe(topic, options?)`
+
+Subscribes to a project topic and returns an `EventSubscription<TopicEvent>`. The connection opens when you start iterating. Throws `invalid_options` for an invalid topic or cursor, and `missing_project_id` when no project is configured.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'topic',
+    type: 'string',
+    description: 'Topic name: lowercase letters, digits, and hyphens, starting with a letter, up to 63 characters.',
+  },
+  {
+    name: 'options.after',
+    type: 'string',
+    description:
+      'Resume after this event ID. Takes precedence over `cursorStore`. Omit it, with no stored cursor, to receive only events published from now on.',
+    isOptional: true,
+  },
+  {
+    name: 'options.afterTimestamp',
+    type: 'number',
+    description:
+      'Start strictly after this time, in milliseconds since the epoch, when there is no event ID to resume from: no `after` and no cursor in `cursorStore`. Cannot be combined with `after`.',
+    isOptional: true,
+  },
+  {
+    name: 'options.cursorStore',
+    type: 'EventCursorStore',
+    description:
+      'Your storage for the last processed event: `{ load(), save(cursor) }`. `load()` runs when iteration starts and returns an `EventCursor` or nothing. A stored `eventId` resumes exactly, a stored `timestamp` alone resumes from that time. `save()` runs once each event is handled, and once `onGap` resolves, with the position delivery resumed from.',
+    isOptional: true,
+  },
+  {
+    name: 'options.onGap',
+    type: '(gap: EventStreamGap) => void | Promise<void>',
+    description:
+      "Called, and awaited, when events after the cursor can't be delivered. Resync from the provider when it runs. Without it, delivery continues past trimmed events silently.",
+    isOptional: true,
+  },
+  {
+    name: 'options.signal',
+    type: 'AbortSignal',
+    description: 'Ends the subscription when aborted.',
+    isOptional: true,
+  },
+  {
+    name: 'options.projectId',
+    type: 'string',
+    description: "Project whose topic to read. Defaults to the client's project.",
+    isOptional: true,
+  },
+]}
+/>
+
+Each `TopicEvent` has an `id`, a `timestamp` in milliseconds, and `fields`, a `Record<string, string>`.
+
+An `EventCursor` is `{ eventId?: string, timestamp?: number }`: the ID and time of the last processed event.
+
+An `EventStreamGap` describes events the subscription couldn't deliver:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'reason',
+    type: "'trimmed' | 'cursor_rejected'",
+    description:
+      '`trimmed`: the events after `after` are no longer stored. `cursor_rejected`: the events service rejected the stored ID, so delivery resumed from the time of the last processed event. Events from that millisecond arrive again, and events trimmed since then are missed.',
+  },
+  { name: 'after', type: 'string', description: 'The event ID delivery was asked to resume after.' },
+  { name: 'resumedAfter', type: 'string', description: "Where delivery resumed: the new stream's starting position." },
+]}
+/>
+
+### `connectEvents(options?)`
+
+Subscribes to the `connect` topic and returns an `EventSubscription<ConnectEvent>`. Takes the same options as `subscribe()`.
+
+<PropertiesTable
+  content={[
+  { name: 'id', type: 'string', description: 'Event ID. A `cursorStore` saves it once the event is handled.' },
+  { name: 'timestamp', type: 'number', description: 'When the event was recorded, in milliseconds since the epoch.' },
+  { name: 'connectionId', type: 'string', description: 'The connection that received the webhook.' },
+  { name: 'integrationId', type: 'string', description: "The connection's provider, such as `linear` or `jira`." },
+  {
+    name: 'eventType',
+    type: 'string',
+    description: 'The provider event, such as `Issue.create` or `pull_request.opened`.',
+  },
+  {
+    name: 'sourceEventId',
+    type: 'string | null',
+    description: "The provider's delivery ID, when the platform found one. Use it to skip duplicates.",
+  },
+  { name: 'payload', type: 'unknown', description: 'The webhook body, parsed from JSON.' },
+  {
+    name: 'payloadParseError',
+    type: 'true',
+    description: "Set when the body isn't valid JSON. `payload` is then the raw string.",
+    isOptional: true,
+  },
+  {
+    name: 'unverified',
+    type: 'boolean',
+    description:
+      "True when the platform couldn't verify the provider's signature. Don't act on such a payload; at most, re-fetch the resource from the provider.",
+  },
+]}
+/>
+
+## EventSubscription
+
+The subscription is an async iterable. Iterate it once.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cursor',
+    type: 'string | undefined',
+    description: 'ID of the last delivered event, or the starting position before the first event.',
+  },
+  {
+    name: 'ready',
+    type: 'Promise<string>',
+    description:
+      'Resolves to the starting position once the first stream opens. Rejects if the subscription fails or closes first.',
+  },
+  {
+    name: 'close()',
+    type: '() => void',
+    description: 'Ends the subscription. A loop waiting for the next event finishes without an error.',
+  },
+]}
+/>
+
+### Reconnects and errors
+
+The subscription reconnects, with growing delays, when the server ends the stream, the network fails, the service is unavailable, or the stream goes idle. A `Retry-After` on a 429 or 503 response sets the minimum wait. It resumes after `cursor`, so no events are skipped while the service still holds that position. If the service no longer holds it, `onGap` is called with reason `trimmed` before the events that follow.
+
+Delivery is at least once. After a reconnect or a restart, an event can arrive again, so make handlers safe to repeat. `sourceEventId` helps you detect duplicates.
+
+These errors end the subscription with a `MastraConnectError`:
+
+| Code | When |
+| - | - |
+| `invalid_cursor` | The server rejected the resume position, and the subscription couldn't resume by time: no time is known for that position, there is no `onGap` handler, or it already resumed by time and no event has arrived since. Clear the stored cursor (or subscribe without `after`) and catch up on anything you missed |
+| `unauthorized` | The token can't read the project's topics (401/403) |
+| `platform_error` | The project or topic wasn't found (404), or another request error |
+| `invalid_options` | The server rejected the subscription itself (400) with no resume position, such as a start time it doesn't accept, or the cursor store returned an invalid cursor |
+| `invalid_response` | An event didn't match the documented format |
+
+## Related
+
+- [Connect](/docs/mastra-platform/connect)
+- [`ConnectClient`](/reference/connect/connect-client)

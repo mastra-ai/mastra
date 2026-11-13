@@ -161,6 +161,31 @@ The [`channels()` reference](/reference/connect/channels) covers selecting provi
 
 Call [`credential()`](/reference/connect/credential) with a connection ID to get the connection's credential for your own code. Use this when you need a provider SDK or an API the tools don't cover.
 
+To manage connections from code, such as listing a project's connections or calling a provider through the proxy, use [`ConnectClient`](/reference/connect/connect-client).
+
+## Receive integration events
+
+When a connected provider sends a webhook, such as a new Linear issue or a GitHub pull request, the platform publishes it to the `connect` topic of every project linked to that connection. Read the topic with [`EventsClient`](/reference/connect/events) to react to changes as they happen instead of polling:
+
+```typescript title="src/events.ts"
+import { ConnectClient } from '@mastra/connect'
+
+const connect = new ConnectClient()
+
+const subscription = connect.events.connectEvents({
+  cursorStore: {
+    load: () => db.get('events-cursor'),
+    save: cursor => db.set('events-cursor', cursor),
+  },
+})
+
+for await (const event of subscription) {
+  console.log(event.integrationId, event.eventType)
+}
+```
+
+The cursor store saves each event once you've handled it, so a restart resumes after the last one. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
+
 ## Security model
 
 For tool calls, the platform adds credentials to requests on the server. Your application never receives them. The platform records each proxied call so you can audit and count tool use. It doesn't log tool arguments or results.
