@@ -1,3 +1,4 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../api/config';
@@ -7,6 +8,7 @@ import { availableModelsQueryOptions } from '../../../../hooks/useAvailableModel
 import { providersQueryOptions } from '../../../../hooks/use-providers';
 import { useLinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useSetDefaultModel } from '../../../../hooks/use-default-model';
+import { IntakeBindingConflictError } from '../../factory/services/intake';
 import {
   createFactoryProject,
   deleteFactoryProject,
@@ -15,6 +17,7 @@ import {
   unlinkRepository,
   updateFactoryDefaultModel,
 } from '../services/github';
+import { applyCodeHostIntake } from '../services/onboardingIntake';
 import {
   clearOnboardingFlow,
   completeOnboardingSchema,
@@ -33,6 +36,20 @@ async function findPendingFactory(baseUrl: string, pendingId: string) {
     if (error instanceof Error && 'status' in error && (error.status === 404 || error.status === 403)) return undefined;
     throw error;
   }
+}
+
+/**
+ * The Factory exists and its repository is linked by now, so a secondary intake failure must not
+ * strand the user in onboarding: warn, and leave them to pick sources in Settings › Intake.
+ */
+function warnIntakeNotApplied(error: unknown) {
+  if (error instanceof IntakeBindingConflictError) {
+    toast.warning('This project already feeds another Factory', {
+      description: 'Choose sources in Settings › Intake to route some of its issues here.',
+    });
+    return;
+  }
+  toast.warning("Issues won't sync yet", { description: 'Choose sources in Settings › Intake.' });
 }
 
 export function useCompleteFactorySetup({ local }: { local: boolean }) {
@@ -101,6 +118,13 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       await Promise.all([
         updateFactoryDefaultModel(baseUrl, factory.id, plan.factoryModelId),
         plan.personalModelId ? setPersonalDefault.mutateAsync(plan.personalModelId) : undefined,
+        // Read from the raw draft: the completion schema strips fields it doesn't know.
+        // Read from the raw draft: the completion schema strips fields it doesn't know.
+        applyCodeHostIntake(baseUrl, {
+          factoryProjectId: factory.id,
+          repository: repo,
+          enabled: draft.codeHostSync !== false,
+        }).catch(warnIntakeNotApplied),
       ]);
       return factory.id;
     },

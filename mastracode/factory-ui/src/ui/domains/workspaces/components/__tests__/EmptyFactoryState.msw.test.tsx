@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
+import { fetchIntakeConfig } from '../../../factory/services/intake';
 import type { GitLabProject } from '../../../factory/services/gitlab';
 import {
   ONBOARDING_FACTORY_KEY,
@@ -171,6 +172,11 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
       }
       return HttpResponse.json({ config: body });
     }),
+    // A GitLab project is routed to the new Factory on its way in, which is what the board reads.
+    http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
+      writes.push({ path: 'routing', body: await request.json() });
+      return HttpResponse.json({ bindings: [] });
+    }),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
       writes.push({ path: 'model', body: await request.json() });
       if (failure === 'model' && !failed) {
@@ -277,9 +283,42 @@ describe('Draft Factory onboarding', () => {
       branch: 'develop',
     });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+    // A GitLab project only feeds the board once it is routed to the Factory it was picked for.
+    expect(writes.find(item => item.path === 'routing')?.body).toEqual({
+      integrationId: 'gitlab',
+      sourceId: 'gitlab-source',
+      factoryProjectId: 'fp-1',
+    });
     expect(readOnboardingDraft()).toEqual({});
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
   }, 20_000);
+
+  it('keeps the codebase repository out of intake when the Work step switch is off', async () => {
+    registerSetup();
+    const stored: Record<string, unknown> = {};
+    server.use(
+      // Intake config the server would serve afterwards, so the assertions read what Settings › Intake reads.
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: stored })),
+      http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+        Object.assign(stored, z.record(z.string(), z.unknown()).parse(await request.json()));
+        return HttpResponse.json({ config: stored });
+      }),
+    );
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: repo,
+      workConfirmed: true,
+      codeHostSync: false,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    // Linking selects the repository on its way in, so the switch only has to drop the selection;
+    // the organization-wide switch stays as linking left it.
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github).toEqual({ enabled: true, sourceIds: null });
+  });
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
     const writes = registerSetup();
