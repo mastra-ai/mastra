@@ -111,10 +111,15 @@ export class JiraRules {
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    // A card filed by hand from Settings › Intake holds the issue key, while the
+    // sweep names the issue by its id. Its browse URL names both the site and the key.
+    const itemsByUrl = new Map(
+      items.flatMap(item => (item.externalSource?.url ? [[item.externalSource.url, item] as const] : [])),
+    );
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
+      const relatedItem = itemsBySourceKey.get(issue.id) ?? itemsByUrl.get(issue.url);
       statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
