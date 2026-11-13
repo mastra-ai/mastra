@@ -8620,6 +8620,8 @@ export class Mastra<
         ...this.#activeEventedRuns,
         ...getActiveDurableAgentWorkflowExecutions(this),
         ...this.#durableRecoveryRechecksInFlight,
+        // A recovery pass still reading the store, for example a boot pass when a deploy stops the instance.
+        ...(this.#recoveryPass ? [this.#recoveryPass] : []),
       ].filter(run => !awaited.has(run));
       if (pendingRuns.length === 0) break;
       pendingRuns.forEach(run => awaited.add(run));

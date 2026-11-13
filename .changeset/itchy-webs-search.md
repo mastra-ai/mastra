@@ -27,6 +27,6 @@ const mastra = new Mastra({
 });
 ```
 
-Recovery is also faster when many runs are active: it lists runs without their step results and reads a run's snapshot only when it restarts it. With 3,000 active runs that another instance holds, among 30,000 finished runs, a call takes about 30 ms instead of 1.8 s on Postgres and 45 ms instead of 630 ms on LibSQL. A call made while another is still handing out restarts joins that call, and `shutdown()` waits, within `drainTimeout`, for the runs a recovery call is restarting.
+Recovery is also faster when many runs are active: it lists runs without their step results and reads a run's snapshot only when it restarts it. With 3,000 active runs that another instance holds, among 30,000 finished runs, a call takes about 30 ms instead of 1.8 s on Postgres and 45 ms instead of 630 ms on LibSQL. A call made while another is still handing out restarts joins that call, and `shutdown()` waits, within `drainTimeout`, for a recovery call in progress and the runs it is restarting.
 
 A default-engine nested run resumed directly now keeps its parent from being restarted while it runs. On stores without atomic status updates, it keeps itself from being restarted instead.
