@@ -41,6 +41,7 @@ export function attachLinearIssueReconciler(
     intake: linear.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
+    ...(context.runtime.keptCards ? { cards: context.runtime.keptCards } : {}),
     isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueId = item.workItem.metadata?.linearIssueId;

@@ -61,6 +61,7 @@ import {
   untilIdleHandlesBackgroundTask,
 } from '../loop/shared/stream-until-idle-helpers';
 import type { AgentLoopResumeClaim } from '../loop/types';
+import { withDefaultToolCallConcurrencyLimit } from '../loop/workflows/agentic-execution/tool-call-concurrency';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
 // `class DurableAgent extends Agent` with a TDZ error. The constructor is read
@@ -10092,7 +10093,7 @@ export class Agent<
     });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
-        defaultOptions as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
         (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<any> & {
         model?: DynamicArgument<MastraModelConfig>;
@@ -11067,7 +11068,7 @@ export class Agent<
     });
     const { options: mergedOptions, resolved: resolvedScopes } = await this.#resolveRunScopes(
       deepMerge(
-        defaultOptions as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(defaultOptions, streamOptions) as Record<string, unknown>,
         (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT> & {
         model?: DynamicArgument<MastraModelConfig>;
@@ -11417,7 +11418,7 @@ export class Agent<
     });
 
     const mergedStreamOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
+      withDefaultToolCallConcurrencyLimit(defaultOptions, streamOptions) as Record<string, unknown>,
       (withDefinedToolHooks(streamOptions) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
     validateModelTimeoutSettings(mergedStreamOptions.modelSettings?.timeout);
@@ -11657,7 +11658,7 @@ export class Agent<
     });
 
     const mergedOptions = deepMerge(
-      defaultOptions as Record<string, unknown>,
+      withDefaultToolCallConcurrencyLimit(defaultOptions, options) as Record<string, unknown>,
       (withDefinedToolHooks(options) ?? {}) as Record<string, unknown>,
     ) as typeof defaultOptions & { model?: DynamicArgument<MastraModelConfig> };
     validateModelTimeoutSettings(mergedOptions.modelSettings?.timeout);

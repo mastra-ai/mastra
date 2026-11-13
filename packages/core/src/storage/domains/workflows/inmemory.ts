@@ -195,6 +195,33 @@ function deepCloneForRun(value: unknown, seen: WeakMap<object, unknown>): unknow
   return out;
 }
 
+/**
+ * A snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`.
+ */
+function summarySnapshot(snapshot: unknown): WorkflowRunState {
+  const source = (snapshot !== null && typeof snapshot === 'object' ? snapshot : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
+}
+
 export class WorkflowsInMemory extends WorkflowsStorage {
   private db: InMemoryDB;
 
@@ -376,6 +403,23 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return this.ownershipRecord(runId);
   }
 
+  /** Reads every record in one pass, so the batch sees a single moment of the store. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    for (const runId of runIds) {
+      const record = this.ownershipRecord(runId);
+      if (record) {
+        records.set(runId, record);
+      }
+    }
+
+    return records;
+  }
+
+  /**
+   * Merges one step's result into a v1 run's snapshot and returns the run's step results.
+   * Moves the run's `updatedAt`.
+   */
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -422,14 +466,21 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
+    // Like the persistent stores, this write moves `updatedAt`, so it tells when the run last made progress.
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
+      updatedAt: new Date(),
     });
 
     return cloneRunData(context);
   }
 
+  /**
+   * Patches a run's state, v1 or storage v2. With `opts.expectedStatus`, only when the stored
+   * status matches. Returns the updated snapshot, or undefined when nothing was written. A write
+   * moves the run's `updatedAt`.
+   */
   async updateWorkflowState({
     workflowName,
     runId,
@@ -453,6 +504,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
         return;
       }
       record.header = { ...record.header, ...cloneRunData(patch) };
+      record.updatedAt = new Date();
       return cloneRunData(this.materializedRow(key)!.snapshot);
     }
     if (storageVersion === 2) {
@@ -490,6 +542,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
+      updatedAt: new Date(),
     });
 
     return snapshot;
@@ -579,6 +632,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return cloneRunData(steps as Record<string, StepResult<any, any, any, any>>);
   }
 
+  /**
+   * Patches a storage v2 run's header. With `opts.expectedStatus`, only when the stored status
+   * matches. Returns the updated header, or undefined when the run isn't stored or the status
+   * didn't match. A write moves the run's `updatedAt`.
+   */
   async updateWorkflowRunHeader({
     workflowName,
     runId,
@@ -596,6 +654,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const { expectedStatus, ...patch } = opts;
     if (!matchesExpectedWorkflowStatus(record.header.status, expectedStatus)) return;
     record.header = { ...record.header, ...cloneRunData(patch) };
+    record.updatedAt = new Date();
     return {
       header: cloneRunData(record.header),
       lastSeq: record.lastSeq,
@@ -847,6 +906,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return snapshot ? cloneRunData(snapshot) : null;
   }
 
+  /**
+   * Lists v1 and v2 runs, newest first. With `summary`, each returned snapshot keeps only its
+   * status, timestamp and parent run, and the stored snapshot is not cloned.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -856,6 +919,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     resourceId,
     threadId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     if (page !== undefined && page < 0) {
       throw new Error('page must be >= 0');
@@ -932,16 +996,26 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       runs = runs.slice(start, end);
     }
 
-    // Deserialize snapshot if it's a string
-    const parsedRuns = runs.map((run: any) => ({
-      ...run,
-      snapshot: typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : cloneRunData(run.snapshot),
-      createdAt: new Date(run.createdAt),
-      updatedAt: new Date(run.updatedAt),
-      runId: run.run_id,
-      workflowName: run.workflow_name,
-      resourceId: run.resourceId,
-    }));
+    const parsedRuns = runs.map((run: any) => {
+      // A parsed string is already a copy; a stored object is cloned unless summary mode reduces
+      // it. The reduction comes last because the status and thread filters read the full snapshot.
+      let snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+      if (summary) {
+        snapshot = summarySnapshot(snapshot);
+      } else if (typeof run.snapshot !== 'string') {
+        snapshot = cloneRunData(snapshot);
+      }
+
+      return {
+        ...run,
+        snapshot,
+        createdAt: new Date(run.createdAt),
+        updatedAt: new Date(run.updatedAt),
+        runId: run.run_id,
+        workflowName: run.workflow_name,
+        resourceId: run.resourceId,
+      };
+    });
 
     return { runs: parsedRuns as WorkflowRun[], total };
   }
