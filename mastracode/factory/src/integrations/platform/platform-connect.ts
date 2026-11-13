@@ -49,26 +49,6 @@ export function connectProxyFetch(connect: ConnectClient): typeof globalThis.fet
   };
 }
 
-/**
- * Calls a platform route that answers with a redirect and returns its
- * `Location`. Any other answer throws a {@link MastraConnectError}.
- */
-export async function platformRedirectLocation(
-  connect: ConnectClient,
-  method: ConnectRequestMethod,
-  path: string,
-): Promise<string> {
-  const response = await connect.fetchRaw(method, path);
-  const location = response.status >= 300 && response.status < 400 ? response.headers.get('location') : null;
-  if (location) return location;
-  const detail = (await response.text().catch(() => '')).trim() || undefined;
-  throw new MastraConnectError(
-    'platform_error',
-    `Platform request failed (${response.status}) while calling ${method} ${path.split('?', 1)[0]}: expected a redirect.`,
-    { status: response.status, source: 'platform', ...(detail ? { detail } : {}) },
-  );
-}
-
 /** The HTTP status of a failed platform or proxied provider call. */
 export function platformErrorStatus(error: unknown): number | undefined {
   return error instanceof MastraConnectError ? error.status : undefined;

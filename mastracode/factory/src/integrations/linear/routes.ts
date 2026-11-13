@@ -59,6 +59,11 @@ export interface MountLinearRoutesOptions {
   listTeamsWithStatus?: () => Promise<{ teams: LinearTeam[]; workspaceErrors: LinearWorkspaceListingError[] }>;
   listConnectionWorkspaces?: () => Promise<LinearConnectionWorkspace[]>;
   /**
+   * Extra fields merged into the platform status reply, and the `reason` to
+   * report when no workspace is connected (e.g. `migration_required`).
+   */
+  platformStatus?: () => Promise<{ notConnectedReason?: string; fields: Record<string, unknown> }>;
+  /**
    * The integration instance providing OAuth + GraphQL access. Required for
    * everything beyond the disabled `status` route.
    */
@@ -256,15 +261,19 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
         }
 
         if (options.listConnectionWorkspaces) {
-          const workspaces = await options.listConnectionWorkspaces();
+          const [workspaces, platform] = await Promise.all([
+            options.listConnectionWorkspaces(),
+            options.platformStatus?.(),
+          ]);
           const active = workspaces.find(workspace => workspace.connected);
           return c.json({
+            ...platform?.fields,
             enabled: true,
             connected: Boolean(active),
             mode: 'platform',
             workspace: active ? { name: active.name, urlKey: active.urlKey } : null,
             workspaces,
-            reason: active ? 'ready' : 'not_connected',
+            reason: active ? 'ready' : (platform?.notConnectedReason ?? 'not_connected'),
             diagnostics: diagnostics(),
           });
         }

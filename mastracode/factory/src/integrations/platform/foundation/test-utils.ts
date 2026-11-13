@@ -13,17 +13,21 @@ export interface FakeConnection {
   status: string;
   accountLabel?: string | null;
   resourceId?: string | null;
+  connectedAt?: string | null;
 }
 
 export interface FakeReply {
   status: number;
   body?: unknown;
   contentType?: string;
+  headers?: Record<string, string>;
 }
 
 export interface FakePlatformRequest {
   method: string;
   path: string;
+  /** The JSON request body, when there was one. */
+  body?: unknown;
 }
 
 /** A subscription the fake events service received. */
@@ -60,7 +64,12 @@ export class FakePlatform {
   /** Replies for the next project listings, in place of the listing. */
   readonly nextListingReplies: FakeReply[] = [];
   readonly requests: FakePlatformRequest[] = [];
-  proxy: (connectionId: string, path: string, query: URLSearchParams) => FakeReply = () => ({ status: 200, body: {} });
+  proxy: (connectionId: string, path: string, query: URLSearchParams, body: unknown) => FakeReply = () => ({
+    status: 200,
+    body: {},
+  });
+  /** Routes a test adds, tried before the built-in ones; `undefined` falls through. */
+  route: (method: string, path: string, body: unknown) => FakeReply | undefined = () => undefined;
   /** `GET /v2/connections/:id/context` bodies, by connection id. */
   readonly contexts = new Map<string, unknown>();
   /** Events published per topic, oldest first. */
@@ -150,15 +159,17 @@ export class FakePlatform {
       this.#stream(decodeURIComponent(topic[1]!), req, res);
       return;
     }
-    for await (const _chunk of req) {
-      // Drain the body; the fake answers from its state alone.
-    }
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    const text = Buffer.concat(chunks).toString('utf8');
+    const body: unknown = text ? parseBody(text) : undefined;
     const method = req.method ?? 'GET';
     const url = new URL(req.url ?? '/', 'http://platform');
     const path = url.pathname;
-    this.requests.push({ method, path });
-    const reply = this.#route(method, path, url.searchParams);
+    this.requests.push({ method, path, ...(body === undefined ? {} : { body }) });
+    const reply = this.route(method, path, body) ?? this.#route(method, path, url.searchParams, body);
     res.statusCode = reply.status;
+    for (const [name, value] of Object.entries(reply.headers ?? {})) res.setHeader(name, value);
     if (reply.body === undefined) {
       res.end();
       return;
@@ -198,7 +209,7 @@ export class FakePlatform {
     res.on('close', () => this.#streams.delete(stream));
   }
 
-  #route(method: string, path: string, query: URLSearchParams): FakeReply {
+  #route(method: string, path: string, query: URLSearchParams, body: unknown): FakeReply {
     const project = `/v2/projects/${this.projectId}`;
     if (method === 'GET' && path === '/v2/connections') {
       return { status: 200, body: { connections: this.orgConnections } };
@@ -236,8 +247,16 @@ export class FakePlatform {
       return body === undefined ? problem(404, 'not_found', path) : { status: 200, body };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
-    if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query);
+    if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query, body);
     return problem(404, 'not_found', `${method} ${path}`);
+  }
+}
+
+function parseBody(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
   }
 }
 

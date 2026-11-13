@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeTeamSourceId, encodeSourceId, encodeTeamSourceId, parseSourceId } from './integration.js';
+import { decodeTeamSourceId, encodeSourceId, encodeTeamSourceId, parseSourceId } from './source-id.js';
 
 describe('Linear source id encoding', () => {
   it('round-trips a team source id', () => {
