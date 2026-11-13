@@ -758,6 +758,34 @@ describe('VCS Factory step', () => {
     expect(onDismissGithubCallback).toHaveBeenCalledOnce();
   });
 
+  it('clears an approval request when a refresh finds a new repository among a full recent list', async () => {
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...repo,
+      id: index + 1,
+      fullName: `octo/recent-${index}`,
+    }));
+    let refreshed = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('refresh')) refreshed = true;
+        // The granted repository was pushed most recently, so it displaces the oldest of the eight.
+        return HttpResponse.json({
+          repos: refreshed ? [{ ...repo, id: 100, fullName: 'octo/granted' }, ...recent.slice(0, 7)] : recent,
+        });
+      }),
+    );
+    const onDismissGithubCallback = vi.fn();
+    const { client } = renderStep({ githubCallback: { kind: 'requested' }, onDismissGithubCallback });
+
+    expect(await screen.findByRole('radio', { name: 'octo/recent-7' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh GitHub repositories' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/granted' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
   it('keeps a pending approval request up while other repositories are already listed', async () => {
     server.use(http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)));
     renderStep({ githubCallback: { kind: 'requested' } });

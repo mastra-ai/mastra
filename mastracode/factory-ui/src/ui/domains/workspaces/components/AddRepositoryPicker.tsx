@@ -17,7 +17,11 @@ import { Plus, RefreshCw, RotateCcw, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
+import {
+  RECENT_REPOSITORY_LIMIT,
+  useGithubReposQuery,
+  useRefreshGithubReposMutation,
+} from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
@@ -76,6 +80,8 @@ export function AddRepositoryPicker({
   const gitlabUnavailable = gitlabStatus.data?.reason === 'unavailable';
   const statusUnavailable = githubUnavailable || gitlabUnavailable;
   const canSearch = githubConnected || gitlabConfigured;
+  // With no query GitHub lists only the most recent repositories, so more may exist beyond them.
+  const recentListCapped = (reposQuery.data?.length ?? 0) >= RECENT_REPOSITORY_LIMIT;
   const waitingForSearch =
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
   const loadingResults = pending || (available.length === 0 && waitingForSearch && !error && !statusUnavailable);
@@ -159,7 +165,9 @@ export function AddRepositoryPicker({
               <Txt as="p" variant="caption" tone="muted">
                 {query
                   ? 'No repositories match your search.'
-                  : 'No more repositories available. Check repository access with Manage under Source control.'}
+                  : recentListCapped
+                    ? 'Your most recent repositories are already added. Search to find others.'
+                    : 'No more repositories available. Check repository access with Manage under Source control.'}
               </Txt>
             )}
           </div>

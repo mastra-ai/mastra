@@ -3,15 +3,17 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useQueryClient } from '@tanstack/react-query';
 import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
+import { queryKeys } from '../../../../api/keys';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import type { SourceControlRepository } from '../services/github';
+import type { GithubStatus, SourceControlRepository } from '../services/github';
 import { githubCallbackAwaitsAccess } from '../services/githubCallbackRecovery';
 import { gitLabUnavailableReason, githubUnavailableReason, repositoryHost } from '../services/sourceControlHosts';
 import type { SourceControlHost } from '../services/sourceControlHosts';
@@ -58,6 +60,7 @@ export function VcsFactoryStep({
   const debouncedQuery = useDebouncedValue(query, 750);
   // Clearing the box shows the full list at once; only typing waits for the debounce.
   const search = query === '' ? '' : debouncedQuery;
+  const queryClient = useQueryClient();
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
   const gitlabStatus = useGitLabStatusQuery();
@@ -97,11 +100,16 @@ export function VcsFactoryStep({
   const refreshGithub = () => {
     // The repository refresh re-syncs status itself; refetching here too cancels and repeats it.
     if (connected) {
-      const before = repos.data?.length ?? 0;
+      const listedIds = new Set(repos.data?.map(repository => repository.id));
+      const installationCount = githubStatus.data?.installations.length ?? 0;
       refreshRepos.mutate(undefined, {
-        // New repositories mean the access an approval or a Platform fix waited on has landed.
+        // A new installation or repository means the access an approval or a Platform fix waited on has landed.
+        // The list is capped to the most recent repositories, so its length alone can't show that.
         onSuccess: next => {
-          if (githubCallbackAwaitsAccess(githubCallback) && next.length > before) onDismissGithubCallback();
+          if (!githubCallbackAwaitsAccess(githubCallback)) return;
+          const status = queryClient.getQueryData<GithubStatus>(queryKeys.githubStatus());
+          const newInstallation = (status?.installations.length ?? 0) > installationCount;
+          if (newInstallation || next.some(repository => !listedIds.has(repository.id))) onDismissGithubCallback();
         },
       });
       return;
