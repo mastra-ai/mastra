@@ -661,7 +661,7 @@ export function assertObservabilityThreadQuerySupported(observabilityStore: Obse
  * works for stores built against older or duplicated `@mastra/core` installs
  * and for stores that predate {@link ObservabilityStorage.getFeatures}.
  */
-function implementsObservabilityStorageMethod(observabilityStore: object, method: string): boolean {
+export function implementsObservabilityStorageMethod(observabilityStore: object, method: string): boolean {
   if (Object.prototype.hasOwnProperty.call(observabilityStore, method)) return true;
 
   let resolvedOwner: object | undefined;

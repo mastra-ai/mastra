@@ -12,7 +12,6 @@ import { z } from 'zod';
 import { getFactoryAuthUser } from '../auth.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
-import { hasEveryWord, searchWords } from '../routes/work-item-selection.js';
 import { ensureFactorySourceSession, FactorySourceSessionResolutionError } from '../session/factory-session.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -20,6 +19,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
+import { hasEveryWord, searchWords } from '../work-items/search-words.js';
 import { propagateClientDisconnect } from './disconnect.js';
 import { factoryActivityEvent } from './events.js';
 

@@ -1355,6 +1355,23 @@ export class DurableAgent<
       globalRunRegistry.set(runId, registryEntry);
       await this.#publishReplayOwner(runId, { threadId, resourceId });
 
+      // Recovered runs run the agent's default lifecycle callbacks like stream() does, then the
+      // caller's. Both run (rather than the caller replacing the default) because
+      // recoverActiveRuns() and automatic recovery always pass their own bookkeeping callbacks.
+      const defaultOptions = await this.getDefaultOptions({ requestContext });
+      const onFinish = async (result: any) => {
+        await defaultOptions?.onFinish?.(result);
+        await options?.onFinish?.(result);
+      };
+      const onErrorCallback = async (error: any) => {
+        await defaultOptions?.onError?.(error);
+        await options?.onError?.(error);
+      };
+      const onAbortCallback = async (data: any) => {
+        await defaultOptions?.onAbort?.(data);
+        await options?.onAbort?.(data);
+      };
+
       // Persistent backends may retain chunks from the pre-crash segment.
       const recoverOffset = await this.#getPubsubOffset(runId);
       this.#assertRecoveryActive();
@@ -1375,15 +1392,15 @@ export class DurableAgent<
         onChunk: options?.onChunk,
         experimentalTransform: options?.experimentalTransform,
         onStepFinish: options?.onStepFinish,
-        onFinish: options?.onFinish,
+        onFinish,
         onStreamFinished: scheduleAutoCleanup,
         onError: async error => {
-          await options?.onError?.(error);
+          await onErrorCallback(error);
           scheduleAutoCleanup();
         },
         onAbort: async data => {
           try {
-            await options?.onAbort?.(data);
+            await onAbortCallback(data);
           } finally {
             scheduleAutoCleanup();
           }
@@ -4026,6 +4043,10 @@ export class DurableAgent<
       // (resumeGenerate) would immediately close on the replayed SUSPENDED.
       resumeOffset = await this.#getPubsubOffset(runId);
       persistedInput = current?.context?.input as DurableAgenticWorkflowInput | undefined;
+      // A parked run that lost its thread lease must hold it again before the segment runs. Later
+      // registration fails open, so take it here: a successor that now holds the thread refuses this
+      // resume instead of running beside it, and the run stays parked.
+      await agentThreadStreamRuntime.reacquireParkedRunLease(runId, this.getPubSub());
     } catch (error) {
       // The segment never started: release the run so it can be resumed again.
       await executionFence.settle(async () => {});

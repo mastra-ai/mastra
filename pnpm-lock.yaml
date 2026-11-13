@@ -2491,6 +2491,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -4408,6 +4411,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7010,9 +7016,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/duckdb':
+        specifier: workspace:*
+        version: link:../../stores/duckdb
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7265,6 +7277,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@mastra/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -7280,6 +7295,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)

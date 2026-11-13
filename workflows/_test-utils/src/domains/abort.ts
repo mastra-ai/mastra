@@ -120,7 +120,7 @@ export function createAbortWorkflows(ctx: WorkflowCreatorContext) {
   {
     const step1Action = vi.fn().mockImplementation(async () => {
       // This step should not run if abort is called immediately
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise(resolve => setTimeout(resolve, 50));
       return { result: 'step1' };
     });
 
@@ -156,7 +156,7 @@ export function createAbortWorkflows(ctx: WorkflowCreatorContext) {
       return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
           resolve({ result: 'should-not-complete' });
-        }, 5000);
+        }, 50);
 
         // Check if abort was signaled
         if (abortSignal) {
@@ -226,7 +226,7 @@ export function createAbortWorkflows(ctx: WorkflowCreatorContext) {
           const timeout = setTimeout(() => {
             nestedStepCompleted = true;
             resolve(undefined);
-          }, 5000);
+          }, 50);
 
           abortSignal.addEventListener('abort', () => {
             clearTimeout(timeout);
@@ -381,8 +381,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
       expect(mocks.step1Action).toHaveBeenCalledTimes(1);
     });
 
-    // This test has a 5s timeout in step2 waiting for abort signal
-    // Skip by default since it times out without actual abort trigger
+    // step2 waits 50 ms unless aborted; nothing aborts it here
     it.skipIf(skipTests.abortDuringStep)(
       'should provide abort signal that can be listened to during step execution',
       async () => {
@@ -411,7 +410,7 @@ export function createAbortTests(ctx: WorkflowTestContext, registry?: WorkflowRe
         const { workflow, resetMocks } = registry!['abort-nested-propagation-workflow']!;
         resetMocks?.();
 
-        // Without abort, the workflow should complete (but with 5s timeout in nested step)
+        // Without abort, the workflow completes after the nested step's 50 ms wait
         // This test validates the workflow definition is correct
         const result = await execute(workflow, { value: 5 });
 

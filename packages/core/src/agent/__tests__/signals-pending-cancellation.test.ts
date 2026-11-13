@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { MockMemory } from '../../memory/mock';
@@ -14,6 +14,14 @@ import {
   ControlledLeasePubSub,
   createFakeThreadRun,
 } from './signals-test-utils';
+
+// Turn ordering here relies on message-history's 10ms pause after each save; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Agent signals: pending cancellation', () => {
   beforeEach(() => {

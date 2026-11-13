@@ -15,7 +15,8 @@ import { ExternalLink } from 'lucide-react';
 import { useState } from 'react';
 
 import { useConnectToolsQuery } from '../../../../hooks/useConnectTools';
-import { isConnectToolsOffError, MASTRA_PLATFORM_URL } from '../../factory/services/platformConnect';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { isConnectToolsOffError, platformProjectConnectUrl } from '../../factory/services/platformConnect';
 import type { ConnectToolConnection } from '../../factory/services/platformConnect';
 import { SettingsSubsection } from './SettingsSubsection';
 import { RetryRow } from './common/ConnectionStateRows';
@@ -56,18 +57,18 @@ export function ConnectToolsSection() {
             onRetry={() => void query.refetch()}
           />
         </SettingsContainer>
-      ) : query.data.length === 0 ? (
+      ) : query.data.connections.length === 0 ? (
         <SettingsContainer>
-          <SettingsEmptyRow action={<ManageLink />}>
+          <SettingsEmptyRow action={<ManageLink projectId={query.data.projectId} />}>
             No connections are attached to this Factory's project yet.
           </SettingsEmptyRow>
         </SettingsContainer>
       ) : (
         <SettingsContainer>
-          <SettingsListHeader action={<ManageLink />}>
-            {query.data.length === 1 ? '1 connection' : `${query.data.length} connections`}
+          <SettingsListHeader action={<ManageLink projectId={query.data.projectId} />}>
+            {query.data.connections.length === 1 ? '1 connection' : `${query.data.connections.length} connections`}
           </SettingsListHeader>
-          {query.data.map(connection => (
+          {query.data.connections.map(connection => (
             <SettingsItem
               key={connection.id}
               media={<ProviderLogo connection={connection} />}
@@ -87,13 +88,11 @@ function statusLabel(status: string): string | undefined {
   return 'Unavailable';
 }
 
-function ManageLink() {
+function ManageLink({ projectId }: { projectId: string }) {
+  const auth = useFactoryAuth();
+  const href = platformProjectConnectUrl(projectId, auth.data?.user?.organizationId);
   return (
-    <Button
-      size="sm"
-      iconEnd={<ExternalLink />}
-      render={<a href={MASTRA_PLATFORM_URL} target="_blank" rel="noreferrer" />}
-    >
+    <Button size="sm" iconEnd={<ExternalLink />} render={<a href={href} target="_blank" rel="noreferrer" />}>
       Manage in Mastra Platform
     </Button>
   );

@@ -43,6 +43,14 @@ import type { MastraAuthMode } from '../constants';
 import { formatZodError, isZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
+import {
+  checkMCPAudience,
+  createMCPOAuthMetadataRoutes,
+  isMCPAudienceEnforced,
+  isMCPOAuthDiscoveryEnabled,
+  mcpWWWAuthenticate,
+  warnOnUnenforcedMCPAudience,
+} from '../mcp/oauth';
 import { resolveServerRoute } from '../mcp/route';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
@@ -56,6 +64,13 @@ export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-a
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { propagateRequestAbort } from './mcp-disconnect';
 export { BUILTIN_MCP_HTTP_ROUTE, resolveServerRoute } from '../mcp/route';
+export {
+  checkMCPAudience,
+  createMCPOAuthMetadataRoutes,
+  isMCPAudienceEnforced,
+  isMCPOAuthDiscoveryEnabled,
+  mcpWWWAuthenticate,
+} from '../mcp/oauth';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -906,8 +921,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
    * Auth for routes with `authTransport: 'bearer'` (the built-in MCP server): only the
    * `Authorization` header counts, always against `server.auth`. Studio client-type routing,
    * cookies, and the `apiKey` query parameter are ignored, so a browser session can't be used.
+   *
+   * 401s carry `WWW-Authenticate` pointing at the OAuth protected-resource metadata, and when
+   * `server.mcp.oauth.resource` is set the token audience must include it.
    */
-  private checkBearerRouteAuth(
+  private async checkBearerRouteAuth(
     route: ServerRoute,
     context: Parameters<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']>[1],
   ): ReturnType<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']> {
@@ -917,7 +935,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       const lower = name.toLowerCase();
       return lower === 'cookie' || lower === MASTRA_CLIENT_TYPE_HEADER ? undefined : context.getHeader(name);
     };
-    return this.checkRouteAuth(
+    const result = await this.checkRouteAuth(
       { ...route, authTransport: undefined },
       {
         ...context,
@@ -929,6 +947,33 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         }),
       },
     );
+
+    const discovery = isMCPOAuthDiscoveryEnabled(this.mastra);
+    if (!discovery && !isMCPAudienceEnforced(this.mastra)) return result;
+
+    const requestUrl = context.request?.url ?? `http://localhost${context.path}`;
+    const prefix = this.prefix ?? '';
+    if (result?.status === 401) {
+      if (!discovery) return result;
+      // RFC 6750 §3: no error code when the request carried no credentials.
+      const error = authorization?.trim() ? { error: 'invalid_token' } : undefined;
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, error);
+      return { ...result, headers: { ...result.headers, 'WWW-Authenticate': challenge } };
+    }
+
+    const user = context.requestContext.get(MASTRA_USER_KEY);
+    if (user !== undefined && !(await checkMCPAudience(this.mastra, user))) {
+      const challenge = mcpWWWAuthenticate(this.mastra, prefix, requestUrl, {
+        error: 'invalid_token',
+        error_description: 'The token audience does not include this MCP server',
+      });
+      return {
+        status: 401,
+        error: 'Invalid token audience',
+        headers: { ...result?.headers, 'WWW-Authenticate': challenge },
+      };
+    }
+    return result;
   }
 
   /**
@@ -1019,6 +1064,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       method: r.method.toUpperCase(),
       pattern: `${prefix}${r.path}`,
     }));
+
+    if (isMCPOAuthDiscoveryEnabled(this.mastra)) {
+      for (const route of createMCPOAuthMetadataRoutes(this.mastra, prefix)) {
+        publicRoutes.push({ method: route.method.toUpperCase(), pattern: route.path });
+      }
+    }
 
     return (path: string, method: string): boolean => {
       const upperMethod = method.toUpperCase();
@@ -1608,6 +1659,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       await this.registerRoute(this.app, resolveServerRoute(route, this.mastra, SERVER_ROUTES), {
         prefix: this.prefix,
       });
+    }
+
+    // OAuth discovery for the built-in MCP endpoint lives at the server root, outside the API prefix.
+    if (isMCPAudienceEnforced(this.mastra)) warnOnUnenforcedMCPAudience(this.mastra);
+    if (isMCPOAuthDiscoveryEnabled(this.mastra)) {
+      for (const route of createMCPOAuthMetadataRoutes(this.mastra, this.prefix ?? '')) {
+        await this.registerRoute(this.app, route, { prefix: '' });
+      }
     }
 
     if (this.openapiPath) {

@@ -11,7 +11,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { createMockModel, MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { MCPClient } from '@mastra/mcp';
+import { MCPClient, MCPServer } from '@mastra/mcp';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 
@@ -348,6 +348,28 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
             'tool_locked-tool',
             'tool_test-tool',
             'tool_whoami',
+            // memory + observability(_analytics): MockMemory agent and the default in-memory observability store.
+            'analyze_feedback',
+            'analyze_metrics',
+            'analyze_scores',
+            'clone_thread',
+            'create_thread',
+            'get_memory_status',
+            'get_observations',
+            'get_span',
+            'get_thread',
+            'get_trace',
+            'get_trace_trajectory',
+            'list_feedback',
+            'list_logs',
+            'list_messages',
+            'list_metric_names',
+            'list_scores',
+            'list_threads',
+            'list_traces',
+            'save_messages',
+            'search_memory',
+            'update_thread',
           ].sort(),
         );
       });
@@ -390,7 +412,11 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       it('narrows toolsets and read-only per request but never widens them', async () => {
         const agentsOnly = Object.keys(await listTools('owner-token', { path: '/api/mcp?toolsets=agents,bogus' }));
         expect(agentsOnly.sort()).toEqual(['call_agent', 'get_agent', 'list_agents']);
-        const readOnly = Object.keys(await listTools('owner-token', { headers: { 'x-mcp-readonly': '1' } }));
+        const readOnly = Object.keys(
+          await listTools('owner-token', {
+            headers: { 'x-mcp-readonly': '1', 'x-mcp-toolsets': 'agents,workflows,tools' },
+          }),
+        );
         // Read-only drops every execute-backed tool; registered tools fall back to list_tools/get_tool.
         expect(readOnly.sort()).toEqual([
           'get_agent',
@@ -841,6 +867,192 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       try {
         expect((await fetch(`${started.url}/api/mcp/v0/servers`)).status).toBe(200);
       } finally {
+        await started.close();
+      }
+    });
+  });
+
+  describe(`${suiteName} — Studio descriptor route`, () => {
+    const originalDev = process.env.MASTRA_DEV;
+    afterEach(() => {
+      if (originalDev === undefined) delete process.env.MASTRA_DEV;
+      else process.env.MASTRA_DEV = originalDev;
+    });
+
+    /** GET /api/mcp/builtin (or `path`) on a freshly served `mastra`. */
+    const describeOn = async (mastra: Mastra, headers: Record<string, string> = {}, path = '/api/mcp/builtin') => {
+      const started = await startServer(mastra);
+      try {
+        const response = await fetch(`${started.url}${path}`, { headers });
+        const text = await response.text();
+        return { status: response.status, text, body: text ? JSON.parse(text) : undefined };
+      } finally {
+        await started.close();
+      }
+    };
+
+    describe('when server.auth and server.rbac are configured', () => {
+      let server: Awaited<ReturnType<BuiltinMCPParityTestSuiteConfig['startServer']>>;
+      beforeAll(async () => {
+        server = await startServer(createParityMastra().mastra);
+      });
+      afterAll(async () => {
+        await server?.close();
+      });
+      const get = async (headers: Record<string, string>) => {
+        const response = await fetch(`${server.url}/api/mcp/builtin`, { headers });
+        const text = await response.text();
+        return { status: response.status, text, body: text ? JSON.parse(text) : undefined };
+      };
+
+      it('describes the endpoint, served toolsets, and auth to an mcp:read caller', async () => {
+        const { status, body } = await get({ authorization: 'Bearer owner-token' });
+        expect(status).toBe(200);
+        expect(body).toEqual({
+          enabled: true,
+          path: '/api/mcp',
+          mcpPackageInstalled: true,
+          // No editor, so no stored_agents; the in-memory store has an observability domain.
+          toolsets: expect.arrayContaining(['agents', 'workflows', 'tools', 'memory']),
+          readOnly: false,
+          auth: { type: 'protected', provider: null },
+        });
+        expect(body.toolsets).not.toContain('stored_agents');
+      });
+
+      it('names no agents, workflows, or tools', async () => {
+        const { text } = await get({ authorization: 'Bearer owner-token' });
+        for (const id of ['test-agent', 'locked-agent', 'test-workflow', 'locked-workflow', 'test-tool', 'whoami']) {
+          expect(text).not.toContain(id);
+        }
+      });
+
+      it('accepts Studio credentials (Studio header and cookie), unlike /api/mcp', async () => {
+        expect((await get({ authorization: 'Bearer viewer-token', 'x-mastra-client-type': 'studio' })).status).toBe(
+          200,
+        );
+        expect((await get({ cookie: 'mastra-token=owner-token' })).status).toBe(200);
+      });
+
+      it('refuses callers without mcp:read with 403, over bearer and Studio', async () => {
+        expect((await get({ authorization: 'Bearer no-mcp-token' })).status).toBe(403);
+        expect((await get({ authorization: 'Bearer no-mcp-token', 'x-mastra-client-type': 'studio' })).status).toBe(
+          403,
+        );
+        expect((await get({ cookie: 'mastra-token=no-mcp-token' })).status).toBe(403);
+      });
+
+      it('refuses unauthenticated callers with 401', async () => {
+        expect((await get({})).status).toBe(401);
+      });
+    });
+
+    // The descriptor reports "protected" whenever server.auth is set, so auth.public must not open the endpoint.
+    it('keeps the endpoint bearer-protected, and reported as protected, when auth.public lists its path', async () => {
+      delete process.env.MASTRA_DEV;
+      const auth = new SimpleAuth<TestUser>({ tokens: { ...USERS }, public: ['/api/mcp', '/api/mcp/builtin'] });
+      const started = await startServer(new Mastra({ logger: false, server: { auth } }));
+      try {
+        const initialize = (headers: Record<string, string>) =>
+          fetch(`${started.url}/api/mcp`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', ...headers },
+            body: JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              method: 'initialize',
+              params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'test', version: '1' } },
+            }),
+          });
+        expect((await initialize({})).status).toBe(401);
+        expect((await initialize({ authorization: 'Bearer owner-token' })).status).toBe(200);
+
+        expect((await fetch(`${started.url}/api/mcp/builtin`)).status).toBe(401);
+        const descriptor = await fetch(`${started.url}/api/mcp/builtin`, {
+          headers: { authorization: 'Bearer owner-token' },
+        });
+        expect(((await descriptor.json()) as { auth: unknown }).auth).toEqual({ type: 'protected', provider: null });
+      } finally {
+        await started.close();
+      }
+    });
+
+    it('reports open dev-only access under mastra dev without auth', async () => {
+      process.env.MASTRA_DEV = 'true';
+      const { status, body } = await describeOn(new Mastra({ logger: false }));
+      expect(status).toBe(200);
+      expect(body).toEqual({
+        enabled: true,
+        path: '/api/mcp',
+        mcpPackageInstalled: true,
+        // The default in-memory storage has an observability domain.
+        toolsets: ['agents', 'workflows', 'tools', 'observability', 'observability_analytics'],
+        readOnly: false,
+        auth: { type: 'open', devOnly: true },
+      });
+    });
+
+    it('reports open access that is not dev-only when enabled explicitly without auth', async () => {
+      delete process.env.MASTRA_DEV;
+      const { body } = await describeOn(new Mastra({ logger: false, server: { mcp: { enabled: true } } }));
+      expect(body.auth).toEqual({ type: 'open', devOnly: false });
+    });
+
+    it('reports only the reason in a production build without server.auth', async () => {
+      delete process.env.MASTRA_DEV;
+      const { status, body } = await describeOn(new Mastra({ logger: false }));
+      expect(status).toBe(200);
+      expect(body).toEqual({ enabled: false, disabledReason: 'production-without-auth' });
+    });
+
+    it('reports a server disabled by config', async () => {
+      process.env.MASTRA_DEV = 'true';
+      const { body } = await describeOn(new Mastra({ logger: false, server: { mcp: { enabled: false } } }));
+      expect(body).toEqual({ enabled: false, disabledReason: 'config' });
+    });
+
+    it('reports server.mcp.path, configured toolsets, and read-only', async () => {
+      process.env.MASTRA_DEV = 'true';
+      const { body } = await describeOn(
+        new Mastra({
+          logger: false,
+          server: { mcp: { path: '/tools-mcp', toolsets: ['tools', 'memory'], readOnly: true } },
+        }),
+      );
+      // memory is configured but no agent has memory, so it isn't served.
+      expect(body).toMatchObject({ path: '/api/tools-mcp', toolsets: ['tools'], readOnly: true });
+    });
+
+    it('reports the /mcp fallback when server.mcp.path collides with this route', async () => {
+      process.env.MASTRA_DEV = 'true';
+      const { body } = await describeOn(new Mastra({ logger: false, server: { mcp: { path: '/mcp/builtin' } } }));
+      expect(body.path).toBe('/api/mcp');
+    });
+
+    it("leaves a user MCP server with the id 'builtin' reachable", async () => {
+      process.env.MASTRA_DEV = 'true';
+      const ping = createTool({
+        id: 'ping',
+        description: 'Answers pong',
+        inputSchema: z.object({}),
+        execute: async () => ({ pong: true }),
+      });
+      const builtin = new MCPServer({ id: 'builtin', name: 'User builtin', version: '1.0.0', tools: { ping } });
+      const started = await startServer(new Mastra({ logger: false, mcpServers: { builtin } }));
+      const client = new MCPClient({
+        id: 'user-builtin-client',
+        servers: { user: { url: new URL(`${started.url}/api/mcp/builtin/mcp`) } },
+      });
+      try {
+        const servers = (await (await fetch(`${started.url}/api/mcp/v0/servers`)).json()) as {
+          servers: Array<{ id: string }>;
+        };
+        expect(servers.servers.map(s => s.id)).toEqual(['builtin']);
+        expect(Object.keys(await client.listTools())).toEqual(['user_ping']);
+        const descriptor = (await (await fetch(`${started.url}/api/mcp/builtin`)).json()) as { enabled: boolean };
+        expect(descriptor.enabled).toBe(true);
+      } finally {
+        await client.disconnect();
         await started.close();
       }
     });

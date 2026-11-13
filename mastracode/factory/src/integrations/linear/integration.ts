@@ -43,7 +43,6 @@ import { resolveLinearRules } from './default-rules.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
-import { attachLinearRules } from './rules.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
 const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
@@ -1174,7 +1173,6 @@ export class LinearIntegration implements FactoryIntegration {
       baseUrl: ctx.baseUrl,
       intake: ctx.storage.intake,
       projects: ctx.storage.projects,
-      ingestFactoryIssues: attachLinearRules(this, ctx),
       workItems: ctx.runtime?.workItems,
       boards: ctx.runtime?.boards,
     });

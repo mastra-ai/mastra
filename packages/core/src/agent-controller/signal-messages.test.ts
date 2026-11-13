@@ -478,8 +478,18 @@ describe('AgentController signal messages', () => {
       signal: createSignal({ type: 'user-message', contents: 'follow-up after abort' }),
     });
 
-    const signal = session.sendSignal({ content: 'follow-up after abort' });
-    await expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+    // The mocked subscription never reports idle, so the session waits out its
+    // post-abort teardown timeout (30s) before falling back to a new run. Fake only
+    // the timer so the test advances through that wait instead of sleeping it.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const signal = session.sendSignal({ content: 'follow-up after abort' });
+      const accepted = expect(signal.accepted).resolves.toEqual({ accepted: true, runId: undefined });
+      await vi.advanceTimersByTimeAsync(30_000);
+      await accepted;
+    } finally {
+      vi.useRealTimers();
+    }
 
     // buildToolsets is only called in the new-run (idle) branch, proving
     // the signal did NOT dispatch onto the dying run.

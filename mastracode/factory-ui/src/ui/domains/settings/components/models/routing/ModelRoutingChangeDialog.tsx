@@ -93,7 +93,7 @@ function RoutingSketch({ from, to }: { from: FactoryModelScope; to: FactoryModel
   return (
     <div aria-hidden="true" className="relative mx-auto aspect-[5/4] w-full max-w-sm">
       <OnboardingIllustration scene="accounts" mode={ACCOUNT_MODES[shown]} />
-      <OnboardingAccountsPreview step="model-setup" modelScope={shown} />
+      <OnboardingAccountsPreview showModels={false} modelScope={shown} />
     </div>
   );
 }

@@ -1889,6 +1889,17 @@ export class AgentThreadStreamRuntime {
   }
 
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    const record = state.threadRunsById.get(runId);
+    // A parked run calls neither the model nor tools, so there is nothing to stop, and aborting it would delete the
+    // snapshot it resumes from. It gets no lost fence either: its resumed tool calls would throw on it. Its resume
+    // must hold the lease again, so every resume calls reacquireParkedRunLease before it runs, which refuses the
+    // resume when a successor now holds the thread. The in-place continuation is dropped so the resume registers
+    // again. A run that is still suspending, or a partly resumed run whose sibling suspensions are pending, is still
+    // executing (its lifecycle is not 'suspended'), so it is stopped.
+    if (record?.lifecycle === 'suspended') {
+      record.continuation = undefined;
+      return;
+    }
     state.leaseLostRunIds.add(runId);
     // Tool calls the step already queued check the fence after this, so they must keep failing until the
     // run ends, not find no fence and run beside the successor.
@@ -1898,7 +1909,6 @@ export class AgentThreadStreamRuntime {
     state.leaseFences.set(runId, lost);
     setRunLeaseFence(runId, lost);
     const preparedRun = state.preparedRunsById.get(runId);
-    const record = state.threadRunsById.get(runId);
     // A step already running (a model request or a tool call) finishes, fails or is aborted first: stopping it
     // mid-way would lose its work, and the fence above already keeps the run from starting a tool. The run stops as
     // soon as the step settles, before another can start. One that never ends is stopped after a grace period, so it
@@ -4902,6 +4912,45 @@ export class AgentThreadStreamRuntime {
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
     return true;
+  }
+
+  /**
+   * A parked run whose lease lapsed keeps its record (its snapshot is still needed) but holds no
+   * lease, renewal or deadline. A resume can start executing before it re-registers, and non-strict
+   * registration runs on even when another owner holds the lease, so the resume must take the lease
+   * here, before it calls the model or tools. The lease is taken under the owner the run held it with,
+   * since its renewals use that owner. It is a no-op when this process has no parked record of the run
+   * for the thread, or the parked run still holds (and renews) its lease.
+   *
+   * @throws AgentThreadLeaseConflictError when another run now holds the thread, so the resume is
+   * refused and the run stays parked.
+   */
+  async reacquireParkedRunLease(runId: string, pubsub?: PubSub): Promise<void> {
+    const state = this.#getState(pubsub);
+    const record = state.threadRunsById.get(runId);
+    if (record?.lifecycle !== 'suspended' || state.leaseRenewalTimers.has(runId)) return;
+    const key = this.#threadKey(record.resourceId, record.threadId);
+    if (state.activeThreadRunIds.get(key) !== runId) return;
+    const resolvedPubSub = this.#getPubSub(pubsub);
+    const owner = record.leaseOwner ?? this.#threadLeaseOwner(resolvedPubSub, runId, record.generation);
+    const lease = await this.#acquireThreadLease(resolvedPubSub, key, runId, owner);
+    if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
+    // The run may have been aborted (and its record dropped) while the lease was being taken. Give back
+    // only this lease; a newer registration of the run owns and renews its own.
+    if (
+      state.threadRunsById.get(runId) !== record ||
+      record.lifecycle !== 'suspended' ||
+      state.activeThreadRunIds.get(key) !== runId
+    ) {
+      if (!state.threadRunsById.has(runId)) {
+        void this.#getLeaseProvider(resolvedPubSub)
+          .releaseLease(key, owner)
+          .catch(() => {});
+      }
+      return;
+    }
+    this.#startLeaseRenewal(resolvedPubSub, key, runId, owner);
+    record.leaseOwner = owner;
   }
 
   closeRunContinuation<OUTPUT>(ownerOutput: MastraModelOutput<OUTPUT>, pubsub?: PubSub): boolean {
