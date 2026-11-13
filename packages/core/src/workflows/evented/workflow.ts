@@ -2224,19 +2224,40 @@ export class EventedRun<
 
     // Dispatch-only callers do not own execution spans; the worker may run in
     // another process, so no local span or tracing registry entry is created here.
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.start',
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: requestContext.toJSON(),
-        actor,
-        initialState: initialStateToUse,
-        perStep,
-      },
+    // execute() still waits for the worker's finish event in the background so the
+    // workflow's onFinish/onError callbacks run, as they do for start(). (#29391)
+    let markDispatched!: () => void;
+    const dispatched = new Promise<void>(resolve => {
+      markDispatched = resolve;
     });
+
+    const execution = this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+      workflowId: this.workflowId,
+      runId: this.runId,
+      resourceId: this.resourceId,
+      graph: this.executionGraph,
+      serializedStepGraph: this.serializedStepGraph,
+      input: inputDataToUse,
+      initialState: initialStateToUse,
+      pubsub: this.mastra.pubsub,
+      retryConfig: this.retryConfig,
+      requestContext,
+      actor,
+      abortController: this.abortController,
+      perStep,
+      onDispatched: markDispatched,
+    });
+
+    // Surface subscribe/publish failures, but don't wait for the workflow to finish.
+    await Promise.race([dispatched, execution]);
+
+    // execute() only tracks the wait for the finish event. Nobody awaits this run's
+    // callbacks, so let shutdown() drain them too before it closes storage and pubsub.
+    const background = execution.catch(error => {
+      this.mastra?.getLogger()?.error(`[Workflow ${this.workflowId}] Background execution failed:`, error);
+    });
+    const releaseTracking = this.mastra.__trackEventedRun(background);
+    void background.finally(releaseTracking);
 
     // Return immediately without waiting for completion
     return { runId: this.runId };
