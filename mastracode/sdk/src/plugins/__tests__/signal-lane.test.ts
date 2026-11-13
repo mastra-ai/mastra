@@ -155,7 +155,7 @@ describe('PluginSignalLane', () => {
     expect(provider.polling).toBe(0);
     expect(provider.connectedAgents).toHaveLength(0);
     expect(lane.getInputProcessors()).toEqual([]);
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('already running'), undefined);
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('already running'), undefined, 'acme.demo');
   });
 
   it('refuses a second plugin contributing an already-live provider id', async () => {
@@ -169,7 +169,7 @@ describe('PluginSignalLane', () => {
     expect(first.polling).toBe(1);
     expect(second.polling).toBe(0);
     expect(processorIds(lane.getInputProcessors())).toEqual(['first-input']);
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('other.demo'), undefined);
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('other.demo'), undefined, 'other.demo');
   });
 
   it('isolates a provider that throws while starting, leaving its siblings live', async () => {
@@ -183,7 +183,7 @@ describe('PluginSignalLane', () => {
 
     expect(processorIds(lane.getInputProcessors())).toEqual(['healthy-signals-input']);
     expect(broken.stopped).toBe(1);
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error));
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error), 'acme.demo');
   });
 
   it('drops the processors of a provider whose getter throws, leaving its siblings contributing', async () => {
@@ -201,7 +201,11 @@ describe('PluginSignalLane', () => {
     // read before either lane is touched, so a throw cannot leave it half-contributed.
     expect(processorIds(lane.getInputProcessors())).toEqual(['healthy-signals-input']);
     expect(processorIds(lane.getOutputProcessors())).toEqual(['healthy-signals-output']);
-    expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to provide processors'), expect.any(Error));
+    expect(onError).toHaveBeenCalledWith(
+      expect.stringContaining('failed to provide processors'),
+      expect.any(Error),
+      'acme.demo',
+    );
   });
 
   it('does not hold up the caller while a provider warms up, and retires it if the warm-up rejects', async () => {
@@ -223,7 +227,7 @@ describe('PluginSignalLane', () => {
 
     failStart?.();
     await vi.waitFor(() =>
-      expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error)),
+      expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error), 'acme.demo'),
     );
 
     expect(slow.stopped).toBe(1);
