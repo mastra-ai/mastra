@@ -1,3 +1,4 @@
+import type { Artifact } from '../../images/schemas.js';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import {
   kitInputSchema,
@@ -46,12 +47,16 @@ export function createImageKit(dependencies: ImageKitDependencies) {
     inputSchema: kitStateSchema,
     outputSchema: kitOutputSchema,
     execute: async ({ inputData }) => {
-      const artifacts = [];
-      for (let slot = 0; slot < 3; slot++) {
+      const generateImage = async (slot: number) => {
         const result = await dependencies.nestedAgent('image-agent').generate(inputData.prompts[slot], slot);
-        artifacts.push(imageOutputSchema.parse(result.object).artifacts[0]);
-      }
-      return kitOutputSchema.parse({ ...inputData, artifacts });
+        return imageOutputSchema.parse(result.object).artifacts[0];
+      };
+      const artifacts: [Artifact, Artifact, Artifact] = [
+        await generateImage(0),
+        await generateImage(1),
+        await generateImage(2),
+      ];
+      return { ...inputData, artifacts };
     },
   });
   return createWorkflow({
