@@ -1,7 +1,7 @@
 import { getEntryId } from '../../step-entry';
-import type { RestartExecutionParams, StepFlowEntry, StepResult, WorkflowRunState } from '../../types';
+import type { RestartExecutionParams, StepResult, WorkflowRunState } from '../../types';
+import type { LeafEntry } from './routing';
 
-type LeafEntry = Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
 type StoredRecord = { status?: string; startedAt?: number; endedAt?: number; metadata?: Record<string, any> };
 
 const TERMINAL_STATUSES = new Set(['success', 'failed', 'canceled', 'tripwire']);

@@ -80,6 +80,8 @@ import {
 } from './loop';
 import { processWorkflowConditional, processWorkflowParallel } from './parallel';
 import { resolveCompletedRestartEntry } from './restart';
+import { routeStepRun } from './routing';
+import type { LeafEntry } from './routing';
 import { processWorkflowSleep, processWorkflowSleepUntil, processWorkflowWaitForEvent } from './sleep';
 import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWorkflow } from './utils';
 
@@ -1978,8 +1980,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const rawStep: StepFlowEntry | undefined = stepGraph[executionPath[0]!];
+    const route = routeStepRun(stepGraph, { executionPath, restart });
 
-    if (!rawStep) {
+    // A branch index with no branch behind it fails the run like a missing entry.
+    if (!rawStep || route.kind === 'missing') {
       // If we're past the last step, end the workflow successfully
       if (executionPath[0]! >= stepGraph.length) {
         return this.endWorkflow({
@@ -2065,16 +2069,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // per-type handler, and plain steps run through `runLeafStep`.
     let step: StepFlowEntry = rawStep;
 
-    //if parallel/conditional and execution path is greater than 1
-    // and restart is present but isParallelOrConditionalRestarted is false,
-    // then we need to process the step using processWorkflowParallel/processWorkflowConditional
-    // to ensure all active steps are processed.
-    if (
-      (step.type === 'parallel' || step.type === 'conditional') &&
-      executionPath.length > 1 &&
-      (!restart || (restart && restart.isParallelOrConditionalRestarted))
-    ) {
-      step = step.steps[executionPath[1]!]!;
+    // routeStepRun decides whether this delivery runs a leaf or goes to its entry's dispatcher.
+    if (route.kind === 'leaf') {
+      step = route.leaf;
     } else if (step.type === 'parallel') {
       return processWorkflowParallel(
         {
@@ -2184,7 +2181,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           step,
         },
       );
-    } else if (step?.type === 'foreach' && (executionPath.length === 1 || (restart && !restart.isForeachRestarted))) {
+    } else if (step?.type === 'foreach') {
       return processWorkflowForEach(
         {
           workflow,
@@ -2217,7 +2214,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Control structures (sleep / sleepUntil / parallel / conditional) already
     // returned above; what remains is a leaf: a plain `step`, a declarative
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
-    const leaf = step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
+    const leaf = step as LeafEntry;
 
     // Nothing serializes two deliveries of this occurrence except the event-id fence in
     // #handleDelivery, which keeps same-id deliveries apart and only on a pubsub with a lease
@@ -2245,7 +2242,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       return this.processWorkflowStepEnd(finished);
     }
 
-    return this.runLeafStep({ ...args, step: leaf }, control);
+    // runLeafStep's parameter type predates classifier entries, which it runs like any single step.
+    return this.runLeafStep(
+      {
+        ...args,
+        step: leaf as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+      },
+      control,
+    );
   }
 
   /**
@@ -2274,39 +2278,6 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   /**
-   * The leaf entry {@link processWorkflowStepRun} runs for a `workflow.step.run`
-   * at `data`'s execution path, or `undefined` when it routes the event to a
-   * dispatcher (parallel, conditional, foreach) or a sleep instead.
-   */
-  #leafAt(
-    workflow: Workflow,
-    { executionPath, restart }: Pick<ProcessorArgs, 'executionPath' | 'restart'>,
-  ): Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }> | undefined {
-    const [index, branch] = executionPath;
-    let leaf: StepFlowEntry | undefined = workflow.stepGraph[index!];
-
-    // Mirrors processWorkflowStepRun's routing. A restart's dispatcher event already carries the
-    // path of the branch or item it publishes, so the restart flags tell it from the leaf's event.
-    if (leaf?.type === 'parallel' || leaf?.type === 'conditional') {
-      if (branch === undefined || (restart && !restart.isParallelOrConditionalRestarted)) {
-        return undefined;
-      }
-      leaf = leaf.steps[branch];
-    } else if (leaf?.type === 'foreach') {
-      if (branch === undefined || (restart && !restart.isForeachRestarted)) {
-        return undefined;
-      }
-    }
-
-    // Sleeps and other control entries have no leaf here.
-    if (!leaf || !isExecutableStep(leaf)) {
-      return undefined;
-    }
-
-    return leaf as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
-  }
-
-  /**
    * What the stored run says about the leaf occurrence this `workflow.step.run`
    * delivers: `'drop'` when it finished and the run went on without it,
    * `'continue'` when it finished and the run still has to continue from its
@@ -2326,8 +2297,8 @@ export class WorkflowEventProcessor extends EventProcessor {
       return 'run';
     }
 
-    const leaf = this.#leafAt(workflow, data);
-    if (!leaf) {
+    const route = routeStepRun(workflow.stepGraph, data);
+    if (route.kind !== 'leaf') {
       return 'run';
     }
 
@@ -2335,7 +2306,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // finished occurrence, so this decides from the records they stamped as well. A saved result the
     // run still has to continue from comes back as 'continue', and the dispatch then hands it to the
     // guards like any delivery.
-    const decision = await this.#finishedOccurrence({ ...data, workflow, eventId: event.id }, leaf, {
+    const decision = await this.#finishedOccurrence({ ...data, workflow, eventId: event.id }, route.leaf, {
       store,
       deferToGuards: false,
     });
@@ -2382,7 +2353,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   async #finishedOccurrence(
     args: ProcessorArgs,
-    step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
+    step: LeafEntry,
     {
       store,
       snapshot: loaded,
