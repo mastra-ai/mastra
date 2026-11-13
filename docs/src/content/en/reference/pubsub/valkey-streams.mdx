@@ -82,7 +82,7 @@ export const mastra = new Mastra({
     name: 'reclaimIntervalMs',
     type: 'number',
     description:
-      "Interval for reclaiming unacknowledged events. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them.",
+      "Interval for reclaiming unacknowledged events. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them. With 0, the pubsub no longer redelivers a stopped worker's events, so workflow recovery restarts evented runs when an instance boots, as it does without a broker.",
     isOptional: true,
     defaultValue: '30000',
   },

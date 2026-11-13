@@ -133,7 +133,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'reclaimIntervalMs',
     type: 'number',
     description:
-      "How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them.",
+      "How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them. With 0, the pubsub no longer redelivers a stopped worker's events, so workflow recovery restarts evented runs when an instance boots, as it does without a broker.",
     isOptional: true,
     defaultValue: '30000',
   },
