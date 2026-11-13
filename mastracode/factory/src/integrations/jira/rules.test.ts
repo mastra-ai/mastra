@@ -468,3 +468,42 @@ describe('Jira board events', () => {
     ]);
   });
 });
+
+describe('a Jira issue with a card on several boards', () => {
+  it('runs every card\'s own rules when the issue changes', async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup(
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()] }),
+    );
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    const [work] = await cardsFor(project.id);
+    const release = await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: work!.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    });
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest({ ...issue, title: 'Fix intake sync faster', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+
+    // One evaluation per card: the first filed keeps the delivery's identity, the other is suffixed with its id.
+    expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
+      [work!.id, `jira:${issue.id}:2026-07-03T00:00:00Z`],
+      [release!.id, `jira:${issue.id}:2026-07-03T00:00:00Z:${release!.id}`],
+    ]);
+    // Each card stayed on its own board; neither refile dragged the other.
+    const cards = await cardsFor(project.id);
+    expect(cards.map(card => [card.id, card.board ?? 'work', card.stages]).sort()).toEqual(
+      [
+        [work!.id, 'work', work!.stages],
+        [release!.id, 'release', ['queued']],
+      ].sort(),
+    );
+  });
+});

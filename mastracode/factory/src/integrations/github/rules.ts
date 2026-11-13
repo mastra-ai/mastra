@@ -1229,17 +1229,31 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    if (linked === undefined && authoringItem === undefined) {
-      await stampClosed();
-      return primary;
-    }
     const companion = linked ?? authoringItem;
-    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
-    await stampClosed(secondary.status);
+    const secondary = companion
+      ? await evaluate(companion, `${deliveryIdentity}:${companion.id}`)
+      : undefined;
+    await stampClosed(secondary?.status);
+    // The record's cards on other boards run their own rules for it, each under its own identity.
+    const statuses = [primary, ...(secondary ? [secondary] : [])];
+    for (const sibling of await this.#siblingCards(relatedItem, companion)) {
+      statuses.push(await evaluate(sibling, `${deliveryIdentity}:${sibling.id}`));
+    }
     for (const status of ['committed', 'replayed'] as const) {
-      if (primary.status === status || secondary.status === status) return { status };
+      if (statuses.some(result => result.status === status)) return { status };
     }
     return primary;
+  }
+
+  /** The other cards filed for `card`'s record, one per board, excluding the ones already evaluated. */
+  async #siblingCards(card: Card | undefined, companion: Card | undefined): Promise<Card[]> {
+    if (!card?.externalSource) return [];
+    const cards = await this.options.storage.listByProjectSource({
+      orgId: card.orgId,
+      factoryProjectId: card.factoryProjectId,
+      source: card.externalSource,
+    });
+    return cards.filter(other => other.id !== card.id && other.id !== companion?.id);
   }
 
   /**

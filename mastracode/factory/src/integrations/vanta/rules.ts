@@ -11,6 +11,7 @@ import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { cardIngressId, cardsByExternalId } from '../record-cards.js';
 import { defaultVantaRules } from './default-rules.js';
 import type { VantaEventRules } from './default-rules.js';
 
@@ -86,20 +87,29 @@ export class VantaRules {
     await toBoardSource(this.options.boards).load(input);
 
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(
-      items
-        .filter(item => item.externalSource?.integrationId === 'vanta' && item.externalSource.type === 'vulnerability')
-        .map(item => [item.externalSource?.externalId, item]),
+    const itemsBySourceKey = cardsByExternalId(
+      items.filter(
+        item => item.externalSource?.integrationId === 'vanta' && item.externalSource.type === 'vulnerability',
+      ),
     );
     const statuses: IngressStatus[] = [];
     const active = new Set(input.vulnerabilities.map(vulnerability => vulnerability.id));
     for (const vulnerability of input.vulnerabilities) {
-      const relatedItem = itemsBySourceKey.get(vulnerability.id);
-      statuses.push(await this.#ingestAlert(input, vulnerability, relatedItem && structuredClone(relatedItem)));
+      const cards = itemsBySourceKey.get(vulnerability.id) ?? [];
+      if (!cards.length) statuses.push(await this.#ingestAlert(input, vulnerability, undefined));
+      // Each board's card runs its own rules for the vulnerability.
+      for (const [index, card] of cards.entries()) {
+        statuses.push(await this.#ingestAlert(input, vulnerability, structuredClone(card), 1, index > 0));
+      }
     }
-    for (const [sourceKey, item] of itemsBySourceKey) {
-      if (!sourceKey || active.has(sourceKey) || item.metadata?.state === 'resolved') continue;
-      statuses.push(await this.#ingestAlert(input, resolvedFromCard(sourceKey, item), structuredClone(item)));
+    for (const [sourceKey, cards] of itemsBySourceKey) {
+      if (!sourceKey || active.has(sourceKey)) continue;
+      for (const [index, item] of cards.entries()) {
+        if (item.metadata?.state === 'resolved') continue;
+        statuses.push(
+          await this.#ingestAlert(input, resolvedFromCard(sourceKey, item), structuredClone(item), 1, index > 0),
+        );
+      }
     }
     if (statuses.includes('committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.includes('replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -111,12 +121,13 @@ export class VantaRules {
     alert: VantaVulnerabilityIngress,
     relatedItem: Card | undefined,
     attempt = 1,
+    sibling = false,
   ): Promise<IngressStatus> {
     const closed = alert.state === 'resolved';
     // A resolved vulnerability Factory never filed stays off the board.
     if (closed && !relatedItem) return 'missing';
 
-    const ingressId = `vanta:${alert.id}:${alert.state}`;
+    const ingressId = cardIngressId(`vanta:${alert.id}:${alert.state}`, relatedItem, sibling);
     const actor = { type: 'human' as const, id: input.userId };
     const event = closed ? 'vulnerabilityClosed' : 'vulnerabilityObserved';
     const boards = this.#boards(input);
@@ -202,7 +213,7 @@ export class VantaRules {
       }
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
-      return this.#ingestAlert(input, alert, fresh ?? undefined, attempt + 1);
+      return this.#ingestAlert(input, alert, fresh ?? undefined, attempt + 1, sibling);
     }
     return committed.status;
   }

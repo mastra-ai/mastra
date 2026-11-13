@@ -18,6 +18,7 @@ import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
+import { cardIngressId, cardsByExternalId } from '../record-cards.js';
 import type { IncidentioEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -109,12 +110,16 @@ export class IncidentioRules {
     });
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
-    const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    const itemsBySourceKey = cardsByExternalId(items);
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per follow-up per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
+      const cards = itemsBySourceKey.get(issue.id) ?? [];
+      if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
+      // Each board's card runs its own rules for the record.
+      for (const [index, card] of cards.entries()) {
+        statuses.push(await this.#ingestIssue(input, issue, structuredClone(card), 1, index > 0));
+      }
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
@@ -126,8 +131,9 @@ export class IncidentioRules {
     issue: IncidentioIssueIngress,
     relatedItem: Card | undefined,
     attempt = 1,
+    sibling = false,
   ): Promise<IngressStatus> {
-    const ingressId = `incidentio:${issue.id}:${issue.updatedAt}`;
+    const ingressId = cardIngressId(`incidentio:${issue.id}:${issue.updatedAt}`, relatedItem, sibling);
     const actor = { type: 'human' as const, id: input.userId };
 
     // Closed follow-ups without existing work items should not create new ones.
@@ -239,7 +245,7 @@ export class IncidentioRules {
       }
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
-      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1, sibling);
     }
     return committed.status;
   }

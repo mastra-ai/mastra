@@ -581,6 +581,22 @@ export class GitLabRules {
             : event.startsWith('mergeRequest')
               ? [pushedReviewItem ?? attachedItem ?? authoringItem]
               : [issueItem];
+    // The record's cards on other boards run their own rules for it, each under its own identity.
+    const evaluated = new Set(candidates.map(item => item?.id));
+    for (const item of [...candidates]) {
+      if (!item?.externalSource) continue;
+      for (const sibling of items) {
+        if (
+          evaluated.has(sibling.id) ||
+          sibling.externalSource?.integrationId !== item.externalSource.integrationId ||
+          sibling.externalSource.externalId !== item.externalSource.externalId
+        ) {
+          continue;
+        }
+        evaluated.add(sibling.id);
+        candidates.push(structuredClone(sibling));
+      }
+    }
     const results = [];
     for (const [index, item] of candidates.entries()) {
       results.push(

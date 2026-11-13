@@ -769,6 +769,44 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'done' });
   });
 
+  it('closes the issue on every board it has a card on, each card through its own rules', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const work = await createLinkedIssue(workItems, project.id);
+    const release = await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: work.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createTriageWorkRegistry(createTestBoard()),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(service.ingest(issueClosed('delivery-closed-both', 'completed'))).resolves.toEqual({
+      status: 'committed',
+    });
+    // A redelivery replays both cards' evaluations rather than running either again.
+    await expect(service.ingest(issueClosed('delivery-closed-both', 'completed'))).resolves.toEqual({
+      status: 'replayed',
+    });
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    // Work's own close rule finishes its card; the release board has none, so its routes decide.
+    expect(decisions.map(entry => [entry.workItemId, entry.decision.type, entry.decision.stage]).sort()).toEqual(
+      [
+        [work.id, 'transition', 'done'],
+        [release!.id, 'routeEvent', undefined],
+      ].sort(),
+    );
+  });
+
   it('cancels an issue-backed work card when its issue closes as not planned', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await createLinkedIssue(workItems, project.id);
