@@ -91,6 +91,14 @@ export class FakeLinear {
     connection.status = status;
   }
 
+  /** Deletes a connection on the platform: unlisted and unlinked; a migrated row still points at it. */
+  dropConnection(connectionId: string): void {
+    const index = this.platform.orgConnections.findIndex(candidate => candidate.id === connectionId);
+    if (index === -1) throw new Error(`No connection ${connectionId}`);
+    this.platform.orgConnections.splice(index, 1);
+    this.platform.linked.delete(connectionId);
+  }
+
   override(workspaceId: string, operation: string, reply: FakeLinearOverride): void {
     this.overrides.set(`${workspaceId}:${operation}`, reply);
   }
@@ -248,6 +256,10 @@ export class FakeLinear {
         continue;
       }
       let connectionId = this.#migrated.get(id);
+      if (connectionId !== undefined && !this.platform.orgConnections.some(c => c.id === connectionId)) {
+        skipped.push({ linearWorkspaceId: id, reason: 'connection_inactive' });
+        continue;
+      }
       const migrated = connectionId === undefined;
       if (connectionId === undefined) {
         connectionId = this.connect(workspace, { connectionId: `conn-migrated-${id}`, linked: false });
