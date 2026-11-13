@@ -5,6 +5,7 @@
  * mocked (MSW). Handlers register on the ApiConfig base URL the test providers
  * inject (`TEST_BASE_URL`), matching how the app wires it.
  */
+import { focusManager } from '@tanstack/react-query';
 import { waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
@@ -140,7 +141,7 @@ describe('useProjectPullRequestsQuery', () => {
 });
 
 describe('intake feeds on an open board', () => {
-  it('given a board left open for five minutes, when nothing asks again, then each provider list is requested once', async () => {
+  it('given a board left open for five minutes, when nothing asks again, then each provider list is requested once, and again when the tab is looked at', async () => {
     const FACTORY_ID = 'factory-1';
     const GITLAB_REPOSITORY_ID = 'gitlab-repository-1';
     const requests = { githubIssues: 0, githubPulls: 0, gitlabIssues: 0, gitlabMergeRequests: 0 };
@@ -183,7 +184,15 @@ describe('intake feeds on an open board', () => {
       await vi.advanceTimersByTimeAsync(5 * 60_000);
 
       expect(requests).toEqual({ githubIssues: 1, githubPulls: 1, gitlabIssues: 1, gitlabMergeRequests: 1 });
+
+      // Looking at the tab again rereads each list once.
+      focusManager.setFocused(false);
+      focusManager.setFocused(true);
+      await waitFor(() =>
+        expect(requests).toEqual({ githubIssues: 2, githubPulls: 2, gitlabIssues: 2, gitlabMergeRequests: 2 }),
+      );
     } finally {
+      focusManager.setFocused(undefined);
       vi.useRealTimers();
     }
   });
