@@ -1,13 +1,19 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
 import { Check, CircleDashed, Code2 } from 'lucide-react';
-import { useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
-import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
-import { IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
+import { isCodeHostSource, useWorkSourceConnections, WORK_SOURCE_NAME } from '../../../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../../../hooks/useWorkSourceConnections';
+import type { SourceControlRepository } from '../../../services/github';
+import { repositoryHost } from '../../../services/sourceControlHosts';
+import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../../ui/icons';
 import { SketchLabel } from './SketchLabel';
 
-const SOURCES = {
+const SOURCES: Record<
+  BoardSource,
+  { Icon: typeof LinearIcon; example: string; id: string; previousId: string; previousExample: string; kind: string }
+> = {
   linear: {
     Icon: LinearIcon,
     example: 'Add repository search',
@@ -32,11 +38,38 @@ const SOURCES = {
     previousExample: 'Retry failed requests',
     kind: 'Follow-up',
   },
+  github: {
+    Icon: GithubIcon,
+    example: 'Add team invitations',
+    id: '#412',
+    previousId: '#411',
+    previousExample: 'Improve review notes',
+    kind: 'Issue',
+  },
+  gitlab: {
+    Icon: GitLabIcon,
+    example: 'Add pipeline retries',
+    id: '!87',
+    previousId: '!86',
+    previousExample: 'Split the deploy job',
+    kind: 'Issue',
+  },
 };
 
-export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
+export function OnboardingIntakePreview({
+  source,
+  repository,
+}: {
+  source: BoardSource;
+  /** The codebase step's pick, which reads as Connected on its own host. */
+  repository?: SourceControlRepository;
+}) {
   const status = useWorkSourceConnections();
   const name = WORK_SOURCE_NAME[source];
+  // A code host is not connected like a tracker; the repository picked in step one is what feeds it.
+  const connected = isCodeHostSource(source)
+    ? repository !== undefined && repositoryHost(repository) === source
+    : status[source];
   const { Icon, example, id, previousId, previousExample, kind } = SOURCES[source];
   return (
     <section aria-label="Work intake preview" className="relative h-full">
@@ -49,7 +82,7 @@ export function OnboardingIntakePreview({ source }: { source: WorkSource }) {
       <SketchLabel x={282} y={24} width={90}>
         <div className="text-right">
           <Txt variant="meta" tone="muted">
-            {status[source] ? 'Connected' : 'Example'}
+            {connected ? 'Connected' : 'Example'}
           </Txt>
         </div>
       </SketchLabel>

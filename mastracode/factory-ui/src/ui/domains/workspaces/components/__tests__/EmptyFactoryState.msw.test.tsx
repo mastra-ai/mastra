@@ -244,7 +244,8 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     const work = await findActiveSection('Work');
-    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
+    // The picked repository is a source on its own, so Work offers Continue without any tracker.
+    await user.click(await work.findByRole('button', { name: 'Continue' }));
 
     const modelSection = await findActiveSection('Model');
     const accounts = await findActiveSection('Accounts');
@@ -252,7 +253,7 @@ describe('Draft Factory onboarding', () => {
     await chooseProvider(user, 'OpenAI', modelSection);
     expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     expect(writes).toEqual([]);
-    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('GitHub')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change codebase' }));
     await user.click(await screen.findByRole('radio', { name: 'GitLab' }));
@@ -365,11 +366,11 @@ describe('Draft Factory onboarding', () => {
 
     await user.click(modelSummary.getByRole('button', { name: 'Change model' }));
     await findActiveSection('Model');
-    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('GitHub')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     const work = await findActiveSection('Work');
-    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await work.findByRole('button', { name: 'Continue' }));
     await findActiveSection('Model');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(writes).toEqual([]);
@@ -422,7 +423,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     expect(await screen.findByRole('heading', { name: 'Work', level: 2 })).toHaveFocus();
 
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Accounts', level: 2 })).toHaveFocus();
   });
 
@@ -969,7 +970,7 @@ describe('Account presets', () => {
     seedOnboarding('project-management', { repository: repo });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     const modelSection = await findActiveSection('Model');
     expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument();
     expect(modelSection.getByText('Local connection')).toBeInTheDocument();
