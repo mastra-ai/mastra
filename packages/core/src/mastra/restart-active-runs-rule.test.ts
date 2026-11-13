@@ -201,6 +201,8 @@ describe('workflow recovery rule (#28712)', () => {
   function startBlockingReplica(storage: InMemoryStore, blocked: string | string[], recovery: MastraRecoveryConfig) {
     const executions: string[] = [];
     const order: string[] = [];
+    // `start:<runId>` and `done:<runId>` per step execution, in the order they happened.
+    const steps: string[] = [];
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const workflow = createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
@@ -211,12 +213,14 @@ describe('workflow recovery rule (#28712)', () => {
           outputSchema: schema,
           execute: async ({ runId }) => {
             executions.push(runId);
+            steps.push(`start:${runId}`);
             if ([blocked].flat().includes(runId)) {
               started.resolve();
               await release.promise;
               order.push('step-done');
             }
 
+            steps.push(`done:${runId}`);
             return {};
           },
         }),
@@ -224,7 +228,7 @@ describe('workflow recovery rule (#28712)', () => {
       .commit();
     const mastra = new Mastra({ logger: false, storage, workflows: { 'recovered-wf': workflow }, recovery });
     replicas.push(mastra);
-    return { mastra, executions, order, started: started.promise, release: release.resolve };
+    return { mastra, executions, order, steps, started: started.promise, release: release.resolve };
   }
 
   it("reads a queued restart's lease again, and leaves the run alone when another instance restarted it meanwhile", async () => {
@@ -303,12 +307,12 @@ describe('workflow recovery rule (#28712)', () => {
       const read = runReads.mock.calls.map(([args]) => args.runId);
       expect(read).toEqual(expect.arrayContaining(['run-1', 'run-2']));
     });
-    // Both rechecks read their run; a restart outside the limiter would start the second run right after.
-    await sleep(100);
-
-    expect(b.executions).toHaveLength(1);
     b.release();
-    await vi.waitFor(() => expect([...b.executions].sort()).toEqual(['run-1', 'run-2']));
+    await vi.waitFor(() => expect(b.steps).toHaveLength(4));
+
+    // A restart outside the limiter would start the second run while the first one still held its slot.
+    const [first, second] = b.executions;
+    expect(b.steps).toEqual([`start:${first}`, `done:${first}`, `start:${second}`, `done:${second}`]);
   }, 10_000);
 
   it('waits at shutdown for a restart the recovery pass is running', async () => {
@@ -326,7 +330,7 @@ describe('workflow recovery rule (#28712)', () => {
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
 
-  it('checks a run again one grace period later when the read right before its restart fails', async () => {
+  it('checks a run again later when the lease read right before its restart fails', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
