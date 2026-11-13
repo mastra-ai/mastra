@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed slow incident.io boards in Factory. Opening a board no longer creates cards while the page loads. New incident.io follow-ups in a source bound to a project now get their card from the background sweep (every 5 minutes by default), whether or not anyone has the board open. Setting `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` now also stops new follow-ups from getting cards.
+incident.io boards in Factory no longer create cards while a list loads. Factory now checks incident.io every five minutes and files new follow-ups itself. It files only follow-ups from a source bound to a project. This happens with no board open. Setting `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED=false` also stops these new cards.
