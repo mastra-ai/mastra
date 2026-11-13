@@ -88,6 +88,8 @@ describe('AgentController: sequential allow auto-approval retains tool results (
       id: 'ping',
       description: 'A simple tool that returns a sentinel',
       inputSchema: z.object({}),
+      // The tool's own flag pauses each call for approval, which the session answers from its `allow` rule.
+      requireApproval: true,
       execute: async () => {
         toolExecutions += 1;
         return { value: SENTINEL };
@@ -129,7 +131,7 @@ describe('AgentController: sequential allow auto-approval retains tool results (
       id: 'allow-retention-controller',
       storage,
       modes: [{ id: 'default', name: 'Default', default: true, agent: registeredAgent }],
-      // non-yolo so requireToolApproval stays true and allow-policy auto-approves
+      // non-yolo so the allow policy auto-approves the paused calls
       initialState: { yolo: false } as any,
     });
 

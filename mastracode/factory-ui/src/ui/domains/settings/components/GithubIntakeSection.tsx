@@ -18,6 +18,9 @@ export function GithubIntakeSection({
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<GithubStatus> }) {
   const selection = useIntakeSelection('github');
+  const dependabotSelection = useIntakeSelection('dependabot');
+  // Present only when the server registers Dependabot intake alongside GitHub.
+  const dependabot = config.dependabot;
   const factoriesQuery = useFactoriesQuery();
   const status = statusQuery.data;
   const connected = status?.connected === true;
@@ -82,6 +85,42 @@ export function GithubIntakeSection({
           />
           {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />
+          )}
+        </>
+      )}
+      {connected && dependabot && (
+        <>
+          <SettingsRow
+            label="Dependabot alerts"
+            description="Create a card for each open Dependabot alert in selected repositories."
+          >
+            <IntakeSyncControl
+              label="Sync alerts"
+              accessibleLabel="Sync Dependabot alerts"
+              description="Poll selected repositories for open Dependabot alerts every 15 minutes. Cards close when the alert is fixed or dismissed."
+              checked={dependabot.enabled}
+              disabled={false}
+              onCheckedChange={enabled => dependabotSelection.update(current => ({ ...current, enabled }))}
+            />
+          </SettingsRow>
+          {dependabot.enabled && (
+            <SourcePicker
+              label="Dependabot repositories"
+              addLabel="Add repository"
+              itemIcon={<SettingsIntegrationIcon provider="github" />}
+              groups={[{ id: 'dependabot-repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
+              selectedIds={dependabot.sourceIds}
+              saving={dependabotSelection.saving}
+              loading={factoriesQuery.isPending}
+              error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
+              onRetry={() => void factoriesQuery.refetch()}
+              onToggleItem={slug =>
+                dependabotSelection.update(current => ({
+                  ...current,
+                  sourceIds: toggleSourceId(current.sourceIds, slug),
+                }))
+              }
+            />
           )}
         </>
       )}

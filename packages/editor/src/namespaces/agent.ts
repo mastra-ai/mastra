@@ -1268,9 +1268,14 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     // When a stored config is an override for a code agent, adding it would create a
     // duplicate entry under a different key (agent.id vs config key), causing the list
     // endpoint to show the agent as "stored" instead of "code".
-    if (!this.getCodeDefinedAgent(storedAgent.id) && this.mastra?.listAgents()[storedAgent.id]?.source !== 'stored') {
-      this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
-      this._registeredStoredAgentIds.add(storedAgent.id);
+    if (!this.getCodeDefinedAgent(storedAgent.id)) {
+      // A concurrent or versioned load of an already registered stored agent skips addAgent, which would leave
+      // `source` at its 'code' default. Callers rely on `source` to apply stored-agent visibility, so set it here.
+      agent.source = 'stored';
+      if (this.mastra?.listAgents()[storedAgent.id]?.source !== 'stored') {
+        this.mastra?.addAgent(agent, storedAgent.id, { source: 'stored' });
+        this._registeredStoredAgentIds.add(storedAgent.id);
+      }
     }
     this.logger?.debug(`[createAgentFromStoredConfig] Successfully created agent "${storedAgent.id}"`);
 

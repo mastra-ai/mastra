@@ -4,12 +4,13 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 
 import gitlab from './gitlab.svg';
 import incidentio from './incidentio.svg';
+import vanta from './vanta.svg';
 import jira from './jira.svg';
 import linear from './linear.svg';
 
-const brandAssets = { gitlab, incidentio, jira, linear };
+const brandAssets = { gitlab, incidentio, jira, linear, vanta };
 
-type SettingsIntegrationProvider = 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'slack';
+type SettingsIntegrationProvider = 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'slack';
 
 export function SettingsIntegrationIcon({
   provider,

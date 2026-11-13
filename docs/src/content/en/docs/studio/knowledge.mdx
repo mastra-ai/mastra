@@ -99,6 +99,40 @@ An `authorize` function replaces the server's rules and role checks for every ro
 
 Set the value to an array of scopes, or `'all'` for someone who should see the whole instance. An empty array reads nothing. See [Knowledge access and errors](/reference/server/routes#knowledge-access-and-errors) for what other values return. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
 
+### Providers with `authorizeUser`
+
+The server never calls `authorize` when the auth provider defines `authorizeUser`. This includes any `MastraAuthProvider` subclass that implements it, and every `CompositeAuth`. For these providers, set the key in a [server middleware](/docs/server/middleware) instead:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter'
+import { auth, getSessionUser } from './auth' // your provider and session lookup
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [...KNOWLEDGE_ROUTES],
+    auth,
+    middleware: [
+      {
+        path: '/api/knowledge/*',
+        handler: async (c, next) => {
+          const user = await getSessionUser(c.req.raw)
+          if (user) {
+            c.get('requestContext').set(
+              MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+              user.isAdmin ? 'all' : [`org:${user.orgId}`, `team:${user.orgId}:${user.teamId}`],
+            )
+          }
+          await next()
+        },
+      },
+    ],
+  },
+})
+```
+
+Server middleware runs before the route's auth check, so the signed-in user isn't on the request context yet. Look the user up from the request with your app's own session check, as above. The route's auth still runs afterwards and rejects callers your provider doesn't accept. Change the middleware `path` if you set a different prefix.
+
 ### Deployment notes
 
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user with a principal mapping can read the pages those principals cover, in every instance.
