@@ -448,6 +448,69 @@ The in-memory fallback is identified by `isFromInMemory: true`. It returns run m
 }
 ```
 
+## Knowledge
+
+These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from `@mastra/server/server-adapter` in `server.apiRoutes`, and register the instance on `Mastra` under `knowledge`. They need `@mastra/core` 1.81.0 or later, and the two link routes need 1.82.0 or later. With an RBAC provider, every route requires the `knowledge:read` permission. Without one, that check is skipped. See [Studio Knowledge](/docs/studio/knowledge) for setup.
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/knowledge` | List the registered Knowledge instances, filtered by FGA when configured |
+| `GET` | `/api/knowledge/:knowledgeKey/tree` | List the root scopes, or the children of `parentId` |
+| `GET` | `/api/knowledge/:knowledgeKey/pages/:pageId` | Get a page with its ancestors, notes, pin and referenced pages |
+| `GET` | `/api/knowledge/:knowledgeKey/link-counts` | Count the links into and out of each page in `pageId` |
+| `GET` | `/api/knowledge/:knowledgeKey/pages/:pageId/links` | List the links into and out of one page |
+| `GET` | `/api/knowledge/:knowledgeKey/graph` | Get a bounded graph of pages with parent and mention edges and scope grants |
+| `GET` | `/api/knowledge/:knowledgeKey/search` | Search page names, descriptions, bodies and notes |
+| `GET` | `/api/knowledge/:knowledgeKey/activity` | List recent changes, optionally for one scope or page |
+| `GET` | `/api/knowledge/:knowledgeKey/events` | Stream the caller's readable writes as Server-Sent Events. See [Knowledge events](#knowledge-events) |
+
+`:knowledgeKey` is the key the instance is registered under in `knowledge: { ... }`.
+
+### Knowledge query parameters
+
+| Route | Parameters |
+| - | - |
+| `tree` | `parentId` (omit for root scopes), `cursor`, `limit` (1 to 100) |
+| `pages/:pageId` | `noteCursor`, `noteLimit` (1 to 100) |
+| `link-counts` | `pageId`, repeated once per page, 1 to 200 |
+| `pages/:pageId/links` | `direction`: `in`, `out` or `both` (default) |
+| `graph` | `rootId` (omit to walk every root scope), `maxPages` (1 to 500) |
+| `search` | `q` (1 to 200 characters), `scopeId` (repeat for up to 20 scopes), `limit` (1 to 100) |
+| `activity` | `scopeId`, `pageId`, `cursor`, `limit` (1 to 100) |
+
+### Knowledge access and errors
+
+Without `server.auth` or `studio.auth`, the routes read as the instance owner and return everything. With auth, they read only what the scopes in the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` can read. Set it to an array of scopes, or `'all'`.
+
+| Status | When |
+| - | - |
+| `403` | Auth is configured and `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` isn't set. `GET /api/knowledge` doesn't read the key, so it doesn't return `403` |
+| `404` | The instance doesn't exist or the FGA provider denies `knowledge:read` on it, or the page doesn't exist or the caller can't read it. For an unreadable page, the link routes report zero counts and no links instead |
+| `500` | `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` isn't an array or `'all'`, or holds a scope that matches no declared scope type |
+| `501` | `@mastra/core` is older than the route needs, or the store has no link index (link routes) |
+
+With an FGA provider, each instance is checked as resource type `knowledge`, by its registered key, with `knowledge:read`. `GET /api/knowledge` lists only the instances the caller can read. With `requireForProtectedRoutes`, `GET /api/knowledge` is refused, because like other list routes it has no FGA metadata. Without an RBAC provider, the `knowledge:read` check is skipped.
+
+The NestJS adapter doesn't serve these routes yet.
+
+### Knowledge events
+
+`GET /api/knowledge/:knowledgeKey/events` sends one event per committed write that the caller can read:
+
+```typescript oxfmt:false
+{
+  kind: 'scope' | 'page' | 'note' | 'pin';
+  op: string;       // such as 'create', 'update', 'delete' or 'merge'
+  pageId?: string;  // left out when the caller can't read the page, including a deleted one
+  scopeId?: string; // left out when the caller can't read the scope
+  at: string;       // ISO timestamp
+}
+```
+
+Writes that touch nothing the caller can read aren't sent. Events carry IDs, not content, so fetch what changed with the other routes. When `pageId` is missing, refresh the scope in `scopeId`.
+
+The server sends a keepalive comment every 25 seconds and closes the stream after five minutes. Reconnect when it closes. The new stream reads the caller's scopes again, so revoked access stops updates. Writes made while disconnected aren't replayed, so refresh what you show after reconnecting.
+
 ## Vectors
 
 | Method | Path | Description |
@@ -718,11 +781,15 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 | `POST` | `/api/mcp/:serverId/tools/:toolId/execute` | Execute a tool |
 | `GET` | `/api/mcp/:serverId/resources` | List server resources |
 | `POST` | `/api/mcp/:serverId/resources/read` | Read a resource |
+| `GET` | `/api/mcp/:serverId/tasks` | List a server's recent MCP tasks (experimental) |
+| `POST` | `/api/mcp/:serverId/tasks/find` | Find an MCP task by its task id (experimental) |
+| `POST` | `/api/mcp/:serverId/tasks/:taskKey/cancel` | Cancel an MCP task (experimental) |
+| `POST` | `/api/mcp/:serverId/tasks/:taskKey/input` | Answer an MCP task's input requests (experimental) |
 | `ALL` | `/api/mcp/:serverId/mcp` | MCP HTTP transport |
 | `ALL` | `/api/mcp/:serverId/sse` | Legacy MCP SSE transport |
 | `POST` | `/api/mcp/:serverId/messages` | Legacy MCP SSE messages |
 
-All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
+All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. With an RBAC provider, listing and finding tasks need `mcp:read`. Cancelling and answering a task need `mcp:write`, since they act on a task another client started. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
 
 ## Responses API
 

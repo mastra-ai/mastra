@@ -19,8 +19,18 @@ export interface EvalMatchers<R = unknown> {
   toPassThresholds(): R;
 }
 
+// Vitest's `Assertion`/`Matchers` type parameters differ between majors (v3/v4 `<T>`, v5 `<R, T>`),
+// and augmentations must repeat them exactly, so one declaration can't target all versions.
+// `Chai.Assertion` is identical across Vitest 3–5, and Vitest maps its function members onto
+// `Assertion` (including `.not`, `.resolves`/`.rejects` and `expect.soft`).
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Chai {
+    interface Assertion extends EvalMatchers<void> {}
+  }
+}
+
 declare module 'vitest' {
-  interface Assertion<T = any> extends EvalMatchers<T> {}
   interface AsymmetricMatchersContaining extends EvalMatchers {}
 }
 

@@ -37,9 +37,8 @@ export function getSourceForPath(path: string): ContentSource {
     return { type: 'external', packagePath: path };
   } else if (path.includes('.mastra')) {
     return { type: 'managed', mastraPath: path };
-  } else {
-    return { type: 'local', projectPath: path };
   }
+  return { type: 'local', projectPath: path };
 }
 
 // =============================================================================

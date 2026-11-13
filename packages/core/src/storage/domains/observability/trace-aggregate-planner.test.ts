@@ -13,12 +13,12 @@ import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import { TRACE_AGGREGATE_DIMENSION_REGISTRY, TRACE_AGGREGATE_IDENTITY_FIELDS } from './trace-aggregate-registry';
 import {
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryValidationError,
 } from './trace-query';
 import type { TraceQueryIssueCode, TraceQueryScalarPredicate } from './trace-query';
+import { planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
 const baseRequest = { timeRange, measures: ['count'] };
@@ -176,6 +176,27 @@ describe('planTraceAggregate', () => {
         ],
       });
       expect(result.orderBy).toEqual({ target: 'measure', measure: 'tokens.total.sum', direction: 'asc' });
+    });
+
+    it('accepts having and orderBy on requested time-to-first measures', () => {
+      const result = plan({
+        timeRange,
+        groupBy: ['entityName'],
+        measures: ['timeToFirstToken.p95', 'timeToFirstChunk.count'],
+        having: gt('timeToFirstChunk.count', 10),
+        orderBy: { field: 'timeToFirstToken.p95', direction: 'desc' },
+      });
+      expect(result.measures).toEqual([
+        { type: 'canonical', name: 'timeToFirstToken.p95' },
+        { type: 'canonical', name: 'timeToFirstChunk.count' },
+      ]);
+      expect(result.having).toEqual({
+        type: 'comparison',
+        measure: 'timeToFirstChunk.count',
+        operator: 'gt',
+        value: 10,
+      });
+      expect(result.orderBy).toEqual({ target: 'measure', measure: 'timeToFirstToken.p95', direction: 'desc' });
     });
 
     it('rejects having and orderBy on token and cost measures that were not requested', () => {

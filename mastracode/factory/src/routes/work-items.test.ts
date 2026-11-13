@@ -1,11 +1,14 @@
+import { gunzipSync } from 'node:zlib';
+
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import type { FactoryRuleActor } from '../rules/types.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -60,6 +63,9 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { boardCheck } from '../work-items/board-check.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { BoardPhasesResponse } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
@@ -71,7 +77,8 @@ function buildApp(
   startCoordinator?: { prepare: (input: any) => Promise<any> },
   requestContext?: RequestContext,
   running: ReadonlySet<string> = new Set(),
-  boardRegistry: BoardRegistry = createBoardRegistry(),
+  // Work as projects stored before new projects' Work dropped Triage: these tests walk its lanes.
+  boardRegistry: BoardRegistry = createTriageWorkRegistry(),
   parked: ReadonlySet<string> = new Set(),
 ) {
   const app = new Hono();
@@ -88,7 +95,6 @@ function buildApp(
       projects: seed.projects,
       workItems: seed.workItems,
       boardRegistry,
-      comments: seed.comments,
       queueHealth: seed.queueHealth,
       transitionService: new FactoryTransitionService({
         configVersion: 'factory-config-v1',
@@ -159,7 +165,7 @@ afterEach(() => {
 });
 
 describe('installed board catalog', () => {
-  it.each([true, false])('returns only structural metadata (defaults: %s)', async includeDefaultBoards => {
+  it.each([true, false])('returns only structural metadata (with Work: %s)', async withWork => {
     const board = defineBoard({
       id: 'release',
       title: 'Release Preview',
@@ -182,40 +188,131 @@ describe('installed board catalog', () => {
       undefined,
       undefined,
       new Set(),
-      createBoardRegistry({ boards: [board], includeDefaultBoards }),
+      withWork ? createBoardRegistry({ boards: [board] }) : boardRegistryOf([board]),
     );
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(response.status).toBe(200);
     const { boards } = await response.json();
-    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
-      includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
-    );
+    expect(boards.map((entry: { id: string }) => entry.id)).toEqual(withWork ? ['work', 'release'] : ['release']);
+    // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
       id: 'release',
+      name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
+      // No phase reviews or builds, so the board has no pull request loop: only its terminal phase finishes cards.
+      flow: { completed: 'shipped', canceled: 'shipped' },
       phases: [
-        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'queued',
+          name: 'Queued',
+          title: 'Queued',
+          kind: 'resting',
+          nextPhases: ['preparing'],
+          transitions: [{ outcome: null, to: 'preparing' }],
+        },
         {
           id: 'preparing',
+          name: 'Preparing',
           title: 'Preparing',
           kind: 'working',
+          nextPhases: ['shipped'],
+          context: 'release-preparer',
           role: 'release-preparer',
+          autoStart: false,
           transitions: [{ outcome: null, to: 'shipped' }],
         },
-        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+        { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
   });
 
+  it("names the phase playing each part of each board's pull request loop", async () => {
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry());
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    // Factory's Work has no Triage, so its flow names none.
+    expect(body.boards[0].flow).not.toHaveProperty('triage');
+    expect(body.boards[0]).toMatchObject({
+      id: 'work',
+      flow: { build: 'execute', pullRequestReview: 'pr-review', completed: 'done', canceled: 'canceled' },
+    });
+    // A project's Work that kept Triage names it.
+    const older = await (await buildApp(orgUser).request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(older.boards[0]).toMatchObject({
+      id: 'work',
+      flow: {
+        triage: 'triage',
+        build: 'execute',
+        pullRequestReview: 'pr-review',
+        completed: 'done',
+        canceled: 'canceled',
+      },
+    });
+    // Which board is the default is DEFAULT_BOARD_ID, and the build context is the build phase's own.
+    expect(body.boards[0]).not.toHaveProperty('default');
+    expect(body.boards[0].flow).not.toHaveProperty('buildContext');
+  });
+
+  it('sends the conditions a phase starts and approves its exit tool under', async () => {
+    const lowEffort = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'effort:low' }],
+    };
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning', 'shipping'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          nextPhases: ['shipping'],
+          autoStart: true,
+          autoStartWhen: lowEffort,
+          exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+        },
+        shipping: { name: 'Shipping', kind: 'working', nextPhases: ['shipped'], autoStart: true, exitTool: 'ship' },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [, planning, shipping] = body.boards[0].phases;
+    expect(planning).toMatchObject({
+      autoStart: true,
+      autoStartWhen: lowEffort,
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+    });
+    // No condition means every card.
+    expect(shipping).toMatchObject({ autoStart: true, exitTool: { id: 'ship', autoApprove: false } });
+    expect(shipping).not.toHaveProperty('autoStartWhen');
+    expect(shipping.exitTool).not.toHaveProperty('autoApproveWhen');
+  });
+
+  it('sends the skill a custom phase runs, so Settings can show it', async () => {
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+        drafting: { name: 'Drafting', kind: 'working', nextPhases: ['shipped'], runner: { skill: 'release-notes' } },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([board]));
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [queued, drafting] = body.boards[0].phases;
+    expect(drafting).toMatchObject({ kind: 'working', skill: 'release-notes' });
+    expect(queued).not.toHaveProperty('skill');
+  });
+
   it('supports an empty installation', async () => {
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([]));
     const response = await app.request(`/web/factory/projects/${PROJECT_ID}/boards`);
     expect(await response.json()).toEqual({ boards: [] });
   });
@@ -264,6 +361,20 @@ describe('auth and scoping', () => {
 
 // ── Create / upsert ──────────────────────────────────────────────────────
 describe('POST /web/factory/projects/:id/work-items', () => {
+  it('refuses a card filed onto the retired Review board, and files nothing', async () => {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        board: 'review',
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:7' },
+      }),
+    );
+    expect(res.status).toBe(422);
+    expect(await res.json()).toMatchObject({ error: 'invalid_board' });
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: PROJECT_ID })).toEqual([]);
+  });
+
   it('creates a work item with server-stamped history', async () => {
     const res = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
     expect(res.status).toBe(200);
@@ -299,7 +410,7 @@ describe('POST /web/factory/projects/:id/work-items', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const boardRegistry = createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false });
+    const boardRegistry = boardRegistryOf([releaseBoard]);
     const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistry);
     const importedItems = [
       {
@@ -390,6 +501,45 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
+  it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        metadata: { number: 42, state: 'closed', labels: ['bug'], author: 'reporter', authorTrusted: true },
+      }),
+    );
+    const created = await response.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema.parse(created)).toEqual(created);
+    expect(created.workItem.workItem).toMatchObject({
+      provider: 'github',
+      key: 'acme/app#42',
+      title: 'Fix the login flow',
+      state: 'closed',
+      labels: ['bug'],
+      author: 'reporter',
+    });
+    expect(created.workItem.metadata).toMatchObject({ number: 42, author: 'reporter', authorTrusted: true });
+    expect(created.workItem.workItem.metadata).not.toHaveProperty('authorTrusted');
+
+    const listed = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(listed)).toEqual(listed);
+    expect(listed.workItems[0].workItem).toEqual(created.workItem.workItem);
+
+    const updated = await (
+      await json('PATCH', `/web/factory/work-items/${created.workItem.id}`, { title: 'Updated title' })
+    ).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemUpdate.responseSchema.parse(updated)).toEqual(updated);
+    expect(updated.workItem.workItem.title).toBe('Updated title');
+    expect(updated.workItem.title).toBe('Updated title');
+    for (const card of [created.workItem, listed.workItems[0], updated.workItem]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      expect(card.workItem.sources).toHaveLength(1);
+      expect(card.workItem.sources[0]).toMatchObject({ provider: 'github', sourceType: 'issue' });
+      expect(card.workItem.sources[0]).not.toHaveProperty('kind');
+    }
+  });
+
   it('keeps internal tokens in storage and out of every read', async () => {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',
@@ -474,7 +624,8 @@ describe('work item read wire', () => {
     expect((await patched.json()).workItem.metadata).toEqual({ number: 42, prNumber: 7 });
 
     const [stored] = await listItems();
-    expect(stored?.metadata).toEqual({ number: 42, prNumber: 7 });
+    expect(stored?.metadata).toEqual({ prNumber: 7 });
+    expect(stored?.workItem.metadata).toEqual({ number: 42 });
   });
 });
 
@@ -518,13 +669,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
         shipped: { title: 'Shipped', kind: 'terminal' },
       },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard]));
 
     const response = await app.request(`/web/factory/work-items/${item.id}`, {
       method: 'PATCH',
@@ -555,13 +700,7 @@ describe('PATCH /web/factory/work-items/:id', () => {
       initialPhase: 'backlog',
       phases: { backlog: { title: 'Backlog', kind: 'resting' } },
     });
-    const app = buildApp(
-      orgUser,
-      undefined,
-      undefined,
-      new Set(),
-      createBoardRegistry({ boards: [releaseBoard, supportBoard], includeDefaultBoards: false }),
-    );
+    const app = buildApp(orgUser, undefined, undefined, new Set(), boardRegistryOf([releaseBoard, supportBoard]));
 
     const responses = await Promise.all([
       app.request(`/web/factory/work-items/${item.id}`, {
@@ -678,19 +817,18 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { title: '' })).status).toBe(400);
   });
 
-  it('stamps a hands-off grant once and refuses anything but true', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  it('no longer takes a hands-off plan grant: alone it changes nothing, beside a real field it is ignored', async () => {
     const item = await createItem();
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(200);
-    const granted = (await listItems())[0]?.plansPreapprovedAt;
-    expect(granted).toBeInstanceOf(Date);
+    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(400);
+    expect((await listItems())[0]).toMatchObject({ revision: item.revision });
+    expect((await listItems())[0]).not.toHaveProperty('plansPreapprovedAt');
 
-    vi.setSystemTime(new Date('2030-01-02T00:00:00.000Z'));
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true });
-    expect((await listItems())[0]?.plansPreapprovedAt).toEqual(granted);
-
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: false })).status).toBe(400);
+    const renamed = await json('PATCH', `/web/factory/work-items/${item.id}`, {
+      title: 'Renamed',
+      plansPreapproved: true,
+    });
+    expect(renamed.status).toBe(200);
+    expect((await listItems())[0]).toMatchObject({ title: 'Renamed' });
   });
 });
 
@@ -703,7 +841,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   const transition = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
     json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`, {
       board: 'work',
-      stage: 'execute',
+      stage: 'planning',
       expectedRevision: item.revision,
       requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       cause: 'board_drag',
@@ -716,12 +854,12 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item);
     expect(res.status).toBe(200);
     const { result } = await res.json();
-    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'execute' });
+    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'planning' });
     const [canonical] = await listItems();
-    expect(canonical?.stages).toEqual(['execute']);
+    expect(canonical?.stages).toEqual(['planning']);
     expect(canonical?.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
       ['intake', true],
-      ['execute', false],
+      ['planning', false],
     ]);
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
@@ -746,7 +884,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         },
         body: JSON.stringify({
           board: 'work',
-          stage: 'execute',
+          stage: 'planning',
           expectedRevision: item.revision,
           requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           cause: 'board_drag',
@@ -774,18 +912,18 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);
-    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'planning' });
+    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'triage' });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('replays immutable ingress without evaluating a second destination', async () => {
     const item = await createItem();
     const first = await transition(item);
-    const replay = await transition(item, { stage: 'planning' });
+    const replay = await transition(item, { stage: 'triage' });
     expect(await replay.json()).toEqual(await first.json());
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('rejects non-UUID human request identities before they can collide across work items', async () => {
@@ -997,6 +1135,8 @@ describe('work item relations', () => {
     });
 
     expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+    // A pull request filed without a board lands on Work, where it is reviewed.
+    expect(child.workItem.board).toBe('work');
 
     const { body: repeated } = await create('child', {
       externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
@@ -1654,184 +1794,6 @@ describe('GET /web/factory/projects/:id/attention', () => {
     });
   });
 
-  it('repairs only legacy decisions whose canonical work is finished', async () => {
-    const terminalResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({ title: 'Terminal repair target' }),
-    );
-    const terminalItem = (await terminalResponse.json()).workItem;
-    const now = new Date('2030-01-01T00:00:00.000Z');
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: terminalItem.id,
-      ingress: { identity: 'legacy-repair-terminal', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: terminalItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'transition',
-          board: 'work',
-          stage: 'done',
-          idempotencyKey: 'legacy-transition-accepted',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-terminal-skill',
-        },
-        {
-          type: 'sendMessage',
-          role: 'work',
-          message: 'Obsolete message.',
-          idempotencyKey: 'legacy-terminal-message',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-terminal-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const terminalDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const byKey = new Map(terminalDecisions.map(decision => [decision.idempotencyKey, decision]));
-    const transition = byKey.get('legacy-transition-accepted');
-    const failedSkill = byKey.get('legacy-terminal-skill');
-    const failedMessage = byKey.get('legacy-terminal-message');
-    const proposal = byKey.get('legacy-terminal-proposal');
-    if (!transition || !failedSkill || !failedMessage || !proposal) {
-      throw new Error('Expected legacy repair decisions');
-    }
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: { in: [transition.id, failedSkill.id, failedMessage.id] } },
-      { status: 'failed', last_error: 'Legacy failure.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: proposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.setAttentionReceipt({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      userId: 'u1',
-      identity: { kind: 'automation-failed', sourceId: failedSkill.id, occurrence: 0 },
-      action: 'archive',
-      now,
-    });
-    await seed.storage.ops.insertOne('factory_rule_ingress', {
-      org_id: 'org1',
-      factory_project_id: PROJECT_ID,
-      identity: 'decision:legacy-transition-accepted',
-      trigger_type: 'rule',
-      transition_id: crypto.randomUUID(),
-      result: { status: 'accepted', stage: 'done' },
-      created_at: now,
-    });
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: terminalItem.id,
-      userId: 'user-1',
-      patch: { stages: ['done'] },
-    });
-
-    const activeResponse = await json(
-      'POST',
-      `/web/factory/projects/${PROJECT_ID}/work-items`,
-      createBody({
-        title: 'Active repair target',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: '43',
-          url: 'https://github.com/acme/app/issues/43',
-        },
-        metadata: { number: 43 },
-      }),
-    );
-    const activeItem = (await activeResponse.json()).workItem;
-    await seed.workItems.commitRuleEvaluation({
-      orgId: 'org1',
-      factoryProjectId: PROJECT_ID,
-      workItemId: activeItem.id,
-      ingress: { identity: 'legacy-repair-active', triggerType: 'test' },
-      configVersion: 'rules-v1',
-      expectedRevision: activeItem.revision,
-      actor: { type: 'system', id: 'rules' },
-      outcome: { status: 'accepted' },
-      decisions: [
-        {
-          type: 'invokeSkill',
-          role: 'work',
-          skillName: 'factory-plan',
-          idempotencyKey: 'legacy-active-skill',
-        },
-        {
-          type: 'invokeSkill',
-          role: 'review',
-          skillName: 'factory-review',
-          idempotencyKey: 'legacy-multistage-proposal',
-        },
-      ],
-      causalChain: [],
-      now,
-    });
-    const activeDecisions = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    const activeDecision = activeDecisions.find(decision => decision.idempotencyKey === 'legacy-active-skill');
-    const multistageProposal = activeDecisions.find(
-      decision => decision.idempotencyKey === 'legacy-multistage-proposal',
-    );
-    if (!activeDecision || !multistageProposal) throw new Error('Expected active legacy decisions');
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: activeDecision.id },
-      { status: 'failed', last_error: 'Still unresolved.', completed_at: now, updated_at: now },
-    );
-    await seed.storage.ops.updateMany(
-      'factory_deferred_decisions',
-      { id: multistageProposal.id },
-      { status: 'proposed', updated_at: now },
-    );
-    await seed.workItems.update({
-      orgId: 'org1',
-      id: activeItem.id,
-      userId: 'user-1',
-      patch: { stages: ['review', 'done'] },
-    });
-
-    await seed.workItems.repairLegacyAttentionState();
-
-    const repaired = await seed.workItems.listDeferredDecisions('org1', PROJECT_ID);
-    expect(repaired.find(decision => decision.id === transition.id)?.status).toBe('succeeded');
-    expect(repaired.find(decision => decision.id === failedSkill.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === proposal.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === failedMessage.id)?.status).toBe('superseded');
-    expect(repaired.find(decision => decision.id === activeDecision.id)?.status).toBe('failed');
-    expect(repaired.find(decision => decision.id === multistageProposal.id)?.status).toBe('proposed');
-    await expect(
-      seed.workItems.listAttentionReceipts({
-        orgId: 'org1',
-        factoryProjectId: PROJECT_ID,
-        userId: 'u1',
-        identities: [
-          {
-            kind: 'automation-failed',
-            sourceId: failedSkill.id,
-            occurrence: 0,
-          },
-        ],
-      }),
-    ).resolves.toEqual([]);
-  });
-
   it('rejects malformed structured receipt rows', async () => {
     const now = new Date('2030-01-01T00:00:00.000Z');
     await seed.storage.ops.insertOne('factory_attention_receipts', {
@@ -2138,7 +2100,11 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     // finishes it (triage → planning), then a human approves planning into done.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    const service = new FactoryTransitionService({ configVersion: 'factory-config-v1', storage: seed.workItems });
+    const service = new FactoryTransitionService({
+      configVersion: 'factory-config-v1',
+      storage: seed.workItems,
+      boards: createTriageWorkRegistry(),
+    });
     const move = (stage: 'triage' | 'planning', expectedRevision: number, identity: string, actor: FactoryRuleActor) =>
       service.transition({
         orgId: 'org1',
@@ -2150,7 +2116,6 @@ describe('GET /web/factory/projects/:id/metrics', () => {
         actor,
         ingress: { type: 'rule', identity },
         cause: 'auto_triage',
-        ...(actor.type === 'agent' && actor.role === 'triage' ? { triageType: 'bug' as const } : {}),
       });
     const triaged = await move('triage', workItem.revision, 'auto-1', {
       type: 'system',
@@ -2188,7 +2153,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 
 describe('run activity on the work-item listing', () => {
   async function startRun(sessionId: string) {
-    await seed.workItems.prepareRunStart({
+    const { item } = await seed.workItems.prepareRunStart({
       orgId: 'org1',
       userId: 'u1',
       factoryProjectId: PROJECT_ID,
@@ -2199,6 +2164,7 @@ describe('run activity on the work-item listing', () => {
       kickoffKey: `kickoff-${sessionId}`,
       kickoffMessage: null,
     });
+    return item;
   }
 
   it('stamps only the starting role, preserving other roles’ sessions and startedBy (#22254)', async () => {
@@ -2269,6 +2235,1465 @@ describe('run activity on the work-item listing', () => {
     );
 
     expect((await res.json()).runningSessionIds).toEqual([]);
+  });
+
+  describe('repeat reads of an unchanged board', () => {
+    const listPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+
+    it('answers 304 without a body while the cards and their activity are unchanged', async () => {
+      await startRun('session-running');
+      const app = buildApp(orgUser, undefined, undefined, new Set(['session-running']));
+
+      const first = await app.request(listPath());
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+      expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+      const again = await app.request(listPath(), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the board again once a card changes', async () => {
+      const card = await startRun('session-idle');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(listPath())).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+
+      const after = await app.request(listPath(), { headers: { 'if-none-match': etag } });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).not.toBe(etag);
+      expect((await after.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the board again once a run starts or parks on an unchanged card', async () => {
+      await startRun('session-a');
+      const running = new Set<string>();
+      const parked = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running, undefined, parked);
+      const idle = (await app.request(listPath())).headers.get('etag')!;
+
+      running.add('session-a');
+      const started = await app.request(listPath(), { headers: { 'if-none-match': idle } });
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-a']);
+
+      running.delete('session-a');
+      parked.add('session-a');
+      const parkedRes = await app.request(listPath(), { headers: { 'if-none-match': idle } });
+      expect(parkedRes.status).toBe(200);
+      expect((await parkedRes.json()).parkedSessionIds).toEqual(['session-a']);
+    });
+
+    it('gzips the body for clients that accept it', async () => {
+      await startRun('session-idle');
+      const res = await buildApp(orgUser).request(listPath(), { headers: { 'accept-encoding': 'gzip, br' } });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toContain('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems).toHaveLength(1);
+    });
+  });
+
+  const boardPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const listedIds = async (res: Response) =>
+    FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json()).workItems.map(item => item.id);
+  const createCard = async (externalId: string, overrides: Record<string, unknown> = {}): Promise<{ id: string }> => {
+    const res = await json(
+      'POST',
+      boardPath(),
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId }, ...overrides }),
+    );
+    const { workItem } = await res.json();
+    return workItem;
+  };
+
+  describe('a board read that sends its cursor back (?since=)', () => {
+    // Steps past the window a `since` read goes back to catch a writer whose clock runs behind.
+    const later = () => vi.setSystemTime(Date.now() + 10_000);
+    const read = async (since?: string) => {
+      const res = await buildApp(orgUser).request(since === undefined ? boardPath() : `${boardPath()}?since=${since}`);
+      const text = await res.text();
+      return { ...FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(JSON.parse(text)), bytes: text.length };
+    };
+    /** A board of `count` cards, read in full once every write to it is older than the window. */
+    const boardOf = async (count: number) => {
+      const cards: { id: string }[] = [];
+      for (let from = 0; from < count; from += 50) {
+        const ids = Array.from({ length: Math.min(50, count - from) }, (_, i) => `issue-${from + i}`);
+        cards.push(...(await Promise.all(ids.map(id => createCard(id)))));
+      }
+      later();
+      return { cards, board: await read() };
+    };
+
+    /** The card tables read from here on, and the table of deleted ids. */
+    const cardReads = () => {
+      const tables = ['factory_board_items', 'factory_work_items', 'factory_work_item_sources', 'work_items'];
+      const findMany = vi.spyOn(seed.storage.ops, 'findMany');
+      return () =>
+        findMany.mock.calls
+          .map(([collection]) => collection)
+          .filter(collection => [...tables, 'factory_board_item_tombstones'].includes(collection));
+    };
+
+    beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'] }));
+
+    it('sends only the cards written and the ids removed since the cursor', async () => {
+      const { cards, board } = await boardOf(4);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+      await json('PATCH', `/web/factory/work-items/${cards[2]!.id}`, { title: 'Reworded' });
+      await json('DELETE', `/web/factory/work-items/${cards[3]!.id}`);
+      later();
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title).sort()).toEqual(['Renamed', 'Reworded']);
+      expect(next).toMatchObject({ removedIds: [cards[3]!.id], check: boardCheck((await read()).workItems) });
+      later();
+      expect(await read(next.cursor)).toMatchObject({ workItems: [], removedIds: [], check: next.check });
+    });
+
+    it('sends a card stamped before the cursor that the cursor’s read did not hold', async () => {
+      const { board } = await boardOf(1);
+      // A second writer: its card lands after the read, stamped by a clock behind this one.
+      vi.setSystemTime(Date.now() - 2_000);
+      const late = await createCard('late');
+      later();
+
+      expect((await read(board.cursor)).workItems.map(card => card.id)).toEqual([late.id]);
+    });
+
+    it.each(['not-a-cursor', ''])('sends the whole board for the cursor %j, which it did not issue', async since => {
+      await boardOf(2);
+
+      const answer = await read(since);
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toEqual(expect.any(String));
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers one changed card in the same bytes on a board of 50 cards and of 2,000', async () => {
+      const bytes = [];
+      for (const count of [50, 2_000]) {
+        await seedProject();
+        const { cards, board } = await boardOf(count);
+        later();
+        await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+        const answer = await read(board.cursor);
+        bytes.push(answer.bytes - answer.check!.length);
+      }
+
+      expect(bytes[1]).toBe(bytes[0]);
+    }, 60_000);
+
+    it('names a board that holds an edit its reader was never sent', async () => {
+      const { cards, board } = await boardOf(2);
+      // A writer whose clock runs further behind than a `since` read goes back.
+      vi.setSystemTime(Date.now() - 6_000);
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      // Past the age at which the list is read whole again, which finds the edit.
+      vi.setSystemTime(Date.now() + 70_000);
+
+      const next = await read(board.cursor);
+
+      expect(next).toMatchObject({ workItems: [], removedIds: [] });
+      expect(next.check).not.toBe(boardCheck(board.workItems));
+      const whole = await read();
+      expect(whole.workItems.map(card => card.title)).toContain('Renamed');
+      expect(next.check).toBe(boardCheck(whole.workItems));
+    });
+
+    it.each([50, 2_000])(
+      'reads no card to answer a reader that holds the cached board of %i cards',
+      async count => {
+        const { board } = await boardOf(count);
+        const reads = cardReads();
+
+        for (let poll = 0; poll < 3; poll++) {
+          expect(await read(board.cursor)).toMatchObject({ workItems: [], removedIds: [], cursor: board.cursor });
+        }
+
+        expect(reads()).toEqual([]);
+      },
+      60_000,
+    );
+
+    it('reads only the deleted ids to answer a cursor older than the cached board', async () => {
+      const { cards, board } = await boardOf(3);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      await read(board.cursor);
+      const reads = cardReads();
+
+      const next = await read(board.cursor);
+      const all = await read('1');
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(all.workItems).toHaveLength(3);
+      expect(reads()).toEqual(['factory_board_item_tombstones', 'factory_board_item_tombstones']);
+    });
+
+    it('gzips what moved for a reader that accepts it', async () => {
+      const { cards, board } = await boardOf(1);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?since=${board.cursor}`, {
+        headers: { 'accept-encoding': 'gzip, br' },
+      });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      expect(res.headers.get('vary')).toBe('Accept-Encoding');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString('utf8'));
+      expect(body.workItems.map((card: { title: string }) => card.title)).toEqual(['Renamed']);
+    });
+
+    it('leaves a card deleted after the list was read for the next read to remove', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[0]!.id}`, { title: 'Renamed' });
+      const listed = await read();
+      const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+      let deleting: Promise<unknown> | undefined;
+      vi.spyOn(seed.storage.ops, 'findMany').mockImplementation(async (collection, ...rest) => {
+        // The delete lands between this read's list and its read of the deleted ids.
+        if (collection === 'factory_board_item_tombstones') {
+          await (deleting ??= json('DELETE', `/web/factory/work-items/${cards[1]!.id}`));
+        }
+        return findMany(collection, ...rest);
+      });
+
+      const next = await read(board.cursor);
+
+      expect(next.workItems.map(card => card.title)).toEqual(['Renamed']);
+      expect(next).toMatchObject({ removedIds: [], check: boardCheck(listed.workItems) });
+      later();
+      expect((await read(next.cursor)).removedIds).toEqual([cards[1]!.id]);
+    });
+
+    it('sends a board showing Review cards whole, without a cursor', async () => {
+      const card = await createCard('pull-request');
+      await createCard('issue');
+      // A row as the retired Review board left it.
+      await seed.storage.ops.updateMany('factory_board_items', { id: card.id }, { board: 'review' });
+
+      const answer = await read('1');
+
+      expect(answer.workItems).toHaveLength(2);
+      expect(answer.cursor).toBeUndefined();
+      expect(answer.removedIds).toBeUndefined();
+    });
+
+    it('answers a narrowed list as it does without a cursor', async () => {
+      const held = await startRun('session-mine');
+      await startRun('session-other');
+      const { cursor } = await read();
+      later();
+      await json('PATCH', `/web/factory/work-items/${held.id}`, { title: 'Renamed' });
+
+      const narrowed = `${boardPath()}?sessionId=session-mine`;
+      const answer = await buildApp(orgUser).request(`${narrowed}&since=${cursor}`);
+
+      expect(answer.headers.get('etag')).toBe((await buildApp(orgUser).request(narrowed)).headers.get('etag'));
+      expect(await answer.json()).not.toHaveProperty('removedIds');
+    });
+
+    it('lists the card named by its id, not what moved since the cursor', async () => {
+      const { cards, board } = await boardOf(2);
+      later();
+      await json('PATCH', `/web/factory/work-items/${cards[1]!.id}`, { title: 'Renamed' });
+
+      const answer = await buildApp(orgUser).request(`${boardPath()}?workItemId=${cards[0]!.id}&since=${board.cursor}`);
+
+      expect(await listedIds(answer)).toEqual([cards[0]!.id]);
+    });
+  });
+
+  describe('one session’s cards (?sessionId=)', () => {
+    const scopedPath = (...sessionIds: string[]) =>
+      `${boardPath()}?${sessionIds.map(sessionId => `sessionId=${encodeURIComponent(sessionId)}`).join('&')}`;
+
+    it('lists the card that holds the session, and the activity of that card only', async () => {
+      const mine = await startRun('session-mine');
+      await startRun('session-other');
+      const app = buildApp(orgUser, undefined, undefined, new Set(['session-mine', 'session-other']));
+
+      const res = await app.request(scopedPath('session-mine'));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual([mine.id]);
+      expect(body.runningSessionIds).toEqual(['session-mine']);
+    });
+
+    it('lists the cards of every session named, in board order', async () => {
+      const first = await startRun('session-first');
+      await startRun('session-second');
+      const third = await startRun('session-third');
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(scopedPath('session-third', 'session-first'));
+
+      expect(await listedIds(res)).toEqual(board.filter(id => id === first.id || id === third.id));
+    });
+
+    it('lists nothing for a session no card holds', async () => {
+      await startRun('session-other');
+
+      const res = await buildApp(orgUser).request(scopedPath('session-unknown'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+
+    it('brings the cards related to the session’s card: its parent, its children and the pull request pushed from its branch', async () => {
+      const mine = await startRun('session-mine');
+      const parent = await createCard('parent');
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { parentWorkItemId: parent.id });
+      const child = await createCard('child', { parentWorkItemId: mine.id });
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      await createCard('unrelated');
+
+      const res = await buildApp(orgUser).request(scopedPath('session-mine'));
+
+      expect((await listedIds(res)).toSorted()).toEqual([mine.id, parent.id, child.id, pullRequest.id].toSorted());
+    });
+
+    it('answers 304 through writes to other cards, and sends the session’s card again once it changes', async () => {
+      const mine = await startRun('session-mine');
+      const other = await startRun('session-other');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${other.id}`, { title: 'Renamed elsewhere' });
+      const unchanged = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe('');
+
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+      const changed = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the session’s card again once its run starts', async () => {
+      await startRun('session-mine');
+      const running = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running);
+      const idle = (await app.request(scopedPath('session-mine'))).headers.get('etag')!;
+
+      running.add('session-mine');
+      const started = await app.request(scopedPath('session-mine'), { headers: { 'if-none-match': idle } });
+
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
+    });
+
+    it('refuses a blank session id rather than sending the whole board', async () => {
+      await startRun('session-mine');
+
+      const res = await buildApp(orgUser).request(`${boardPath()}?sessionId=`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('the cards holding a session (?scope=sessions)', () => {
+    const sessionsPath = () => `${boardPath()}?scope=sessions`;
+
+    it('lists every card holding a session with its activity, in board order, without the cards holding none', async () => {
+      const first = await startRun('session-first');
+      await createCard('unstarted');
+      const second = await startRun('session-second');
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+      const app = buildApp(
+        orgUser,
+        undefined,
+        undefined,
+        new Set(['session-first']),
+        undefined,
+        new Set(['session-second']),
+      );
+
+      const res = await app.request(sessionsPath());
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === first.id || id === second.id),
+      );
+      expect(body.runningSessionIds).toEqual(['session-first']);
+      expect(body.parkedSessionIds).toEqual(['session-second']);
+    });
+
+    it('brings the pull request pushed from a session’s branch, though it holds no session', async () => {
+      const mine = await startRun('session-mine');
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      await createCard('unrelated');
+
+      const res = await buildApp(orgUser).request(sessionsPath());
+
+      expect((await listedIds(res)).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
+    });
+
+    it('answers 304 through writes to cards holding no session, and sends the list again once a listed card changes', async () => {
+      const mine = await startRun('session-mine');
+      const unstarted = await createCard('unstarted');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      await json('PATCH', `/web/factory/work-items/${unstarted.id}`, { title: 'Renamed elsewhere' });
+      const unchanged = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+      expect(await unchanged.text()).toBe('');
+
+      await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+      const changed = await app.request(sessionsPath(), { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect((await changed.json()).workItems[0].title).toBe('Renamed');
+    });
+
+    it('sends the list again each time a run starts or stops on an unchanged card', async () => {
+      await startRun('session-mine');
+      const running = new Set<string>();
+      const app = buildApp(orgUser, undefined, undefined, running);
+      const idle = (await app.request(sessionsPath())).headers.get('etag')!;
+
+      running.add('session-mine');
+      const started = await app.request(sessionsPath(), { headers: { 'if-none-match': idle } });
+      expect(started.status).toBe(200);
+      expect((await started.json()).runningSessionIds).toEqual(['session-mine']);
+
+      running.delete('session-mine');
+      const stopped = await app.request(sessionsPath(), {
+        headers: { 'if-none-match': started.headers.get('etag')! },
+      });
+      expect(stopped.status).toBe(200);
+      expect((await stopped.json()).runningSessionIds).toEqual([]);
+    });
+
+    it.each([
+      ['an unknown scope', '?scope=everything'],
+      ['a scope combined with session ids', '?scope=sessions&sessionId=session-mine'],
+    ])('refuses %s rather than guessing which cards to send', async (_case, query) => {
+      await startRun('session-mine');
+
+      const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
+
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('the cards holding no session (?started=false)', () => {
+    const unstarted = async (query = '') => {
+      const res = await buildApp(orgUser).request(`${boardPath()}?started=false${query}`);
+      const body = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json());
+      return { titles: body.workItems.map(item => item.title), total: body.total };
+    };
+    const rename = (card: { id: string }, title: string) =>
+      json('PATCH', `/web/factory/work-items/${card.id}`, { title });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('lists the cards holding no session, most recently updated first, and counts them', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      await startRun('session-mine');
+      const oldest = await createCard('1', { title: 'Oldest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Middle card' });
+      vi.setSystemTime(new Date('2026-11-01T10:02:00Z'));
+      await createCard('3', { title: 'Newest card' });
+      vi.setSystemTime(new Date('2026-11-01T10:03:00Z'));
+      await json('PATCH', `/web/factory/work-items/${oldest.id}`, { metadata: { note: 'looked at' } });
+
+      expect(await unstarted()).toEqual({
+        titles: ['Oldest card', 'Newest card', 'Middle card'],
+        total: 3,
+      });
+    });
+
+    it('finds a card by every word typed, in any case, in its title, its key, its number or its source id', async () => {
+      await createCard('github:7:issue:12', { title: 'Fix the login flow', metadata: { number: 12 } });
+      await createCard('github:7:issue:345', { title: 'Rework the login palette', metadata: { number: 345 } });
+      await createCard('linear:issue-uuid', {
+        title: 'Tidy the settings page',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:issue-uuid' },
+        metadata: { identifier: 'ENG-77' },
+      });
+
+      expect((await unstarted('&q=LOGIN%20fix')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=%2312')).titles).toEqual(['Fix the login flow']);
+      expect((await unstarted('&q=34')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=issue:345')).titles).toEqual(['Rework the login palette']);
+      expect((await unstarted('&q=eng-77')).titles).toEqual(['Tidy the settings page']);
+      expect(await unstarted('&q=fix%20palette')).toEqual({ titles: [], total: 0 });
+      expect((await unstarted('&q=login')).total).toBe(2);
+    });
+
+    it('never lists a card holding a session, whatever is typed', async () => {
+      await startRun('session-mine');
+      await createCard('1', { title: 'Work nobody started' });
+
+      expect(await unstarted('&q=work')).toEqual({ titles: ['Work nobody started'], total: 1 });
+    });
+
+    it('sends the first 20 matches unless told a limit, with the count of every match', async () => {
+      for (let number = 1; number <= 23; number += 1) {
+        await createCard(String(number), { title: number % 2 ? `Palette ${number}` : `Login ${number}` });
+      }
+
+      const all = await unstarted();
+      expect(all.titles).toHaveLength(20);
+      expect(all.total).toBe(23);
+      const typed = await unstarted('&q=palette&limit=5');
+      expect(typed.titles).toHaveLength(5);
+      expect(typed.titles.every(title => title.startsWith('Palette'))).toBe(true);
+      expect(typed.total).toBe(12);
+      expect((await unstarted('&limit=500')).titles).toHaveLength(23);
+    });
+
+    it('answers 304 while nothing changed, and sends the count again once only it changed', async () => {
+      vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') });
+      const older = await createCard('1', { title: 'Palette, older' });
+      vi.setSystemTime(new Date('2026-11-01T10:01:00Z'));
+      await createCard('2', { title: 'Palette, newer' });
+      const path = `${boardPath()}?started=false&q=palette&limit=1`;
+      const app = buildApp(orgUser);
+      const first = await app.request(path);
+      const etag = first.headers.get('etag')!;
+      expect(await first.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 2 });
+
+      const unchanged = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(unchanged.status).toBe(304);
+
+      // The card that was past the limit stops matching: the listed card is the same, the count is not.
+      await rename(older, 'Login');
+      const changed = await app.request(path, { headers: { 'if-none-match': etag } });
+      expect(changed.status).toBe(200);
+      expect(await changed.json()).toMatchObject({ workItems: [{ title: 'Palette, newer' }], total: 1 });
+    });
+  });
+
+  describe('the cards filed from given sources (?source=)', () => {
+    const sourcePath = (...sources: string[]) =>
+      `${boardPath()}?${sources.map(source => `source=${encodeURIComponent(source)}`).join('&')}`;
+
+    it('lists the cards filed from a source named by its id or its URL, whatever sessions they hold', async () => {
+      const byId = await createCard('github:7:issue:12');
+      const byUrl = await createCard('github-issue:13', {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:13',
+          url: 'https://github.com/acme/app/issues/13',
+        },
+      });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      await createCard('github:7:issue:99');
+
+      const res = await buildApp(orgUser).request(
+        sourcePath(
+          'github:7:issue:12',
+          'https://github.com/acme/app/issues/13',
+          'github:7:pull-request:14',
+          'github:7:issue:404',
+        ),
+      );
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id).toSorted()).toEqual(
+        [byId.id, byUrl.id, started.id].toSorted(),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing when no card is filed from the sources', async () => {
+      await createCard('github:7:issue:12');
+
+      expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
+    });
+  });
+
+  describe('the cards named by their ids (?workItemId=)', () => {
+    const idPath = (...ids: string[]) => `${boardPath()}?${ids.map(id => `workItemId=${id}`).join('&')}`;
+
+    it('lists only the named cards, in board order, whatever sessions they hold and without their relatives', async () => {
+      const parent = await createCard('github:7:issue:12');
+      const child = await createCard('github:7:issue:13', { parentWorkItemId: parent.id });
+      const started = await createCard('github:7:pull-request:14');
+      await json('PATCH', `/web/factory/work-items/${started.id}`, {
+        sessions: { review: { sessionId: 'session-review', branch: 'factory/pr-14', threadId: 'thread-review' } },
+      });
+      const board = await listedIds(await buildApp(orgUser).request(boardPath()));
+
+      const res = await buildApp(orgUser).request(idPath(started.id, child.id));
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+      expect(body.workItems.map((item: { id: string }) => item.id)).toEqual(
+        board.filter(id => id === started.id || id === child.id),
+      );
+      expect(body).not.toHaveProperty('total');
+    });
+
+    it('lists nothing, without an error, when no card has the id', async () => {
+      await createCard('github:7:issue:12');
+
+      const res = await buildApp(orgUser).request(idPath('11111111-2222-4333-8444-555555555555'));
+
+      expect(res.status).toBe(200);
+      expect(await listedIds(res)).toEqual([]);
+    });
+  });
+
+  it.each([
+    ['a wish for the started cards', '?started=true', 'invalid_started'],
+    ['unstarted cards combined with a scope', '?started=false&scope=sessions', 'invalid_started'],
+    ['unstarted cards combined with session ids', '?started=false&sessionId=session-mine', 'invalid_started'],
+    ['typed text without started=false', '?q=login', 'invalid_search'],
+    ['typed text with a scope', '?scope=sessions&q=login', 'invalid_search'],
+    ['typed text longer than 200 characters', `?started=false&q=${'a'.repeat(201)}`, 'invalid_search'],
+    ['a blank source', '?source=', 'invalid_source'],
+    ['a source longer than 512 characters', `?source=${'a'.repeat(513)}`, 'invalid_source'],
+    ['more than 100 sources', `?${Array.from({ length: 101 }, (_, i) => `source=s${i}`).join('&')}`, 'invalid_source'],
+    ['sources combined with a scope', '?source=github-issue:1&scope=sessions', 'invalid_source'],
+    ['sources combined with unstarted cards', '?source=github-issue:1&started=false', 'invalid_source'],
+    ['sources combined with session ids', '?source=github-issue:1&sessionId=session-mine', 'invalid_source'],
+    ['an id that is not a card id', '?workItemId=backlog-1', 'invalid_work_item_id'],
+    [
+      'more than 100 ids',
+      `?${Array.from({ length: 101 }, () => `workItemId=${PROJECT_ID}`).join('&')}`,
+      'invalid_work_item_id',
+    ],
+    ['ids combined with sources', `?workItemId=${PROJECT_ID}&source=github-issue:1`, 'invalid_work_item_id'],
+    ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
+    ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
+    ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
+  ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
+    await createCard('github-issue:1');
+
+    const res = await buildApp(orgUser).request(`${boardPath()}${query}`);
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error });
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/starters', () => {
+  const startersPath = () => `/web/factory/projects/${PROJECT_ID}/work-items/starters`;
+  const create = async (overrides: Record<string, unknown>) =>
+    (await (await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody(overrides))).json())
+      .workItem;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', startersPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', startersPath())).status).toBe(404);
+  });
+
+  it('counts the cards behind each starter on the default board', async () => {
+    const issue = (externalId: string) => ({ integrationId: 'github', type: 'issue', externalId });
+    await create({ externalSource: issue('1'), metadata: { labels: ['bug', 'Memory'] } });
+    await create({ externalSource: issue('2'), metadata: { labels: ['Memory'] } });
+    await create({ externalSource: issue('3'), stages: ['intake'], sessions: { triage: run.execute } });
+    await create({
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+      metadata: { number: 7, state: 'open', sourceCreatedAt: '2030-01-10T00:00:00.000Z' },
+    });
+    vi.useFakeTimers({ now: new Date('2030-01-12T00:00:00.000Z'), toFake: ['Date'] });
+
+    const res = await json('GET', startersPath());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemStarters.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      failed: 0,
+      changesRequested: 0,
+      review: { count: 1, oldestOpenedAt: '2030-01-10T00:00:00.000Z' },
+      undecided: 1,
+      untriaged: 2,
+      unplannedBugs: 1,
+      sweep: { area: 'Memory', count: 2 },
+      stale: 0,
+    });
+  });
+
+  it('counts an open card whose newest run decision failed', async () => {
+    const card = await create({});
+    const now = new Date(Date.now() + 1_000);
+    await seed.workItems.commitRuleEvaluation({
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: card.id,
+      ingress: { identity: 'failing-run', triggerType: 'test' },
+      configVersion: 'rules-v1',
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage', idempotencyKey: 'failing-run' }],
+      causalChain: [],
+      now,
+    });
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(0);
+    const [claimed] = await seed.workItems.claimDeferredDecisions({
+      ownerId: 'worker-1',
+      now,
+      leaseExpiresAt: new Date(now.getTime() + 60_000),
+      limit: 1,
+    });
+    await seed.workItems.failDeferredDecision({
+      id: claimed!.id,
+      orgId: 'org1',
+      factoryProjectId: PROJECT_ID,
+      ownerId: 'worker-1',
+      now,
+      availableAt: now,
+      lastError: 'Sandbox quota exceeded',
+      failureCode: 'session_unavailable',
+      terminal: true,
+    });
+
+    expect((await (await json('GET', startersPath())).json()).failed).toBe(1);
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/activity', () => {
+  const activityPath = (since: string) =>
+    `/web/factory/projects/${PROJECT_ID}/work-items/activity?since=${encodeURIComponent(since)}`;
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    const since = '2026-06-01T00:00:00.000Z';
+    expect((await json('GET', activityPath(since), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', activityPath(since))).status).toBe(404);
+  });
+
+  it('lists when cards were created and completed since the instant, and counts every card', async () => {
+    vi.useFakeTimers({ now: new Date('2026-06-10T12:00:00.000Z'), toFake: ['Date'] });
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    vi.setSystemTime(new Date('2026-06-15T12:00:00.000Z'));
+    const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody());
+    const { workItem } = await created.json();
+    vi.setSystemTime(new Date('2026-06-16T09:00:00.000Z'));
+    await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
+      board: 'work',
+      stage: 'done',
+      expectedRevision: workItem.revision,
+      requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa4',
+      cause: 'board_drag',
+    });
+
+    const res = await json('GET', activityPath('2026-06-12T00:00:00.000Z'));
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemActivity.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      total: 2,
+      createdAt: ['2026-06-15T12:00:00.000Z'],
+      doneAt: ['2026-06-16T09:00:00.000Z'],
+    });
+  });
+
+  describe('asked again by a tab that kept the answer', () => {
+    const since = '2026-06-12T00:00:00.000Z';
+    const createAt = async (instant: string) => {
+      vi.setSystemTime(new Date(instant));
+      await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ externalSource: null }));
+    };
+
+    it('answers 304 without a body while no card of the period changed', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+
+      const first = await app.request(activityPath(since));
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+
+      const again = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the instants again once a card is created inside the period', async () => {
+      vi.useFakeTimers({ now: new Date('2026-06-15T12:00:00.000Z'), toFake: ['Date'] });
+      await createAt('2026-06-15T12:00:00.000Z');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(activityPath(since))).headers.get('etag');
+      expect(etag).toBeTruthy();
+
+      await createAt('2026-06-16T09:00:00.000Z');
+
+      const after = await app.request(activityPath(since), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      expect(after.headers.get('etag')).not.toBe(etag);
+      const body = await after.json();
+      expect(body.total).toBe(2);
+      // The instants follow the board's order, which this case does not pin.
+      expect(body.createdAt.toSorted()).toEqual(['2026-06-15T12:00:00.000Z', '2026-06-16T09:00:00.000Z']);
+      expect(body.doneAt).toEqual([]);
+    });
+  });
+
+  it.each([
+    ['no instant', ''],
+    ['a date without a time', '?since=2026-06-12'],
+    ['text that is not an instant', '?since=last-week'],
+  ])('refuses %s rather than guessing a window', async (_case, query) => {
+    const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/activity${query}`);
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
+  type Phases = BoardPhasesResponse;
+  interface Filed {
+    id: string;
+    revision: number;
+  }
+
+  const teammate = { workosId: 'u2', organizationId: 'org1' };
+  const itemsPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const phasesPath = (query = '', board = 'work') =>
+    `/web/factory/projects/${PROJECT_ID}/boards/${board}/phases${query && `?${query}`}`;
+  const at = (instant: string) => vi.setSystemTime(new Date(instant));
+
+  const file = async (externalId: string, overrides: Record<string, unknown> = {}, user = orgUser): Promise<Filed> => {
+    const res = await json(
+      'POST',
+      itemsPath(),
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId },
+        title: `Card ${externalId}`,
+        metadata: {},
+        ...overrides,
+      }),
+      user,
+    );
+    expect(res.ok).toBe(true);
+    return (await res.json()).workItem;
+  };
+
+  const move = async (card: Filed, stage: string, user = orgUser) => {
+    const res = await json(
+      'POST',
+      `${itemsPath()}/${card.id}/transition`,
+      { board: 'work', stage, expectedRevision: card.revision, requestId: crypto.randomUUID(), cause: 'board_drag' },
+      user,
+    );
+    expect(res.status).toBe(200);
+  };
+
+  const read = async (query = '', app = buildApp(orgUser)): Promise<Phases> => {
+    const res = await app.request(phasesPath(query));
+    expect(res.status).toBe(200);
+    return FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await res.json());
+  };
+
+  const under = (body: Phases, phase: string) => {
+    const found = body.phases.find(entry => entry.phase === phase);
+    if (!found) throw new Error(`The answer has no ${phase} phase`);
+    return { total: found.total, ids: found.cards.map(card => card.id) };
+  };
+
+  beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') }));
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', phasesPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', phasesPath())).status).toBe(404);
+  });
+
+  it('lists the board’s phases in order, each with how many cards it holds and the first of them, latest entry first', async () => {
+    await file('1');
+    at('2026-11-01T10:01:00Z');
+    const second = await file('2');
+    at('2026-11-01T10:02:00Z');
+    const third = await file('3');
+    const { boards } = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    const phases: string[] = boards
+      .find((board: { id: string }) => board.id === 'work')
+      .phases.map((phase: { id: string }) => phase.id);
+
+    const body = await read('limit=2');
+
+    expect(body.phases.map(entry => entry.phase)).toEqual(phases);
+    expect(under(body, 'intake')).toEqual({ total: 3, ids: [third.id, second.id] });
+    expect(body.phases.filter(entry => entry.phase !== 'intake').map(entry => entry.total)).toEqual(
+      phases.slice(1).map(() => 0),
+    );
+    expect(body).toMatchObject({ boardTotal: 3, matchingTotal: 3, related: [] });
+  });
+
+  it('shows a card that is in none of the board’s phases under the first one, and no card of another board', async () => {
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry({ boards: [release] }));
+    const filed = await app.request(itemsPath(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createBody({ externalSource: null, board: 'release', stages: ['queued'], metadata: {} })),
+    });
+    expect(filed.ok).toBe(true);
+    const onRelease: Filed = (await filed.json()).workItem;
+    const lost = await file('1');
+    await seed.workItems.update({ orgId: 'org1', id: lost.id, userId: 'u1', patch: { stages: ['retired-lane'] } });
+
+    const work = await read('', app);
+    const other = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(
+      await (await app.request(phasesPath('', 'release'))).json(),
+    );
+
+    expect(work.phases[0]?.cards.map(card => card.id)).toEqual([lost.id]);
+    expect(work.phases.slice(1).every(entry => entry.total === 0)).toBe(true);
+    expect(work.boardTotal).toBe(1);
+    expect(other.phases.map(entry => [entry.phase, entry.cards.map(card => card.id)])).toEqual([
+      ['queued', [onRelease.id]],
+      ['shipped', []],
+    ]);
+  });
+
+  it('lists a card that is in two phases under both, and counts it once among the board’s cards', async () => {
+    const both = await file('1', { metadata: { labels: ['bug'] } });
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: both.id,
+      userId: 'u1',
+      patch: { stages: ['triage', 'execute'] },
+    });
+    await file('2');
+
+    const whole = await read();
+    const bugs = await read('label=bug');
+
+    expect(under(whole, 'triage').ids).toEqual([both.id]);
+    expect(under(whole, 'execute').ids).toEqual([both.id]);
+    expect(whole).toMatchObject({ boardTotal: 2, matchingTotal: 2 });
+    expect([under(bugs, 'triage').total, under(bugs, 'execute').total, under(bugs, 'intake').total]).toEqual([1, 1, 0]);
+    // The filters lower how many match; the board still has both cards.
+    expect(bugs).toMatchObject({ boardTotal: 2, matchingTotal: 1 });
+  });
+
+  describe('the order of a phase (?sort=)', () => {
+    it('orders by creation when asked, newest or oldest first, whatever entered the phase last', async () => {
+      const older = await file('1');
+      at('2026-11-01T10:01:00Z');
+      const newer = await file('2');
+      at('2026-11-01T10:02:00Z');
+      await move(newer, 'planning');
+      at('2026-11-01T10:03:00Z');
+      await move(older, 'planning');
+
+      expect(under(await read(), 'planning').ids).toEqual([older.id, newer.id]);
+      expect(under(await read('sort=created-newest'), 'planning').ids).toEqual([newer.id, older.id]);
+      expect(under(await read('sort=created-oldest'), 'planning').ids).toEqual([older.id, newer.id]);
+    });
+
+    it('puts first the cards the signed-in user last moved into the phase', async () => {
+      const [a, b, c] = [await file('1'), await file('2'), await file('3')];
+      at('2026-11-01T10:01:00Z');
+      await move(a, 'planning');
+      at('2026-11-01T10:02:00Z');
+      await move(b, 'planning', teammate);
+      at('2026-11-01T10:03:00Z');
+      await move(c, 'planning');
+
+      expect(under(await read('sort=recent'), 'planning').ids).toEqual([c.id, b.id, a.id]);
+      expect(under(await read('sort=recent-mine'), 'planning').ids).toEqual([c.id, a.id, b.id]);
+      expect(under(await read('sort=recent-mine', buildApp(teammate)), 'planning').ids).toEqual([b.id, c.id, a.id]);
+    });
+
+    it('keeps cards that entered at the same instant in one order: by id, descending', async () => {
+      const cards = [await file('1'), await file('2'), await file('3')];
+
+      expect(under(await read(), 'intake').ids).toEqual(
+        cards
+          .map(card => card.id)
+          .sort()
+          .reverse(),
+      );
+    });
+  });
+
+  describe('how deep a phase is listed (?limit=, ?window=, ?item=)', () => {
+    const fileTwoPhases = async () => {
+      const intake: Filed[] = [];
+      const planning: Filed[] = [];
+      for (const [nth, stage] of ['intake', 'intake', 'intake', 'planning', 'planning'].entries()) {
+        at(`2026-11-01T10:0${nth}:00Z`);
+        const card = await file(String(nth));
+        if (stage === 'planning') await move(card, 'planning');
+        (stage === 'planning' ? planning : intake).push(card);
+      }
+      // Latest entry first, as the phases list them.
+      return { intake: intake.reverse().map(card => card.id), planning: planning.reverse().map(card => card.id) };
+    };
+
+    it('deepens only the phase a window names', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read('limit=1&window=intake:2');
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 2) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
+    });
+
+    it('answers for the asked card with its place and its body, and lists its phase no deeper', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read(`limit=1&item=${intake[2]}&cards=true`);
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
+      expect(body.item).toEqual({
+        id: intake[2],
+        version: expect.any(String),
+        places: [{ phase: 'intake', position: 2 }],
+      });
+      // The first card of each phase, then the asked one: three bodies, not the phase above it.
+      expect(body.workItems?.map(card => card.id)).toEqual([intake[0], planning[0], intake[2]]);
+      expect(body.workItems?.[2]?.version).toBe(body.item?.version);
+    });
+
+    it('answers no asked card for one the board does not hold', async () => {
+      await fileTwoPhases();
+
+      const body = await read(`limit=1&item=${crypto.randomUUID()}`);
+
+      expect(body).not.toHaveProperty('item');
+    });
+
+    it('ignores a window for a phase the board no longer has, so a reader that deepened it keeps its board', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read('limit=1&window=retired-phase:5&window=planning:2');
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning });
+    });
+  });
+
+  it.each([
+    ['an order it does not know', 'sort=sideways'],
+    ['a window without a count', 'window=intake'],
+    ['a window of no card', 'window=intake:0'],
+    ['two windows for one phase', 'window=intake:2&window=intake:3'],
+    ['an asked card that is not an id', 'item=first'],
+    ['a card bodies flag other than true', 'cards=yes'],
+  ])('refuses %s rather than answering another view', async (_case, query) => {
+    const res = await json('GET', phasesPath(query));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_phases_query' });
+  });
+
+  it('404s for a board the project does not have', async () => {
+    const res = await json('GET', phasesPath('', 'missing'));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'board_not_found' });
+  });
+
+  describe('a searched or filtered view', () => {
+    const fileMixedBoard = async () => {
+      const issue = await file('1', {
+        title: 'Fix the login flow',
+        metadata: { number: 101, labels: ['bug', 'Memory'], author: 'octocat', assignees: ['hubot'] },
+      });
+      const pullRequest = await file('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        title: 'Tidy the palette',
+        metadata: { number: 7, labels: ['bug'], author: 'monalisa', requestedReviewers: ['defunkt'] },
+      });
+      const linearA = await file('LIN-1', {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
+        title: 'Palette contrast',
+        metadata: { linearProjectId: 'project-a', assignee: 'Ada' },
+      });
+      const linearB = await file('LIN-2', {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-2' },
+        title: 'Slow sync',
+        metadata: { linearProjectId: 'project-b' },
+      });
+      const byHand = await file('', { externalSource: null, title: 'Write the changelog' }, teammate);
+      return new Map([
+        [issue.id, 'issue'],
+        [pullRequest.id, 'pull request'],
+        [linearA.id, 'linear a'],
+        [linearB.id, 'linear b'],
+        [byHand.id, 'by hand'],
+      ]);
+    };
+
+    it.each([
+      ['a search word', 'q=palette', ['linear a', 'pull request']],
+      ['every search word', 'q=the%20login', ['issue']],
+      ['a card number', 'q=%23101', ['issue']],
+      ['a label', 'label=bug', ['issue', 'pull request']],
+      ['every picked label', 'label=bug&label=Memory', ['issue']],
+      ['a source', 'source=github', ['issue', 'pull request']],
+      ['cards filed by hand', 'source=manual', ['by hand']],
+      ['pull requests', 'source=pull-request', ['pull request']],
+      ['any picked source', 'source=pull-request&source=linear', ['linear a', 'linear b', 'pull request']],
+      ['a Linear project picked alone', 'linearProject=project-a', ['linear a']],
+      ['a source’s author', 'author=github:octocat', ['issue']],
+      ['the person who filed a card by hand', 'author=factory:u2', ['by hand']],
+      ['an assignee', 'assignee=github:hubot&assignee=linear:ada', ['issue', 'linear a']],
+      ['a requested reviewer', 'reviewer=github:defunkt', ['pull request']],
+      ['a person who worked on the card', 'worked=factory:u2', ['by hand']],
+      ['a person involved in any way', 'teammate=github:defunkt&teammate=github:hubot', ['issue', 'pull request']],
+      ['every field at once', 'label=bug&source=github&author=github:monalisa', ['pull request']],
+      ['a search and a filter at once', 'label=bug&q=login', ['issue']],
+      ['nothing, when no card matches every field', 'label=Memory&reviewer=github:defunkt', []],
+    ])('keeps the cards that match %s, and counts only them', async (_case, query, expected) => {
+      const names = await fileMixedBoard();
+
+      const body = await read(query);
+
+      const intake = under(body, 'intake');
+      expect(intake.ids.map(id => names.get(id)).sort()).toEqual(expected);
+      expect(intake.total).toBe(expected.length);
+      expect(body.matchingTotal).toBe(expected.length);
+      // The board's own count ignores the search and the filters.
+      expect(body.boardTotal).toBe(5);
+    });
+  });
+
+  describe('the cards an answer names', () => {
+    const fileParentAndPullRequest = async () => {
+      const parent = await file('parent');
+      at('2026-11-01T10:01:00Z');
+      const pullRequest = await file('child', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+        parentWorkItemId: parent.id,
+      });
+      return { parent, pullRequest };
+    };
+
+    it('names the cards related to a listed card that no phase lists, without any card body', async () => {
+      const { parent, pullRequest } = await fileParentAndPullRequest();
+
+      const res = await json('GET', phasesPath('limit=1'));
+      const raw = await res.json();
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(raw);
+
+      expect(under(body, 'intake')).toEqual({ total: 2, ids: [pullRequest.id] });
+      expect(body.related.map(card => card.id)).toEqual([parent.id]);
+      expect(raw).not.toHaveProperty('workItems');
+      // Once a phase lists the parent, it is no longer only related.
+      expect((await read()).related).toEqual([]);
+    });
+
+    it('sends with cards=true the body of every named card, as the list route sends it', async () => {
+      const { parent, pullRequest } = await fileParentAndPullRequest();
+      await move(await file('unrelated'), 'planning');
+      const listed = await (await json('GET', itemsPath())).json();
+      const wire = (id: string) => listed.workItems.find((card: { id: string }) => card.id === id);
+
+      const raw = await (await json('GET', phasesPath('limit=1&window=planning:1&cards=true'))).json();
+
+      const unrelated = raw.phases.find((entry: { phase: string }) => entry.phase === 'planning').cards[0];
+      const sent = raw.workItems.map(({ version: _version, ...card }: { version: string }) => card);
+      expect(sent).toEqual([wire(pullRequest.id), wire(unrelated.id), wire(parent.id)]);
+      // A reader tells its copy of a card from the answer's by its version.
+      expect(raw.related).toEqual([{ id: parent.id, version: raw.workItems[2].version }]);
+      expect(raw.workItems[2].version).toEqual(expect.any(String));
+    });
+
+    it('declares the version of each body it sends, so a typed reader takes it from the answer', async () => {
+      await file('1');
+      const schema = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema;
+
+      const raw = await (await json('GET', phasesPath('cards=true'))).json();
+
+      expect(schema.parse(raw)).toEqual(raw);
+      const [{ version: _version, ...unversioned }] = raw.workItems;
+      expect(schema.safeParse({ ...raw, workItems: [unversioned] }).success).toBe(false);
+    });
+
+    it('names a card by the same version in the by-id read, so a reader can tell it holds the body', async () => {
+      const card = await file('1');
+
+      const phases = await read();
+      const byId = await (await json('GET', `${itemsPath()}?workItemId=${card.id}`)).json();
+
+      expect(byId.workItems).toMatchObject([{ id: card.id, version: phases.phases[0]?.cards[0]?.version }]);
+    });
+
+    it('reports which sessions of the named cards run or wait, and none of an unlisted card', async () => {
+      const start = async (sessionId: string) => {
+        await seed.workItems.prepareRunStart({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+          role: 'execute',
+          session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+          resourceId: sessionId,
+          kickoffKey: `kickoff-${sessionId}`,
+          kickoffMessage: null,
+        });
+      };
+      await start('session-older');
+      at('2026-11-01T10:01:00Z');
+      await start('session-newer');
+      const sessions = new Set(['session-older', 'session-newer']);
+      const app = buildApp(orgUser, undefined, undefined, sessions, undefined, new Set(['session-newer']));
+
+      const firstOnly = await read('limit=1', app);
+      const both = await read('', app);
+
+      expect(firstOnly).toMatchObject({ runningSessionIds: ['session-newer'], parkedSessionIds: ['session-newer'] });
+      expect(both.runningSessionIds.toSorted()).toEqual(['session-newer', 'session-older']);
+      expect(both.parkedSessionIds).toEqual(['session-newer']);
+    });
+  });
+
+  describe('asked again by a board that kept the answer', () => {
+    it('answers 304 without a body while nothing the view shows changed', async () => {
+      await file('1');
+      const app = buildApp(orgUser);
+
+      const first = await app.request(phasesPath());
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+      expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+      const again = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the answer again, with the card’s new version, once a listed card changes', async () => {
+      const card = await file('1');
+      const app = buildApp(orgUser);
+      const first = await app.request(phasesPath());
+      const etag = first.headers.get('etag');
+      const before = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await first.json());
+
+      at('2026-11-01T10:05:00Z');
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+
+      const after = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await after.json());
+      expect(under(body, 'intake').ids).toEqual([card.id]);
+      expect(body.phases[0]?.cards[0]?.version).not.toBe(before.phases[0]?.cards[0]?.version);
+    });
+
+    it('sends a new version when a source sync changes a listed card in the millisecond of its last write', async () => {
+      const card = await file('1');
+      at('2026-11-01T10:00:07Z');
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+      const app = buildApp(orgUser);
+      const view = phasesPath('cards=true');
+      const first = await app.request(view);
+      const before = await first.json();
+
+      // The clock has not moved: the sync stamps the card with the instant the rename did.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: before.workItems[0].workItem.externalId,
+        patch: { labels: ['urgent'] },
+      });
+
+      const after = await app.request(view, { headers: { 'if-none-match': first.headers.get('etag')! } });
+      expect(after.status).toBe(200);
+      const body = await after.json();
+      expect(body.workItems[0]).toMatchObject({ changedAt: before.workItems[0].changedAt });
+      expect(body.workItems[0].workItem.labels).toEqual(['urgent']);
+      expect(body.phases[0].cards[0].version).not.toBe(before.phases[0].cards[0].version);
+      expect(body.workItems[0].version).toBe(body.phases[0].cards[0].version);
+    });
+
+    it('sends a new version of a Review card that reads as a Work card once Review closes, though nothing wrote it', async () => {
+      const closed = await file('closed', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'closed' },
+      });
+      const open = await file('open', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'open' },
+      });
+      // Rows as the retired Review board left them: one done, one still in review.
+      const stored = (id: string, stages: string[]) =>
+        seed.storage.ops.updateMany('factory_board_items', { id }, { board: 'review', stages });
+      await stored(closed.id, ['done']);
+      await stored(open.id, ['review']);
+      const app = buildApp(orgUser);
+      const byId = async () =>
+        (await (await app.request(`${itemsPath()}?workItemId=${closed.id}`)).json()).workItems[0];
+      at('2026-11-01T10:01:00Z');
+      await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Still open' });
+      const held = await byId();
+      expect(held).toMatchObject({ board: 'review' });
+      const etag = (await app.request(phasesPath())).headers.get('etag');
+
+      at('2026-11-01T10:02:00Z');
+      await seed.workItems.update({
+        orgId: 'org1',
+        id: open.id,
+        userId: orgUser.workosId,
+        patch: { stages: ['done'] },
+      });
+
+      const after = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const done = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema
+        .parse(await after.json())
+        .phases.find(entry => entry.phase === 'done');
+      const named = done?.cards.find(card => card.id === closed.id);
+      const now = await byId();
+      expect(now).toMatchObject({ board: 'work', changedAt: held.changedAt });
+      expect(named?.version).toBe(now.version);
+      expect(named?.version).not.toBe(held.version);
+    });
+
+    it('still answers 304 when the card that changed is outside every window', async () => {
+      const deep = await file('1');
+      at('2026-11-01T10:01:00Z');
+      await file('2');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(phasesPath('limit=1'))).headers.get('etag');
+
+      at('2026-11-01T10:05:00Z');
+      await json('PATCH', `/web/factory/work-items/${deep.id}`, { title: 'Renamed below the fold' });
+
+      const again = await app.request(phasesPath('limit=1'), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+    });
+
+    it('sends the answer again once a total changes, though the listed cards did not', async () => {
+      const oldest = await file('1');
+      const app = buildApp(orgUser);
+      const view = phasesPath('limit=1&sort=created-oldest');
+      const etag = (await app.request(view)).headers.get('etag');
+
+      at('2026-11-01T10:05:00Z');
+      await file('2');
+
+      const after = await app.request(view, { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await after.json());
+      expect(under(body, 'intake')).toEqual({ total: 2, ids: [oldest.id] });
+    });
+
+    it('gzips the answer for a reader that accepts it', async () => {
+      const card = await file('1');
+
+      const res = await buildApp(orgUser).request(phasesPath(), { headers: { 'accept-encoding': 'gzip' } });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString());
+      expect(under(body, 'intake').ids).toEqual([card.id]);
+    });
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/filter-options', () => {
+  const itemsPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const optionsPath = () => `${itemsPath()}/filter-options`;
+  const file = (overrides: Record<string, unknown>, user = orgUser) =>
+    json('POST', itemsPath(), createBody({ metadata: {}, ...overrides }), user);
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', optionsPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', optionsPath())).status).toBe(404);
+  });
+
+  it('offers every label, every person a source names and every Factory user who acted, over all the project’s cards', async () => {
+    await file({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+      metadata: { labels: ['bug', 'Memory'], author: 'octocat', assignees: ['hubot'] },
+    });
+    await file({
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+      metadata: { labels: ['bug', 'area: docs'], author: 'octocat', requestedReviewers: ['defunkt'] },
+    });
+    await file({
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
+      metadata: { assignee: 'Ada' },
+    });
+    await file({ externalSource: null, title: 'Filed by hand' }, { workosId: 'u2', organizationId: 'org1' });
+
+    const res = await json('GET', optionsPath());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      labels: ['area: docs', 'bug', 'Memory'],
+      people: [
+        { id: 'linear:ada', name: 'Ada', source: 'linear' },
+        { id: 'github:defunkt', name: 'defunkt', source: 'github' },
+        { id: 'github:hubot', name: 'hubot', source: 'github' },
+        { id: 'github:octocat', name: 'octocat', source: 'github' },
+      ],
+      actorIds: ['u1', 'u2'],
+    });
+  });
+
+  it('answers 304 while no card changed, and the options again once one did', async () => {
+    await file({ metadata: { labels: ['bug'] } });
+    const app = buildApp(orgUser);
+    const first = await app.request(optionsPath());
+    const etag = first.headers.get('etag');
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+    const again = await app.request(optionsPath(), { headers: { 'if-none-match': etag! } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe('');
+
+    await file({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '2' },
+      metadata: { labels: ['docs'] },
+    });
+
+    const after = await app.request(optionsPath(), { headers: { 'if-none-match': etag! } });
+    expect(after.status).toBe(200);
+    expect((await after.json()).labels).toEqual(['bug', 'docs']);
   });
 });
 

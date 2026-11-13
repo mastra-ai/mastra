@@ -2,7 +2,7 @@ import type { ServerDetailInfo } from '@mastra/core/mcp';
 import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 import { MastraClient } from '../client';
-import type { McpServerListResponse } from '../types';
+import type { GetBuiltinMcpServerResponse, McpServerListResponse } from '../types';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -129,6 +129,24 @@ describe('MCP Server Registry Client Methods', () => {
     });
   });
 
+  describe('getBuiltinMcpServer()', () => {
+    const descriptor: GetBuiltinMcpServerResponse = {
+      enabled: true,
+      path: '/mastra/mcp',
+      mcpPackageInstalled: true,
+      toolsets: ['agents', 'tools'],
+      readOnly: false,
+      auth: { type: 'protected', provider: 'jwt' },
+    };
+
+    it('fetches GET /mcp/builtin under the configured apiPrefix', async () => {
+      mockFetchResponse(descriptor);
+      const prefixed = new MastraClient({ ...clientOptions, apiPrefix: '/mastra' });
+      expect(await prefixed.getBuiltinMcpServer()).toEqual(descriptor);
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/mastra/mcp/builtin', expect.any(Object));
+    });
+  });
+
   describe('getMcpServerDetails()', () => {
     const serverId = 'mcp-server-1';
 
@@ -252,6 +270,66 @@ describe('MCP Server Registry Client Methods', () => {
         resumeData: { confirmed: true },
         suspendPayload: { phase: 'confirm', amount: 990 },
       });
+    });
+  });
+
+  describe('MCP server tasks', () => {
+    const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+
+    it('lists tasks with getMcpServerTasks(), passing limit only when given', async () => {
+      const listed = { surfaces: [], tasks: [] };
+      mockFetchResponse(listed);
+      expect(await client.getMcpServerTasks('my server')).toEqual(listed);
+      expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/my%20server/tasks`);
+
+      mockFetchResponse(listed);
+      await client.getMcpServerTasks('tasks', { limit: 20 });
+      expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks?limit=20`);
+    });
+
+    it('passes filters and the page cursor as query parameters', async () => {
+      mockFetchResponse({ surfaces: [], tasks: [] });
+      await client.getMcpServerTasks('tasks', {
+        status: 'failed',
+        surface: 'slow_report',
+        client: 'a/b+c',
+        cursor: 'p2',
+      });
+      const url = new URL(lastCall()[0]);
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        status: 'failed',
+        surface: 'slow_report',
+        client: 'a/b+c',
+        cursor: 'p2',
+      });
+    });
+
+    it('finds a task by MCP task id with findMcpServerTask(), sending the id in the body', async () => {
+      mockFetchResponse({ task: { taskKey: 'key-1' } });
+      await client.findMcpServerTask('tasks', 'raw-task-id');
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/find`);
+      expect(url).not.toContain('raw-task-id');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ taskId: 'raw-task-id' });
+    });
+
+    it('cancels by key with cancelMcpServerTask(), encoding the key', async () => {
+      mockFetchResponse({ success: true });
+      expect(await client.cancelMcpServerTask('tasks', 'a/b+c')).toEqual({ success: true });
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/a%2Fb%2Bc/cancel`);
+      expect(init.method).toBe('POST');
+    });
+
+    it('answers input with answerMcpServerTaskInput()', async () => {
+      mockFetchResponse({ success: true });
+      const inputResponses = { approve: { action: 'accept', content: { ok: true } } };
+      await client.answerMcpServerTaskInput('tasks', 'key-1', inputResponses);
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/key-1/input`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ inputResponses });
     });
   });
 

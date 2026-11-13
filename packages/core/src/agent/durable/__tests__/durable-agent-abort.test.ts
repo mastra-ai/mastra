@@ -25,7 +25,7 @@ import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
 /** @param onCall - invoked as soon as the model starts streaming, to synchronize on a live run. */
-function createAbortableModel(onCall?: () => void) {
+function createAbortableModel(onCall?: () => void, text?: string) {
   return new MockLanguageModelV2({
     doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
       onCall?.();
@@ -47,6 +47,7 @@ function createAbortableModel(onCall?: () => void) {
               timestamp: new Date(0),
             });
             controller.enqueue({ type: 'text-start', id: 'text-1' });
+            if (text) controller.enqueue({ type: 'text-delta', id: 'text-1', delta: text });
             // Hold the stream open and resolve with an AbortError as soon as
             // the signal fires — the durable step then catches AbortError and
             // emits the abort event to the bridge.
@@ -328,7 +329,8 @@ describe('DurableAgent abort signal', () => {
       const modelCalled = new Promise<void>(resolve => {
         streaming = resolve;
       });
-      const blocking = createAbortableModel(streaming);
+      // Input interrupts a silent model; wait for visible output so this tests queued cancellation instead.
+      const blocking = createAbortableModel(streaming, 'Initial answer');
       let calls = 0;
       const model = new MockLanguageModelV2({
         doStream: async options => {
@@ -364,6 +366,14 @@ describe('DurableAgent abort signal', () => {
       const result = await agent.stream('initial', { memory: { thread: scope.threadId, resource: scope.resourceId } });
       try {
         await modelCalled;
+        const reader = result.output.fullStream.getReader();
+        try {
+          let chunk = await reader.read();
+          while (!chunk.done && chunk.value.type !== 'text-delta') chunk = await reader.read();
+          expect(chunk.done).toBe(false);
+        } finally {
+          reader.releaseLock();
+        }
         observer?.unsubscribe();
         const removed = agent.sendSignal({ type: 'user-message', contents: 'cancelled durable input' }, scope);
         await removed.accepted;
@@ -486,4 +496,46 @@ describe('DurableAgent abort signal', () => {
 
     cleanup();
   });
+  // The run abort route answers with __abortRunAcknowledged. On the process
+  // executing the run it must still confirm, with or without a memory thread.
+  // The threadless case runs last, and the threadless evented case lives in
+  // durable-agent-abort-ack.test.ts: on main, a run started after a threadless
+  // run of the other agent kind in the same process never reaches the model.
+  it.each([
+    ['evented', createEventedAgent, true],
+    ['durable', createDurableAgent, true],
+    ['durable', createDurableAgent, false],
+  ] as const)(
+    '%s __abortRunAcknowledged confirms a run executing in this process (case %#)',
+    async (_kind, createAgent, withThread) => {
+      let streaming: () => void;
+      const modelCalled = new Promise<void>(resolve => {
+        streaming = resolve;
+      });
+      const baseAgent = new Agent({
+        id: `abort-ack-owner-agent-${_kind}-${withThread}`,
+        name: 'Abort Ack Owner Agent',
+        instructions: 'Test',
+        model: createAbortableModel(() => streaming()) as LanguageModelV2,
+      });
+      const durableAgent = createAgent({ agent: baseAgent, pubsub });
+
+      let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+      const { output, runId, cleanup } = await durableAgent.stream('Go', {
+        ...(withThread
+          ? { memory: { thread: `abort-ack-owner-thread-${_kind}`, resource: `abort-ack-owner-resource-${_kind}` } }
+          : {}),
+        onAbort: data => {
+          abortPayload = data;
+        },
+      });
+
+      await modelCalled;
+      await expect(durableAgent.__abortRunAcknowledged(runId)).resolves.toBe(true);
+      await output.consumeStream();
+      expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
+
+      cleanup();
+    },
+  );
 });

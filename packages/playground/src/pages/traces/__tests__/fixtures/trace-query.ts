@@ -124,6 +124,15 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
   },
 };
 
+/** Store that also returns thread rows, so Studio can offer the threads view. */
+export const threadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQueryRows: true,
+  },
+};
+
 export const noFeedbackCapabilities: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityStorageDuckDB',
   capabilities: {

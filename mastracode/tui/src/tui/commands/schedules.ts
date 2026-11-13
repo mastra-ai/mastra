@@ -297,7 +297,7 @@ async function manageScheduleFlow(
       if (confirm !== 'Delete') return;
       scheduler.delete(schedule.id);
       ctx.showInfo(`Deleted schedule ${id}.`);
-      return;
+      break;
     }
   }
 }

@@ -162,8 +162,12 @@ function getErrorHint(errorType: string): string | null {
       return 'Use /model to select a different model';
     case 'context_length':
       return 'Use /new to start a fresh conversation';
+    case 'content_filter':
+      return 'Retry, rephrase, or use /model to switch models';
     case 'rate_limit':
       return 'Wait a moment and try again';
+    case 'quota':
+      return "Check the provider account's billing or usage allowance, or switch to another account";
     case 'network':
       return 'Check your internet connection';
     default:
@@ -279,6 +283,8 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
       // Sandbox check first, mirroring the dispatch routing order.
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+      } else if (event.toolName === 'ask_user') {
+        hookMgr.runPermissionRequest('ask_question', event.toolCallId, event.toolName, payload).catch(() => {});
       } else if (event.toolName === 'submit_plan') {
         hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
       }

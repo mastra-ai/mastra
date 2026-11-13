@@ -39,12 +39,37 @@ export function getRouteSpecificSchemaDefaults(route: ServerRoute): {
   query?: Record<string, unknown>;
   body?: Record<string, unknown>;
 } {
+  if (route.path === '/observability/feedback/:feedbackId' && route.method === 'PUT') {
+    return {
+      body: {
+        contextMode: 'provided',
+        feedback: {
+          feedbackId: 'test-feedback-replacement',
+          traceId: 'test-trace',
+          timestamp: '2026-01-01T00:00:00.000Z',
+          feedbackSource: 'user',
+          feedbackType: 'comment',
+          value: 'replacement feedback',
+        },
+      },
+    };
+  }
+
   if (route.path === '/observability/traces/query/values') {
     return { body: { predicateScope: 'trace', path: 'entityName' } };
   }
 
   if (route.path === '/agent-controller/:controllerId/sessions' && route.method === 'POST') {
     return { body: { resourceId: 'test-resource' } };
+  }
+
+  if (route.path === '/schedules' && route.method === 'POST') {
+    return { body: { cron: '* * * * *' } };
+  }
+
+  // `data` must match the payloadSchema of the 'ticket.created' event on test-server-1.
+  if (route.path === '/mcp/:serverId/events/:eventName/emit') {
+    return { body: { data: { id: 'test-ticket' } } };
   }
 
   if (route.path === '/datasets/:datasetId/compare') {
@@ -155,16 +180,17 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodDefault') {
     if ('_zod' in schema) {
       return def.defaultValue;
-    } else {
-      return def.defaultValue();
     }
+    return def.defaultValue();
   }
 
   if (typeName === 'ZodString') {
-    const hasDateTimeFormat = (def.checks ?? []).some((check: any) => {
-      const checkDef = check._zod?.def ?? check.def ?? check;
-      return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
-    });
+    const hasDateTimeFormat =
+      def.format === 'datetime' ||
+      (def.checks ?? []).some((check: any) => {
+        const checkDef = check._zod?.def ?? check.def ?? check;
+        return check.kind === 'datetime' || check.format === 'datetime' || checkDef.format === 'datetime';
+      });
     if (hasDateTimeFormat) {
       if (fieldName?.toLowerCase() === 'from') return '2026-01-01T00:00:00.000Z';
       if (fieldName?.toLowerCase() === 'to') return '2026-01-02T00:00:00.000Z';
@@ -280,22 +306,20 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
   if (typeName === 'ZodDate') return new Date();
-  if (typeName === 'ZodBigInt') return BigInt(0);
+  if (typeName === 'ZodBigInt') return 0n;
 
   if (typeName === 'ZodLiteral') {
     if ('_zod' in schema) {
       return def.values?.[0];
-    } else {
-      return def.value;
     }
+    return def.value;
   }
 
   if (typeName === 'ZodEnum') {
     if ('_zod' in schema) {
       return Object.values(def.entries)[0];
-    } else {
-      return def.values[0];
     }
+    return def.values[0];
   }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
@@ -305,9 +329,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodArray') {
     if ('_zod' in schema) {
       return [generateValidDataFromSchema(def.element, fieldName)];
-    } else {
-      return [generateValidDataFromSchema(def.type, fieldName)];
     }
+    return [generateValidDataFromSchema(def.type, fieldName)];
   }
 
   if (typeName === 'ZodObject') {
@@ -420,7 +443,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
     params.scorerId = 'test-scorer';
   }
   if (route.path.includes(':scoreId')) params.scoreId = 'test-score';
-  if (route.path.includes(':feedbackId')) params.feedbackId = 'test-feedback';
+  if (route.path.includes(':feedbackId')) {
+    params.feedbackId = route.method === 'PUT' ? 'test-feedback-replacement' : 'test-feedback';
+  }
   if (route.path.includes(':traceId')) params.traceId = 'test-trace';
   if (route.path.includes(':runId')) params.runId = 'test-run';
   if (route.path.includes(':stepId')) params.stepId = 'test-step';
@@ -441,6 +466,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':id') && route.path.includes('/mcp/v0/servers/')) params.id = 'test-server-1';
   if (route.path.includes(':serverId')) params.serverId = 'test-server-1';
   if (route.path.includes(':toolId') && route.path.includes('/mcp/')) params.toolId = 'getWeather';
+  if (route.path.includes(':eventName')) params.eventName = 'ticket.created';
+  if (route.path.includes(':taskKey')) params.taskKey = 'test-task-key';
 
   // Workspace route params
   if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';

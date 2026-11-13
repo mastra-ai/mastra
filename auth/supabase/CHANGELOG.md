@@ -1,5 +1,41 @@
 # @mastra/auth-supabase
 
+## 1.2.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+## 1.2.0-alpha.0
+
+### Minor Changes
+
+- The built-in MCP server now advertises your identity provider as the authorization server to MCP clients, so they can discover where to sign in. ([#29930](https://github.com/mastra-ai/mastra/pull/29930))
+
+### Patch Changes
+
+- Added `user` support for dynamic agent configuration callbacks: the provider now implements `toMastraUser()` so callbacks receive a correctly mapped `user` argument (id, name, email, avatar, and role where available). ([#28612](https://github.com/mastra-ai/mastra/pull/28612))
+
+## 1.1.6
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@supabase/supabase-js@^2.118.0` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.118.0) (from `^2.110.9`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@supabase/supabase-js@^2.118.0` ↗︎](https://www.npmjs.com/package/@supabase/supabase-js/v/2.118.0) (from `^2.110.9`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
 ## 1.1.5
 
 ### Patch Changes

@@ -42,7 +42,7 @@ const results = await vectorStore.query({
 
 ## Documentation
 
-- [@mastra/astra documentation](https://mastra.ai/reference/vectors/astra)
+- [@mastra/astra documentation](https://mastra.ai/integrations/vectors/astra)
 
 ## Changelog
 

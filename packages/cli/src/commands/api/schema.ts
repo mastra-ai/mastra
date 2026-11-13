@@ -1,6 +1,7 @@
 import { fetchSchemaManifest } from './client.js';
 import { ApiCliError } from './errors.js';
 import { FACTORY_API_ROUTE_SCHEMAS } from './factory-route-metadata.generated.js';
+import { FEEDBACK_SCORE_SCHEMAS } from './feedback-score-schemas.generated.js';
 import { LEARNING_ROUTE_SCHEMAS } from './learning-route-metadata.js';
 import type { ResolvedTarget } from './target.js';
 import type { ApiCommandDescriptor, ApiCommandExample } from './types.js';
@@ -26,6 +27,7 @@ const FACTORY_BUNDLED_ROUTE_SCHEMAS = Object.fromEntries(
 
 export const BUNDLED_ROUTE_SCHEMAS: Readonly<Record<string, BundledRouteSchema>> = {
   ...FACTORY_BUNDLED_ROUTE_SCHEMAS,
+  ...FEEDBACK_SCORE_SCHEMAS,
   ...LEARNING_ROUTE_SCHEMAS,
 };
 
@@ -136,10 +138,13 @@ export function buildCommandExamples(descriptor: ApiCommandDescriptor): ApiComma
 
 function buildGenericExamples(descriptor: ApiCommandDescriptor, command: string): ApiCommandExample[] {
   if (descriptor.list) {
+    const positionalSamples = samplePositionals(descriptor);
     return [
       {
         description: descriptor.description,
-        command: descriptor.acceptsInput ? `${command} '{"page":0,"perPage":50}'` : command,
+        command: [command, ...positionalSamples, descriptor.acceptsInput ? `'{"page":0,"perPage":50}'` : undefined]
+          .filter(Boolean)
+          .join(' '),
       },
     ];
   }

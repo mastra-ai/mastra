@@ -193,6 +193,22 @@ describe('createRepoTemplate', () => {
     expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/widgets');
   });
 
+  it('threads docker into the template as a resource operation after sizing', async () => {
+    const template = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+      cpuCount: 4,
+      docker: true,
+    })!();
+
+    const serialized = serializeSandboxTemplate(template!);
+    expect(serialized.operations.slice(0, 2)).toEqual([
+      { method: 'cpuCount', args: [4] },
+      { method: 'docker', args: [true] },
+    ]);
+    expect(serialized.family).toBe('repo:https://github.com/acme/widgets:/widgets');
+  });
+
   it('omits resource operations entirely when sizing is not requested', async () => {
     const template = await createRepoTemplate({
       getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
@@ -201,6 +217,14 @@ describe('createRepoTemplate', () => {
     const methods = serializeSandboxTemplate(template!).operations.map(operation => operation.method);
     expect(methods).not.toContain('cpuCount');
     expect(methods).not.toContain('memoryMB');
+    expect(methods).not.toContain('docker');
+
+    const dockerOff = await createRepoTemplate({
+      getRepositoryAccess: accessFor('https://github.com/acme/widgets.git'),
+      resolveHead: headOf(SHA_1),
+      docker: false,
+    })!();
+    expect(serializeSandboxTemplate(dockerOff!)).toEqual(serializeSandboxTemplate(template!));
   });
 
   it('produces a commit-independent family key derived from the clone URL + workdir', async () => {
@@ -295,6 +319,21 @@ describe('createRepoTemplate', () => {
     })!();
 
     expect(other).toBeUndefined();
+  });
+
+  it('keeps docker in the resources-only template when nothing else is requested', async () => {
+    const expected = { schemaVersion: 1, operations: [{ method: 'docker', args: [true] }] };
+
+    const noHead = await createRepoTemplate({
+      docker: true,
+      getRepositoryAccess: accessFor('https://github.com/acme/unresolved-docker.git'),
+      resolveHead: vi.fn().mockRejectedValue(new Error('rate limited')),
+    })!();
+    expect(serializeSandboxTemplate(noHead!)).toEqual(expected);
+
+    const noRepos = await createRepoTemplate({ docker: true })!();
+    expect(serializeSandboxTemplate(noRepos!)).toEqual(expected);
+    expect(createRepoTemplate({ docker: false })).toBeUndefined();
   });
 
   it('keeps the requested resources when the repository template cannot be resolved', async () => {
@@ -495,6 +534,44 @@ describe('createRepoTemplate', () => {
       TURBO_TEAM: 'acme',
     });
     expect(JSON.stringify(definition)).not.toContain('turbo_secret');
+  });
+
+  describe('buildEnvRevision', () => {
+    const base = {
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/acme/widgets.git' }),
+      resolveHead: headOf(SHA_1),
+      workingDirectory: '/home/user/repos',
+      setupCommand: 'pnpm install',
+    };
+    const definitionOf = async (options: Partial<Parameters<typeof createRepoTemplate>[0]>) =>
+      serializeSandboxTemplate((await createRepoTemplate({ ...base, ...options })!())!);
+
+    it('puts the revision ahead of every clone and setup step, values stay out', async () => {
+      const definition = await definitionOf({ buildEnv: { NPM_TOKEN: 'sentinel-value-1' }, buildEnvRevision: 'rev-a' });
+      const index = definition.operations.findIndex(
+        op => op.method === 'setEnvs' && JSON.stringify(op.args).includes('MASTRA_BUILD_ENV_REVISION'),
+      );
+      expect(definition.operations[index]).toEqual({
+        method: 'setEnvs',
+        args: [{ MASTRA_BUILD_ENV_REVISION: 'rev-a' }],
+      });
+      const firstRunCmd = definition.operations.findIndex(op => op.method === 'runCmd');
+      expect(index).toBeGreaterThanOrEqual(0);
+      expect(index).toBeLessThan(firstRunCmd);
+      expect(JSON.stringify(definition)).not.toContain('sentinel-value-1');
+    });
+
+    it('changes the definition when the revision changes, not when values change', async () => {
+      const a = await definitionOf({ buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-a' });
+      const b = await definitionOf({ buildEnv: { NPM_TOKEN: 'two' }, buildEnvRevision: 'rev-a' });
+      const c = await definitionOf({ buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-b' });
+      expect(b).toEqual(a);
+      expect(c).not.toEqual(a);
+    });
+
+    it('leaves the definition unchanged without a revision', async () => {
+      expect(await definitionOf({ buildEnv: { NPM_TOKEN: 'one' } })).toEqual(await definitionOf({}));
+    });
   });
 
   it('rejects a hostile clone URL instead of interpolating it into build commands', async () => {

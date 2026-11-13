@@ -401,6 +401,27 @@ describe('agent-controller routes', () => {
       expect(await controller.getSession('never-started')).toBeUndefined();
       expect(await controller.queryThreads({ resourceId: 'never-started' })).toEqual([]);
     });
+
+    // Scopes are authority: a remote caller never names them. Hosts derive them from
+    // trusted request context through the agent's `scopes` function instead.
+    it('never passes scopes from the request body to the session', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-scopes', id: 'user-scopes', ownerId: 'code' });
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+
+      await expect(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-scopes',
+          message: 'hello',
+          scopes: ['org:other'],
+        } as any),
+      ).resolves.toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]![0]).not.toHaveProperty('scopes');
+    });
   });
 
   // The messages/steer/follow-up/tool-suspension routes ack immediately and let
@@ -1140,6 +1161,94 @@ describe('agent-controller routes', () => {
   });
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
+    it('parses displayState=false as false rather than a truthy string', () => {
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'false' }).displayState).toBe(
+        false,
+      );
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'true' }).displayState).toBe(
+        true,
+      );
+    });
+
+    it('omits display state snapshots when displayState=false but preserves other events', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-no-snapshots',
+        id: 'user-no-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      session.emit({ type: 'agent_start' } as any);
+      session.emit({ type: 'agent_end' } as any);
+      const first = await reader.read();
+      const second = await reader.read();
+      await reader.cancel();
+
+      expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
+    });
+
+    // The adapter can hand the route a signal that aborted while earlier middleware ran. Without checking
+    // `aborted` up front the session subscription and its 25 s heartbeat stay alive until something cancels the
+    // stream, which a client that already left never does. (#28480)
+    it('ends the stream when the client left before the stream started', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-gone-early',
+        id: 'user-gone-early',
+        ownerId: 'code',
+      });
+      const client = new AbortController();
+      client.abort();
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-gone-early',
+        abortSignal: client.signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      const frames: unknown[] = [];
+      for (let next = await reader.read(); !next.done; next = await reader.read()) frames.push(next.value);
+
+      expect(frames.map(frame => (frame as { type: string }).type)).toEqual(['display_state_changed']);
+    });
+
+    it('still sends live display state changes by default', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-snapshots',
+        id: 'user-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-snapshots',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const initial = await reader.read();
+      session.emit({ type: 'agent_start' } as any);
+      const event = await reader.read();
+      const snapshot = await reader.read();
+      await reader.cancel();
+
+      expect((initial.value as any).type).toBe('display_state_changed');
+      expect(event.value).toEqual({ type: 'agent_start' });
+      expect((snapshot.value as any).type).toBe('display_state_changed');
+    });
+
     it('delivers session events to the SSE stream', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -1285,6 +1394,89 @@ describe('agent-controller routes', () => {
       expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
+    });
+
+    it('carries the same provider details, requested model, codes and reason a saved error keeps', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-facts',
+        id: 'user-err-facts',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-facts',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const responseBody = '{"error":{"type":"permission_error","message":"Your API key does not have permission."}}';
+      const providerError = Object.assign(new Error('Bad Request'), {
+        name: 'AI_APICallError',
+        statusCode: 403,
+        responseBody,
+        responseHeaders: { 'x-request-id': 'req_123' },
+        requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'secret prompt' }] },
+      });
+      session.emit({ type: 'error', error: providerError, errorType: 'provider' } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(received)).error).toEqual({
+        name: 'AI_APICallError',
+        message: 'Bad Request',
+        statusCode: 403,
+        responseBody,
+        requestId: 'req_123',
+        modelId: 'claude-opus-4-5',
+        codes: ['permission_error'],
+        reason: 'Your API key does not have permission.',
+      });
+    });
+
+    it('keeps the stream open when a provider detail of an error cannot be read', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-unreadable',
+        id: 'user-err-unreadable',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-unreadable',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const unreadable = Object.defineProperty(new Error('Bad Request'), 'responseHeaders', {
+        get() {
+          throw new TypeError('Body has already been consumed.');
+        },
+      });
+      session.emit({ type: 'error', error: unreadable, errorType: 'provider' } as any);
+      session.emit({ type: 'agent_end', reason: 'error' } as any);
+
+      const delivered: any[] = [];
+      while (delivered.at(-1)?.type !== 'agent_end') {
+        const { value } = await reader.read();
+        const type = (value as any)?.type;
+        if (type === 'error' || type === 'agent_end') delivered.push(value);
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(delivered))).toEqual([
+        { type: 'error', error: { name: 'Error', message: 'Bad Request' }, errorType: 'provider' },
+        { type: 'agent_end', reason: 'error' },
+      ]);
     });
 
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {
@@ -1910,6 +2102,8 @@ describe('agent-controller routes', () => {
         .getAgentController('code')!
         .createSession({ resourceId: 'user-limit', id: 'user-limit', ownerId: 'code' });
       for (let i = 0; i < 4; i++) await session.thread.create({ title: `t${i}` });
+      const memory = (await mastra.getStorage()!.getStore('memory'))!;
+      const listThreads = vi.spyOn(memory, 'listThreads');
 
       const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
         mastra,
@@ -1926,6 +2120,28 @@ describe('agent-controller routes', () => {
       );
       const times = res.threads.map(t => Date.parse(t.updatedAt!));
       expect(times[0]).toBeGreaterThanOrEqual(times[1]!);
+      // In-memory storage scans once instead of materializing the whole map for each page.
+      expect(listThreads).toHaveBeenCalledTimes(1);
+      expect(listThreads.mock.calls[0]?.[0]).toMatchObject({
+        perPage: false,
+        orderBy: { field: 'updatedAt', direction: 'DESC' },
+      });
+
+      const fractional = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 1.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(fractional.threads.length).toBe(1);
+
+      const subOne = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-limit',
+        limit: 0.2,
+      } as any)) as { threads: { id: string }[] };
+      expect(subOne.threads).toEqual([]);
     });
 
     it('scopes the result to `tags` so worktrees sharing a resourceId stay isolated', async () => {
@@ -1999,6 +2215,43 @@ describe('agent-controller routes', () => {
       const thread = res.threads.find(t => t.title === 'p1');
       expect(thread?.tags).toEqual({ projectPath: '/repo' });
     });
+
+    it.each([
+      { key: 'projectPath', storageFilter: { resourceId: 'user-tags', metadata: { projectPath: '/repo/a' } } },
+      { key: 'project-path', storageFilter: { resourceId: 'user-tags' } },
+    ])(
+      'lists only the threads tagged $key, filtering in storage when it accepts the key',
+      async ({ key, storageFilter }) => {
+        const memory = (await mastra.getStorage()!.getStore('memory'))!;
+        const now = new Date();
+        for (const [id, path] of [
+          ['a1', '/repo/a'],
+          ['b1', '/repo/b'],
+        ] as const) {
+          await memory.saveThread({
+            thread: {
+              id,
+              resourceId: 'user-tags',
+              title: id,
+              metadata: { [key]: path },
+              createdAt: now,
+              updatedAt: now,
+            },
+          });
+        }
+        const listThreads = vi.spyOn(memory, 'listThreads');
+
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-tags',
+          tags: { [key]: '/repo/a' },
+        } as any)) as { threads: { title?: string; tags?: Record<string, string> }[] };
+
+        expect(listThreads).toHaveBeenCalledWith(expect.objectContaining({ filter: storageFilter }));
+        expect(res.threads).toEqual([expect.objectContaining({ title: 'a1', tags: { [key]: '/repo/a' } })]);
+      },
+    );
 
     it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
       // Thread state comes from the agent thread-stream runtime — the same

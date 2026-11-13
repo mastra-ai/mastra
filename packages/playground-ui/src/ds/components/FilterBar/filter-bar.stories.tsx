@@ -112,7 +112,7 @@ function Demo({
     <div className="grid w-full max-w-3xl gap-3">
       <FilterBar fields={fields} operators={DEFAULT_FILTER_OPERATORS} value={items} onValueChange={setItems}>
         <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter traces…" />
+        <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
       {children?.(items)}
       <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">{JSON.stringify(items, null, 2)}</pre>
@@ -255,7 +255,7 @@ export const CustomLayout: Story = {
           onValueChange={setItems}
           className="rounded-lg"
         >
-          <FilterBar.Input placeholder="Add a filter…" />
+          <FilterBar.Input placeholder="Add a filter" />
         </FilterBar>
         <div className="flex flex-wrap items-center gap-1">
           {items.map(item => (
@@ -305,7 +305,7 @@ function ExpressionDemo({ initial }: { initial: FilterBarExpression }) {
     <div className="grid w-full max-w-3xl gap-3">
       <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={expression} onValueChange={setExpression}>
         <FilterBar.Chips />
-        <FilterBar.Input placeholder="Filter traces…" />
+        <FilterBar.Input placeholder="Filter traces" />
       </FilterBar>
       <pre className="rounded-lg bg-card p-3 text-meta text-muted-foreground">
         {JSON.stringify(expression, null, 2)}

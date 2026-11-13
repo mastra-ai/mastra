@@ -11,16 +11,11 @@ import { queryKeys } from '../../api/keys';
 import { createAppRoutes } from '../router';
 import type { GithubIssueDetail } from '../domains/factory/services/factory';
 import { saveKanbanView } from './boardLayoutQueries';
-import { largeBoard, largeCandidatePage } from './fixtures/largeBoard';
+import { boardViewport, mockBoardRowLayout } from './boardRowLayout';
+import { largeBoard, largeCandidatePage, largeCardId } from './fixtures/largeBoard';
 import { FACTORY_ID, stubWorkBoard } from './workBoardStubs';
 
 const ITEM_COUNT = 250;
-
-function viewport() {
-  const element = screen.getByTestId('board-column-triage').closest<HTMLElement>('.overflow-auto');
-  if (!element) throw new Error('Missing board scroll container');
-  return element;
-}
 
 function serveWorkItems(count: number) {
   server.use(
@@ -45,17 +40,7 @@ function renderBoard(search = '', itemCount = ITEM_COUNT) {
 }
 
 describe('Large factory boards', () => {
-  beforeEach(() => {
-    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (this: HTMLElement) {
-      return this.matches('.overflow-auto') ? 600 : 48;
-    });
-    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
-    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-      const scroller = this.closest<HTMLElement>('.overflow-auto');
-      const height = this.matches('.overflow-auto') ? 600 : 48;
-      return new DOMRect(0, this === scroller ? 0 : -(scroller?.scrollTop ?? 0), 1200, height);
-    });
-  });
+  beforeEach(mockBoardRowLayout);
   afterEach(() => vi.restoreAllMocks());
 
   it.each(['list', 'board'] as const)(
@@ -66,18 +51,18 @@ describe('Large factory boards', () => {
       if (layout === 'board') await saveKanbanView(userEvent.setup());
 
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByLabelText('Large task 249')).not.toBeInTheDocument());
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
 
-      fireEvent.scroll(viewport(), { target: { scrollTop: 0 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 0 } });
       expect(await screen.findByLabelText('Large task 249')).toBeInTheDocument();
       expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
     },
   );
 
   it('given a deep link to the last issue, shows and focuses it without mounting all preceding issues', async () => {
-    renderBoard('?item=large-0');
+    renderBoard(`?item=${largeCardId(0)}`);
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Details for Large task 0' })).toHaveFocus();
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
@@ -89,79 +74,82 @@ describe('Large factory boards', () => {
     onTestFinished(() => {
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
-    const { router } = renderBoard('?item=large-100');
+    const { router } = renderBoard(`?item=${largeCardId(100)}`);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Details for Large task 100' })).toHaveFocus());
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 0 } });
-    const scrollTo = vi.spyOn(viewport(), 'scrollTo');
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=large-100&sort=created-oldest`));
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 0 } });
+    const scrollTo = vi.spyOn(boardViewport(), 'scrollTo');
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?item=${largeCardId(100)}&sort=created-oldest`));
 
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(scrollTo).not.toHaveBeenCalled();
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
-    expect(viewport().scrollTop).toBe(0);
+    expect(boardViewport().scrollTop).toBe(0);
   });
 
-  it('given an offscreen issue, finds it by searching the full dataset', async () => {
+  it('given an issue the board has not loaded, finds it by searching the full dataset', async () => {
     const { router } = renderBoard();
     await screen.findByLabelText('Large task 249');
-    expect(screen.queryByLabelText('Large task 0')).not.toBeInTheDocument();
-    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=Large+task+0`));
-    expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
-    expect(screen.getAllByTestId('work-item-card')).toHaveLength(1);
+    expect(screen.queryByLabelText('Large task 137')).not.toBeInTheDocument();
+    await act(() => router.navigate(`/factories/${FACTORY_ID}/work?search=task+137`));
+    expect(await screen.findByLabelText('Large task 137')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId('work-item-card')).toHaveLength(1));
   });
 
-  it('given open details, scrolling keeps the card and its comment draft alive', async () => {
+  it('given open details, scrolling keeps the card and its description draft alive', async () => {
     renderBoard();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft while I scroll');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft while I scroll');
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByRole('article', { name: 'Large task 248' })).not.toBeInTheDocument());
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft while I scroll');
+    expect(draft).toHaveValue('Keep this draft while I scroll');
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
   });
 
-  it('given an open comment draft, changing sort retains the same issue when its position changes', async () => {
+  it('given an open description draft, changing sort retains the same issue when its position changes', async () => {
     const { router } = renderBoard();
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 249' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 249' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft after sorting');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft after sorting');
 
     await act(() => router.navigate(`/factories/${FACTORY_ID}/work?sort=created-oldest`));
 
     expect(await screen.findByLabelText('Large task 0')).toBeInTheDocument();
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft after sorting');
+    expect(draft).toHaveValue('Keep this draft after sorting');
     expect(screen.getAllByTestId('work-item-card').length).toBeLessThan(35);
   });
 
-  it('given an open comment draft, a refresh crossing the virtualization threshold keeps the draft both ways', async () => {
+  it('given an open description draft, a refresh crossing the virtualization threshold keeps the draft both ways', async () => {
     const { client } = renderBoard('', 30);
     const user = userEvent.setup();
     await user.click(await screen.findByRole('button', { name: 'Details for Large task 29' }));
     const details = await screen.findByRole('dialog', { name: 'Large task 29' });
-    const comment = await within(details).findByRole('textbox', { name: 'Comment' });
-    await user.type(comment, 'Keep this draft across refreshes');
+    await user.click(await within(details).findByRole('button', { name: 'Add a description' }));
+    const draft = within(details).getByRole('textbox', { name: 'Description' });
+    await user.type(draft, 'Keep this draft across refreshes');
 
     serveWorkItems(31);
     await act(() => client.invalidateQueries());
     expect(await screen.findByLabelText('Large task 30')).toBeInTheDocument();
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft across refreshes');
+    expect(draft).toHaveValue('Keep this draft across refreshes');
 
     serveWorkItems(30);
     await act(() => client.invalidateQueries());
     await waitFor(() => expect(screen.queryByLabelText('Large task 30')).not.toBeInTheDocument());
     expect(details).toBeInTheDocument();
-    expect(comment).toHaveValue('Keep this draft across refreshes');
+    expect(draft).toHaveValue('Keep this draft across refreshes');
   });
 
   it('given a focused card, scrolling preserves keyboard focus until the user leaves it', async () => {
@@ -169,7 +157,7 @@ describe('Large factory boards', () => {
     const details = await screen.findByRole('button', { name: 'Details for Large task 249' });
     act(() => details.focus());
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByLabelText('Large task 248')).not.toBeInTheDocument());
     expect(details).toHaveFocus();
 
@@ -184,7 +172,7 @@ describe('Large factory boards', () => {
     const dataTransfer = { setData: (type: string, value: string) => transferred.set(type, value) };
     fireEvent.dragStart(card, { dataTransfer });
 
-    fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+    fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
     await waitFor(() => expect(screen.queryByLabelText('Large task 248')).not.toBeInTheDocument());
     expect(card).toBeInTheDocument();
 
@@ -245,7 +233,7 @@ describe('Large factory boards', () => {
       expect(prompt).toHaveFocus();
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
       expect(screen.queryByRole('button', { name: 'Load more candidates' })).not.toBeInTheDocument();
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 1' })).not.toBeInTheDocument());
       expect(prompt).toHaveValue('Keep this guidance while loading more');
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
@@ -278,7 +266,7 @@ describe('Large factory boards', () => {
       if (layout === 'board') await saveKanbanView(userEvent.setup());
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
 
-      fireEvent.scroll(viewport(), { target: { scrollTop: 6000 } });
+      fireEvent.scroll(boardViewport(), { target: { scrollTop: 6000 } });
       await waitFor(() => expect(screen.queryByRole('article', { name: 'Candidate 0' })).not.toBeInTheDocument());
       expect(screen.getAllByTestId('candidate-card').length).toBeLessThan(35);
     },

@@ -25,6 +25,7 @@ vi.mock('@mastra/core/storage', async importOriginal => {
   const actual = await importOriginal<typeof import('@mastra/core/storage')>();
   return {
     ...actual,
+    SPAN_QUERY_ORDER_FIELDS: undefined,
     SPAN_QUERY_FIELD_REGISTRY: undefined,
     // The old builder iterates metrics even for an empty page.
     buildSpanQueryResponse: (...args: Parameters<typeof actual.buildSpanQueryResponse>) => {
@@ -56,6 +57,8 @@ it('supplies the metrics argument required by older core response builders', () 
 
 it('keeps span queries and legacy model/provider predicates usable without the new registry', async () => {
   expect(storage.getFeatures()).toContain('span-query');
+  expect(storage.getFeatures()).not.toContain('span-query-duration-sort');
+  expect(storage.getFeatures()).not.toContain('span-query-model-provider-sort');
   const startedAt = new Date();
   const request = {
     timeRange: { from: startedAt.toISOString(), to: new Date(startedAt.getTime() + 60_000).toISOString() },
@@ -67,7 +70,8 @@ it('keeps span queries and legacy model/provider predicates usable without the n
         traceId: 'legacy',
         spanId: 'legacy',
         startedAt,
-        attributes: { model: 'model-a', provider: 'provider-a' },
+        model: 'model-a',
+        provider: 'provider-a',
         input: 'hello',
       }),
     ],

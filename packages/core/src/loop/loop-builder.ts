@@ -1,12 +1,13 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
-import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
+import { getResumeTracingContext, InternalSpans, SpanType } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import type { createEventedWorkflow } from '../workflows/create';
 import { createWorkflow } from '../workflows/create';
+import { markFrameworkCondition } from '../workflows/framework-condition';
 import type { Step } from '../workflows/step';
 import type { OutputWriter, WorkflowStateTracingContext } from '../workflows/types';
 import type { Workflow } from '../workflows/workflow';
@@ -15,10 +16,12 @@ import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import {
+  CONTINUATION_STOP_CAUSE_KEY,
   DELEGATION_BAILED_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_PROVIDER_METADATA_KEY,
   STEP_TOOLS_KEY,
   STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
@@ -382,8 +385,23 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
+          writeScoped(
+            scopeCtx,
+            STEP_PROVIDER_METADATA_KEY,
+            'stepProviderMetadata',
+            typedInputData.metadata?.providerMetadata,
+          );
           return toolCalls;
         },
         { id: 'map-tool-calls' },
@@ -398,6 +416,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             return toolCallForeachOptions.concurrency;
           }
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
             requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
@@ -651,6 +672,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
+        rest.tracingScope?.set(CONTINUATION_STOP_CAUSE_KEY, decision.stopCause);
         if (decision.forceContinue) {
           typedInputData.stepResult.isContinued = true;
         }
@@ -666,6 +688,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
+        if (typedInputData.stepResult?.reason !== 'retry') messageList.markStepCompleted();
         await outputWriter({
           type: 'step-finish',
           runId,
@@ -713,15 +736,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         agentSpan.traceId === previousContext.traceId &&
         agentSpan.getParentSpanId() === previousContext.spanId;
 
-      if (continuesSavedLineage) {
-        resumeTracingContext = { ...previousContext };
-      } else {
-        resumeTracingContext = {
-          traceId: agentSpan.traceId,
-          spanId: resolveExportedSpanId(agentSpan),
-          parentSpanId: agentSpan.getParentSpanId(),
-        };
-      }
+      const own = getResumeTracingContext(agentSpan);
+      resumeTracingContext = continuesSavedLineage
+        ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
+        : own;
     }
 
     const workflow = this.workflowFactory()({
@@ -756,7 +774,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         validateInputs: false,
       },
     })
-      .dowhile(this.buildIterationWorkflow(), this.buildContinuationPredicate())
+      .dowhile(this.buildIterationWorkflow(), markFrameworkCondition(this.buildContinuationPredicate()))
       .commit();
     workflow.__setResumeTracingContext(resumeTracingContext);
     return workflow;

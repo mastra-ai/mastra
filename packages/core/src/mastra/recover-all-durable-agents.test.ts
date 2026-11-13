@@ -10,7 +10,7 @@
  * `recover-active-runs.test.ts` and `recover-run.test.ts`.
  */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { DurableStepIds } from '../agent/durable/constants';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
@@ -84,6 +84,14 @@ async function seedRunning(store: InMemoryStore, agentId: string, runId: string)
     } as WorkflowRunState,
   });
 }
+
+// Asserts what the default shutdown drain budget waits for; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('Mastra.recoverAllDurableAgents', () => {
   let store: InMemoryStore;

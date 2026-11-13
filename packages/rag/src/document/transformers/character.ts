@@ -5,45 +5,39 @@ import { TextTransformer } from './text';
 
 function splitTextWithRegex(text: string, separator: string, separatorPosition?: 'start' | 'end'): string[] {
   if (!separator) {
-    return text.split('');
-  }
-
-  if (!separatorPosition) {
-    return text.split(new RegExp(separator)).filter(s => s !== '');
+    // Split by code point, not UTF-16 code unit, so a chunk never ends inside a
+    // surrogate pair (emoji, supplementary-plane CJK) and leaves a lone surrogate.
+    return Array.from(text);
   }
 
   if (!text) {
     return [];
   }
 
-  // Split with capturing group to keep separators
-  const splits = text.split(new RegExp(`(${separator})`));
+  // Slice at full-match boundaries instead of using String.split, which would
+  // inject the pattern's capture groups (or undefined for unmatched ones) into the output.
   const result: string[] = [];
+  let lastIndex = 0;
+  let pendingSeparator = '';
 
-  if (separatorPosition === 'end') {
-    // Process all complete pairs
-    for (let i = 0; i < splits.length - 1; i += 2) {
-      if (i + 1 < splits.length) {
-        // Current text + separator
-        const chunk = splits[i] + (splits[i + 1] || '');
-        if (chunk) result.push(chunk);
-      }
-    }
-    // Handle the last element if it exists and isn't a separator
-    if (splits.length % 2 === 1 && splits[splits.length - 1]) {
-      result.push(splits?.[splits.length - 1]!);
-    }
-  } else {
-    if (splits[0]) result.push(splits[0]);
+  for (const match of text.matchAll(new RegExp(separator, 'g'))) {
+    const matched = match[0];
+    const piece = text.slice(lastIndex, match.index);
 
-    for (let i = 1; i < splits.length - 1; i += 2) {
-      const separator = splits[i];
-      const text = splits[i + 1] ?? '';
-      if (separator) {
-        result.push(separator + text);
-      }
+    if (separatorPosition === 'end') {
+      result.push(piece + matched);
+    } else if (separatorPosition === 'start') {
+      result.push(pendingSeparator + piece);
+      pendingSeparator = matched;
+    } else {
+      result.push(piece);
     }
+
+    lastIndex = match.index + matched.length;
   }
+
+  const tail = text.slice(lastIndex);
+  result.push(separatorPosition === 'start' ? pendingSeparator + tail : tail);
 
   return result.filter(s => s !== '');
 }

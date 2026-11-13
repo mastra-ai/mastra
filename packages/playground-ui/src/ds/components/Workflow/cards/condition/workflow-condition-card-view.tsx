@@ -45,7 +45,7 @@ export function WorkflowConditionCardView({
         {hasExpression && (
           <>
             <span className="ml-auto">Expression</span>
-            <CopyButton content={copyContent} tooltip="Copy expression" size="sm" className="nodrag nopan" />
+            <CopyButton content={copyContent} tooltip="Copy expression" className="nodrag nopan" />
           </>
         )}
       </div>

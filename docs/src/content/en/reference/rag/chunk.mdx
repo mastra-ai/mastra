@@ -407,13 +407,15 @@ When using the `headers` option, the markdown strategy ignores all general optio
   {
     name: 'maxSize',
     type: 'number',
-    description: 'Maximum size of each chunk',
+    description:
+      'Target maximum size of each JSON chunk. Must be at least 21. Long values nested in objects can produce larger chunks.',
   },
   {
     name: 'minSize',
     type: 'number',
     isOptional: true,
-    description: 'Minimum size of each chunk',
+    description:
+      'Accepted for compatibility. Has no effect on JSON chunking: chunks smaller than this are kept, so no data is discarded.',
   },
   {
     name: 'ensureAscii',

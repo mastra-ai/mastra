@@ -17,7 +17,7 @@ export function OnboardingPersonalConnectionStatus({
   const connected = provider ? isProviderConnected(provider, local ? undefined : 'user', method) : false;
   return (
     <Txt variant="meta" tone="muted" className="mt-2">
-      {connected ? 'Connected · your account' : 'Connect your account'}
+      {connected ? 'Your account is connected' : 'Connect your account'}
     </Txt>
   );
 }

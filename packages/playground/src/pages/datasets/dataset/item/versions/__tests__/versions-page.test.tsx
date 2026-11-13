@@ -111,7 +111,7 @@ describe('DatasetItemVersionsComparePage', () => {
       expect(container.querySelector('.cm-mergeView')).toBeNull();
       expect(screen.getByRole('combobox', { name: 'Version' })).toBeDefined();
       expect(screen.getByRole('combobox', { name: 'Compare version' })).toBeDefined();
-      expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
+      expect(screen.getByRole('button', { name: /Default view/ })).toBeDefined();
       expect(screen.getAllByText('Input')).toHaveLength(2);
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
       // Left = v2, which sets Tool Mocks and Request Context; right = v1, which sets neither.
@@ -139,12 +139,12 @@ describe('DatasetItemVersionsComparePage', () => {
     });
   });
 
-  describe('when the Diff View button is clicked', () => {
+  describe('when the Diff view button is clicked', () => {
     it('stores ?view=diff in the URL and highlights the changes', async () => {
       const { container } = renderPage('/datasets/ds-1/items/item-a/versions?version=2&compare=1');
       expect(container.querySelector('.code-diff-removed')).toBeNull();
 
-      fireEvent.click(await screen.findByRole('button', { name: /Diff View/ }));
+      fireEvent.click(await screen.findByRole('button', { name: /Diff view/ }));
 
       await waitFor(() => expect(container.querySelector('.code-diff-removed')).not.toBeNull());
       expect(container.querySelector('.code-diff-added')).not.toBeNull();

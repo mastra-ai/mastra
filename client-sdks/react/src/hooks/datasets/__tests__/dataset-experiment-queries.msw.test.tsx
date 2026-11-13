@@ -10,6 +10,7 @@ import { useExperimentTrace } from '../../experiments/use-experiment-trace';
 import { useCompareExperiments } from '../use-compare-experiments';
 import {
   useAllDatasetExperimentResultsQueries,
+  useDatasetExperiment,
   useDatasetExperimentsQueries,
   useScoresByExperimentIdsQueries,
 } from '../use-dataset-experiments';
@@ -248,6 +249,63 @@ const scoreRow = (runId: string, entityId: string): ScoresResponse['scores'][num
   source: 'TEST',
   createdAt: NOW,
   updatedAt: NOW,
+});
+
+describe('useDatasetExperiment', () => {
+  describe('when navigating back to an experiment', () => {
+    it('renders the cached experiment immediately and refreshes it in the background', async () => {
+      let calls = 0;
+      server.use(
+        http.get('*/api/datasets/ds-1/experiments/exp-a', () => {
+          calls++;
+          return HttpResponse.json(datasetExperiment('exp-a', 'completed'));
+        }),
+      );
+
+      const { wrapper } = makeWrapper();
+      const first = renderHook(() => useDatasetExperiment({ datasetId: 'ds-1', experimentId: 'exp-a' }), { wrapper });
+      await waitFor(() => expect(first.result.current.data?.id).toBe('exp-a'));
+      first.unmount();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      const second = renderHook(() => useDatasetExperiment({ datasetId: 'ds-1', experimentId: 'exp-a' }), {
+        wrapper,
+      });
+
+      expect(second.result.current.isLoading).toBe(false);
+      expect(second.result.current.data?.status).toBe('completed');
+      await waitFor(() => expect(calls).toBe(2));
+    });
+  });
+
+  describe('when the cached experiment was running and has since completed', () => {
+    it('replaces the cached status and stops polling', async () => {
+      let status: 'running' | 'completed' = 'running';
+      let calls = 0;
+      server.use(
+        http.get('*/api/datasets/ds-1/experiments/exp-a', () => {
+          calls++;
+          return HttpResponse.json(datasetExperiment('exp-a', status));
+        }),
+      );
+
+      const { wrapper } = makeWrapper();
+      const first = renderHook(() => useDatasetExperiment({ datasetId: 'ds-1', experimentId: 'exp-a' }), { wrapper });
+      await waitFor(() => expect(first.result.current.data?.status).toBe('running'));
+      first.unmount();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      status = 'completed';
+      const second = renderHook(() => useDatasetExperiment({ datasetId: 'ds-1', experimentId: 'exp-a' }), {
+        wrapper,
+      });
+
+      await waitFor(() => expect(second.result.current.data?.status).toBe('completed'));
+      const callsWhenCompleted = calls;
+      await new Promise(resolve => setTimeout(resolve, 2500));
+      expect(calls).toBe(callsWhenCompleted);
+    });
+  });
 });
 
 describe('useDatasetExperimentsQueries', () => {

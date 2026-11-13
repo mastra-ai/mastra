@@ -200,7 +200,7 @@ export async function runFuzzSeed(env: FuzzEnv, seed: number, steps = 40): Promi
             observationTokens: record.observationTokenCount ?? 0,
             threadId: ids.threadId,
           });
-          return;
+          break;
         }
       }
     };

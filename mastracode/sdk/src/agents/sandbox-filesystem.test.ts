@@ -71,6 +71,47 @@ describe('SandboxFilesystem', () => {
     expect(sandbox.calls.some(c => c.includes(`base64 < '${WORKDIR}/src/index.ts'`))).toBe(true);
   });
 
+  it('explains a miss on an absolute path that exists outside the workdir', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return { exitCode: 20, stdout: '', stderr: '' };
+      if (script === `test -e '/tmp/x/a.ts'`) return { exitCode: 0, stdout: '', stderr: '' };
+      return { exitCode: 20, stdout: '', stderr: '' };
+    });
+    const error = await fs.readFile('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toBe(
+      `File not found: /tmp/x/a.ts (resolved to ${WORKDIR}/tmp/x/a.ts). File tools only reach files under ${WORKDIR}; absolute paths are workspace-relative. Put scratch worktrees under ${WORKDIR}/.worktrees/.`,
+    );
+  });
+
+  it('explains the miss from stat, which view calls before readFile', async () => {
+    const { fs } = makeFs(script => {
+      if (isContainmentCheck(script)) return { exitCode: 20, stdout: '', stderr: '' };
+      if (script === `test -e '/tmp/x/a.ts'`) return { exitCode: 0, stdout: '', stderr: '' };
+      return { exitCode: 1, stdout: '', stderr: '' };
+    });
+    const error = await fs.stat('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(error.message).toContain(`Put scratch worktrees under ${WORKDIR}/.worktrees/.`);
+  });
+
+  it('keeps the plain not-found error when the path exists nowhere', async () => {
+    const { fs } = makeFs(script => ({ exitCode: script.startsWith('test -e') ? 1 : 20, stdout: '', stderr: '' }));
+    for (const path of ['/src/missing.ts', '/tmp/nope.ts']) {
+      const error = await fs.readFile(path).catch(e => e);
+      expect(error).toBeInstanceOf(FileNotFoundError);
+      expect(error.message).toBe(`File not found: ${path}`);
+    }
+  });
+
+  it('tells agents where scratch worktrees go and how to install their dependencies', () => {
+    const { fs } = makeFs();
+    expect(fs.getInstructions()).toContain(`${WORKDIR}/.worktrees/`);
+    expect(fs.getInstructions()).toContain('pnpm install --prefer-offline --frozen-lockfile');
+    expect(fs.getInstructions()).toContain('pnpm turbo build --filter="<package>^..."');
+  });
+
   it('asks the sandbox to retain all command output', async () => {
     // Sandboxes keep only the newest 1 MiB of output by default; a base64 file
     // read or a long listing must not lose its head.
@@ -236,9 +277,9 @@ describe('SandboxFilesystem', () => {
   it('falls back to BSD stat when GNU stat is unavailable', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/dir`);
-      // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
-      if (script.includes('stat -c')) {
-        expect(script).toContain('stat -f');
+      // Simulate macOS: the `stat -L -c || stat -L -f` compound runs BSD output.
+      if (script.includes('stat -L -c')) {
+        expect(script).toContain('stat -L -f');
         return { exitCode: 0, stdout: 'Directory|128|1700000000|1690000000\n', stderr: '' };
       }
       return { exitCode: 0, stdout: '', stderr: '' };
@@ -977,6 +1018,22 @@ describe('with a native sandbox filesystem', () => {
     expect(await fs.stat(`${WORKDIR}/src/a.ts`)).toMatchObject({ name: 'a.ts', path: '/src/a.ts', size: 5 });
   });
 
+  it('infers a missing file MIME type and keeps one the provider supplies', async () => {
+    const { native } = makeNative();
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR, verifySymlinks: false });
+    const base = { name: 'x', path: '/x', size: 5, createdAt: new Date(0), modifiedAt: new Date(0) };
+
+    native.stat = async () => ({ ...base, type: 'file' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/png');
+
+    native.stat = async () => ({ ...base, type: 'file', mimeType: 'image/x-custom' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/x-custom');
+
+    native.stat = async () => ({ ...base, type: 'directory' });
+    expect((await fs.stat('/assets.png')).mimeType).toBeUndefined();
+  });
+
   it('passes typed errors through', async () => {
     const { native } = makeNative();
     native.readFile = async () => {
@@ -985,6 +1042,32 @@ describe('with a native sandbox filesystem', () => {
     const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
     const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
     await expect(fs.readFile('/missing')).rejects.toBeInstanceOf(FileNotFoundError);
+  });
+
+  it('explains a native miss on an absolute path that exists outside the workdir', async () => {
+    const { native } = makeNative();
+    native.readFile = async () => {
+      throw new FileNotFoundError(`${WORKDIR}/tmp/x/a.ts`);
+    };
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    const error = await fs.readFile('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(sandbox.calls).toEqual([`test -e '/tmp/x/a.ts'`]);
+  });
+
+  it('explains a native stat miss on an absolute path that exists outside the workdir', async () => {
+    const { native } = makeNative();
+    native.stat = async () => {
+      throw new FileNotFoundError(`${WORKDIR}/tmp/x/a.ts`);
+    };
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR });
+    const error = await fs.stat('/tmp/x/a.ts').catch(e => e);
+    expect(error).toBeInstanceOf(FileNotFoundError);
+    expect(error.message).toContain(`resolved to ${WORKDIR}/tmp/x/a.ts`);
+    expect(sandbox.calls).toEqual([`test -e '/tmp/x/a.ts'`]);
   });
 
   describe('verifySymlinks', () => {

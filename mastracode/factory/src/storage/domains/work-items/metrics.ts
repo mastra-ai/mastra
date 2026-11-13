@@ -12,7 +12,7 @@
  */
 
 import { isAgentActor } from './base.js';
-import type { WorkItemRow } from './base.js';
+import type { Card } from './base.js';
 
 /** Default window span (days) when the request omits or malforms the range. */
 export const DEFAULT_METRICS_WINDOW = 30;
@@ -21,28 +21,14 @@ export const MAX_METRICS_WINDOW = 366;
 
 const DAY_MS = 86_400_000;
 
-/** Terminal stage — items here count as completed, not in-flight. */
-const DONE_STAGE = 'done';
-
-/** Terminal stage for tracked non-completions — never a completion. */
-const CANCELED_STAGE = 'canceled';
-
 /**
- * Terminal stages — items holding only these are not in-flight. `done` is a
- * completion (feeds throughput/lead time); `canceled` is a tracked
- * non-completion outcome and feeds neither.
+ * What a card holding `stage` means for flow metrics, read from the card's board: `completed`
+ * (an entry feeds throughput and lead time), `canceled` (a tracked non-completion, feeds
+ * neither), `queued` (at rest, not yet in flight) or `pipeline` (in flight). Built by
+ * `boardPhaseOutcomes`.
  */
-const TERMINAL_STAGES = new Set([DONE_STAGE, CANCELED_STAGE]);
-
-const INTAKE_STAGE = 'intake';
-
-/**
- * Pipeline work excludes the inbox as well as the terminal stages: an intake
- * card is queued, not in flight, and its pass through is the poller filing it.
- */
-function isPipelineStage(stage: string): boolean {
-  return !TERMINAL_STAGES.has(stage) && stage !== INTAKE_STAGE;
-}
+export type MetricsPhaseOutcome = 'completed' | 'canceled' | 'queued' | 'pipeline';
+export type MetricsPhaseOutcomes = (item: Pick<Card, 'board'>, stage: string) => MetricsPhaseOutcome;
 
 /**
  * Cards the Factory ran: starting a run records its session on the row. The
@@ -50,7 +36,7 @@ function isPipelineStage(stage: string): boolean {
  * those outnumber the Factory's own work by an order of magnitude, so counting
  * them reports the upstream repo's flow as the Factory's.
  */
-function hasFactoryRun(item: WorkItemRow): boolean {
+function hasFactoryRun(item: Card): boolean {
   return Object.keys(item.sessions).length > 0;
 }
 
@@ -66,11 +52,11 @@ export interface FactoryMetrics {
    * drag the per-day rate toward zero on a young board.
    */
   daysCovered: number;
-  /** Entries into `done` per UTC day, gap-filled across the covered days. */
+  /** Entries into a completing phase per UTC day, gap-filled across the covered days. */
   throughput: { date: string; count: number }[];
-  /** Card creation → `done` for every completion that landed in the window. */
+  /** Card creation → completion for every completion that landed in the window. */
   leadTime: { medianMs: number | null; p90Ms: number | null; samples: number };
-  /** Distinct cards in a pipeline stage — past intake, not yet terminal. */
+  /** Distinct cards in a pipeline stage — past rest, not yet terminal. */
   wipTotal: number;
   /** Cards created in the window, by source. */
   sourceMix: { source: string; count: number }[];
@@ -154,7 +140,7 @@ function parseTime(iso: string): number {
 }
 
 /** Asserted up front so a corrupt row fails every window, not just the ones that read it. */
-function assertParsableHistory(items: WorkItemRow[]): void {
+function assertParsableHistory(items: Card[]): void {
   for (const item of items) {
     for (const entry of item.stageHistory) {
       parseTime(entry.enteredAt);
@@ -177,7 +163,7 @@ function utcDay(time: number): string {
 }
 
 /** Stages the item was holding at `time`, replayed from its history. */
-function stagesHeldAt(item: WorkItemRow, time: number): Set<string> {
+function stagesHeldAt(item: Card, time: number): Set<string> {
   const held = new Set<string>();
   for (const entry of item.stageHistory) {
     if (parseTime(entry.enteredAt) >= time) continue;
@@ -191,12 +177,12 @@ type Window = { windowStart: number; windowEnd: number };
 
 /**
  * Completions per UTC day, plus one lead-time sample each. A completion is an
- * entry *into* `done`, not the state of the card now: a card reopened today
+ * entry *into* a completing phase, not the state of the card now: a card reopened today
  * must not erase the day it shipped, and a card that shipped twice shipped
  * twice. Days before the oldest card are left out rather than gap-filled with
  * zeroes that would drag the daily average down.
  */
-function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
+function completions(items: Card[], { windowStart, windowEnd }: Window, outcomeOf: MetricsPhaseOutcomes) {
   let earliestItem = Infinity;
   for (const item of items) earliestItem = Math.min(earliestItem, item.createdAt.getTime());
   const boardStart = Number.isFinite(earliestItem) ? utcDayStart(earliestItem) : -Infinity;
@@ -209,7 +195,7 @@ function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
   const leadSamples: number[] = [];
   for (const item of items) {
     for (const entry of item.stageHistory) {
-      if (entry.stage !== DONE_STAGE) continue;
+      if (outcomeOf(item, entry.stage) !== 'completed') continue;
       const doneAt = parseTime(entry.enteredAt);
       if (doneAt < windowStart || doneAt >= windowEnd) continue;
       byDay.set(utcDay(doneAt), (byDay.get(utcDay(doneAt)) ?? 0) + 1);
@@ -220,12 +206,12 @@ function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
 }
 
 /** Cards holding at least one pipeline stage right now — window-independent. */
-function countInFlight(items: WorkItemRow[]): number {
-  return items.filter(item => item.stages.some(isPipelineStage)).length;
+function countInFlight(items: Card[], outcomeOf: MetricsPhaseOutcomes): number {
+  return items.filter(item => item.stages.some(stage => outcomeOf(item, stage) === 'pipeline')).length;
 }
 
 /** Where the window's cards came from, most common first. */
-function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
+function demandMix(items: Card[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
   const counts = new Map<string, number>();
   for (const item of items) {
     const created = item.createdAt.getTime();
@@ -242,14 +228,18 @@ function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): Fa
  * counted exit; only pipeline stages get rows, since intake and terminal
  * stages have no pass to hand over.
  */
-function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['agentCoverage'] {
+function agentCoverage(
+  items: Card[],
+  { windowStart, windowEnd }: Window,
+  outcomeOf: MetricsPhaseOutcomes,
+): FactoryMetrics['agentCoverage'] {
   const byStage = new Map<string, FactoryMetrics['agentCoverage'][number]>();
   for (const item of items) {
-    const heldAtWindowEnd = stagesHeldAt(item, windowEnd);
+    const heldAtWindowEnd = [...stagesHeldAt(item, windowEnd)].map(stage => outcomeOf(item, stage));
     const visited = new Set<string>();
     for (let i = 0; i < item.stageHistory.length; i++) {
       const entry = item.stageHistory[i]!;
-      if (!isPipelineStage(entry.stage) || visited.has(entry.stage)) continue;
+      if (outcomeOf(item, entry.stage) !== 'pipeline' || visited.has(entry.stage)) continue;
       visited.add(entry.stage);
       if (entry.exitedAt === undefined) continue;
       const exited = parseTime(entry.exitedAt);
@@ -273,19 +263,23 @@ function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window)
         (later, j) => j > i && later.stage === entry.stage && parseTime(later.enteredAt) < windowEnd,
       );
       if (reworked) row.outcomes.reworked += 1;
-      else if (heldAtWindowEnd.has(DONE_STAGE)) row.outcomes.done += 1;
-      else if (heldAtWindowEnd.has(CANCELED_STAGE)) row.outcomes.canceled += 1;
+      else if (heldAtWindowEnd.includes('completed')) row.outcomes.done += 1;
+      else if (heldAtWindowEnd.includes('canceled')) row.outcomes.canceled += 1;
       else row.outcomes.inFlight += 1;
     }
   }
   return [...byStage.values()];
 }
 
-export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
+export function computeFactoryMetrics(
+  boardItems: readonly Card[],
+  window: Window,
+  outcomeOf: MetricsPhaseOutcomes,
+): FactoryMetrics {
   const items = boardItems.filter(hasFactoryRun);
   assertParsableHistory(items);
 
-  const { byDay, leadSamples } = completions(items, window);
+  const { byDay, leadSamples } = completions(items, window, outcomeOf);
 
   return {
     daysCovered: byDay.size,
@@ -297,8 +291,8 @@ export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window)
       p90Ms: percentile(leadSamples, 0.9),
       samples: leadSamples.length,
     },
-    wipTotal: countInFlight(items),
+    wipTotal: countInFlight(items, outcomeOf),
     sourceMix: demandMix(items, window),
-    agentCoverage: agentCoverage(items, window),
+    agentCoverage: agentCoverage(items, window, outcomeOf),
   };
 }

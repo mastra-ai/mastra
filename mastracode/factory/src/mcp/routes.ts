@@ -19,7 +19,9 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { FACTORY_TOOL_ANNOTATIONS } from '../tools/annotations.js';
 import { createFactoryTools } from '../tools/index.js';
 import type { FactoryToolDependencies, FactoryToolScope } from '../tools/index.js';
+import { hasEveryWord, searchWords } from '../work-items/search-words.js';
 import { propagateClientDisconnect } from './disconnect.js';
+import { factoryActivityEvent } from './events.js';
 
 export const FACTORY_MCP_PATH = '/web/factory/projects/:projectId/mcp';
 const PROTECTED_RESOURCE_PREFIX = '/.well-known/oauth-protected-resource';
@@ -42,6 +44,20 @@ export interface FactoryMcpConfig {
    */
   authorizationServers?: string[];
 }
+
+/**
+ * MCP requires a server version. The Factory doesn't expose its package
+ * version at runtime, so this versions the endpoint's interface instead.
+ */
+const FACTORY_MCP_SERVER_VERSION = '1.0.0';
+
+/** What a connected client is told the server is for and where to start. */
+const FACTORY_MCP_INSTRUCTIONS = [
+  'A Mastra Factory tracks software work as work items on a board; agent sessions plan and build them.',
+  'Start with `factory_list_attention` for what needs a person, or `search` and `fetch` to find a work item.',
+  'Work item tools file, update, move and follow items; session tools start, message and follow the agent sessions working on them.',
+  'Every call runs as the signed-in user. When the Factory has a repository, session tools act from a private connector session of theirs.',
+].join(' ');
 
 /** Mastra Platform's WorkOS AuthKit, which issues tokens Platform's `/auth/verify` accepts. */
 export const PLATFORM_MCP_AUTHORIZATION_SERVER = 'https://auth-kit.mastra.ai';
@@ -66,7 +82,6 @@ export interface FactoryMcpRoutesDeps {
   /** Source-control handles a connector session can be filed under, tried in order. */
   sourceControls: readonly SourceControlStorageHandle[];
   tools: FactoryToolDependencies;
-  version?: string;
 }
 
 /** The connector session a user's MCP client acts from: one per user and Factory, stable across requests. */
@@ -127,13 +142,10 @@ function createSearchFetchTools(
         'Search this Factory’s work items by title or id. Returns matching items with ids to pass to `fetch`.',
       inputSchema: z.object({ query: z.string().describe('Words to look for in work item titles.') }),
       execute: async ({ query }) => {
-        const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
-        const items = await deps.tools.workItems.list(project);
+        const words = searchWords(query);
+        const items = await deps.tools.workItems.listShared(project);
         const results = items
-          .filter(item => {
-            const haystack = `${item.id} ${item.title}`.toLowerCase();
-            return terms.every(term => haystack.includes(term));
-          })
+          .filter(item => hasEveryWord(`${item.id} ${item.title}`.toLowerCase(), words))
           .slice(0, 20)
           .map(item => ({
             id: item.id,
@@ -233,15 +245,29 @@ async function handleMcp(deps: FactoryMcpRoutesDeps, c: Context): Promise<Respon
   const server = new MCPServer({
     id: `factory-${factoryProjectId}`,
     name: `${project.name ?? 'Mastra'} Factory`,
-    version: deps.version ?? '1.0.0',
+    version: FACTORY_MCP_SERVER_VERSION,
     description: 'Manage work items, sessions and decisions in a Mastra Factory.',
+    instructions: FACTORY_MCP_INSTRUCTIONS,
+    // VS Code and Cursor still open with 2025-era `initialize`; serve them statelessly.
+    legacy: 'stateless',
     tools: createFactoryMcpTools(scope, deps, { persistedSession: persisted }),
+    events: {
+      'factory.activity': factoryActivityEvent({
+        orgId: tenant.orgId,
+        factoryProjectId,
+        audit: deps.tools.audit,
+        workItems: deps.tools.workItems,
+        sessions: deps.tools.sessions,
+        viewer: { orgId: tenant.orgId, userId: tenant.userId },
+      }),
+    },
   });
 
   const { req, res } = toReqRes(c.req.raw);
   const done = server
     .startHTTP({ url: new URL(c.req.url), httpPath: mcpPath, req, res })
-    .catch(() => {
+    .catch(error => {
+      console.warn('[factory] MCP request failed:', error);
       if (!res.headersSent) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(

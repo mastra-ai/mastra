@@ -132,7 +132,7 @@ export function TemplateForm({
                 defaultModel={defaultModelId || ''}
                 updateModel={onModelUpdate || (() => Promise.resolve({ message: 'Updated' }))}
                 closeEditor={() => {}} // No need to close in template context
-                autoSave={true}
+                autoSave
                 selectProviderPlaceholder="Provider"
               />
             </div>
@@ -142,7 +142,7 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'state-layer mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card text-foreground',
+              'mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-card state-layer text-foreground',
               '[&_svg]:h-[1.1em] [&_svg]:text-foreground [&>svg]:w-[1.1em]',
             )}
             onClick={handleInstallTemplate}

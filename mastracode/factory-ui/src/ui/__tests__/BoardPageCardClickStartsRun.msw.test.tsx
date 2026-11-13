@@ -9,9 +9,12 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { workBoardInfo } from '../../../e2e/ui/board-catalog';
+import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -118,31 +121,20 @@ function stubBoardEndpoints({
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
   const created: Array<Record<string, unknown>> = [];
-  const comments: Array<{ itemId: string; body: Record<string, unknown> }> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
+            id: FACTORY_ID,
+            name: 'Acme Factory',
             repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/repo',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-              ...(multiRepository
-                ? [{ id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } }]
-                : []),
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/repo' }),
+              ...(multiRepository ? [listedRepository('repo-2', 'acme/other', { branch: 'main' })] : []),
             ],
           },
         ],
@@ -222,10 +214,6 @@ function stubBoardEndpoints({
         workItem: { ...issueWorkItem, id: 'item-filed', title: String(body.title), stages: ['intake'] },
       });
     }),
-    http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, async ({ params, request }) => {
-      comments.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
-      return HttpResponse.json({ comment: { id: 'comment-1' } });
-    }),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       patches.push({ itemId: String(params.itemId), body });
@@ -257,7 +245,7 @@ function stubBoardEndpoints({
     ),
   );
 
-  return { transitions, patches, created, comments };
+  return { transitions, patches, created };
 }
 
 function renderWorkBoard() {
@@ -274,6 +262,35 @@ async function moveFromCardDetails(cardTitle: string, action: string) {
 }
 
 describe('Board card buttons move the card', () => {
+  it('moves a card using its normalized source repository mapping without prompting for a repository', async () => {
+    const item = {
+      ...linearWorkItem,
+      stages: ['intake'],
+      metadata: { linearProjectId: 'stale-project', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        title: linearWorkItem.title,
+        key: 'ENG-42',
+        state: 'open',
+        metadata: { ...linearWorkItem.metadata, linearProjectId: 'linear-project-1' },
+      },
+    };
+    const { patches, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      mappedLinearRepository: true,
+      workItems: [item],
+    });
+    renderWorkBoard();
+
+    await moveFromCardDetails(item.title, 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+    expect(transitions[0]).toMatchObject({ itemId: item.id, body: { stage: 'triage' } });
+  });
+
   it('issues a transition to Triage with cause card_action when Investigate is clicked', async () => {
     const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
     renderWorkBoard();
@@ -325,6 +342,41 @@ describe('Board card buttons move the card', () => {
     ]);
     expect(transitions[0]).toMatchObject({
       itemId: 'linear-item-1',
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+    });
+  });
+
+  it('patches only the chosen repository when moving a normalized card with stale provider metadata', async () => {
+    const item = {
+      ...linearWorkItem,
+      stages: ['intake'],
+      metadata: {
+        ...linearWorkItem.metadata,
+        labels: ['stale-label'],
+        state: 'closed',
+        githubRepositoryId: 202,
+      },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        title: linearWorkItem.title,
+        key: 'ENG-42',
+        state: 'open',
+        labels: ['bug'],
+        metadata: linearWorkItem.metadata,
+      },
+    };
+    const { patches, transitions } = stubBoardEndpoints({ multiRepository: true, workItems: [item] });
+    renderWorkBoard();
+
+    await moveFromCardDetails(item.title, 'Investigate');
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: /acme\/other/ }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(patches).toEqual([{ itemId: item.id, body: { metadata: { repository: 'acme/other' } } }]);
+    expect(transitions[0]).toMatchObject({
+      itemId: item.id,
       body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
     });
   });
@@ -433,12 +485,30 @@ describe('Board card buttons move the card', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix login bug' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
-  it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
-    const { transitions, created, comments } = stubBoardEndpoints({
+  it("keeps Work's moves and its unfiled issues against a server older than the board loop", async () => {
+    // A server from before the catalog named each board's loop parts sends no `flow` for Work.
+    const { flow: _flow, ...olderWork } = workBoardInfo;
+    const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem], issues: [logoutIssue] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+        HttpResponse.json({ boards: [olderWork] }),
+      ),
+    );
+    renderWorkBoard();
+
+    expect(await screen.findByRole('button', { name: 'Details for Crash on logout' })).toBeVisible();
+    await moveFromCardDetails('Fix login bug', 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(transitions[0]).toMatchObject({ itemId: 'item-1', body: { board: 'work', stage: 'triage' } });
+  });
+
+  it('files a candidate in Intake, saves its custom prompt as the description, then moves it', async () => {
+    const { transitions, created } = stubBoardEndpoints({
       issues: [logoutIssue],
     });
     const { client } = renderWorkBoard();
@@ -454,31 +524,10 @@ describe('Board card buttons move the card', () => {
 
     await waitFor(() => expect(transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
-    expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
-    expect(comments).toEqual([
-      { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
+    expect(created).toEqual([
+      expect.objectContaining({ title: 'Crash on logout', stages: ['intake'], description: 'Check the token TTL' }),
     ]);
     expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
-  });
-
-  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
-    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
-        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
-      ),
-    );
-    renderWorkBoard();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
-    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-
-    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
-    expect(transitions).toEqual([]);
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {
@@ -495,15 +544,13 @@ describe('Board card buttons move the card', () => {
     expect(screen.queryByRole('menuitem', { name: 'Prepare approval hands-off' })).not.toBeInTheDocument();
   });
 
-  it('offers the ordinary runs once a labelled card sits in a working lane, even before acceptance was recorded', async () => {
+  it('offers the ordinary runs once a person moved a labelled card into a working lane, before the label catches up', async () => {
     stubBoardEndpoints({
       workItems: [
         {
           ...issueWorkItem,
           metadata: { number: 7, labels: ['status: needs approval'] },
           stages: ['planning'],
-          triageType: 'feature request',
-          acceptedAt: null,
         },
       ],
     });
@@ -542,7 +589,6 @@ describe('Board card buttons move the card', () => {
           ],
         }),
       ),
-      http.get(`${TEST_BASE_URL}/web/intake/label-routes`, () => HttpResponse.json({ routes: [] })),
       http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () =>
         HttpResponse.json({ issues: [gitlabCandidateIssue], nextCursor: null }),
       ),

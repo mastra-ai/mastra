@@ -3,6 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createObservabilityVNextTests,
+  SPAN_AGGREGATE_CONFORMANCE_CASES,
+  SPAN_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
@@ -23,6 +25,7 @@ import {
   parseQueryThreadsInput,
   parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planSpanAggregate,
   planSpanQuery,
   planThreadQuery,
   planTraceAggregate,
@@ -148,17 +151,29 @@ describe('ObservabilityStorageDuckDB', () => {
         'delta-polling',
         'trace-query',
         'trace-aggregate',
+        'aggregate-time-to-first-measures',
         'span-query',
         'span-query-context-fields',
+        'span-query-duration-sort',
+        'span-query-model-provider-sort',
+        'span-query-model-fields',
+        'span-aggregate',
+        'span-aggregate-model-dimensions',
         'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        'trace-query-context-fields',
         'trace-query-time-to-first-chunk',
         'trace-query-time-to-first-chunk-sort',
+        'trace-query-time-to-first-token',
+        'trace-query-time-to-first-token-sort',
+        'span-query-outcome-fields',
+        'trace-query-outcome-fields',
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ]);
@@ -176,17 +191,29 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        'aggregate-time-to-first-measures',
         'span-query',
         'span-query-context-fields',
+        'span-query-duration-sort',
+        'span-query-model-provider-sort',
+        'span-query-model-fields',
+        'span-aggregate',
+        'span-aggregate-model-dimensions',
         'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        'trace-query-context-fields',
         'trace-query-time-to-first-chunk',
         'trace-query-time-to-first-chunk-sort',
+        'trace-query-time-to-first-token',
+        'trace-query-time-to-first-token-sort',
+        'span-query-outcome-fields',
+        'trace-query-outcome-fields',
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ]);
@@ -219,17 +246,29 @@ describe('ObservabilityStorageDuckDB', () => {
         'delta-polling',
         'trace-query',
         'trace-aggregate',
+        'aggregate-time-to-first-measures',
         'span-query',
         'span-query-context-fields',
+        'span-query-duration-sort',
+        'span-query-model-provider-sort',
+        'span-query-model-fields',
+        'span-aggregate',
+        'span-aggregate-model-dimensions',
         'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        'trace-query-context-fields',
         'trace-query-time-to-first-chunk',
         'trace-query-time-to-first-chunk-sort',
+        'trace-query-time-to-first-token',
+        'trace-query-time-to-first-token-sort',
+        'span-query-outcome-fields',
+        'trace-query-outcome-fields',
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ]);
@@ -246,17 +285,29 @@ describe('ObservabilityStorageDuckDB', () => {
         'metric-discovery',
         'trace-query',
         'trace-aggregate',
+        'aggregate-time-to-first-measures',
         'span-query',
         'span-query-context-fields',
+        'span-query-duration-sort',
+        'span-query-model-provider-sort',
+        'span-query-model-fields',
+        'span-aggregate',
+        'span-aggregate-model-dimensions',
         'thread-query-rows',
         'trace-query-root-duration',
         'trace-query-discovery',
         'thread-query',
         'trace-query-tenant-scope',
         'feedback',
+        'feedback-replacement',
         'trace-query-context-ids',
+        'trace-query-context-fields',
         'trace-query-time-to-first-chunk',
         'trace-query-time-to-first-chunk-sort',
+        'trace-query-time-to-first-token',
+        'trace-query-time-to-first-token-sort',
+        'span-query-outcome-fields',
+        'trace-query-outcome-fields',
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ]);
@@ -3778,6 +3829,37 @@ describe('ObservabilityStorageDuckDB aggregateTraces', () => {
     const total = 'pagination' in traces ? traces.pagination?.total : undefined;
     expect(total).toBeGreaterThan(0);
     expect(aggregate.rows).toEqual([{ measures: { count: total } }]);
+  });
+});
+
+describe('ObservabilityStorageDuckDB aggregateSpans', () => {
+  let store: DuckDBStore;
+
+  beforeAll(async () => {
+    store = new DuckDBStore({ path: ':memory:' });
+    await store.init();
+    await writeTraceAggregateFixture(store.observability, SPAN_AGGREGATE_FIXTURE_DATA, 'event-sourced');
+  });
+
+  afterAll(async () => {
+    await store.db.close();
+  });
+
+  it.each(SPAN_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const plan = planSpanAggregate(testCase.request, { scope: testCase.scope });
+      const response = await store.observability.aggregateSpans(plan);
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
+
+  it('counts the same spans querySpans pages through', async () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-04T00:00:00Z' };
+    const aggregate = await store.observability.aggregateSpans(planSpanAggregate({ timeRange, measures: ['count'] }));
+    const spans = await store.observability.querySpans(planSpanQuery({ timeRange }));
+    expect(spans.spans).toHaveLength(8);
+    expect(aggregate.rows[0]?.measures.count).toBe(spans.spans.length);
   });
 });
 

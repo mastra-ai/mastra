@@ -153,7 +153,7 @@ Numbered page navigation: Previous, page numbers, and Next. It is a ready-made c
 - `aria-label` names the landmark, default `"Pagination"`. Name it after the table when a page has more than one pager, for example `"Credit history pages"`.
 - With seven pages or fewer, every page shows. Beyond that, the first and last pages stay visible and distant pages collapse into `…` around the current page.
 - Previous and Next stay in place on the first and last page, marked `aria-disabled`, so the layout and keyboard focus never jump.
-- The current page wears a raised pill that slides to the new page, and a hover highlight glides under the pointer, the same fluid treatment as the menus. Both respect reduced motion.
+- The current page wears a raised pill.
 
 The prop type is exported as `TablePaginationProps`.
 
@@ -354,11 +354,11 @@ Controls go in an `ActionRow` above the table: search and filters in `ActionRow.
 ```tsx
 <ActionRow>
   <ActionRow.Start>
-    <ListSearch label="Search credits" placeholder="Search credits" value={search} onSearch={setSearch} />
+    <SearchInput {...listSearchProps} className="max-w-120" label="Search credits" placeholder="Search credits" defaultValue={search} onValueChange={setSearch} />
   </ActionRow.Start>
   <ActionRow.End>
     <Combobox
-      aria-label="Filter by status"
+      aria-label="Search by status"
       multiple
       options={statusOptions}
       placeholder="Status"
@@ -406,11 +406,13 @@ const [search, setSearch] = useState('');
 const filtered = credits.filter(credit => matchesSearch(credit, search));
 const pageCredits = filtered.slice(page * pageSize, (page + 1) * pageSize);
 
-<ListSearch
+<SearchInput
+  size="sm"
+  debounceMs={300}
   label="Search credits"
   placeholder="Search credits"
-  value={search}
-  onSearch={value => {
+  defaultValue={search}
+  onValueChange={value => {
     setSearch(value);
     setPage(0);
   }}

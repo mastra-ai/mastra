@@ -107,4 +107,37 @@ export class InMemoryServerCache extends MastraServerCache {
     this.cache.set(key, counter);
     return counter;
   }
+
+  /**
+   * Allocation and append happen in one synchronous critical section. JS runs
+   * one task at a time and nothing here awaits, so no other publish can observe
+   * the counter after it is bumped but before the entry is appended.
+   */
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    const existingCounter = this.cache.get(counterKey);
+    if (existingCounter !== undefined && typeof existingCounter !== 'number') {
+      throw new Error(`${counterKey} exists but is not a number`);
+    }
+    const index = typeof existingCounter === 'number' ? existingCounter : 0;
+
+    const existingList = this.cache.get(listKey);
+    if (existingList !== undefined && !Array.isArray(existingList)) {
+      throw new Error(`${listKey} exists but is not an array`);
+    }
+    const list = Array.isArray(existingList) ? existingList : [];
+
+    // A cache configured without expiry stays that way; otherwise the longer of
+    // the cache default and the requested minimum wins.
+    const ttl = this.ttlMs > 0 ? Math.max(this.ttlMs, ttlMs ?? 0) : Infinity;
+    this.cache.set(counterKey, index + 1, { ttl });
+    list.push({ ...value, index });
+    this.cache.set(listKey, list, { ttl });
+
+    return index;
+  }
 }

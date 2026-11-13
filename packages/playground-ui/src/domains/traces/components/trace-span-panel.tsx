@@ -1,13 +1,13 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { Button } from '@/ds/components/Button';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
@@ -40,6 +40,7 @@ export interface TraceSpanPanelProps {
 
   // Trace-panel pass-through.
   anchorSpanId?: string;
+  entityType?: TraceDataPanelViewProps['entityType'];
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -60,11 +61,13 @@ export interface TraceSpanPanelProps {
   withQueryTrace: boolean;
   /** Full-thread view: shows the per-trace Feedback tab. */
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
   onOpenScore: (traceId: string, scoreId: string) => void;
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
+  rootStreamingTimings?: TraceDataPanelViewProps['rootStreamingTimings'];
   traceHref?: string;
   /** Drawer width; defaults to `wide`. */
   size?: TraceDataPanelViewProps['size'];
@@ -81,8 +84,8 @@ export interface TraceSpanPanelProps {
   onSpanViewChange?: TraceDataPanelViewProps['onSpanViewChange'];
 
   // Span-panel pass-through.
-  spanActiveTab?: string;
-  onSpanTabChange?: (tab: string) => void;
+  spanActiveTab?: SpanDataPanelViewProps['activeTab'];
+  onSpanTabChange?: SpanDataPanelViewProps['onTabChange'];
   spanFeedbackTabBadge?: ReactNode;
   spanFeedbackTabSlot?: SpanDataPanelViewProps['feedbackTabSlot'];
 }
@@ -100,6 +103,7 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   anchorSpanId,
+  entityType,
   initialSpanId,
   onPrevious,
   onNext,
@@ -113,10 +117,12 @@ export function TraceSpanPanel({
   onFullThreadOpenChange,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
   scoresTabBadge,
   scoresTabSlot,
   usage,
+  rootStreamingTimings,
   traceHref,
   size,
   depth,
@@ -136,7 +142,6 @@ export function TraceSpanPanel({
     spanId: selectedSpanId ?? '',
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
   const { Link, paths } = useLinkComponent();
 
   // The trace summary links the entity to its page; the app's link provider owns the routes.
@@ -159,8 +164,10 @@ export function TraceSpanPanel({
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
+        entityType={entityType}
         entityHref={entityHref}
         usage={usage}
+        rootStreamingTimings={rootStreamingTimings}
         isLoading={isLoadingSpans}
         onClose={onClose}
         onSpanSelect={onSpanSelect}
@@ -210,10 +217,7 @@ export function TraceSpanPanel({
               traceId={traceId}
               spanId={selectedSpanId}
               span={spanDetailData?.span}
-              isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
               isLoading={isLoadingSpanDetail}
-              onPrevious={handlePreviousSpan}
-              onNext={handleNextSpan}
               onClose={() => onSpanSelect(undefined)}
               activeTab={spanActiveTab}
               onTabChange={onSpanTabChange}
@@ -231,6 +235,7 @@ export function TraceSpanPanel({
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onClose={() => onFullThreadOpenChange?.(false)}
       />
     </>

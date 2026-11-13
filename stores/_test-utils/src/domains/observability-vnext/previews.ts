@@ -130,7 +130,7 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       }
     });
 
-    it('trims upstream previews, caps them like generated ones and regenerates blank previews', async () => {
+    it('trims upstream previews, caps them like generated ones and preserves intentional blanks', async () => {
       // Oversized, and cut right before a surrogate pair: the cap must not split it.
       const oversized = `  ${'u'.repeat(99)}${'\u{1F600}'.repeat(100_000)}`;
       await getStorage().batchCreateSpans({
@@ -151,7 +151,7 @@ export function createPreviewTests(getStorage: () => ObservabilityStorage, optio
       if (options.spanQuery !== false) {
         expect(await listSpans()).toEqual({
           'trace-upstream-root': { ...rootPreviews },
-          'trace-upstream-child': { ...expected.child },
+          'trace-upstream-child': { ...expected.child, errorPreview: null },
         });
       }
     });

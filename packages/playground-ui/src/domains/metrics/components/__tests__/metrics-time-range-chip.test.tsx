@@ -1,0 +1,77 @@
+// @vitest-environment jsdom
+import { fireEvent, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { MetricsProvider } from '../../hooks/use-metrics';
+import { METRICS_FILTER_BAR_OPERATORS } from '../../metrics-filters';
+import { MetricsTimeRangeChip } from '../metrics-time-range-chip';
+import { olderServerCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
+import { serveCapabilities } from './metrics-msw';
+import { FilterBar } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
+import { renderWithProviders } from '@/test/render';
+
+const DAY = 24 * 60 * 60 * 1000;
+
+function renderChip(onCustomRangeChange = vi.fn()) {
+  const from = new Date(Date.now() - 30 * DAY);
+  renderWithProviders(
+    <MetricsProvider
+      preset="custom"
+      customRange={{ from, to: new Date() }}
+      filterTokens={[]}
+      onPresetChange={() => {}}
+      onFilterTokensChange={() => {}}
+      onCustomRangeChange={onCustomRangeChange}
+    >
+      <FilterBar
+        fields={[FILTER_BAR_TIME_RANGE_FIELD]}
+        operators={METRICS_FILTER_BAR_OPERATORS}
+        value={[FILTER_BAR_TIME_RANGE_ITEM]}
+        onValueChange={() => {}}
+        aria-label="Metrics filters"
+      >
+        <FilterBar.Chips renderChip={() => <MetricsTimeRangeChip />} />
+      </FilterBar>
+    </MetricsProvider>,
+  );
+  return onCustomRangeChange;
+}
+
+describe('MetricsTimeRangeChip', () => {
+  describe('when the trace store keeps 7 days', () => {
+    it('rejects a custom range that starts before the oldest kept day', async () => {
+      serveCapabilities({
+        ...traceAggregateCapabilities,
+        capabilities: { ...traceAggregateCapabilities.capabilities, traceRetentionDays: 7 },
+      });
+      const onCustomRangeChange = renderChip();
+
+      fireEvent.click(screen.getByRole('button', { name: /last|custom|time|\d/i }));
+      // The chip only knows the limit once capabilities load; then the calendar can't page back
+      // past the oldest kept month.
+      await vi.waitFor(() =>
+        expect(screen.getByRole('button', { name: /previous month/i }).getAttribute('aria-disabled')).toBe('true'),
+      );
+      fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+      expect(screen.getByRole('alert').textContent).toContain('Range cannot start before');
+      expect(onCustomRangeChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the store reports no retention limit', () => {
+    it('applies the same range', async () => {
+      serveCapabilities(olderServerCapabilities);
+      const onCustomRangeChange = renderChip();
+
+      fireEvent.click(screen.getByRole('button', { name: /last|custom|time|\d/i }));
+      fireEvent.click(await screen.findByRole('button', { name: /apply/i }));
+
+      expect(screen.queryByRole('alert')).toBeNull();
+      expect(onCustomRangeChange).toHaveBeenCalledTimes(1);
+    });
+  });
+});

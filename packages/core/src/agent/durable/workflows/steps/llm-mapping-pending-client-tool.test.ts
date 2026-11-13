@@ -16,6 +16,10 @@
  * but are resolved outcomes, not pending calls, and must keep their existing behaviour.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { captureOutcomeEvents } from '../../../../loop/test-utils/aimock/outcome-test-utils';
+import { MastraTimeoutError } from '../../../../loop/timeout';
+import { Mastra } from '../../../../mastra';
+import { SpanType } from '../../../../observability';
 import type { MastraDBMessage } from '../../../message-list';
 import { MessageList } from '../../../message-list';
 import { globalRunRegistry } from '../../run-registry';
@@ -77,11 +81,13 @@ function seedMessageListState(calls: SeededCall[]) {
 async function runMappingStep(
   toolResults: unknown[],
   calls: SeededCall[] = [{ toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS }],
+  tracing?: { mastra: Mastra; stepSpanData: unknown; abortSignal: AbortSignal },
 ) {
   const step = createDurableLLMMappingStep();
   const output = await (step as any).execute({
     inputData: {
       llmOutput: {
+        stepSpanData: tracing?.stepSpanData,
         messageListState: seedMessageListState(calls),
         stepResult: {
           isContinued: true,
@@ -97,7 +103,8 @@ async function runMappingStep(
       messageId: 'msg-1',
       state: { threadId: THREAD_ID, resourceId: RESOURCE_ID, threadExists: true },
     },
-    mastra: { getLogger: () => undefined },
+    mastra: tracing?.mastra ?? { getLogger: () => undefined },
+    abortSignal: tracing?.abortSignal,
     requestContext: new Map(),
   });
 
@@ -231,5 +238,73 @@ describe('issue #23295 (durable engine): mapping step stops at a client-executed
     expect(stored(TOOL_CALL_ID)?.state).toBe('output-error');
     expect(stored(TOOL_CALL_ID)?.errorText).toBe('Tool "nope" not found');
     expect(output.stepResult.isContinued).toBe(true);
+  });
+});
+
+describe('durable step outcomes at a cancellation boundary', () => {
+  it.each([false, true])('only interrupts tool work that observed cancellation (aborted=%s)', async aborted => {
+    const { observability, ended } = captureOutcomeEvents();
+    const mastra = new Mastra({ observability });
+    const instance = mastra.observability!.getSelectedInstance()!;
+    const step = instance.startSpan({ name: 'tools', type: SpanType.MODEL_STEP, outcome: null });
+    const controller = new AbortController();
+    controller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 100 }));
+    await runMappingStep(
+      [
+        {
+          toolCallId: TOOL_CALL_ID,
+          toolName: TOOL_NAME,
+          args: TOOL_ARGS,
+          ...(aborted ? { aborted: true } : { result: { accepted: true } }),
+        },
+      ],
+      undefined,
+      { mastra, stepSpanData: step.snapshot(), abortSignal: controller.signal },
+    );
+    expect(ended(SpanType.MODEL_STEP)).toMatchObject([
+      aborted ? { outcome: 'interrupted', stopReason: 'timeout' } : { outcome: 'success', stopReason: null },
+    ]);
+  });
+});
+
+describe('durable mapping step when the run stopped while a call settled', () => {
+  const mappingError = { name: 'Error', message: 'tool output mapping failed' };
+
+  it.each([
+    ['the total deadline', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }],
+    ['abort()', { runAborted: true as const }],
+  ])('ends the run as %s instead of the mapping failure', async (_stop, stop) => {
+    const { output, stored } = await runMappingStep([
+      { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, mappingError, ...stop },
+    ]);
+
+    expect(output).toMatchObject(stop);
+    expect(stored(TOOL_CALL_ID)?.state).toBe('call');
+  });
+
+  it.each([
+    ['deadline first', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }, false],
+    ['deadline last', { deadlineTimeout: { timeoutType: 'total' as const, timeoutMs: 100 } }, true],
+    ['abort first', { runAborted: true as const }, false],
+    ['abort last', { runAborted: true as const }, true],
+  ])('preserves a sibling stop regardless of result order (%s)', async (_label, stop, mappingFirst) => {
+    const calls = [
+      { toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS },
+      { toolCallId: SERVER_CALL_ID, toolName: SERVER_TOOL, args: SERVER_ARGS },
+    ];
+    const failed = { ...calls[0], mappingError };
+    const stopped = { ...calls[1], aborted: true, ...stop };
+    const { output, stored } = await runMappingStep(mappingFirst ? [failed, stopped] : [stopped, failed], calls);
+
+    expect(output).toMatchObject(stop);
+    expect(output.stepResult.isContinued).toBe(false);
+    expect(stored(TOOL_CALL_ID)?.state).toBe('call');
+    expect(stored(SERVER_CALL_ID)?.state).toBe('call');
+  });
+
+  it('still fails the run on a mapping failure the run was not stopped during', async () => {
+    await expect(
+      runMappingStep([{ toolCallId: TOOL_CALL_ID, toolName: TOOL_NAME, args: TOOL_ARGS, mappingError }]),
+    ).rejects.toThrow('tool output mapping failed');
   });
 });

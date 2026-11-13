@@ -1,41 +1,20 @@
-import type { FACTORY_RULE_STAGES, FactoryRuleBoard, FactoryRuleStage } from '@mastra/factory/rules/types';
-
+import { boardIdOf, boardLoop, phaseKindOf } from './boardFlow';
+import type { BoardInfo } from './boardFlow';
+import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem } from './services/workItems';
-import { BOARD_STAGES, stageLabel, stageOrder } from './stages';
+import { stageLabel } from './stages';
 import type { BoardStage, BoardStageId } from './stages';
 
-export type BoardKind = FactoryRuleBoard;
+export type BoardKind = string;
 
-const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> = {
-  intake: true,
-  triage: false,
-  planning: false,
-  execute: false,
-  review: true,
-  done: true,
-  canceled: true,
-} satisfies Record<(typeof FACTORY_RULE_STAGES)[number], boolean>;
-
-const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
-  if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];
-  return [stage.id === 'review' ? { ...stage, label: 'Reviewing' } : stage];
-});
-
-export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {
-  return kind === 'review' ? REVIEW_BOARD_STAGES : BOARD_STAGES;
-}
-
-export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
-  return itemBoard(item) === kind;
-}
-
+/** Whether `item` shows in the `stage` column; a card in no known column shows in the first one, where cards start. */
 export function itemAppearsInStage(
   item: WorkItem,
   stage: BoardStageId,
   stages: ReadonlyArray<{ id: BoardStageId }>,
 ): boolean {
   if (item.stages.includes(stage)) return true;
-  return stage === 'intake' && !stages.some(candidate => item.stages.includes(candidate.id));
+  return stage === stages[0]?.id && !stages.some(candidate => item.stages.includes(candidate.id));
 }
 
 export function boardLoadingStages({
@@ -43,38 +22,69 @@ export function boardLoadingStages({
   itemsPending,
   intakePending,
   triagePending,
+  board,
 }: {
   stages: ReadonlyArray<BoardStage>;
   itemsPending: boolean;
   intakePending: boolean;
   triagePending: boolean;
+  /** The board on show; its rest and triage phases wait on the intake feed. */
+  board?: BoardInfo;
 }): ReadonlySet<BoardStageId> {
   const loading = new Set<BoardStageId>();
   if (itemsPending) {
     for (const stage of stages) loading.add(stage.id);
   }
-  if (intakePending) loading.add('intake');
-  if (triagePending) loading.add('triage');
+  const loop = boardLoop(board);
+  const rest = board?.initialPhase ?? stages[0]?.id;
+  if (intakePending && rest !== undefined) loading.add(rest);
+  if (triagePending && loop?.triage) loading.add(loop.triage.phase);
   return loading;
 }
 
 export function itemBoard(item: WorkItem): string {
-  return item.board ?? (item.source === 'github-pr' || item.source === 'gitlab-pr' ? 'review' : 'work');
+  return boardIdOf(item);
 }
 
-export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {
-  return boardStages(itemBoard(item));
+/**
+ * The columns a card can sit in on its board. On a board that reviews pull requests, a pull
+ * request's own card stays out of the builder's phases, and only a card carrying one enters review.
+ */
+export function itemStageOptions(item: WorkItem, board: BoardInfo | undefined): ReadonlyArray<BoardStage> {
+  if (!board) return [];
+  return board.phases
+    .filter(phase => pullRequestMayEnter(board, item, phase.id))
+    .map(phase => ({ id: phase.id, label: phase.name ?? phase.title }));
 }
 
-export function itemStageLabel(item: WorkItem, stage: string): string {
-  return itemStageOptions(item).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+/** Whether a card may enter `stage` on `board`, by the parts its phases play in the pull request loop. */
+export function pullRequestMayEnter(
+  board: BoardInfo | undefined,
+  item: Pick<WorkItem, 'source' | 'workItem'>,
+  stage: string,
+): boolean {
+  const loop = boardLoop(board);
+  const review = loop?.pullRequestReview;
+  if (!board || review === undefined) return true;
+  if (isPullRequestSource(item.source)) return stage === review || phaseKindOf(board, stage) !== 'working';
+  return stage !== review || cardHasPullRequest(item);
 }
 
-/** Furthest stage the item currently sits in; items with no known stage read as Intake, like the board columns. */
-export function currentItemStageLabel(item: WorkItem): string {
-  const options = itemStageOptions(item);
-  // Stages off this item's board sort after every column, so keeping them would beat the real one
-  const onBoard = item.stages.filter(stage => options.some(candidate => candidate.id === stage));
-  const furthest = onBoard.sort((a, b) => stageOrder(b) - stageOrder(a)).at(0);
-  return itemStageLabel(item, furthest ?? 'intake');
+export function itemStageLabel(item: WorkItem, stage: string, board: BoardInfo | undefined): string {
+  return itemStageOptions(item, board).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+}
+
+/** Furthest phase the item currently sits in; items with no known phase read as the board's first, like its columns. */
+export function currentItemStage(item: WorkItem, board: BoardInfo | undefined): string | undefined {
+  const options = itemStageOptions(item, board);
+  const order = (stage: string) => options.findIndex(candidate => candidate.id === stage);
+  // Phases the card can't sit in on its board would beat the real one, so they are dropped.
+  const onBoard = item.stages.filter(stage => order(stage) !== -1);
+  const furthest = onBoard.sort((a, b) => order(b) - order(a)).at(0);
+  return furthest ?? board?.initialPhase ?? item.stages[0];
+}
+
+export function currentItemStageLabel(item: WorkItem, board: BoardInfo | undefined): string {
+  const stage = currentItemStage(item, board);
+  return stage === undefined ? '' : itemStageLabel(item, stage, board);
 }

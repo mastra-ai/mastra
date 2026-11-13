@@ -109,7 +109,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
     typeDescription:
       '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`. Defaults to `server.mcpOptions` from your `Mastra` config.',
     isOptional: true,
   },
 ]}
@@ -123,7 +123,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
 | Streaming | `res.write()` / `res.end()` | `stream()` helper |
-| AbortSignal | Created from `req.on('close')` | `c.req.raw.signal` |
+| AbortSignal | Created from `res.on('close')`, aborted only when the response didn't finish | `c.req.raw.signal` |
 
 ## Adding custom routes
 
@@ -169,7 +169,10 @@ const server = new MastraServer({ app, mastra })
 await server.init()
 
 app.get('/custom/protected', createAuthMiddleware({ mastra }), (req, res) => {
-  const user = res.locals.requestContext.get('user')
+  const user = res.locals.requestContext?.get('mastra__user')
+  if (!user) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
   res.json({ user })
 })
 
@@ -177,6 +180,8 @@ app.get('/custom/public', createAuthMiddleware({ mastra, requiresAuth: false }),
   res.json({ ok: true })
 })
 ```
+
+`createAuthMiddleware()` calls the next handler without authenticating when the Mastra server has no `auth` config, or when the route matches a public pattern. Public patterns include the built-in defaults (`/api` and `/api/auth/*`) and any `auth.public` patterns you configure. In those cases `mastra__user` isn't set, so protected handlers should reject requests without it, as the example above does.
 
 ## Accessing context
 
@@ -200,10 +205,11 @@ Available properties on `res.locals`:
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
-| `tools` | Available tools |
+| `registeredTools` | Tools registered with the adapter |
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
-| `user` | Authenticated user (if auth configured) |
+
+When auth is configured, read the authenticated user with `res.locals.requestContext.get('mastra__user')`. Clients can't set the reserved `mastra__user` key through the `requestContext` query parameter or body. On raw Express routes, the value is only populated after [`createAuthMiddleware()`](#adding-custom-routes) runs, so apply it before trusting the user. Don't rely on the legacy `user` key for authorization. A client can supply it on routes without auth middleware.
 
 ## Adding middleware
 

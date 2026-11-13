@@ -61,8 +61,8 @@ const {
 | - | - | - | - |
 | `cwd` | `string` | `process.cwd()` | Working directory for project detection |
 | `homeDir` | `string` | `os.homedir()` | Home directory for global config discovery |
-| `modes` | `AgentControllerMode[] \| false` | Build, Plan, Explore | Override modes (model IDs, colors, which modes exist). `false` runs every session as a single Build agent |
-| `subagents` | `AgentControllerSubagent[]` | Explore, Plan, Execute | Override or extend subagent definitions |
+| `modes` | `AgentControllerMode[] \| false` | `build`, `plan`, `fast` (displayed as Explore) | Override modes (model IDs, colors, which modes exist). `false` runs every session as a single Build agent |
+| `subagents` | `AgentControllerSubagent[]` | `[]` | Subagent definitions to register. None are registered by default. Pass `[...builtinSubagents]` to enable Explore, Plan and Execute |
 | `extraTools` | `Record<string, Tool> \| ((ctx) => Record<string, Tool> \| Promise<Record<string, Tool>>)` | — | Extra tools merged into the dynamic tool set |
 | `postToolObserver` | `(context: ToolAfterHookContext) => void \| Promise<void>` | — | Observes completed tool calls without replacing tools. Errors are logged without failing successful tool calls |
 | `inputProcessors` | `InputProcessor[] \| ((ctx) => InputProcessor[] \| Promise<InputProcessor[]>)` | — | Processors prepended before Mastra Code's built-in input processors |
@@ -128,11 +128,11 @@ Subagent definitions for spawning focused child agents.
 | `id` | `string` | Yes | Unique identifier (e.g., `"explore"`) |
 | `name` | `string` | Yes | Display name in tool output |
 | `description` | `string` | Yes | What this subagent does |
-| `instructions` | `string` | Yes | System prompt for the subagent |
+| `instructions` | `DynamicArgument<AgentInstructions>` | Yes | System prompt for the subagent. Accepts a string, array of strings, system message object, array of system messages, or a function that returns any of these (or a promise of one) |
 | `tools` | `ToolsInput` | No | Tools available to this subagent |
 | `allowedControllerTools` | `string[]` | No | Tool IDs from controller tools this subagent can use |
 | `defaultModelId` | `string` | No | Default model for this subagent type |
-| `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` |
+| `maxSteps` | `number` | No | Optional maximum number of steps for the spawned subagent; defaults to `50` unless `stopWhen` is set |
 | `stopWhen` | `LoopOptions['stopWhen']` | No | Optional stop condition for the spawned subagent loop |
 
 #### `StorageConfig`
@@ -183,7 +183,7 @@ Background task definition.
 | - | - | - | - |
 | `id` | `string` | Yes | Unique identifier for this handler |
 | `intervalMs` | `number` | Yes | Interval between executions in milliseconds |
-| `handler` | `() => Promise<void>` | Yes | Async function to execute |
+| `handler` | `() => void \| Promise<void>` | Yes | Sync or async function to execute |
 
 ### AgentController
 

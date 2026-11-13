@@ -9,6 +9,7 @@ import {
   TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   traceAggregateRowSchema,
   type TraceAggregateDimension,
+  type TraceAggregateMeasureRule,
   type TraceAggregateRequest,
   type TraceAggregateResponse,
   type TraceAggregateRow,
@@ -179,6 +180,22 @@ function durationMs(root: RawTraceQuerySpan): number {
   return Date.parse(root.endedAt!) - Date.parse(root.startedAt);
 }
 
+const TIME_TO_FIRST_PERCENTILES: Partial<Record<string, number>> = { p50: 0.5, p90: 0.9, p95: 0.95, p99: 0.99 };
+
+/** Rows without the field are skipped; statistics over no values are null, `count` is 0. */
+function timeToFirstValue(rows: RawTraceQuerySpan[], rule: TraceAggregateMeasureRule): number | null {
+  const values = rows
+    .map(row => row[rule.field!])
+    .filter((value): value is number => value !== null && value !== undefined)
+    .sort((a, b) => a - b);
+  if (rule.statistic === 'count') return values.length;
+  if (values.length === 0) return null;
+  if (rule.statistic === 'avg') return values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (rule.statistic === 'min') return values[0]!;
+  if (rule.statistic === 'max') return values[values.length - 1]!;
+  return traceAggregatePercentile(values, TIME_TO_FIRST_PERCENTILES[rule.statistic!]!);
+}
+
 type MeasureValue = number | null;
 type MeasureValues = Map<string, MeasureValue>;
 
@@ -279,6 +296,24 @@ function computeMeasures(
         values.set(measure.name, rule.statistic === 'avg' ? sum / usageBearing.length : sum);
         break;
       }
+      case 'timeToFirstToken.avg':
+      case 'timeToFirstToken.min':
+      case 'timeToFirstToken.max':
+      case 'timeToFirstToken.p50':
+      case 'timeToFirstToken.p90':
+      case 'timeToFirstToken.p95':
+      case 'timeToFirstToken.p99':
+      case 'timeToFirstToken.count':
+      case 'timeToFirstChunk.avg':
+      case 'timeToFirstChunk.min':
+      case 'timeToFirstChunk.max':
+      case 'timeToFirstChunk.p50':
+      case 'timeToFirstChunk.p90':
+      case 'timeToFirstChunk.p95':
+      case 'timeToFirstChunk.p99':
+      case 'timeToFirstChunk.count':
+        values.set(measure.name, timeToFirstValue(roots, TRACE_AGGREGATE_MEASURE_REGISTRY[measure.name]));
+        break;
       default: {
         const unhandled: never = measure;
         throw new Error(`Unhandled measure: ${JSON.stringify(unhandled)}`);
@@ -509,6 +544,9 @@ interface AggregateRootSpec {
   lookup?: boolean;
   environment?: string;
   organizationId?: string;
+  executionSource?: string;
+  timeToFirstTokenMs?: number;
+  timeToFirstChunkMs?: number;
 }
 
 function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
@@ -519,12 +557,15 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
     entityName: spec.entityName,
     entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
+    executionSource: spec.executionSource ?? null,
     organizationId,
     threadId: spec.threadId,
     startedAt: spec.startedAt,
     endedAt: new Date(Date.parse(spec.startedAt) + spec.durationMs).toISOString(),
     error: spec.error ? { message: 'failed' } : null,
     metadata: spec.tenant === undefined ? null : { tenant: spec.tenant },
+    timeToFirstTokenMs: spec.timeToFirstTokenMs ?? null,
+    timeToFirstChunkMs: spec.timeToFirstChunkMs ?? null,
   });
   if (!spec.lookup) return [root];
   return [
@@ -570,9 +611,15 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * `billing-2` also has a child `scorer_run` span with `entityId: nightly-scorer`, which only span-scope
  * `entityId` predicates match.
  *
+ * Root `executionSource` (spans write it as `source`): `cloud` on triage-1..3 and every billing root,
+ * `local` on triage-4, triage-5, and research-1 (staging); null everywhere else.
+ *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
  * (p95 2900), null 1. Total 20 traces, 5 errors.
+ *
+ * Root time to first token / chunk (ms): triage-1 200 / 300, triage-2 400 / 600, triage-4 600 / 900,
+ * triage-5 800 / none; the superseded `triage-6` copy has 9000 / 9000. Every other root has neither.
  *
  * Excluded records: a superseded `triage-6` root (lower `cursorId`, error, 4 s, ending before the
  * current copy), a
@@ -587,6 +634,9 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 100,
       traceId: 'triage-1',
+      timeToFirstTokenMs: 200,
+      timeToFirstChunkMs: 300,
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-01T10:00:00.000Z',
@@ -598,6 +648,9 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 110,
       traceId: 'triage-2',
+      timeToFirstTokenMs: 400,
+      timeToFirstChunkMs: 600,
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-01T11:00:00.000Z',
@@ -610,6 +663,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 120,
       traceId: 'triage-3',
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-02T10:00:00.000Z',
@@ -621,6 +675,9 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 130,
       traceId: 'triage-4',
+      timeToFirstTokenMs: 600,
+      timeToFirstChunkMs: 900,
+      executionSource: 'local',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-03T10:00:00.000Z',
@@ -632,6 +689,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 140,
       traceId: 'triage-5',
+      timeToFirstTokenMs: 800,
+      executionSource: 'local',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-05T10:00:00.000Z',
@@ -644,6 +703,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 150,
       traceId: 'triage-6',
+      timeToFirstTokenMs: 9000,
+      timeToFirstChunkMs: 9000,
       entityName: 'triage',
       name: 'triage retry',
       spanType: 'workflow_run',
@@ -664,6 +725,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 200,
       traceId: 'billing-1',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 500,
@@ -674,6 +736,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 210,
       traceId: 'billing-2',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 1500,
@@ -696,6 +759,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 220,
       traceId: 'billing-3',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 2500,
@@ -706,6 +770,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 230,
       traceId: 'billing-4',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-06T10:00:00.000Z',
       durationMs: 2500,
@@ -716,6 +781,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 240,
       traceId: 'billing-5',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-06T11:00:00.000Z',
       durationMs: 2500,
@@ -760,6 +826,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 400,
       traceId: 'research-1',
+      executionSource: 'local',
       entityName: 'research',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 12_000,
@@ -855,7 +922,7 @@ export interface TraceAggregateConformanceCase {
   /**
    * Absolute per-measure tolerance for store conformance. Percentile semantics are
    * backend-native (`percentile_cont` on PostgreSQL, `quantile` on ClickHouse), so
-   * only `duration.p*` measures carry a tolerance; counts, sums (including tokens and cost),
+   * only percentile measures (`duration.p*`, `timeToFirstToken.p*`, `timeToFirstChunk.p*`) carry a tolerance; counts, sums (including tokens and cost),
    * rates, and row `cost` stay exact.
    */
   tolerance?: Record<string, number>;
@@ -1240,6 +1307,107 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
     tolerance: { 'duration.p50': 1000, 'duration.p90': 200, 'duration.p95': 100, 'duration.p99': 20 },
   },
   {
+    name: 'time-to-first measures read the current root and skip traces without a value',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'in', value: { path: 'entityName' }, set: ['triage', 'billing'] },
+      groupBy: ['entityName'],
+      measures: [
+        'timeToFirstToken.avg',
+        'timeToFirstToken.min',
+        'timeToFirstToken.max',
+        'timeToFirstToken.p50',
+        'timeToFirstToken.p90',
+        'timeToFirstToken.p95',
+        'timeToFirstToken.p99',
+        'timeToFirstToken.count',
+        'timeToFirstChunk.avg',
+        'timeToFirstChunk.min',
+        'timeToFirstChunk.max',
+        'timeToFirstChunk.p50',
+        'timeToFirstChunk.p90',
+        'timeToFirstChunk.p95',
+        'timeToFirstChunk.p99',
+        'timeToFirstChunk.count',
+      ],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: triage,
+          measures: {
+            'timeToFirstToken.avg': 500,
+            'timeToFirstToken.min': 200,
+            'timeToFirstToken.max': 800,
+            'timeToFirstToken.p50': 500,
+            'timeToFirstToken.p90': 740,
+            'timeToFirstToken.p95': 770,
+            'timeToFirstToken.p99': 794,
+            'timeToFirstToken.count': 4,
+            'timeToFirstChunk.avg': 600,
+            'timeToFirstChunk.min': 300,
+            'timeToFirstChunk.max': 900,
+            'timeToFirstChunk.p50': 600,
+            'timeToFirstChunk.p90': 840,
+            'timeToFirstChunk.p95': 870,
+            'timeToFirstChunk.p99': 894,
+            'timeToFirstChunk.count': 3,
+          },
+        },
+        {
+          dimensions: billing,
+          measures: {
+            'timeToFirstToken.avg': null,
+            'timeToFirstToken.min': null,
+            'timeToFirstToken.max': null,
+            'timeToFirstToken.p50': null,
+            'timeToFirstToken.p90': null,
+            'timeToFirstToken.p95': null,
+            'timeToFirstToken.p99': null,
+            'timeToFirstToken.count': 0,
+            'timeToFirstChunk.avg': null,
+            'timeToFirstChunk.min': null,
+            'timeToFirstChunk.max': null,
+            'timeToFirstChunk.p50': null,
+            'timeToFirstChunk.p90': null,
+            'timeToFirstChunk.p95': null,
+            'timeToFirstChunk.p99': null,
+            'timeToFirstChunk.count': 0,
+          },
+        },
+      ],
+      truncated: false,
+    },
+    // Backend-native percentiles land between the interpolated value and the upper order statistic.
+    tolerance: {
+      'timeToFirstToken.p50': 100,
+      'timeToFirstToken.p90': 60,
+      'timeToFirstToken.p95': 30,
+      'timeToFirstToken.p99': 6,
+      'timeToFirstChunk.p90': 60,
+      'timeToFirstChunk.p95': 30,
+      'timeToFirstChunk.p99': 6,
+    },
+  },
+  {
+    name: 'orderBy on a time-to-first measure sorts groups without a value last',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['timeToFirstToken.count', 'timeToFirstChunk.max'],
+      having: { op: 'gte', left: { path: 'timeToFirstToken.count' }, right: { literal: 0 } },
+      orderBy: { field: 'timeToFirstChunk.max', direction: 'desc' },
+      limit: 2,
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { 'timeToFirstToken.count': 4, 'timeToFirstChunk.max': 900 } },
+        { dimensions: billing, measures: { 'timeToFirstToken.count': 0, 'timeToFirstChunk.max': null } },
+      ],
+      truncated: true,
+    },
+  },
+  {
     name: 'status dimension derives from the root error and countDistinct.traceId counts traces',
     request: { timeRange: aggregateRange, groupBy: ['status'], measures: ['count', 'countDistinct.traceId'] },
     expected: {
@@ -1321,6 +1489,42 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
           dimensions: { environment: 'staging' },
           measures: { count: 2, 'countDistinct.entityName': 1, 'countDistinct.metadata.tenant': 1 },
         },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root executionSource under a where filter with a null group',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+      groupBy: ['executionSource'],
+      measures: ['count', 'errorCount'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { executionSource: 'cloud' }, measures: { count: 8, errorCount: 2 } },
+        { dimensions: { executionSource: null }, measures: { count: 8, errorCount: 1 } },
+        { dimensions: { executionSource: 'local' }, measures: { count: 2, errorCount: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'countDistinct over root executionSource skips null values',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'countDistinct.executionSource'],
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { count: 6, 'countDistinct.executionSource': 2 } },
+        { dimensions: billing, measures: { count: 5, 'countDistinct.executionSource': 1 } },
+        { dimensions: support, measures: { count: 4, 'countDistinct.executionSource': 0 } },
+        { dimensions: research, measures: { count: 2, 'countDistinct.executionSource': 1 } },
+        { dimensions: scheduler, measures: { count: 2, 'countDistinct.executionSource': 0 } },
+        { dimensions: unnamed, measures: { count: 1, 'countDistinct.executionSource': 0 } },
       ],
       truncated: false,
     },

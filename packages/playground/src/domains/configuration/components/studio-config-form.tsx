@@ -3,10 +3,9 @@ import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
-import { SettingsContainer, SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { SaveIcon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { useRef, useState } from 'react';
 import { useStudioConfig } from '../context/studio-config-state';
 import type { StudioConfig } from '../types';
 import type { HeaderListFormItem } from './header-list-form';
@@ -15,17 +14,16 @@ import { HeaderListForm } from './header-list-form';
 export interface StudioConfigFormProps {
   initialConfig?: StudioConfig;
   onSave?: () => void;
-  variant?: 'default' | 'factory';
 }
 
-export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }: StudioConfigFormProps) => {
-  const isFactoryLayout = variant === 'factory';
-  const FieldsContainer = isFactoryLayout ? SettingsContainer : Fragment;
+export const StudioConfigForm = ({ initialConfig, onSave }: StudioConfigFormProps) => {
   const { setConfig } = useStudioConfig();
+  // Rows keep an id so removing one doesn't hand its inputs to the next.
+  const nextHeaderId = useRef(0);
   const [headers, setHeaders] = useState<HeaderListFormItem[]>(() => {
     if (!initialConfig) return [];
 
-    return Object.entries(initialConfig.headers).map(([name, value]) => ({ name, value }));
+    return Object.entries(initialConfig.headers).map(([name, value]) => ({ id: nextHeaderId.current++, name, value }));
   });
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>) => {
@@ -49,7 +47,7 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
   };
 
   const handleAddHeader = (header: HeaderListFormItem) => {
-    setHeaders(prev => [...prev, header]);
+    setHeaders(prev => [...prev, { ...header, id: nextHeaderId.current++ }]);
   };
 
   const handleRemoveHeader = (index: number) => {
@@ -72,47 +70,20 @@ export const StudioConfigForm = ({ initialConfig, onSave, variant = 'default' }:
     },
   ];
 
-  const headersEditor = (
-    <HeaderListForm
-      headers={headers}
-      onAddHeader={handleAddHeader}
-      onRemoveHeader={handleRemoveHeader}
-      showHeading={!isFactoryLayout}
-    />
-  );
-
   return (
     <TooltipProvider delayDuration={0}>
-      <Form onSubmit={handleSubmit} className={isFactoryLayout ? undefined : 'gap-6'}>
-        <FieldsContainer>
-          {connectionFields.map(({ label, ...field }) => {
-            if (isFactoryLayout) {
-              return (
-                <SettingsRow key={field.name} label={label}>
-                  <Input {...field} className="w-full lg:max-w-96" />
-                </SettingsRow>
-              );
-            }
+      <Form onSubmit={handleSubmit} className="gap-6">
+        {connectionFields.map(({ label, ...field }) => (
+          <Field key={field.name}>
+            <FieldLabel required={field.required}>{label}</FieldLabel>
+            <Input {...field} />
+            <FieldError />
+          </Field>
+        ))}
+        <HeaderListForm headers={headers} onAddHeader={handleAddHeader} onRemoveHeader={handleRemoveHeader} />
 
-            return (
-              <Field key={field.name}>
-                <FieldLabel required={field.required}>{label}</FieldLabel>
-                <Input {...field} />
-                <FieldError />
-              </Field>
-            );
-          })}
-          {isFactoryLayout ? (
-            <SettingsFieldsetRow label="Headers">
-              <div className="w-full lg:max-w-96">{headersEditor}</div>
-            </SettingsFieldsetRow>
-          ) : (
-            headersEditor
-          )}
-        </FieldsContainer>
-
-        <Button type="submit" className={isFactoryLayout ? 'ml-auto' : 'mt-4 ml-auto'} icon={<SaveIcon />}>
-          Save Configuration
+        <Button type="submit" className="mt-4 ml-auto" icon={<SaveIcon />}>
+          Save configuration
         </Button>
       </Form>
     </TooltipProvider>

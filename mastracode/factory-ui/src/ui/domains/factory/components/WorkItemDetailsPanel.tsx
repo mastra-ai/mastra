@@ -1,24 +1,23 @@
-import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { EllipsisVertical, Minimize2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useId } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { useParams } from 'react-router';
 
-import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
-import { externalLinkLabel } from '../boardItems';
+import type { CardContextSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
 import type { CardMorph } from '../hooks/useCardMorph';
+import type { ReworkReason } from '../reworkReason';
 import type { AuditEventPage } from '../services/audit';
-import { workItemIdentifier } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import { timelineEvents, workItemActivity } from '../workItemActivity';
-import { SourceIcon } from './BoardIcons';
 import { CardDetailsPanel } from './CardDetailsPanel';
 import { WorkItemCardRows } from './WorkItemCardRows';
+import { WorkItemExternalLink } from './WorkItemExternalLink';
 import { WorkItemTray } from './WorkItemTray';
 
 export function WorkItemDetailsPanel({
@@ -26,6 +25,8 @@ export function WorkItemDetailsPanel({
   columnStage,
   projectRepositoryId,
   activityPage,
+  contextSessions,
+  rework,
   morph,
   relatedLinks,
   status,
@@ -37,6 +38,8 @@ export function WorkItemDetailsPanel({
   columnStage: BoardStageId;
   projectRepositoryId: string;
   activityPage?: AuditEventPage;
+  contextSessions: readonly CardContextSession[];
+  rework?: ReworkReason;
   morph: CardMorph;
   relatedLinks: ReactNode;
   status: BoardCardStatus;
@@ -46,15 +49,10 @@ export function WorkItemDetailsPanel({
 }) {
   const { factoryId = '' } = useParams<{ factoryId: string }>();
   const titleId = useId();
-  const auth = useFactoryAuth();
-  const [searchParams] = useSearchParams();
-  const highlightCommentId =
-    searchParams.get('item') === item.id ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const activity = workItemActivity(item, activityPage);
   const events = timelineEvents(activity);
   const actors = { ...activityPage?.actors, ...activity.extraActors };
-  const identifier = workItemIdentifier(item);
 
   return (
     <CardDetailsPanel
@@ -73,20 +71,10 @@ export function WorkItemDetailsPanel({
           actions={actions}
           beforeStart={morph.closeDetails}
           open
+          rework={rework}
           controls={
             <>
-              {item.url !== null && (
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={identifier === undefined ? undefined : `${externalLinkLabel(item.source)}: ${identifier}`}
-                  className={buttonVariants({ variant: 'ghost', size: 'sm' })}
-                >
-                  <SourceIcon source={item.source} />
-                  {identifier ?? externalLinkLabel(item.source)}
-                </a>
-              )}
+              <WorkItemExternalLink item={item} />
               <Button
                 type="button"
                 variant="ghost"
@@ -117,11 +105,10 @@ export function WorkItemDetailsPanel({
         item={item}
         factoryId={factoryId}
         projectRepositoryId={projectRepositoryId}
-        enabled={morph.open}
-        currentUser={auth.data?.user}
-        highlightCommentId={highlightCommentId}
         events={events}
         actors={actors}
+        contextSessions={contextSessions}
+        rework={rework}
       />
     </CardDetailsPanel>
   );

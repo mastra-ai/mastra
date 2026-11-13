@@ -21,6 +21,26 @@ describe('getSpanDurationMs', () => {
 });
 
 describe('getInputPreview', () => {
+  it('previews a run started by a signal by its contents, labelling non-user signals', () => {
+    const signal = { id: 's1', createdAt: '2026-01-01', __isCreatedSignal: true, toDBMessage: '[Function]' };
+    expect(
+      getInputPreview({
+        ...signal,
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+        contents: 'Triage it.',
+      }),
+    ).toBe('Skill factory-triage: Triage it.');
+    expect(getInputPreview({ ...signal, type: 'reactive', tagName: 'system-reminder', contents: 'CI is red.' })).toBe(
+      'system-reminder: CI is red.',
+    );
+    expect(getInputPreview({ ...signal, type: 'user', tagName: 'user', contents: 'Summarize the queue' })).toBe(
+      'Summarize the queue',
+    );
+    expect(getInputPreview({ ...signal, type: 'user-message', contents: [{ type: 'text', text: 'Hi' }] })).toBe('Hi');
+  });
+
   it('returns an empty preview for a missing input', () => {
     expect(getInputPreview(null)).toBe('');
     expect(getInputPreview(undefined)).toBe('');
@@ -34,7 +54,7 @@ describe('getInputPreview', () => {
       { role: 'user', content: 'Second question' },
     ];
 
-    expect(getInputPreview(input)).toBe('First question | Second question');
+    expect(getInputPreview(input)).toBe('First question; Second question');
   });
 
   it('unwraps the legacy { messages } envelope of agent_run spans', () => {
@@ -112,7 +132,8 @@ describe('isTokenLimitExceeded', () => {
     expect(isTokenLimitExceeded(spanWith({}))).toBe(false);
     expect(isTokenLimitExceeded(undefined)).toBeFalsy();
     // A span may arrive with no attributes at all.
-    expect(isTokenLimitExceeded({} as SpanRecord)).toBeFalsy();
+    const spanWithoutAttributes = {} as SpanRecord;
+    expect(isTokenLimitExceeded(spanWithoutAttributes)).toBeFalsy();
   });
 });
 

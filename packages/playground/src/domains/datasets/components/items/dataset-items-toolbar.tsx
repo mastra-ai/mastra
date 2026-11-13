@@ -3,7 +3,7 @@
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
@@ -82,11 +82,12 @@ export function DatasetItemsToolbar({
 
   const searchField = showItemActions && (
     <div className="max-w-120 flex-1">
-      <ListSearch
+      <SearchInput
+        {...listSearchProps}
         label="Search items"
-        placeholder="Search items..."
+        placeholder="Search items"
         value={searchQuery ?? ''}
-        onSearch={query => onSearchChange?.(query)}
+        onValueChange={query => onSearchChange?.(query)}
       />
     </div>
   );
@@ -112,20 +113,20 @@ export function DatasetItemsToolbar({
         {onCreateDatasetClick && (
           <DropdownMenu.Item onSelect={onCreateDatasetClick}>
             <FolderPlus />
-            <span>Create Dataset from Items</span>
+            <span>Create dataset from items</span>
           </DropdownMenu.Item>
         )}
         {onAddToDatasetClick && (
           <DropdownMenu.Item onSelect={onAddToDatasetClick}>
             <FolderOutput />
-            <span>Copy Items to Dataset</span>
+            <span>Copy items to dataset</span>
           </DropdownMenu.Item>
         )}
         {onDeleteClick && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-              <Trash2 /> Delete Items
+              <Trash2 /> Delete items
             </DropdownMenu.Item>
           </>
         )}
@@ -155,7 +156,7 @@ export function DatasetItemsToolbar({
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
+                <Button size="icon-md" aria-label="Dataset actions menu">
                   <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>

@@ -90,10 +90,9 @@ export function formatGapBetweenDates(prevDate: Date, currDate: Date): string | 
     return `[${weeks} weeks later]`;
   } else if (diffDays < 60) {
     return `[1 month later]`;
-  } else {
-    const months = Math.floor(diffDays / 30);
-    return `[${months} months later]`;
   }
+  const months = Math.floor(diffDays / 30);
+  return `[${months} months later]`;
 }
 
 /** A calendar span: a single day has `start` and `end` on the same day. */

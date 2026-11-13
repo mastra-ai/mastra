@@ -21,6 +21,23 @@ afterEach(() => {
 });
 
 describe('TraceColumnsMenu', () => {
+  describe('when it renders', () => {
+    it('shows an icon-only trigger named Columns', () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      const trigger = screen.getByRole('button', { name: 'Columns' });
+      expect(trigger.textContent).toBe('');
+    });
+
+    it('explains the trigger in a tooltip on hover', async () => {
+      render(<TraceColumnsMenu {...defaultProps} />);
+
+      await userEvent.hover(screen.getByRole('button', { name: 'Columns' }));
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Columns');
+    });
+  });
+
   describe('when usage metrics are unavailable', () => {
     it('explains why the usage columns are disabled', async () => {
       render(<TraceColumnsMenu {...defaultProps} usageDisabledReason="Metrics are unavailable." />);

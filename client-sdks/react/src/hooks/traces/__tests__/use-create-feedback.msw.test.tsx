@@ -11,7 +11,13 @@ import { server } from '../../../test/msw-server';
 import { useCreateFeedback } from '../use-create-feedback';
 import { useSpanFeedback } from '../use-span-feedback';
 import { useTraceFeedback } from '../use-trace-feedback';
-import { mixedFeedbackResponse, SPAN_ID, spanFeedbackResponse, TRACE_ID } from './fixtures/trace-feedback';
+import {
+  createdFeedbackResponse,
+  mixedFeedbackResponse,
+  SPAN_ID,
+  spanFeedbackResponse,
+  TRACE_ID,
+} from './fixtures/trace-feedback';
 
 const BASE_URL = 'http://localhost:4111';
 const FEEDBACK_URL = `${BASE_URL}/api/observability/feedback`;
@@ -28,6 +34,41 @@ const makeWrapper = () => {
 afterEach(() => cleanup());
 
 describe('useCreateFeedback', () => {
+  describe('when explicit context and anonymous attribution are supplied', () => {
+    it.each([undefined, SPAN_ID])(
+      'sends explicit context and anonymous attribution for span %s and returns its creation identity',
+      async spanId => {
+        const onPost = vi.fn<(body: unknown) => void>();
+        const created = createdFeedbackResponse(spanId);
+        server.use(
+          http.post(FEEDBACK_URL, async ({ request }) => {
+            onPost(await request.json());
+            return HttpResponse.json(created);
+          }),
+        );
+        const { result } = renderHook(
+          () => useCreateFeedback({ traceId: TRACE_ID, spanId, contextMode: 'resolve', feedbackUserId: null }),
+          { wrapper: makeWrapper() },
+        );
+        const response = await result.current.mutateAsync({ text: 'anonymous note' });
+        expect(onPost).toHaveBeenCalledWith({
+          contextMode: 'resolve',
+          feedback: {
+            feedbackId: expect.any(String),
+            timestamp: expect.any(String),
+            traceId: TRACE_ID,
+            ...(spanId ? { spanId } : {}),
+            feedbackType: 'comment',
+            feedbackSource: 'user',
+            value: 'anonymous note',
+            feedbackUserId: null,
+          },
+        });
+        expect(response).toEqual(created);
+      },
+    );
+  });
+
   describe('when called', () => {
     it('posts trace-level feedback without a spanId', async () => {
       const onPost = vi.fn<(body: Record<string, unknown>) => void>();
@@ -44,6 +85,8 @@ describe('useCreateFeedback', () => {
 
       expect(onPost).toHaveBeenCalledWith({
         feedback: {
+          feedbackId: expect.any(String),
+          timestamp: expect.any(String),
           traceId: TRACE_ID,
           feedbackType: 'comment',
           feedbackSource: 'user',

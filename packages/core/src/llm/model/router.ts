@@ -19,6 +19,7 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -278,6 +279,29 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     return (modelSupportedUrls as Record<string, RegExp[]>) ?? {};
   }
 
+  /**
+   * Resolves the provider id of the model this router calls, e.g. `groq.chat` or `openai.responses`.
+   * `provider` only names the gateway's provider (`groq`, `openai`), which doesn't tell a Chat
+   * Completions endpoint from a Responses one. Returns `undefined` when the model can't be resolved
+   * (e.g. a missing API key); the model call reports that error itself.
+   */
+  async resolveApiProviderId(): Promise<string | undefined> {
+    try {
+      const resolved = this.#manager.resolveModelId(this.config.routerId);
+      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+      const model = await this.resolveLanguageModel({
+        apiKey: auth.apiKey ?? '',
+        auth,
+        headers: mergeHeaders(this.config.headers, auth.headers),
+        trackStreamTransport: false,
+        ...resolved,
+      });
+      return model.provider;
+    } catch {
+      return undefined;
+    }
+  }
+
   /** @internal */
   _getStreamTransport(): StreamTransport | undefined {
     return this.#lastStreamTransport;
@@ -412,7 +436,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const model = await this.resolveLanguageModel({
       apiKey: auth.apiKey ?? '',
@@ -420,6 +444,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       headers: mergeHeaders(this.config.headers, auth.headers),
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     if (isLanguageModelV4(model)) {
@@ -457,7 +484,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const { transport, websocket } = getOpenAITransport(
       sanitizedOptions.providerOptions as ProviderOptions | undefined,
@@ -479,6 +506,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       responsesWebSocket: websocket,
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     const streamTransport = this.#lastStreamTransport;
@@ -552,6 +582,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     headers,
     transport,
     responsesWebSocket,
+    trackStreamTransport = true,
   }: {
     modelId: string;
     providerId: string;
@@ -560,6 +591,8 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     headers?: Record<string, string>;
     transport?: OpenAITransport;
     responsesWebSocket?: ResponsesWebSocketOptions;
+    /** Set false to resolve without replacing the transport handle the next stream reads. */
+    trackStreamTransport?: boolean;
   }): Promise<GatewayLanguageModel> {
     const resolvedTransport: OpenAITransport = transport ?? 'fetch';
     const websocketKey =
@@ -568,6 +601,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
         : '';
     const useInstanceCache = this.shouldUseInstanceGatewayCache(auth);
     const cache = useInstanceCache ? this.instanceGatewayCache : this.getGatewayCache();
+    // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion at the model-cache key boundary.
     const authScopeKey = useInstanceCache ? `${auth.source ?? ''}` : '';
     const key = ModelRouterLanguageModel.computeModelCacheKey({
       gatewayId: this.gatewayId,
@@ -582,7 +616,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       api: this.config.api || 'chat',
     });
     if (cache.modelInstances.has(key)) {
-      this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
+      if (trackStreamTransport) this.setStreamTransportFromCache({ cache, resolvedTransport, key, responsesWebSocket });
       return cache.modelInstances.get(key)!;
     }
 
@@ -605,7 +639,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
               supportsStructuredOutputs: true,
             }).chatModel(modelId);
       cache.modelInstances.set(key, modelInstance);
-      this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
+      if (trackStreamTransport) this.setStreamTransportHandle({ resolvedTransport, responsesWebSocket });
       return modelInstance;
     }
 
@@ -640,7 +674,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     if (gatewayTransport) {
       cache.gatewayStreamTransports.set(key, gatewayTransport);
     }
-    this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, responsesWebSocket });
+    if (trackStreamTransport) {
+      this.setStreamTransportHandle({ resolvedTransport, transport: gatewayTransport, responsesWebSocket });
+    }
     return modelInstance;
   }
 
@@ -679,4 +715,15 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
 
 function readGatewayStreamTransport(model: GatewayLanguageModel): GatewayStreamTransportHandle | undefined {
   return (model as GatewayLanguageModelWithStreamTransport)[MASTRA_GATEWAY_STREAM_TRANSPORT];
+}
+
+/**
+ * Returns the provider id of the API a model sends requests to, e.g. `openai.chat` or
+ * `anthropic.messages`. Router models resolve the model they will call; other models report
+ * their own `provider`.
+ */
+export async function resolveApiProviderId(model: unknown): Promise<string | undefined> {
+  if (model instanceof ModelRouterLanguageModel) return model.resolveApiProviderId();
+  const provider = (model as { provider?: unknown } | null | undefined)?.provider;
+  return typeof provider === 'string' && provider.length > 0 ? provider : undefined;
 }

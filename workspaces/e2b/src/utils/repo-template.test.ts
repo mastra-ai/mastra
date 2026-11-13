@@ -19,6 +19,24 @@ const { execFileMock } = vi.hoisted(() => ({ execFileMock: vi.fn() }));
 vi.mock('node:child_process', () => ({
   execFile: (...args: unknown[]) => execFileMock(...args),
 }));
+// e2b wraps Template in a Proxy that caches bound statics on first read, so
+// vi.spyOn(Template, ...) is silently ignored after the first access. Route
+// exists/build through stable mocks instead.
+const { templateExists, templateBuild } = vi.hoisted(() => ({ templateExists: vi.fn(), templateBuild: vi.fn() }));
+vi.mock('e2b', async importOriginal => {
+  const actual = await importOriginal<typeof import('e2b')>();
+  const overrides: Record<PropertyKey, unknown> = { exists: templateExists, build: templateBuild };
+  return {
+    ...actual,
+    Template: new Proxy(actual.Template, {
+      get: (target, prop) => (prop in overrides ? overrides[prop] : Reflect.get(target, prop)),
+    }),
+  };
+});
+afterEach(() => {
+  templateExists.mockReset();
+  templateBuild.mockReset();
+});
 const fetchMock = vi.fn();
 vi.stubGlobal('fetch', fetchMock);
 
@@ -409,6 +427,32 @@ describe('createRepoTemplate', () => {
     expect(serialized).toContain('PIP_INDEX_URL');
   });
 
+  describe('buildEnv with buildEnvRevision', () => {
+    it('applies buildEnv to build steps without putting values in the name', async () => {
+      const spec = await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'sentinel-e2b' }, buildEnvRevision: 'rev-a' });
+      const serialized = await serializedSteps(spec);
+      expect(serialized).toContain('sentinel-e2b');
+      expect(spec.ref).not.toContain('sentinel-e2b');
+    });
+
+    it('names the template by the revision, never the values', async () => {
+      const a = await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-a' });
+      const aOtherValue = await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'two' }, buildEnvRevision: 'rev-a' });
+      const b = await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'one' }, buildEnvRevision: 'rev-b' });
+      expect(aOtherValue.ref).toBe(a.ref);
+      expect(aOtherValue.staleRef).toBe(a.staleRef);
+      expect(b.ref).not.toBe(a.ref);
+      expect(a.ref).toBe(repoTemplateRef({ ...IDENTITY, buildEnvRevision: 'rev-a' }));
+    });
+
+    it('keeps hashing buildEnv values into the name without a revision', async () => {
+      expect((await resolve(BASE)).ref).toBe(repoTemplateRef(IDENTITY));
+      const legacy = await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'one' } });
+      expect(legacy.ref).toBe(repoTemplateRef({ ...IDENTITY, buildEnv: { NPM_TOKEN: 'one' } }));
+      expect(legacy.ref).not.toBe((await resolve({ ...BASE, buildEnv: { NPM_TOKEN: 'two' } })).ref);
+    });
+  });
+
   it('needs no root prep when workingDirectory is omitted', async () => {
     const steps = await serializedSteps(await resolve(BASE));
     expect(steps).not.toContain('chown');
@@ -466,8 +510,8 @@ describe('refreshRepoTemplate', () => {
   });
 
   it('reuses an existing build at the current head without building', async () => {
-    const exists = vi.spyOn(Template, 'exists').mockResolvedValue(true);
-    const build = vi.spyOn(Template, 'build').mockRejectedValue(new Error('must not build'));
+    const exists = templateExists.mockResolvedValue(true);
+    const build = templateBuild.mockRejectedValue(new Error('must not build'));
     const result = await refreshRepoTemplate(options);
     expect(result).toEqual({
       ref: repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }),
@@ -479,10 +523,8 @@ describe('refreshRepoTemplate', () => {
   });
 
   it('builds the missing head ref and moves the current tag', async () => {
-    vi.spyOn(Template, 'exists').mockResolvedValue(false);
-    const build = vi
-      .spyOn(Template, 'build')
-      .mockResolvedValue({ alias: 'x', name: 'x', tags: [], templateId: 't', buildId: 'b' });
+    templateExists.mockResolvedValue(false);
+    const build = templateBuild.mockResolvedValue({ alias: 'x', name: 'x', tags: [], templateId: 't', buildId: 'b' });
     const result = await refreshRepoTemplate(options);
     expect(result.action).toBe('built');
     expect(result.ref).toBe(repoTemplateRef({ cloneUrl: CLONE_URL, setupCommand: SETUP, sha: head }));
@@ -492,13 +534,13 @@ describe('refreshRepoTemplate', () => {
   });
 
   it('rejects on build failure so external warmers can observe it', async () => {
-    vi.spyOn(Template, 'exists').mockResolvedValue(false);
-    vi.spyOn(Template, 'build').mockRejectedValue(new Error('registry flake'));
+    templateExists.mockResolvedValue(false);
+    templateBuild.mockRejectedValue(new Error('registry flake'));
     await expect(refreshRepoTemplate(options)).rejects.toThrow('registry flake');
   });
 
   it('degrades to the current-tag ref when the head cannot be resolved', async () => {
-    vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    templateExists.mockResolvedValue(true);
     mockHead(undefined);
     const result = await refreshRepoTemplate(options);
     expect(result).toEqual({
@@ -636,7 +678,7 @@ describe('createRepoTemplate with repos', () => {
   });
 
   it('refreshRepoTemplate reports the list sha', async () => {
-    vi.spyOn(Template, 'exists').mockResolvedValue(true);
+    templateExists.mockResolvedValue(true);
     onTestFinished(() => vi.restoreAllMocks());
     const result = await refreshRepoTemplate(listOptions);
     expect(result.action).toBe('reused');

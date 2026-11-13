@@ -7,6 +7,7 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
   BaseResource,
   A2A,
   A2AV1,
@@ -27,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -53,6 +55,8 @@ import type {
   TraceQueryResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -89,6 +93,7 @@ import type {
   GetScorePercentilesResponse,
   ListFeedbackArgs,
   CreateFeedbackBody,
+  ReplaceFeedbackBody,
   CreateFeedbackResponse,
   DeleteFeedbackArgs,
   DeleteFeedbackResponse,
@@ -124,8 +129,11 @@ import type {
   GetTagsArgs,
   GetTagsResponse,
 } from './resources/observability-route-types.js';
+import type { SignalWriteOptions } from './resources/signal-writes';
 import type { Body, PathParams, QueryParams, RouteResponse } from './route-types.generated.js';
 import type {
+  GetScoreResponse,
+  GetFeedbackResponse,
   ListFeedbackResponse,
   ClientOptions,
   McpServerEventStreamFrame,
@@ -143,6 +151,7 @@ import type {
   SaveMessageToMemoryParams,
   SaveMessageToMemoryResponse,
   McpServerListResponse,
+  GetBuiltinMcpServerResponse,
   McpServerToolListResponse,
   GetScorerResponse,
   GetScorersResponse,
@@ -689,6 +698,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists the Knowledge instances registered on the server
+   * @returns Promise containing each instance's application key and id
+   */
+  public listKnowledge(): Promise<{ instances: KnowledgeInstanceSummary[] }> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Application key the instance is registered under
+   * @returns Knowledge resource
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
+  }
+
+  /**
    * Retrieves logs
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
@@ -728,9 +754,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs?${searchParams}`);
-    } else {
-      return this.request(`/logs`);
     }
+    return this.request(`/logs`);
   }
 
   /**
@@ -777,9 +802,8 @@ export class MastraClient extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/logs/${runId}?${searchParams}`);
-    } else {
-      return this.request(`/logs/${runId}`);
     }
+    return this.request(`/logs/${runId}`);
   }
 
   /**
@@ -819,6 +843,14 @@ export class MastraClient extends BaseResource {
     }
     const queryString = searchParams.toString();
     return this.request(`/mcp/v0/servers${queryString ? `?${queryString}` : ''}`);
+  }
+
+  /**
+   * Describes the built-in Mastra MCP server: whether it is served, its endpoint path, toolsets, and auth mode.
+   * Requires `mcp:read`. Its tools depend on the caller, so connect an MCP client to `path` to list them.
+   */
+  public getBuiltinMcpServer(): Promise<GetBuiltinMcpServerResponse> {
+    return this.request('/mcp/builtin');
   }
 
   /**
@@ -974,6 +1006,73 @@ export class MastraClient extends BaseResource {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/emit`, {
       method: 'POST',
       body: { data },
+    });
+  }
+
+  /**
+   * Lists which tools an MCP server runs as tasks, and its recent tasks across principals
+   * (experimental). `unavailable` says why `tasks` is empty for a store that can't be listed
+   * or a resource-scoped caller.
+   * @param serverId - The ID of the MCP server.
+   * @param params - Optional `limit`, `status`, `surface` and `client` (a listed `principalKey`)
+   *   filters, and the `cursor` from the previous page's `nextCursor`.
+   */
+  public getMcpServerTasks(
+    serverId: PathParams<'GET /mcp/:serverId/tasks'>['serverId'],
+    params: QueryParams<'GET /mcp/:serverId/tasks'> = {},
+  ): Promise<RouteResponse<'GET /mcp/:serverId/tasks'>> {
+    const searchParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(params)) {
+      if (value !== undefined) searchParams.set(name, String(value));
+    }
+    const query = searchParams.size ? `?${searchParams}` : '';
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks${query}`);
+  }
+
+  /**
+   * Finds an MCP server task by its MCP task id, as a client sees it (experimental). The server
+   * hashes the id before the lookup; it is sent in the body so it stays out of URLs and logs.
+   * Rejects with 404 for an unknown task.
+   * @param serverId - The ID of the MCP server.
+   * @param taskId - The MCP task id.
+   */
+  public findMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/find'>['serverId'],
+    taskId: Body<'POST /mcp/:serverId/tasks/find'>['taskId'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/find'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/find`, { method: 'POST', body: { taskId } });
+  }
+
+  /**
+   * Cancels an MCP server task by key, like the `tasks/cancel` MCP request (experimental).
+   * Rejects with 404 once the task is no longer running.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   */
+  public cancelMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['taskKey'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/cancel'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Answers an MCP server task's open input requests, like the `tasks/update` MCP request
+   * (experimental). Rejects with 404 unless the task is waiting for one of them.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   * @param inputResponses - Answers keyed by input request, e.g. `{ approve: { action: 'accept', content: {...} } }`.
+   */
+  public answerMcpServerTaskInput(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['taskKey'],
+    inputResponses: Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/input'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/input`, {
+      method: 'POST',
+      body: { inputResponses },
     });
   }
 
@@ -1239,8 +1338,17 @@ export class MastraClient extends BaseResource {
    * Groups and measures the traces selected by a time range and optional trace-query predicate.
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
-    return this.observability.aggregateTraces(params);
+  aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
+    return this.observability.aggregateTraces(params, options);
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params);
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
@@ -1307,7 +1415,8 @@ export class MastraClient extends BaseResource {
    * Deletes traces by ID, cascading to all associated spans and trace-linked
    * signal events (scores, feedback, metrics, logs). Signals without a trace ID
    * are untouched. On ClickHouse-backed stores, reads may briefly return
-   * deleted rows until the delete is fully applied.
+   * deleted rows until the delete is fully applied. A supporting Platform backend
+   * returns `{ accepted: true }` after queueing cleanup, before records disappear.
    */
   deleteTraces(params: DeleteTracesRequest): Promise<DeleteTracesResponse> {
     return this.observability.deleteTraces(params);
@@ -1331,17 +1440,25 @@ export class MastraClient extends BaseResource {
   // Scores
   // --------------------------------------------------------------------------
 
+  /** Retrieves one score by ID; the response contains null when it is missing. */
+  getScore(id: string): Promise<GetScoreResponse> {
+    return this.observability.getScore(id);
+  }
+
   /** Retrieves a paginated list of observability scores. */
   listScores(params: ListScoresArgs = {}): Promise<ListScoresResponseNew> {
     return this.observability.listScores(params);
   }
 
   /** Creates a single score record in the observability store. */
-  createScore(params: CreateScoreBody): Promise<CreateScoreResponse> {
-    return this.observability.createScore(params);
+  createScore(params: CreateScoreBody, options?: SignalWriteOptions): Promise<CreateScoreResponse> {
+    return this.observability.createScore(params, options);
   }
 
-  /** Deletes score records by scoreId, optionally scoped to a tenant. */
+  /**
+   * Deletes score records by scoreId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteScores(params: DeleteScoresArgs): Promise<DeleteScoresResponse> {
     return this.observability.deleteScores(params);
   }
@@ -1370,17 +1487,30 @@ export class MastraClient extends BaseResource {
   // Feedback
   // --------------------------------------------------------------------------
 
+  /** Retrieves one feedback by ID; the response contains null when it is missing. */
+  getFeedback(id: string): Promise<GetFeedbackResponse> {
+    return this.observability.getFeedback(id);
+  }
+
   /** Retrieves a paginated list of feedback records. */
   listFeedback(params: ListFeedbackArgs = {}): Promise<ListFeedbackResponse> {
     return this.observability.listFeedback(params);
   }
 
   /** Creates a single feedback record in the observability store. */
-  createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
-    return this.observability.createFeedback(params);
+  createFeedback(params: CreateFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.createFeedback(params, options);
   }
 
-  /** Deletes feedback records by feedbackId, optionally scoped to a tenant. */
+  /** Full replacement on Platform. Preserve the original identity/timestamp; each accepted retry is a new replacement. */
+  replaceFeedback(params: ReplaceFeedbackBody, options?: SignalWriteOptions): Promise<CreateFeedbackResponse> {
+    return this.observability.replaceFeedback(params, options);
+  }
+
+  /**
+   * Deletes feedback records by feedbackId, optionally scoped to a tenant.
+   * Returns OSS success or Platform acceptance; accepted cleanup is asynchronous.
+   */
   deleteFeedback(params: DeleteFeedbackArgs): Promise<DeleteFeedbackResponse> {
     return this.observability.deleteFeedback(params);
   }
@@ -2489,6 +2619,7 @@ export class MastraClient extends BaseResource {
     if (options?.page !== undefined) searchParams.set('page', String(options.page));
     if (options?.perPage !== undefined) searchParams.set('perPage', String(options.perPage));
     for (const tag of options?.tags ?? []) searchParams.append('tags', tag);
+    if (options?.status) searchParams.set('status', options.status);
     if (options?.orderBy) {
       searchParams.set('orderBy[field]', options.orderBy.field);
       searchParams.set('orderBy[direction]', options.orderBy.direction);
@@ -2649,6 +2780,24 @@ export class MastraClient extends BaseResource {
    */
   public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
     return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Answers a suspended background task with `resumeData`. Pass the task's
+   * `suspendedAt` to have the server reject the answer (409) when the task has
+   * resumed or suspended again since you read it.
+   */
+  public resumeBackgroundTask(
+    backgroundTaskId: string,
+    resumeData: unknown,
+    options: { suspendedAt?: Date | string | number } = {},
+  ): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
+      method: 'POST',
+      body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
+    });
   }
 
   /**

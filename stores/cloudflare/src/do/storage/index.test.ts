@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue } from 'node:sqlite';
 
-import { createRunFencingTests } from '@internal/storage-test-utils';
+import { createBackgroundTasksTests, createRunFencingTests } from '@internal/storage-test-utils';
 import { beforeAll, describe, vi } from 'vitest';
 
 import { CloudflareDOStorage } from '../index';
@@ -34,4 +34,5 @@ describe('CloudflareDOStorage', () => {
   });
 
   createRunFencingTests({ storage });
+  createBackgroundTasksTests({ storage });
 });

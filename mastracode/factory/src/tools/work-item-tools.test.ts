@@ -1,11 +1,7 @@
-import { EventEmitterPubSub } from '@mastra/core/events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
-import { feedTopic } from '../feed-events.js';
-import { fakeRouteAuth } from '../routes/test-utils.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
-import { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -31,25 +27,14 @@ const FOREIGN_DECISION_ID = '0f9e8d7c-6b5a-4493-8271-605f4e3d2c1b';
 
 async function setup({
   transition,
-  feed,
   actorProfile,
   interactive = true,
 }: {
   interactive?: boolean;
   transition?: Transition;
-  feed?: Pick<CommentsDomain, 'createComment'>;
   actorProfile?: FactoryToolScope['actorProfile'];
 } = {}) {
   const seed = await createFactoryStorageForTests();
-  const pubsub = new EventEmitterPubSub();
-  const publish = vi.spyOn(pubsub, 'publish');
-  const commentsDomain = new CommentsDomain({
-    auth: fakeRouteAuth(),
-    comments: seed.comments,
-    workItems: seed.workItems,
-    projects: seed.projects,
-    pubsub,
-  });
   const boards = createBoardRegistry();
   // Two linked repositories, so a card that names neither is ambiguous. Only
   // the reads the repository check makes are stubbed.
@@ -93,7 +78,6 @@ async function setup({
       boards,
       transitionService,
       auditRecorder,
-      feed: feed ?? commentsDomain,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
     },
   ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
@@ -105,7 +89,7 @@ async function setup({
       factoryProjectId,
       input: { title, stages: ['intake'], metadata: {} },
     });
-  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem, publish };
+  return { ...seed, boards, tools, run, transitionService, auditRecorder, fileItem };
 }
 
 function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}): FactoryDeferredDecisionRecord {
@@ -137,7 +121,7 @@ describe('factory_create_work_item', () => {
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404.',
+      description: 'Users land on /404.',
     });
     await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
 
@@ -150,17 +134,22 @@ describe('factory_create_work_item', () => {
     expect(transitionService.transition).toHaveBeenCalledTimes(2);
   });
 
-  it("files the item as the caller in the board's first phase, posts the brief and follows it", async () => {
-    const { run, workItems, comments, transitionService, auditRecorder, publish } = await setup();
+  it("files the item as the caller in the board's first phase, stores the description and follows it", async () => {
+    const { run, workItems, transitionService, auditRecorder } = await setup();
 
     const created = await run<{ id: string; stage: string; title: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
     });
 
     expect(created).toMatchObject({ title: 'Fix the login redirect', stage: 'intake' });
     const item = await workItems.getForProject('org-1', 'project-1', created.id);
-    expect(item).toMatchObject({ createdBy: 'user-1', board: 'work', stages: ['intake'] });
+    expect(item).toMatchObject({
+      createdBy: 'user-1',
+      board: 'work',
+      stages: ['intake'],
+      description: 'Users land on /404 after signing in.',
+    });
     expect(transitionService.transition).toHaveBeenCalledWith(
       expect.objectContaining({
         workItemId: created.id,
@@ -169,20 +158,6 @@ describe('factory_create_work_item', () => {
         cause: 'work_item_created',
         actor: { type: 'human', id: 'user-1' },
       }),
-    );
-    const feed = await comments.listRecent({
-      orgId: 'org-1',
-      factoryProjectId: 'project-1',
-      workItemId: created.id,
-      limit: 10,
-    });
-    expect(feed.map(comment => [comment.body, comment.author.id])).toEqual([
-      ['Users land on /404 after signing in.', 'user-1'],
-    ]);
-    // Through the comments domain: open boards get a feed touch for the new card.
-    expect(publish).toHaveBeenCalledWith(
-      feedTopic('org-1', 'project-1'),
-      expect.objectContaining({ type: 'factory.feed.touched', data: { workItemId: created.id } }),
     );
     expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
       expect.objectContaining({ sessionId: 'session-1', threadId: 'thread-1', userId: 'user-1', reason: 'created' }),
@@ -199,23 +174,6 @@ describe('factory_create_work_item', () => {
     );
   });
 
-  it('reports the item with a warning instead of failing when the brief cannot be posted', async () => {
-    const { run, workItems } = await setup({
-      feed: { createComment: vi.fn(async () => Promise.reject(new Error('feed is down'))) },
-    });
-
-    const created = await run<{ id: string; warnings?: string[] }>('factory_create_work_item', {
-      title: 'Card that exists anyway',
-      brief: 'Brief that fails to post.',
-    });
-
-    expect(created.warnings).toEqual(['The brief was not posted: feed is down']);
-    await expect(workItems.getForProject('org-1', 'project-1', created.id)).resolves.not.toBeNull();
-    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
-      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
-    ]);
-  });
-
   it('removes the item again when the first phase refuses it', async () => {
     const { run, workItems, auditRecorder } = await setup({
       transition: async request => ({
@@ -227,7 +185,9 @@ describe('factory_create_work_item', () => {
       }),
     });
 
-    await expect(run('factory_create_work_item', { title: 'Nope', brief: 'x' })).rejects.toThrow('Intake is closed.');
+    await expect(run('factory_create_work_item', { title: 'Nope', description: 'x' })).rejects.toThrow(
+      'Intake is closed.',
+    );
     expect(await workItems.list({ orgId: 'org-1', factoryProjectId: 'project-1' })).toEqual([]);
     expect(auditRecorder.record).not.toHaveBeenCalled();
   });
@@ -239,9 +199,9 @@ describe('factory_create_work_item', () => {
         inputSchema: { safeParse(input: unknown): { success: boolean } };
       }
     ).inputSchema;
-    expect(schema.safeParse({ title: 't', brief: 'b' }).success).toBe(true);
-    expect(schema.safeParse({ title: 't', brief: 'b', stage: 'execute' }).success).toBe(false);
-    expect(schema.safeParse({ title: 't', brief: 'b', board: 'review' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b' }).success).toBe(true);
+    expect(schema.safeParse({ title: 't', description: 'b', stage: 'execute' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b', board: 'review' }).success).toBe(false);
   });
 });
 
@@ -251,7 +211,7 @@ describe('repositories', () => {
 
     const created = await run<{ id: string }>('factory_create_work_item', {
       title: 'Fix the login redirect',
-      brief: 'Users land on /404 after signing in.',
+      description: 'Users land on /404 after signing in.',
       repository: 'mastra-ai/platform',
     });
 
@@ -263,7 +223,7 @@ describe('repositories', () => {
     const { run, workItems } = await setup();
 
     await expect(
-      run('factory_create_work_item', { title: 'x', brief: 'y', repository: 'someone/else' }),
+      run('factory_create_work_item', { title: 'x', description: 'y', repository: 'someone/else' }),
     ).rejects.toThrow(
       'someone/else is not linked to this Factory. Linked repositories: mastra-ai/mastra, mastra-ai/platform.',
     );
@@ -272,6 +232,18 @@ describe('repositories', () => {
 });
 
 describe('factory_update_work_item', () => {
+  it("sets and clears a card's description", async () => {
+    const { run, workItems, fileItem } = await setup();
+    const { item } = await fileItem('project-1', 'Card');
+
+    const set = await run('factory_update_work_item', { workItem: item.id, description: '  Repro: sign in twice.  ' });
+    expect(set).toMatchObject({ updated: ['description'] });
+    expect((await workItems.getForProject('org-1', 'project-1', item.id))?.description).toBe('Repro: sign in twice.');
+
+    await run('factory_update_work_item', { workItem: item.id, description: '' });
+    expect((await workItems.getForProject('org-1', 'project-1', item.id))?.description).toBeNull();
+  });
+
   it("sets a card's repository, title and parent as the caller and audits the fields", async () => {
     const { run, workItems, fileItem, auditRecorder } = await setup();
     const { item } = await fileItem('project-1', 'Old title');
@@ -289,8 +261,8 @@ describe('factory_update_work_item', () => {
       updated: ['title', 'repository', 'parentWorkItemId'],
       repository: 'mastra-ai/mastra',
       parentWorkItemId: parent.id,
-      plansPreapproved: false,
     });
+    expect(result).not.toHaveProperty('plansPreapproved');
     const stored = await workItems.getForProject('org-1', 'project-1', item.id);
     expect(stored).toMatchObject({ title: 'New title', parentWorkItemId: parent.id, stages: item.stages });
     expect(stored!.metadata).toMatchObject({ repository: 'mastra-ai/mastra' });
@@ -327,13 +299,17 @@ describe('factory_update_work_item', () => {
   });
 
   it("refuses to repoint a card synced from an issue, which follows the issue's repository", async () => {
-    const { run, workItems, fileItem } = await setup();
-    const { item } = await fileItem('project-1', 'Issue card');
-    await workItems.update({
+    const { run, workItems } = await setup();
+    const { item } = await workItems.upsert({
       orgId: 'org-1',
-      id: item.id,
+      factoryProjectId: 'project-1',
       userId: 'user-1',
-      patch: { metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' } },
+      input: {
+        title: 'Issue card',
+        stages: ['intake'],
+        externalSource: { integrationId: 'github', type: 'issue', externalId: '42' },
+        metadata: { githubRepositoryId: '2', repository: 'mastra-ai/mastra' },
+      },
     });
 
     await expect(
@@ -341,19 +317,21 @@ describe('factory_update_work_item', () => {
     ).rejects.toThrow("This card runs in mastra-ai/mastra, which comes from its linked issue and can't be changed.");
   });
 
-  it('detaches a card from its parent and pre-approves its plans', async () => {
+  it('detaches a card from its parent, and refuses the retired plan pre-approval', async () => {
     const { run, workItems, fileItem } = await setup();
     const { item: parent } = await fileItem('project-1', 'Epic');
     const { item } = await fileItem('project-1', 'Child');
     await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { parentWorkItemId: parent.id } });
 
-    const result = await run('factory_update_work_item', {
-      workItem: item.id,
-      parentWorkItem: null,
-      plansPreapproved: true,
-    });
+    // Plans always wait for a person (or the board's exit tool), so there is nothing to pre-approve.
+    await expect(
+      run('factory_update_work_item', { workItem: item.id, parentWorkItem: null, plansPreapproved: true }),
+    ).resolves.toMatchObject({ error: true });
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.parentWorkItemId).toBe(parent.id);
 
-    expect(result).toMatchObject({ parentWorkItemId: null, plansPreapproved: true });
+    const result = await run('factory_update_work_item', { workItem: item.id, parentWorkItem: null });
+
+    expect(result).toMatchObject({ parentWorkItemId: null });
   });
 
   it('refuses a parent from another Factory and a card that would be its own ancestor', async () => {
@@ -384,6 +362,12 @@ describe('factory_update_work_item', () => {
     expect(schema.safeParse({ workItem: item.id, sessions: {} }).success).toBe(false);
     expect(schema.safeParse({ workItem: item.id, title: 'ok' }).success).toBe(true);
   });
+
+  it("does not offer plan pre-approval it can't perform", async () => {
+    const { tools } = await setup();
+
+    expect(tools.factory_update_work_item.description).not.toMatch(/pre-?approv/i);
+  });
 });
 
 describe('approval', () => {
@@ -410,6 +394,7 @@ describe('approval', () => {
         'factory_list_work_items',
         'factory_inspect_work_item',
         'factory_list_attention',
+        'factory_list_audit_events',
         'factory_create_work_item',
         'factory_update_work_item',
         'factory_transition_work_item',
@@ -423,6 +408,8 @@ describe('approval', () => {
         'factory_start_session',
         'factory_answer_approval',
         'factory_switch_session_model',
+        'factory_recreate_sandbox',
+        'factory_sandbox_port_url',
         'factory_list_side_sessions',
         'factory_subscribe_session',
         'factory_unsubscribe_session',
@@ -452,6 +439,59 @@ describe('factory_transition_work_item', () => {
         ingress: expect.objectContaining({ type: 'human', identity: expect.stringMatching(/^human:user-1:/) }),
       }),
     );
+  });
+
+  // The move can start a phase session the Factory owns; following is how this session hears it wait.
+  it('follows the card it moved, so the session hears from the run the move starts', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+
+    await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', userId: 'user-1', reason: 'moved' }),
+    ]);
+  });
+
+  it('still reports the move when following the card fails, so the agent does not move it twice', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+    vi.spyOn(workItems, 'subscribeToWorkItem').mockRejectedValue(new Error('storage is away'));
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).resolves.toEqual({
+      workItemId: item.id,
+      stage: 'triage',
+      revision: item.revision + 1,
+      warnings: ['This session does not follow it yet: storage is away'],
+    });
+  });
+
+  it('keeps "created" when a session moves a card it filed', async () => {
+    const { run, workItems } = await setup();
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
+
+    await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
+    ]);
+  });
+
+  it('does not follow a card whose move the board refused', async () => {
+    const { run, fileItem, workItems } = await setup({
+      transition: async request => ({
+        status: 'rejected',
+        transitionId: 't',
+        itemId: request.workItemId,
+        code: 'stale',
+        reason: 'The item changed.',
+      }),
+    });
+    const { item } = await fileItem('project-1', 'Stale');
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).rejects.toThrow();
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([]);
   });
 
   it("returns the board's refusal as an error", async () => {
@@ -560,7 +600,7 @@ describe('subscriptions', () => {
 
   it('keeps "created" when a session subscribes to an item it filed', async () => {
     const { run } = await setup();
-    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', brief: 'b' });
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
     await expect(run('factory_subscribe_work_item', { workItem: created.id })).resolves.toMatchObject({
       reason: 'created',
     });
@@ -622,15 +662,12 @@ describe('on a turn nobody signed in started', () => {
     );
   });
 
-  it('refuses to pre-approve plans, approve or dismiss proposals, and changes nothing', async () => {
+  it('refuses to approve or dismiss proposals, and changes nothing', async () => {
     const { run, workItems, fileItem, auditRecorder } = await setup({ interactive: false });
     const { item } = await fileItem('project-1', 'Keep my gate');
     const approve = vi.spyOn(workItems, 'approveDeferredDecision');
     const dismiss = vi.spyOn(workItems, 'dismissDeferredDecision');
 
-    await expect(run('factory_update_work_item', { workItem: item.id, plansPreapproved: true })).rejects.toThrow(
-      'Only a person can pre-approve plans',
-    );
     await expect(run('factory_resolve_proposal', { decisionId: DECISION_ID, action: 'approve' })).rejects.toThrow(
       'Only a person can approve or dismiss a proposed run',
     );
@@ -641,7 +678,6 @@ describe('on a turn nobody signed in started', () => {
     expect(approve).not.toHaveBeenCalled();
     expect(dismiss).not.toHaveBeenCalled();
     expect(auditRecorder.record).not.toHaveBeenCalled();
-    const stored = await workItems.get({ orgId: 'org-1', id: item.id });
-    expect(stored?.plansPreapprovedAt).toBeNull();
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision);
   });
 });

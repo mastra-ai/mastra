@@ -2,78 +2,43 @@ import type { OnboardingDraft, OnboardingModelScope, OnboardingStep } from './on
 
 export const SETUP_LABELS: Record<OnboardingModelScope, string> = {
   factory: 'Company account',
-  hybrid: 'Company work · personal sessions',
+  hybrid: 'Company work and personal sessions',
   user: 'Personal accounts',
 };
 
-export function onboardingSteps(scope?: OnboardingModelScope, local = false): OnboardingStep[] {
-  return [
-    'initial',
-    'vcs',
-    'project-management',
-    ...(local ? [] : (['model-setup'] as const)),
-    ...(scope === 'user' ? [] : (['model-provider'] as const)),
-    ...(scope === 'user' || scope === 'hybrid' ? (['personal-provider'] as const) : []),
-    'review',
-  ];
-}
-
-export function firstModelStep(scope?: OnboardingModelScope): OnboardingStep {
-  return scope === 'user' ? 'personal-provider' : 'model-provider';
-}
-
-const ACCOUNT_STEPS: Partial<Record<OnboardingStep, true>> = {
-  'model-setup': true,
-  'model-provider': true,
-  'personal-provider': true,
-  review: true,
+export const SETUP_DETAILS: Record<OnboardingModelScope, string> = {
+  factory: 'A shared account and model for Factory work and sessions.',
+  hybrid: 'Factory work uses the company account. Each person uses their own account for sessions.',
+  user: 'Each person uses their own account and default model, for Factory work and sessions.',
 };
 
-export function restoredOnboardingStep(saved: OnboardingStep, draft: OnboardingDraft, local: boolean): OnboardingStep {
-  if (saved !== 'initial' && !draft.repository) return 'vcs';
-  if (!ACCOUNT_STEPS[saved]) return saved;
-  if (!local && !draft.modelScope) return 'model-setup';
-  return onboardingSteps(draft.modelScope, local).includes(saved) ? saved : firstModelStep(draft.modelScope);
-}
+/**
+ * The page's numbered cards. Accounts (who pays) and Model (the providers behind those accounts) open
+ * together as the Model step, so a change of accounts shows its providers right away.
+ */
+export type OnboardingSection = OnboardingStep | 'accounts';
 
-export const STEP_META: Record<OnboardingStep, { label: string; title: string; description?: string }> = {
-  initial: { label: 'Welcome', title: 'Set up your factory.' },
-  vcs: { label: 'Codebase', title: 'Choose your codebase.' },
-  'project-management': { label: 'Work', title: 'Connect your work.' },
-  'model-setup': {
-    label: 'Setup',
-    title: 'Choose your setup.',
-    description: 'Choose whose accounts power this Factory.',
-  },
-  'model-provider': { label: 'Model', title: 'Choose your model.' },
-  'personal-provider': { label: 'Model', title: 'Choose your model.' },
-  review: {
-    label: 'Review',
-    title: 'Ready to create.',
-    description: 'Review your Factory settings. Connected accounts are already saved.',
-  },
+export const ONBOARDING_SECTIONS: Record<OnboardingSection, { index: number; label: string }> = {
+  vcs: { index: 1, label: 'Codebase' },
+  'project-management': { index: 2, label: 'Work' },
+  accounts: { index: 3, label: 'Accounts' },
+  model: { index: 4, label: 'Model' },
 };
 
-export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModelScope, local = false) {
-  if (step === 'model-provider')
-    return {
-      ...STEP_META[step],
-      description: companyModelDescription(scope, local),
-    };
-  if (step === 'personal-provider')
-    return {
-      ...STEP_META[step],
-      title: scope === 'hybrid' ? 'Set up your sessions.' : 'Choose your model.',
-      description:
-        scope === 'hybrid'
-          ? 'Your account · your default model for sessions.'
-          : 'Your account · your default model for Factory work and sessions.',
-    };
-  return STEP_META[step];
+/** Local mode leaves out the Accounts card, so Model moves up to third; otherwise it keeps its own number. */
+export function modelSectionIndex(local: boolean): number | undefined {
+  return local ? ONBOARDING_SECTIONS.accounts.index : undefined;
 }
 
-function companyModelDescription(scope: OnboardingModelScope | undefined, local: boolean) {
-  if (local) return 'Connect a provider and choose the model for your Factory.';
-  if (scope === 'hybrid') return 'Company account · model for Factory work.';
-  return 'Company account · model for Factory work and sessions.';
+/** First section still missing a choice; Model once Codebase and Work are settled. */
+export function nextOnboardingStep(draft: OnboardingDraft): OnboardingStep {
+  if (!draft.repository) return 'vcs';
+  if (!draft.workConfirmed) return 'project-management';
+  return 'model';
+}
+
+/** A draft without a repository always reopens Codebase; otherwise the stored open section wins. */
+export function restoredOnboardingStep(saved: OnboardingStep | undefined, draft: OnboardingDraft): OnboardingStep {
+  if (!draft.repository) return 'vcs';
+  return saved ?? nextOnboardingStep(draft);
 }

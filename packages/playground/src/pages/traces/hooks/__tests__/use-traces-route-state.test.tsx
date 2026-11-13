@@ -42,13 +42,71 @@ function renderRouteState(initialEntry: string) {
 }
 
 describe('useTracesRouteState', () => {
+  describe('when a shared URL contains a text search', () => {
+    it('restores the search', () => {
+      const { result } = renderRouteState('/traces?textSearch=needle');
+      expect(result.current.route.filters.textSearch).toBe('needle');
+    });
+
+    it('removes a cleared search from the URL', () => {
+      const { result, params } = renderRouteState('/traces?textSearch=needle');
+      act(() =>
+        result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
+      );
+      expect(params().has('textSearch')).toBe(false);
+    });
+  });
+
+  describe('when a filter field changes to an empty text search', () => {
+    it('preserves the editable chip through URL state', () => {
+      const { result, params } = renderRouteState('/traces');
+      act(() => result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: '' })));
+      expect(params().get('textSearch')).toBe('');
+      expect(result.current.route.filters.textSearch).toBe('');
+    });
+
+    it('removes an empty draft from the URL', () => {
+      const { result, params } = renderRouteState('/traces?textSearch=');
+      act(() =>
+        result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
+      );
+      expect(params().has('textSearch')).toBe(false);
+      expect(result.current.route.filters.textSearch).toBeUndefined();
+    });
+  });
+
   describe('when the URL is empty', () => {
     it('decodes the default selection, filters and sort', () => {
       const { result } = renderRouteState('/traces');
 
       expect(result.current.route.selection).toEqual(EMPTY_TRACES_SELECTION);
       expect(result.current.route.filters).toEqual({ datePreset: 'last-7d', tokens: [], groups: [] });
-      expect(result.current.route.sortDirection).toBe('desc');
+      expect(result.current.route.sort).toEqual({ field: 'startedAt', direction: 'desc' });
+    });
+  });
+
+  describe('when the URL sorts by time to first chunk', () => {
+    it('decodes the field and direction', () => {
+      const { result } = renderRouteState('/traces?sort=timeToFirstChunkMs&dir=desc');
+
+      expect(result.current.route.sort).toEqual({ field: 'timeToFirstChunkMs', direction: 'desc' });
+    });
+
+    it('hands back the same sort when an unrelated param changes', () => {
+      const { result } = renderRouteState('/traces?sort=timeToFirstChunkMs&dir=desc');
+      const before = result.current.route.sort;
+
+      act(() => result.current.route.setState(selectTrace(result.current.route.filters, 'trace-a')));
+
+      expect(result.current.route.sort).toBe(before);
+    });
+  });
+
+  describe('when the URL sorts by a field the explorer does not know', () => {
+    it('decodes the default sort', () => {
+      const { result } = renderRouteState('/traces?sort=durationMs&dir=asc');
+
+      expect(result.current.route.sort).toEqual({ field: 'startedAt', direction: 'desc' });
     });
   });
 
@@ -255,7 +313,7 @@ describe('useTracesRouteState', () => {
       const { result, params } = renderRouteState('/traces?foo=bar');
 
       act(() => result.current.route.setState(selectTrace(result.current.route.filters, 'trace-a')));
-      act(() => result.current.route.setSortDirection('asc'));
+      act(() => result.current.route.setSort({ field: 'startedAt', direction: 'asc' }));
 
       expect(params().get('traceId')).toBe('trace-a');
       expect(params().get('dir')).toBe('asc');
@@ -263,22 +321,32 @@ describe('useTracesRouteState', () => {
     });
   });
 
-  describe('when the sort direction changes', () => {
+  describe('when the sort changes', () => {
     it('writes the sort params', () => {
       const { result, params } = renderRouteState('/traces?page=2');
 
-      act(() => result.current.route.setSortDirection('asc'));
+      act(() => result.current.route.setSort({ field: 'startedAt', direction: 'asc' }));
 
-      expect(result.current.route.sortDirection).toBe('asc');
+      expect(result.current.route.sort).toEqual({ field: 'startedAt', direction: 'asc' });
       expect(params().get('sort')).toBe('startedAt');
       expect(params().get('dir')).toBe('asc');
       expect(params().has('page')).toBe(false);
     });
 
+    it('writes the time to first chunk field', () => {
+      const { result, params } = renderRouteState('/traces');
+
+      act(() => result.current.route.setSort({ field: 'timeToFirstChunkMs', direction: 'asc' }));
+
+      expect(result.current.route.sort).toEqual({ field: 'timeToFirstChunkMs', direction: 'asc' });
+      expect(params().get('sort')).toBe('timeToFirstChunkMs');
+      expect(params().get('dir')).toBe('asc');
+    });
+
     it('does not persist the write', () => {
       const { result, persistedWrites } = renderRouteState('/traces');
 
-      act(() => result.current.route.setSortDirection('asc'));
+      act(() => result.current.route.setSort({ field: 'startedAt', direction: 'asc' }));
 
       expect(persistedWrites).not.toHaveBeenCalled();
     });

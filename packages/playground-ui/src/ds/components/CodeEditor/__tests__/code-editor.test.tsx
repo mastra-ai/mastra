@@ -248,12 +248,12 @@ describe('CodeEditor — language extensions', () => {
 describe('CodeEditor — passing its settings through', () => {
   it('shows line numbers unless the caller turns them off', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: true, foldGutter: false });
 
     cleanup();
 
     render(<CodeEditor value="x" showCopyButton={false} lineNumbers={false} />);
-    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false });
+    expect(lastProps()?.basicSetup).toEqual({ lineNumbers: false, foldGutter: false });
   });
 
   it('hands over the placeholder, focus and change handler it was given', () => {

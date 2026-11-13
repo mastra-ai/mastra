@@ -2,15 +2,19 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
 import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
+import { FactoryDispatchError } from '../rules/dispatch-errors.js';
+import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type {
   SourceControlSession,
   SourceControlSessionVisibility,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { legacyGithubWorkItemBranch } from '../work-item-branch.js';
 import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 
@@ -267,10 +271,9 @@ export async function resolvePrimaryEnvironmentRepository(args: {
  * repository's pinned or default branch as the base. The sandbox itself boots
  * every environment repository.
  *
- * The run is attributed to `attributeToUserId` when the caller has an
- * interactive user (e.g. the approver of a proposed run), and otherwise falls
- * back to whoever connected the repository (`connection.createdByUserId`),
- * because a genuinely autonomous run has no interactive user of its own.
+ * The run is attributed to `attributeToUserId` when the caller names a person
+ * for it, and only otherwise falls back to whoever connected the repository
+ * (`connection.createdByUserId`).
  */
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
@@ -286,13 +289,21 @@ export async function ensureFactorySourceSession(
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
+  // Prefer an existing current branch, then the legacy branch on this exact
+  // repository and owner. Never reuse another repository's same-number card.
+  const legacyBranch = legacyGithubWorkItemBranch(branch);
+  const lookup = { projectRepositoryId: resolved.projectRepositoryId, userId };
+  const existing = legacyBranch
+    ? ((await sourceControl.sessions.getForBranch({ ...lookup, branch })) ??
+      (await sourceControl.sessions.getForBranch({ ...lookup, branch: legacyBranch })))
+    : null;
   const session = await sourceControl.sessions.create({
     sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
     factoryProjectId,
     orgId,
     userId,
-    branch,
+    branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
     visibility: args.visibility ?? 'org',
     ...(args.origin ? { origin: args.origin } : {}),
@@ -378,4 +389,35 @@ export async function hydrateFactorySession(
   }
   // Callers pin this id to the thread, so only report a model the session actually runs on.
   return switched ? selectedModelId : undefined;
+}
+
+/** Where a Factory-owned run can find a model to call. */
+export interface OrganizationModelSources {
+  modelCredentials?: Pick<ModelCredentialsStorage, 'listCredentials'>;
+  /** OpenAI-compatible providers the organization configured, each with its own key. */
+  customProviders?: Pick<CustomProvidersStorage, 'ensureReady' | 'list'>;
+  /** Providers that run on the server process's own credentials, so need no stored key. */
+  deploymentModelProviders?: ReadonlySet<string>;
+}
+
+/**
+ * A run owned by the Factory reaches models through the organization alone: its stored
+ * keys and the providers it configured. With neither it cannot run however often it is
+ * retried, so say what to add instead of starting a run that dies on its first model call.
+ */
+export async function requireOrganizationModelKey(
+  sources: OrganizationModelSources | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+): Promise<void> {
+  if (!sources?.modelCredentials || sources.deploymentModelProviders?.size) return;
+  const credentials = await sources.modelCredentials.listCredentials(project.orgId, factoryPrincipalId(project.id));
+  if (credentials.some(credential => credential.scope === 'org')) return;
+  if (sources.customProviders) {
+    await sources.customProviders.ensureReady();
+    if ((await sources.customProviders.list({ orgId: project.orgId })).length) return;
+  }
+  throw new FactoryDispatchError(
+    'factory_org_key_missing',
+    "This Factory runs its cards on the organization's model keys, and none is set. Add an organization key or provider under Settings → Models, then retry.",
+  );
 }

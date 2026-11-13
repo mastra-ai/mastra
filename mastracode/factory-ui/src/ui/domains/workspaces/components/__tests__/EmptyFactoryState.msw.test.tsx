@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
@@ -10,12 +10,15 @@ import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
 import type { GitLabProject } from '../../../factory/services/gitlab';
 import {
   ONBOARDING_FACTORY_KEY,
-  ONBOARDING_DRAFT_KEY,
-  ONBOARDING_STEP_KEY,
   persistOnboardingDraft,
+  persistOnboardingFactory,
+  persistOnboardingStep,
   readOnboardingDraft,
 } from '../../services/onboardingFlow';
+import type { OnboardingDraft, OnboardingStep } from '../../services/onboardingFlow';
+import { OnboardingPage } from '../../../../pages/OnboardingPage';
 import { EmptyFactoryState } from '../EmptyFactoryState';
+import { chooseProvider, chooseSubscription } from './fixtures/modelSection';
 
 const repo: GithubRepo = {
   id: 99,
@@ -42,16 +45,28 @@ const gitlabProject: GitLabProject = {
   sandboxWorkdir: '/workspace/backend',
 };
 const model = { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' as const };
+const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
 
 function renderOnboarding() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/onboarding']}>
       <Routes>
-        <Route path="/onboarding" element={<EmptyFactoryState />} />
+        <Route path="/onboarding" element={<EmptyFactoryState onDismissGithubCallback={() => {}} />} />
         <Route path="/factories/:id" element={<h1>Factory ready</h1>} />
       </Routes>
     </MemoryRouter>,
   );
+}
+
+function seedOnboarding(step: OnboardingStep, draft?: OnboardingDraft) {
+  if (draft) persistOnboardingDraft(draft);
+  persistOnboardingStep(step);
+}
+
+/** The open section: its card carries the section heading; done and next rows do not. */
+async function findActiveSection(name: 'Codebase' | 'Work' | 'Accounts' | 'Model') {
+  await screen.findByRole('heading', { name, level: 2 });
+  return within(screen.getByRole('region', { name }));
 }
 
 function registerSetup(failure?: 'connection' | 'intake' | 'model') {
@@ -59,6 +74,10 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
   let project: FactoryProjectPayload | undefined;
   let failed = false;
   server.use(
+    // A connected personal lane starts on the caller's saved default model, when there is one.
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.put(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
       const body = await request.json();
       writes.push({ path: 'personal-model', body });
@@ -95,7 +114,9 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () => HttpResponse.json({ projects: project ? [project] : [] })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({ projects: project ? [{ ...project, repositories: [] }] : [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       project ? HttpResponse.json({ project }) : HttpResponse.json({ error: 'not_found' }, { status: 404 }),
     ),
@@ -166,12 +187,43 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
   return writes;
 }
 
+/** Create factory, once the Model section has resolved every required choice. */
+async function enabledCreateButton() {
+  const button = await screen.findByRole('button', { name: 'Create factory' });
+  await waitFor(() => expect(button).toBeEnabled());
+  return button;
+}
+
 beforeEach(() => sessionStorage.clear());
 afterEach(() => sessionStorage.clear());
 
 describe('Draft Factory onboarding', () => {
-  it('lets users change repository, VCS and model, then commits only the reviewed choices', async () => {
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+  it('reopens a GitLab pick on GitLab after a GitHub install result was shown', async () => {
+    seedOnboarding('vcs');
+    registerSetup();
+    const user = userEvent.setup();
+    renderWithProviders(
+      <MemoryRouter initialEntries={['/onboarding?github_app_installed=true']}>
+        <Routes>
+          <Route path="/onboarding" element={<OnboardingPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'GitHub' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'GitLab' }));
+    await user.click(await screen.findByRole('radio', { name: 'team/backend' }));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    await findActiveSection('Work');
+
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
+    expect(await screen.findByRole('radio', { name: 'team/backend' })).toBeChecked();
+    expect(screen.getByRole('radio', { name: 'GitLab' })).toBeChecked();
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled();
+  });
+
+  it('lets users change repository, VCS and model, then commits only the confirmed choices', async () => {
+    seedOnboarding('vcs');
     const writes = registerSetup();
     const user = userEvent.setup();
     renderOnboarding();
@@ -179,32 +231,35 @@ describe('Draft Factory onboarding', () => {
     expect(within(screen.getByLabelText('Codebase preview')).getByText('octo/hello')).toBeInTheDocument();
     await user.click(screen.getByRole('radio', { name: 'octo/hello' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(screen.getByRole('button', { name: 'Go back to previous step' }));
+    await findActiveSection('Work');
+
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
     expect(await screen.findByRole('radio', { name: 'octo/hello' })).toBeChecked();
     await user.click(screen.getByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-    await user.click(await screen.findByRole('radio', { name: 'Company account' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
-    expect(writes).toEqual([]);
+    const work = await findActiveSection('Work');
+    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
 
-    await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
-    expect(await screen.findByRole('radio', { name: 'octo/other' })).toBeChecked();
-    await user.click(screen.getByRole('button', { name: 'Change provider' }));
-    await user.click(screen.getByRole('button', { name: 'Continue with GitLab' }));
+    const modelSection = await findActiveSection('Model');
+    const accounts = await findActiveSection('Accounts');
+    expect(await accounts.findByRole('radio', { name: 'Company account' })).toBeChecked();
+    await chooseProvider(user, 'OpenAI', modelSection);
+    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    expect(writes).toEqual([]);
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Change codebase' }));
+    await user.click(await screen.findByRole('radio', { name: 'GitLab' }));
     await user.click(await screen.findByRole('radio', { name: 'team/backend' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    const review = within(await screen.findByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('team/backend')).toBeInTheDocument();
-    expect(review.getByText('GitLab · develop')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Edit model' }));
-    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
-    await user.click(screen.getByRole('button', { name: 'Change provider' }));
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    const reopened = await findActiveSection('Model');
+    const codebase = within(screen.getByRole('region', { name: 'Codebase' }));
+    expect(codebase.getByText('team/backend')).toBeInTheDocument();
+    expect(codebase.getByText('develop')).toBeInTheDocument();
+
+    expect(await reopened.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    await chooseProvider(user, 'Anthropic', reopened);
+    await reopened.findByRole('combobox');
     expect(writes).toEqual([]);
     expect(readOnboardingDraft().model?.providerId).toBe('anthropic');
     await user.click(screen.getByRole('button', { name: 'Create factory' }));
@@ -228,47 +283,123 @@ describe('Draft Factory onboarding', () => {
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({ modelScope: 'factory', repository: otherRepo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-provider');
+    seedOnboarding('model', { modelScope: 'factory', repository: otherRepo, workConfirmed: true, model });
     const view = renderOnboarding();
-    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    const modelSection = await findActiveSection('Model');
+    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     view.unmount();
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'vcs');
+    persistOnboardingStep('vcs');
     renderOnboarding();
     expect(await screen.findByRole('radio', { name: 'octo/other' })).toBeChecked();
     expect(writes).toEqual([]);
   });
 
-  it('returns directly to review after reloading an edited step', async () => {
+  it('returns to Model after a reopened codebase is finished across a reload', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    seedOnboarding('vcs', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
     const user = userEvent.setup();
     const view = renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit codebase' }));
+    await findActiveSection('Codebase');
     view.unmount();
     renderOnboarding();
     await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
+    await findActiveSection('Model');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(readOnboardingDraft().repository?.fullName).toBe('octo/other');
     expect(writes).toEqual([]);
+  });
+
+  it('reopens a finished section from its summary and returns to Model once it is settled again', async () => {
+    const writes = registerSetup();
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    const user = userEvent.setup();
+    renderOnboarding();
+    const modelSection = await findActiveSection('Model');
+    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+
+    await user.click(screen.getByRole('button', { name: 'Change work' }));
+    await findActiveSection('Work');
+    const modelSummary = within(screen.getByRole('region', { name: 'Model' }));
+    expect(modelSummary.getByText(model.modelId)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
+
+    await user.click(modelSummary.getByRole('button', { name: 'Change model' }));
+    await findActiveSection('Model');
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Change work' }));
+    const work = await findActiveSection('Work');
+    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
+    await findActiveSection('Model');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+    expect(writes).toEqual([]);
+  });
+
+  it('summarizes both models, work then sessions, when company work and personal sessions are set up', async () => {
+    registerSetup();
+    seedOnboarding('model', {
+      modelScope: 'hybrid',
+      repository: repo,
+      workConfirmed: true,
+      model,
+      personal: personalModel,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await findActiveSection('Model');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
+
+    await user.click(screen.getByRole('button', { name: 'Change work' }));
+    await findActiveSection('Work');
+    expect(
+      within(screen.getByRole('region', { name: 'Model' })).getByText(`${model.modelId} · ${personalModel.modelId}`),
+    ).toBeInTheDocument();
+  });
+
+  it('says connections could not be checked, not "Set up later", while Linear status is down', async () => {
+    registerSetup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ error: 'Temporary outage' }, { status: 503 }),
+      ),
+    );
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    renderOnboarding();
+
+    const work = within(await screen.findByRole('region', { name: 'Work' }));
+    expect(await work.findByText("Couldn't check connections")).toBeInTheDocument();
+    expect(work.queryByText('Set up later')).not.toBeInTheDocument();
+  });
+
+  it('moves keyboard focus to the section that opens instead of dropping it', async () => {
+    registerSetup();
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await findActiveSection('Model');
+    expect(document.body).toHaveFocus();
+
+    await user.click(screen.getByRole('button', { name: 'Change work' }));
+    expect(await screen.findByRole('heading', { name: 'Work', level: 2 })).toHaveFocus();
+
+    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    expect(await screen.findByRole('heading', { name: 'Accounts', level: 2 })).toHaveFocus();
   });
 
   it.each(['connection', 'model'] as const)(
     'reuses the pending Factory after a failed final %s save and reload',
     async failure => {
       const writes = registerSetup(failure);
-      persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
       const user = userEvent.setup();
       const view = renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('alert')).toHaveTextContent('502');
       expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
       view.unmount();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       await waitFor(() => expect(writes.filter(item => item.path === 'create')).toHaveLength(1));
     },
@@ -278,27 +409,28 @@ describe('Draft Factory onboarding', () => {
     'recreates a pending Factory when a failed setup is retried in %s scope',
     async desiredScope => {
       const writes = registerSetup('model');
-      persistOnboardingDraft({
+      seedOnboarding('model', {
         repository: repo,
+        workConfirmed: true,
         modelScope: desiredScope === 'factory' ? 'user' : 'factory',
         model,
         personal: model,
       });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
       const user = userEvent.setup();
       const view = renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('alert')).toHaveTextContent('502');
       expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBe('fp-1');
       view.unmount();
       persistOnboardingDraft({
         repository: repo,
+        workConfirmed: true,
         modelScope: desiredScope,
         model,
         personal: model,
       });
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'delete')).toEqual([{ path: 'delete', body: { id: 'fp-1' } }]);
       expect(writes.filter(item => item.path === 'create')).toEqual([
@@ -320,12 +452,11 @@ describe('Draft Factory onboarding', () => {
         HttpResponse.json({ error: 'forbidden' }, { status: 403 }),
       ),
     );
-    persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    sessionStorage.setItem(ONBOARDING_FACTORY_KEY, 'fp-gone');
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    persistOnboardingFactory('fp-gone');
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    await user.click(await enabledCreateButton());
     expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
@@ -339,7 +470,9 @@ describe('Draft Factory onboarding', () => {
         http.post(
           `${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`,
           async ({ request }) => {
-            const body = (await request.json()) as { repository: { slug: string; externalId: string } };
+            const body = z
+              .object({ repository: z.object({ slug: z.string(), externalId: z.string() }) })
+              .parse(await request.json());
             const link = {
               id: `link-${body.repository.externalId}`,
               repository: { ...body.repository, defaultBranch: 'main' },
@@ -357,21 +490,21 @@ describe('Draft Factory onboarding', () => {
           return HttpResponse.json({ ok: true });
         }),
       );
-      persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      persistOnboardingDraft({ modelScope: 'factory', repository: repo, workConfirmed: true, model });
+      persistOnboardingStep('model');
       const user = userEvent.setup();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('alert')).toBeInTheDocument();
 
       links.push({
         id: 'link-teammate',
         repository: { slug: 'octo/teammate', externalId: '7', defaultBranch: 'main' },
       });
-      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: 'octo/other' }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
 
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
@@ -423,26 +556,26 @@ describe('Draft Factory onboarding', () => {
           return HttpResponse.json({ ok: true });
         }),
       );
-      persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+      persistOnboardingDraft({ modelScope: 'factory', repository: repo, workConfirmed: true, model });
+      persistOnboardingStep('model');
       const user = userEvent.setup();
       const view = renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('alert')).toHaveTextContent('502');
 
-      await user.click(screen.getByRole('button', { name: 'Edit codebase' }));
+      await user.click(screen.getByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: otherRepo.fullName }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('alert')).toHaveTextContent('Failed to unlink repository (502)');
       expect([...links.keys()]).toEqual(['link-teammate', 'link-99', 'link-100']);
 
       view.unmount();
       renderOnboarding();
-      await user.click(await screen.findByRole('button', { name: 'Edit codebase' }));
+      await user.click(await screen.findByRole('button', { name: 'Change codebase' }));
       await user.click(await screen.findByRole('radio', { name: finalRepo.fullName }));
       await user.click(screen.getByRole('button', { name: 'Continue' }));
-      await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
       expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
       expect([...links.values()].map(item => item.fullName)).toEqual(['octo/teammate', finalRepo.fullName]);
@@ -451,22 +584,25 @@ describe('Draft Factory onboarding', () => {
 
   it('refuses to create a Factory whose model is no longer available', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({
+    seedOnboarding('model', {
       modelScope: 'factory',
       repository: repo,
+      workConfirmed: true,
       model: { ...model, modelId: 'openai/retired-model' },
     });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('openai/retired-model is no longer available');
+    const modelSection = await findActiveSection('Model');
+    expect(
+      await modelSection.findByText('Your previous model is no longer available. Choose another model.'),
+    ).toHaveAttribute('role', 'alert');
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });
 });
 
 describe('Personal Factory model', () => {
-  function registerMemberWithoutCompanyAccount() {
+  it('only offers personal accounts to members without a company account', async () => {
+    const writes = registerSetup();
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
         HttpResponse.json({
@@ -475,50 +611,18 @@ describe('Personal Factory model', () => {
         }),
       ),
     );
-  }
-
-  it('sends members back to setup when shared access is no longer available while editing review', async () => {
-    const writes = registerSetup();
-    registerMemberWithoutCompanyAccount();
-    persistOnboardingDraft({ modelScope: 'factory', repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    seedOnboarding('model', { repository: repo, workConfirmed: true });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit model' }));
-    await user.click(await screen.findByRole('button', { name: 'Change setup' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your setup.' })).toBeInTheDocument();
-    expect(readOnboardingDraft().modelScope).toBe('factory');
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Choose your model.' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
+    const accounts = await findActiveSection('Accounts');
+    const modelSection = await findActiveSection('Model');
+    expect(await accounts.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+    expect(accounts.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
+    const account = within(modelSection.getByRole('group', { name: 'Your account' }));
+    await chooseProvider(user, 'Anthropic', account);
+    await account.findByRole('combobox');
     expect(writes).toEqual([]);
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('Personal accounts')).toBeInTheDocument();
-    expect(review.getByText('anthropic/claude-fable-5')).toBeInTheDocument();
-  });
-
-  it('only offers personal accounts to members without shared access', async () => {
-    const writes = registerSetup();
-    registerMemberWithoutCompanyAccount();
-    persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
-    const user = userEvent.setup();
-    renderOnboarding();
-    expect(await screen.findByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
-    expect(screen.getByRole('radio', { name: 'Personal accounts' })).toBeChecked();
-    expect(screen.getByRole('radio', { name: 'Company work · personal sessions' })).toHaveAttribute(
-      'aria-disabled',
-      'true',
-    );
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
-    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    expect(writes).toEqual([]);
-    const review = within(screen.getByRole('region', { name: 'Review factory setup' }));
-    expect(review.getByText('API key · your default for work and sessions')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Create factory' }));
+    await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'user' });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
@@ -527,22 +631,18 @@ describe('Personal Factory model', () => {
     });
   });
 
-  it('asks legacy drafts to choose a setup while retaining their repository and model', async () => {
+  it('treats a draft without a scope as the company account', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo, model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    seedOnboarding('model', { repository: repo, workConfirmed: true, model });
     renderOnboarding();
-    expect(await screen.findByRole('heading', { name: 'Choose your setup.' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Create factory' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    const modelSection = await findActiveSection('Model');
+    const accounts = await findActiveSection('Accounts');
+    expect(await accounts.findByRole('radio', { name: 'Company account' })).toBeChecked();
+    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     expect(readOnboardingDraft().repository).toEqual(repo);
     expect(writes).toEqual([]);
   });
 });
-
-const personalModel = { providerId: 'anthropic', modelId: 'anthropic/claude-fable-5', method: 'api_key' as const };
 
 describe('Account presets', () => {
   it.each(['factory', 'user', 'hybrid'] as const)(
@@ -577,30 +677,30 @@ describe('Account presets', () => {
           return HttpResponse.json({ ok: true });
         }),
       );
-      persistOnboardingDraft({ repository: repo });
-      sessionStorage.setItem(ONBOARDING_STEP_KEY, 'model-setup');
+      seedOnboarding('model', { repository: repo, workConfirmed: true });
       const user = userEvent.setup();
       renderOnboarding();
-      expect(await screen.findByRole('radio', { name: 'Company work · personal sessions' })).toBeChecked();
-      if (scope === 'user') await user.click(await screen.findByRole('radio', { name: 'Personal accounts' }));
-      if (scope === 'factory') await user.click(await screen.findByRole('radio', { name: 'Company account' }));
-      await user.click(await screen.findByRole('button', { name: 'Continue' }));
-      const connectWithKey = async (providerName: string) => {
-        await user.click(await screen.findByRole('button', { name: providerName }));
+      const accounts = await findActiveSection('Accounts');
+      const modelSection = await findActiveSection('Model');
+      expect(await accounts.findByRole('radio', { name: 'Company account' })).toBeChecked();
+      const hybridScope = accounts.getByRole('radio', { name: 'Company work and personal sessions' });
+      const connectWithKey = async (lane: ReturnType<typeof within>, providerName: string) => {
+        await chooseProvider(user, providerName, lane);
         const dialog = within(await screen.findByRole('dialog'));
         await user.type(dialog.getByLabelText(`API key for ${providerName}`), 'test-key');
         await user.click(dialog.getByRole('button', { name: 'Save' }));
-        await screen.findByRole('combobox');
+        await lane.findByRole('combobox');
       };
-      if (scope !== 'user') {
-        await connectWithKey('OpenAI');
-        await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      // Without a Mastra Gateway each lane starts on an empty provider picker.
+      if (scope !== 'user') await connectWithKey(modelSection, 'OpenAI');
+      if (scope === 'hybrid') {
+        await user.click(hybridScope);
+        await connectWithKey(within(modelSection.getByRole('group', { name: 'Your sessions' })), 'Anthropic');
       }
-      if (scope !== 'factory') {
-        await connectWithKey('Anthropic');
-        await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+      if (scope === 'user') {
+        await user.click(accounts.getByRole('radio', { name: 'Personal accounts' }));
+        await connectWithKey(within(await modelSection.findByRole('group', { name: 'Your account' })), 'Anthropic');
       }
-      await screen.findByRole('region', { name: 'Review factory setup' });
       expect(savedKeys).toEqual(
         {
           factory: [{ provider: 'openai', scope: 'org' }],
@@ -612,7 +712,7 @@ describe('Account presets', () => {
         }[scope],
       );
       expect(writes).toEqual([]);
-      await user.click(screen.getByRole('button', { name: 'Create factory' }));
+      await user.click(await enabledCreateButton());
       await screen.findByRole('heading', { name: 'Factory ready' });
       expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: scope });
       expect(writes.find(item => item.path === 'model')?.body).toEqual({
@@ -658,23 +758,17 @@ describe('Account presets', () => {
         return HttpResponse.json({ status: 'complete' });
       }),
     );
-    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'personal-provider');
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'hybrid', model });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
-    await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
+    const sessions = within(await screen.findByRole('group', { name: 'Your sessions' }));
+    await chooseSubscription(user, 'Continue with Anthropic', sessions);
     const dialog = within(await screen.findByRole('dialog'));
     await user.type(dialog.getByLabelText('Authorization code'), 'demo-code');
     await user.click(dialog.getByRole('button', { name: 'Complete sign in' }));
-    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
+    await sessions.findByRole('combobox');
     expect(signInStarts).toEqual([{ mode: 'paste-code', scope: 'user' }]);
-    expect(readOnboardingDraft().personal).toEqual({
-      providerId: 'anthropic',
-      method: 'oauth',
-      modelId: personalModel.modelId,
-    });
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'hybrid' });
     expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: personalModel.modelId });
@@ -682,14 +776,25 @@ describe('Account presets', () => {
 
   it('requires a personal model in hybrid even when the shared model is ready', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          orgKeyAdmin: true,
+          providers: [
+            { provider: 'openai', source: 'stored-org', orgCredential: 'api_key' },
+            { provider: 'anthropic', source: 'stored-org', orgCredential: 'api_key' },
+          ],
+        }),
+      ),
+    );
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'hybrid', model });
     renderOnboarding();
-    expect(await screen.findByRole('button', { name: 'Create factory' })).toBeDisabled();
+    const modelSection = await findActiveSection('Model');
+    expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+    const sessions = within(modelSection.getByRole('group', { name: 'Your sessions' }));
+    expect(await sessions.findByRole('button', { name: 'Choose a provider' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
-    await user.click(screen.getByRole('button', { name: 'Edit personal model' }));
-    expect(screen.queryByRole('button', { name: 'Review setup' })).not.toBeInTheDocument();
   });
 
   it('revalidates each account without falling back to the other catalog', async () => {
@@ -704,12 +809,11 @@ describe('Account presets', () => {
         }),
       ),
     );
-    persistOnboardingDraft({ repository: repo, modelScope: 'factory', model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'factory', model });
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('no longer available for the company account');
+    const modelSection = await findActiveSection('Model');
+    expect(await modelSection.findByText('No models are available for this connection yet.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });
 
@@ -720,19 +824,24 @@ describe('Account presets', () => {
         HttpResponse.json({ providers: [{ provider: 'openai', source: 'oauth-org', orgCredential: 'oauth' }] }),
       ),
     );
-    persistOnboardingDraft({ repository: repo, modelScope: 'factory', model });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'factory', model });
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('connection for the company account has changed');
+    const modelSection = await findActiveSection('Model');
+    expect(
+      await modelSection.findByText(
+        'Your OpenAI connection changed since you chose it. Connect it again or choose another provider.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
     expect(writes).toEqual([]);
   });
 
   it('starts from the existing personal default when it is available for the selected provider', async () => {
-    registerSetup();
+    const writes = registerSetup();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-6.1-sol' })),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [
@@ -742,63 +851,152 @@ describe('Account presets', () => {
         }),
       ),
     );
-    persistOnboardingDraft({ repository: repo, modelScope: 'user' });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'personal-provider');
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'user' });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Review setup' }));
-    expect(readOnboardingDraft().personal?.modelId).toBe('openai/gpt-6.1-sol');
+    const account = within(await screen.findByRole('group', { name: 'Your account' }));
+    await chooseProvider(user, 'OpenAI', account);
+    expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
+    await user.click(await enabledCreateButton());
+    await screen.findByRole('heading', { name: 'Factory ready' });
+    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'openai/gpt-6.1-sol' });
+  });
+
+  it('waits for the personal default before offering Create, so a fallback never overwrites it', async () => {
+    const writes = registerSetup();
+    let answerDefault = () => {};
+    const defaultAnswered = new Promise<void>(resolve => {
+      answerDefault = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
+        await defaultAnswered;
+        return HttpResponse.json({ modelId: 'openai/gpt-6.1-sol', thinkingLevel: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            { id: model.modelId, provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true },
+            { id: 'openai/gpt-6.1-sol', provider: 'openai', modelName: 'gpt-6.1-sol', hasApiKey: true },
+          ],
+        }),
+      ),
+    );
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'user' });
+    const user = userEvent.setup();
+    const { client } = renderOnboarding();
+    const account = within(await screen.findByRole('group', { name: 'Your account' }));
+    await chooseProvider(user, 'OpenAI', account);
+    // Everything but the held default has settled, so a fallback suggestion would have enabled Create by now.
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    await act(() => new Promise(resolve => setTimeout(resolve, 50)));
+    expect(screen.getByRole('button', { name: 'Create factory' })).toBeDisabled();
+
+    answerDefault();
+    expect(await account.findByRole('combobox')).toHaveValue('GPT-6.1 Sol');
+    await user.click(await enabledCreateButton());
+    await screen.findByRole('heading', { name: 'Factory ready' });
+    expect(writes.find(item => item.path === 'personal-model')?.body).toEqual({ modelId: 'openai/gpt-6.1-sol' });
   });
 
   it('preserves cached choices but never applies unused personal defaults', async () => {
     const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model, personal: personalModel });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
+    seedOnboarding('model', {
+      repository: repo,
+      workConfirmed: true,
+      modelScope: 'hybrid',
+      model,
+      personal: personalModel,
+    });
     const user = userEvent.setup();
     const view = renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(await screen.findByRole('radio', { name: 'Company account' }));
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    const accounts = await findActiveSection('Accounts');
+    await user.click(await accounts.findByRole('radio', { name: 'Company account' }));
+    expect(readOnboardingDraft().modelScope).toBe('factory');
     view.unmount();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
+    const reloaded = await findActiveSection('Model');
+    expect(await reloaded.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     expect(readOnboardingDraft().personal).toEqual(personalModel);
-    expect(screen.queryByRole('button', { name: 'Edit personal model' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    expect(reloaded.queryByRole('group', { name: 'Your sessions' })).not.toBeInTheDocument();
+    await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.some(item => item.path === 'personal-model')).toBe(false);
-  });
-
-  it('returns to review when the setup edit keeps the same accounts', async () => {
-    const writes = registerSetup();
-    persistOnboardingDraft({ repository: repo, modelScope: 'hybrid', model, personal: personalModel });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'review');
-    const user = userEvent.setup();
-    renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Edit setup' }));
-    await user.click(await screen.findByRole('radio', { name: 'Company account' }));
-    await user.click(screen.getByRole('radio', { name: 'Company work · personal sessions' }));
-    await user.click(screen.getByRole('button', { name: 'Continue' }));
-    expect(await screen.findByRole('heading', { name: 'Ready to create.' })).toBeInTheDocument();
-    expect(readOnboardingDraft()).toMatchObject({ modelScope: 'hybrid', model, personal: personalModel });
-    expect(writes).toEqual([]);
   });
 
   it('skips policy selection for local single-user setups', async () => {
     const writes = registerSetup();
     server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
-    persistOnboardingDraft({ repository: repo });
-    sessionStorage.setItem(ONBOARDING_STEP_KEY, 'project-management');
+    seedOnboarding('project-management', { repository: repo });
     const user = userEvent.setup();
     renderOnboarding();
     await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-    await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
-    await user.click(await screen.findByRole('button', { name: 'Continue' }));
-    expect(screen.queryByRole('button', { name: 'Edit setup' })).not.toBeInTheDocument();
-    await user.click(await screen.findByRole('button', { name: 'Create factory' }));
+    const modelSection = await findActiveSection('Model');
+    expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument();
+    expect(modelSection.getByText('Local connection')).toBeInTheDocument();
+    await chooseProvider(user, 'OpenAI', modelSection);
+    await modelSection.findByRole('combobox');
+    await user.click(await enabledCreateButton());
     await screen.findByRole('heading', { name: 'Factory ready' });
     expect(writes.filter(item => item.path === 'personal-model')).toEqual([]);
     expect(writes.find(item => item.path === 'create')?.body).toEqual({ name: repo.name, modelScope: 'factory' });
+  });
+
+  it('lets a local setup without an account switch the theme', async () => {
+    registerSetup();
+    server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => new HttpResponse(null, { status: 404 })));
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await screen.findByRole('button', { name: 'Theme' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'System' })).toBeChecked();
+    await user.click(screen.getByRole('menuitemradio', { name: 'Dark' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Theme' }));
+    expect(await screen.findByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
+  });
+
+  it('locks every Change and control while the factory is created', async () => {
+    const writes = registerSetup();
+    let releaseCreate: () => void = () => {};
+    const createReleased = new Promise<void>(resolve => {
+      releaseCreate = resolve;
+    });
+    server.use(
+      http.post(`${TEST_BASE_URL}/web/factory/projects`, async ({ request }) => {
+        const body = await request.json();
+        writes.push({ path: 'create', body });
+        await createReleased;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'hello', modelScope: 'factory' } });
+      }),
+      // The gateway gives the company account a provider-source switch, which the creating fieldset can't lock.
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({
+          orgKeyAdmin: true,
+          providers: [
+            { provider: 'mastra', source: 'none', orgKey: false, connectWithMastraAccount: true },
+            { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', userCredential: 'api_key' },
+            { provider: 'anthropic', source: 'stored-org', orgCredential: 'api_key', userCredential: 'api_key' },
+          ],
+        }),
+      ),
+    );
+    seedOnboarding('model', { repository: repo, workConfirmed: true, modelScope: 'factory', model });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await findActiveSection('Model');
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('button', { name: 'Creating your factory…' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Change codebase' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Change work' })).toBeDisabled();
+    const accounts = within(screen.getByRole('region', { name: 'Accounts' }));
+    expect(accounts.getByRole('radio', { name: 'Company account' })).toHaveAttribute('aria-disabled', 'true');
+    const modelSection = within(screen.getByRole('region', { name: 'Model' }));
+    await user.click(modelSection.getByRole('radio', { name: 'Mastra Gateway' }));
+    expect(modelSection.getByRole('radio', { name: 'Your own provider' })).toBeChecked();
+    releaseCreate();
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(writes.filter(item => item.path === 'create')).toEqual([
+      { path: 'create', body: { name: repo.name, modelScope: 'factory' } },
+    ]);
   });
 });

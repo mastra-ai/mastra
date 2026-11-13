@@ -61,6 +61,33 @@ function formatWorkflowRun(snapshotData: WorkflowSnapshotDBItem): WorkflowRun {
   };
 }
 
+/**
+ * A snapshot reduced to what `listWorkflowRuns({ summary: true })` returns: `status` and
+ * `timestamp` when set, and `parentWorkflow` only when both of its IDs are non-empty strings.
+ * A missing snapshot reduces to `{}`.
+ */
+function summarySnapshot(snapshot: unknown): WorkflowRunState {
+  const source = (snapshot !== null && typeof snapshot === 'object' ? snapshot : {}) as Partial<WorkflowRunState>;
+  const { status, timestamp, parentWorkflow } = source;
+  const summary: Record<string, unknown> = {};
+
+  if (status !== undefined && status !== null) {
+    summary.status = status;
+  }
+
+  if (timestamp !== undefined && timestamp !== null) {
+    summary.timestamp = timestamp;
+  }
+
+  const workflowId = parentWorkflow?.workflowId;
+  const runId = parentWorkflow?.runId;
+  if (typeof workflowId === 'string' && workflowId !== '' && typeof runId === 'string' && runId !== '') {
+    summary.parentWorkflow = { workflowId, runId };
+  }
+
+  return summary as unknown as WorkflowRunState;
+}
+
 interface RunOwnerItem {
   run_id: string;
   generation: number;
@@ -82,6 +109,8 @@ function toRunOwnershipRecord(item: RunOwnerItem): RunOwnershipRecord {
 // Maximum retry attempts for optimistic locking conflicts
 const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 50;
+// BatchGetItem accepts at most 100 keys per call.
+const BATCH_GET_MAX_KEYS = 100;
 
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   /**
@@ -276,6 +305,64 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
   }
 
   /**
+   * Reads the records with one strongly consistent BatchGetItem per 100 runs,
+   * the most one call accepts. Keys DynamoDB leaves unprocessed (throttling,
+   * response size) are read again with backoff.
+   */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+
+    try {
+      const owners = this.service.entities.workflow_run_owner!;
+      for (let start = 0; start < ids.length; start += BATCH_GET_MAX_KEYS) {
+        // ElectroDB lowercases key values, so IDs that differ only in case name the same item, as
+        // they do in the single-run read. Request each item once and key it by every ID asked for.
+        const requestedByKey = new Map<string, string[]>();
+        for (const runId of ids.slice(start, start + BATCH_GET_MAX_KEYS)) {
+          const key = runId.toLowerCase();
+          requestedByKey.set(key, [...(requestedByKey.get(key) ?? []), runId]);
+        }
+
+        let pending = [...requestedByKey.keys()];
+
+        for (let attempt = 0; pending.length > 0; attempt++) {
+          if (attempt > MAX_RETRIES) {
+            throw new Error(`DynamoDB left ${pending.length} run ownership reads unprocessed`);
+          }
+
+          if (attempt > 0) {
+            await new Promise(resolve => setTimeout(resolve, BASE_DELAY_MS * 2 ** (attempt - 1)));
+          }
+
+          const { data, unprocessed } = (await owners
+            .get(pending.map(runId => this.#runOwnerKey(runId)))
+            .go({ consistent: true })) as { data: RunOwnerItem[]; unprocessed: { run_id: string }[] };
+          for (const item of data) {
+            for (const runId of requestedByKey.get(item.run_id.toLowerCase()) ?? []) {
+              records.set(runId, toRunOwnershipRecord(item));
+            }
+          }
+
+          pending = unprocessed.map(key => key.run_id.toLowerCase());
+        }
+      }
+
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DYNAMODB', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
+  /**
    * Helper to check if an error is a DynamoDB conditional check failure
    */
   private isConditionalCheckFailed(error: unknown): boolean {
@@ -341,7 +428,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const now = new Date();
         let snapshot: WorkflowRunState;
@@ -455,7 +542,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const existingSnapshot = existingRecord.data?.snapshot as WorkflowRunState | undefined;
         const { expectedStatus, ...state } = opts;
@@ -622,7 +709,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
         })
-        .go();
+        .go({ consistent: true });
 
       if (!result.data?.snapshot) {
         // Check snapshot exists
@@ -644,6 +731,10 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns> {
     this.logger.debug('Getting workflow runs', { args });
 
@@ -722,6 +813,13 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
               return snapshot.resourceId === args.resourceId;
             });
           }
+
+          // The snapshot is one JSON string attribute, so DynamoDB can't project fields out of it.
+          // Reducing each page here keeps only the summary fields of the matching runs in memory.
+          if (args?.summary) {
+            pageFilteredData = pageFilteredData.map(item => ({ ...item, snapshot: summarySnapshot(item.snapshot) }));
+          }
+
           allMatchingSnapshots.push(...pageFilteredData);
         }
 
@@ -770,7 +868,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         if (!result.data) {
           return null;

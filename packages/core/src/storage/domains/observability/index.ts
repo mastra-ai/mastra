@@ -1,4 +1,5 @@
 export * from './base';
+export * from './text-search';
 export * from './discovery';
 export * from './feedback';
 export * from './inmemory';
@@ -45,6 +46,7 @@ export {
   traceSelectionSchema,
   threadPredicateSchema,
   traceQueryRequestSchema,
+  traceQueryRootSourceSchema,
   queryThreadsInputSchema,
   traceQueryTraceSchema,
   traceQueryTraceResponseSchema,
@@ -79,15 +81,17 @@ export {
   formatTraceQuerySchemaIssues,
   parseTraceQueryRequest,
   parseQueryThreadsInput,
+  planTraceQuerySelectionPredicate,
+  normalizeTraceQueryPath,
+  normalizeTraceQueryText,
+} from './trace-query';
+export {
   planTraceQuery,
   planThreadQuery,
   encodeTraceQueryCursor,
   encodeTraceQueryDeltaCursor,
   getTraceQueryDeltaWatermark,
-  planTraceQuerySelectionPredicate,
-  normalizeTraceQueryPath,
-  normalizeTraceQueryText,
-} from './trace-query';
+} from './trace-query-plan';
 export type {
   TraceQueryLiteral,
   TraceQueryPathOrLiteral,

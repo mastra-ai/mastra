@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.120",
+  "version": "0.0.124",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -23,21 +23,25 @@
       }
     }
   },
-  "scripts": {},
+  "scripts": {
+    "test": "vitest run"
+  },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@microsoft/api-extractor": "^7.57.7",
+    "@microsoft/api-extractor": "catalog:",
+    "local-pkg": "^1.2.1",
+    "resolve.exports": "^2.0.4",
     "tinyglobby": "^0.2.17",
-    "local-pkg": "^1.1.2",
-    "resolve.exports": "^2.0.3",
-    "ts-morph": "^27.0.2",
-    "typescript": "catalog:ts6"
+    "ts-morph": "^28.0.0",
+    "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "vitest": "catalog:",
     "zod": "catalog:"
   }
 }

@@ -11,14 +11,21 @@
  *   {"cmd":"approve","runId","toolCallId"} -> resume-done
  *   {"cmd":"observe","id","runId"}       -> observed, chunk*, closed
  *   {"cmd":"detach","id"}
+ *
+ * With ROLE set it is one process of a split deploy instead (observe-by-index
+ * restart test, COR-1506): ROLE=api serves HTTP on PORT with `createNodeServer`,
+ * ROLE=worker runs the agentic loop with `startWorkers()`. stdin is unused and
+ * setting `${KEY_PREFIX}:gate` in Redis releases `wait_gate`.
  */
 import { createInterface } from 'node:readline';
 
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { CachingPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { createNodeServer } from '@mastra/deployer/server';
 import { LibSQLStore } from '@mastra/libsql';
 import { createClient } from 'redis';
 import { z } from 'zod';
@@ -26,7 +33,7 @@ import { z } from 'zod';
 import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cache';
 import { RedisStreamsPubSub } from '../src/index';
 
-const { REDIS_URL, KEY_PREFIX, STORAGE_URL, LLM_URL, ENGINE = 'durable', NODE_ID = 'node' } = process.env;
+const { REDIS_URL, KEY_PREFIX, STORAGE_URL, LLM_URL, ENGINE = 'durable', NODE_ID = 'node', ROLE, PORT } = process.env;
 
 function emit(event: Record<string, unknown>) {
   process.stdout.write(`${JSON.stringify({ node: NODE_ID, ...event })}\n`);
@@ -68,18 +75,21 @@ async function main() {
     model: openai('gpt-4o-mini'),
     tools: { wait_gate: waitGate, lookup_status: lookup },
   });
-  const pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const cache = new RedisServerCache(
+    { client: cacheClient as any },
+    { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
+  );
+  const pubsub = process.env.PREWRAPPED_PUBSUB === '1' ? new CachingPubSub(redisPubsub, cache) : redisPubsub;
   const agent = ENGINE === 'evented' ? createEventedAgent({ agent: base }) : createDurableAgent({ agent: base });
 
   const mastra = new Mastra({
     logger: false,
     storage: new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! }),
     pubsub,
-    cache: new RedisServerCache(
-      { client: cacheClient as any },
-      { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
-    ),
+    cache,
     agents: { observerAgent: agent },
+    ...(ROLE === 'api' ? { server: { port: Number(PORT) } } : {}),
   });
   const durable: any = mastra.getAgent('observerAgent');
 
@@ -127,6 +137,28 @@ async function main() {
     emit({ type: 'closed', id: cmd.id });
   }
 
+  const shutdown = async () => {
+    for (const observation of observations.values()) observation.detach();
+    await mastra.shutdown?.().catch(() => {});
+    await cacheClient.quit().catch(() => {});
+    process.exit(0);
+  };
+  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+
+  if (ROLE) {
+    const gatePoll = setInterval(async () => {
+      if (await cacheClient.get(`${KEY_PREFIX}:gate`).catch(() => null)) {
+        clearInterval(gatePoll);
+        releaseGate();
+      }
+    }, 50);
+    if (ROLE === 'worker') await mastra.startWorkers();
+    else await createNodeServer(mastra, { tools: {}, studio: false, isDev: false });
+    emit({ type: 'ready' });
+    return;
+  }
+
   const handlers: Record<string, (cmd: any) => Promise<void> | void> = {
     stream,
     approve,
@@ -142,15 +174,6 @@ async function main() {
       .then(() => handlers[cmd.cmd]!(cmd))
       .catch(error => emit({ type: 'error', cmd: cmd.cmd, id: cmd.id, message: String(error?.stack ?? error) }));
   });
-
-  const shutdown = async () => {
-    for (const observation of observations.values()) observation.detach();
-    await mastra.shutdown?.().catch(() => {});
-    await cacheClient.quit().catch(() => {});
-    process.exit(0);
-  };
-  process.on('SIGTERM', shutdown);
-  process.on('SIGINT', shutdown);
 
   emit({ type: 'ready' });
 }

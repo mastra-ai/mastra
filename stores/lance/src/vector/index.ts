@@ -107,7 +107,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+  public static async create(uri: string, options?: ConnectionOptions & { id?: string }): Promise<LanceVectorStore> {
     const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
@@ -759,9 +759,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Table is now empty; index will be created when data is upserted and row count >= 256
         this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
         return;
-      } else {
-        table = await this.lanceClient.openTable(resolvedTableName);
       }
+      table = await this.lanceClient.openTable(resolvedTableName);
 
       const metricType = this.mastraMetricToLance(metric);
 
@@ -1314,16 +1313,15 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
                     // If we're about to update this vector anyway, use the new value
                     if (update.vector) {
                       rowData[key] = update.vector;
-                    } else {
+                    } else if (Array.isArray(value)) {
                       // Ensure vector is a plain array
-                      if (Array.isArray(value)) {
-                        rowData[key] = [...value];
-                      } else if (typeof value === 'object' && value !== null) {
-                        // Handle vector objects by converting to array if needed
-                        rowData[key] = Array.from(value as any[]);
-                      } else {
-                        rowData[key] = value;
-                      }
+
+                      rowData[key] = [...value];
+                    } else if (typeof value === 'object' && value !== null) {
+                      // Handle vector objects by converting to array if needed
+                      rowData[key] = Array.from(value as any[]);
+                    } else {
+                      rowData[key] = value;
                     }
                   } else {
                     rowData[key] = value;

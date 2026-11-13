@@ -69,8 +69,15 @@ export abstract class PubSub {
    * @param options.producedBefore - Only delete entries whose `data.producedAt`
    *   is at or before this epoch ms and that aren't `data.pinned`. Used to drop
    *   the parts of a run that storage already holds while the run continues.
+   * @param options.retainTerminalEvents - Preserve final run-completed, run-failed,
+   *   and run-aborted events, plus run-registered authority metadata, so subscribers
+   *   can recover outcomes without output and reject superseded executions.
+   *   Completion events with status suspended are not final and may be trimmed.
    */
-  trimTopic(_topic: string, _options: { runId: string; producedBefore?: number }): Promise<void> {
+  trimTopic(
+    _topic: string,
+    _options: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
     return Promise.resolve();
   }
 
@@ -107,6 +114,17 @@ export abstract class PubSub {
    */
   get supportsOffsets(): boolean {
     return false;
+  }
+
+  /**
+   * Whether a subscriber that attaches after events were published on `topic`
+   * can still read them (`getHistory`, a replaying subscribe). A publisher that
+   * sends changes against its earlier events resends the whole state when it
+   * can't. Defaults to {@link supportsOffsets}.
+   * @internal
+   */
+  __replaysTopic(_topic: string): boolean {
+    return this.supportsOffsets;
   }
 
   /**
@@ -264,6 +282,17 @@ export interface LeaseProvider {
    * silent caller-side fallback.
    */
   transferLease(key: string, fromOwner: string, toOwner: string, ttlMs: number): Promise<boolean>;
+
+  /**
+   * Optional. Returns `true` when `error`, thrown by one of the methods above,
+   * proves the backend is refusing every client, not just this one (e.g. Redis
+   * replaying its dataset after a restart answers `LOADING` to everybody). No
+   * other owner can be granted a lease meanwhile, so a caller whose lease
+   * lapsed may keep waiting for the backend instead of treating it as lost.
+   * Any other error, including a connection failure that may affect only this
+   * caller, must return `false`.
+   */
+  isUnavailableToAll?(error: unknown): boolean;
 }
 
 /**

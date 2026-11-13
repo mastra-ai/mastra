@@ -1,7 +1,7 @@
 import type { McpServerEventOccurrence } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Card } from '@mastra/playground-ui/components/Card';
-import { Code } from '@mastra/playground-ui/components/Code';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -29,10 +29,15 @@ export function McpEventOccurrenceRow({ occurrence }: { occurrence: McpServerEve
           </Txt>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <Code
-            code={JSON.stringify(occurrence.data, null, 2)}
-            lang="json"
-            className="overflow-x-auto px-3 pb-3 whitespace-pre"
+          <CodeEditor
+            value={JSON.stringify(occurrence.data, null, 2)}
+            language="json"
+            editable={false}
+            lineNumbers={false}
+            showCopyButton={false}
+            variant="embedded"
+            aria-label={`Event ${occurrence.eventId} data`}
+            className="px-3 pb-3"
           />
         </CollapsibleContent>
       </Collapsible>

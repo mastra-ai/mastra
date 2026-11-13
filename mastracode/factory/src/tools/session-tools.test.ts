@@ -347,6 +347,24 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
+  it('lets an agent inspect the available models before choosing an exact ID from the user’s intent', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+
+    await expect(env.switchModel({ sessionId: started.sessionId })).resolves.toEqual({
+      sessionId: started.sessionId,
+      models: ['openai/gpt-5.6', 'openai/gpt-6.1-sol'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' }),
+    ).resolves.toMatchObject({
+      modelId: 'openai/gpt-6.1-sol',
+      live: true,
+    });
+  });
+
   it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
@@ -392,10 +410,11 @@ describe('factory_switch_session_model', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
-      'not owned by you',
-    );
-    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.switchModel({ sessionId: 'other-user-session' })).rejects.toThrow('not owned by you');
+    await expect(env.switchModel({ sessionId: 'missing' })).rejects.toThrow('not found');
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -423,6 +442,12 @@ describe('factory_switch_session_model with stored credentials', () => {
 
   it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
     const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
       sessionId: env.sessionId,
@@ -454,6 +479,12 @@ describe('factory_switch_session_model with stored credentials', () => {
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
     });
     env.controller.getSession.mockResolvedValue(null);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['acme/acme-1', 'deepseek/deepseek-flash'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
@@ -696,10 +727,15 @@ describe('the side session run-end backstop', () => {
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
 
-    // A later run nobody started from here (a typed message, a wake) reports too.
+    // A later run (a typed message, a wake) that ends with nothing new doesn't say "finished" again.
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(1);
+
+    // But a failure after it still goes out.
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(2));
-    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[1]!.input).toMatchObject({ kind: 'failed' });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
@@ -970,6 +1006,19 @@ describe('factory_start_session in work-item mode', () => {
     expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
   });
 
+  it("still starts Work's old plan role, which no phase names as its context any more", async () => {
+    const { start, item, seed } = await withItem();
+
+    const result = (await start({ prompt: 'Plan it.', workItem: item.id, role: 'plan' })) as Started;
+
+    expect(result).toMatchObject({ mode: 'work-item', role: 'plan' });
+    const after = (await seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
+    expect(after.sessions.plan).toMatchObject({ sessionId: result.sessionId });
+    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'spectator' })).rejects.toThrow(
+      'board has no spectator role.',
+    );
+  });
+
   it('starts a work-item run shared with the org even from a private session', async () => {
     const { start, item, sessions, sourceControl } = await withItem('private');
 
@@ -1002,12 +1051,82 @@ describe('factory_start_session in work-item mode', () => {
     expect(request.requestContext).toBeUndefined();
   });
 
-  it("starts a work-item role in a hybrid Factory on the Factory's scope, like the Start route", async () => {
-    const env = await withItem();
-    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
-    await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' });
+  // The person asked for the run, but the card's session is the Factory's: it runs on the
+  // organization's keys, and the person follows it from the session they asked in.
+  it.each(['hybrid', 'factory'] as const)(
+    'starts a work-item role in a %s Factory as the Factory, followed by the session that asked',
+    async modelScope => {
+      const env = await withItem();
+      await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope } });
+      const factory = `factory-project:${env.scope.factoryProjectId}`;
 
-    expect(env.prepare.mock.calls[0]![0]).toMatchObject({ modelScope: 'factory' });
+      const result = (await env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })) as Started;
+
+      expect(env.prepare.mock.calls[0]![0]).toMatchObject({
+        modelScope: 'factory',
+        userId: factory,
+        startedBy: { type: 'human', id: 'user-1' },
+      });
+      await expect(env.sessions.getBySessionId(result.sessionId)).resolves.toMatchObject({ userId: factory });
+      const session = env.created.find(entry => entry.options.id === result.sessionId)!.session;
+      expect(session.state.get()).toMatchObject({ factoryOwnerUserId: factory, factoryModelScope: 'factory' });
+      expect(session.sendSignal.mock.calls[0]![1].requestContext.get('user')).toEqual({
+        workosId: factory,
+        organizationId: 'org-1',
+      });
+      const after = (await env.seed.workItems.get({ orgId: 'org-1', id: env.item.id }))!;
+      expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId, startedBy: factory });
+      expect(await env.subscriptions()).toEqual([
+        expect.objectContaining({ workItemId: env.item.id, userId: 'user-1', reason: 'started' }),
+      ]);
+    },
+  );
+
+  it('refuses to start a Factory-run role while the organization has no model key, and says what to add', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    // The caller's own key is not the Factory's to spend.
+    await env.seed.credentials.setCredential({ orgId: 'org-1', userId: 'user-1' }, 'openai', {
+      type: 'api_key',
+      key: 'sk-personal',
+    });
+    const before = await env.sessionRows();
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).rejects.toThrow(
+      'Add an organization key or provider under Settings → Models',
+    );
+
+    expect(env.prepare).not.toHaveBeenCalled();
+    expect(await env.sessionRows()).toEqual(before);
+    expect(await env.subscriptions()).toEqual([]);
+
+    await env.seed.credentials.setCredential({ orgId: 'org-1' }, 'openai', { type: 'api_key', key: 'sk-org' });
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+  });
+
+  it('starts a Factory-run role for an organization that runs on its own provider and stores no key', async () => {
+    const env = await withItem('org', { tenantCredentials: true });
+    await env.seed.projects.update({ orgId: 'org-1', id: env.scope.factoryProjectId, input: { modelScope: 'hybrid' } });
+    await env.seed.customProviders.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: {
+        providerId: 'acme',
+        name: 'Acme',
+        url: 'https://llm.acme.dev/v1',
+        apiKey: 'sk-acme',
+        models: ['fast-1'],
+      },
+    });
+
+    await expect(env.start({ prompt: 'Go.', workItem: env.item.id, role: 'work' })).resolves.toMatchObject({
+      mode: 'work-item',
+    });
+    expect(env.prepare).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: `factory-project:${env.scope.factoryProjectId}` }),
+    );
   });
 
   it("bills the work-item session to the caller's credential tenant", async () => {
@@ -1322,9 +1441,11 @@ describe('session tools on a turn nobody signed in started', () => {
     });
     const other = { ...env.scope, sessionId: 'other-session', resourceId: 'other-session', threadId: 'other-thread' };
 
-    await expect(
-      env.toolsFor(other).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
-    ).rejects.toThrow('only this session and the side sessions it started can switch models');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.toolsFor(other).switchModel({ sessionId: started.sessionId })).rejects.toThrow(
+      'only this session and the side sessions it started can switch models',
+    );
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
     expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
@@ -1362,7 +1483,7 @@ describe('session tools on a turn nobody signed in started', () => {
 
   it('mounts every user tool but refuses to answer an approval', async () => {
     const env = await setup('org', wake);
-    const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
+    const deps = env.deps as unknown as FactoryToolDependencies;
     const answer = (scope: FactoryToolScope) =>
       (
         createFactoryTools({ scope, deps }).factory_answer_approval as unknown as {

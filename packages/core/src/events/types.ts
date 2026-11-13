@@ -13,9 +13,16 @@ export type Event = {
    * seen: a newer execution has taken the run over.
    */
   generation?: number;
+  /** Iteration index for durable agent execution boundary events. */
+  stepIndex?: number;
   /**
-   * Sequential index for position tracking.
-   * Enables efficient resume from a specific position.
+   * Index of this event in its topic's log.
+   *
+   * Allocated when the event is appended to the shared cache (see
+   * `MastraServerCache.listPushIndexed`), so a subscriber can resume from an
+   * index and, on seeing a higher one, read the gap back from the log. Absent
+   * when the event could not be cached — such events are delivered live-only
+   * and cannot be resumed by offset.
    */
   index?: number;
   /**

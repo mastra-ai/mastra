@@ -32,15 +32,45 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import sql from 'mssql';
 import { MssqlDB, resolveMssqlConfig } from '../../db';
 import type { MssqlDomainConfig } from '../../db';
-import { assertRunFence, claimTransaction, DB_NOW_MS, inTransaction, withRunFence } from '../../db/run-fencing';
+import {
+  assertRunFence,
+  claimTransaction,
+  DB_NOW_MS,
+  inTransaction,
+  retryWriteRace,
+  withRunFence,
+} from '../../db/run-fencing';
 import type { Queryable } from '../../db/run-fencing';
 import { getSchemaName, getTableName } from '../utils';
 
 const RUN_OWNER_COLUMNS = `[generation], [ownerId], [leaseExpiresAt], ${DB_NOW_MS} AS [nowMs]`;
+/** Run ids per query in `getRunOwnerships`, well under SQL Server's 2,100 parameters per request. */
+const RUN_OWNERSHIP_BATCH_SIZE = 500;
+
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
+ * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty.
+ * Only these paths are read, so `context` is never sent. OPENJSON parses each snapshot once, and
+ * FOR JSON PATH leaves out NULL values. A snapshot that isn't valid JSON lists as `{}`, since
+ * OPENJSON would fail the whole listing on it. OPENJSON returns one row per element of a JSON
+ * array, so `TOP (1)` keeps the summary to one object.
+ */
+const SUMMARY_SNAPSHOT_SQL = `COALESCE(CASE WHEN ISJSON([snapshot]) = 1 THEN (
+    SELECT TOP (1) s.[status],
+      TRY_CAST(s.[timestamp] AS BIGINT) AS [timestamp],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[workflowId] END AS [parentWorkflow.workflowId],
+      CASE WHEN s.[workflowId] <> '' AND s.[runId] <> '' THEN s.[runId] END AS [parentWorkflow.runId]
+    FROM OPENJSON([snapshot]) WITH (
+      [status] NVARCHAR(MAX) '$.status',
+      [timestamp] NVARCHAR(64) '$.timestamp',
+      [workflowId] NVARCHAR(MAX) '$.parentWorkflow.workflowId',
+      [runId] NVARCHAR(MAX) '$.parentWorkflow.runId'
+    ) AS s
+    FOR JSON PATH, WITHOUT_ARRAY_WRAPPER) END, '{}')`;
 
 function toRunOwnershipRecord(runId: string, row: Record<string, unknown>): RunOwnershipRecord {
   // The driver returns BIGINT columns as strings.
@@ -61,6 +91,8 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
   private needsConnect: boolean;
   private skipDefaultIndexes?: boolean;
   private indexes?: CreateIndexOptions[];
+  /** Set once the snapshot table is seen with a `resourceId` column, which is never dropped. */
+  #hasResourceIdColumn = false;
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
@@ -86,6 +118,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     this.indexes = indexes?.filter(idx => (WorkflowsMSSQL.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   supportsConcurrentUpdates(): boolean {
     return true;
   }
@@ -104,6 +140,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for workflows domain
@@ -291,6 +328,54 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
     }
+  }
+
+  /** Reads the records with one query per {@link RUN_OWNERSHIP_BATCH_SIZE} runs. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+
+    try {
+      for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
+        const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
+        const request = this.pool.request();
+        chunk.forEach((runId, i) => request.input(`runId${i}`, runId));
+        // Joining the requested ids lets the column's collation match them, as the single-run
+        // read does (case, trailing spaces), and returns each record under the id asked for.
+        const result = await request.query(
+          `SELECT j.[reqId], ${RUN_OWNER_COLUMNS}
+           FROM (VALUES ${chunk.map((_, i) => `(@runId${i})`).join(', ')}) AS j ([reqId])
+           JOIN ${this.#runOwnersTable} o ON o.[runId] = j.[reqId]`,
+        );
+
+        const rows: Record<string, unknown>[] = result.recordset;
+        for (const row of rows) {
+          const runId = String(row.reqId);
+          records.set(runId, toRunOwnershipRecord(runId, row));
+        }
+      }
+
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
+    }
+  }
+
+  /** Whether the snapshot table has `resourceId`, which tables created before it existed lack. */
+  async #resourceIdColumnExists(): Promise<boolean> {
+    if (!this.#hasResourceIdColumn) {
+      this.#hasResourceIdColumn = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
+    }
+
+    return this.#hasResourceIdColumn;
   }
 
   private parseWorkflowRun(row: any): WorkflowRun {
@@ -521,40 +606,57 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     resourceId,
     snapshot,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
     resourceId?: string;
     snapshot: WorkflowRunState;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const table = getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) });
     const now = new Date().toISOString();
+    const expectedStatuses =
+      expectedStatus === undefined ? undefined : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatuses === undefined
+        ? ''
+        : expectedStatuses.length === 0
+          ? ' AND 1 = 0'
+          : ` AND JSON_VALUE(target.[snapshot], '$.status') IN (${expectedStatuses.map((_, i) => `@expectedStatus${i}`).join(', ')})`;
     try {
-      await withRunFence(
-        this.pool,
-        this.#runOwnersTable,
-        resolveRunFence(this, fence, runId),
-        'persistWorkflowSnapshot',
-        async q => {
-          const request = q.request();
-          request.input('workflow_name', workflowName);
-          request.input('run_id', runId);
-          request.input('resourceId', resourceId);
-          request.input('snapshot', JSON.stringify(snapshot));
-          request.input('createdAt', sql.DateTime2, new Date(now));
-          request.input('updatedAt', sql.DateTime2, new Date(now));
-          const mergeSql = `MERGE INTO ${table} AS target
+      // Two first writes of a run can both take `WHEN NOT MATCHED`; the loser
+      // gets a duplicate key (or a deadlock) and its retry takes `WHEN MATCHED`.
+      return await retryWriteRace(() =>
+        withRunFence(
+          this.pool,
+          this.#runOwnersTable,
+          resolveRunFence(this, fence, runId),
+          'persistWorkflowSnapshot',
+          async q => {
+            const request = q.request();
+            request.input('workflow_name', workflowName);
+            request.input('run_id', runId);
+            request.input('resourceId', resourceId);
+            request.input('snapshot', JSON.stringify(snapshot));
+            request.input('createdAt', sql.DateTime2, new Date(now));
+            request.input('updatedAt', sql.DateTime2, new Date(now));
+            expectedStatuses?.forEach((status, i) => request.input(`expectedStatus${i}`, status));
+            const mergeSql = `MERGE INTO ${table} AS target
             USING (SELECT @workflow_name AS workflow_name, @run_id AS run_id) AS src
             ON target.workflow_name = src.workflow_name AND target.run_id = src.run_id
-            WHEN MATCHED THEN UPDATE SET
+            WHEN MATCHED${guard} THEN UPDATE SET
               resourceId = @resourceId,
               snapshot = @snapshot,
               [updatedAt] = @updatedAt
             WHEN NOT MATCHED THEN INSERT (workflow_name, run_id, resourceId, snapshot, [createdAt], [updatedAt])
               VALUES (@workflow_name, @run_id, @resourceId, @snapshot, @createdAt, @updatedAt);`;
-          await request.query(mergeSql);
-        },
+            const result = await request.query(mergeSql);
+            return (result.rowsAffected[0] ?? 0) > 0;
+          },
+        ),
       );
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
@@ -567,6 +669,35 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
             workflowName,
             runId,
           },
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const request = this.pool.request();
+      request.input('workflow_name', workflowName);
+      request.input('run_id', runId);
+      const result = await request.query(
+        `SELECT TOP 1 JSON_VALUE([snapshot], '$.status') AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.schema) })} WHERE workflow_name = @workflow_name AND run_id = @run_id`,
+      );
+      const status: unknown = result.recordset?.[0]?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MSSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );
@@ -697,6 +828,10 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns({
     workflowName,
     fromDate,
@@ -705,6 +840,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
     perPage,
     resourceId,
     status,
+    summary,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     try {
       const conditions: string[] = [];
@@ -721,8 +857,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
       }
 
       if (resourceId) {
-        const hasResourceId = await this.db.hasColumn(TABLE_WORKFLOW_SNAPSHOT, 'resourceId');
-        if (hasResourceId) {
+        if (await this.#resourceIdColumnExists()) {
           conditions.push(`[resourceId] = @resourceId`);
           paramMap['resourceId'] = resourceId;
         } else {
@@ -759,7 +894,14 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
         total = Number(countResult.recordset[0]?.count || 0);
       }
 
-      let query = `SELECT * FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
+      let columns = '*';
+      if (summary) {
+        // A table without resourceId lists without it, as `SELECT *` lists it.
+        const resourceIdColumn = (await this.#resourceIdColumnExists()) ? '[resourceId], ' : '';
+        columns = `[workflow_name], [run_id], ${resourceIdColumn}${SUMMARY_SNAPSHOT_SQL} AS [snapshot], [createdAt], [updatedAt]`;
+      }
+
+      let query = `SELECT ${columns} FROM ${tableName} ${whereClause} ORDER BY [seq_id] DESC`;
       if (usePagination) {
         const normalizedPerPage = normalizePerPage(perPage, Number.MAX_SAFE_INTEGER);
         const offset = page! * normalizedPerPage;

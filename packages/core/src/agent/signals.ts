@@ -762,3 +762,6 @@ export function dataPartToSignal(part: AgentSignalDataPart): CreatedAgentSignal 
 
   return createSignal({ ...part.data, type: part.data.type });
 }
+
+/** @internal Notification of input admitted to the owning run. Optional for older listeners. */
+export type PendingSignalListener = (signals?: AgentSignalDataPart['data'][]) => void;

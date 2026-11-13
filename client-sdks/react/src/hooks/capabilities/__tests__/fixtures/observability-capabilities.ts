@@ -23,7 +23,10 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootSpanFields: true,
     traceQueryRootEntityId: true,
     traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceAggregate: true,
+    spanAggregate: true,
     threadQuery: true,
     threadQueryRows: true,
     spanQuery: true,
@@ -53,9 +56,21 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootSpanFields: false,
     traceQueryRootEntityId: false,
     traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
     traceAggregate: false,
+    spanAggregate: false,
     threadQuery: false,
     spanQuery: false,
+  },
+};
+
+/** Store answers legacy thread queries (thread ids only) but not thread rows. */
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    threadQueryRows: false,
   },
 };
 
@@ -73,6 +88,23 @@ export const preAggregateCapabilities = {
   observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
   capabilities: Object.fromEntries(
     Object.entries(traceQueryCapabilities.capabilities).filter(([key]) => key !== 'traceAggregate'),
+  ),
+};
+
+/** Store runs span queries but does not declare `span-aggregate`. */
+export const noSpanAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    spanAggregate: false,
+  },
+};
+
+/** Response from a server released before the `spanAggregate` key existed. */
+export const preSpanAggregateCapabilities = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: Object.fromEntries(
+    Object.entries(traceQueryCapabilities.capabilities).filter(([key]) => key !== 'spanAggregate'),
   ),
 };
 

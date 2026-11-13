@@ -12,6 +12,7 @@ import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
+import { codeFoldGutter } from './fold-gutter-extension';
 import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
@@ -124,6 +125,8 @@ const codeEditorVariants = cva(
       variant: {
         default: cn(inputSurfaceAndFocusWithinStyle, 'rounded-md p-1', fieldErrorRimWithin),
         embedded: 'rounded-none border-none bg-transparent p-0',
+        /** Prose edited in place: no frame, no gutter, text flush with the label above it. */
+        inline: 'rounded-none border-none bg-transparent p-0',
       },
     },
     defaultVariants: {
@@ -160,8 +163,15 @@ const editorFocusTheme = Prec.highest(
 
 const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
+/** Drops the line inset so text lines up with surrounding copy, and keeps three lines to click into while empty. */
+const inlineTheme = EditorView.theme({
+  '.cm-content': { padding: '0', minHeight: '3lh' },
+  '.cm-line': { padding: '0' },
+});
+
 type CodeEditorContentAttributes = {
   'aria-label': string;
+  class: string;
   id?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
@@ -190,6 +200,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
+  /** Extra CodeMirror extensions, added after the built-in ones. Memoize them to avoid reconfiguring on every render. */
+  extensions?: Extension[];
 } & VariantProps<typeof codeEditorVariants> &
   Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
@@ -211,6 +223,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      extensions: extraExtensions,
       variant,
       id,
       'aria-label': ariaLabelProp,
@@ -240,13 +253,17 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     };
 
     const extensions = useMemo(() => {
-      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
+      const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel, class: 'zoom-safe-text' };
       if (controlId) contentAttributes.id = controlId;
       if (ariaLabelledBy) contentAttributes['aria-labelledby'] = ariaLabelledBy;
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
-      const exts: Extension[] = [...editorFocusExtensions, EditorView.contentAttributes.of(contentAttributes)];
+      const exts: Extension[] = [
+        ...editorFocusExtensions,
+        EditorView.contentAttributes.of(contentAttributes),
+        variant === 'inline' ? inlineTheme : codeFoldGutter,
+      ];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -270,8 +287,14 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(EditorState.readOnly.of(true));
       }
 
+      if (extraExtensions) {
+        exts.push(...extraExtensions);
+      }
+
       return exts;
     }, [
+      extraExtensions,
+      variant,
       language,
       highlightVariables,
       schema,
@@ -289,7 +312,13 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         {(showCopyButton || canFormat) && (
           <div className="absolute top-2 right-2 z-20 flex gap-1">
             {canFormat && (
-              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+              <Button
+                type="button"
+                size="icon-sm"
+                tooltip="Format JSON"
+                aria-label="Format JSON"
+                onClick={handleFormat}
+              >
                 <Braces />
               </Button>
             )}
@@ -308,7 +337,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
-          basicSetup={{ lineNumbers }}
+          basicSetup={{ lineNumbers, foldGutter: false }}
         />
       </div>
     );

@@ -3,12 +3,7 @@ title: "Working memory | Memory"
 description: "Persist user profiles, preferences, and application data with Mastra working memory using resource- or thread-scoped templates and storage adapters."
 packages:
   - "@mastra/core"
-  - "@mastra/libsql"
   - "@mastra/memory"
-  - "@mastra/mongodb"
-  - "@mastra/oracledb"
-  - "@mastra/pg"
-  - "@mastra/upstash"
 ---
 
 # Working memory
@@ -440,7 +435,7 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/harness/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/signals/state-signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({

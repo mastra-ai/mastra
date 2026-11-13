@@ -1,16 +1,16 @@
+import { EntityType } from '@mastra/core/observability';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
-import type { SpanTab } from '../../types';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { ScoreDataPanel, TraceScoresTab } from '@/domains/scores';
+import { ScoreDataPanel, TraceScoresList } from '@/domains/scores';
 
 export type TracesExplorerPanelProps = {
   /** Opens a score of one of the full thread's traces (the host owns routing). */
@@ -20,7 +20,7 @@ export type TracesExplorerPanelProps = {
   headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
   /** Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link. */
   traceHref?: (traceId: string) => string;
-  /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
+  /** Shows the "Add to dataset" button next to "Score trace". Defaults to `true`. */
   withAddTraceToDataset?: boolean;
 };
 
@@ -33,7 +33,7 @@ export function TracesExplorerPanel({
   traceHref,
   withAddTraceToDataset = true,
 }: TracesExplorerPanelProps) {
-  const { withQueryTrace, withFeedback } = useTracesConfig();
+  const { withQueryTrace, withFeedback, feedbackOptions } = useTracesConfig();
   const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
@@ -90,15 +90,25 @@ export function TracesExplorerPanel({
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
 
+  // Only agent traces carry the Messages column, so other traces open the drawer one size
+  // smaller, with or without a span open. The listed row knows the entity on click; the root
+  // span covers deep-linked traces outside the list.
+  const listedRow = rows.find(row => row.traceId === traceId);
+  const entityType = listedRow?.entityType ?? anchorSpan?.entityType;
+  const isAgent = entityType === EntityType.AGENT;
+  const panelSize = spanId ? (isAgent ? 'full' : 'wide') : isAgent ? 'wide' : 'half';
+
   return (
     <>
       <TraceSpanPanel
         title="Trace details"
-        size={spanId ? 'full' : 'wide'}
+        size={panelSize}
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
+        entityType={entityType}
         usage={usage}
+        rootStreamingTimings={listedRow}
         isLoadingSpans={isLoadingSpans}
         selectedSpanId={spanId ?? null}
         onClose={() => {
@@ -108,6 +118,7 @@ export function TracesExplorerPanel({
         isFullThreadOpen={isFullThreadOpen}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
@@ -119,20 +130,26 @@ export function TracesExplorerPanel({
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
         feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
+        feedbackTabSlot={
+          withFeedback
+            ? ({ traceId: tid }) => <TraceFeedbackTab key={tid} traceId={tid} feedbackOptions={feedbackOptions} />
+            : undefined
+        }
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
-          rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
+          rootSpanId ? <TraceScoresList traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
         }
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}
         spanActiveTab={selection.spanTab ?? 'details'}
-        onSpanTabChange={tab => setSpanTab(tab as SpanTab)}
+        onSpanTabChange={setSpanTab}
         spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
         spanFeedbackTabSlot={
           withFeedback
             ? ({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
+                tid && sid ? (
+                  <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} feedbackOptions={feedbackOptions} />
+                ) : null
             : undefined
         }
         headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}

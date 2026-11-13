@@ -2,6 +2,13 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { DispatchAdapterHandle } from '@mastra/server/server-adapter';
+import {
+  cancelReaderOnResponseClose,
+  getCustomRouteHTTPExceptionResponse,
+  registerDispatchAdapter,
+  writeWithBackpressure,
+} from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -13,8 +20,12 @@ const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
 
 type HonoApiRoute = Exclude<ApiRoute, { readonly _mastraSchemaRoute: true }>;
 
-/** Authenticates a matched custom route. Throws to reject the request. */
-export type CustomRouteAuthenticate = (requiresAuth: boolean) => Promise<void>;
+/** Authenticates and authorizes a matched custom route. Throws to reject the request. */
+export type CustomRouteAuthenticate = (
+  route: ApiRoute,
+  requiresAuth: boolean,
+  pathParams: Record<string, string>,
+) => Promise<void>;
 
 type CustomRouteEnv = { requestContext: RequestContext; authenticate: CustomRouteAuthenticate; authError?: unknown };
 
@@ -29,6 +40,8 @@ export class CustomRouteService {
   private readonly routes: HonoApiRoute[];
   private readonly authConfig: Map<string, boolean>;
   private fetchPromise?: Promise<CustomRouteFetch>;
+  /** Recorded on each request this module serves, so `dispatchRoute` applies this module's paths. */
+  readonly dispatchAdapter: DispatchAdapterHandle;
 
   constructor(
     @Inject(MASTRA) private readonly mastra: Mastra,
@@ -44,6 +57,13 @@ export class CustomRouteService {
         this.authConfig.set(key, route.requiresAuth !== false);
       }
     }
+
+    // NestMastraServer is not built on @mastra/server's MastraServer, so tell dispatchRoute where routes are served.
+    this.dispatchAdapter = registerDispatchAdapter(mastra, {
+      prefix: options.prefix ?? '',
+      getCustomRouteAuthConfig: () => this.authConfig,
+      getCustomApiRoutes: () => mastra.getServer()?.apiRoutes ?? [],
+    });
   }
 
   /** Auth config for custom routes, keyed by `METHOD:path`. */
@@ -55,7 +75,7 @@ export class CustomRouteService {
    * Runs a matched custom route and writes its response.
    * Returns false if no custom route handled the request.
    *
-   * `authenticate` runs after Hono's router selects the route, so auth is enforced
+   * `authenticate` runs after Hono's router selects the route, so auth, RBAC, and FGA are enforced
    * for exactly the routes Hono dispatches (including regex-constrained params).
    */
   async handle(
@@ -91,26 +111,15 @@ export class CustomRouteService {
     }
 
     const reader = response.body.getReader();
-    const onClose = () => void reader.cancel().catch(() => {});
-    res.once('close', onClose);
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
     try {
       while (!res.destroyed) {
         const { done, value } = await reader.read();
         if (done) break;
-        if (!res.write(value)) {
-          await new Promise<void>(resolve => {
-            const resume = () => {
-              res.off('drain', resume);
-              res.off('close', resume);
-              resolve();
-            };
-            res.once('drain', resume);
-            res.once('close', resume);
-          });
-        }
+        await writeWithBackpressure(res, value);
       }
     } finally {
-      res.off('close', onClose);
+      readerCancel.dispose();
       res.end();
     }
     return true;
@@ -134,6 +143,8 @@ export class CustomRouteService {
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
       });
@@ -156,11 +167,15 @@ export class CustomRouteService {
         : [];
       const requiresAuth = this.authConfig.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false;
       const authMiddleware = async (
-        c: { env: CustomRouteEnv; body: (data: null, status: 401) => Response },
+        c: {
+          env: CustomRouteEnv;
+          req: { param: () => Record<string, string> };
+          body: (data: null, status: 401) => Response;
+        },
         next: () => Promise<void>,
       ) => {
         try {
-          await c.env.authenticate(requiresAuth);
+          await c.env.authenticate(route, requiresAuth, c.req.param());
         } catch (err) {
           // Surface Nest HTTP exceptions (401/403) to the caller instead of Hono's onError.
           c.env.authError = err;

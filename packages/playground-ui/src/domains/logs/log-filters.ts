@@ -42,6 +42,13 @@ export const LOGS_DATE_PRESET_PARAM = 'datePreset';
 export const LOGS_DATE_FROM_PARAM = 'dateFrom';
 export const LOGS_DATE_TO_PARAM = 'dateTo';
 
+/** The range the logs page shows when the URL names none. */
+export const DEFAULT_LOGS_DATE_PRESET: LogsDatePreset = 'last-24h';
+
+/** Fields the logs list can be sorted by. */
+export const LOGS_SORT_FIELDS = ['timestamp'] as const;
+export const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
+
 export const LOGS_DATE_PRESET_VALUES = new Set<LogsDatePreset>([
   'all',
   'last-24h',

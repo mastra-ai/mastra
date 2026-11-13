@@ -1,24 +1,20 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import type { ReactNode } from 'react';
+import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
+import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
-import {
-  SESSION_STATUS_OPTIONS,
-  SESSION_UPDATED_OPTIONS,
-  filterSessionRows,
-  sessionOwnerOptions,
-} from '../services/sessionFilters';
+import { filterSessionRows } from '../services/sessionFilters';
 import {
   collapsedRowsKeepingActive,
   groupSessionRows,
@@ -27,19 +23,26 @@ import {
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
-import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
+import type { SessionListRow } from '../services/sessionRows';
+import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
+import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import {
+  SESSION_SORT_MENU_OPTIONS,
+  SESSION_STATUS_MENU_OPTIONS,
+  SESSION_UPDATED_MENU_OPTIONS,
+  sessionOwnerMenuOptions,
+} from './sessionPropertyOptions';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
-  const navigate = useNavigate();
-  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
-  const catalog = useBoardCatalog(factoryId);
+  const openNewUserSession = useOpenNewUserSession();
   const {
     view,
     hiddenGroupKeys,
@@ -50,8 +53,14 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const sidebarState = useMaybeSidebarState()?.state;
+  const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
+    // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
+    revealChildSessions: view.revealChildSessions && sidebarState !== 'collapsed',
+  });
+  const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
   const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
@@ -61,7 +70,7 @@ export function SessionsSection() {
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const mergedBySessionId = useWorkspacePullRequestMerges({
+  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
     baseUrl,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
@@ -71,11 +80,9 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
-  const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
+  const nothingToList = loaded && !hasRepositories && rows.length === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
 
   return (
@@ -89,7 +96,7 @@ export function SessionsSection() {
                 variant="ghost"
                 size="icon-sm"
                 aria-label="New user session"
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
+                onClick={() => openNewUserSession(factoryId)}
                 disabled={deletion.deleting}
               >
                 <Plus size={15} />
@@ -106,28 +113,28 @@ export function SessionsSection() {
               <DropdownMenu.RadioSub
                 label="Sort"
                 icon={<ArrowUpDown aria-hidden />}
-                options={SESSION_SORT_OPTIONS}
+                options={SESSION_SORT_MENU_OPTIONS}
                 value={view.sort}
                 onValueChange={sort => updateView({ sort })}
               />
               <DropdownMenu.RadioSub
                 label="Owner"
                 icon={<UserRound aria-hidden />}
-                options={sessionOwnerOptions(rows, viewerUserId)}
+                options={sessionOwnerMenuOptions(rows, viewerUserId)}
                 value={filters.owner}
                 onValueChange={owner => changeFilters({ owner })}
               />
               <DropdownMenu.RadioSub
                 label="Status"
                 icon={<CircleDashed aria-hidden />}
-                options={SESSION_STATUS_OPTIONS}
+                options={SESSION_STATUS_MENU_OPTIONS}
                 value={filters.status}
                 onValueChange={status => changeFilters({ status })}
               />
               <DropdownMenu.RadioSub
                 label="Updated"
                 icon={<Clock aria-hidden />}
-                options={SESSION_UPDATED_OPTIONS}
+                options={SESSION_UPDATED_MENU_OPTIONS}
                 value={filters.updated}
                 onValueChange={updated => changeFilters({ updated })}
               />
@@ -139,6 +146,16 @@ export function SessionsSection() {
                 onVisibilityChange={changeGroupVisibility}
                 onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
               />
+              <DropdownMenu.Separator />
+              <DropdownMenu.CheckboxItem checked={view.compact} onCheckedChange={compact => updateView({ compact })}>
+                Compact view
+              </DropdownMenu.CheckboxItem>
+              <DropdownMenu.CheckboxItem
+                checked={view.revealChildSessions}
+                onCheckedChange={revealChildSessions => updateView({ revealChildSessions })}
+              >
+                Reveal child sessions
+              </DropdownMenu.CheckboxItem>
             </PropertiesMenu>
           </div>
         }
@@ -147,39 +164,48 @@ export function SessionsSection() {
       </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-4">
+        {!loaded && !loadFailed && rows.length === 0 && <SidebarNavigationSkeleton label="Loading sessions" />}
         {groups.map(group => (
           <SessionGroupList
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            renderRow={row => (
-              <SessionListItem
-                factoryId={factoryId}
-                row={row}
-                disabled={deletion.deleting}
-                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
-                onDelete={deletion.requestDeletion}
-              />
-            )}
+            renderRow={row => {
+              const item = (entry: SessionListRow, level?: number, subItems?: ReactNode) => (
+                <SessionListItem
+                  key={entry.session.sessionId}
+                  factoryId={factoryId}
+                  row={entry}
+                  level={level}
+                  compact={view.compact}
+                  disabled={deletion.deleting}
+                  liveStatus={
+                    liveStatusBySessionId[entry.session.sessionId] ??
+                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
+                  }
+                  onDelete={deletion.requestDeletion}
+                  subItems={subItems}
+                />
+              );
+              return item(
+                row,
+                undefined,
+                row.childRows?.length ? (
+                  <Sidebar.NavList className="mt-0.5">{row.childRows.map(child => item(child, 1))}</Sidebar.NavList>
+                ) : undefined,
+              );
+            }}
           />
         ))}
       </div>
 
       {loadFailed && (
-        <div className="flex items-center gap-2 px-2 py-1">
-          <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
-            Couldn’t load sessions
-          </Txt>
-          <Button variant="ghost" size="sm" onClick={retry}>
-            Retry
-          </Button>
-        </div>
+        // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
+        <SidebarLoadError onRetry={retry} announce={false}>
+          Couldn’t load sessions
+        </SidebarLoadError>
       )}
-      {loaded && emptyMessage !== undefined && (
-        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyMessage}
-        </Txt>
-      )}
+      {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (
         <DeleteSessionDialog
@@ -197,17 +223,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
-  if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';
 }

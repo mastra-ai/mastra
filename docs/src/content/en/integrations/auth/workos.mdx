@@ -1,20 +1,35 @@
 ---
 title: "WorkOS | Auth"
-description: "Authenticate Mastra with WorkOS access tokens, configure default or fine-grained authorization, load memberships, and support custom JWT templates."
+description: "Give Mastra agents WorkOS tools through Mastra Connect, and authenticate Mastra with WorkOS access tokens, fine-grained authorization, and JWT templates."
 packages:
   - "@mastra/auth-workos"
   - "@mastra/client-js"
+  - "@mastra/connect"
   - "@mastra/core"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import WorkOSConnectTools from "@site/src/components/connect/generated/workos.mdx";
 
 # WorkOS
 
+Use WorkOS with Mastra in two ways:
+
+- **Agent tools** let an agent manage WorkOS organizations, users, and SSO connections through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Server authentication](#server-authentication)** verifies requests to your Mastra server with WorkOS, using the `@mastra/auth-workos` package.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<WorkOSConnectTools />
+
+## Server authentication
+
 The `@mastra/auth-workos` package provides authentication for Mastra using WorkOS. It verifies incoming requests using WorkOS access tokens and integrates with the Mastra server using the `auth` option.
 
-## Prerequisites
+### Prerequisites
 
 This example uses WorkOS authentication. Make sure to:
 
@@ -36,7 +51,7 @@ For detailed setup instructions, refer to the [WorkOS documentation](https://wor
 
 :::
 
-## Installation
+### Installation
 
 Before you can use the `MastraAuthWorkos` class you have to install the `@mastra/auth-workos` package.
 
@@ -44,9 +59,9 @@ Before you can use the `MastraAuthWorkos` class you have to install the `@mastra
 npm install @mastra/auth-workos@latest
 ```
 
-## Usage examples
+### Usage examples
 
-### Basic usage with environment variables
+#### Basic usage with environment variables
 
 ```typescript {2,6} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -59,7 +74,7 @@ export const mastra = new Mastra({
 })
 ```
 
-### Custom configuration
+#### Custom configuration
 
 ```typescript {2,6-9} title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -75,13 +90,19 @@ export const mastra = new Mastra({
 })
 ```
 
-## Configuration
+### Configuration
 
-### Default authorization
+#### Default authorization
 
 By default, `MastraAuthWorkos` grants access to any authenticated WorkOS user. The authorization check succeeds when the resolved user object contains both a Mastra user ID and a WorkOS user ID.
 
-### FGA membership loading
+#### FGA membership loading
+
+:::note
+
+FGA requires a Mastra Enterprise Edition (EE) license in production. It works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license). [Contact sales](https://mastra.ai/contact) for more information.
+
+:::
 
 Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
 
@@ -102,7 +123,7 @@ const workosFga = new MastraFGAWorkos({
 
 When `fetchMemberships` is `false`, Mastra skips the extra WorkOS `listOrganizationMemberships()` call on each authenticated request.
 
-### Service tokens and custom JWT templates
+#### Service tokens and custom JWT templates
 
 For machine-to-machine or service-account access, you can configure `MastraAuthWorkos` to trust verified bearer-token claims from a WorkOS custom JWT template.
 
@@ -123,7 +144,7 @@ const workosAuth = new MastraAuthWorkos({
 
 This is useful when your JWT template already includes the exact FGA context Mastra needs, such as `organizationMembershipId`, tenant IDs, or service-principal identifiers. When `trustJwtClaims` is enabled, Mastra can fall back to those verified claims if a bearer token isn't meant to round-trip through `workos.userManagement.getUser()`.
 
-### Custom authorization
+#### Custom authorization
 
 If you need stricter authorization, subclass `MastraAuthWorkos` and override `authorizeUser()`:
 
@@ -145,11 +166,11 @@ const workosAuth = new AdminOnlyWorkosAuth({
 
 Visit [MastraAuthWorkos](/reference/auth/workos) for all available configuration options.
 
-## Client-side setup
+### Client-side setup
 
 When using WorkOS auth, you'll need to implement the WorkOS authentication flow to exchange an authorization code for an access token, then use that token with your Mastra requests.
 
-### Installing WorkOS SDK
+#### Installing WorkOS SDK
 
 First, install the WorkOS SDK in your application:
 
@@ -157,7 +178,7 @@ First, install the WorkOS SDK in your application:
 npm install @workos-inc/node
 ```
 
-### Exchanging code for access token
+#### Exchanging code for access token
 
 After users complete the WorkOS authentication flow and return with an authorization code, exchange it for an access token:
 
@@ -182,7 +203,7 @@ Refer to the [WorkOS User Management documentation](https://workos.com/docs/auth
 
 :::
 
-## Configuring `MastraClient`
+### Configuring `MastraClient`
 
 When `auth` is enabled, all requests made with `MastraClient` must include a valid WorkOS access token in the `Authorization` header:
 
@@ -207,7 +228,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 
 :::
 
-### Making authenticated requests
+#### Making authenticated requests
 
 Once `MastraClient` is configured with the WorkOS access token, you can send authenticated requests:
 

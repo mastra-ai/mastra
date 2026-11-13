@@ -1,11 +1,14 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraScorer } from '../../evals/base';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
+import { stopDurableExecutionParticipants } from './evented-execution';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -236,15 +239,33 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
 }
 
 /**
+ * Whether shutdown only detaches `mastra` from this durable-agent execution rather than abandoning it: an evented
+ * execution behind a broker, which another process may be executing.
+ */
+function detachesOnShutdown(mastra: Mastra, entry: RunRegistryEntry): boolean {
+  return !!entry.eventedExecution && !(mastra.pubsub.__rawBus() instanceof EventEmitterPubSub);
+}
+
+export function isDurableAgentExecutionDetached(mastra: Mastra, runId: string): boolean {
+  const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
+  return !!entry && entry.mastra === mastra && detachesOnShutdown(mastra, entry);
+}
+
+/**
  * Abandon the durable-agent executions `mastra` is still running: each stops
  * without writing and releases its run, so recovery can take it right away.
  * Executions that already settled are left alone.
  */
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
-  const fences = registryEntries().flatMap(entry =>
-    entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
+  await stopDurableExecutionParticipants(mastra);
+  await Promise.allSettled(
+    registryEntries().map(async entry => {
+      if (entry.mastra !== mastra || !entry.executionFence) return;
+      // A broker does not prove that this is the only executing process.
+      if (detachesOnShutdown(mastra, entry)) entry.executionFence.detach();
+      else await entry.executionFence.abandon();
+    }),
   );
-  await Promise.allSettled(fences.map(fence => fence.abandon()));
 }
 
 /**
@@ -253,11 +274,19 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
  * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
  * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
  */
-export function endRunSpansWithError(runId: string, error: Error): void {
+export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
-    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
+    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: options.endSpan ?? true,
+    });
+    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: options.endSpan ?? true,
+    });
   } catch {
     // Span bookkeeping must never break error reporting.
   }

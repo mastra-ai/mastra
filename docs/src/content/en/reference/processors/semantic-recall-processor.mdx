@@ -8,7 +8,7 @@ packages:
 
 # SemanticRecall
 
-The `SemanticRecall` is a **hybrid processor** that enables semantic search over conversation history using vector embeddings. On input, it performs semantic search to find relevant historical messages. On output, it creates embeddings for new messages to enable future semantic retrieval.
+The `SemanticRecall` is a **hybrid processor** that enables semantic search over conversation history using vector embeddings. On input, it performs semantic search to find relevant historical messages. On output, it creates embeddings for new messages to enable future semantic retrieval. With a self-embedding vector store and no `embedder`, it sends the message text to the store, which creates the embeddings.
 
 ## Usage example
 
@@ -54,8 +54,9 @@ const processor = new SemanticRecall({
           {
             name: 'embedder',
             type: 'MastraEmbeddingModel<string>',
-            description: 'Embedder for generating query embeddings',
-            isOptional: false,
+            description:
+              'Embedder for generating query embeddings. Required unless the vector store embeds text itself (self-embedding)',
+            isOptional: true,
           },
           {
             name: 'topK',
@@ -87,6 +88,13 @@ const processor = new SemanticRecall({
             isOptional: true,
           },
           {
+            name: 'filter',
+            type: 'VectorFilter',
+            description:
+              "Metadata filter for the vector query, combined with the scope filter using `$and`. Messages are stored with their thread's metadata, so the filter can match thread metadata. For example, `{ projectId: { $eq: 'project-a' } }`",
+            isOptional: true,
+          },
+          {
             name: 'indexName',
             type: 'string',
             description: 'Index name for the vector store. If not provided, auto-generated based on embedder model',
@@ -97,6 +105,14 @@ const processor = new SemanticRecall({
             type: 'IMastraLogger',
             description: 'Optional logger instance for structured logging',
             isOptional: true,
+          },
+          {
+            name: 'maxChunkChars',
+            type: 'number',
+            description:
+              "Largest number of characters of message text sent to the embedder in one input. Longer messages are split into chunks, each stored as its own vector row. When unset, the limit comes from the embedder's `maxInputTokens` if it declares one (FastEmbed models do), otherwise 16,384 characters (about 4,096 English tokens).",
+            isOptional: true,
+            default: '16384',
           },
         ],
       },
@@ -187,9 +203,9 @@ export const agent = new Agent({
 
 ### Output processing
 
-1. Extracts text content from new user and assistant messages
-1. Generates embeddings for each message
-1. Stores embeddings in the vector store with metadata (message ID, thread ID, resource ID, role, content, timestamp)
+1. Extracts text content from new user and assistant messages, skipping messages already embedded earlier in the same run
+1. Splits long messages into chunks of at most `maxChunkChars` characters and generates an embedding for each chunk
+1. Stores one vector row per chunk with metadata (thread metadata, message ID, thread ID, resource ID, role, content, timestamp). Row IDs are derived from the message ID (the first chunk uses a UUID message ID as is), so saving the same message again replaces its rows instead of adding new ones
 1. Uses LRU caching for embeddings to avoid redundant API calls
 
 ### Cross-thread recall

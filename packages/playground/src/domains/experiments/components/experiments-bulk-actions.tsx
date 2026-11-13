@@ -1,22 +1,24 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { GitCompare, X } from 'lucide-react';
+import { DeleteExperimentsButton } from './delete-experiments-button';
 
 export interface ExperimentsBulkActionsProps {
-  selectedCount: number;
+  selectedIds: string[];
   onClearSelection: () => void;
   onCompare: () => void;
   /** When set, Compare is disabled and this reason is shown in its tooltip. */
   compareDisabledReason?: string;
 }
 
-/** Selection count (a button clearing the selection once non-empty), plus Compare — always shown, explained when disabled. */
+/** Selection count (a button clearing the selection once non-empty), plus Delete and Compare — always shown, Compare explained when disabled. */
 export function ExperimentsBulkActions({
-  selectedCount,
+  selectedIds,
   onClearSelection,
   onCompare,
   compareDisabledReason,
 }: ExperimentsBulkActionsProps) {
+  const selectedCount = selectedIds.length;
   const isEmpty = selectedCount === 0;
 
   return (
@@ -32,6 +34,7 @@ export function ExperimentsBulkActions({
       >
         {selectedCount} selected
       </Button>
+      <DeleteExperimentsButton experimentIds={selectedIds} onDeleted={onClearSelection} />
       {compareDisabledReason ? (
         // A disabled button swallows pointer and focus events, so the wrapper owns the tooltip.
         <Tooltip>

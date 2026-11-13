@@ -1,4 +1,4 @@
-import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -71,7 +71,7 @@ export function ComparisonTracePanel({ traceId, onClose, withQueryTrace, withFee
       scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
       scoresTabSlot={({ traceId: id, rootSpanId }) =>
         rootSpanId ? (
-          <TraceScoresTab
+          <TraceScoresList
             traceId={id}
             spanId={rootSpanId}
             onScoreSelect={scoreId => navigate(traceScoreLink(id, scoreId))}

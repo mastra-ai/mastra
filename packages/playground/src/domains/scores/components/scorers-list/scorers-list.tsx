@@ -113,13 +113,13 @@ export function ScorersList({
             <DataList.TopCellSmart
               long="Agents"
               short={<AgentIcon />}
-              tooltip="Number of attached Agents"
+              tooltip="Number of attached agents"
               className="text-center"
             />
             <DataList.TopCellSmart
               long="Workflows"
               short={<WorkflowIcon />}
-              tooltip="Number of attached Workflows"
+              tooltip="Number of attached workflows"
               className="text-center"
             />
           </>

@@ -1,3 +1,4 @@
+import { Tabs } from '@base-ui/react/tabs';
 import type { ComponentPropsWithoutRef } from 'react';
 import { useSidebar } from '../root/sidebar-context';
 import { useSidebarNavStack } from './sidebar-nav-stack-context';
@@ -11,14 +12,16 @@ export function SidebarNavStackRootView({ children, className, ...props }: Sideb
   const active = state === 'collapsed' || activeValue === rootValue;
 
   return (
-    <div
+    <Tabs.Panel
       {...props}
+      value={rootValue}
+      role={undefined}
+      tabIndex={undefined}
       data-slot="sidebar-nav-stack-root"
       aria-hidden={!active}
-      inert={!active}
-      className={sidebarNavStackPageClasses(active, 'root', className)}
+      className={sidebarNavStackPageClasses('root', className)}
     >
       {children}
-    </div>
+    </Tabs.Panel>
   );
 }

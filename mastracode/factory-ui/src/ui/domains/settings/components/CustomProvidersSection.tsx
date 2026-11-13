@@ -1,202 +1,134 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Plus } from 'lucide-react';
+import {
+  SettingsEmptyRow,
+  SettingsItem,
+  SettingsItemIcon,
+  SettingsListHeader,
+  SettingsNoticeRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
+import { Plus, Server } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import type { CustomProviderInfo } from '../../../../api/types';
-import {
-  useCustomProvidersQuery,
-  useRemoveCustomProvider,
-  useSaveCustomProvider,
-} from '../../../../hooks/use-custom-providers';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
-
-interface DraftState {
-  /** id of the provider being edited, or '' for a brand-new one. */
-  editingId: string;
-  name: string;
-  url: string;
-  apiKey: string;
-  models: string;
-}
-
-const EMPTY_DRAFT: DraftState = { editingId: '', name: '', url: '', apiKey: '', models: '' };
+import { useCustomProvidersQuery, useRemoveCustomProvider } from '../../../../hooks/use-custom-providers';
+import { CustomProviderForm } from './CustomProviderForm';
 
 /**
- * Custom OpenAI-compatible providers. Mirrors the TUI's `/custom-providers`
- * command. Backed by global settings (settings.json) on the server, not session
- * state — these are user-global endpoint definitions (name + base URL + optional
- * key + model list). Keys are write-only; the server reports only their presence.
+ * Organization-scoped OpenAI-compatible endpoint definitions. Keys are
+ * write-only; the server reports only their presence. Renders the rows of
+ * its section's `SettingsContainer`.
  */
 export function CustomProvidersSection() {
   const providersQuery = useCustomProvidersQuery();
-  const saveMutation = useSaveCustomProvider();
   const removeMutation = useRemoveCustomProvider();
-
-  const [draftError, setDraftError] = useState<string | null>(null);
-  const [draft, setDraft] = useState<DraftState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [draft, setDraft] = useState<CustomProviderInfo | 'new' | null>(null);
 
   const providers = providersQuery.data ?? [];
   const loading = providersQuery.isPending;
-  const busy = saveMutation.isPending || removeMutation.isPending;
+  const busy = removeMutation.isPending;
   const queryError = providersQuery.error instanceof Error ? providersQuery.error.message : null;
-  const error = draftError ?? queryError;
-
-  const startAdd = () => {
-    setDraftError(null);
-    setDraft({ ...EMPTY_DRAFT });
-  };
-  const startEdit = (p: CustomProviderInfo) =>
-    setDraft({ editingId: p.id, name: p.name, url: p.url, apiKey: '', models: p.models.join(', ') });
-
-  const save = async () => {
-    if (!draft) return;
-    const name = draft.name.trim();
-    const url = draft.url.trim();
-    if (!name || !url) {
-      setDraftError('Name and URL are required.');
-      return;
-    }
-    const models = draft.models
-      .split(',')
-      .map(m => m.trim())
-      .filter(Boolean);
-    const apiKey = draft.apiKey.trim();
-    setDraftError(null);
-    try {
-      await saveMutation.mutateAsync({
-        name,
-        url,
-        models,
-        ...(apiKey ? { apiKey } : {}),
-        ...(draft.editingId ? { previousId: draft.editingId } : {}),
-      });
-      setDraft(null);
-    } catch (e) {
-      setDraftError(e instanceof Error ? e.message : String(e));
-    }
-  };
 
   const remove = async (id: string) => {
-    setDraftError(null);
+    setError(null);
     try {
       await removeMutation.mutateAsync({ id });
-    } catch (e) {
-      setDraftError(e instanceof Error ? e.message : String(e));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
     }
   };
 
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-3">
-        <Txt tone="muted" as="p" variant="caption">
-          OpenAI-compatible endpoints.
-        </Txt>
-        {!draft && (
-          <Button size="sm" onClick={startAdd} disabled={busy}>
-            <Plus size={13} /> Add provider
-          </Button>
-        )}
-      </div>
+  const addProvider = draft ? undefined : (
+    <Button size="sm" icon={<Plus />} onClick={() => setDraft('new')} disabled={busy}>
+      Add provider
+    </Button>
+  );
 
-      {error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {error}
-        </Txt>
+  return (
+    <>
+      <CustomProvidersListTop
+        loading={loading}
+        failed={queryError !== null}
+        count={providers.length}
+        addProvider={addProvider}
+      />
+
+      {(error ?? queryError) && (
+        <SettingsNoticeRow>
+          <Txt as="p" variant="caption" className="text-destructive-foreground">
+            {error ?? queryError}
+          </Txt>
+        </SettingsNoticeRow>
       )}
 
       {draft && (
-        <div className="border-border flex flex-col gap-3 rounded-lg border p-3">
-          <Field className="gap-1">
-            <FieldLabel>Name</FieldLabel>
-            <Input
-              size="sm"
-              placeholder="e.g. my-llm"
-              value={draft.name}
-              onChange={e => setDraft({ ...draft, name: e.target.value })}
-              autoFocus
-            />
-          </Field>
-          <Field className="gap-1">
-            <FieldLabel>Base URL</FieldLabel>
-            <Input
-              size="sm"
-              placeholder="https://api.example.com/v1"
-              value={draft.url}
-              onChange={e => setDraft({ ...draft, url: e.target.value })}
-            />
-          </Field>
-          <Field className="gap-1">
-            <FieldLabel>API key {draft.editingId ? '(leave blank to keep)' : '(optional)'}</FieldLabel>
-            <Input
-              type="password"
-              size="sm"
-              placeholder="Paste API key"
-              value={draft.apiKey}
-              onChange={e => setDraft({ ...draft, apiKey: e.target.value })}
-            />
-          </Field>
-          <Field className="gap-1">
-            <FieldLabel>Models (comma-separated)</FieldLabel>
-            <Input
-              size="sm"
-              placeholder="model-a, model-b"
-              value={draft.models}
-              onChange={e => setDraft({ ...draft, models: e.target.value })}
-            />
-          </Field>
-          <div className="flex items-center gap-2">
-            <Button variant="primary" size="sm" disabled={busy} onClick={() => void save()}>
-              {draft.editingId ? 'Save' : 'Add'}
-            </Button>
-            <Button size="sm" disabled={busy} onClick={() => setDraft(null)}>
-              Cancel
-            </Button>
-          </div>
-        </div>
+        <CustomProviderForm
+          key={draft === 'new' ? 'new' : draft.id}
+          provider={draft === 'new' ? undefined : draft}
+          onCancel={() => setDraft(null)}
+          onSaved={() => setDraft(null)}
+        />
       )}
 
-      {loading ? (
-        <SkeletonRows label="Loading custom providers" rows={3} rowClassName="h-9 w-full" />
-      ) : providers.length === 0 ? null : (
-        <ul role="list" className="divide-border flex flex-col divide-y">
-          {providers.map(p => (
-            <li key={p.id} role="listitem" className="flex items-center justify-between gap-3 py-2">
-              <div className="flex min-w-0 flex-col gap-0.5">
-                <div className="flex items-center gap-2">
-                  <Txt tone="ink" as="span" variant="body" className="truncate">
-                    {p.name}
-                  </Txt>
-                  {p.hasApiKey && (
-                    <Badge size="sm" variant="success">
-                      Key saved
-                    </Badge>
-                  )}
-                </div>
-                <Txt tone="muted" as="span" variant="meta" className="truncate">
-                  {p.url}
-                </Txt>
-                {p.models.length > 0 && (
-                  <Txt tone="muted" as="span" variant="meta">
-                    {p.models.length} model{p.models.length === 1 ? '' : 's'}
-                  </Txt>
+      {!loading &&
+        providers.map(provider => (
+          <SettingsItem
+            key={provider.id}
+            media={
+              <SettingsItemIcon>
+                <Server />
+              </SettingsItemIcon>
+            }
+            title={provider.name}
+            description={
+              <Metadata singleLine>
+                <Metadata.Item>{provider.url}</Metadata.Item>
+                {provider.models.length > 0 && (
+                  <Metadata.Item className="shrink-0">
+                    {provider.models.length} model{provider.models.length === 1 ? '' : 's'}
+                  </Metadata.Item>
                 )}
-              </div>
-              <div className="flex items-center gap-2">
-                <Button size="sm" disabled={busy} onClick={() => startEdit(p)}>
-                  Edit
-                </Button>
-                <Button size="sm" disabled={busy} onClick={() => void remove(p.id)}>
-                  Remove
-                </Button>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+              </Metadata>
+            }
+          >
+            {provider.hasApiKey && (
+              <Badge size="sm" variant="success">
+                Key saved
+              </Badge>
+            )}
+            <Button size="sm" disabled={busy} onClick={() => setDraft(provider)}>
+              Edit
+            </Button>
+            <Button size="sm" disabled={busy} onClick={() => void remove(provider.id)}>
+              Remove
+            </Button>
+          </SettingsItem>
+        ))}
+    </>
+  );
+}
+
+/** The list's first row: a skeleton while loading, nothing if it failed, else the count or the empty row. */
+function CustomProvidersListTop({
+  loading,
+  failed,
+  count,
+  addProvider,
+}: {
+  loading: boolean;
+  failed: boolean;
+  count: number;
+  addProvider: ReactNode;
+}) {
+  if (loading) return <SettingsSkeleton label="Loading custom providers" variant="item" rows={2} />;
+  if (failed) return null;
+  if (count === 0) return <SettingsEmptyRow action={addProvider}>No custom providers</SettingsEmptyRow>;
+  return (
+    <SettingsListHeader action={addProvider}>{count === 1 ? '1 provider' : `${count} providers`}</SettingsListHeader>
   );
 }

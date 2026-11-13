@@ -16,7 +16,6 @@ import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
 import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
-import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 import { cn } from '@/lib/utils';
@@ -51,8 +50,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
   scrollable?: boolean;
   /**
-   * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
-   * by default so it does not fade the sticky top header.
+   * Edge fades where content is scrolled out of view, 1.25rem deep by default. The sticky
+   * header never fades: the top edge fades the rows just below it instead.
    */
   mask?: ScrollAreaMask;
   /**
@@ -80,13 +79,38 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
 
 type DataListRootStyle = CSSProperties & {
   '--data-list-background'?: string;
+  '--data-list-fade-top'?: string;
 };
 
-function getDataListMask(mask: ScrollAreaMask | undefined): ScrollAreaMask {
-  if (mask === undefined) return { top: false };
-  if (mask === true || mask === false) return mask;
+type MaskSide = NonNullable<Exclude<ScrollAreaMask, boolean>['top']>;
 
-  return { top: false, ...mask };
+const DATA_LIST_FADE_DEPTH = '1.25rem';
+
+const fadeSide = (side: MaskSide | undefined): MaskSide | undefined => (side === true ? DATA_LIST_FADE_DEPTH : side);
+
+/** The top fade's depth, or `false` for none. Omitted means on, at the default depth. */
+const topFadeDepth = (side: MaskSide = true): Exclude<MaskSide, true> => (side === true ? DATA_LIST_FADE_DEPTH : side);
+
+/**
+ * Splits the caller's `mask` into the ScrollArea's fades (bottom, left, right) and the top fade.
+ * The ScrollArea's own top fade stays off, since it would fade the sticky header with the rows;
+ * the top edge is a gradient under the header instead (see `dataListTopFadeStyles`).
+ */
+function resolveDataListMask(mask: ScrollAreaMask | undefined): {
+  area: ScrollAreaMask;
+  top: Exclude<MaskSide, true>;
+} {
+  if (mask === false) return { area: false, top: false };
+  const sides = mask === true || mask === undefined ? {} : mask;
+  return {
+    area: {
+      x: DATA_LIST_FADE_DEPTH,
+      y: DATA_LIST_FADE_DEPTH,
+      ...Object.fromEntries(Object.entries(sides).map(([key, side]) => [key, fadeSide(side)])),
+      top: false,
+    },
+    top: topFadeDepth(sides.top ?? sides.y),
+  };
 }
 
 /**
@@ -109,14 +133,46 @@ const dataListGridStyles = [
   '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg',
   '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-lg',
   '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-lg',
+  // The grid paints the root's colour so the 1px gaps between rows read as separators, also over the
+  // well (below) that the fades reveal.
+  'bg-(--data-list-background)',
   '[&_.data-list-top]:bg-(--data-list-background)',
+  // Sticky cells stay opaque over horizontally scrolled cells, the header's included.
+  '[&_.data-list-top>.data-list-sticky-start]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
-  // A sticky cell must stay opaque over horizontally scrolled cells, so it
-  // cannot show the fluid highlight through; it takes the opaque twin of a fill
-  // rung over the row well instead, the same level a selected row rests on.
-  '[&_.data-list-row[data-fluid-hover-active]>.data-list-sticky-start]:bg-surface-panel',
-  '[&_.data-list-row>.data-list-sticky-start]:after:right-0',
-  '[&_.data-list-top>.data-list-sticky-start]:after:right-0',
+  // A sticky cell cannot show the hover layer through; it takes the opaque twin
+  // of a fill rung over the row well instead, the same level a selected row rests on.
+  '[&_.data-list-row-interactive:not(:disabled):hover>.data-list-sticky-start]:bg-surface-panel',
+  // The pinned column's edge: one 1px divider, drawn per cell (bridging the 1px row gaps), shown once
+  // cells are scrolled under it.
+  "[&_.data-list-sticky-start]:after:pointer-events-none [&_.data-list-sticky-start]:after:absolute [&_.data-list-sticky-start]:after:-top-px [&_.data-list-sticky-start]:after:right-0 [&_.data-list-sticky-start]:after:bottom-0 [&_.data-list-sticky-start]:after:w-px [&_.data-list-sticky-start]:after:bg-border [&_.data-list-sticky-start]:after:opacity-0 [&_.data-list-sticky-start]:after:transition-opacity [&_.data-list-sticky-start]:after:duration-fast [&_.data-list-sticky-start]:after:content-['']",
+  'group-data-overflow-x-start/scroll-area:[&_.data-list-sticky-start]:after:opacity-100',
+] as const;
+
+/**
+ * The top fade: a gradient hanging under the sticky header, into the row well, so rows fade as they
+ * pass under the header while the header itself stays solid. Shown once rows are scrolled under it.
+ */
+const dataListTopFadeStyles = [
+  "[&_.data-list-top]:after:pointer-events-none [&_.data-list-top]:after:absolute [&_.data-list-top]:after:inset-x-0 [&_.data-list-top]:after:top-full [&_.data-list-top]:after:h-(--data-list-fade-top) [&_.data-list-top]:after:bg-linear-to-b [&_.data-list-top]:after:from-background [&_.data-list-top]:after:to-transparent [&_.data-list-top]:after:opacity-0 [&_.data-list-top]:after:transition-opacity [&_.data-list-top]:after:duration-fast [&_.data-list-top]:after:content-['']",
+  'group-data-overflow-y-start/scroll-area:[&_.data-list-top]:after:opacity-100',
+] as const;
+
+/**
+ * The row well: the dark surface behind the rows, below the header. Rows cover it; the edge fades
+ * reveal it, so rows fade into the well rather than into the lighter panel. Painted on the root, so
+ * it never scrolls. `top-11` clears the root's inset plus the `h-10` header.
+ */
+const dataListWellStyles =
+  "before:pointer-events-none before:absolute before:inset-1 before:rounded-lg before:bg-background before:content-[''] has-[.data-list-top]:before:top-11";
+
+/**
+ * Scrollbars sit beside the rows: below the header and clear of the rounded corners, instead of
+ * along the panel's edge. Base UI positions them inline, hence `!`.
+ */
+const dataListScrollbarStyles = [
+  '[&>[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:top-2! has-[.data-list-top]:[&>[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:top-12! [&>[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:right-1.5! [&>[data-slot=scroll-area-scrollbar][data-orientation=vertical]]:bottom-2!',
+  '[&>[data-slot=scroll-area-scrollbar][data-orientation=horizontal]]:right-2! [&>[data-slot=scroll-area-scrollbar][data-orientation=horizontal]]:bottom-1.5! [&>[data-slot=scroll-area-scrollbar][data-orientation=horizontal]]:left-2!',
 ] as const;
 
 const dataListVariantClasses: Record<DataListVariant, string> = {
@@ -234,8 +290,10 @@ function DataListBase({
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
+  const fades = resolveDataListMask(mask);
   const gridStyle: DataListRootStyle = {
     '--data-list-background': dataListVariantBackground[variant],
+    ...(fades.top && { '--data-list-fade-top': fades.top }),
     gridTemplateColumns: columns,
   };
   // Cells keep their DOM order; CSS `order` places each one in its moved track.
@@ -248,24 +306,21 @@ function DataListBase({
         .join('\n')
     : null;
 
-  // One hover surface travels between rows (same primitive as menus/selects).
-  // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
-      // It is also the offsetParent rows are measured against and the highlight is positioned in.
-      className={cn('grid content-start', ...dataListGridStyles, dataListFitClasses[fit], menu.containerClassName)}
+      // `isolate` keeps each row's negative-z surface and hover layers above the list's own background.
+      className={cn(
+        'relative isolate grid content-start',
+        ...dataListGridStyles,
+        scrollable && fades.top && dataListTopFadeStyles,
+        dataListFitClasses[fit],
+      )}
       style={gridStyle}
       data-data-list={reorder.reorderable ? scopeId : undefined}
-      {...menu.getContainerProps({})}
     >
       {orderRules && <style>{orderRules}</style>}
-      {/* The highlight is the old row hover color. It sits between each row's
-          `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="rounded-(--fluid-hover-item-radius) bg-fill-subtle">
-        {children}
-      </FluidMenuItems>
+      {children}
     </div>
   );
 
@@ -282,8 +337,9 @@ function DataListBase({
   }
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
-  // spans the full width. Masks default to every overflowing edge except the
-  // top — a top fade would fade the opaque sticky header.
+  // spans the full width, and the header scrolls sideways with the rows for free.
+  // Overscroll is off: a bounce would drag the sticky header along and expose the
+  // panel behind the content.
   return (
     <ScrollArea
       {...props}
@@ -292,7 +348,7 @@ function DataListBase({
       scrollButtons={scrollButtons}
       revealScrollbarOnHover={revealScrollbarOnHover}
       orientation="both"
-      mask={getDataListMask(mask)}
+      mask={fades.area}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
       // Size to content but never exceed the parent. Flex (unlike grid `1fr`) lays
       // items out against the max-height-clamped container, so short lists stay
@@ -301,10 +357,21 @@ function DataListBase({
       className={cn(
         'flex max-h-full w-full flex-col self-start rounded-xl p-1',
         dataListVariantClasses[variant],
+        variant === 'default' && dataListWellStyles,
+        dataListScrollbarStyles,
         className,
       )}
     >
-      <ScrollAreaViewport ref={scrollRef} className="min-h-0 flex-1 basis-auto">
+      <ScrollAreaViewport
+        ref={scrollRef}
+        className={cn(
+          // `relative` lifts the content above the well. `rounded-lg` (the root's 12px less its 4px
+          // inset) clips the square header corners that otherwise cut into the panel's rim.
+          'relative min-h-0 flex-1 basis-auto overscroll-none rounded-lg',
+          // A pinned column draws its own edge (the divider), so nothing fades on the left.
+          'has-[.data-list-sticky-start]:[--scroll-area-fade-left:0px]!',
+        )}
+      >
         <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
       </ScrollAreaViewport>
     </ScrollArea>

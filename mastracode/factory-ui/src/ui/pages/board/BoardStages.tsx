@@ -4,18 +4,22 @@ import type { ReactNode } from 'react';
 import { useRef } from 'react';
 import type { DragPayload } from '../../domains/factory/boardDrag';
 import type { BoardLayout } from '../../domains/factory/boardLayout';
+import { BOARD_SCROLL_SURFACE_CLASS } from '../../domains/factory/boardLayout';
 import { BoardTooltipDelay } from '../../domains/factory/components/BoardCardParts';
 import { BoardColumn, BoardColumnHeader } from '../../domains/factory/components/BoardColumn';
 import { BoardDetailsDock } from '../../domains/factory/components/BoardDetailsDock';
 import { BoardList, BoardListGroup } from '../../domains/factory/components/BoardList';
+import { PhaseExitTool } from '../../domains/factory/components/PhaseExitTool';
+import type { PhaseExitToolInfo } from '../../domains/factory/components/PhaseExitTool';
 import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCardContext';
+import type { BoardOpenCard } from '../../domains/factory/context/BoardOpenCardContext';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
-import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
-import type { LinkedComment } from '../../domains/factory/hooks/useOpenCardState';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
   phaseKind?: BoardPhaseKind;
+  /** The tool whose success ends this working phase. */
+  exitTool?: PhaseExitToolInfo;
   taskCount: number;
   loading: boolean;
   collapsed: boolean;
@@ -29,28 +33,23 @@ export function BoardStages({
   layout,
   stages: stageViews,
   totalTaskCount,
-  linkedComment,
+  openCard,
   onDrop,
   toolbar,
 }: {
   layout: BoardLayout;
   stages: BoardStageView[];
   totalTaskCount: number;
-  /** A `?item&comment` link, which opens its card. */
-  linkedComment: LinkedComment | undefined;
+  openCard: BoardOpenCard;
   onDrop: (payload: DragPayload, stage: string) => void;
   toolbar: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const openCard = useOpenCardState(linkedComment);
   return (
     <BoardScrollContext value={scrollRef}>
       <BoardOpenCardContext value={openCard}>
         <BoardDetailsDock enabled={layout === 'list'}>
-          <div
-            ref={scrollRef}
-            className="[container-type:inline-size] m-px min-h-0 min-w-0 flex-1 [scrollbar-gutter:stable] overflow-auto overscroll-x-contain rounded-[calc(var(--studio-frame-radius,1.5rem)-1px)] lg:overscroll-x-auto"
-          >
+          <div ref={scrollRef} className={BOARD_SCROLL_SURFACE_CLASS}>
             <div className={cn('flex min-h-full min-w-full flex-col gap-3', layout === 'board' ? 'w-max' : 'w-full')}>
               <div className="from-background via-background z-20 flex flex-col gap-3 bg-linear-to-b via-[calc(100%-1rem)] to-transparent pb-4 max-lg:contents lg:sticky lg:top-0">
                 <div className="sticky left-0 flex w-[100cqw] px-4 pt-4">{toolbar}</div>
@@ -67,6 +66,11 @@ export function BoardStages({
                         loading={stageView.loading}
                         collapsed={stageView.collapsed}
                         headerAction={stageView.createButton}
+                        headerExtras={
+                          stageView.exitTool && (
+                            <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                          )
+                        }
                       />
                     ))}
                   </div>
@@ -105,6 +109,11 @@ export function BoardStages({
                           open={stageView.groupOpen}
                           onOpenChange={stageView.onGroupOpenChange}
                           action={stageView.createButton}
+                          extras={
+                            stageView.exitTool && (
+                              <PhaseExitTool phaseLabel={stageView.stage.label} exitTool={stageView.exitTool} />
+                            )
+                          }
                           onDrop={onDrop}
                         >
                           {stageView.cards}

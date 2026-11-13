@@ -1,4 +1,5 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
@@ -47,7 +48,8 @@ export function attachIncidentioIssueReconciler(
     intake: incidentio.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
-    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
+    ...(context.runtime.keptCards ? { cards: context.runtime.keptCards } : {}),
+    isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => item.externalSource?.externalId,
     metadata: (item, issue) => ({
       identifier: issue.identifier,

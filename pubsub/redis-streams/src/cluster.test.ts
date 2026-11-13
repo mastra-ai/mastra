@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Event, EventCallback } from '@mastra/core/events';
-import { createCluster } from 'redis';
+import { createClient, createCluster } from 'redis';
 import { afterEach, describe, expect, it } from 'vitest';
+import { makeStallingProxy } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 // Single-node cluster from docker-compose.yaml (cluster-mode enabled, all
@@ -89,5 +90,224 @@ describe('RedisStreamsPubSub against Redis Cluster', () => {
     await ps.publish(topic, makeEvent());
     await waitFor(() => attempts.length === 3);
     expect(attempts).toEqual([1, 2, 3]);
+  });
+
+  describe('connect timeout', () => {
+    const CONNECT_TIMEOUT_MS = 500;
+    let proxies: ReturnType<typeof makeStallingProxy>[] = [];
+
+    afterEach(async () => {
+      for (const p of proxies) p.resume();
+      await Promise.all(pubsubs.map(p => p.close().catch(() => {})));
+      pubsubs = [];
+      await Promise.all(proxies.map(p => p.close()));
+      proxies = [];
+    });
+
+    /**
+     * Put a stalling proxy in front of every cluster node and route slot
+     * discovery through them with nodeAddressMap, so a test can freeze new
+     * connections to the whole cluster without touching the shared server.
+     */
+    async function createProxiedPubSub(name?: string) {
+      const probe = createClient({ url: CLUSTER_URL });
+      await probe.connect();
+      const slots = (await probe.sendCommand(['CLUSTER', 'SLOTS'])) as Array<Array<unknown>>;
+      await probe.close();
+      const routes = new Map<string, { host: string; port: number }>();
+      for (const slot of slots) {
+        const [host, port] = slot[2] as [string, number];
+        const address = `${host}:${port}`;
+        if (routes.has(address)) continue;
+        const proxy = makeStallingProxy({ host, port: Number(port) });
+        proxies.push(proxy);
+        routes.set(address, { host: '127.0.0.1', port: await proxy.listening });
+      }
+      const root = [...routes.values()][0]!;
+      const ps = new RedisStreamsPubSub({
+        cluster: {
+          rootNodes: [{ url: `redis://${root.host}:${root.port}` }],
+          nodeAddressMap: (address: string) => routes.get(address)!,
+          defaults: { name, socket: { connectTimeout: CONNECT_TIMEOUT_MS } },
+        },
+        keyPrefix: `cluster-connect-timeout-${randomUUID()}`,
+        blockMs: 200,
+      });
+      pubsubs.push(ps);
+      return { ps, nodes: [...routes.keys()] };
+    }
+
+    function settle(promise: Promise<unknown>, ms = 5_000) {
+      return Promise.race([
+        promise.then(
+          () => ({ status: 'resolved' as const }),
+          (err: Error) => ({ status: 'rejected' as const, message: err.message }),
+        ),
+        new Promise<{ status: 'hung' }>(r => setTimeout(() => r({ status: 'hung' }), ms)),
+      ]);
+    }
+
+    it('rejects subscribe() when the cluster freezes before the first connect, then recovers', async () => {
+      const { ps } = await createProxiedPubSub();
+      for (const p of proxies) p.stall();
+
+      const started = Date.now();
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}))).toEqual({
+        status: 'rejected',
+        message: expect.stringContaining(`write client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
+      });
+      expect(Date.now() - started).toBeLessThan(CONNECT_TIMEOUT_MS + 1_000);
+
+      // The timed-out cluster client was destroyed, not wedged: it connects once the nodes answer.
+      for (const p of proxies) p.resume();
+      const topic = `t-${randomUUID()}`;
+      let received = 0;
+      await ps.subscribe(topic, (_e, ack) => {
+        received += 1;
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent());
+      await waitFor(() => received === 1);
+    }, 15_000);
+
+    it("rejects subscribe() when the cluster freezes before the subscription's reader connects", async () => {
+      const { ps } = await createProxiedPubSub();
+      // Connect the writer first, so only the reader's connection is stalled.
+      await ps.publish(`warmup-${randomUUID()}`, makeEvent());
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}, { group: 'workers' }))).toEqual({
+        status: 'rejected',
+        message: expect.stringContaining(`read client did not connect to Redis within ${CONNECT_TIMEOUT_MS}ms`),
+      });
+    }, 15_000);
+
+    it("leaves no node connections behind when a timed-out connect's nodes answer after close()", async () => {
+      const name = `connect-timeout-leak-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.subscribe(`t-${randomUUID()}`, () => {}))).toMatchObject({ status: 'rejected' });
+      await ps.close();
+      // The cluster answers late, as after SIGCONT: the abandoned connect's
+      // held sockets now complete their handshake.
+      for (const p of proxies) p.resume();
+      await new Promise(r => setTimeout(r, 1_000));
+
+      const leftover: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        leftover.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      expect(leftover).toEqual(nodes.map(() => 0));
+    }, 15_000);
+
+    async function clientsNamed(nodes: string[], name: string) {
+      const counts: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        counts.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      return counts;
+    }
+
+    it('leaves no node connections behind when a retry times out while the original connect is still pending', async () => {
+      // A retry that starts its own slot discovery reuses the original's node
+      // entries, so it settles as soon as its slot reply lands. If that is
+      // within the moment the original's node clients are opening their TCP
+      // sockets, destroy() cannot reach them and they connect anyway. Both slot
+      // replies land together only some of the time, so repeat the scenario.
+      const leftover: number[][] = [];
+      for (let round = 0; round < 5; round++) {
+        const name = `connect-timeout-retry-leak-${randomUUID()}`;
+        const { ps, nodes } = await createProxiedPubSub(name);
+        const mine = proxies.slice(-nodes.length);
+        for (const p of mine) p.stall();
+
+        // The first connect times out, then a retry while still frozen times out too.
+        expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+        expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+        await ps.close();
+
+        // The cluster answers late, as after SIGCONT.
+        for (const p of mine) p.resume();
+        await new Promise(r => setTimeout(r, 1_000));
+        leftover.push(await clientsNamed(nodes, name));
+      }
+      expect(leftover).toEqual(leftover.map(counts => counts.map(() => 0)));
+    }, 60_000);
+
+    it('connects a retry made while the timed-out connect is pending, once the cluster answers', async () => {
+      const name = `connect-timeout-retry-live-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+
+      // Retry while frozen, then let the cluster answer within its budget.
+      const retry = settle(ps.publish(`t-${randomUUID()}`, makeEvent()));
+      await new Promise(r => setTimeout(r, 100));
+      for (const p of proxies) p.resume();
+      expect(await retry).toEqual({ status: 'resolved' });
+      await new Promise(r => setTimeout(r, 1_000));
+
+      // Cleaning up the abandoned connect must not have destroyed the live
+      // client: its node connections are still there before anything reconnects.
+      expect((await clientsNamed(nodes, name)).every(n => n > 0)).toBe(true);
+      const topic = `t-${randomUUID()}`;
+      let received = 0;
+      await ps.subscribe(topic, (_e, ack) => {
+        received += 1;
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent());
+      await waitFor(() => received === 1);
+    }, 15_000);
+
+    it('leaves no node connections behind when a retried connect also times out and the first answers last', async () => {
+      const name = `connect-timeout-retry-leak-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      // Both abandoned connects are held at the root node. Answer the retry
+      // first, so the original connect is the last to open node clients.
+      const [root, ...rest] = proxies;
+      for (const p of rest) void p.resume();
+      await root!.resume({ newestFirst: true, gapMs: 300 });
+      await new Promise(r => setTimeout(r, 1_000));
+      await ps.close();
+
+      expect(await clientsNamed(nodes, name)).toEqual(nodes.map(() => 0));
+    }, 15_000);
+
+    it('does not connect after close() when a retry was waiting on the timed-out connect', async () => {
+      const name = `connect-timeout-close-retry-${randomUUID()}`;
+      const { ps, nodes } = await createProxiedPubSub(name);
+      for (const p of proxies) p.stall();
+
+      expect(await settle(ps.publish(`t-${randomUUID()}`, makeEvent()))).toMatchObject({ status: 'rejected' });
+      // The retry waits for the abandoned discovery, which waits on the frozen nodes.
+      // close() does not wait for a lease call, unlike a pending publish.
+      const retry = settle(ps.acquireLease(`lease-${randomUUID()}`, 'owner', 5_000));
+      await ps.close();
+      for (const p of proxies) void p.resume();
+      await retry;
+      await new Promise(r => setTimeout(r, 1_000));
+
+      const leftover: number[] = [];
+      for (const address of nodes) {
+        const node = createClient({ url: `redis://${address}` });
+        await node.connect();
+        leftover.push((await node.clientList()).filter(c => c.name === name).length);
+        await node.close();
+      }
+      expect(leftover).toEqual(nodes.map(() => 0));
+    }, 15_000);
   });
 });

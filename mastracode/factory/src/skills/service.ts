@@ -68,7 +68,7 @@ export function formatSkillMessage(name: string, contents: string): string {
 export async function resolvePromptInvocation(
   controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: { sessionId: string; prompt: string },
-): Promise<{ session: SkillSession; contents: string }> {
+): Promise<{ session: SkillSession; skillName?: undefined; contents: string }> {
   const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
   return { session, contents: input.prompt };

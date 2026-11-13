@@ -1,32 +1,56 @@
 import type { EntityType } from '@mastra/core/observability';
-import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
+import type { TraceQueryArgs, TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { createContext, useContext } from 'react';
 import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
 import type { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-columns';
 import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { SpanTab, TraceDatePreset } from '../../types';
+import type { FeedbackOptions } from '../feedback-options';
 import type { TraceSpanView } from '../trace-data-panel-view';
-import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
-import type { DataListSort } from '@/ds/components/DataList';
+import type { TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 
 export type TracesMetricsSupport = { supported: boolean; isLoading: boolean };
 
 /**
- * Host switches (e.g. feature flags). Each one can only turn a feature off:
- * it is combined with what the server supports, and defaults to on.
+ * Host switches (e.g. feature flags), combined with what the server supports.
+ * `traceQuery` and `feedback` default to on and can only turn their feature off.
+ * `spanQuery` and `threadQuery` default to off: each view is offered only when its flag is `true`
+ * and the server supports it.
  */
-export type TracesExplorerFeatures = { traceQuery?: boolean; feedback?: boolean };
+export type TracesExplorerFeatures = {
+  traceQuery?: boolean;
+  feedback?: boolean;
+  spanQuery?: boolean;
+  threadQuery?: boolean;
+};
 
 export type TracesConfigContextValue = {
   listId: string;
+  rootSource?: TraceQueryArgs['rootSource'];
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
+  withTextSearch: boolean;
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
+  /** The span query API is on, so the host can offer a spans view next to the traces list. */
+  withSpanQuery: boolean;
+  /** The thread rows API is on, so the host can offer a threads view next to the traces list. */
+  withThreadQuery: boolean;
   withRootDuration: boolean;
+  /** The server filters trace queries on the root span's `outcome` and `stopReason`. */
+  withOutcomeFields: boolean;
+  /** Trace rows carry the root span's time to first chunk, so the TTFC column can be shown. */
+  withTimeToFirstChunk: boolean;
+  /** Trace queries can be ordered by the root span's time to first chunk. */
+  withTimeToFirstChunkSort: boolean;
+  /** Trace rows carry the root span's time to first token, so the TTFT column can be shown. */
+  withTimeToFirstToken: boolean;
+  /** Trace queries can be ordered by the root span's time to first token. */
+  withTimeToFirstTokenSort: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
@@ -40,18 +64,27 @@ export type TracesConfigContextValue = {
 export type TracesFiltersActions = {
   /** Replaces the filter tokens and groups. The scope tokens are always kept. */
   setFilterTokens: (tokens: TracesFilters['tokens'], groups: TracesFilters['groups']) => void;
+  setTextSearch: (value: string | undefined) => void;
   setDatePreset: (preset: TraceDatePreset) => void;
   setDate: (value: Date | undefined, end: 'from' | 'to') => void;
   setDateRange: (from: Date | undefined, to: Date | undefined) => void;
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  zoomDateRange: (from: Date, to: Date) => void;
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  resetDateRange: (defaultPreset: TraceDatePreset) => void;
 };
 
 export type TracesFiltersContextValue = TracesFiltersActions & {
   /** The host's filters with the entries this server can't query dropped. */
   filters: TracesFilters;
+  /** Normalized search accepted by the query API; raw text stays in filters. */
+  textSearch?: string;
   dateFrom?: Date;
   dateTo?: Date;
   filtersApplied: boolean;
   contentFiltersApplied: boolean;
+  /** The host's filters ask for `running` traces, which `filters` (and so the query) can't express. */
+  runningSelected: boolean;
 };
 
 export type TracesSelectionActions = {
@@ -81,10 +114,9 @@ export type TracesListContextValue = Pick<
   | 'error'
   | 'refetch'
   | 'autoRefetch'
-  | 'setAutoRefetch'
 > & {
-  sortDirection: TracesSortDirection;
-  onSortChange: (direction: DataListSort) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
 };
 
 export type TracesColumnsContextValue = ReturnType<typeof useTraceColumnPreferences>;
@@ -115,11 +147,11 @@ export const useTracesListFetching = () => {
 };
 export const useTracesColumns = () => useRequired(TracesColumnsContext, 'useTracesColumns');
 
-const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
-const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
+export const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
+export const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
 
 export type TraceUsageColumns = {
-  /** Column preferences with the usage columns removed when the store can't serve them. */
+  /** Column preferences without the columns the store can't serve (usage, time to first chunk/token). */
   displayedPreferences: TraceColumnPreferences;
   /** Whether usage should be fetched: metrics are supported and a usage column is visible. */
   usageEnabled: boolean;
@@ -128,11 +160,22 @@ export type TraceUsageColumns = {
 
 export const useTraceUsageColumns = (): TraceUsageColumns => {
   const { preferences } = useTracesColumns();
-  const { metricsSupport } = useTracesConfig();
+  const { metricsSupport, withTimeToFirstChunk, withTimeToFirstToken, isCapabilitiesLoading } = useTracesConfig();
   const unavailable = !metricsSupport.isLoading && !metricsSupport.supported;
-  const displayedPreferences = unavailable
-    ? { ...preferences, visibleColumns: preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)) }
-    : preferences;
+  const timeToFirstChunkUnavailable = !isCapabilitiesLoading && !withTimeToFirstChunk;
+  const timeToFirstTokenUnavailable = !isCapabilitiesLoading && !withTimeToFirstToken;
+  const displayedPreferences =
+    unavailable || timeToFirstChunkUnavailable || timeToFirstTokenUnavailable
+      ? {
+          ...preferences,
+          visibleColumns: preferences.visibleColumns.filter(
+            column =>
+              !(unavailable && isTraceUsageColumn(column)) &&
+              !(timeToFirstChunkUnavailable && column === 'timeToFirstChunk') &&
+              !(timeToFirstTokenUnavailable && column === 'timeToFirstToken'),
+          ),
+        }
+      : preferences;
   return {
     displayedPreferences,
     usageEnabled: !unavailable && !metricsSupport.isLoading && hasTraceUsageColumn(displayedPreferences),

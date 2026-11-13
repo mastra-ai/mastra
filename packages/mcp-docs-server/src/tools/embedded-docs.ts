@@ -149,8 +149,11 @@ async function readSourceMap(packageName: string, projectPath: string): Promise<
       return null;
     }
 
-    const sourceMapPath = path.join(packageInfo.rootPath, 'dist', 'docs', 'SOURCE_MAP.json');
-    const content = await fs.readFile(sourceMapPath, 'utf-8');
+    const docsDir = path.join(packageInfo.rootPath, 'dist', 'docs');
+    // Packages write the map to dist/docs/assets; older releases wrote it to dist/docs.
+    const content = await fs
+      .readFile(path.join(docsDir, 'assets', 'SOURCE_MAP.json'), 'utf-8')
+      .catch(() => fs.readFile(path.join(docsDir, 'SOURCE_MAP.json'), 'utf-8'));
     const sourceMap = JSON.parse(content) as SourceMap;
     sourceMapCache.set(cacheKey, sourceMap);
     return sourceMap;

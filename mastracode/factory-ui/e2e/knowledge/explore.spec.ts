@@ -13,7 +13,7 @@ const graph = {
       name: 'Payments Service',
       kind: 'service',
       description: 'Handles charging flows through [[Deploy Runbook]].',
-      scope: ['org:proof', `resource:${projectId}`],
+      scope: ['org:proof', `project:${projectId}`],
       rung: 'resource',
       pinned: true,
       recordCount: 1,
@@ -24,7 +24,7 @@ const graph = {
       id: 'runbook',
       name: 'Deploy Runbook',
       kind: 'doc',
-      scope: ['org:proof', `resource:${projectId}`],
+      scope: ['org:proof', `project:${projectId}`],
       rung: 'resource',
       pinned: false,
       recordCount: 1,
@@ -46,7 +46,7 @@ const graph = {
     {
       id: 'observational-memory',
       name: 'Observational memory',
-      scope: ['org:proof', `resource:${projectId}`],
+      scope: ['org:proof', `project:${projectId}`],
       rung: 'resource',
     },
   ],
@@ -63,12 +63,11 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
     }
     if (url.pathname.endsWith('/web/config/features')) return route.fulfill({ json: { knowledge: true } });
     if (url.pathname.endsWith('/web/factory/projects')) {
-      return route.fulfill({ json: { projects: [{ id: projectId, name: 'Proof Factory' }] } });
+      return route.fulfill({ json: { projects: [{ id: projectId, name: 'Proof Factory', repositories: [] }] } });
     }
     if (url.pathname.endsWith(`/web/factory/projects/${projectId}`)) {
       return route.fulfill({ json: { project: { id: projectId, name: 'Proof Factory' } } });
     }
-    if (url.pathname.endsWith('/source-control-connections')) return route.fulfill({ json: { connections: [] } });
     if (url.pathname.includes('/permissions')) return route.fulfill({ json: {} });
     if (url.pathname.endsWith('/work-items')) return route.fulfill({ json: { workItems: [] } });
     if (url.pathname.endsWith('/attention')) {
@@ -87,7 +86,6 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
         },
       });
     }
-    if (url.pathname.endsWith('/feed-events')) return route.fulfill({ body: '', contentType: 'text/event-stream' });
     if (url.pathname.endsWith('/active-runs')) return route.fulfill({ json: { runs: [] } });
     if (url.pathname.endsWith('/decisions')) return route.fulfill({ json: { decisions: [] } });
     if (url.pathname.endsWith('/work-records')) return route.fulfill({ json: { workRecords: [] } });
@@ -148,7 +146,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
             },
             {
               id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              address: `resource:${projectId}`,
+              address: `project:${projectId}`,
               name: projectId,
               parentIds: ['11111111-1111-4111-8111-111111111111'],
               memberCount: 2,
@@ -217,8 +215,8 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 updatedAt: '2026-08-28T10:00:00.000Z',
               },
               {
-                id: 'subconscious-scope',
-                name: 'subconscious',
+                id: 'curation-scope',
+                name: 'curation',
                 kind: 'feature',
                 scope: null,
                 rung: null,
@@ -244,9 +242,9 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
                 type: 'contains',
               },
               {
-                id: 'contains:features:subconscious',
+                id: 'contains:features:curation',
                 source: '22222222-2222-4222-8222-222222222222',
-                target: 'subconscious-scope',
+                target: 'curation-scope',
                 type: 'contains',
               },
               {
@@ -271,7 +269,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               action: 'record-created',
               recordType: 'record',
               recordId: 'rec-1',
-              scope: ['org:proof', `resource:${projectId}`],
+              scope: ['org:proof', `project:${projectId}`],
               node: { id: 'payments', name: 'Payments Service', rung: 'resource' },
               createdAt: '2026-08-28T10:00:00.000Z',
             },
@@ -289,7 +287,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
               node: 'payments',
               relation: 'owned',
               text: 'Payments uses [[Deploy Runbook]].',
-              scope: ['org:proof', `resource:${projectId}`],
+              scope: ['org:proof', `project:${projectId}`],
               rung: 'resource',
               capturedAt: '2026-08-28T10:00:00.000Z',
               pinned: true,
@@ -308,7 +306,6 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await page.getByRole('button', { name: new RegExp(`${projectId} project`) }).click();
   await expect(page.getByText('Payments Service')).toBeVisible();
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText(`project:${projectId}`);
-  await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText(`resource:${projectId}`);
 
   // Search results remain above the open details flyout after returning search
   // to the page header.
@@ -371,7 +368,7 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('features');
   await expect(page.getByTestId('knowledge-scope-flyout')).toContainText('scope');
   await expect(page.getByTestId('knowledge-scope-flyout')).not.toContainText('Structural scope');
-  await expect(page.getByText('subconscious')).toBeVisible();
+  await expect(page.getByText('curation')).toBeVisible();
   const featureScopeNode = page.locator(
     '[data-testid="knowledge-node"][data-node-id="22222222-2222-4222-8222-222222222222"]',
   );

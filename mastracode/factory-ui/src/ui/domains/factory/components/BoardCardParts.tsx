@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -6,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
+import { Hand, Maximize2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -15,10 +16,12 @@ import {
   HIDDEN_CARD_LABELS,
   SOURCE_LABELS,
   metadataLabelColors,
-  metadataLabels,
   pullRequestStatusForItem,
+  pullRequestStatusForSource,
+  workItemKey,
 } from '../boardItems';
 import type { CardAction } from '../cardPrimaryAction';
+import { attachedPullRequestSource } from '../services/workItems';
 import type { WorkItem, WorkItemSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
@@ -32,9 +35,21 @@ export function SourceTitle({ source, title, id }: { source: WorkItemSource; tit
   );
 }
 
+export function CardKey({ item }: { item: Pick<WorkItem, 'source' | 'metadata'> }) {
+  // SourceTitle's sr-only prefix already announces the source.
+  return workItemKey(item) ?? <span aria-hidden>{SOURCE_LABELS[item.source]}</span>;
+}
+
 export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
   if (item.source === 'github-pr') return <PullRequestStatusIcon status={pullRequestStatusForItem(item)} />;
-  return <SourceIcon source={item.source} />;
+  const attached = attachedPullRequestSource(item);
+  if (!attached) return <SourceIcon source={item.source} />;
+  return (
+    <>
+      <SourceIcon source={item.source} />
+      <PullRequestStatusIcon status={pullRequestStatusForSource(attached)} />
+    </>
+  );
 }
 
 // The app-wide provider fires at 0ms, which makes card-sized targets open as the pointer merely crosses them.
@@ -63,22 +78,6 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
     >
       <Maximize2 size={13} aria-hidden />
     </button>
-  );
-}
-
-export function CommentCount({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <Txt
-      as="span"
-      variant="meta"
-      tone="faint"
-      className="flex shrink-0 items-center gap-1"
-      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
-    >
-      <MessageSquare size={11} aria-hidden />
-      {count}
-    </Txt>
   );
 }
 

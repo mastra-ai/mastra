@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { PubSub } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
 import type { EventCallback } from '../../events/types';
+import type { MastraModelOutput } from '../../stream/base/output';
 import type { Agent } from '../agent';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 
@@ -36,6 +37,7 @@ class AckTrackingPubSub extends PubSub implements LeaseProvider {
   #subscribers = new Map<string, Set<EventCallback>>();
   #index = 0;
   #deliveryIndex = 0;
+  #redeliveries = new Map<string, () => Promise<void>>();
 
   async publish(topic: string, event: any): Promise<void> {
     const id = `event-${this.#index++}`;
@@ -43,22 +45,33 @@ class AckTrackingPubSub extends PubSub implements LeaseProvider {
     for (const subscriber of [...(this.#subscribers.get(topic) ?? [])]) {
       const deliveryId = `${id}:${this.#deliveryIndex++}`;
       this.pending.add(deliveryId);
-      const ack = async () => {
-        this.pending.delete(deliveryId);
-        this.acked.push(id);
-        this.#order++;
+      const deliver = async () => {
+        const ack = async () => {
+          this.pending.delete(deliveryId);
+          this.#redeliveries.delete(deliveryId);
+          this.acked.push(id);
+          this.#order++;
+        };
+        const nack = async () => {
+          this.nacked.push(id);
+          this.#redeliveries.set(deliveryId, deliver);
+        };
+        try {
+          await subscriber(envelope, ack, nack);
+        } catch {
+          // A rejected callback is the negative acknowledgement signal; a real
+          // backend nacks on it rather than dropping the entry.
+          await nack();
+        }
       };
-      const nack = async () => {
-        this.nacked.push(id);
-      };
-      try {
-        await subscriber(envelope, ack, nack);
-      } catch {
-        // A rejected callback is the negative acknowledgement signal; a real
-        // backend nacks on it rather than dropping the entry.
-        await nack();
-      }
+      await deliver();
     }
+  }
+
+  async redeliverNacked(): Promise<void> {
+    const deliveries = [...this.#redeliveries.values()];
+    this.#redeliveries.clear();
+    for (const deliver of deliveries) await deliver();
   }
 
   async flush(): Promise<void> {}
@@ -173,7 +186,9 @@ describe('thread stream subscriber acknowledgements', () => {
       expect(observerNotifications).toBe(0);
       expect(pubsub.pending.size).toBe(0);
       expect(pubsub.nacked).toEqual([]);
-      expect(pubsub.acked).toHaveLength(18); // Owner control, observer control and observer fan-out.
+      // Six published signal events plus the owner's pending-message presentation for the two
+      // admitted signals, each acked by owner control, observer control and observer fan-out.
+      expect(pubsub.acked).toHaveLength(24);
       unsubscribe();
       await publishSignal('unsubscribed');
       expect(notifications).toBe(2);
@@ -264,6 +279,77 @@ describe('thread stream subscriber acknowledgements', () => {
 
     runtime.releaseThreadRunReservation('remote-run', pubsub);
     subscription.unsubscribe();
+  });
+
+  it('leaves a failed remote abort unacknowledged so a retry can stop the run', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new AckTrackingPubSub();
+    let attempts = 0;
+    let stopped = false;
+    const registeredAgent = {
+      id: 'abort-retry-agent',
+      abortRunStream: () => {
+        if (++attempts === 1) throw new Error('temporary abort failure');
+        stopped = true;
+        return true;
+      },
+    } as unknown as Agent<any, any, any, any>;
+    const finished = Promise.withResolvers<void>();
+    let controller!: ReadableStreamDefaultController;
+    let status = 'running';
+    const output = {
+      runId: 'abort-retry-run',
+      get status() {
+        return status;
+      },
+      fullStream: new ReadableStream({ start: streamController => (controller = streamController) }),
+      _waitUntilFinished: () => finished.promise,
+    } as unknown as MastraModelOutput<unknown>;
+    let streamId = '';
+    const capture: EventCallback = (event, ack) => {
+      if (event.data?.type === 'run-registered') streamId = event.data.streamId;
+      return ack?.();
+    };
+    await pubsub.subscribe(topic, capture);
+    await runtime.registerRun(registeredAgent, output, { memory: { thread: threadId, resource: resourceId } }, pubsub);
+    await nextTick();
+    await pubsub.unsubscribe(topic, capture);
+    const ackedBefore = pubsub.acked.length;
+    const abort = (targetRunId = output.runId, targetStreamId = streamId) =>
+      pubsub.publish(topic, {
+        type: 'run-abort-requested',
+        runId: targetRunId,
+        data: { type: 'run-abort-requested', runId: targetRunId, streamId: targetStreamId },
+      });
+    try {
+      expect(streamId).not.toBe('');
+      await abort();
+      expect(stopped).toBe(false);
+      expect(pubsub.nacked).toHaveLength(1);
+      expect(pubsub.acked).toHaveLength(ackedBefore);
+      expect(pubsub.pending.size).toBe(1);
+      const failedEventId = pubsub.nacked[0];
+
+      // Retry the same delivery, not a newly published abort request.
+      await pubsub.redeliverNacked();
+      expect(stopped).toBe(true);
+      expect(attempts).toBe(2);
+      expect(pubsub.acked).toHaveLength(ackedBefore + 1);
+      expect(pubsub.acked.at(-1)).toBe(failedEventId);
+      expect(pubsub.pending.size).toBe(0);
+
+      // Stale streams and unknown runs remain acknowledged no-ops, not abort fallbacks.
+      await abort(output.runId, 'old-stream');
+      await abort('unknown-run');
+      expect(attempts).toBe(2);
+      expect(pubsub.acked).toHaveLength(ackedBefore + 3);
+      expect(pubsub.nacked).toHaveLength(1);
+    } finally {
+      status = 'success';
+      controller.close();
+      finished.resolve();
+      await nextTick();
+    }
   });
 
   it('acknowledges cancellation before releasing an observer-free listener holding only pending work', async () => {

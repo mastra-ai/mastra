@@ -39,7 +39,8 @@ import type { OutputWriter } from '../workflows';
 import { assertThreadOwnedByResource } from './memory-thread-ownership';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
-import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
+import { modelSpanAttributes } from './model-span-attributes';
+import { deriveAgentRunRequestContext, incomingAgentScopes, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
   AgentGenerateOptions,
@@ -88,7 +89,7 @@ export interface AgentLegacyCapabilities {
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
   /** Get the agent's configured scopes */
-  getScopes(options: { requestContext: RequestContext }): Promise<string[] | undefined>;
+  getScopes(options: { requestContext: RequestContext; scopes?: string[] }): Promise<string[]>;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get the agent's LLM instance, optionally using a request-scoped model override */
@@ -245,6 +246,7 @@ export class AgentLegacyHandler {
   private __primitive({
     instructions,
     messages,
+    model,
     context,
     thread,
     memoryConfig,
@@ -263,6 +265,8 @@ export class AgentLegacyHandler {
     ...rest
   }: {
     instructions: AgentInstructions;
+    /** The resolved model this run was prepared with, named on the AGENT_RUN span */
+    model?: { modelId?: unknown; provider?: unknown };
     toolsets?: ToolsetsInput;
     clientTools?: ToolsInput;
     resourceId?: string;
@@ -294,6 +298,7 @@ export class AgentLegacyHandler {
           },
           attributes: {
             instructions: this.capabilities.convertInstructionsToString(instructions),
+            ...modelSpanAttributes(model),
             availableTools: [
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
@@ -830,9 +835,14 @@ export class AgentLegacyHandler {
     // `resource:`/`thread:` and throw on conflict (see resolveAgentScopes).
     const resourceIdFromContext = callerRequestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = callerRequestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const incomingScopes = incomingAgentScopes({
+      requestContext: callerRequestContext,
+      mastra: this.capabilities.mastra,
+    });
     const resolvedScopes = resolveAgentScopes({
       requestContext: callerRequestContext,
-      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext }),
+      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext, scopes: incomingScopes }),
+      incomingScopes,
       memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
       resourceId: resourceIdFromArgs,
       threadId: args.threadId,
@@ -879,6 +889,7 @@ export class AgentLegacyHandler {
     const { before, after } = this.__primitive({
       messages,
       instructions,
+      model: llm.getModel(),
       context,
       thread: threadFromArgs,
       memoryConfig,

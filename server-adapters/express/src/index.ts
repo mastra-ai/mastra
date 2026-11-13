@@ -3,39 +3,33 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  applyMcpRequestAuth,
+  cancelReaderOnResponseClose,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
   serializeStreamChunk,
+  writeWithBackpressure,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
 export { createAuthMiddleware } from './auth-middleware';
 export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
+class BodyLimitExceededError extends Error {
+  constructor(limit: number) {
+    super(`Request body size limit exceeded (max: ${limit} bytes)`);
   }
-  return _hasPermissionPromise;
 }
+
+type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
 
 /**
  * Convert Express request to Web API Request for cookie-based auth providers.
@@ -141,6 +135,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           controller.abort();
         }
       });
+      // A client that dropped while earlier middleware ran (async auth, body parsing) fired 'close' before this
+      // listener existed.
+      if (res.destroyed) {
+        controller.abort();
+      }
+
       res.locals.abortSignal = controller.signal;
       next();
     };
@@ -165,6 +165,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
+    const readerCancel = cancelReaderOnResponseClose(reader, res);
 
     try {
       while (true) {
@@ -173,7 +174,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         if (value) {
           if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
-            res.write(value);
+            await writeWithBackpressure(res, value);
             continue;
           }
 
@@ -191,9 +192,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             continue;
           }
           if (streamFormat === 'sse') {
-            res.write(`data: ${serialized.json}\n\n`);
+            await writeWithBackpressure(res, `data: ${serialized.json}\n\n`);
           } else {
-            res.write(serialized.json + '\x1E');
+            await writeWithBackpressure(res, serialized.json + '\x1E');
           }
         }
       }
@@ -202,6 +203,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
       });
     } finally {
+      readerCancel.dispose();
       res.end();
     }
   }
@@ -221,13 +223,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           const maxFileSize = route.maxBodySize ?? this.bodyLimitOptions?.maxSize;
           body = await this.parseMultipartFormData(request, maxFileSize);
         } catch (error) {
+          if (error instanceof BodyLimitExceededError) {
+            throw error;
+          }
           this.mastra.getLogger()?.error('Failed to parse multipart form data', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
-          // Re-throw size limit errors, let others fall through to validation
-          if (error instanceof Error && error.message.toLowerCase().includes('size')) {
-            throw error;
-          }
           bodyParseError = {
             message: error instanceof Error ? error.message : 'Failed to parse multipart form data',
           };
@@ -255,8 +256,24 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         headers: {
           'content-type': request.headers['content-type'] as string,
         },
-        limits: maxFileSize ? { fileSize: maxFileSize } : undefined,
+        limits: maxFileSize ? { fileSize: maxFileSize, fieldSize: maxFileSize } : undefined,
       });
+
+      // Content-Length is checked up front, but chunked bodies have none, so cap
+      // the total bytes pulled from the request while streaming into busboy.
+      if (maxFileSize !== undefined) {
+        let received = 0;
+        const onData = (chunk: Buffer) => {
+          received += chunk.length;
+          if (received > maxFileSize) {
+            request.off('data', onData);
+            request.unpipe(busboy);
+            request.pause();
+            reject(new BodyLimitExceededError(maxFileSize));
+          }
+        };
+        request.on('data', onData);
+      }
 
       busboy.on('file', (fieldname: string, file: NodeJS.ReadableStream) => {
         const chunks: Buffer[] = [];
@@ -268,7 +285,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
         file.on('limit', () => {
           limitExceeded = true;
-          reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
+          reject(new BodyLimitExceededError(maxFileSize!));
         });
 
         file.on('end', () => {
@@ -302,6 +319,11 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     });
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(
     route: ServerRoute,
     response: Response,
@@ -331,12 +353,13 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+        const readerCancel = cancelReaderOnResponseClose(reader, response);
 
         const onResError = (err: unknown) => {
           this.mastra.getLogger()?.error('Error writing datastream response', {
             error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
           });
-          void reader.cancel('response write error').catch(() => {});
+          readerCancel.cancel('response write error');
         };
         response.once('error', onResError);
 
@@ -344,7 +367,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
-            response.write(value);
+            await writeWithBackpressure(response, value);
           }
         } catch (error) {
           this.mastra.getLogger()?.error('Error in datastream processing', {
@@ -352,6 +375,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           });
         } finally {
           response.off('error', onResError);
+          readerCancel.dispose();
           response.end();
         }
       } else {
@@ -368,7 +392,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
 
       try {
         // Merge class-level mcpOptions with route-specific options (route takes precedence)
-        const options = { ...this.mcpOptions, ...routeMcpOptions };
+        const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
+
+        await applyMcpRequestAuth({ req: request, requestContext: response.locals.requestContext, setRequestAuth });
 
         await server.startHTTP({
           url: new URL(request.url, `http://${request.headers.host}`),
@@ -397,6 +423,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       const { server, ssePath, messagePath } = result as MCPSseTransportResult;
 
       try {
+        await applyMcpRequestAuth({
+          req: request,
+          requestContext: response.locals.requestContext,
+          setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
+        });
+
         await server.startSSE({
           url: new URL(request.url, `http://${request.headers.host}`),
           ssePath: `${resolvedPrefix}${ssePath}`,
@@ -429,6 +461,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     // Create middleware array
     const middlewares: Array<(req: Request, res: Response, next: NextFunction) => void> = [];
 
+    const sendBodyTooLarge = (res: Response) => {
+      let errorResponse: unknown = { error: 'Request body too large' };
+      if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+        try {
+          errorResponse = this.bodyLimitOptions.onError(errorResponse);
+        } catch {
+          // Fall back to the default response.
+        }
+      }
+      // Close the connection instead of draining the rest of the oversized body.
+      res.setHeader('Connection', 'close');
+      return res.status(413).json(errorResponse);
+    };
+
     // Add body limit middleware if needed
     if (isBodyMethod && maxSize !== undefined) {
       const bodyLimitMiddleware = (req: Request, res: Response, next: NextFunction) => {
@@ -440,15 +486,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             ? Buffer.byteLength(JSON.stringify(req.body), 'utf8')
             : 0;
         if ((contentLength && parseInt(contentLength, 10) > maxSize) || parsedLength > maxSize) {
-          let errorResponse: unknown = { error: 'Request body too large' };
-          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
-            try {
-              errorResponse = this.bodyLimitOptions.onError(errorResponse);
-            } catch {
-              // Fall back to the default response.
-            }
-          }
-          return res.status(413).json(errorResponse);
+          return sendBodyTooLarge(res);
         }
         next();
       };
@@ -485,7 +523,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
-        const params = await this.getParams(route, req);
+        let params: ParsedRequestParams;
+        try {
+          params = await this.getParams(route, req);
+        } catch (error) {
+          if (error instanceof BodyLimitExceededError) {
+            return sendBodyTooLarge(res);
+          }
+          throw error;
+        }
 
         // Return 400 Bad Request if body parsing failed (e.g., malformed multipart data)
         if (params.bodyParseError) {
@@ -563,33 +609,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           request: toWebRequest(req),
         };
 
-        // Check route permission requirement (EE feature)
-        // Uses convention-based permission derivation: permissions are auto-derived
-        // from route path/method unless explicitly set or route is public
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
-
-            if (permissionError) {
-              return res.status(permissionError.status).json({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
-          }
-        }
-
-        // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, route, res.locals.requestContext, {
-          ...params.urlParams,
-          ...params.queryParams,
-          ...(typeof params.body === 'object' ? params.body : {}),
-        });
-        if (fgaError) {
-          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+        // Check route permission (RBAC) and FGA authorization (EE features)
+        const authzError = await this.authorizeRoute(
+          route,
+          {
+            ...params.urlParams,
+            ...params.queryParams,
+            ...(typeof params.body === 'object' ? params.body : {}),
+          },
+          res.locals.requestContext,
+        );
+        if (authzError) {
+          return res.status(authzError.status).json({ error: authzError.error, message: authzError.message });
         }
 
         try {
@@ -615,24 +646,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          let status = 500;
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              status = (error as any).status;
-            }
-            // Check for MastraError with status in details
-            else if (
-              'details' in error &&
-              error.details &&
-              typeof error.details === 'object' &&
-              'status' in error.details
-            ) {
-              status = (error.details as any).status;
-            }
-          }
-          res.status(status).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+          const { status, body } = getHTTPErrorResponse(error);
+          res.status(status).json(body);
         }
       },
     );
@@ -643,28 +658,20 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     if (!(await this.buildCustomRouteHandler(routes))) return;
 
     this.app.use(async (req: Request, res: Response, next: NextFunction) => {
-      // Check if this request matches a protected custom route and run auth
+      // Check auth against the custom route the custom-route app will actually run for
+      // the URL it's forwarded, which can differ from what Express matched.
       const path = String(req.path || '/');
       const method = String(req.method || 'GET');
-      const matchedRoute = findMatchingCustomRoute(
-        path,
-        method,
-        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
-      );
-      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const dispatchUrl = `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`;
+      const {
+        match: matchedRoute,
+        requiresAuth: shouldRunCustomRouteAuth,
+        serverRoute,
+        customRouteAuthConfig,
+      } = this.resolveCustomRouteAuth(dispatchUrl, method, path);
       const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
       if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
-        const serverRoute: ServerRoute = {
-          method: (matchedRoute?.route.method ?? method) as any,
-          path: matchedRoute?.route.path ?? path,
-          responseType: 'json',
-          handler: async () => {},
-          requiresAuth: matchedRoute?.route.requiresAuth,
-          requiresPermission: matchedRoute?.route.requiresPermission,
-          fga: matchedRoute?.route.fga,
-        };
-
         if (shouldRunCustomRouteAuth) {
           const authError = await this.checkRouteAuth(serverRoute, {
             path,
@@ -674,6 +681,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             requestContext: res.locals.requestContext,
             request: toWebRequest(req),
             buildAuthorizeContext: () => toWebRequest(req),
+            customRouteAuthConfig,
           });
 
           if (authError) {
@@ -688,27 +696,22 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             }
           }
 
-          const authConfig = this.mastra.getServer()?.auth;
-          if (authConfig) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-              if (permissionError) {
-                return res.status(permissionError.status).json({
-                  error: permissionError.error,
-                  message: permissionError.message,
-                });
-              }
-            }
+          const permissionError = this.checkRouteRBAC(serverRoute, res.locals.requestContext);
+          if (permissionError) {
+            return res.status(permissionError.status).json({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
           }
         }
 
         // Check FGA authorization (EE feature)
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, res.locals.requestContext, {
-          ...(matchedRoute?.params ?? {}),
           ...(req.query as Record<string, string>),
           ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+          ...(matchedRoute?.params ?? {}),
         });
         if (fgaError) {
           return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
@@ -716,7 +719,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
 
       const response = await this.handleCustomRouteRequest(
-        `${req.protocol}://${req.get('host') || 'localhost'}${req.originalUrl}`,
+        dispatchUrl,
         req.method,
         req.headers as Record<string, string | string[] | undefined>,
         req.body,

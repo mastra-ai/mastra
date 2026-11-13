@@ -12,14 +12,16 @@ import type {
   LLMRequestProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '../../../processors';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
+import { MASTRA_AUTH_TOKEN_KEY, RequestContext, withoutLiveRequestKeys } from '../../../request-context';
 import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
+import type { Agent } from '../../agent';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
+import { isDurableAgentLike } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
 import type {
@@ -115,24 +117,43 @@ export interface ResolveRuntimeOptions {
  */
 export function restoreRequestContext(entries?: Record<string, unknown>, runLevel?: RequestContext): RequestContext {
   if (entries) {
-    // Drop any persisted token from legacy snapshots written before the token
-    // was excluded from persistence — a stale bearer token must never be restored.
-    const restored: RequestContext = new RequestContext<unknown>(
-      Object.entries(entries).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
-    );
-    // The framework-managed bearer token is deliberately never persisted into
-    // `requestContextEntries` (see preparation.ts), so carry the *live* token
-    // over from the run-level context when one exists. Without this, tools
-    // that forward auth (e.g. same-auth MCP servers) would lose the token on
-    // any path where the snapshot takes precedence during an authenticated run.
-    const liveToken = runLevel?.getRaw?.(MASTRA_AUTH_TOKEN_KEY);
-    if (liveToken !== undefined) {
-      restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
-    }
+    // The persisted entries belong to whoever started the run. Their bearer token
+    // (legacy snapshots) and signed-in user are dropped, and the live ones are
+    // carried over from the run-level context, so a resumed run acts only as
+    // the resuming caller. Tools that forward auth (e.g. same-auth MCP servers)
+    // keep the live token on paths where the snapshot takes precedence.
+    const restored: RequestContext = new RequestContext<unknown>([
+      ...Object.entries(withoutLiveRequestKeys(entries)),
+      ...liveRequestEntries(runLevel),
+    ]);
     restoreRunAgentScopes(restored);
     return restored;
   }
   return runLevel ?? new RequestContext();
+}
+
+/**
+ * The run's `requestContextEntries` as handed to scorers (`customContext`), with
+ * the signed-in user taken from the live run-level context rather than the
+ * snapshot. The bearer token is never included.
+ */
+export function restoreCustomContext(
+  entries?: Record<string, unknown>,
+  runLevel?: RequestContext,
+): Record<string, unknown> | undefined {
+  if (!entries) return undefined;
+  return Object.fromEntries([
+    ...Object.entries(withoutLiveRequestKeys(entries)),
+    ...liveRequestEntries(runLevel).filter(([key]) => key !== MASTRA_AUTH_TOKEN_KEY),
+  ]);
+}
+
+/** The token and user entries that `withoutLiveRequestKeys` drops, read from the live context. */
+function liveRequestEntries(runLevel?: RequestContext): [string, unknown][] {
+  if (!runLevel) return [];
+  const live = Object.fromEntries(runLevel.entries());
+  const kept = withoutLiveRequestKeys(live);
+  return Object.entries(live).filter(([key]) => !(key in kept));
 }
 
 /**
@@ -278,6 +299,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
+  let rebuiltAgent: Agent<any, any, any, any> | undefined;
 
   // If the registry entry is a real (non-placeholder) in-process entry we
   // trust it wholesale (in-process / same-process resume). Otherwise fall
@@ -287,6 +309,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   } else if (mastra) {
     try {
       const agent = mastra.getAgentById(agentId);
+      rebuiltAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
 
       // Restore the caller's request context from the JSON-safe snapshot on
       // the workflow input (mirrors durable-agent.ts resume handling), so
@@ -383,6 +406,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
       outputProcessors,
       errorProcessors,
       processorStates,
+      agent: rebuiltAgent,
     };
     if (globalEntry) {
       Object.assign(globalEntry, rebuilt);
@@ -493,6 +517,7 @@ export async function rebuildRunToolsFromMastra(options: {
   try {
     const agent = mastra.getAgentById(agentId);
     agentResolved = true;
+    const processorAgent = isDurableAgentLike(agent) && agent.agent !== agent ? agent.agent : agent;
     // Restore the caller's request context so request-scoped tools, workspace
     // and memory resolve with the same configuration as the original call.
     const resolveRequestContext = restoreRequestContext(requestContextEntries, requestContext);
@@ -544,6 +569,7 @@ export async function rebuildRunToolsFromMastra(options: {
       workspace,
       memory,
       saveQueueManager,
+      agent: processorAgent,
       ...rebuiltProcessors,
       ...(options.rehydrateProcessors ? { requestContext: resolveRequestContext } : {}),
     };
@@ -572,6 +598,7 @@ export async function rebuildRunToolsFromMastra(options: {
       existing.outputProcessors ??= rebuiltProcessors.outputProcessors;
       existing.errorProcessors ??= rebuiltProcessors.errorProcessors;
       existing.processorStates ??= rebuiltProcessors.processorStates;
+      existing.agent ??= processorAgent;
     } else {
       existing = patch as RunRegistryEntry;
       setRunRegistryEntry(runId, existing, mastra as Mastra | undefined);

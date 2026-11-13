@@ -76,7 +76,9 @@ function renderRoute(initialThreadId: string) {
         },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5' })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null }),
+    ),
     // The server resolves the thread's owner and billing scope; a work-item thread is Factory-billed.
     http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
       const params = new URL(request.url).searchParams;
@@ -141,21 +143,19 @@ function renderRoute(initialThreadId: string) {
 
 async function expectWorkItemCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /gpt-5/ });
+  const option = await screen.findByRole('option', { name: /GPT-5/ });
   expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /claude-sonnet-4-6/ })).not.toBeInTheDocument();
-  expect(await screen.findByRole('note')).toHaveTextContent(
-    "Showing models this Factory's organization credentials can run.",
-  );
+  expect(screen.queryByRole('option', { name: /Claude Sonnet 4\.6/ })).not.toBeInTheDocument();
+  expect(await screen.findByRole('link', { name: 'Add an organization credential' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 
 async function expectInteractiveCatalog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: /^Session model/ }));
-  const option = await screen.findByRole('option', { name: /claude-sonnet-4-6/ });
+  const option = await screen.findByRole('option', { name: /Claude Sonnet 4\.6/ });
   expect(within(option).getByText('Default')).toBeVisible();
-  expect(screen.queryByRole('option', { name: /gpt-5/ })).not.toBeInTheDocument();
-  expect(screen.queryByText(/Showing models this Factory/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('option', { name: /GPT-5/ })).not.toBeInTheDocument();
+  expect(screen.getByRole('link', { name: 'Connect a provider' })).toBeInTheDocument();
   await user.keyboard('{Escape}');
 }
 

@@ -217,6 +217,62 @@ describeForAllEngines('AIMock loop scenario: supervisor delegation hooks', engin
     );
   });
 
+  it('lets a sub-agent finish after a render-only tool call (#26183)', async () => {
+    const mock = getMock();
+    let complete: DelegationCompleteContext | undefined;
+    const renderCard = createTool({
+      id: 'render-card',
+      description: 'Show a card in the browser',
+      inputSchema: z.object({ productId: z.string() }),
+      renderOnly: true,
+    });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: mock,
+      prompt: 'Show sku-1 and describe it.',
+      agents: { worker: makeWorker(mock, { 'render-card': renderCard }) },
+      collectChunks: true,
+      stopWhen: stepCountIs(5),
+      errorProcessors: [],
+      delegation: {
+        onDelegationComplete: (ctx: DelegationCompleteContext) => {
+          complete = ctx;
+        },
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', predicate: req => isSupervisor(req) && !lastIsToolResult(req) }, DELEGATE);
+        llm.on(
+          { endpoint: 'chat', predicate: req => isWorker(req) && !lastIsToolResult(req) },
+          { toolCalls: [{ id: 'sub-card', name: 'render-card', arguments: { productId: 'sku-1' } }] },
+        );
+        llm.on(
+          { endpoint: 'chat', predicate: req => isWorker(req) && lastIsToolResult(req) },
+          { content: 'I displayed sku-1. It is a nice product.' },
+        );
+        llm.on(
+          { endpoint: 'chat', predicate: req => isSupervisor(req) && lastIsToolResult(req) },
+          { content: 'Here is sku-1.' },
+        );
+      },
+    });
+
+    expect(workerRequests(mock)).toHaveLength(2);
+    expect(
+      chunks?.some(
+        chunk =>
+          chunk.type === 'tool-output' &&
+          chunk.payload?.output?.type === 'tool-call' &&
+          chunk.payload.output.payload?.toolCallId === 'sub-card',
+      ),
+    ).toBe(true);
+    expect(complete!.result.subAgentPendingToolCalls).toBeUndefined();
+    expect(complete!.result.subAgentToolResults).toEqual([
+      expect.objectContaining({ toolName: 'render-card', toolCallId: 'sub-card', result: { acknowledged: true } }),
+    ]);
+    expect(delegationResultSeenBySupervisor(mock)).toContain('I displayed sku-1');
+  });
+
   it('does not report a sub-agent tool that threw as pending', async () => {
     const mock = getMock();
     let complete: DelegationCompleteContext | undefined;

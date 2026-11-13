@@ -24,17 +24,26 @@ export const coreFeatures = new Set<string>([
   'dataset-item-purge',
   'observability:v1.13.2',
   'observability-delta-polling',
+  // Shared span-type-aware input, output, and error preview formatting.
+  'observability-span-previews',
   'observability-trace-query-tenant-scope',
   'channels',
   'deploy-diagnosis',
   'model-inference-span',
+  'execution-outcomes',
   'internal-usage-rollup',
   'json-prompt-injection:inline',
   'observability-signal-deletion',
   'knowledge-v2',
+  // Knowledge schema 4 (pages, notes, stamps, mentions, pins) and its shared bound helpers.
+  'knowledge-pages',
   // Experiments can be deleted, including experiments orphaned by dataset
   // deletion, and the deletion cascades to the experiment's observability traces.
   'experiment-deletion',
+  // compareExperiments filters by organizationId and projectId. Older cores
+  // accept those arguments and ignore them, so callers must fail closed on a
+  // scoped comparison unless this flag is present.
+  'experiment-comparison-tenancy',
   // Processors can declare the span type they are traced as, and the built-in
   // subsystems declare theirs: SKILL_ACTION, AGENT_SIGNAL, and the memory and
   // workspace types for skills, state signals, memory and workspace

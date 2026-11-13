@@ -99,9 +99,8 @@ export class AnthropicSchemaCompatLayer extends SchemaCompatLayer {
 
       if (this.getModel().modelId.includes('claude-3.5-haiku')) {
         return this.defaultZodStringHandler(value, ['max', 'min']);
-      } else {
-        return value;
       }
+      return value;
     } else if (isNull(z)(value)) {
       return z
         .any()

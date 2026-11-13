@@ -51,11 +51,10 @@ vi.mock('tinyexec', () => tinyexec);
 vi.mock('./platform.js', () => platform);
 vi.mock('mastra/internal/auth', () => cliAuth);
 
-import { create } from './create.js';
+import { create, PLATFORM_TEMPLATE_REPO } from './create.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 const analytics = { trackEvent: () => {}, shutdown: async () => {} } as unknown as PosthogAnalytics;
-const TEMPLATE_REPO = 'https://github.com/mastra-ai/softwarefactory-template';
 
 const ENV_EXAMPLE = `# Mastra Factory environment.
 
@@ -91,7 +90,6 @@ beforeEach(() => {
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
-  clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
   platform.ensureProductionEnvironment.mockResolvedValue('env_production');
@@ -126,10 +124,10 @@ afterEach(() => {
 });
 
 describe('create --no-platform', () => {
-  it('scaffolds a project with a verbatim .env and shows the next steps', async () => {
+  it('scaffolds a project with a generated encryption key in .env and shows the next steps', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
+      template: PLATFORM_TEMPLATE_REPO,
       noPlatform: true,
       analytics,
     });
@@ -137,12 +135,16 @@ describe('create --no-platform', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // With --no-platform, .env stays a verbatim copy of .env.example — the
-    // CLI writes no values. Everything stays a commented placeholder (an
+    // With --no-platform the CLI writes only a generated credential
+    // encryption key; everything else stays a commented placeholder (an
     // active `KEY=` would load as the empty string and poison
     // `process.env.X ?? default` fallbacks).
-    expect(env).toBe(ENV_EXAMPLE);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
+    const key = /^FACTORY_CREDENTIAL_ENCRYPTION_KEY=(.+)$/m.exec(env)?.[1];
+    expect(Buffer.from(key!, 'base64')).toHaveLength(32);
+    expect(env).toBe(
+      ENV_EXAMPLE.replace('# FACTORY_CREDENTIAL_ENCRYPTION_KEY=', `FACTORY_CREDENTIAL_ENCRYPTION_KEY=${key}`),
+    );
+    expect(env.match(/^[A-Z][A-Z0-9_]*=/gm)).toEqual(['FACTORY_CREDENTIAL_ENCRYPTION_KEY=']);
 
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
@@ -174,7 +176,7 @@ describe('create --no-platform', () => {
     tinyexec.x.mockRejectedValue(new Error('remote unreachable'));
 
     await expect(
-      create({ projectName: 'my-factory', template: TEMPLATE_REPO, noPlatform: true, analytics }),
+      create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics }),
     ).rejects.toThrow(/Failed to clone repository/);
 
     expect(tinyexec.x).not.toHaveBeenCalledWith(expect.any(String), ['install'], expect.anything());
@@ -190,7 +192,7 @@ describe('create --no-platform', () => {
     tinyexec.x.mockRejectedValue(new Error('remote unreachable'));
 
     await expect(
-      create({ projectName: 'existing-factory', template: TEMPLATE_REPO, noPlatform: true, analytics }),
+      create({ projectName: 'existing-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics }),
     ).rejects.toThrow(/Directory existing-factory already exists/);
 
     expect(fs.readFileSync(markerPath, 'utf8')).toBe('keep me');
@@ -208,7 +210,7 @@ describe('create --no-platform', () => {
     });
 
     await expect(
-      create({ projectName: 'my-factory', template: TEMPLATE_REPO, noPlatform: true, analytics }),
+      create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics }),
     ).rejects.toThrow(/retry manually/);
 
     expect(clack.note).not.toHaveBeenCalled();
@@ -216,9 +218,65 @@ describe('create --no-platform', () => {
   });
 });
 
+describe('create template selection', () => {
+  const degitRepo = () =>
+    tinyexec.x.mock.calls.find(([command, args]) => command === 'npx' && args[0] === 'degit')?.[1][1];
+
+  it('scaffolds the platform template by default', async () => {
+    await create({ projectName: 'my-factory', analytics });
+
+    expect(degitRepo()).toBe('mastra-ai/template-factory');
+    expect(platform.createServerProject).toHaveBeenCalled();
+  });
+
+  it('scaffolds the self-hosted template with --no-platform', async () => {
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(degitRepo()).toBe('mastra-ai/template-factory-self-hosted');
+    expect(cliAuth.getToken).not.toHaveBeenCalled();
+  });
+
+  it('generates a different encryption key for each project', async () => {
+    await create({ projectName: 'factory-a', noPlatform: true, analytics });
+    await create({ projectName: 'factory-b', noPlatform: true, analytics });
+
+    const keyOf = (name: string) =>
+      /^FACTORY_CREDENTIAL_ENCRYPTION_KEY=(.+)$/m.exec(fs.readFileSync(path.join(workDir, name, '.env'), 'utf8'))?.[1];
+    expect(keyOf('factory-a')).toBeTruthy();
+    expect(keyOf('factory-a')).not.toBe(keyOf('factory-b'));
+  });
+
+  it('keeps an encryption key the template already sets', async () => {
+    fs.writeFileSync(path.join(templateDir, '.env.example'), 'FACTORY_CREDENTIAL_ENCRYPTION_KEY=preset\n');
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8')).toBe(
+      'FACTORY_CREDENTIAL_ENCRYPTION_KEY=preset\n',
+    );
+  });
+
+  it('adds no encryption key when the template does not declare one', async () => {
+    fs.writeFileSync(path.join(templateDir, '.env.example'), '# OPENAI_API_KEY=\n');
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8')).toBe('# OPENAI_API_KEY=\n');
+  });
+
+  it('uses an explicit --template over the --no-platform default', async () => {
+    await create({
+      projectName: 'my-factory',
+      template: 'https://github.com/acme/custom-factory',
+      noPlatform: true,
+      analytics,
+    });
+
+    expect(degitRepo()).toBe('acme/custom-factory');
+  });
+});
+
 describe('create (platform provisioning)', () => {
   it('writes platform credentials to .env and shows the "Platform connected" outro', async () => {
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
@@ -237,7 +295,7 @@ describe('create (platform provisioning)', () => {
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
-      region: 'eu',
+      region: 'us',
     });
 
     // Other .env.example placeholders untouched.
@@ -247,18 +305,13 @@ describe('create (platform provisioning)', () => {
     // Platform pipeline hit in order.
     expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).toHaveBeenCalledWith('wos-token', { forcePrompt: true });
-    expect(clack.select).toHaveBeenCalledWith({
-      message: 'Where should your Factory project run?',
-      options: [
-        { value: 'eu', label: '🇪🇺 eu' },
-        { value: 'us', label: '🇺🇸 us' },
-      ],
-    });
+    // Region defaults to us without prompting.
+    expect(clack.select).not.toHaveBeenCalled();
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       name: 'my-factory',
-      region: 'eu',
+      region: 'us',
     });
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
@@ -270,7 +323,7 @@ describe('create (platform provisioning)', () => {
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-eu-central-1',
+      regionId: 'aws-us-west-2',
     });
 
     // Success outro summarizes the provisioned infra so the user isn't
@@ -287,7 +340,7 @@ describe('create (platform provisioning)', () => {
 
   it('preserves the minted secret key when environment setup fails', async () => {
     platform.ensureProductionEnvironment.mockRejectedValue(new platform.PlatformApiError(403, 'forbidden'));
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
     expect(env).toMatch(/^MASTRA_PLATFORM_SECRET_KEY=sk_live_test$/m);
     expect(env).toMatch(/^MASTRA_PROJECT_ID=proj_abc$/m);
@@ -301,7 +354,7 @@ describe('create (platform provisioning)', () => {
       new platform.PlatformApiError(403, 'Attaching a database requires the admin role in your organization.'),
     );
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const note = clack.note.mock.calls[0]![0] as string;
     expect(note).toContain('Platform provisioning failed');
@@ -322,7 +375,7 @@ describe('create (platform provisioning)', () => {
       new platform.PlatformApiError(504, 'Neon database is still provisioning after 60s.'),
     );
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const env = fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8');
     expect(env).not.toMatch(/^MASTRA_SHARED_API_URL=/m);
@@ -336,22 +389,23 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region to project creation and skips the region picker', async () => {
+  it('passes --region eu to project creation and the database region', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
-      region: 'us',
+      template: PLATFORM_TEMPLATE_REPO,
+      region: 'eu',
       analytics,
     });
 
     expect(clack.select).not.toHaveBeenCalled();
-    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'us' }));
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
+    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-us-west-2',
+      regionId: 'aws-eu-central-1',
     });
   });
 
@@ -359,7 +413,7 @@ describe('create (platform provisioning)', () => {
     await expect(
       create({
         projectName: 'my-factory',
-        template: TEMPLATE_REPO,
+        template: PLATFORM_TEMPLATE_REPO,
         region: 'aws-us-east-2',
         analytics,
       }),
@@ -372,7 +426,7 @@ describe('create (platform provisioning)', () => {
   it('--org <name> skips the interactive picker and resolves via fetchOrgs', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
+      template: PLATFORM_TEMPLATE_REPO,
       org: 'Beta',
       analytics,
     });
@@ -387,7 +441,7 @@ describe('create (platform provisioning)', () => {
     cliAuth.loadCredentials.mockResolvedValue(null);
     clack.text.mockResolvedValue('');
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     expect(clack.text).toHaveBeenCalledWith({
       message: 'Mastra account is required, press enter to continue...',
@@ -406,7 +460,7 @@ describe('create (platform provisioning)', () => {
     });
 
     try {
-      await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+      await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
       expect(clack.cancel).toHaveBeenCalledWith('Operation cancelled');
       expect(exit).toHaveBeenCalledWith(0);
@@ -418,7 +472,7 @@ describe('create (platform provisioning)', () => {
   });
 
   it('allows any key to skip while waiting for platform authentication', async () => {
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     expect(clack.text).not.toHaveBeenCalled();
     expect(cliAuth.getToken).toHaveBeenCalledWith(undefined, { skipOnInput: true, source: 'create-factory' });
@@ -428,7 +482,7 @@ describe('create (platform provisioning)', () => {
   it('treats keyboard cancellation as skipped platform setup', async () => {
     cliAuth.getToken.mockRejectedValue(new cliAuth.LoginCancelledError());
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     expect(platform.createServerProject).not.toHaveBeenCalled();
     expect(clack.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
@@ -440,7 +494,7 @@ describe('create (platform provisioning)', () => {
   it('--org fails with a clear message when no org matches', async () => {
     await create({
       projectName: 'my-factory',
-      template: TEMPLATE_REPO,
+      template: PLATFORM_TEMPLATE_REPO,
       org: 'does-not-exist',
       analytics,
     });
@@ -455,7 +509,7 @@ describe('create (platform provisioning)', () => {
 describe('create — .env safety before git commit', () => {
   it('adds .env to .gitignore before the initial commit so platform secrets are never staged', async () => {
     // Template ships no .gitignore of its own.
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const projectPath = path.join(workDir, 'my-factory');
     const gitignore = fs.readFileSync(path.join(projectPath, '.gitignore'), 'utf8');
@@ -478,7 +532,7 @@ describe('create — .env safety before git commit', () => {
     const existing = 'node_modules\n.env*\ndist\n';
     fs.writeFileSync(path.join(templateDir, '.gitignore'), existing);
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const gitignore = fs.readFileSync(path.join(workDir, 'my-factory', '.gitignore'), 'utf8');
     // Content unchanged — no duplicate `.env` appended.
@@ -489,7 +543,7 @@ describe('create — .env safety before git commit', () => {
     const existing = 'node_modules\ndist\n';
     fs.writeFileSync(path.join(templateDir, '.gitignore'), existing);
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const gitignore = fs.readFileSync(path.join(workDir, 'my-factory', '.gitignore'), 'utf8');
     expect(gitignore).toContain('node_modules');
@@ -509,7 +563,7 @@ describe('create — .env safety before git commit', () => {
       return { stdout: '', stderr: '', exitCode: 0, killed: false };
     });
 
-    await create({ projectName: 'my-factory', template: TEMPLATE_REPO, analytics });
+    await create({ projectName: 'my-factory', template: PLATFORM_TEMPLATE_REPO, analytics });
 
     const runCalls = tinyexec.x.mock.calls as Array<[string, string[]]>;
     const anyGit = runCalls.some(call => call[0] === 'git');

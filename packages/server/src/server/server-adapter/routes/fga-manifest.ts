@@ -105,6 +105,10 @@ export function getBuiltInRouteFGAConfig(route: ServerRoute): FGARouteConfig | n
     return { resourceType: 'mcp', resourceIdParam: 'serverId', permission };
   }
 
+  if (path.startsWith('/knowledge/:knowledgeKey')) {
+    return { resourceType: 'knowledge', resourceIdParam: 'knowledgeKey', permission };
+  }
+
   if (path.startsWith('/memory/threads/:threadId') || path.startsWith('/memory/network/threads/:threadId')) {
     return { resourceType: 'thread', resourceIdParam: 'threadId', permission };
   }

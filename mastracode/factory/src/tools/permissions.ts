@@ -11,6 +11,7 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_list_work_items',
   'factory_inspect_work_item',
   'factory_list_attention',
+  'factory_list_audit_events',
   'factory_create_work_item',
   'factory_update_work_item',
   'factory_transition_work_item',
@@ -27,6 +28,8 @@ export const FACTORY_TOOLS_WITHOUT_APPROVAL: readonly string[] = [
   'factory_start_session',
   'factory_answer_approval',
   'factory_switch_session_model',
+  'factory_recreate_sandbox',
+  'factory_sandbox_port_url',
 ];
 
 export interface FactoryToolPermissionsSession {

@@ -1,3 +1,4 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -71,7 +72,13 @@ export function SandboxBlock({
   onSave: SaveEnvironment;
 }) {
   const saveSetting = (key: string, value: unknown | null) => onSave({ settings: { [key]: value } });
-  return schemaProperties(environment.sandbox.settingsSchema).map(([key, schema]) => (
+  const properties = schemaProperties(environment.sandbox.settingsSchema);
+  const effective = (key: string) =>
+    environment.settings[key] ?? properties.find(([name]) => name === key)?.[1].default;
+  const memoryMb = effective('memoryMb');
+  const dockerLowMemory =
+    effective('docker') === true && typeof memoryMb === 'number' && memoryMb < DOCKER_MIN_MEMORY_MB;
+  const rows = properties.map(([key, schema]) => (
     <SettingRow
       key={key}
       name={key}
@@ -81,7 +88,21 @@ export function SandboxBlock({
       onCommit={value => saveSetting(key, value)}
     />
   ));
+  return (
+    <>
+      {rows}
+      {dockerLowMemory && (
+        <Notice variant="warning">
+          Docker is on with {memoryMb} MB of memory. We recommend at least 2 GB for Docker; with less, containers may
+          run out of memory.
+        </Notice>
+      )}
+    </>
+  );
 }
+
+/** Recommended minimum memory for sandboxes that run Docker. */
+const DOCKER_MIN_MEMORY_MB = 2048;
 
 function SettingRow({
   name,
@@ -117,7 +138,7 @@ function SettingRow({
         disabled={disabled}
         onValueChange={next => void onCommit(next === unsetKey ? null : coerceChoice(choices, next))}
       >
-        <SelectTrigger size="sm" aria-label={label} className="w-auto">
+        <SelectTrigger size="sm" aria-label={label}>
           <Txt as="span" variant="caption">
             {current === UNSET ? (placeholder ? `Default (${placeholder})` : 'Default') : labelOf(current)}
           </Txt>
@@ -145,35 +166,31 @@ function SettingRow({
     );
   } else if (type === 'integer' || type === 'number') {
     control = (
-      <div className="w-full lg:max-w-40">
-        <CommittedInput
-          label={label}
-          type="number"
-          min={schema.minimum}
-          max={schema.maximum}
-          step={type === 'integer' ? 1 : 'any'}
-          placeholder={placeholder}
-          value={value === undefined ? '' : String(value)}
-          disabled={disabled}
-          onCommit={raw => {
-            if (raw === '') return onCommit(null);
-            const parsed = numberInRange(raw, schema, type === 'integer');
-            return parsed === undefined ? Promise.reject(new Error('invalid')) : onCommit(parsed);
-          }}
-        />
-      </div>
+      <CommittedInput
+        label={label}
+        type="number"
+        min={schema.minimum}
+        max={schema.maximum}
+        step={type === 'integer' ? 1 : 'any'}
+        placeholder={placeholder}
+        value={value === undefined ? '' : String(value)}
+        disabled={disabled}
+        onCommit={raw => {
+          if (raw === '') return onCommit(null);
+          const parsed = numberInRange(raw, schema, type === 'integer');
+          return parsed === undefined ? Promise.reject(new Error('invalid')) : onCommit(parsed);
+        }}
+      />
     );
   } else if (type === 'string') {
     control = (
-      <div className="w-full lg:max-w-96">
-        <CommittedInput
-          label={label}
-          placeholder={placeholder}
-          value={value === undefined ? '' : String(value)}
-          disabled={disabled}
-          onCommit={raw => onCommit(raw === '' ? null : raw)}
-        />
-      </div>
+      <CommittedInput
+        label={label}
+        placeholder={placeholder}
+        value={value === undefined ? '' : String(value)}
+        disabled={disabled}
+        onCommit={raw => onCommit(raw === '' ? null : raw)}
+      />
     );
   } else {
     control = (

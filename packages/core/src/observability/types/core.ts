@@ -10,7 +10,14 @@ import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
 import type { ClientObservabilityProxy } from './client';
-import type { FeedbackEvent, FeedbackInput } from './feedback';
+import type {
+  FeedbackEvent,
+  FeedbackInput,
+  FeedbackReplacementEvent,
+  FeedbackReplacementInput,
+  FeedbackReviewStatusInput,
+  FeedbackReviewStatusEvent,
+} from './feedback';
 import type { LoggerContext, LogEvent } from './logging';
 import type { MetricsContext, MetricEvent } from './metrics';
 import type { ScoreEvent, ScoreInput } from './scores';
@@ -23,6 +30,7 @@ import type {
   ExportedSpan,
   Span,
   SpanIds,
+  SpanSnapshot,
   SpanOutputProcessor,
   SpanType,
   StartSpanOptions,
@@ -160,13 +168,25 @@ export interface ObservabilityEventBus<TEvent> {
  * Union of all observability event types.
  * Used by the unified ObservabilityBus that handles all signals.
  */
-export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEvent | FeedbackEvent;
+export type ObservabilityEvent =
+  | TracingEvent
+  | LogEvent
+  | MetricEvent
+  | ScoreEvent
+  | FeedbackEvent
+  | FeedbackReplacementEvent
+  | FeedbackReviewStatusEvent;
 
 /** Signal whose event was dropped by the observability exporter pipeline. */
 export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
 
-/** Reason an observability event was dropped by the exporter pipeline. */
-export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
+/**
+ * Reason an observability event was dropped by the exporter pipeline.
+ *
+ * `span-not-updatable`: a span update or end reached storage, but no unended span
+ * with that ID was stored (it was never persisted, or it had already ended).
+ */
+export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable';
 
 /** Sanitized error details for observability drop events. */
 export interface ObservabilityDropError {
@@ -235,7 +255,7 @@ export interface ObservabilityInstance {
    * @param cached - The exported span data to rebuild from
    * @returns A span that can have end()/update()/error() called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType>;
+  rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType>;
 
   /**
    * Force flush any buffered/queued spans from all exporters and the bridge
@@ -331,8 +351,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the scored target when available.
    * Include `spanId` when the score is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addScore?(args: {
     traceId?: string;
@@ -347,8 +368,9 @@ export interface ObservabilityEntrypoint {
    *
    * `traceId` anchors the feedback target when available.
    * Include `spanId` when the feedback is about a specific span.
-   * Include `correlationContext` to emit immediately from live span/trace state
-   * without rehydrating the target from storage first.
+   * Include `correlationContext` to supply context from live span/trace state.
+   * Without it, context resolution depends on the exporter: storage exporters look up
+   * local spans, while exporters such as PostHog receive the event without that lookup.
    */
   addFeedback?(args: {
     traceId?: string;
@@ -356,6 +378,17 @@ export interface ObservabilityEntrypoint {
     correlationContext?: CorrelationContext;
     feedback: FeedbackInput;
   }): Promise<void>;
+
+  /** Replace complete feedback independently at each supporting exporter. */
+  replaceFeedback?(args: FeedbackReplacementInput): Promise<void>;
+
+  /** Update review status independently at each supporting exporter. */
+  updateFeedbackReviewStatus?(args: FeedbackReviewStatusInput): Promise<void>;
+
+  /** @internal Notify non-storage exporters after the server has persisted a record. */
+  __exportPersistedEvent?(
+    event: ScoreEvent | FeedbackEvent | FeedbackReplacementEvent | FeedbackReviewStatusEvent,
+  ): Promise<void>;
 
   /**
    * Returns the proxy responsible for client observability (W3C trace
@@ -572,6 +605,12 @@ export interface ObservabilityEvents {
 
   /** Handle score events */
   onScoreEvent?(event: ScoreEvent): void | Promise<void>;
+
+  /** Handle full feedback replacements; unsupported exporters ignore them. */
+  onFeedbackReplacementEvent?(event: FeedbackReplacementEvent): void | Promise<void>;
+
+  /** Review-only update; unsupported exporters skip it. */
+  onFeedbackReviewStatusEvent?(event: FeedbackReviewStatusEvent): void | Promise<void>;
 
   /** Handle feedback events */
   onFeedbackEvent?(event: FeedbackEvent): void | Promise<void>;
