@@ -472,6 +472,8 @@ export interface SourceControlStorageHandle {
    * event bus) another one. Returns a function that removes the listener.
    */
   onLinkedRepositoriesChanged(listener: () => void): () => void;
+  /** False once the factory failed to share these changes between replicas. */
+  linkedRepositoryChangesShared(): boolean;
   readonly installations: {
     list(args: { orgId: string }): Promise<SourceControlInstallation[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
@@ -834,6 +836,7 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 
 export class SourceControlStorage extends FactoryStorageDomain {
   readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
+  #linkedRepositoryChangesShared = true;
 
   constructor() {
     super('source-control');
@@ -850,6 +853,20 @@ export class SourceControlStorage extends FactoryStorageDomain {
   onLinkedRepositoriesChanged(listener: (change: LinkedRepositoriesChange) => void): () => void {
     this.#linkedRepositoryListeners.add(listener);
     return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  /**
+   * Whether changes made on other replicas reach this one's listeners. True
+   * until `linkedRepositoryChangesUnshared()`, so a single-process factory and
+   * tests can keep the set in memory.
+   */
+  get linkedRepositoryChangesShared(): boolean {
+    return this.#linkedRepositoryChangesShared;
+  }
+
+  /** Records that other replicas' changes cannot be heard, so readers stop keeping the set. */
+  linkedRepositoryChangesUnshared(): void {
+    this.#linkedRepositoryChangesShared = false;
   }
 
   /** Runs the listeners; `local: false` reports a write another replica announced. */
@@ -1175,6 +1192,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
         this.onLinkedRepositoriesChanged(change => {
           if (change.integrationId === integrationId) listener();
         }),
+      linkedRepositoryChangesShared: () => this.linkedRepositoryChangesShared,
       installations: {
         list: async ({ orgId }) =>
           (

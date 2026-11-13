@@ -973,6 +973,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           },
         },
         onRepositoriesChanged: listener => this.storage.onLinkedRepositoriesChanged(listener),
+        repositoryChangesShared: () => this.storage.linkedRepositoryChangesShared(),
       }),
     ];
   }

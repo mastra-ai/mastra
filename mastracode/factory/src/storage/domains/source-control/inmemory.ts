@@ -44,6 +44,10 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
     return () => this.#linkedRepositoryListeners.delete(listener);
   }
 
+  linkedRepositoryChangesShared(): boolean {
+    return true;
+  }
+
   #linkedRepositoriesChanged(): void {
     for (const listener of this.#linkedRepositoryListeners) listener();
   }

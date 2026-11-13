@@ -905,8 +905,9 @@ export class MastraFactory {
     // polling replica about links made on another one.
     this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage).catch(
       error => {
+        sourceControlStorage.linkedRepositoryChangesUnshared();
         console.warn(
-          `[factory] subscribing to linked repository changes failed; repositories linked on another replica are polled within the hour: ${error instanceof Error ? error.message : error}`,
+          `[factory] subscribing to linked repository changes failed; the GitHub event poll reads linked repositories from the database on every tick: ${error instanceof Error ? error.message : error}`,
         );
         return undefined;
       },

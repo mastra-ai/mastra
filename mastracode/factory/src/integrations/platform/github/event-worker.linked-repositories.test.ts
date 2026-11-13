@@ -24,7 +24,7 @@ async function createReplica(url: string, pubsub: EventEmitterPubSub) {
   const domain = backend.registerDomain(new SourceControlStorage());
   await backend.init();
   const stopSharing = await shareLinkedRepositoryChanges(pubsub, domain);
-  return { backend, projects, github: domain.forIntegration('github'), stopSharing };
+  return { backend, projects, domain, github: domain.forIntegration('github'), stopSharing };
 }
 
 type Replica = Awaited<ReturnType<typeof createReplica>>;
@@ -77,7 +77,10 @@ describe('PlatformGithubEventWorker linked repositories', () => {
   let worker: PlatformGithubEventWorker | undefined;
   /** Repository ids the worker asked the Platform for events of, in order. */
   let polled: string[];
-  let clock: number;
+  /** Names the Platform reports for repositories, by id. */
+  let platformNames: Map<number, string>;
+  /** Repositories each pull request reconcile sweep was handed. */
+  let reconciled: Array<Array<{ id: number; fullName: string }>>;
 
   beforeEach(async () => {
     directory = await mkdtemp(join(tmpdir(), 'linked-repositories-'));
@@ -86,7 +89,8 @@ describe('PlatformGithubEventWorker linked repositories', () => {
     polling = await createReplica(url, pubsub);
     other = await createReplica(url, pubsub);
     polled = [];
-    clock = 1_000;
+    platformNames = new Map();
+    reconciled = [];
   });
 
   afterEach(async () => {
@@ -99,7 +103,10 @@ describe('PlatformGithubEventWorker linked repositories', () => {
     await rm(directory, { recursive: true, force: true });
   });
 
-  async function startWorker(sourceControl: SourceControlStorageHandle = polling.github) {
+  async function startWorker(
+    sourceControl: SourceControlStorageHandle = polling.github,
+    { reconcile = false }: { reconcile?: boolean } = {},
+  ) {
     // The cursor store is not under test: nothing here returns events, so it is only written on a repository's first poll.
     let settings: unknown = null;
     worker = new PlatformGithubEventWorker({
@@ -107,6 +114,11 @@ describe('PlatformGithubEventWorker linked repositories', () => {
         baseUrl: 'https://platform.example.com',
         accessToken: 'platform-token',
         fetchImpl: async input => {
+          const installationId = /\/installations\/(\d+)\/repositories$/.exec(String(input))?.[1];
+          if (installationId) {
+            const repositories = [...platformNames].map(([id, fullName]) => ({ id, fullName }));
+            return new Response(JSON.stringify({ repositories }), { headers: { 'content-type': 'application/json' } });
+          }
           const repositoryId = /\/repositories\/(\d+)\/events/.exec(String(input))?.[1];
           if (!repositoryId) throw new Error(`Unexpected request: ${String(input)}`);
           polled.push(repositoryId);
@@ -128,8 +140,16 @@ describe('PlatformGithubEventWorker linked repositories', () => {
       } as unknown as PlatformGithubEventStorage,
       sourceControl,
       onRepositoriesChanged: listener => sourceControl.onLinkedRepositoriesChanged(listener),
+      repositoryChangesShared: () => sourceControl.linkedRepositoryChangesShared(),
+      ...(reconcile
+        ? {
+            reconcileFactoryState: async repositories => {
+              reconciled.push(repositories.map(({ id, fullName }) => ({ id, fullName })));
+              return { repositories: repositories.length, checked: 0, merged: 0, closed: 0, failed: 0, errors: [] };
+            },
+          }
+        : {}),
       intervalMs: POLL_MS,
-      now: () => clock,
     });
     await worker.init({
       pubsub,
@@ -180,18 +200,28 @@ describe('PlatformGithubEventWorker linked repositories', () => {
     expect(polled).not.toContain('202');
   });
 
-  it('re-reads the linked repositories after an hour, so a change it never heard of is still picked up', async () => {
+  it('sweeps a repository under the name the Platform reports, without reading storage', async () => {
     await linkRepository(polling, '101');
+    platformNames.set(101, 'acme/renamed');
+    const storageReads = countStorageReads(polling);
+    await startWorker(polling.github, { reconcile: true });
+    await polls('101', 1);
+    const readsForFirstPoll = storageReads();
+    await polls('101', 3);
+
+    expect(reconciled).toEqual([[{ id: 101, fullName: 'acme/renamed' }]]);
+    expect(storageReads()).toBe(readsForFirstPoll);
+  });
+
+  it('re-reads the linked repositories on every poll once other replicas cannot be heard', async () => {
+    await linkRepository(polling, '101');
+    polling.domain.linkedRepositoryChangesUnshared();
     await startWorker();
     await polls('101', 1);
 
     // The other replica stops announcing, as if its event bus connection had dropped.
     await other.stopSharing();
     await linkRepository(other, '202');
-    await polls('101', 3);
-    expect(polled).not.toContain('202');
-
-    clock += 60 * 60_000;
     await polls('202', 1);
   });
 });
