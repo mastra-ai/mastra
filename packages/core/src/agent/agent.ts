@@ -8706,7 +8706,12 @@ export class Agent<
       if (recoverClaimedAt !== undefined) {
         // Another resume may have claimed the run between the read above and taking the lease. Holding
         // the lease, no other resume can claim it now, so this read settles which claim is recovered.
-        const held = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        const held = await workflowsStore
+          .loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId })
+          .catch(async error => {
+            await releaseLease();
+            throw error;
+          });
         if (held?.status !== claimStatus || held?.resumeClaimedAt !== recoverClaimedAt) {
           await releaseLease();
           throwAlreadyClaimed();
@@ -8744,6 +8749,12 @@ export class Agent<
         runId,
         opts: { status: 'suspended', expectedStatus: 'pending' },
       });
+      if (recoverClaimedAt !== undefined) {
+        // The hand-back cannot tell claims apart, so it may have knocked back a newer claim taken
+        // since the read above. Recover only if the run still carries the claim that was read.
+        const handedBack = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        throwIfNotRecoveredClaim(handedBack);
+      }
       claimed = await claim();
       if (!claimed) throwAlreadyClaimed();
     }

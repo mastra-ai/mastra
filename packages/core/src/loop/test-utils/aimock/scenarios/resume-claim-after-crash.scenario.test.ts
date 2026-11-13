@@ -282,6 +282,87 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     60_000,
   );
 
+  /**
+   * On storage without run fencing only a claim that never started is taken over. Each worker
+   * created here dies right after claiming, before starting the resumed run, once `armed`.
+   */
+  async function setupUnfenced() {
+    getMock().on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call-1', name: 'find-user', arguments: { query: 'Ada' } }] },
+    );
+    getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Found Ada.' });
+    const storage = await createStorage();
+    let armed = false;
+    const diesBeforeStart = (name: string) => {
+      const stalled = deferred();
+      const worker = createWorker(storage, name, async () => {}, {
+        fencing: false,
+        holdWrite: (method, args, phase) => {
+          if (!armed || method !== 'updateWorkflowState' || phase !== 'before' || args.opts.status !== 'running') {
+            return undefined;
+          }
+          stalled.resolve();
+          return new Promise(() => {});
+        },
+      });
+      return { ...worker, stalled: stalled.promise };
+    };
+
+    const workerA = diesBeforeStart('A');
+    const suspended = await workerA.agent.generate('Find the user Ada');
+    expect(suspended.finishReason).toBe('suspended');
+    const runId = suspended.runId!;
+    armed = true;
+
+    vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], shouldAdvanceTime: true });
+    void workerA.agent.resumeGenerate({ name: 'Ada' }, { runId }).catch(() => {});
+    await workerA.stalled;
+    await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
+
+    return { storage, runId, diesBeforeStart };
+  }
+
+  it('finishes a dead approval on storage without run fencing (#30285)', async () => {
+    const { storage, runId } = await setupUnfenced();
+    const workerB = createWorker(storage, 'B', async () => {}, { fencing: false });
+
+    const recovered = await (await workerB.agent.recoverResume({ runId })).getFullOutput();
+
+    expect(recovered.text).toBe('Found Ada.');
+    expect(workerB.resumedWith).toEqual(['Ada:Ada']);
+  }, 30_000);
+
+  // Technical: the unfenced takeover hands the run back before claiming it, and that hand-back
+  // cannot tell claims apart, so the recovery re-checks the claim after it. (#30285)
+  it('never replaces a newer decision with an older one on storage without run fencing (#30285)', async () => {
+    const { storage, runId, diesBeforeStart } = await setupUnfenced();
+    const cStalled = deferred();
+    const cContinue = deferred();
+    const workerC = createWorker(storage, 'C', async () => {}, {
+      fencing: false,
+      holdWrite: (method, args, phase) => {
+        if (method !== 'updateWorkflowState' || phase !== 'before' || args.opts.status !== 'suspended')
+          return undefined;
+        cStalled.resolve();
+        return cContinue.promise;
+      },
+    });
+
+    // C reads A's claim and its decision, then stalls right before handing the run back.
+    const recoverC = outcome(workerC.agent.recoverResume({ runId }).then(r => r.getFullOutput()));
+    await cStalled.promise;
+
+    // Meanwhile D takes A's claim over with a different decision, and dies before starting.
+    const workerD = diesBeforeStart('D');
+    void workerD.agent.resumeGenerate({ name: 'Grace' }, { runId }).catch(() => {});
+    await workerD.stalled;
+
+    cContinue.resolve();
+    await expect(recoverC).resolves.toBe('AGENT_RESUME_ALREADY_CLAIMED');
+    expect([...workerC.executions, ...workerD.executions]).toEqual([]);
+  }, 30_000);
+
   it('does not recover a resume that is still alive', async () => {
     const { storage, runId, workerA, resumeA, finishA } = await setup();
     const workerB = createWorker(storage, 'B', async () => {});
