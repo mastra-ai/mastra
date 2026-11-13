@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { noopLogger } from '../../logger';
+import { EagerToolExecutionNotRun } from '../../loop/workflows/agentic-execution/eager-tool-execution';
 import { runBeforeApprovalChecks } from '../../loop/workflows/agentic-execution/tool-approval-verdict';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
@@ -1000,6 +1001,7 @@ describe('CoreToolBuilder execution failures', () => {
       options: {
         name: 'failing_tool',
         logger: logger as any,
+        tracing: { currentSpan: { input: { content: marker } } } as any,
       },
     });
 
@@ -1027,42 +1029,135 @@ describe('CoreToolBuilder execution failures', () => {
     }
   });
 
-  it.each(['MCP_CLIENT_TOOL_TASK_FAILED', 'MCP_CLIENT_TOOL_TASK_CANCELLED', 'MCP_CLIENT_TOOL_TASK_POLL_FAILED'])(
-    'keeps remote task failure text out of tracked exceptions (%s)',
-    async id => {
-      const secret = 'person@example.com';
-      const testTool = createTool({
-        id: 'remote_task',
-        description: 'Fails like an MCP task',
+  it.each([
+    'MCP_CLIENT_TOOL_TASK_FAILED',
+    'MCP_CLIENT_TOOL_TASK_CANCELLED',
+    'MCP_CLIENT_TOOL_TASK_POLL_FAILED',
+    'MCP_CLIENT_HOST_NOT_ALLOWED',
+  ])('keeps remote task failure text out of tracked exceptions (%s)', async id => {
+    const secret = 'person@example.com';
+    const testTool = createTool({
+      id: 'remote_task',
+      description: 'Fails like an MCP task',
+      inputSchema: z.object({ email: z.string() }),
+      execute: async () => {
+        throw new MastraError({
+          id,
+          domain: ErrorDomain.MCP,
+          category: ErrorCategory.THIRD_PARTY,
+          text: `task task-123 failed for ${secret}`,
+        });
+      },
+    });
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    const builtTool = new CoreToolBuilder({
+      originalTool: testTool,
+      options: { name: 'remote_task', logger: logger as any },
+    }).build();
+
+    const thrown = await builtTool.execute!({ email: secret }, { toolCallId: 'call-1', messages: [] }).catch(
+      (err: unknown) => err,
+    );
+
+    expect(String(thrown)).toContain(secret);
+    expect(logger.trackException).toHaveBeenCalledTimes(1);
+    const [tracked, metadata] = logger.trackException.mock.calls[0]!;
+    const trackedText = JSON.stringify({ ...tracked, message: tracked.message, metadata });
+    expect(trackedText).toContain(id);
+    expect(trackedText).not.toContain(secret);
+    expect(trackedText).not.toContain('task-123');
+  });
+
+  it.each([
+    ['a plain error', new Error('cannot reach person@example.com')],
+    [
+      'an error with a data-derived id',
+      new MastraError({
+        id: 'MCP_CLIENT_TOOL_FAILED_person@example.com' as Uppercase<string>,
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.THIRD_PARTY,
+        text: 'cannot reach person@example.com',
+      }),
+    ],
+  ])('keeps %s from an MCP tool out of tracked exceptions', async (_, failure) => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    const builtTool = new CoreToolBuilder({
+      originalTool: createTool({
+        id: 'remote_lookup',
+        description: 'Fails like a remote MCP tool',
         inputSchema: z.object({ email: z.string() }),
+        mcpMetadata: { serverName: 'contacts', serverVersion: '1.0.0' },
         execute: async () => {
-          throw new MastraError({
-            id,
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            text: `task task-123 failed for ${secret}`,
-          });
+          throw failure;
         },
-      });
-      const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
-      const builtTool = new CoreToolBuilder({
-        originalTool: testTool,
-        options: { name: 'remote_task', logger: logger as any },
-      }).build();
+      }),
+      options: { name: 'remote_lookup', logger: logger as any },
+    }).build();
 
-      const thrown = await builtTool.execute!({ email: secret }, { toolCallId: 'call-1', messages: [] }).catch(
-        (err: unknown) => err,
-      );
+    const thrown = await builtTool.execute!(
+      { email: 'person@example.com' },
+      { toolCallId: 'call-1', messages: [] },
+    ).catch((err: unknown) => err);
 
-      expect(String(thrown)).toContain(secret);
-      expect(logger.trackException).toHaveBeenCalledTimes(1);
-      const [tracked, metadata] = logger.trackException.mock.calls[0]!;
-      const trackedText = JSON.stringify({ ...tracked, message: tracked.message, metadata });
-      expect(trackedText).toContain(id);
-      expect(trackedText).not.toContain(secret);
-      expect(trackedText).not.toContain('task-123');
+    expect(String(thrown)).toContain('person@example.com');
+    const [tracked] = logger.trackException.mock.calls[0]!;
+    expect(tracked.message).toBe('Remote tool failed (MCP_CLIENT_TOOL_CALL_FAILED)');
+    expect(JSON.stringify(tracked)).not.toContain('person@example.com');
+  });
+
+  it.each([
+    {
+      scenario: 'a cancelled call',
+      failure: new Error('Could not save person@example.com'),
+      abortSignal: AbortSignal.abort(),
+      recorded: 'Remote tool call aborted (MCP_CLIENT_TOOL_CALL_ABORTED)',
     },
-  );
+    {
+      scenario: 'an eager-execution handoff',
+      failure: new EagerToolExecutionNotRun('"remote_lookup" requested suspension'),
+      abortSignal: undefined,
+      recorded: 'Eager tool execution did not run: "remote_lookup" requested suspension',
+    },
+  ])('does not record $scenario from an MCP tool as a remote failure', async ({ failure, abortSignal, recorded }) => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    const builtTool = new CoreToolBuilder({
+      originalTool: createTool({
+        id: 'remote_lookup',
+        description: 'Stops like a remote MCP tool',
+        inputSchema: z.object({ email: z.string() }),
+        mcpMetadata: { serverName: 'contacts', serverVersion: '1.0.0' },
+        execute: async () => {
+          throw failure;
+        },
+      }),
+      options: { name: 'remote_lookup', logger: logger as any },
+    }).build();
+
+    await builtTool.execute!({ email: 'x' }, { toolCallId: 'call-1', messages: [], abortSignal }).catch(
+      () => undefined,
+    );
+
+    expect(logger.trackException.mock.calls[0]![0].message).toBe(recorded);
+  });
+
+  it('keeps the error text of a local tool in tracked exceptions', async () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+    const builtTool = new CoreToolBuilder({
+      originalTool: createTool({
+        id: 'local_lookup',
+        description: 'Fails locally',
+        inputSchema: z.object({ city: z.string() }),
+        execute: async () => {
+          throw new Error('geocoder is down');
+        },
+      }),
+      options: { name: 'local_lookup', logger: logger as any },
+    }).build();
+
+    await builtTool.execute!({ city: 'Paris' }, { toolCallId: 'call-1', messages: [] }).catch(() => undefined);
+
+    expect(logger.trackException.mock.calls[0]![0].message).toBe('geocoder is down');
+  });
 });
 
 describe('CoreToolBuilder validation failure logs', () => {
