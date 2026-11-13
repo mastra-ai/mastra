@@ -91,15 +91,19 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
   };
 
   it.each([
-    ['registered before first use', false],
-    ['bus read before registration', true],
+    { resolveBeforeRegistering: false, fork: false },
+    { resolveBeforeRegistering: true, fork: false },
+    { resolveBeforeRegistering: false, fork: true },
+    { resolveBeforeRegistering: true, fork: true },
   ])(
-    'publishes on mastra.pubsub so another instance observes replay plus live tail (%s)',
+    'publishes on mastra.pubsub so another instance observes replay plus live tail (resolveBeforeRegistering=$resolveBeforeRegistering, fork=$fork)',
     { timeout: 15_000 },
-    async (_, resolveBeforeRegistering) => {
+    async ({ resolveBeforeRegistering, fork }) => {
       const { a, b, pubsub, started, release } = setup({ resolveBeforeRegistering });
+      const runner = fork ? (a.__fork() as unknown as DurableAgent) : a;
+      const publish = vi.spyOn(pubsub, 'publish');
 
-      const run = await a.stream('Look it up then answer.', { maxSteps: 3 });
+      const run = await runner.stream('Look it up then answer.', { maxSteps: 3 });
       const consumed = run.output.consumeStream();
       await started;
       await pubsub.flush();
@@ -122,6 +126,11 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       expect(types).toContain('text-delta');
       expect(types.at(-1)).toBe('finish');
       expect(await observed.output.text).toBe('The answer is FOUND.');
+      expect(
+        publish.mock.calls.some(
+          ([topic, event]) => topic === AGENT_STREAM_TOPIC(run.runId) && event.type === AgentStreamEventTypes.FINISH,
+        ),
+      ).toBe(true);
     },
   );
 
