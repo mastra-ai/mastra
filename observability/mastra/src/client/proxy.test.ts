@@ -256,8 +256,53 @@ describe('ingest happy path', () => {
 
 describe('client span timestamp rejection (OBS-935)', () => {
   it.each([
+    [1500000, '1600000'],
+    ['1500000', 1600000],
+    [1500000, '1500000'],
+  ])('exports valid mixed timestamp representations (%s, %s)', async (startTimeUnixNano, endTimeUnixNano) => {
+    const events: ObservabilityEvent[] = [];
+    const instance = new DefaultObservabilityInstance({
+      name: 'mixed-timestamps',
+      serviceName: 'test',
+      exporters: [
+        {
+          name: 'capture',
+          exportTracingEvent: async event => {
+            events.push(event);
+          },
+          onMetricEvent: event => {
+            events.push(event);
+          },
+          onLogEvent: event => {
+            events.push(event);
+          },
+          flush: async () => {},
+          shutdown: async () => {},
+        },
+      ],
+    });
+    const proxy = createClientObservabilityProxy({ resolveInstance: () => instance });
+    proxy.receive(
+      {
+        executionDurationMs: 1,
+        spans: spansPayload([makeSpan({ startTimeUnixNano, endTimeUnixNano })]),
+        logs: logsPayload([
+          { traceId: TRACE_ID, spanId: CHILD_SPAN_ID, timeUnixNano: '1600000', body: { stringValue: 'kept' } },
+        ]),
+      },
+      carrier(),
+    );
+    await instance.flush();
+    expect(events.map(event => event.type)).toEqual(['span_started', 'span_ended', 'log', 'metric']);
+    expect(events[1]).toMatchObject({ exportedSpan: { startTime: new Date(1), endTime: new Date(1) } });
+    await instance.shutdown();
+  });
+
+  it.each([
     ['1000000000', '999000000'],
     ['1000000001', '1000000000'],
+    [1600000, '1500000'],
+    ['1600000', 1500000],
   ])('rejects a mixed payload before exporting any records (%s > %s)', (startTimeUnixNano, endTimeUnixNano) => {
     const events: ObservabilityEvent[] = [];
     const instance = new DefaultObservabilityInstance({

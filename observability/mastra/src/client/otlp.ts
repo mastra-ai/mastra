@@ -37,7 +37,7 @@ function hasReversedTimestamps(start: unknown, end: unknown): boolean {
  */
 function nanosToDate(value: unknown): Date {
   if (typeof value === 'number') {
-    return new Date(Math.round(value / 1e6));
+    return new Date(Math.trunc(value / 1e6));
   }
   if (typeof value === 'string') {
     // Avoid BigInt in hot path; just take the millisecond portion of the
