@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { z } from 'zod/v4';
 import { browserCliHandler } from '../../browser/cli-handler';
 import { createTool } from '../../tools';
@@ -7,6 +8,7 @@ import {
   DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
   RetainedOutputBuffer,
 } from '../sandbox/process-manager/process-handle';
+import type { Workspace } from '../workspace';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -108,6 +110,35 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   return `${output}${separator}${terminalLine}`;
 }
 
+/**
+ * The directory the workspace's file tools resolve relative paths against, when its
+ * filesystem is sandbox-backed and reports one. Only the configured filesystem is
+ * consulted: a dynamic filesystem resolver is not invoked just to learn a default cwd, so
+ * a sandbox-only tool call still resolves nothing it did not resolve before. Every absent
+ * case — no filesystem, no capability — falls back to `undefined`, which keeps the
+ * sandbox's own default cwd exactly as before.
+ */
+async function resolveDefaultCwd(workspace: Workspace): Promise<string | undefined> {
+  try {
+    const root = await workspace.filesystem?.getCommandCwd?.();
+    return root?.startsWith('/') ? root : undefined;
+  } catch {
+    // A filesystem that cannot answer must not fail the command: run it with today's default.
+    return undefined;
+  }
+}
+
+/**
+ * The cwd a command actually runs in. An explicit absolute `cwd` wins, a relative one is
+ * resolved under the default root so it means the same thing as a relative path passed to
+ * the file tools, and an omitted `cwd` becomes the default root.
+ */
+function resolveCommandCwd(cwd: string | undefined, defaultCwd: string | undefined): string | undefined {
+  if (!cwd) return defaultCwd;
+  if (cwd.startsWith('/')) return cwd;
+  return defaultCwd ? path.posix.join(defaultCwd, cwd) : cwd;
+}
+
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
 async function executeCommand(input: Record<string, any>, context: any) {
   let { command } = input;
@@ -115,6 +146,9 @@ async function executeCommand(input: Record<string, any>, context: any) {
   const timeout = input.timeout != null ? (input.timeout as number) * 1000 : undefined;
   const background = input.background as boolean | undefined;
   const { workspace, sandbox } = requireSandbox(context);
+  // Commands and file tools must resolve relative paths against the same directory, or a
+  // file written by a shell command is invisible to the file tools (and to the plan card).
+  const effectiveCwd = resolveCommandCwd(cwd, await resolveDefaultCwd(workspace));
 
   // Lazy browser launch and CDP URL injection for browser CLI commands
   const browser = workspace.browser;
@@ -171,7 +205,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
   const span = startWorkspaceSpan(context, workspace, {
     category: 'sandbox',
     operation: background ? 'spawnProcess' : 'executeCommand',
-    input: { command, cwd, timeout: input.timeout, background },
+    input: { command, cwd: effectiveCwd, timeout: input.timeout, background },
     attributes: { sandboxProvider: sandbox.provider },
   });
 
@@ -193,7 +227,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     // spawn() resolves before any data events fire (Node event loop guarantees this).
     let handle: Awaited<ReturnType<typeof sandbox.processes.spawn>>;
     handle = await sandbox.processes.spawn(command, {
-      cwd: cwd ?? undefined,
+      cwd: effectiveCwd,
       timeout: timeout ?? undefined,
       abortSignal: bgAbortSignal,
       // A background process collects output rather than being driven over stdin,
@@ -271,7 +305,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
     const result = await sandbox
       .executeCommand(reportUpstreamPipelineFailure(command, sandbox.provider), [], {
         timeout: timeout ?? undefined,
-        cwd: cwd ?? undefined,
+        cwd: effectiveCwd,
         abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
         onStdout: async (data: string) => {
           stdout.append(data);
@@ -368,7 +402,7 @@ Usage:
 - Commands run in a shell, so pipes, redirects, and chaining (&&, ||, ;) all work.
 - Always quote file paths that contain spaces (e.g., cd "/path/with spaces").
 - Use the timeout parameter (in seconds) to limit execution time. Behavior when omitted depends on the sandbox provider.
-- Optionally use cwd to override the working directory. Commands run from the sandbox's configured workingDirectory (or the provider default) if omitted.`;
+- Optionally use cwd to override the working directory. Commands run from the workspace directory if omitted, the same root relative file paths resolve against; a relative cwd is resolved against that directory.`;
 
 /** Foreground-only tool (no background param in schema). */
 export const executeCommandTool = createTool({

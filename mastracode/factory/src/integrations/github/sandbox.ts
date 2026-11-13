@@ -421,8 +421,9 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
     // destination with a non-retryable fatal. Nothing here is recoverable,
     // the probe above already ruled out a checkout of this repo, so
     // clear its contents before cloning, exactly as the retry path does. Keep
-    // the workdir itself because LocalSandbox runs commands with this
-    // directory as the child process cwd.
+    // the workdir itself because Factory's own commands use it as their cwd
+    // (`gh pr create`, and the `cd` each lifecycle command starts with), so it
+    // has to exist as a directory.
     const authEnv = gitAuthenticationEnvironment(
       cleanCloneUrl,
       token,
@@ -439,7 +440,7 @@ async function materializeRepoImpl(options: MaterializeRepoOptions): Promise<voi
         beforeRetry: async () => {
           // A clone that died partway leaves the destination non-empty, which
           // git refuses to clone into. Clear its contents so the retry starts
-          // clean without removing LocalSandbox's process cwd.
+          // clean, leaving a directory Factory's commands still use as cwd.
           await clearWorkdir(sandbox, workdir);
         },
       },
