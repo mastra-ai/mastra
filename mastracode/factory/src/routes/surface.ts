@@ -1043,6 +1043,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()
