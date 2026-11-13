@@ -23,6 +23,7 @@ setAnalytics(analytics);
 const program = new Command();
 
 type CreateArgs = {
+  name?: string;
   template?: string;
   platform?: boolean;
   org?: string;
@@ -33,6 +34,7 @@ program
   .name('create-factory')
   .description('Create a new Mastra Factory project')
   .argument('[project-name]', 'Directory name of the project')
+  .option('--name <name>', 'Directory name of the project (same as the [project-name] argument)')
   .option(
     '--template <template-name>',
     'Create a project from a template (public GitHub URL). Defaults to the platform template, or the self-hosted template with --no-platform',
@@ -41,7 +43,14 @@ program
   .option('--org <org>', 'Mastra organization id or name — skips the interactive org picker')
   .option('--region <region>', 'Platform project region (eu or us); defaults to us')
   .version(pkg.version, '-v, --version')
-  .action(async (projectNameArg: string | undefined, args: CreateArgs) => {
+  .action(async (positionalName: string | undefined, args: CreateArgs) => {
+    if (positionalName && args.name && positionalName !== args.name) {
+      program.error(`Conflicting project names: "${positionalName}" and --name "${args.name}". Pass only one.`);
+    }
+    const projectNameArg = (args.name ?? positionalName)?.trim();
+    if (projectNameArg === '') {
+      program.error(`Project name can't be empty`);
+    }
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
     // Values that must never reach analytics if a failure message echoes them.

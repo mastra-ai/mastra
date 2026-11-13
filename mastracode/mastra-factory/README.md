@@ -39,6 +39,12 @@ By default, the setup wizard scaffolds the [platform template](https://github.co
 npx create-factory@latest my-mastra-factory --no-platform
 ```
 
+All input can be passed as command-line args instead:
+
+```bash
+npx create-factory@latest --name acme-factory --org my-org --region eu
+```
+
 Pass `--help` to see all options:
 
 ```bash
