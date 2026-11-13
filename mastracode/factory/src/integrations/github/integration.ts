@@ -113,7 +113,7 @@ export interface RepoSummary {
 
 /**
  * Narrows a repository listing: `query` keeps names containing it, `limit`
- * returns only that many, most recently pushed first.
+ * returns only that many, most recently pushed first. `fresh` skips caches.
  */
 export interface RepoListOptions {
   fresh?: boolean;

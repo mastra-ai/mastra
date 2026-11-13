@@ -1076,6 +1076,28 @@ describe('PlatformGithubIntegration', () => {
     expect(url.searchParams.get('limit')).toBe('100');
   });
 
+  it('falls back to the full listing when the name search window misses the repository', async () => {
+    const window = Array.from({ length: 100 }, (_, i) => ({
+      id: i + 1,
+      owner: `fork-${i}`,
+      name: 'app',
+      fullName: `fork-${i}/app`,
+      private: false,
+      defaultBranch: 'main',
+    }));
+    const wanted = { id: 500, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' };
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        json({ repositories: new URL(String(input)).searchParams.has('q') ? window : [...window, wanted] }),
+      );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getInstallationRepo(7, 'acme/app')).resolves.toMatchObject({ id: 500 });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(new URL(String(fetchImpl.mock.calls[1]![0])).searchParams.has('q')).toBe(false);
+  });
+
   it('asks the Platform for a narrowed listing without caching it as the full grant', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
       json({

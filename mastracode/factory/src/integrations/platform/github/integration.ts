@@ -1313,7 +1313,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       return result.repositories.map(repository => ({ ...repository, installationId }));
     }
 
-    // Hot in two places — the repos route and token minting (which re-lists
+    // Read by single-repository lookups and token minting (which re-lists
     // only to validate the 1–10 repo rule). A short TTL collapses repeat
     // Platform round trips within one UI interaction; `fresh` skips it so an
     // explicit refresh picks up repositories just granted on GitHub.
@@ -1336,18 +1336,21 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   /**
    * The Platform has no single-repository endpoint, so use a cached full
    * listing when one is warm and otherwise search the installation by name,
-   * which stays fast on accounts with hundreds of repositories.
+   * which stays fast on accounts with hundreds of repositories. The search is
+   * capped, so a miss falls back to the full listing rather than answering no.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+    const find = (repositories: RepoSummary[]) =>
+      repositories.find(repository => repository.fullName === repoFullName) ?? null;
     const cached = this.#installationReposCache.get(installationId);
-    const repositories =
-      cached && cached.expiresAt > Date.now()
-        ? cached.repos
-        : await this.listInstallationRepos(installationId, {
-            query: repoFullName.split('/').pop() ?? repoFullName,
-            limit: 100,
-          });
-    return repositories.find(repository => repository.fullName === repoFullName) ?? null;
+    if (cached && cached.expiresAt > Date.now()) return find(cached.repos);
+    const searched = find(
+      await this.listInstallationRepos(installationId, {
+        query: repoFullName.split('/').pop() ?? repoFullName,
+        limit: 100,
+      }),
+    );
+    return searched ?? find(await this.listInstallationRepos(installationId));
   }
 
   async mintInstallationToken(installationId: number): Promise<string> {
