@@ -94,22 +94,6 @@ function guardPlanFileWrite({ workspaceToolName, input, context }: WorkspaceTool
   };
 }
 
-/**
- * Run `execute_command` from the project path when the model omits `cwd`.
- * The prompt advertises the project path as the working directory and the
- * file tools resolve against it, but the sandbox's own default cwd can be its
- * parent (a Factory session's checkout sits under the VM's home dir), so a
- * bare `git status` would otherwise run outside the repository.
- */
-export function defaultCommandCwdToProjectPath({ workspaceToolName, input, context }: WorkspaceToolHookContext) {
-  if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
-  if (!input || typeof input !== 'object') return;
-  const commandInput = input as { cwd?: unknown };
-  if (commandInput.cwd != null && commandInput.cwd !== '') return;
-  const projectPath = getHarnessProjectPath(getHarnessContext(context));
-  if (projectPath?.startsWith('/')) commandInput.cwd = projectPath;
-}
-
 const BACKGROUND_TOOL_CONFIG = { enabled: true, defaultDisposition: 'foreground' } as const;
 
 export function createMastraCodeWorkspaceTools(
@@ -117,7 +101,6 @@ export function createMastraCodeWorkspaceTools(
   plansDir?: string,
 ): WorkspaceToolsConfig {
   const background = backgroundToolsEnabled ? BACKGROUND_TOOL_CONFIG : undefined;
-  const guardPlanFile = createPlanModePlanFileWriteGuard(plansDir);
   return {
     ...TOOL_NAME_OVERRIDES,
     // The TUI shows this description in place of the raw command.
@@ -146,10 +129,7 @@ export function createMastraCodeWorkspaceTools(
       ...(background ? { background } : {}),
     },
     hooks: {
-      beforeToolCall: hookContext => {
-        defaultCommandCwdToProjectPath(hookContext);
-        return guardPlanFile(hookContext);
-      },
+      beforeToolCall: createPlanModePlanFileWriteGuard(plansDir),
     },
   };
 }
