@@ -30,7 +30,7 @@ export function createImageAgent(environment: NodeJS.ProcessEnv, images: ImageGe
         description: 'Generate the one image assigned to this execution slot.',
         inputSchema: z.strictObject({}),
         outputSchema: imageOutputSchema,
-        execute: async () => imageOutputSchema.parse({ artifacts: [await images.generate()] }),
+        execute: async () => ({ artifacts: [await images.generate()] as [Artifact] }),
       }),
     },
   });
