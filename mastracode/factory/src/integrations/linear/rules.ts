@@ -120,7 +120,8 @@ export class LinearRules {
       const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
       const renamed = byIssueId.find(item => !isTerminalWorkItem(this.#boards(input), item)) ?? byIssueId[0];
       const filed = itemsBySourceKey.get(`linear:${issue.identifier}`);
-      const cards = filed ?? (renamed ? (itemsBySourceKey.get(renamed.externalSource?.externalId) ?? [renamed]) : []);
+      const renamedId = renamed?.externalSource?.externalId;
+      const cards = filed ?? (renamed ? ((renamedId && itemsBySourceKey.get(renamedId)) || [renamed]) : []);
       if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
       // Each board's card runs its own rules for the issue.
       for (const card of cards) {
