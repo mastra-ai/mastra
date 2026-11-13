@@ -108,6 +108,16 @@ describe('resolveBuiltinMCPConfig studioUrl', () => {
     expect(studioUrl({ mcp: { studioUrl: false } })).toBeUndefined();
   });
 
+  it('uses https when the dev server serves HTTPS, from server.https or mastra dev --https', () => {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    const https = { key: Buffer.from('key'), cert: Buffer.from('cert') };
+    expect(studioUrl({ https })).toBe('https://localhost:4111');
+    expect(studioUrl({ https, studioProtocol: 'http' })).toBe('http://localhost:4111');
+    vi.stubEnv('MASTRA_HTTPS_KEY', 'a2V5');
+    vi.stubEnv('MASTRA_HTTPS_CERT', 'Y2VydA==');
+    expect(studioUrl({})).toBe('https://localhost:4111');
+  });
+
   it('is only set elsewhere when configured', () => {
     vi.stubEnv('MASTRA_DEV', '');
     expect(studioUrl({})).toBeUndefined();

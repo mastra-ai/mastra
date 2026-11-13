@@ -140,7 +140,12 @@ export function summarizeTrace(output: Row): string {
   ].join('\n');
 }
 
-const num = (value: unknown) => (typeof value === 'number' ? String(Math.round(value * 1000) / 1000) : undefined);
+/** Three decimals, but small nonzero values (a $0.0004 cost) keep three significant digits instead of reading 0. */
+function num(value: unknown): string | undefined {
+  if (typeof value !== 'number') return undefined;
+  if (value === 0 || Math.abs(value) >= 1) return String(Math.round(value * 1000) / 1000);
+  return String(Number(value.toPrecision(3)));
+}
 
 /** A series as its range and endpoints: the app charts every point. */
 function seriesLine(label: string, series: Row): string {

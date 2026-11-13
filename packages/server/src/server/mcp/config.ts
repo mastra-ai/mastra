@@ -174,7 +174,10 @@ function resolveStudioUrl(mastra: Mastra, config: ServerMCPConfig): string | und
   const host = name.includes(':') && !name.startsWith('[') ? `[${name}]` : name;
   const port = server?.studioPort ?? server?.port ?? 4111;
   const base = (server?.studioBase ?? '/').replace(/\/+$/, '');
-  return `${server?.studioProtocol ?? 'http'}://${host}:${port}${base}`;
+  // Like the dev server: HTTPS when `server.https` or `mastra dev --https` (which passes the cert in env) is set.
+  const https =
+    (server?.https?.key && server.https.cert) || (process.env.MASTRA_HTTPS_KEY && process.env.MASTRA_HTTPS_CERT);
+  return `${server?.studioProtocol ?? (https ? 'https' : 'http')}://${host}:${port}${base}`;
 }
 
 /** DNS-rebinding protection for `mastra dev` only; production hosts sit behind proxies and custom domains. */

@@ -30,8 +30,14 @@ import type { OpenedTraceFilter } from '../../shared/mcp-fetch';
 import { TraceView } from '../../shared/trace-view';
 import { LogsTab } from './logs-tab';
 import { MetricsTab } from './metrics-tab';
-import type { Drilldown } from './metrics-tab';
-import { decodeTraceFilters, encodeTraceFilters, logArgsToParams, whereToTraceFilters } from './opened-filters';
+import type { Drilldown, MetricsOpening } from './metrics-tab';
+import {
+  decodeTraceFilters,
+  encodeTraceFilters,
+  logArgsToParams,
+  metricsArgsToFilters,
+  whereToTraceFilters,
+} from './opened-filters';
 
 type Args = Record<string, unknown>;
 type View = 'traces' | 'spans' | 'threads' | 'logs' | 'metrics';
@@ -48,6 +54,8 @@ type Opened = {
   sort: TracesSort;
   /** The logs tab's starting search params, as Studio's logs URL. */
   logParams: string;
+  /** The metrics tab's starting time range and chips, from `analyze_metrics` filters. */
+  metrics?: MetricsOpening;
 };
 
 /** Logs list arguments that are paging or sort, which the logs tab sets itself. */
@@ -88,6 +96,7 @@ function toOpened(tool: string | undefined, args: Args | undefined): Opened {
   if (tool === 'list_logs') return toOpenedLogs(args, opened);
   if (tool === 'analyze_metrics') {
     opened.view = 'metrics';
+    opened.metrics = metricsArgsToFilters(args?.filters);
     return opened;
   }
   const timeRange = args?.timeRange as { from?: string; to?: string } | undefined;
@@ -304,7 +313,7 @@ function Views({ app, opened, onClearQuery }: { app: App; opened: Opened; onClea
         )}
         {views.includes('metrics') && (
           <TabContent value="metrics" className="min-h-0 flex-1 overflow-auto">
-            <MetricsTab onDrilldown={drilldown} logs={views.includes('logs')} />
+            <MetricsTab onDrilldown={drilldown} logs={views.includes('logs')} opening={opened.metrics} />
           </TabContent>
         )}
       </Tabs>

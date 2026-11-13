@@ -9,6 +9,7 @@ import {
 } from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   AgentRunsCard,
   BreakdownCard,
@@ -39,6 +40,9 @@ import { useState } from 'react';
 
 /** Where a dashboard drilldown goes: the Studio URL's search params, which the traces and logs tabs read. */
 export type Drilldown = { to: 'traces' | 'logs'; params: URLSearchParams };
+
+/** What the dashboard opens on: the opening tool's time range and chips, and the filters it couldn't apply. */
+export type MetricsOpening = { tokens: PropertyFilterToken[]; range?: DateRange; unapplied: string[] };
 
 type MetricsProps = {
   onDrilldown: (drilldown: Drilldown) => void;
@@ -145,7 +149,7 @@ function MetricsCards({ onDrilldown, logs }: MetricsProps) {
   );
 }
 
-function MetricsContent(props: MetricsProps) {
+function MetricsContent({ unapplied, ...props }: MetricsProps & { unapplied: string[] }) {
   const { error } = useAgentRunsKpiMetrics(useMetricsFilters());
   const { data: tags } = useTags();
   const { data: entityNames } = useEntityNames();
@@ -165,6 +169,12 @@ function MetricsContent(props: MetricsProps) {
           <MetricsFilterBar fields={fields} />
         </ActionRow.Start>
       </ActionRow>
+      {unapplied.length > 0 && (
+        <Txt variant="body-sm" tone="muted">
+          The conversation also filtered by {unapplied.join(', ')}, which the dashboard can't apply. Its numbers include
+          everything those filters left out.
+        </Txt>
+      )}
       {error ? (
         <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
       ) : (
@@ -179,10 +189,10 @@ function MetricsContent(props: MetricsProps) {
  * tab with the same filters Studio would put in their URL. Filters aren't saved between visits, since hosts
  * sandbox apps away from storage.
  */
-export function MetricsTab(props: MetricsProps) {
-  const [preset, setPreset] = useState<DatePreset>('24h');
-  const [customRange, setCustomRange] = useState<DateRange>();
-  const [filterTokens, setFilterTokens] = useState<PropertyFilterToken[]>([]);
+export function MetricsTab({ opening, ...props }: MetricsProps & { opening?: MetricsOpening }) {
+  const [preset, setPreset] = useState<DatePreset>(opening?.range ? 'custom' : '24h');
+  const [customRange, setCustomRange] = useState<DateRange | undefined>(opening?.range);
+  const [filterTokens, setFilterTokens] = useState<PropertyFilterToken[]>(opening?.tokens ?? []);
   return (
     <MetricsProvider
       preset={preset}
@@ -195,7 +205,7 @@ export function MetricsTab(props: MetricsProps) {
       customRange={customRange}
       onCustomRangeChange={setCustomRange}
     >
-      <MetricsContent {...props} />
+      <MetricsContent {...props} unapplied={opening?.unapplied ?? []} />
     </MetricsProvider>
   );
 }

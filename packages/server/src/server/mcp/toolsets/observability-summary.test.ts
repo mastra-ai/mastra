@@ -22,6 +22,13 @@ describe('summarizeMetrics', () => {
     expect(text).toContain('Change: 23.45%');
   });
 
+  it('keeps small nonzero values instead of rounding them to 0', () => {
+    const text = summarizeMetrics({
+      groups: [{ dimensions: { model: 'gpt-5-mini' }, value: 0.000123456, estimatedCost: 0.0004, costUnit: 'usd' }],
+    });
+    expect(text).toContain('- model=gpt-5-mini | 0.000123 | 0.0004 usd');
+  });
+
   it('lists breakdown groups', () => {
     const text = summarizeMetrics({
       groups: [{ dimensions: { entityName: 'support-agent' }, value: 42, estimatedCost: 0.5, costUnit: 'usd' }],

@@ -1,4 +1,10 @@
+import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
 import { applyLogsPropertyFilterTokens, buildLogsListFilters } from '@mastra/playground-ui/domains/logs/log-filters';
+import {
+  METRICS_PROPERTY_FILTER_PARAM_BY_FIELD,
+  METRICS_ROOT_ENTITY_TYPE_PARAM,
+  getMetricsPropertyFilterTokens,
+} from '@mastra/playground-ui/domains/metrics/metrics-filters';
 import {
   DEFAULT_TRACES_FILTERS,
   buildTracesQueryRequest,
@@ -118,6 +124,36 @@ function conjuncts(where: unknown): Predicate[] {
 }
 
 /** The traces filters in a Studio traces URL, as Studio's traces page reads them. */
+/**
+ * Turns `analyze_metrics` filters into the dashboard's starting time range and filter chips, through Studio's
+ * metrics URL params. `unapplied` names the filters the dashboard has no chip for, so the app can say the
+ * dashboard's totals ignore them. `name` picks the analyzed metric, not a scope, so it's left out.
+ */
+export function metricsArgsToFilters(filters: unknown): {
+  tokens: PropertyFilterToken[];
+  range?: { from?: Date; to?: Date };
+  unapplied: string[];
+} {
+  const { timestamp, name: _name, ...dimensions } = (filters ?? {}) as Args;
+  const params = new URLSearchParams();
+  const unapplied: string[] = [];
+  const paramFor: Record<string, string> = {
+    ...METRICS_PROPERTY_FILTER_PARAM_BY_FIELD,
+    rootEntityType: METRICS_ROOT_ENTITY_TYPE_PARAM,
+  };
+  for (const [key, value] of Object.entries(dimensions)) {
+    if (value == null) continue;
+    const param = paramFor[key];
+    const values = Array.isArray(value) ? value : [value];
+    if (!param || values.length === 0 || !values.every(item => typeof item === 'string')) unapplied.push(key);
+    else for (const item of values) params.append(param, item);
+  }
+  const { start, end } = (timestamp ?? {}) as { start?: string; end?: string };
+  const range =
+    start || end ? { from: start ? new Date(start) : undefined, to: end ? new Date(end) : undefined } : undefined;
+  return { tokens: getMetricsPropertyFilterTokens(params), range, unapplied };
+}
+
 export function decodeTraceFilters(params: URLSearchParams): TracesFilters {
   const parseDate = (raw: string | null) => {
     const date = raw ? new Date(raw) : undefined;

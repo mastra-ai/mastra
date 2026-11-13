@@ -117,6 +117,12 @@ function traceState(traceId: string, spans: LightSpanRecord[], selected: LightSp
 export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrace; spanId?: string }) {
   const [spans, setSpans] = useState(trace.spans);
   const [selectedSpanId, setSelectedSpanId] = useState(spanId);
+  // A span picked in one trace means nothing in the next one the host sends.
+  const [shownTraceId, setShownTraceId] = useState(trace.traceId);
+  if (shownTraceId !== trace.traceId) {
+    setShownTraceId(trace.traceId);
+    setSelectedSpanId(spanId);
+  }
   useEffect(() => {
     setSpans(trace.spans);
     if (trace.nextOffset === undefined) return;

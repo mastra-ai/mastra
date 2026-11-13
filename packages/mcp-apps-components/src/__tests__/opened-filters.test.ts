@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { logArgsToParams, whereToTraceFilters } from '../apps/observability-explorer/opened-filters';
+import {
+  logArgsToParams,
+  metricsArgsToFilters,
+  whereToTraceFilters,
+} from '../apps/observability-explorer/opened-filters';
 
 const eq = (path: string, literal: string | number) => ({ op: 'eq', left: { path }, right: { literal } });
 
@@ -113,5 +117,40 @@ describe('logArgsToParams', () => {
 
     expect(Object.fromEntries(params)).toEqual({ filterTraceId: 'trace-1' });
     expect(rest).toEqual({ level: ['error', 'warn'], message: 'refund' });
+  });
+});
+
+describe('metricsArgsToFilters', () => {
+  it("opens the dashboard on the model's time range and the filters it has chips for", () => {
+    const result = metricsArgsToFilters({
+      name: ['mastra_agent_duration_ms'],
+      timestamp: { start: '2026-11-03T00:00:00.000Z', end: '2026-11-10T00:00:00.000Z' },
+      rootEntityType: 'agent',
+      entityName: 'support-agent',
+      environment: 'production',
+      tags: ['beta', 'eu'],
+    });
+    expect(result.range).toEqual({
+      from: new Date('2026-11-03T00:00:00.000Z'),
+      to: new Date('2026-11-10T00:00:00.000Z'),
+    });
+    expect(result.tokens).toEqual([
+      { fieldId: 'rootEntityType', value: 'agent' },
+      { fieldId: 'entityName', value: 'support-agent' },
+      { fieldId: 'environment', value: 'production' },
+      { fieldId: 'tags', value: ['beta', 'eu'] },
+    ]);
+    expect(result.unapplied).toEqual([]);
+  });
+
+  it('names the filters the dashboard has no chip for', () => {
+    const result = metricsArgsToFilters({ entityName: 'support-agent', entityType: 'tool_call', labels: { a: 'b' } });
+    expect(result.tokens).toEqual([{ fieldId: 'entityName', value: 'support-agent' }]);
+    expect(result.unapplied).toEqual(['entityType', 'labels']);
+    expect(result.range).toBeUndefined();
+  });
+
+  it('opens on the default view without filters', () => {
+    expect(metricsArgsToFilters(undefined)).toEqual({ tokens: [], range: undefined, unapplied: [] });
   });
 });

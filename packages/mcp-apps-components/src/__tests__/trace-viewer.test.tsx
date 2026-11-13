@@ -108,6 +108,24 @@ it('shows a trace that arrives after one that failed', async () => {
   expect(screen.queryByText('The trace could not be loaded.')).toBeNull();
 });
 
+it('closes the picked span when the host sends another trace', async () => {
+  const mcp = traceServer();
+  const bridge = await openTrace(mcp, 'trace-1');
+  fireEvent.click(await spanRow("tool: 'get-weather'"));
+  expect(await screen.findByText('Parent span')).toBeTruthy();
+
+  // The next trace reuses the span ids, so a kept selection would load trace-2's "tool" span unasked.
+  const next = traceSpans.map(span => ({ ...span, traceId: 'trace-2' }));
+  await bridge.sendToolResult({
+    content: [{ type: 'text', text: JSON.stringify({ traceId: 'trace-2', spanCount: next.length, spans: next }) }],
+  });
+
+  await waitFor(() => expect(screen.queryByText('Parent span')).toBeNull());
+  await new Promise(resolve => setTimeout(resolve, 100));
+  expect(screen.queryByText('Parent span')).toBeNull();
+  expect(mcp.calls.filter(call => call.tool === 'get_span' && call.args.traceId === 'trace-2')).toEqual([]);
+});
+
 it("keeps a newer trace when the rest of an older one's pages arrive after it", async () => {
   let release!: () => void;
   const mcp = traceServer({ pageSize: 1, pagesHeld: new Promise<void>(resolve => (release = resolve)) });
