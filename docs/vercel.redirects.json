@@ -3,12 +3,12 @@
     {
       "source": "/docs/mastra-platform/connect/end-user-connections",
       "destination": "/docs/mastra-platform/connect",
-      "permanent": true
+      "permanent": false
     },
     {
       "source": "/reference/connect/user-connect-routes",
       "destination": "/reference/connect/tools",
-      "permanent": true
+      "permanent": false
     },
     {
       "source": "/docs/workspace/overview",

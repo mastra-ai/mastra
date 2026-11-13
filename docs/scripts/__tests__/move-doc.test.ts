@@ -477,6 +477,23 @@ describe('move-doc Mastra integration tests', () => {
     expect(redirects.some((redirect: { source: string }) => redirect.source.includes(':sdk'))).toBe(false)
   })
 
+  test('keeps unrelated temporary redirects temporary', async () => {
+    await tempSetup.writeFile(
+      'vercel.redirects.json',
+      JSON.stringify({
+        redirects: [{ source: '/docs/temporary', destination: '/docs/elsewhere', permanent: false }],
+      }),
+    )
+    await tempSetup.writeFile('src/content/en/docs/old-page.mdx', '---\ntitle: Old\n---\n# Old')
+
+    const result = await moveDocuments('/docs/old-page', '/docs/new-page', { verbose: false })
+
+    expect(result.success).toBe(true)
+    const redirects = JSON.parse(await tempSetup.readFile('vercel.redirects.json')).redirects
+    expect(redirects).toContainEqual({ source: '/docs/temporary', destination: '/docs/elsewhere', permanent: false })
+    expect(redirects).toContainEqual({ source: '/docs/old-page', destination: '/docs/new-page', permanent: true })
+  })
+
   test('updates static redirect source and destination when glob redirect covers them', async () => {
     await tempSetup.writeFile(
       'vercel.redirects.json',

@@ -211,7 +211,7 @@ const dedupeRedirectsBySource = (redirects: Redirect[]): Redirect[] => {
     const redirect = redirects[index]
     if (seen.has(redirect.source)) continue
     seen.add(redirect.source)
-    deduped.unshift({ ...redirect, permanent: true })
+    deduped.unshift(redirect)
   }
 
   return deduped
@@ -477,7 +477,7 @@ const updateRedirects = async (
 ): Promise<string[]> => {
   const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
-  let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
+  let redirects = config.redirects
 
   if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
@@ -511,7 +511,7 @@ const updateRedirects = async (
       return { ...redirect, destination: `${newPathBase}${newHash || destHash || ''}`, permanent: true }
     }
 
-    return { ...redirect, permanent: true }
+    return redirect
   })
 
   if (oldPath !== newPath) {
