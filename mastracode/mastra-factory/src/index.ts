@@ -47,7 +47,10 @@ program
     if (positionalName && args.name && positionalName !== args.name) {
       program.error(`Conflicting project names: "${positionalName}" and --name "${args.name}". Pass only one.`);
     }
-    const projectNameArg = args.name ?? positionalName;
+    const projectNameArg = (args.name ?? positionalName)?.trim();
+    if (projectNameArg === '') {
+      program.error(`Project name can't be empty`);
+    }
     const region = args.region ? String(args.region) : undefined;
     const validRegion = region === 'eu' || region === 'us' ? region : undefined;
     // Values that must never reach analytics if a failure message echoes them.
