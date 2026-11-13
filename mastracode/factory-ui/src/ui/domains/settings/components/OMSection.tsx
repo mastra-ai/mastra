@@ -167,9 +167,6 @@ export function OMSection({
           <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
-          <Txt tone="muted" as="p" variant="meta">
-            Observational-memory model calls may fail until credentials are configured.
-          </Txt>
         </div>
       )}
 

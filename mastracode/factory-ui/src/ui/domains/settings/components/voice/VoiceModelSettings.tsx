@@ -83,7 +83,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
           </SelectContent>
         </Select>
       </SettingsRow>
-      <SettingsRow label="In use for you" description="What the mic uses right now">
+      <SettingsRow label="In use for you">
         <Txt as="span" variant="caption">
           {inUseLabel(settings)}
         </Txt>

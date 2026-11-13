@@ -41,7 +41,7 @@ export function AddSpeechToTextKeyDrawer({
       <DrawerContent>
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
-          <DrawerDescription>Paste an API key. Subscription sign-ins can't transcribe audio.</DrawerDescription>
+          <DrawerDescription>Subscription sign-ins can't transcribe audio.</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="flex min-h-0 flex-col gap-3">
           <ul className="border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border">

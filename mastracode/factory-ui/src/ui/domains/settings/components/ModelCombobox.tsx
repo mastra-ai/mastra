@@ -34,7 +34,7 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
   return {
     value: AUTO_VALUE,
     label: 'Auto',
-    description: effectiveName ? `Currently ${effectiveName}` : 'Picked for you',
+    description: effectiveName ? `Currently ${effectiveName}` : undefined,
     displayLabel: effectiveName ? `Auto (${effectiveName})` : 'Auto',
     start: (
       <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">

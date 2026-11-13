@@ -83,7 +83,6 @@ describe('OMSection', () => {
     renderWithProviders(<OMSection models={models} />);
 
     expect(await screen.findByText('Model credentials required')).toBeInTheDocument();
-    expect(screen.getByText(/model calls may fail until credentials are configured/)).toBeInTheDocument();
     expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
     // A configured model that is no longer in the catalog still shows, by name.
     expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');

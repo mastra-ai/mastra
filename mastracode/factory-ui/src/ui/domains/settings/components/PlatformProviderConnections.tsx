@@ -52,10 +52,7 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
-          <DialogDescription>
-            Paste an API key from your {meta.displayName} dashboard. The key is stored by Mastra Platform and never
-            reaches the browser again.
-          </DialogDescription>
+          <DialogDescription>Paste an API key from your {meta.displayName} dashboard.</DialogDescription>
         </DialogHeader>
         <DialogBody>
           <Input

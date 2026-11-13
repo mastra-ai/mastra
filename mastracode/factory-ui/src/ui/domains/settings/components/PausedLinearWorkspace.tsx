@@ -30,7 +30,7 @@ export function PausedLinearWorkspace({
           </Badge>
         </span>
       }
-      description={`${count} ${count === 1 ? 'project or team' : 'projects and teams'} paused. Reconnect to resume. Your saved routing is kept.`}
+      description={`${count} ${count === 1 ? 'project or team' : 'projects and teams'} paused.`}
       errorMsg={reconnect.error}
     >
       <div className="flex flex-wrap items-center gap-2">

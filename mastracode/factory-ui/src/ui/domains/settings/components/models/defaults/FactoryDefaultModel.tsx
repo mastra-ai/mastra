@@ -65,7 +65,7 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
         <SharedCredentialNotice modelId={defaultModelId || undefined} />
         {applyToSessions.data && (
           <Txt as="p" variant="meta" role="status">
-            Switch started in the background. Running sessions will pick up the new model on their next step.
+            Switch started in the background.
           </Txt>
         )}
       </div>

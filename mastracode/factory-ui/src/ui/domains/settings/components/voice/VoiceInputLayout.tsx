@@ -11,10 +11,6 @@ const MODEL_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'factory', use
 const KEYS_SCOPE: Record<VoiceScope, SettingsScope> = { factory: 'org', user: 'personal' };
 
 const DESCRIPTION = 'Speech-to-text for the composer mic and Slack voice clips.';
-const SCOPE_DESCRIPTION: Record<VoiceScope, string> = {
-  factory: `${DESCRIPTION} Like chats in this Factory, it uses the Factory's model and organization keys.`,
-  user: `${DESCRIPTION} Like chats in this Factory, it uses your own model and keys.`,
-};
 
 export function VoiceInputLayout({
   anchorRef,
@@ -34,7 +30,7 @@ export function VoiceInputLayout({
         id={VOICE_INPUT_ANCHOR}
         scope={scope && MODEL_SCOPE[scope]}
         title="Voice input"
-        description={scope ? SCOPE_DESCRIPTION[scope] : DESCRIPTION}
+        description={DESCRIPTION}
       >
         {models}
       </SettingsSubsection>

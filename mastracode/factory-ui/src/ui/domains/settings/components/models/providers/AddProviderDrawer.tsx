@@ -123,9 +123,7 @@ export function AddProviderDrawer({
       <DrawerContent aria-busy={startingProvider !== undefined || undefined}>
         <DrawerHeader>
           <DrawerTitle>Add provider</DrawerTitle>
-          <DrawerDescription>
-            Sign in with a subscription or paste an API key. {AUDIENCE[credentialScope]}
-          </DrawerDescription>
+          <DrawerDescription>{AUDIENCE[credentialScope]}</DrawerDescription>
         </DrawerHeader>
         <DrawerBody className="flex min-h-0 flex-col gap-3">
           <SearchInput
