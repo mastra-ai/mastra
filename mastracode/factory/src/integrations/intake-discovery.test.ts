@@ -78,6 +78,21 @@ describe('intake discovery on a reconcile sweep', () => {
     expect(filed.get(id)).toContain('new-issue');
   });
 
+  it('records a failing source and still files the next source of the same project', async () => {
+    const { project, sweep, filed } = await setup((_, __, sourceId) => {
+      if (sourceId === 'revoked') throw new Error('connection revoked');
+      return { issues: [{ id: 'new-issue' }] };
+    });
+    const id = await project('org-1', { enabled: true, sourceIds: ['revoked', 'healthy'] });
+
+    await expect(sweep()).resolves.toMatchObject({
+      observed: 1,
+      failed: 1,
+      errors: [{ projectId: id, error: 'connection revoked' }],
+    });
+    expect(filed.get(id)).toEqual(['new-issue']);
+  });
+
   it('reads a source to its end when the provider asks for every page', async () => {
     const { project, sweep, listed } = await setup(
       (_, cursor) => {

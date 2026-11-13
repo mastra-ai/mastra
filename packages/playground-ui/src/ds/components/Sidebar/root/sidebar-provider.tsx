@@ -2,6 +2,7 @@ import React from 'react';
 import type { CSSProperties } from 'react';
 import { SidebarContext, MobileDrawerContext } from './sidebar-context';
 import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
+import { SIDEBAR_WIDTHS } from './sidebar-widths';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
@@ -23,15 +24,15 @@ export type SidebarProviderProps = {
   children: React.ReactNode;
   /** Initial state before localStorage hydrates. Defaults to `'default'`. */
   defaultState?: SidebarState;
-  /** Default expanded width in px. Defaults to `240`. */
+  /** Default expanded width in px. Defaults to `232`. */
   defaultWidth?: number;
-  /** Minimum draggable width in px. Defaults to `200`. */
+  /** Minimum draggable width in px. Defaults to `192`. Raise it for a view that needs more room. */
   minWidth?: number;
-  /** Maximum draggable width in px. Defaults to `480`. */
+  /** Maximum draggable width in px. Defaults to `340`. */
   maxWidth?: number;
   /** Drag below this value snaps the sidebar closed. Defaults to `minWidth` (snap to collapsed when dragged below the expanded minimum). Pass `0` to disable snap. */
   collapseBelow?: number;
-  /** Width in px when collapsed. Defaults to `64`. Set to `0` for fully hidden. */
+  /** Width in px when collapsed. Defaults to `60`. Set to `0` for fully hidden. */
   collapsedWidth?: number;
   /** Disable the global ⌘B / Ctrl+B toggle shortcut. Defaults to `true` so browser shortcuts are preserved. */
   disableKeyboardShortcut?: boolean;
@@ -52,11 +53,11 @@ const useIsoLayoutEffect = typeof window !== 'undefined' ? React.useLayoutEffect
 export function SidebarProvider({
   children,
   defaultState = 'default',
-  defaultWidth = 240,
-  minWidth = 200,
-  maxWidth = 480,
+  defaultWidth = SIDEBAR_WIDTHS.default,
+  minWidth = SIDEBAR_WIDTHS.min,
+  maxWidth = SIDEBAR_WIDTHS.max,
   collapseBelow,
-  collapsedWidth = 64,
+  collapsedWidth = SIDEBAR_WIDTHS.collapsed,
   disableKeyboardShortcut = true,
   storageKey,
   mobileBreakpoint = 1024,

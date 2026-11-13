@@ -40,6 +40,7 @@ import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/ba
 import type { IntegrationContext } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
+import { cardIngressId } from '../record-cards.js';
 import type { GitLabEventRules } from './default-rules.js';
 import { decodeIssueReference, encodeIssueReference, encodeSourceId, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
@@ -47,6 +48,26 @@ import type { ParsedGitLabWebhook } from './webhook.js';
 const RULE_TIMEOUT_MS = 5_000;
 
 type IngressStatus = 'ignored' | 'committed' | 'replayed' | 'missing';
+
+export interface GitLabIngressResult {
+  status: IngressStatus;
+  /**
+   * Every Factory this delivery reaches has handled it for good: ingesting the same
+   * delivery again would only replay. Sweeps use it to skip what they already listed.
+   */
+  settled?: boolean;
+}
+
+function settled(result: GitLabIngressResult): boolean {
+  return result.settled ?? (result.status === 'committed' || result.status === 'replayed');
+}
+
+function combined(results: GitLabIngressResult[]): GitLabIngressResult {
+  const all = results.length > 0 && results.every(settled);
+  if (results.some(result => result.status === 'committed')) return { status: 'committed', settled: all };
+  if (results.some(result => result.status === 'replayed')) return { status: 'replayed', settled: all };
+  return { status: results[0]?.status ?? 'ignored', settled: all };
+}
 
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
@@ -272,7 +293,7 @@ export class GitLabRules {
     return toBoardSource(this.options.boards).forProject(scope);
   }
 
-  async ingest(parsed: ParsedGitLabWebhook): Promise<{ status: IngressStatus }> {
+  async ingest(parsed: ParsedGitLabWebhook): Promise<GitLabIngressResult> {
     const event = eventName(parsed);
     const project = object(parsed.payload.project);
     const projectId = number(project?.id);
@@ -283,14 +304,12 @@ export class GitLabRules {
 
     const targets = await this.#targets(String(projectId), host);
     if (targets.length === 0) return { status: 'ignored' };
-    const results: Array<{ status: IngressStatus }> = [];
+    const results: GitLabIngressResult[] = [];
     for (const target of targets) {
       await this.loadBoards(target.target);
       results.push(await this.#ingestProject(parsed, event, projectId, projectPath, host, username, target));
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    return combined(results);
   }
 
   async #targets(repositoryExternalId: string, host: string): Promise<ProjectTarget[]> {
@@ -332,7 +351,7 @@ export class GitLabRules {
     host: string,
     username: string,
     target: ProjectTarget,
-  ): Promise<{ status: IngressStatus }> {
+  ): Promise<GitLabIngressResult> {
     const factoryProject = await this.options.projects.get({
       orgId: target.target.orgId,
       id: target.target.factoryProjectId,
@@ -544,7 +563,7 @@ export class GitLabRules {
         headAt,
         ownedPullRequestNumber: mergeRequestIid,
       });
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
@@ -567,7 +586,7 @@ export class GitLabRules {
         });
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     const ownItem = reviewItem ?? attachedItem;
     const openedItem = (home?.reason === 'authored' ? home.card : undefined) ?? authoringItem;
@@ -581,8 +600,33 @@ export class GitLabRules {
             : event.startsWith('mergeRequest')
               ? [pushedReviewItem ?? attachedItem ?? authoringItem]
               : [issueItem];
+    // The record's cards on other boards run their own rules for it, each under its own identity.
+    const evaluated = new Set(candidates.map(item => item?.id));
+    const firstSibling = candidates.length;
+    for (const item of [...candidates]) {
+      if (!item?.externalSource) continue;
+      for (const sibling of items) {
+        if (
+          evaluated.has(sibling.id) ||
+          sibling.externalSource?.integrationId !== item.externalSource.integrationId ||
+          sibling.externalSource.externalId !== item.externalSource.externalId
+        ) {
+          continue;
+        }
+        evaluated.add(sibling.id);
+        candidates.push(structuredClone(sibling));
+      }
+    }
     const results = [];
     for (const [index, item] of candidates.entries()) {
+      const delivery = `gitlab:${projectId}:${parsed.deliveryId}`;
+      // The first card and the record's cards on other boards take an identity that survives
+      // another card of the record being deleted; a card evaluated twice keeps its own scheme.
+      const repeated = candidates.filter(other => other?.id === item?.id).length > 1;
+      const ingressIdentity =
+        (index === 0 && !repeated) || index >= firstSibling
+          ? await cardIngressId(this.options.storage, delivery, item)
+          : `${delivery}${index ? `:${item?.id ?? index}` : ''}`;
       results.push(
         await this.#evaluate({
           parsed,
@@ -608,7 +652,7 @@ export class GitLabRules {
           factoryAuthored: Boolean(authoringItem),
           item,
           ...(pullRequestHome ? { pullRequestHome } : {}),
-          ingressIdentity: `gitlab:${projectId}:${parsed.deliveryId}${index ? `:${item?.id ?? index}` : ''}`,
+          ingressIdentity,
           // A merge request opening concerns two cards: its own card,
           // which the integration handler files against the authoring item,
           // and that authoring item, which its board may react to. The second
@@ -640,9 +684,7 @@ export class GitLabRules {
         ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    return combined(results);
   }
 
   /**
@@ -950,7 +992,7 @@ export class GitLabRules {
 export function attachGitLabRules(
   gitlab: GitLabRulesIntegration,
   context: IntegrationContext,
-): ((event: ParsedGitLabWebhook) => Promise<unknown>) | undefined {
+): ((event: ParsedGitLabWebhook) => Promise<GitLabIngressResult>) | undefined {
   if (!context.runtime) return undefined;
   const rules = new GitLabRules({
     gitlab,

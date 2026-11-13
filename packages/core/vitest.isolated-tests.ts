@@ -37,8 +37,10 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/suspended-run-ttl.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-abort.test.ts', // vi.mock,env
   'src/agent/__tests__/thread-lease-loss-no-abort-run-stream.test.ts', // env
+  'src/agent/__tests__/thread-lease-loss-parked.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-tool-scope.test.ts', // env
   'src/agent/__tests__/thread-shutdown-lease-release.test.ts', // env
+  'src/agent/__tests__/thread-stream-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
@@ -50,6 +52,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-memory-message-refs.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-model-list-settings-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
+  'src/agent/durable/__tests__/durable-agent-recover-processor-failure.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-background-tools-redelivery.test.ts', // timers
