@@ -568,6 +568,313 @@ describe('Workflow (Evented Engine Specific)', () => {
     });
   });
 
+  describe('nested workflow setState in parallel branches (issue #29732)', () => {
+    const stateSchema = z.object({
+      first: z.number().optional(),
+      second: z.number().optional(),
+      approved: z.boolean().optional(),
+    });
+
+    const makeStateStep = (id: string, delayMs: number, update?: Record<string, unknown>) =>
+      createStep({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        execute: async ({ setState }) => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          if (update) {
+            await setState(update as any);
+          }
+          return {};
+        },
+      });
+
+    const makeNestedWorkflow = (id: string, delayMs: number, update: Record<string, unknown>) => {
+      const write = makeStateStep(`${id}-write`, delayMs, update);
+      return createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [write],
+      })
+        .then(write)
+        .commit();
+    };
+
+    const runWorkflow = async (workflow: any, id: string, initialState: Record<string, unknown>) => {
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        return await run.start({
+          inputData: {},
+          initialState,
+          outputOptions: { includeState: true },
+        });
+      } finally {
+        await mastra.stopWorkers();
+      }
+    };
+
+    it.for([
+      ['nested-first', 5, 50],
+      ['nested-last', 50, 5],
+    ] as const)(
+      'keeps a nested branch update when the sibling never touches state (%s)',
+      async ([name, nestedDelay, siblingDelay]) => {
+        const id = `nested-parallel-state-${name}`;
+        const nested = makeNestedWorkflow(`${id}-nested`, nestedDelay, { approved: true });
+        const other = makeStateStep(`${id}-other`, siblingDelay);
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [nested, other],
+        });
+        workflow.parallel([nested, other]).commit();
+
+        const result = await runWorkflow(workflow, id, {});
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ approved: true });
+        expect(JSON.stringify(result.steps)).not.toContain('__stateDelta');
+      },
+    );
+
+    it.for([
+      ['nested-first', 5, 50],
+      ['nested-last', 50, 5],
+    ] as const)(
+      'merges a nested branch update with a state-writing sibling (%s)',
+      async ([name, nestedDelay, siblingDelay]) => {
+        const id = `nested-parallel-merge-${name}`;
+        const nested = makeNestedWorkflow(`${id}-nested`, nestedDelay, { first: 1 });
+        const other = makeStateStep(`${id}-other`, siblingDelay, { second: 1 });
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [nested, other],
+        });
+        workflow.parallel([nested, other]).commit();
+
+        const result = await runWorkflow(workflow, id, { first: 0, second: 0 });
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ first: 1, second: 1 });
+      },
+    );
+
+    it('keeps a nested branch update in a multi-match conditional', async () => {
+      const id = 'nested-conditional-state';
+      const nested = makeNestedWorkflow(`${id}-nested`, 5, { first: 1 });
+      const other = makeStateStep(`${id}-other`, 50, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [nested, other],
+      });
+      workflow
+        .branch([
+          [async () => true, nested],
+          [async () => true, other],
+        ])
+        .commit();
+
+      const result = await runWorkflow(workflow, id, { first: 0, second: 0 });
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ first: 1, second: 1 });
+    });
+
+    it('keeps an update made by a nested workflow inside a nested parallel branch', async () => {
+      const id = 'nested-in-nested-parallel-state';
+      const inner = makeNestedWorkflow(`${id}-inner`, 5, { approved: true });
+      const middleSibling = makeStateStep(`${id}-middle-sibling`, 30);
+      const middle = createWorkflow({
+        id: `${id}-middle`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [inner, middleSibling],
+      })
+        .parallel([inner, middleSibling])
+        .commit();
+      const outerSibling = makeStateStep(`${id}-outer-sibling`, 150, { second: 1 });
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [middle, outerSibling],
+      });
+      workflow.parallel([middle, outerSibling]).commit();
+
+      const result = await runWorkflow(workflow, id, { second: 0 });
+      expect(result.status).toBe('success');
+      expect((result as any).state).toEqual({ second: 1, approved: true });
+    });
+
+    it.for([
+      ['later-finishes-first', 5, 50],
+      ['later-finishes-last', 50, 5],
+    ] as const)(
+      'keeps a later nested branch write that restores the start value (%s)',
+      async ([name, laterDelay, earlierDelay]) => {
+        const id = `nested-parallel-restore-${name}`;
+        const earlier = makeNestedWorkflow(`${id}-earlier`, earlierDelay, { first: 1 });
+        const later = makeNestedWorkflow(`${id}-later`, laterDelay, { first: 0 });
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [earlier, later],
+        });
+        workflow.parallel([earlier, later]).commit();
+
+        // Branch writes merge in declaration order, as for plain step branches (#22319)
+        const result = await runWorkflow(workflow, id, { first: 0 });
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ first: 0 });
+      },
+    );
+
+    it('keeps a nested branch write made before it suspended', async () => {
+      const id = 'nested-parallel-resume-state';
+      const earlier = makeNestedWorkflow(`${id}-earlier`, 5, { first: 1 });
+      const suspendingStep = createStep({
+        id: `${id}-suspending`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        resumeSchema: z.object({}),
+        stateSchema,
+        execute: async ({ setState, suspend, resumeData }) => {
+          if (resumeData) return {};
+          await new Promise(resolve => setTimeout(resolve, 30));
+          await setState({ first: 2 });
+          return suspend({});
+        },
+      });
+      const later = createWorkflow({
+        id: `${id}-later`,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [suspendingStep],
+      })
+        .then(suspendingStep)
+        .commit();
+
+      const workflow = createWorkflow({
+        id,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        stateSchema,
+        steps: [earlier, later],
+      });
+      workflow.parallel([earlier, later]).commit();
+
+      const mastra = new Mastra({
+        workflows: { [id]: workflow },
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const started = await run.start({ inputData: {}, initialState: { first: 0 } });
+        expect(started.status).toBe('suspended');
+
+        const result = await run.resume({
+          step: [later.id, suspendingStep.id],
+          resumeData: {},
+          outputOptions: { includeState: true },
+        });
+        expect(result.status).toBe('success');
+        expect((result as any).state).toEqual({ first: 2 });
+        expect(JSON.stringify(result.steps)).not.toContain('__stateWrites');
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+
+    it.for([
+      ['sibling-writes-before-suspend', 5],
+      ['sibling-writes-after-suspend', 80],
+    ] as const)(
+      "does not revert a sibling's write when a nested branch resumes without writing (%s)",
+      async ([name, siblingDelay]) => {
+        const id = `nested-parallel-state-resume-no-write-${name}`;
+        const earlier = makeNestedWorkflow(`${id}-earlier`, siblingDelay, { first: 1 });
+        const suspendingStep = createStep({
+          id: `${id}-suspend`,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          resumeSchema: z.object({}),
+          stateSchema,
+          execute: async ({ suspend, resumeData }) => {
+            if (resumeData) return {};
+            await new Promise(resolve => setTimeout(resolve, 30));
+            return suspend({});
+          },
+        });
+        const later = createWorkflow({
+          id: `${id}-later`,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [suspendingStep],
+        })
+          .then(suspendingStep)
+          .commit();
+
+        const workflow = createWorkflow({
+          id,
+          inputSchema: z.object({}),
+          outputSchema: z.object({}),
+          stateSchema,
+          steps: [earlier, later],
+        });
+        workflow.parallel([earlier, later]).commit();
+
+        const mastra = new Mastra({
+          workflows: { [id]: workflow },
+          storage: testStorage,
+          pubsub: new EventEmitterPubSub(),
+        });
+        await mastra.startWorkers();
+        try {
+          const run = await workflow.createRun();
+          const started = await run.start({ inputData: {}, initialState: { first: 0 } });
+          expect(started.status).toBe('suspended');
+
+          const result = await run.resume({
+            step: [later.id, suspendingStep.id],
+            resumeData: {},
+            outputOptions: { includeState: true },
+          });
+          expect(result.status).toBe('success');
+          expect((result as any).state).toEqual({ first: 1 });
+        } finally {
+          await mastra.stopWorkers();
+        }
+      },
+    );
+  });
+
   describe('terminal snapshot cleanup (issue #22209)', () => {
     const makeStep = (id: string, execute: () => Promise<any>) =>
       createStep({

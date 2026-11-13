@@ -33,6 +33,7 @@ import {
   RunFenceConflictError,
 } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
+import { deepEqual } from '../../../utils/deep-equal';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
 import type {
@@ -1508,6 +1509,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         parentWorkflow,
         nestedRunId: runId,
         prevResult,
+        stateDelta: this.nestedRunStateDelta(finalState, stepResults, parentWorkflow),
         state: finalState,
         resumeSteps,
         resumeData,
@@ -1585,6 +1587,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     timeTravel,
     perStep,
     outputOptions,
+    stateDelta,
   }: Pick<
     ProcessorArgs,
     | 'prevResult'
@@ -1600,6 +1603,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     parentWorkflow: ParentWorkflow;
     nestedRunId: string;
     state: Record<string, any>;
+    /** State keys the nested run changed, so a parallel sibling that finishes later keeps them. */
+    stateDelta?: Record<string, any>;
   }) {
     // get the step from the parent workflow and process it if it's a loop.
     // `parentWorkflow` came over the pubsub wire: a serializing pubsub (Redis
@@ -1663,7 +1668,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         executionPath: parentWorkflow.executionPath,
         resumeSteps,
         stepResults: parentWorkflow.stepResults,
-        prevResult,
+        prevResult: stateDelta ? { ...prevResult, __stateDelta: stateDelta } : prevResult,
         resumeData,
         activeStepsPath,
         parentWorkflow: parentWorkflow.parentWorkflow,
@@ -1738,6 +1743,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           stepResults: parentWorkflow.stepResults,
           prevResult: {
             ...prevResult,
+            __stateDelta: this.nestedRunStateDelta(finalState, stepResults, parentWorkflow),
             suspendPayload: {
               ...prevResult.suspendPayload,
               __workflow_meta: {
@@ -3956,6 +3962,33 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
+  /**
+   * The setState() delta a nested run hands its parent step. Without it the parent only
+   * sees the nested run's full final state, and a nested parallel/conditional branch's
+   * updates would be lost to whichever sibling finishes last (#29732). It covers every key
+   * a nested step explicitly wrote (recorded as `__stateWrites`, so writes made before a
+   * suspend, or that restore the start value, still count) plus any key that differs from
+   * the state the nested run started with (paths that don't record writes), with values
+   * taken from the final state.
+   */
+  private nestedRunStateDelta(
+    finalState: Record<string, any>,
+    stepResults: Record<string, any> | undefined,
+    parentWorkflow: ParentWorkflow,
+  ): Record<string, any> | undefined {
+    const startState = resolveCurrentState({ stepResults: parentWorkflow.stepResults });
+    const keys = new Set<string>();
+    for (const [stepId, result] of Object.entries(stepResults ?? {})) {
+      if (stepId === '__state') continue;
+      for (const key of result?.__stateWrites ?? []) keys.add(key);
+    }
+    for (const [key, value] of Object.entries(finalState)) {
+      if (!deepEqual(value, startState[key])) keys.add(key);
+    }
+    const delta = Object.fromEntries([...keys].filter(key => key in finalState).map(key => [key, finalState[key]]));
+    return Object.keys(delta).length > 0 ? delta : undefined;
+  }
+
   protected async processWorkflowStepEnd({
     workflow,
     workflowId,
@@ -4475,6 +4508,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // clear from activeStepsPath
       delete activeStepsPath[stepId];
 
+      // In a nested run, record which keys this step explicitly wrote (unioned with
+      // earlier runs of the step, e.g. before a suspend) so nestedRunStateDelta can
+      // hand the parent every write, not just keys that differ from the start state.
+      const priorStateWrites: string[] = (stepResults[stepId] as any)?.__stateWrites ?? [];
+      const stateWrites = parentWorkflow
+        ? [...new Set([...priorStateWrites, ...Object.keys(extractedStateDelta ?? {})])]
+        : [];
+
       // handle nested workflow
       if (parentContext) {
         prevResult = stepResults[stepId] = {
@@ -4496,7 +4537,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       // sibling updates key-by-key instead of last-writer-wins on full state
       // snapshots (#22319). The delta is stripped again before results are
       // surfaced to users.
-      let storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
+      let storedResult = {
+        ...prevResult,
+        ...(branchStateDelta ? { __stateDelta: branchStateDelta } : {}),
+        ...(stateWrites.length > 0 ? { __stateWrites: stateWrites } : {}),
+      } as typeof prevResult;
 
       const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
       const guardCompletion =

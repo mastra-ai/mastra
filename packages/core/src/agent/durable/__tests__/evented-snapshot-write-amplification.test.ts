@@ -176,11 +176,11 @@ async function measureRun(engine: 'default' | 'evented', toolIterations: number)
         stats.maxDuplicatesPerWrite = Math.max(stats.maxDuplicatesPerWrite, serialized.split(marker).length - 1);
         maxRunningAccumulatedSteps = Math.max(
           maxRunningAccumulatedSteps,
-          serialized.split('"accumulatedSteps"').length - 1,
+          serialized.split('"accumulatedSteps":').length - 1,
         );
         maxRunningMessageListState = Math.max(
           maxRunningMessageListState,
-          serialized.split('"messageListState"').length - 1,
+          serialized.split('"messageListState":').length - 1,
         );
       }
       return result;
