@@ -67,7 +67,7 @@ function decodeFilters(params: URLSearchParams): TracesFilters {
       : DEFAULT_TRACES_FILTERS.datePreset;
   return {
     datePreset,
-    textSearch: params.get('textSearch') || undefined,
+    textSearch: params.get('textSearch') ?? undefined,
     dateFrom: parseDate(params.get(TRACE_DATE_FROM_PARAM)),
     dateTo: parseDate(params.get(TRACE_DATE_TO_PARAM)),
     tokens: getTracePropertyFilterTokens(params),
@@ -95,7 +95,9 @@ function setOrDelete(params: URLSearchParams, key: string, value: string | undef
 
 function encodeFilters(base: URLSearchParams, filters: TracesFilters): URLSearchParams {
   const next = new URLSearchParams(base);
-  setOrDelete(next, 'textSearch', filters.textSearch);
+  // An empty value preserves an editable chip after changing its field; absence removes it.
+  if (filters.textSearch !== undefined) next.set('textSearch', filters.textSearch);
+  else next.delete('textSearch');
   setOrDelete(
     next,
     TRACE_DATE_PRESET_PARAM,

@@ -156,11 +156,11 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
     update(params => writeObservabilityListSort(params, next));
 
-  const searchValue = withTextSearch ? (searchParams.get('textSearch') ?? '') : '';
+  const searchValue = withTextSearch ? (searchParams.get('textSearch') ?? undefined) : undefined;
   const textSearch = effectiveTextSearch(searchValue);
-  const setTextSearch = (value: string) =>
+  const setTextSearch = (value: string | undefined) =>
     update(next => {
-      if (value) next.set('textSearch', value);
+      if (value !== undefined) next.set('textSearch', value);
       else next.delete('textSearch');
       next.delete('page');
       next.delete('traceId');

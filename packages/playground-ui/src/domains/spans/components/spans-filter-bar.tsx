@@ -13,7 +13,7 @@ const createItemId = (fieldId: string) => fieldId;
 
 export type SpansFilterBarProps = {
   textSearch?: string;
-  onTextSearchChange?: (value: string) => void;
+  onTextSearchChange?: (value: string | undefined) => void;
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;

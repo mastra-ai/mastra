@@ -53,6 +53,20 @@ describe('useTracesRouteState', () => {
     });
   });
 
+  describe('when a filter field changes to an empty text search', () => {
+    it('preserves the editable chip through URL state and distinguishes removal', () => {
+      const { result, params } = renderRouteState('/traces');
+      act(() => result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: '' })));
+      expect(params().get('textSearch')).toBe('');
+      expect(result.current.route.filters.textSearch).toBe('');
+      act(() =>
+        result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
+      );
+      expect(params().has('textSearch')).toBe(false);
+      expect(result.current.route.filters.textSearch).toBeUndefined();
+    });
+  });
+
   describe('when the URL is empty', () => {
     it('decodes the default selection, filters and sort', () => {
       const { result } = renderRouteState('/traces');

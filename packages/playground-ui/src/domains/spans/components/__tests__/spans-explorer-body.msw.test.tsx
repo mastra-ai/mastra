@@ -141,6 +141,27 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when text search is supported', () => {
+    it('keeps an empty search chip editable after changing another filter field', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanQueryCapabilities,
+        capabilities: { ...spanQueryCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const { queries } = renderBodyAtUrl('filter.status=error');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
+      fireEvent.click(await screen.findByRole('option', { name: 'Contains text' }));
+      expect(await screen.findByRole('button', { name: 'Remove Contains text filter' })).toBeTruthy();
+      expect(currentSearchParams().get('textSearch')).toBe('');
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      fireEvent.click(screen.getByRole('combobox', { name: 'Value: …' }));
+      const editor = screen.getByPlaceholderText('Type a value…');
+      fireEvent.change(editor, { target: { value: 'needle' } });
+      fireEvent.keyDown(editor, { key: 'Enter' });
+      await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
+      fireEvent.click(screen.getByRole('button', { name: 'Remove Contains text filter' }));
+      await waitFor(() => expect(currentSearchParams().has('textSearch')).toBe(false));
+    });
+
     it('applies, edits and removes a contains-text chip without losing the other filters', async () => {
       setHandlers(spanRowsPage, {
         ...spanAggregateCapabilities,

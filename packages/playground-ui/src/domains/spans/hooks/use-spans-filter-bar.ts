@@ -91,7 +91,7 @@ export function useSpansFilterBarFields({
 
 export type UseSpansFilterBarOptions = {
   textSearch?: string;
-  onTextSearchChange?: (value: string) => void;
+  onTextSearchChange?: (value: string | undefined) => void;
   tokens: TraceFilterToken[];
   groups: TraceFilterGroup[];
   onFiltersChange: (tokens: TraceFilterToken[], groups: TraceFilterGroup[]) => void;
@@ -135,8 +135,9 @@ export function useSpansFilterBar({
       });
       onFiltersChange(next.tokens, next.groups);
       const search = expression.nodes.find(node => !isFilterBarGroup(node) && node.fieldId === TEXT_SEARCH_FIELD.id);
-      const nextText = search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : '';
-      if (nextText !== (textSearch ?? '')) onTextSearchChange?.(nextText);
+      const nextText =
+        search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : undefined;
+      if (nextText !== textSearch) onTextSearchChange?.(nextText);
     },
     [onFiltersChange, textSearch, onTextSearchChange],
   );

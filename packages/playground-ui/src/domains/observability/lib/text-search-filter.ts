@@ -12,5 +12,7 @@ export const TEXT_SEARCH_FIELD: FilterBarField = {
 };
 
 export function textSearchFilterItems(value: string | undefined): FilterBarItem[] {
-  return value ? [{ id: TEXT_SEARCH_FIELD.id, fieldId: TEXT_SEARCH_FIELD.id, operatorId: 'is', value }] : [];
+  return value !== undefined
+    ? [{ id: TEXT_SEARCH_FIELD.id, fieldId: TEXT_SEARCH_FIELD.id, operatorId: 'is', value }]
+    : [];
 }
