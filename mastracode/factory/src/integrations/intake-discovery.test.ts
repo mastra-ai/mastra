@@ -14,10 +14,13 @@ const refreshed: IssueReconcileSummary = { projects: 0, checked: 3, updated: 1, 
  * Real project and intake storage. The provider side is the two functions a
  * provider hands the sweep: how it lists a project's issues and how it files them.
  */
-async function setup(list: (projectId: string, cursor: string | undefined) => { issues: Issue[]; next?: string }) {
+async function setup(
+  list: (projectId: string, cursor: string | undefined, sourceId: string) => { issues: Issue[]; next?: string },
+  maxPages?: number,
+) {
   const seeded = await createFactoryStorageForTests();
   const filed = new Map<string, string[]>();
-  const listed: Array<{ projectId: string; cursor: string | undefined }> = [];
+  const listed: Array<{ projectId: string; cursor: string | undefined; sourceId: string }> = [];
   const project = async (orgId: string, selection: { enabled: boolean; sourceIds: string[] } | null) => {
     const { id } = await seeded.projects.create({ orgId, userId: 'user-1', input: { name: 'Factory' } });
     if (selection) await seeded.intake.saveConfig({ orgId, config: { tracker: selection } });
@@ -27,14 +30,13 @@ async function setup(list: (projectId: string, cursor: string | undefined) => { 
     integrationId: 'tracker',
     intake: seeded.intake,
     projects: seeded.projects,
-    open: async (current, selectedIds) => {
-      if (selectedIds.length === 0) return null;
-      return async cursor => {
-        listed.push({ projectId: current.id, cursor });
-        const page = list(current.id, cursor);
+    ...(maxPages ? { maxPages } : {}),
+    open: async (current, selectedIds) =>
+      selectedIds.map(sourceId => async (cursor: string | undefined) => {
+        listed.push({ projectId: current.id, cursor, sourceId });
+        const page = list(current.id, cursor, sourceId);
         return { issues: page.issues, nextCursor: page.next ?? null };
-      };
-    },
+      }),
     ingest: async input => {
       expect(input.userId).toBe('factory-rule-dispatcher');
       filed.set(input.factoryProjectId, [
@@ -58,12 +60,36 @@ describe('intake discovery on a reconcile sweep', () => {
     expect(listed.map(({ cursor }) => cursor)).toEqual([undefined, 'page-2']);
   });
 
-  it('stops listing a project after five pages', async () => {
+  it('stops listing a source after five pages', async () => {
     const { project, sweep, listed } = await setup(() => ({ issues: [{ id: 'issue' }], next: 'more' }));
     await project('org-1', { enabled: true, sourceIds: ['source-1'] });
 
     await expect(sweep()).resolves.toMatchObject({ observed: 5, failed: 0 });
     expect(listed).toHaveLength(5);
+  });
+
+  it('gives each source its own five pages, so a busy source cannot starve the next', async () => {
+    const { project, sweep, filed } = await setup((_, __, sourceId) =>
+      sourceId === 'busy' ? { issues: [{ id: 'busy-issue' }], next: 'more' } : { issues: [{ id: 'new-issue' }] },
+    );
+    const id = await project('org-1', { enabled: true, sourceIds: ['busy', 'quiet'] });
+
+    await expect(sweep()).resolves.toMatchObject({ observed: 6, failed: 0 });
+    expect(filed.get(id)).toContain('new-issue');
+  });
+
+  it('reads a source to its end when the provider asks for every page', async () => {
+    const { project, sweep, listed } = await setup(
+      (_, cursor) => {
+        const page = Number(cursor ?? 0);
+        return { issues: [{ id: `issue-${page}` }], ...(page < 7 ? { next: String(page + 1) } : {}) };
+      },
+      Number.POSITIVE_INFINITY,
+    );
+    await project('org-1', { enabled: true, sourceIds: ['source-1'] });
+
+    await expect(sweep()).resolves.toMatchObject({ observed: 8, failed: 0 });
+    expect(listed).toHaveLength(8);
   });
 
   it('lists nothing for an org that turned the provider off, saved no selection, or selected no source', async () => {

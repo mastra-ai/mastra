@@ -178,14 +178,20 @@ describe('incident.io first-sight intake', () => {
     ]);
   });
 
-  it('stops listing a project after five pages', async () => {
-    const { fetchImpl, project, sweep } = await setup(() =>
-      json({ follow_ups: [outstanding], pagination_meta: { after: 'more' } }),
-    );
-    await project('org-1', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]);
+  it('reads follow-ups to the last page, since incident.io lists the newest last', async () => {
+    const pages = 8;
+    const { fetchImpl, project, filed, sweep } = await setup(after => {
+      const page = after ? Number(after) : 0;
+      return json({
+        follow_ups: [{ ...outstanding, id: `follow-up-${page + 1}` }],
+        pagination_meta: page + 1 < pages ? { after: String(page + 1) } : {},
+      });
+    });
+    const id = await project('org-1', [INCIDENTIO_FOLLOW_UPS_SOURCE_ID]);
 
-    await expect(sweep()).resolves.toMatchObject({ observed: 5, failed: 0 });
-    expect(fetchImpl).toHaveBeenCalledTimes(5);
+    await expect(sweep()).resolves.toMatchObject({ observed: pages, failed: 0 });
+    expect(fetchImpl).toHaveBeenCalledTimes(pages);
+    expect(await filed('org-1', id)).toContain(`incidentio:follow-up:follow-up-${pages}`);
   });
 
   it('records a project whose listing fails and still files the others', async () => {

@@ -101,19 +101,22 @@ export function attachIncidentioIssueReconciler(
         factoryProjectId: project.id,
         selectedIds,
       });
-      // A board shows follow-ups only, so the page budget is not spent on incidents.
-      const sourceIds = bound.filter(sourceId => incidentio.isFollowUpSource(sourceId));
-      if (sourceIds.length === 0) return null;
-      return async cursor => {
-        const page = await incidentio.intake.listItems({
-          orgId: project.orgId,
-          userId: 'factory-rule-dispatcher',
-          sourceIds,
-          ...(cursor ? { cursor } : {}),
+      // A board shows follow-ups only, so incidents are never listed.
+      return bound
+        .filter(sourceId => incidentio.isFollowUpSource(sourceId))
+        .map(sourceId => async (cursor: string | undefined) => {
+          const page = await incidentio.intake.listItems({
+            orgId: project.orgId,
+            userId: 'factory-rule-dispatcher',
+            sourceIds: [sourceId],
+            ...(cursor ? { cursor } : {}),
+          });
+          return { issues: followUpIssues(page.items), nextCursor: page.nextCursor };
         });
-        return { issues: followUpIssues(page.items), nextCursor: page.nextCursor };
-      };
     },
+    // incident.io lists follow-ups oldest first and cannot sort or filter them by
+    // status, so a page cap would never reach the newest ones.
+    maxPages: Number.POSITIVE_INFINITY,
     ingest: input => rules.ingest(input),
   });
 }
