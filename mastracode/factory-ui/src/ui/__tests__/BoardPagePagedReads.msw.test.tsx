@@ -149,6 +149,8 @@ describe('The board of a large project', () => {
     );
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more cards' })).not.toBeInTheDocument());
     expect(screen.queryByRole('status', { name: 'Loading more cards' })).not.toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(asked.listings.map(listing => listing.getAll('window'))).toHaveLength(4);
   });
 
   it('asks once for a deeper list that fails, and does not ask again on its own', async () => {

@@ -30,7 +30,7 @@ export function LoadMoreSentinel({
 }: LoadMoreSentinelProps) {
   const { inView, setRef } = useInView();
   const loadMoreUnlessFetching = useEffectEvent(() => {
-    if (!isFetchingNextPage) onLoadMore();
+    if (hasNextPage && !isFetchingNextPage) onLoadMore();
   });
 
   useEffect(() => {
