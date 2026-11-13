@@ -15,12 +15,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { EventEmitterPubSub } from '../events/event-emitter';
 import { MockStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
 import { createWorkflow } from '../workflows';
 import type { Workflow } from '../workflows';
-import { sharedBroker } from './test-utils/shared-broker';
 import { Mastra } from './index';
 
 // The runs these tests store were just written, so without a zero grace the rule would leave them for later.
@@ -292,22 +290,11 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(
       new Mastra({ logger: false, recovery: { workflows: 'off', workflowConcurrency: 0 } }).recoveryConfig,
     ).toMatchObject({ workflows: 'off', workflowConcurrency: 1 });
-  });
-
-  // The grace only covers default-engine runs, so it doesn't depend on the pubsub.
-  it.each([
-    { pubsub: 'the in-process pubsub', create: () => new EventEmitterPubSub() },
-    {
-      pubsub: 'a broker that redelivers unacked messages',
-      create: () => sharedBroker({ redeliversUnacked: true }).connect(),
-    },
-  ])('defaults workflowGraceMs to 2 s with $pubsub, and honors an explicit value', ({ create }) => {
-    expect(new Mastra({ logger: false, pubsub: create() }).recoveryConfig.workflowGraceMs).toBe(2_000);
-    expect(
-      new Mastra({ logger: false, pubsub: create(), recovery: { workflowGraceMs: 0 } }).recoveryConfig,
-    ).toMatchObject({ workflowGraceMs: 0 });
-    expect(
-      new Mastra({ logger: false, pubsub: create(), recovery: { workflowGraceMs: -1 } }).recoveryConfig,
-    ).toMatchObject({ workflowGraceMs: 2_000 });
+    expect(new Mastra({ logger: false, recovery: { workflowGraceMs: 0 } }).recoveryConfig).toMatchObject({
+      workflowGraceMs: 0,
+    });
+    expect(new Mastra({ logger: false, recovery: { workflowGraceMs: -1 } }).recoveryConfig).toMatchObject({
+      workflowGraceMs: 2_000,
+    });
   });
 });
