@@ -126,6 +126,7 @@ async function setup(options: { tracked?: string[]; incidentResponse?: () => Res
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('incidentioItemFromPayload', () => {

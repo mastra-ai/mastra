@@ -98,7 +98,7 @@ export class PlatformConnectBinding {
   #cache: { at: number; connections: Promise<PlatformConnection[]> } | undefined;
   #generation = 0;
   #bootLinking: Promise<void> | undefined;
-  #needsLinking = new Map<string, NeedsLinkingEntry & { permanent: boolean }>();
+  #needsLinking = new Map<string, NeedsLinkingEntry>();
 
   constructor(options: PlatformConnectBindingOptions) {
     this.integrationId = options.integrationId;
@@ -207,7 +207,7 @@ export class PlatformConnectBinding {
 
   /** Org connections the Factory could not link to its project. */
   get needsLinking(): NeedsLinkingEntry[] {
-    return [...this.#needsLinking.values()].map(({ connectionId, reason }) => ({ connectionId, reason }));
+    return [...this.#needsLinking.values()];
   }
 
   /** Runs `listener` whenever linking adds a connection to the project. */
@@ -246,18 +246,10 @@ export class PlatformConnectBinding {
    * Links the org's global connections for the provider keys that are not
    * yet linked to the Factory project. The platform answers 204 whether a
    * link was created or already existed, so the project listing is compared
-   * before and after. `retryOnly: 'transient'` skips connections whose last
-   * link was refused for lack of permission.
+   * before and after.
    */
-  async linkOrgConnections(options: { retryOnly?: 'transient' } = {}): Promise<LinkOrgConnectionsResult> {
-    const keys = new Set(this.providerKeys);
-    const org = await this.connect.request<{ connections: ProjectConnection[] }>('GET', '/v2/connections');
-    const candidates = org.connections.filter(
-      connection =>
-        keys.has(connection.integrationId) &&
-        !connection.resourceId &&
-        (connection.status === 'active' || connection.status === 'needs_reauth'),
-    );
+  async linkOrgConnections(): Promise<LinkOrgConnectionsResult> {
+    const candidates = await this.#orgCandidates();
     const linkedBefore = new Set((await this.connect.listConnections()).map(connection => connection.id));
     const linked: string[] = [];
     for (const connection of candidates) {
@@ -265,16 +257,14 @@ export class PlatformConnectBinding {
         this.#needsLinking.delete(connection.id);
         continue;
       }
-      if (options.retryOnly === 'transient' && this.#needsLinking.get(connection.id)?.permanent) continue;
       try {
         await this.connect.linkConnection(connection.id);
         this.#needsLinking.delete(connection.id);
         linked.push(connection.id);
       } catch (error) {
         const status = platformErrorStatus(error);
-        const permanent = status === 401 || status === 403;
-        const reason = permanent ? PERMISSION_REMEDY : platformErrorMessage(error);
-        this.#needsLinking.set(connection.id, { connectionId: connection.id, reason, permanent });
+        const reason = status === 401 || status === 403 ? PERMISSION_REMEDY : platformErrorMessage(error);
+        this.#needsLinking.set(connection.id, { connectionId: connection.id, reason });
         logPlatformWarn('Could not link an org connection to the Factory project', {
           integrationId: this.integrationId,
           connectionId: connection.id,
@@ -290,20 +280,40 @@ export class PlatformConnectBinding {
     return { linked, needsLinking: this.needsLinking };
   }
 
+  /**
+   * Org connections for these provider keys that the project listing doesn't
+   * show: links that were refused or failed, and connections made outside the
+   * Factory since it last linked. Reads both listings fresh.
+   */
+  async unlinkedOrgConnections(): Promise<string[]> {
+    const candidates = await this.#orgCandidates();
+    const linked = new Set((await this.connect.listConnections()).map(connection => connection.id));
+    return candidates.filter(connection => !linked.has(connection.id)).map(connection => connection.id);
+  }
+
+  async #orgCandidates(): Promise<ProjectConnection[]> {
+    const keys = new Set(this.providerKeys);
+    const org = await this.connect.request<{ connections: ProjectConnection[] }>('GET', '/v2/connections');
+    return org.connections.filter(
+      connection =>
+        keys.has(connection.integrationId) &&
+        !connection.resourceId &&
+        (connection.status === 'active' || connection.status === 'needs_reauth') &&
+        this.#accepts(toPlatformConnection(connection)),
+    );
+  }
+
   async #readProjectConnections(): Promise<PlatformConnection[]> {
     const connections = await this.connect.listConnections({ providerKeys: this.providerKeys });
     return connections.flatMap(connection => {
       if (connection.status !== 'active' && connection.status !== 'needs_reauth') return [];
-      const mapped: PlatformConnection = {
-        id: connection.id,
-        integrationId: connection.integrationId,
-        status: connection.status,
-        accountLabel: connection.accountLabel ?? null,
-        resourceId: connection.resourceId ?? null,
-        connectedAt: connection.connectedAt ?? null,
-      };
-      return !this.#filter || this.#filter(mapped) ? [mapped] : [];
+      const mapped = toPlatformConnection(connection);
+      return this.#accepts(mapped) ? [mapped] : [];
     });
+  }
+
+  #accepts(connection: PlatformConnection): boolean {
+    return !this.#filter || this.#filter(connection);
   }
 
   #mapPlatformError(connectionId: string, error: unknown): unknown {
@@ -313,4 +323,15 @@ export class PlatformConnectBinding {
       ? new PlatformConnectionNotConnectedError(connectionId, { cause: error })
       : error;
   }
+}
+
+function toPlatformConnection(connection: ProjectConnection): PlatformConnection {
+  return {
+    id: connection.id,
+    integrationId: connection.integrationId,
+    status: connection.status as PlatformConnection['status'],
+    accountLabel: connection.accountLabel ?? null,
+    resourceId: connection.resourceId ?? null,
+    connectedAt: connection.connectedAt ?? null,
+  };
 }

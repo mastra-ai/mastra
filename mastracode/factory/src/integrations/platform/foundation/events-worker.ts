@@ -276,6 +276,23 @@ export class PlatformEventsWorker extends MastraWorker {
       this.#leaseRetryTimer.unref?.();
       return;
     }
+    // The previous holder advanced the cursors while this replica waited.
+    try {
+      this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    } catch (error) {
+      this.deps?.logger.warn('Platform events: could not read the saved cursors; retrying the lease', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      await this.#leaseProvider.releaseLease(this.#leaseKey(), this.#leaseOwner).catch(() => {});
+      if (!this.#running) return;
+      this.#leaseRetryTimer = setTimeout(() => void this.#acquire(), Math.floor(this.#leaseTtlMs / 2));
+      this.#leaseRetryTimer.unref?.();
+      return;
+    }
+    if (!this.#running) {
+      await this.#leaseProvider.releaseLease(this.#leaseKey(), this.#leaseOwner).catch(() => {});
+      return;
+    }
     this.#hasLease = true;
     this.#startLeaseRenewal();
     const abort = new AbortController();
@@ -358,7 +375,7 @@ export class PlatformEventsWorker extends MastraWorker {
         runner.diagnostics.connected = true;
         for await (const event of subscription) {
           if (signal.aborted) break;
-          await this.#deliver(runner, event);
+          await this.#deliver(runner, event, signal);
         }
       } catch (error) {
         if (signal.aborted) break;
@@ -384,8 +401,12 @@ export class PlatformEventsWorker extends MastraWorker {
     }
   }
 
-  /** Runs the handler, retrying with backoff; a poison event is logged and skipped. */
-  async #deliver(runner: TopicRunner, event: StreamEvent): Promise<void> {
+  /**
+   * Runs the handler, retrying with backoff. An event that still fails is
+   * logged and skipped, and its integrations reconcile now rather than at the
+   * next scheduled sweep.
+   */
+  async #deliver(runner: TopicRunner, event: StreamEvent, signal: AbortSignal): Promise<void> {
     runner.diagnostics.lastEventAt = this.#now();
     runner.diagnostics.lagMs = Math.max(0, this.#now() - event.timestamp);
     for (let attempt = 1; ; attempt += 1) {
@@ -396,12 +417,13 @@ export class PlatformEventsWorker extends MastraWorker {
         const message = error instanceof Error ? error.message : String(error);
         if (attempt >= HANDLER_ATTEMPTS) {
           runner.diagnostics.handlerFailures += 1;
-          this.deps?.logger.error('Platform events: giving up on an event; the next reconcile repairs it', {
+          this.deps?.logger.error('Platform events: giving up on an event; reconciling to repair it', {
             topic: runner.topic,
             eventId: event.id,
             attempts: attempt,
             error: message,
           });
+          runner.reconcile();
           return;
         }
         this.deps?.logger.warn('Platform events: event handler failed; retrying', {
@@ -410,8 +432,8 @@ export class PlatformEventsWorker extends MastraWorker {
           attempt,
           error: message,
         });
-        await sleep(this.#retryDelayMs * 2 ** (attempt - 1), this.#abort?.signal);
-        if (!this.#abort || this.#abort.signal.aborted) throw error;
+        await sleep(this.#retryDelayMs * 2 ** (attempt - 1), signal);
+        if (signal.aborted) throw error;
       }
     }
   }
