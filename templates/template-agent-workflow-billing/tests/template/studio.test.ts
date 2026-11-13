@@ -568,8 +568,16 @@ async function waitQuery(
 ) {
   let rows: any[] = [];
   for (let attempt = 0; attempt < 240; attempt++) {
-    rows = await query(root, sql, args);
-    if (predicate(rows)) return rows;
+    const inspected = await query(root, sql, args).catch(error => {
+      // Concurrent application writes can briefly lock this separate inspection client.
+      if (error !== null && typeof error === 'object' && 'code' in error && error.code === 'SQLITE_BUSY')
+        return undefined;
+      throw error;
+    });
+    if (inspected !== undefined) {
+      rows = inspected;
+      if (predicate(rows)) return rows;
+    }
     await new Promise(resolve => setTimeout(resolve, 50));
   }
   throw new Error(`Persisted state did not settle: ${sql}: ${JSON.stringify(rows)}`);
