@@ -804,6 +804,9 @@ const sidebars = {
           label: 'Deploys',
           link: { type: 'doc', id: 'mastra-platform/deploy/overview' },
           collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             { type: 'doc', id: 'mastra-platform/server', label: 'Server' },
             { type: 'doc', id: 'mastra-platform/studio', label: 'Studio' },
@@ -817,6 +820,9 @@ const sidebars = {
           label: 'Gateway',
           link: { type: 'doc', id: 'mastra-platform/gateway/overview' },
           collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             { type: 'doc', id: 'mastra-platform/gateway/features', label: 'Features' },
             { type: 'doc', id: 'mastra-platform/gateway/models', label: 'Models' },
@@ -860,6 +866,9 @@ const sidebars = {
           label: 'Observability',
           link: { type: 'doc', id: 'mastra-platform/observability/overview' },
           collapsed: true,
+          customProps: {
+            contextualSidebar: true,
+          },
           items: [
             { type: 'doc', id: 'mastra-platform/trace-intelligence', label: 'Trace Intelligence' },
             { type: 'doc', id: 'mastra-platform/dashboards', label: 'Dashboards' },
