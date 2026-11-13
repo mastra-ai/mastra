@@ -40,6 +40,11 @@ function normalizeBasePath(basePath: string): string {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
+// frame-ancestors is not valid in a meta tag, so the document response sets it here.
+// The Studio shell also ships a matching frame-src meta policy.
+const STUDIO_DOCUMENT_CSP =
+  "frame-src 'self' blob: data: https:; object-src 'none'; base-uri 'self'; frame-ancestors 'self'";
+
 export async function studio(
   options: StudioOptions = {
     serverHost: 'localhost',
@@ -172,13 +177,18 @@ export const createServer = (builtStudioPath: string, options: StudioOptions, re
       if (supportsGzip) {
         res.writeHead(200, {
           'Content-Type': 'text/html',
+          'Content-Security-Policy': STUDIO_DOCUMENT_CSP,
           'Content-Encoding': 'gzip',
           'Content-Length': compressedHtml.length,
           Vary: 'Accept-Encoding',
         });
         return res.end(compressedHtml);
       }
-      res.writeHead(200, { 'Content-Type': 'text/html', Vary: 'Accept-Encoding' });
+      res.writeHead(200, {
+        'Content-Type': 'text/html',
+        'Content-Security-Policy': STUDIO_DOCUMENT_CSP,
+        Vary: 'Accept-Encoding',
+      });
       return res.end(html);
     }
 

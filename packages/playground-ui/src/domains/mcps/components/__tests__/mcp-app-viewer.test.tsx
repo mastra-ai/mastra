@@ -5,7 +5,7 @@ import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { useMcpAppToolCall } from '../../hooks/use-mcp-app-tool-call';
 import { McpAppViewer } from '../mcp-app-viewer';
@@ -17,6 +17,10 @@ import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 const SANDBOX_URL = new URL('http://sandbox.test/proxy.html');
 const HTML = '<!DOCTYPE html><html><body>app</body></html>';
+
+beforeAll(() => {
+  URL.createObjectURL ??= () => 'blob:http://localhost/sandbox-proxy';
+});
 
 function viewer(props: Partial<McpAppViewerProps>) {
   return <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />;
@@ -32,6 +36,15 @@ async function renderApp(
 }
 
 describe('McpAppViewer', () => {
+  it('does not give a same-origin app frame the Studio origin', async () => {
+    const { container } = renderWithProviders(<McpAppViewer html={HTML} toolName="showDashboard" />);
+    const { frame } = await sandboxFrame(container);
+
+    expect(frame.getAttribute('sandbox') ?? '').not.toContain('allow-same-origin');
+    expect(frame.getAttribute('sandbox')).toContain('allow-scripts');
+    expect(frame.src.startsWith('blob:')).toBe(true);
+  });
+
   it('tells the app only about the host features it was given handlers for', async () => {
     const app = await renderApp({ onToolCall: vi.fn() });
 

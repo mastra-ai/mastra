@@ -3,6 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
 import { MastraFGAPermissions } from '../fga-permissions';
@@ -1575,6 +1576,7 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
         id: message.id || memory.generateId(),
         createdAt: message.createdAt ? new Date(message.createdAt) : new Date(),
       }));
+      stripClientAuthoredTurnMarks(processedMessages);
 
       const result = await memory.saveMessages({ messages: processedMessages as any, memoryConfig: {} });
       return result;

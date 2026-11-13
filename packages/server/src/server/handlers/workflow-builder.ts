@@ -1,3 +1,4 @@
+import { stripClientAuthoredTurnMarks } from '@mastra/core/memory';
 import { HTTPException } from '../http-exception';
 import { agentExecutionBodySchema, streamResponseSchema } from '../schemas/agents';
 import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-builder';
@@ -65,6 +66,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
 
       const { messages, memory: memoryOption, requestContext: bodyRequestContext, scopes: _scopes, ...rest } = params;
       validateBody({ messages });
+      stripClientAuthoredTurnMarks(messages);
 
       mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
 

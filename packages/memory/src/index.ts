@@ -81,6 +81,8 @@ import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
 
+export { asUserTurn, escapeTurnMarkup, sealTurnMarkup } from '@mastra/core/memory';
+export type { TurnSpeaker } from '@mastra/core/memory';
 export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
