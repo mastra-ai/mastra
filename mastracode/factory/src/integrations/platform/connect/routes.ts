@@ -13,15 +13,15 @@
  * (org:write parity with Linear), not an organization admin.
  */
 
+import type { ConnectClient } from '@mastra/connect';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { Context } from 'hono';
 
+import type { Context } from 'hono';
 import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
-import type { PlatformApiClient } from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import { connectToolExclusion, offersSessionTools } from './session-tools.js';
 
 type RouteContext = Context;
@@ -78,11 +78,11 @@ interface CatalogEntry {
 
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
-  client: PlatformApiClient;
+  client: ConnectClient;
 }
 
 export interface ConnectToolsSource {
-  client: PlatformApiClient;
+  client: ConnectClient;
   projectId: string;
   /**
    * `default`: sessions get Factory's own Connect tools for this project.
@@ -148,15 +148,14 @@ function providerFromParam(c: RouteContext): PlatformConnectProvider | null {
 }
 
 function platformError(c: RouteContext, err: unknown) {
-  if (err instanceof PlatformApiError) {
-    if (err.status === 409) {
-      return c.json({ error: 'session_pending', message: err.message }, 409);
-    }
-    if (err.status === 403) {
-      return c.json({ error: 'platform_forbidden', message: err.message }, 403);
-    }
+  const status = platformErrorStatus(err);
+  if (status === 409) {
+    return c.json({ error: 'session_pending', message: platformErrorMessage(err) }, 409);
   }
-  return c.json({ error: 'platform_request_failed', message: err instanceof Error ? err.message : String(err) }, 502);
+  if (status === 403) {
+    return c.json({ error: 'platform_forbidden', message: platformErrorMessage(err) }, 403);
+  }
+  return c.json({ error: 'platform_request_failed', message: platformErrorMessage(err) }, 502);
 }
 
 /**
@@ -323,7 +322,7 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
           const session = await client.request<PlatformSessionResponse>(
             'POST',
             `/v2/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`,
-            {},
+            { body: {} },
           );
           c.header('Cache-Control', 'no-store');
           return c.json(session, 201);
@@ -356,7 +355,7 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
           const session = await client.request<PlatformSessionResponse>(
             'POST',
             `/v2/connections/${encodeURIComponent(connectionId)}/reconnect-session`,
-            {},
+            { body: {} },
           );
           c.header('Cache-Control', 'no-store');
           return c.json(session, 201);

@@ -94,7 +94,6 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import {
   buildConnectToolListRoute,
   buildConnectToolsRoute,
@@ -107,6 +106,7 @@ import {
   resolveToolsInTime,
 } from './integrations/platform/connect/session-tools.js';
 import { logIntegrationSummary } from './integrations/startup-summary.js';
+import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { SELECT_VANTA_VULNERABILITIES_MIGRATION, vantaOrgsSyncingWithoutSource } from './integrations/vanta/sync.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -1882,7 +1882,7 @@ export class MastraFactory {
     const connectToolsList: ConnectToolsSource | { missing: ConnectToolsSetupMissing } =
       'projectId' in connectSetup
         ? {
-            client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+            client: createPlatformConnectClient(),
             projectId: connectSetup.projectId,
             toolsSource: connectToolsSource,
             resolveTools:
@@ -2462,7 +2462,7 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                client: createPlatformConnectClient(),
               })
             : []),
           buildConnectToolsRoute(routeAuth, connectToolsList),
