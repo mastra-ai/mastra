@@ -54,6 +54,22 @@ const getStudioPath = () => {
   return studioPath;
 };
 
+/**
+ * Whether a request inside Studio names a static file rather than a Studio page.
+ * Studio deep links can contain dotted ids (`/agents/lead.agent/threads`), so a dot
+ * in the path is not enough (#30296). The Studio build only has files under
+ * `/assets/` and at its top level (e.g. `/mastra-dark-tile.svg`), so only those
+ * locations, plus top-level hidden folders such as `/.well-known/`, skip the SPA
+ * fallback; a missing file there still gets a 404.
+ */
+const isStudioStaticFileRequest = (studioRelativePath: string) => {
+  if (studioRelativePath.startsWith('/assets/') || studioRelativePath.startsWith('/.')) {
+    return true;
+  }
+  const isTopLevel = studioRelativePath.lastIndexOf('/') === 0;
+  return isTopLevel && studioRelativePath.includes('.') && !studioRelativePath.endsWith('.html');
+};
+
 // Use adapter type definitions
 type Bindings = HonoBindings;
 
@@ -496,15 +512,20 @@ export async function createHonoServer(
       return await next();
     }
 
-    // Skip if it's an asset file (has extension other than .html)
-    if (requestPath.includes('.') && !requestPath.endsWith('.html')) {
-      return await next();
-    }
-
     // Only serve studio for routes matching the configured base path
     const isStudioRoute =
       studioBasePath === '' || requestPath === studioBasePath || requestPath.startsWith(`${studioBasePath}/`);
-    if (options?.studio && isStudioRoute) {
+    const servesStudio = options?.studio && isStudioRoute;
+
+    // Let static file requests fall through to the static handlers (or a 404)
+    const isStaticFileRequest = servesStudio
+      ? isStudioStaticFileRequest(requestPath.slice(studioBasePath.length))
+      : requestPath.includes('.') && !requestPath.endsWith('.html');
+    if (isStaticFileRequest) {
+      return await next();
+    }
+
+    if (servesStudio) {
       // For HTML routes, serve index.html with dynamic replacements
       const studioPath = getStudioPath();
       let indexHtml = await readFile(join(studioPath, 'index.html'), 'utf-8');
