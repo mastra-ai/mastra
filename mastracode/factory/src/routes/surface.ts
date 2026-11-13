@@ -23,6 +23,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '.
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
+import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -166,6 +167,8 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -589,6 +592,8 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry | ProjectBoardSource;
+    /** Passed for the workers' context only: routes do not sweep. */
+    keptCards?: CardSource;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -638,7 +643,12 @@ export function buildIntegrationContext(
     ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady
       ? {
-          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+          runtime: {
+            configVersion: deps.configVersion,
+            workItems: deps.domains.workItems,
+            boards: deps.boardRegistry,
+            ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+          },
         }
       : {}),
     ...(deps.emitAudit || deps.onRepositoryPush
@@ -1026,6 +1036,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          runSlots: deps.runSlots,
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards

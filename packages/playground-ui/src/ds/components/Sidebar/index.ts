@@ -29,6 +29,7 @@ export {
 } from './root/sidebar-context';
 export { SidebarMobileTrigger, type SidebarMobileTriggerProps } from './root/sidebar-mobile-trigger';
 export { SidebarProvider, type SidebarProviderProps } from './root/sidebar-provider';
+export { SIDEBAR_WIDTHS } from './root/sidebar-widths';
 export { SidebarRoot, type SidebarRootProps } from './root/sidebar-root';
 export { SidebarTrigger, type SidebarTriggerProps } from './root/sidebar-trigger';
 export { SidebarSearchTrigger, type SidebarSearchTriggerProps } from './header/sidebar-search-trigger';

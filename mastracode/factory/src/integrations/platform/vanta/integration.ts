@@ -79,10 +79,18 @@ export class PlatformVantaIntegration implements FactoryIntegration {
 
   /** Every active vulnerability from the supplied connections, de-duplicated by id. */
   async listVulnerabilities(connections?: PlatformIntegrationConnection[]): Promise<VantaVulnerability[]> {
+    const selected = connections ?? (await this.listConnections()).sort((a, b) => a.id.localeCompare(b.id));
+    if (selected.length === 0) throw new Error('There is no active Vanta connection.');
+    const unreadable = selected.find(connection => connection.status !== 'active');
+    if (unreadable) throw new Error(`Vanta connection ${unreadable.id} is ${unreadable.status}.`);
     const byId = new Map<string, VantaVulnerability>();
-    for (const connection of connections ?? await this.#activeConnections()) {
+    for (const connection of selected) {
       let cursor: string | null = null;
-      for (let page = 0; page < MAX_PAGES; page++) {
+      for (let page = 0; ; page++) {
+        if (page === MAX_PAGES) {
+          // A cut-off list would read as the rest being resolved.
+          throw new Error(`Vanta connection ${connection.id} has more than ${MAX_PAGES} pages of vulnerabilities.`);
+        }
         const query = new URLSearchParams({ isDeactivated: 'false', pageSize: String(PAGE_SIZE) });
         if (cursor) query.set('pageCursor', cursor);
         const result: VantaVulnerabilityPage = await this.#client.request<VantaVulnerabilityPage>(
@@ -119,6 +127,7 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     if (!ingest) return [];
     const { projects, intake } = ctx.storage;
     const sync = createVantaSync({
+      connected: async () => (await this.#activeConnections()).length > 0,
       listVulnerabilities: async orgId => this.listVulnerabilitiesForOrg(orgId, await projects.listAll()),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>

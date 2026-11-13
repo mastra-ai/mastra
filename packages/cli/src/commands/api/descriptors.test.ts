@@ -160,6 +160,7 @@ describe('api command descriptors', () => {
       factoryMetrics: ['metricsGet', ['id'], true, false, false],
       factoryHealthThresholds: ['healthThresholdsGet', ['id'], false, false, false],
       factoryDecisionList: ['decisionList', ['id'], true, false, false],
+      factoryDecisionQueue: ['runQueue', ['id'], false, false, false],
       factoryDecisionApprove: ['decisionApprove', ['id', 'decisionId'], false, false, false],
       factoryDecisionDismiss: ['decisionDismiss', ['id', 'decisionId'], false, false, false],
       factoryDecisionRetry: ['decisionRetry', ['id', 'decisionId'], false, false, false],
