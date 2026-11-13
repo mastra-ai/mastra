@@ -9,7 +9,7 @@ import type { IntegrationContext } from '../../base.js';
 
 import { registerGithubRefreshTarget } from '../../github/token-refresh.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
-import { PlatformGithubConnectUnavailableError, PlatformGithubIntegration } from './integration.js';
+import { PlatformGithubIntegration } from './integration.js';
 import { PlatformGithubModes } from './mode.js';
 
 const config = {
@@ -1937,26 +1937,6 @@ describe('PlatformGithubIntegration', () => {
       });
       return { integration, fetchImpl };
     }
-
-    it('refuses a switched org with a typed error instead of falling back to the legacy routes', async () => {
-      const { integration, fetchImpl } = await switchedIntegration();
-
-      // A placeholder installation id never names the org; the org on the connection does.
-      await expect(
-        integration.versionControl.listPullRequests({
-          connection: { type: 'app-installation', installationId: 1, orgId: 'org-switched' },
-          sourceId: 'acme/app',
-        }),
-      ).rejects.toBeInstanceOf(PlatformGithubConnectUnavailableError);
-      // A connection without an org is found by its switched installation.
-      await expect(
-        integration.versionControl.listPullRequests({
-          connection: { type: 'app-installation', installationId: 900 },
-          sourceId: 'acme/app',
-        }),
-      ).rejects.toBeInstanceOf(PlatformGithubConnectUnavailableError);
-      expect(fetchImpl).not.toHaveBeenCalled();
-    });
 
     it('keeps an org that has not switched on the legacy routes', async () => {
       const { integration, fetchImpl } = await switchedIntegration();

@@ -83,16 +83,26 @@ import { settleOrAbort } from '../../github/settle-or-abort.js';
 import type { GithubSubscriptionStorage } from '../../github/subscriptions.js';
 import { parseAuthorizedBotsEnv } from '../../github/webhook.js';
 import { PlatformConnectIntegration } from '../foundation/index.js';
-import type { PlatformTopicSubscription } from '../foundation/index.js';
-import { logPlatformBootInfo, logPlatformInfo, logPlatformWarn } from '../logging.js';
-import { platformErrorStatus } from '../platform-connect.js';
+import type { PlatformConnectEventDelivery, PlatformTopicSubscription } from '../foundation/index.js';
+import { logPlatformBootInfo, logPlatformError, logPlatformInfo, logPlatformWarn } from '../logging.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
+import {
+  connectGithubEventHandler,
+  FACTORY_GITHUB_PROVIDER_KEY,
+  FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
+} from './connect-events.js';
+import { GithubConnectTokens } from './connect-tokens.js';
+import { ConnectGithubTransport, githubErrorStatus } from './connect-transport.js';
 import { legacyGithubTopicSubscription } from './legacy-events.js';
 import { LegacyGithubTransport, splitRepository } from './legacy-transport.js';
-import type { LegacyGithubUserConnection, LegacyHiddenPersonalInstallReason } from './legacy-transport.js';
+import type {
+  LegacyGithubUserConnection,
+  LegacyHiddenPersonalInstallReason,
+  LegacyInstallationRepository,
+} from './legacy-transport.js';
 import { LinkedGithubRepositories } from './linked-repositories.js';
 import { PlatformGithubModes } from './mode.js';
-import type { PlatformGithubMode, PlatformGithubModeStorage } from './mode.js';
+import type { PlatformGithubConnectInstallation, PlatformGithubModeRecord, PlatformGithubModeStorage } from './mode.js';
 import type {
   GithubCall,
   GithubComment,
@@ -123,7 +133,13 @@ function githubStatusReason(
 type PlatformGithubUserConnection = LegacyGithubUserConnection;
 
 /** The Mastra Factory GitHub apps' Connect provider keys. */
-export const PLATFORM_GITHUB_PROVIDER_KEYS = ['factory-github', 'factory-reviews-github'] as const;
+export const PLATFORM_GITHUB_PROVIDER_KEYS = [
+  FACTORY_GITHUB_PROVIDER_KEY,
+  FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
+] as const;
+/** Slugs of the Mastra Factory GitHub apps, which Factory also posts as. */
+const FACTORY_GITHUB_APP_SLUG = 'mastra-factory';
+const FACTORY_REVIEWS_GITHUB_APP_SLUG = 'mastra-factory-reviews';
 
 const PAGE_SIZE = 30;
 // Open issues list newest-first; missed opens are recent, so a bounded scan
@@ -203,6 +219,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   }
   readonly #legacy: LegacyGithubTransport;
   readonly #modes = new PlatformGithubModes(() => this.integrationStorage as unknown as PlatformGithubModeStorage);
+  readonly #tokens = new GithubConnectTokens(this.connect);
+  /** One Connect transport per switched installation, keeping its token cache warm. */
+  readonly #connectTransports = new Map<string, ConnectGithubTransport>();
+  readonly #githubApiUrl: string | undefined;
   readonly #endpointHost: string;
   readonly #slug: string | undefined;
   /**
@@ -224,6 +244,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   #integrationStorage: GithubSubscriptionStorage | undefined;
   #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   #reconcileWorker: GithubReconcileWorker | undefined;
+  #connectEvents: ((event: PlatformConnectEventDelivery) => Promise<void>) | undefined;
   readonly #linkedRepositories = new LinkedGithubRepositories(() => ({
     listConfiguredExternalKeys: () => this.storage.projectRepositories.listConfiguredExternalKeys(),
     listByExternalRepository: args => this.storage.projectRepositories.listByExternalRepository(args),
@@ -273,10 +294,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
-      const installations = await this.#legacy.listInstallations();
-      const usable = installations.installations.filter(
-        installation => installation.usable && !installation.suspendedAt,
-      );
+      const usable = await this.#sourceInstallations(orgId);
       const repositories = await Promise.all(
         usable.map(async installation => {
           const storedInstallation = await this.versionControl.registerInstallation({
@@ -289,7 +307,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
             },
           });
           const result = {
-            repositories: await this.#legacy.listInstallationRepositories(installation.installationId),
+            repositories: await this.#installationRepositories(installation.installationId, orgId),
           };
           await this.versionControl.registerRepositories({
             orgId,
@@ -547,6 +565,8 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       slug?: string;
       /** Connect client, or options for one; defaults to the platform environment. */
       connect?: PlatformConnectOption;
+      /** GitHub REST API the Mastra Factory apps' tokens call. Defaults to `https://api.github.com`. */
+      githubApiUrl?: string;
     } = {},
   ) {
     super({
@@ -558,6 +578,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     this.#legacy = new LegacyGithubTransport(this.connect);
     this.#endpointHost = new URL(this.connect.baseUrl).host;
     this.#slug = options.slug;
+    this.#githubApiUrl = options.githubApiUrl;
     // Identity is deliberately NOT taken from `options.slug`. That slug names
     // the deployment's own self-hosted GitHub App, which is a different App
     // than the one this integration posts as — and on a Platform deployment it
@@ -566,6 +587,10 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     // App, so it names itself, with an override for non-production Apps.
     this.identity = new GithubAppIdentity(
       process.env.MASTRA_PLATFORM_GITHUB_APP_SLUG?.trim() || PLATFORM_GITHUB_APP_SLUG,
+      [
+        process.env.MASTRA_FACTORY_GITHUB_APP_SLUG?.trim() || FACTORY_GITHUB_APP_SLUG,
+        process.env.MASTRA_FACTORY_REVIEWS_GITHUB_APP_SLUG?.trim() || FACTORY_REVIEWS_GITHUB_APP_SLUG,
+      ],
     );
     this.authorizedBots = parseAuthorizedBotsEnv(process.env.MASTRACODE_GITHUB_AUTHORIZED_BOTS) ?? [];
     const legacyReconcileEnabled = process.env.MASTRA_PLATFORM_GITHUB_RECONCILE_ENABLED;
@@ -911,12 +936,37 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     ];
   }
 
+  /**
+   * `factory-github` webhooks from the `connect` topic, for orgs that switched
+   * to the Mastra Factory apps. `factory-reviews-github` events are ignored.
+   */
+  protected override async handleConnectEvent(
+    event: PlatformConnectEventDelivery,
+    ctx: IntegrationContext,
+  ): Promise<void> {
+    if (!ctx.controller) {
+      throw new Error('Platform GitHub events require the mounted Mastra Code controller.');
+    }
+    this.#connectEvents ??= connectGithubEventHandler({
+      delivery: { controller: ctx.controller, github: this, ingestFactoryEvent: attachGithubRules(this, ctx) },
+      repositories: this.#linkedRepositories,
+      modes: this.#modes,
+      onDependabotAlert: () => this.#reconcileWorker?.requestRun(['dependabot']),
+      logger: {
+        debug: () => {},
+        warn: (message: string, fields?: Record<string, unknown>) => logPlatformWarn(message, fields),
+        error: (message: string, fields?: Record<string, unknown>) => logPlatformError(message, fields),
+      },
+    });
+    await this.#connectEvents(event);
+  }
+
   /** Repositories renamed on GitHub keep their id; sweep them under the name the platform reports now. */
   async #refreshRepositoryNames(targets: ReconcileRepository[]): Promise<void> {
     for (const installationId of new Set(targets.map(target => target.installationId))) {
       try {
         const names = new Map(
-          (await this.#legacy.listInstallationRepositories(installationId)).map(repository => [
+          (await this.#installationRepositories(installationId)).map(repository => [
             repository.id,
             repository.fullName,
           ]),
@@ -959,7 +1009,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     state: 'open' | 'closed';
   }): Promise<GithubDependabotAlert[]> {
     splitRepository(input.repository);
-    const github = await this.#github(installationConnection(input.installationId));
+    const github = await this.#github(installationConnection(input.installationId), input.repository);
     return github.listDependabotAlerts({ repository: input.repository }, input.state);
   }
 
@@ -979,7 +1029,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       return undefined;
     }
     try {
-      const github = await this.#github(installationConnection(input.installationId));
+      const github = await this.#github(installationConnection(input.installationId), input.repository);
       // Read with GitHub's REST field names, as before the transport existed.
       // The platform route answers in camelCase, so the renamed fields read as
       // absent here (recorded as a follow-up, not changed in this move).
@@ -1038,7 +1088,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
       return undefined;
     }
     try {
-      const github = await this.#github(installationConnection(input.installationId));
+      const github = await this.#github(installationConnection(input.installationId), input.repository);
       // Read with GitHub's REST field names, as before the transport existed (see fetchPullRequestState).
       const result = (await github.getIssue({ repository: input.repository }, input.number)) as unknown as {
         title?: string;
@@ -1076,7 +1126,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     repository: string;
   }): Promise<Array<ReconcileIssueState & { number: number }>> {
     const issues: Array<ReconcileIssueState & { number: number }> = [];
-    const github = await this.#github(installationConnection(input.installationId));
+    const github = await this.#github(installationConnection(input.installationId), input.repository);
     for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
       splitRepository(input.repository);
       const result = {
@@ -1103,7 +1153,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
     const comments: GithubComment[] = [];
     splitRepository(input.repository);
-    const github = await this.#github(installationConnection(input.installationId));
+    const github = await this.#github(installationConnection(input.installationId), input.repository);
     const call = { repository: input.repository };
     for (let page = 1; ; page += 1) {
       const result = await github.listIssueComments(call, input.issueNumber, { page, perPage: PAGE_SIZE });
@@ -1187,7 +1237,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     if (inFlight) return settleOrAbort(inFlight, signal, undefined);
     const lookup = (async () => {
       try {
-        const github = await this.#github(installationConnection(installationId));
+        const github = await this.#github(installationConnection(installationId), repoFullName);
         const permission = await github.getCollaboratorPermission({ repository: repoFullName }, username);
         // Failures are not cached: a rate-limited or aborted lookup must retry
         // on the next call rather than pin the login as unknown.
@@ -1228,7 +1278,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
-    const result = { repositories: await this.#legacy.listInstallationRepositories(installationId) };
+    const result = { repositories: await this.#installationRepositories(installationId) };
     const repos = result.repositories.map(repository => ({ ...repository, installationId }));
     setBounded(this.#installationReposCache, installationId, {
       repos,
@@ -1275,7 +1325,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     labels: string[],
   ): Promise<string[]> {
     splitRepository(sourceId);
-    const github = await this.#github(installationConnection(installationId));
+    const github = await this.#github(installationConnection(installationId), sourceId);
     return github.addIssueLabels({ repository: sourceId }, issueNumber, labels);
   }
 
@@ -1283,7 +1333,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     const name = label.trim();
     if (!name) return;
     splitRepository(sourceId);
-    const github = await this.#github(installationConnection(installationId));
+    const github = await this.#github(installationConnection(installationId), sourceId);
     await github.removeIssueLabel({ repository: sourceId }, issueNumber, name);
   }
 
@@ -1291,7 +1341,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     return {
       pulls: {
         get: async ({ owner, repo, pull_number }: { owner: string; repo: string; pull_number: number }) => {
-          const github = await this.#github(installationConnection(installationId));
+          const github = await this.#github(installationConnection(installationId), `${owner}/${repo}`);
           const data = await github.getPullRequest({ repository: `${owner}/${repo}` }, pull_number);
           return { data: { base: { repo: { id: data.base.repo.id } }, head: { ref: data.head.ref } } };
         },
@@ -1303,7 +1353,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(connection);
     splitRepository(sourceId);
     const normalizedLabels = normalizeLabels(labels);
-    const github = await this.#github(connection);
+    const github = await this.#github(connection, sourceId);
     const result = {
       issues: await github.listIssues(
         { repository: sourceId },
@@ -1326,7 +1376,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     const repository = requireSource(sourceId, 'GitHub Intake requires a repository source.');
     const issueNumber = requirePositiveId(issueId, 'issue');
     splitRepository(repository);
-    const github = await this.#github(connection);
+    const github = await this.#github(connection, repository);
     try {
       const [issue, comments] = await Promise.all([
         github.getIssue({ repository }, issueNumber),
@@ -1355,7 +1405,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     // pull request, not an issue. Factory does not close PRs via updateIssue —
     // PR merges/closes go through the version-control pipeline.
     splitRepository(repository);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, repository);
     const call = { repository, ...(input.actingUserId ? { actingUserId: input.actingUserId } : {}) };
     try {
       await github.getPullRequest({ repository }, issueNumber);
@@ -1392,7 +1442,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
     const issueNumber = requirePositiveId(input.issueId, 'issue');
     splitRepository(repository);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, repository);
     try {
       const comment = await github.createIssueComment(
         { repository, ...(input.actingUserId ? { actingUserId: input.actingUserId } : {}) },
@@ -1411,7 +1461,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     const page = parsePositiveCursor(input.cursor);
     splitRepository(input.sourceId);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const result = {
       pullRequests: await github.listPullRequests(
         { repository: input.sourceId },
@@ -1439,13 +1489,15 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
     splitRepository(input.sourceId);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const result = await github.createPullRequest(
       { repository: input.sourceId, ...(input.actingUserId ? { actingUserId: input.actingUserId } : {}) },
       { head: input.headBranch, base: input.baseBranch, title: input.title, body: input.body, draft: input.draft },
     );
     const created = parsePullRequest(result);
-    if (input.actingUserId && input.connection.type === 'app-installation') {
+    if (input.actingUserId && github instanceof ConnectGithubTransport) {
+      await this.#assignOpener(github, input.sourceId, result.number, input.actingUserId, created);
+    } else if (input.actingUserId && input.connection.type === 'app-installation') {
       try {
         const user = await this.#fetchUserConnection(input.actingUserId);
         const login = user.githubUsername;
@@ -1475,6 +1527,38 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     return created;
   }
 
+  /**
+   * Assigns a pull request to the person it was opened for, with their own
+   * GitHub token. Best effort: a missing connection or a refusal only warns.
+   */
+  async #assignOpener(
+    github: ConnectGithubTransport,
+    repository: string,
+    number: number,
+    userId: string,
+    created: ReturnType<typeof parsePullRequest>,
+  ): Promise<void> {
+    try {
+      const login = await github.userLogin(userId);
+      if (!login) return;
+      const { owner, repo } = splitRepository(repository);
+      const data = await github.asUser(userId, 'assignPullRequestOpener', async octokit => {
+        const response = await octokit.issues.addAssignees({ owner, repo, issue_number: number, assignees: [login] });
+        return response.data;
+      });
+      if (!data?.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+        logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
+      } else {
+        created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
+      }
+    } catch (error) {
+      logPlatformWarn('Failed to assign the PR opener', {
+        url: created.url,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   async #updatePullRequest(input: UpdatePullRequestInput) {
     const { github, call, number } = await this.#pullRequestCall(input);
     const result = await github.updatePullRequest(call, number, {
@@ -1499,7 +1583,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     const page = parsePositiveCursor(input.cursor);
     const number = requirePositiveId(input.pullRequestId, 'pull request');
     splitRepository(input.sourceId);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const result = {
       comments: await github.listIssueComments({ repository: input.sourceId }, number, { page, perPage: PAGE_SIZE }),
     };
@@ -1512,7 +1596,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
   async #createComment(input: CreatePullRequestCommentInput) {
     const number = requirePositiveId(input.pullRequestId, 'pull request');
     splitRepository(input.sourceId);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const comment = await github.createIssueComment(actingCall(input.sourceId, input.actingUserId), number, input.body);
     this.#observeSelfAuthor(comment, input.actingUserId);
     return parseComment(comment);
@@ -1522,7 +1606,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     splitRepository(input.sourceId);
     const commentId = requirePositiveId(input.commentId, 'comment');
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const comment = await github.updateIssueComment(
       actingCall(input.sourceId, input.actingUserId),
       commentId,
@@ -1535,7 +1619,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     splitRepository(input.sourceId);
     const commentId = requirePositiveId(input.commentId, 'comment');
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     await github.deleteIssueComment(actingCall(input.sourceId, input.actingUserId), commentId);
   }
 
@@ -1574,7 +1658,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     // Every call creates a new run; GitHub shows the latest run per app and name.
     splitRepository(input.sourceId);
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     const run = await github.createCheckRun(actingCall(input.sourceId, input.actingUserId), {
       name: input.name,
       headSha: input.headSha,
@@ -1652,7 +1736,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     splitRepository(input.sourceId);
     const commentId = requirePositiveId(input.commentId, 'review comment');
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     return parseReviewComment(
       await github.updateReviewComment(actingCall(input.sourceId, input.actingUserId), commentId, input.body),
     );
@@ -1662,7 +1746,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     requireGithubConnection(input.connection);
     splitRepository(input.sourceId);
     const commentId = requirePositiveId(input.commentId, 'review comment');
-    const github = await this.#github(input.connection);
+    const github = await this.#github(input.connection, input.sourceId);
     await github.deleteReviewComment(actingCall(input.sourceId, input.actingUserId), commentId);
   }
 
@@ -1671,27 +1755,111 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
    * sandboxes get these, never an installation-wide token.
    */
   async #repositoryToken(target: { installationId: number; orgId?: string }, repositories: string[]): Promise<string> {
-    const mode = await this.#modeOf({ type: 'app-installation', ...target });
-    if (mode === 'legacy') {
+    const org = await this.#connectOrg({ type: 'app-installation', ...target });
+    if (!org) {
       return this.#legacy.mintRepositoryToken(target.installationId, repositories, REPOSITORY_TOKEN_PERMISSIONS);
     }
-    throw new PlatformGithubConnectUnavailableError();
+    // Connect hands out installation-wide tokens only. Sandboxes never get one.
+    throw new GithubTokenScopeUnavailableError();
+  }
+
+  /** The installations an org's repositories come from: its switched installations, or the legacy app's usable ones. */
+  async #sourceInstallations(
+    orgId: string,
+  ): Promise<Array<{ installationId: number; accountLogin: string; accountType: string }>> {
+    const record = this.#integrationStorage ? await this.#modes.get(orgId) : undefined;
+    if (record?.mode === 'connect') {
+      return (record.installations ?? []).map(installation => ({
+        installationId: installation.installationId,
+        accountLogin: installation.accountLogin,
+        accountType: installation.accountType ?? 'Organization',
+      }));
+    }
+    const installations = await this.#legacy.listInstallations();
+    return installations.installations.filter(installation => installation.usable && !installation.suspendedAt);
+  }
+
+  /** Every repository an installation reaches, from whichever app it belongs to. */
+  async #installationRepositories(installationId: number, orgId?: string): Promise<LegacyInstallationRepository[]> {
+    const transport = await this.#connectTransport(
+      { type: 'app-installation', installationId, ...(orgId ? { orgId } : {}) },
+      undefined,
+    );
+    return transport
+      ? transport.listInstallationRepositories()
+      : this.#legacy.listInstallationRepositories(installationId);
   }
 
   /**
    * The transport serving a connection. The org's mode is the only branch
    * point: an org that has not switched, and any connection whose org can't be
-   * named, stays on the legacy routes.
+   * named, stays on the legacy routes. A switched org never falls back to them.
    */
-  async #github(connection: IntegrationConnection): Promise<GithubTransport> {
-    if ((await this.#modeOf(connection)) === 'legacy') return this.#legacy;
-    throw new PlatformGithubConnectUnavailableError();
+  async #github(connection: IntegrationConnection, repository?: string): Promise<GithubTransport> {
+    return (await this.#connectTransport(connection, repository)) ?? this.#legacy;
   }
 
-  async #modeOf(connection: IntegrationConnection): Promise<PlatformGithubMode> {
-    if (connection.type !== 'app-installation' || !this.#integrationStorage) return 'legacy';
-    if (connection.orgId) return this.#modes.modeFor(connection.orgId);
-    return (await this.#modes.orgForInstallation(connection.installationId)) ? 'connect' : 'legacy';
+  /** The switched org a connection belongs to, or null when it runs on the legacy app. */
+  async #connectOrg(
+    connection: IntegrationConnection,
+  ): Promise<{ orgId: string; record: PlatformGithubModeRecord } | null> {
+    if (connection.type !== 'app-installation' || !this.#integrationStorage) return null;
+    const orgId = connection.orgId ?? (await this.#modes.orgForInstallation(connection.installationId));
+    if (!orgId) return null;
+    const record = await this.#modes.get(orgId);
+    return record.mode === 'connect' ? { orgId, record } : null;
+  }
+
+  /**
+   * The Connect transport for a switched org's installation: the one the
+   * connection names, else the one installed on the repository's owner.
+   */
+  async #connectTransport(
+    connection: IntegrationConnection,
+    repository: string | undefined,
+  ): Promise<ConnectGithubTransport | null> {
+    const org = await this.#connectOrg(connection);
+    if (!org || connection.type !== 'app-installation') return null;
+    const installations = org.record.installations ?? [];
+    const owner = repository ? splitRepository(repository).owner.toLowerCase() : undefined;
+    const installation =
+      installations.find(candidate => candidate.installationId === connection.installationId) ??
+      (owner ? installations.find(candidate => candidate.accountLogin.toLowerCase() === owner) : undefined);
+    if (!installation) throw new PlatformGithubInstallationNotFoundError(org.orgId, repository);
+    await this.#requireActive(installation);
+    return this.#transportFor(installation);
+  }
+
+  /** Both apps' connections must be live: a switched org never falls back to the legacy app. */
+  async #requireActive(installation: PlatformGithubConnectInstallation): Promise<void> {
+    const [github, reviews] = await Promise.all([
+      this.connectionFor(FACTORY_GITHUB_PROVIDER_KEY, connection => connection.id === installation.connectionId),
+      this.connectionFor(
+        FACTORY_REVIEWS_GITHUB_PROVIDER_KEY,
+        connection => connection.id === installation.reviewsConnectionId,
+      ),
+    ]);
+    if (!github || !reviews) {
+      throw new PlatformGithubConnectionInactiveError(
+        installation.accountLogin,
+        !github ? 'factory-github' : 'factory-reviews-github',
+      );
+    }
+  }
+
+  #transportFor(installation: PlatformGithubConnectInstallation): ConnectGithubTransport {
+    const key = `${installation.installationId}:${installation.connectionId}:${installation.reviewsConnectionId}`;
+    let transport = this.#connectTransports.get(key);
+    if (!transport) {
+      transport = new ConnectGithubTransport({
+        installation,
+        tokens: this.#tokens,
+        isFactoryLogin: login => this.isFactoryCommentAuthor(login),
+        ...(this.#githubApiUrl ? { baseUrl: this.#githubApiUrl } : {}),
+      });
+      this.#connectTransports.set(key, transport);
+    }
+    return transport;
   }
 
   /** Validates a pull request reference in the order the legacy routes did, then picks its transport. */
@@ -1705,7 +1873,7 @@ export class PlatformGithubIntegration extends PlatformConnectIntegration implem
     splitRepository(input.sourceId);
     const number = requirePositiveId(input.pullRequestId, 'pull request');
     return {
-      github: await this.#github(input.connection),
+      github: await this.#github(input.connection, input.sourceId),
       call: actingCall(input.sourceId, input.actingUserId),
       number,
     };
@@ -1883,20 +2051,50 @@ function reviewEvent(event: 'approve' | 'request-changes' | 'comment') {
  * authors it with that user's GitHub connection instead of the App bot.
  */
 function isNotFound(error: unknown): boolean {
-  return platformErrorStatus(error) === 404;
+  return githubErrorStatus(error) === 404;
 }
 
 // Platform answers 404 when the installation row is gone, 409 when it is suspended or soft-deleted.
 // A 502 also covers a dead installation but is indistinguishable from a transient GitHub outage.
 function isDeadInstallation(error: unknown): boolean {
-  const status = platformErrorStatus(error);
+  const status = githubErrorStatus(error);
   return status === 404 || status === 409;
 }
 
-/** Raised for an org on the Mastra Factory apps until Factory can serve it. */
-export class PlatformGithubConnectUnavailableError extends Error {
+/** A switched org has no Mastra Factory app installation for the repository's owner. */
+export class PlatformGithubInstallationNotFoundError extends Error {
+  readonly status = 404;
+
+  constructor(orgId: string, repository: string | undefined) {
+    super(
+      `Org ${orgId} switched to the Mastra Factory GitHub apps, but none of its installations serves ${repository ?? 'this connection'}.`,
+    );
+    this.name = 'PlatformGithubInstallationNotFoundError';
+  }
+}
+
+/** One of a switched org's Mastra Factory app connections is no longer active. */
+export class PlatformGithubConnectionInactiveError extends Error {
+  readonly status = 409;
+
+  constructor(accountLogin: string, providerKey: string) {
+    super(`The ${providerKey} connection for ${accountLogin} is not active. Reconnect it in Factory settings.`);
+    this.name = 'PlatformGithubConnectionInactiveError';
+  }
+}
+
+/**
+ * Agent sandboxes only get tokens scoped to the repositories they work on.
+ * Connect issues installation-wide tokens, so a switched org can't mint one.
+ */
+export class GithubTokenScopeUnavailableError extends Error {
+  readonly status = 409;
+  readonly code = 'sandbox_token_scope_unavailable';
+
   constructor() {
-    super('This org has switched to the Mastra Factory GitHub apps, which this Factory version cannot serve yet.');
-    this.name = 'PlatformGithubConnectUnavailableError';
+    super(
+      'Repository-scoped GitHub tokens are not available for the Mastra Factory GitHub apps yet, so Factory will not hand an agent sandbox an installation-wide token.',
+    );
+    this.name = 'GithubTokenScopeUnavailableError';
   }
 }

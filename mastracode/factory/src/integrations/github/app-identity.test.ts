@@ -58,4 +58,15 @@ describe('GithubAppIdentity', () => {
     identity.observeSelfAuthor('  ');
     expect(identity.matches('mastra-platform[bot]')).toBe(true);
   });
+
+  it('recognises every App that is Factory, without letting an alias become its login', () => {
+    const identity = new GithubAppIdentity('mastra-platform', ['mastra-factory', 'Mastra-Factory-Reviews']);
+    expect(identity.matches('mastra-platform[bot]')).toBe(true);
+    expect(identity.matches('mastra-factory[bot]')).toBe(true);
+    expect(identity.matches('mastra-factory-reviews[bot]')).toBe(true);
+    expect(identity.matches('dane-ai-mastra[bot]')).toBe(false);
+
+    identity.observeSelfAuthor('mastra-factory-reviews[bot]');
+    expect(identity.login).toBe('mastra-platform[bot]');
+  });
 });

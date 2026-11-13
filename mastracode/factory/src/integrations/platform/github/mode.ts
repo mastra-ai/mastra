@@ -6,6 +6,8 @@ export type PlatformGithubMode = 'legacy' | 'connect';
 /** An installation of the Mastra Factory apps an org switched to. */
 export interface PlatformGithubConnectInstallation {
   accountLogin: string;
+  /** `Organization` or `User`, as GitHub reports the account. */
+  accountType?: string;
   /** The `factory-github` installation id. */
   installationId: number;
   /** The `factory-github` Connect connection serving it. */
