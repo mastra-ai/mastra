@@ -2219,7 +2219,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     // only when they share an event id. Two deliveries with different ids that read the same saved
     // result can both continue the run from it. A broker's reclaim hands a dead worker's message to
     // one consumer, so in practice a finished occurrence sees a single late delivery.
-    const finished = (await this.#finishedCheckStore(workflow)) ? await this.#finishedOccurrence(args, leaf) : 'run';
+    const store = await this.#finishedCheckStore(workflow);
+    const finished = store ? await this.#finishedOccurrence(args, leaf, { store }) : 'run';
     const logger = this.mastra.getLogger();
     const occurrence = { workflowId, runId, executionPath };
 
@@ -2311,7 +2312,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     const workflow = this.#resolveLiveWorkflow(data) ?? undefined;
-    if (!workflow || !(await this.#finishedCheckStore(workflow))) {
+    const store = await this.#finishedCheckStore(workflow);
+    if (!workflow || !store) {
       return 'run';
     }
 
@@ -2325,6 +2327,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // run still has to continue from comes back as 'continue', and the dispatch then hands it to the
     // guards like any delivery.
     const decision = await this.#finishedOccurrence({ ...data, workflow, eventId: event.id }, leaf, {
+      store,
       deferToGuards: false,
     });
     return typeof decision === 'string' ? decision : 'continue';
@@ -2356,22 +2359,18 @@ export class WorkflowEventProcessor extends EventProcessor {
    * is a duplicate, or the step end arguments that continue the run from the
    * saved result. See {@link finishedOccurrence}.
    *
-   * A resume of the step and time travel run it again on purpose and skip the
-   * check. With `deferToGuards` (the default), records the store's step guards
-   * stamped are left to those guards on the deliveries they arbitrate.
+   * `store` is the one {@link #finishedCheckStore} returned. A resume of the
+   * step and time travel run it again on purpose and skip the check. With
+   * `deferToGuards` (the default), records the store's step guards stamped
+   * are left to those guards on the deliveries they arbitrate.
    */
   async #finishedOccurrence(
     args: ProcessorArgs,
     step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>,
-    { deferToGuards = true }: { deferToGuards?: boolean } = {},
+    { store, deferToGuards = true }: { store: WorkflowsStorage; deferToGuards?: boolean },
   ): Promise<'run' | 'drop' | ProcessorArgs> {
     const leafId = getEntryId(step.type === 'loop' || step.type === 'foreach' ? step.step : step);
     if (args.timeTravel || args.resumeSteps?.[0] === leafId) {
-      return 'run';
-    }
-
-    const store = await this.mastra.getStorage()?.getStore('workflows');
-    if (!store) {
       return 'run';
     }
 
