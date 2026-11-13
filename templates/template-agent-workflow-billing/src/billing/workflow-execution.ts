@@ -175,29 +175,33 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
     );
     if (!claim.claimed) return this.read(id, executionId, request.billing);
     try {
-      await this.context.identity.run(identity, () =>
-        this.options.gateway.execute(
-          request.billing,
-          {
-            resourceId: id,
-            operation: 'start',
-            idempotencyKey: executionId,
-            input: { executionId, inputData: input, version: claim.record.version },
-          },
-          { executionId, version: claim.record.version, configuration: record.configuration },
-        ),
-      );
-    } catch (error) {
-      // Only a missing accounting execution proves admission never happened.
-      const admitted = await this.options.accounting.hasExecution(executionId);
-      await this.options.workflowStorage.transition(
-        executionId,
-        claim.record.version,
-        admitted ? 'uncertain' : 'failed',
-      );
-      throw error;
+      try {
+        await this.context.identity.run(identity, () =>
+          this.options.gateway.execute(
+            request.billing,
+            {
+              resourceId: id,
+              operation: 'start',
+              idempotencyKey: executionId,
+              input: { executionId, inputData: input, version: claim.record.version },
+            },
+            { executionId, version: claim.record.version, configuration: record.configuration },
+          ),
+        );
+      } catch (error) {
+        // Only a missing accounting execution proves admission never happened.
+        const admitted = await this.options.accounting.hasExecution(executionId);
+        await this.options.workflowStorage.transition(
+          executionId,
+          claim.record.version,
+          admitted ? 'uncertain' : 'failed',
+        );
+        throw error;
+      }
+      return await this.workflowResponse(id, executionId, claim.record.version, request.billing);
+    } finally {
+      this.clearImmediate(executionId, claim.record.version);
     }
-    return this.workflowResponse(id, executionId, claim.record.version, request.billing);
   }
   async execute(id: string, input: Json, executionId: string): Promise<ExecutorOutcome> {
     const request = parseInput(
@@ -391,6 +395,9 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       this.preparing.delete(record.id);
     }
   }
+  private clearImmediate(executionId: string, version: number) {
+    if (this.immediateWorkflows.get(executionId)?.version === version) this.immediateWorkflows.delete(executionId);
+  }
   private async workflowResponse<W extends AnyWorkflow>(
     id: string,
     executionId: string,
@@ -435,14 +442,18 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
       this.runtime,
     );
     if (!claim.claimed) return this.read(id, executionId, request.billing);
-    const outcome = await this.runSegment(id, claim.record, identity, input);
-    await this.options.accounting.finish(
-      executionId,
-      outcome,
-      outcome.result === undefined ? null : boundedJson(outcome.result),
-      { executionId, version: claim.record.version },
-    );
-    return this.workflowResponse(id, executionId, claim.record.version, request.billing);
+    try {
+      const outcome = await this.runSegment(id, claim.record, identity, input);
+      await this.options.accounting.finish(
+        executionId,
+        outcome,
+        outcome.result === undefined ? null : boundedJson(outcome.result),
+        { executionId, version: claim.record.version },
+      );
+      return await this.workflowResponse(id, executionId, claim.record.version, request.billing);
+    } finally {
+      this.clearImmediate(executionId, claim.record.version);
+    }
   }
   async cancel<W extends AnyWorkflow>(
     id: string,
