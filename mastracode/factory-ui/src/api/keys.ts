@@ -155,6 +155,9 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
+  /** Under the decision lists, so whatever refreshes them refreshes the queue too. */
+  factoryRunQueue: (githubProjectId: string | undefined) =>
+    [...queryKeys.factoryDecisionsRoot(githubProjectId), 'run-queue'] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
