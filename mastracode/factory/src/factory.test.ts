@@ -3066,10 +3066,12 @@ describe('MastraFactory.prepare integrations', () => {
     const names = (args.workers ?? []).map(worker => worker.name);
     expect(names.filter(name => name === 'platform-events')).toHaveLength(1);
     expect(names).not.toContain('platform-gitlab-events');
+    // Linear's events come through the shared worker; no Linear poller of its own.
+    expect(names.filter(name => name.startsWith('platform-linear'))).toEqual([]);
     const events = args.workers!.find(worker => worker.name === 'platform-events') as unknown as {
       diagnostics(): { integrations: string[] };
     };
-    expect(events.diagnostics().integrations.sort()).toEqual(['gitlab', 'incidentio', 'jira']);
+    expect(events.diagnostics().integrations.sort()).toEqual(['gitlab', 'incidentio', 'jira', 'linear']);
   });
 
   it('runs no Platform events worker, and says why, when the deployment has no project id', async () => {
