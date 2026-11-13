@@ -1,0 +1,199 @@
+import { describe, expect, it } from 'vitest';
+
+import { startFakePlatform } from '../foundation/test-utils.js';
+import type { FakePlatform } from '../foundation/test-utils.js';
+import { createPlatformStorageForTests } from '../test-utils.js';
+import { FACTORY_GITHUB_PROVIDER_KEY, FACTORY_REVIEWS_GITHUB_PROVIDER_KEY } from './connect-events.js';
+import { FACTORY_GITHUB_USER_PROVIDER_KEY } from './connect-tokens.js';
+import {
+  GithubTokenScopeUnavailableError,
+  PlatformGithubConnectionInactiveError,
+  PlatformGithubInstallationNotFoundError,
+  PlatformGithubIntegration,
+} from './integration.js';
+import { PlatformGithubModes } from './mode.js';
+import type { PlatformGithubModeStorage } from './mode.js';
+import { startFakeGithub } from './test-utils.js';
+import type { FakeGithub } from './test-utils.js';
+
+const FUTURE = '2099-01-01T00:00:00.000Z';
+
+const rawPullRequest = (number: number, login: string) => ({
+  number,
+  title: 'Fix',
+  body: 'Body',
+  state: 'open',
+  html_url: `https://github.com/acme/app/pull/${number}`,
+  merged: false,
+  mergeable: null,
+  draft: false,
+  head: { ref: 'fix', sha: 'h1' },
+  base: { ref: 'main', repo: { id: 101, full_name: 'acme/app' } },
+  user: { login, avatar_url: '', html_url: '' },
+  assignees: [],
+  requested_reviewers: [],
+  created_at: '2026-11-13T10:00:00Z',
+  updated_at: '2026-11-13T10:00:00Z',
+});
+
+function connection(platform: FakePlatform, id: string, integrationId: string, extra: { resourceId?: string } = {}) {
+  platform.orgConnections.push({ id, integrationId, status: 'active', ...extra });
+  platform.linked.add(id);
+}
+
+async function setup(options: { reviewsActive?: boolean; users?: Record<string, string> } = {}) {
+  const platform = await startFakePlatform();
+  const github: FakeGithub = await startFakeGithub();
+  connection(platform, 'conn-github', FACTORY_GITHUB_PROVIDER_KEY);
+  if (options.reviewsActive !== false) connection(platform, 'conn-reviews', FACTORY_REVIEWS_GITHUB_PROVIDER_KEY);
+  platform.credentials.set('conn-github', { type: 'oauth2', accessToken: 'tok-github', expiresAt: FUTURE });
+  platform.credentials.set('conn-reviews', { type: 'oauth2', accessToken: 'tok-reviews', expiresAt: FUTURE });
+  const logins = new Map<string, string>();
+  for (const [userId, login] of Object.entries(options.users ?? {})) {
+    const id = `conn-user-${userId}`;
+    connection(platform, id, FACTORY_GITHUB_USER_PROVIDER_KEY, { resourceId: userId });
+    platform.credentials.set(id, { type: 'oauth2', accessToken: `tok-${userId}`, expiresAt: FUTURE });
+    logins.set(`tok-${userId}`, login);
+  }
+
+  const seed = await createPlatformStorageForTests();
+  const integration = new PlatformGithubIntegration({ connect: platform.connect(), githubApiUrl: github.baseUrl });
+  const generic = seed.integrations.forIntegration('github');
+  integration.initialize?.({ storage: generic });
+  integration.versionControl.initialize({ storage: seed.sourceControl.forIntegration('github') });
+  await new PlatformGithubModes(() => generic as unknown as PlatformGithubModeStorage).saveConnect('org-1', {
+    switchedAt: Date.parse('2026-11-13T00:00:00.000Z'),
+    switchedBy: 'admin-1',
+    installations: [
+      { accountLogin: 'acme', installationId: 900, connectionId: 'conn-github', reviewsConnectionId: 'conn-reviews' },
+    ],
+  });
+
+  const pulls: unknown[] = [];
+  github.route = request => {
+    if (request.path === '/user' && request.token && logins.has(request.token)) {
+      return { status: 200, body: { login: logins.get(request.token) } };
+    }
+    if (request.method === 'GET' && request.path === '/repos/acme/app/pulls') return { status: 200, body: pulls };
+    if (request.method === 'POST' && request.path === '/repos/acme/app/pulls') {
+      const author = request.token === 'tok-github' ? 'mastra-factory[bot]' : logins.get(request.token ?? '');
+      return {
+        status: 201,
+        body: { ...rawPullRequest(7, author ?? 'ghost'), body: (request.body as { body?: string }).body },
+      };
+    }
+    if (request.method === 'POST' && request.path === '/repos/acme/app/issues/7/assignees') {
+      return {
+        status: 201,
+        body: { assignees: (request.body as { assignees: string[] }).assignees.map(login => ({ login })) },
+      };
+    }
+    return undefined;
+  };
+  return { platform, github, integration, storage: seed.sourceControl.forIntegration('github') };
+}
+
+const switchedConnection = { type: 'app-installation' as const, installationId: 900, orgId: 'org-1' };
+
+describe('PlatformGithubIntegration in connect mode', () => {
+  it('calls GitHub with the factory-github token, never the legacy routes', async () => {
+    const { platform, github, integration } = await setup();
+    await integration.versionControl.listPullRequests({ connection: switchedConnection, sourceId: 'acme/app' });
+
+    expect(github.calls('/repos/acme/app/pulls', 'GET').map(request => request.token)).toEqual(['tok-github']);
+    expect(platform.requests.filter(request => request.path.startsWith('/v1/server'))).toEqual([]);
+  });
+
+  it('finds the installation by its id, or by the repository owner for a placeholder connection', async () => {
+    const { github, integration } = await setup();
+    // No org on the connection: the installation index names it.
+    await integration.versionControl.listPullRequests({
+      connection: { type: 'app-installation', installationId: 900 },
+      sourceId: 'acme/app',
+    });
+    // Intake's placeholder installation id never matches; the owner does.
+    await integration.versionControl.listPullRequests({
+      connection: { type: 'app-installation', installationId: 1, orgId: 'org-1' },
+      sourceId: 'acme/app',
+    });
+    expect(github.calls('/repos/acme/app/pulls', 'GET')).toHaveLength(2);
+  });
+
+  it('refuses a repository none of the switched installations serves', async () => {
+    const { github, integration } = await setup();
+    await expect(
+      integration.versionControl.listPullRequests({
+        connection: { type: 'app-installation', installationId: 1, orgId: 'org-1' },
+        sourceId: 'other/app',
+      }),
+    ).rejects.toBeInstanceOf(PlatformGithubInstallationNotFoundError);
+    expect(github.requests).toEqual([]);
+  });
+
+  it('refuses when one of the two app connections is no longer active, never falling back to legacy', async () => {
+    const { platform, github, integration } = await setup({ reviewsActive: false });
+    await expect(
+      integration.versionControl.listPullRequests({ connection: switchedConnection, sourceId: 'acme/app' }),
+    ).rejects.toBeInstanceOf(PlatformGithubConnectionInactiveError);
+    expect(github.requests).toEqual([]);
+    expect(platform.requests.filter(request => request.path.startsWith('/v1/server'))).toEqual([]);
+  });
+
+  it('never hands an agent sandbox an installation-wide token', async () => {
+    const { platform, integration, storage } = await setup();
+    const installation = await integration.versionControl.registerInstallation({
+      orgId: 'org-1',
+      userId: 'user-1',
+      installation: { externalId: '900', accountName: 'acme', accountType: 'Organization' },
+    });
+    const [repository] = await integration.versionControl.registerRepositories({
+      orgId: 'org-1',
+      installationId: installation.id,
+      repositories: [{ externalId: '101', slug: 'acme/app', defaultBranch: 'main' }],
+    });
+    expect(await storage.repositories.get({ orgId: 'org-1', id: repository!.id })).not.toBeNull();
+
+    await expect(
+      integration.versionControl.getRepositoryAccess({ orgId: 'org-1', repositoryId: repository!.id }),
+    ).rejects.toBeInstanceOf(GithubTokenScopeUnavailableError);
+    expect(platform.requests.filter(request => request.path.includes('/token'))).toEqual([]);
+    expect(platform.requests.filter(request => request.path.endsWith('/credentials'))).toEqual([]);
+  });
+
+  it('opens a pull request as the acting user and assigns it to them with their own token', async () => {
+    const { github, integration } = await setup({ users: { 'user-1': 'octocat' } });
+    const created = await integration.versionControl.createPullRequest({
+      connection: switchedConnection,
+      sourceId: 'acme/app',
+      headBranch: 'fix',
+      baseBranch: 'main',
+      title: 'Fix',
+      body: 'Body',
+      actingUserId: 'user-1',
+    });
+
+    expect(github.calls('/repos/acme/app/pulls', 'POST').map(request => request.token)).toEqual(['tok-user-1']);
+    expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([
+      expect.objectContaining({ token: 'tok-user-1', body: { assignees: ['octocat'] } }),
+    ]);
+    expect(created.assignees).toEqual(['octocat']);
+  });
+
+  it('opens a pull request as the app, naming the acting user, when they have not connected GitHub', async () => {
+    const { github, integration } = await setup();
+    await integration.versionControl.createPullRequest({
+      connection: switchedConnection,
+      sourceId: 'acme/app',
+      headBranch: 'fix',
+      baseBranch: 'main',
+      title: 'Fix',
+      body: 'Body',
+      actingUserId: 'user-1',
+    });
+
+    const [request] = github.calls('/repos/acme/app/pulls', 'POST');
+    expect(request?.token).toBe('tok-github');
+    expect((request?.body as { body: string }).body).toMatch(/^> Opened by @user-1\n/);
+    expect(github.calls('/repos/acme/app/issues/7/assignees', 'POST')).toEqual([]);
+  });
+});

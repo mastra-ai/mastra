@@ -24,10 +24,16 @@
 export class GithubAppIdentity {
   #configuredLogin: string | undefined;
   #observedLogin: string | undefined;
+  readonly #aliases: ReadonlySet<string>;
 
-  constructor(slug?: string) {
-    const trimmed = slug?.trim();
-    this.#configuredLogin = trimmed ? `${trimmed.toLowerCase()}[bot]` : undefined;
+  /**
+   * @param aliases Slugs of other Apps that are also Factory (an org can post
+   *   through more than one). They are recognised as Factory but never become
+   *   its {@link login}.
+   */
+  constructor(slug?: string, aliases: readonly string[] = []) {
+    this.#configuredLogin = botLogin(slug);
+    this.#aliases = new Set(aliases.map(botLogin).filter((login): login is string => login !== undefined));
   }
 
   /** The login Factory posts as, or `undefined` when it cannot be determined. */
@@ -47,7 +53,7 @@ export class GithubAppIdentity {
    */
   observeSelfAuthor(login: string | null | undefined): void {
     const trimmed = login?.trim().toLowerCase();
-    if (trimmed) this.#observedLogin = trimmed;
+    if (trimmed && !this.#aliases.has(trimmed)) this.#observedLogin = trimmed;
   }
 
   /**
@@ -55,8 +61,15 @@ export class GithubAppIdentity {
    * callers that must not fail open should check {@link known} first.
    */
   matches(login: string | null | undefined): boolean {
+    if (!login) return false;
+    const candidate = login.trim().toLowerCase();
+    if (this.#aliases.has(candidate)) return true;
     const self = this.login;
-    if (!self || !login) return false;
-    return login.trim().toLowerCase() === self;
+    return self !== undefined && candidate === self;
   }
+}
+
+function botLogin(slug: string | undefined): string | undefined {
+  const trimmed = slug?.trim();
+  return trimmed ? `${trimmed.toLowerCase()}[bot]` : undefined;
 }
