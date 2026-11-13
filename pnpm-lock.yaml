@@ -6660,6 +6660,12 @@ importers:
       '@mastra/pg':
         specifier: workspace:*
         version: link:../../stores/pg
+      '@mastra/valkey':
+        specifier: workspace:*
+        version: link:../../stores/valkey
+      '@mastra/valkey-streams':
+        specifier: workspace:*
+        version: link:../valkey-streams
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
