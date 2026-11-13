@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectClient } from '../connect-client.js';
 import { MastraConnectError } from '../errors.js';
 import { EventsClient, parseServerSentEvents, resolveEventsUrl } from '../events.js';
-import type { EventsClientOptions, TopicEvent } from '../events.js';
+import type { EventCursor, EventStreamGap, EventsClientOptions, TopicEvent } from '../events.js';
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
 
@@ -525,6 +525,494 @@ describe('EventsClient.subscribe', () => {
         'ConnectClient validates the events URL at construction',
       ).toThrow(/Invalid events service URL/);
     }
+  });
+});
+
+function memoryStore(initial: EventCursor | null = null) {
+  const saved: EventCursor[] = [];
+  const load = vi.fn(() => initial);
+  return {
+    saved,
+    load,
+    store: {
+      load,
+      save(cursor: EventCursor) {
+        saved.push(cursor);
+      },
+    },
+  };
+}
+
+function badCursor(_req: IncomingMessage, res: ServerResponse) {
+  res.writeHead(400, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Invalid event cursor' }));
+}
+
+describe('EventsClient.subscribe with a cursor store', () => {
+  it('saves an event once the loop body finishes, never one whose handling threw', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}, 1_000));
+        res.write(event('12', {}, 2_000));
+        res.write(event('13', {}, 3_000));
+      },
+    ]);
+    const { saved, store } = memoryStore();
+    const failed = (async () => {
+      for await (const e of client(s.url).subscribe('connect', { cursorStore: store })) {
+        if (e.id === '13') throw new Error('handler failed');
+      }
+    })();
+    await expect(failed).rejects.toThrow('handler failed');
+    expect(saved).toEqual([
+      { eventId: '11', timestamp: 1_000 },
+      { eventId: '12', timestamp: 2_000 },
+    ]);
+  });
+
+  it('does not save the event the consumer broke out on, or a ready cursor', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}, 1_000));
+        res.write(event('12', {}, 2_000));
+      },
+    ]);
+    const { saved, store } = memoryStore();
+    const events = await take(client(s.url).subscribe('connect', { cursorStore: store }), 2);
+    expect(events.map(e => e.id)).toEqual(['11', '12']);
+    expect(saved).toEqual([{ eventId: '11', timestamp: 1_000 }]);
+
+    const idle = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+      },
+    ]);
+    const quiet = memoryStore();
+    const subscription = client(idle.url).subscribe('connect', { cursorStore: quiet.store });
+    const iterating = take(subscription, 1);
+    await expect(subscription.ready).resolves.toBe('10');
+    subscription.close();
+    await iterating;
+    expect(quiet.saved).toEqual([]);
+  });
+
+  it('starts from after, then the stored id, the stored time, then afterTimestamp', async () => {
+    const answer: Handler = (_req, res) => {
+      startStream(res);
+      res.write(ready('40'));
+      res.write(event('41', {}));
+    };
+    const start = async (options: Parameters<EventsClient['subscribe']>[1]) => {
+      const s = await server([answer]);
+      await take(client(s.url).subscribe('connect', options), 1);
+      return { url: s.requests[0]!.url, lastEventId: s.requests[0]!.headers['last-event-id'] };
+    };
+    const path = '/v1/projects/proj_1/topics/connect';
+
+    const explicit = memoryStore({ eventId: '20', timestamp: 5 });
+    await expect(start({ after: '30', cursorStore: explicit.store })).resolves.toEqual({
+      url: path,
+      lastEventId: '30',
+    });
+    expect(explicit.load).not.toHaveBeenCalled();
+
+    await expect(start({ cursorStore: memoryStore({ eventId: '20', timestamp: 5 }).store })).resolves.toEqual({
+      url: path,
+      lastEventId: '20',
+    });
+    await expect(start({ cursorStore: memoryStore({ timestamp: 5 }).store, afterTimestamp: 7 })).resolves.toEqual({
+      url: `${path}?afterTimestamp=5`,
+      lastEventId: undefined,
+    });
+    await expect(start({ cursorStore: memoryStore(null).store, afterTimestamp: 7 })).resolves.toEqual({
+      url: `${path}?afterTimestamp=7`,
+      lastEventId: undefined,
+    });
+    await expect(start({ afterTimestamp: 0 })).resolves.toEqual({
+      url: `${path}?afterTimestamp=0`,
+      lastEventId: undefined,
+    });
+    await expect(start({ cursorStore: memoryStore(null).store })).resolves.toEqual({
+      url: path,
+      lastEventId: undefined,
+    });
+  });
+
+  it('reconnects by id after a stream that started from a time', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('40'));
+        res.end(event('41', {}));
+      },
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('41'));
+        res.write(event('42', {}));
+      },
+    ]);
+    await take(client(s.url).subscribe('connect', { afterTimestamp: 5 }), 2);
+    expect(s.requests[0]!.url).toContain('?afterTimestamp=5');
+    expect(s.requests[1]!.url).toBe('/v1/projects/proj_1/topics/connect');
+    expect(s.requests[1]!.headers['last-event-id']).toBe('41');
+  });
+
+  it('rejects invalid starting cursors', async () => {
+    for (const afterTimestamp of [-1, 1.5, Number.NaN]) {
+      expect(() => client('http://127.0.0.1:1').subscribe('connect', { afterTimestamp })).toThrow(/afterTimestamp/);
+    }
+    expect(() => client('http://127.0.0.1:1').subscribe('connect', { after: '1', afterTimestamp: 1 })).toThrow(
+      /at most one/,
+    );
+    for (const stored of [{ eventId: 'abc' }, { timestamp: -5 }]) {
+      const s = await server([answerReady]);
+      const error = await failure(
+        take(client(s.url).subscribe('connect', { cursorStore: memoryStore(stored).store }), 1),
+      );
+      expect(error.code).toBe('invalid_options');
+      expect(s.requests).toHaveLength(0);
+    }
+  });
+
+  it('saves the event being handled when the subscription closes during handling', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}, 1_000));
+        res.write(event('12', {}, 2_000));
+      },
+    ]);
+    const { saved, store } = memoryStore();
+    const shutdown = new AbortController();
+    const seen: string[] = [];
+    for await (const e of client(s.url).subscribe('connect', { cursorStore: store, signal: shutdown.signal })) {
+      shutdown.abort();
+      seen.push(e.id);
+    }
+    expect(seen).toEqual(['11']);
+    expect(saved).toEqual([{ eventId: '11', timestamp: 1_000 }]);
+  });
+
+  it('ends with the store error when loading fails, and rejects ready', async () => {
+    const s = await server([answerReady]);
+    const subscription = client(s.url).subscribe('connect', {
+      cursorStore: {
+        load: async () => {
+          throw new Error('store offline');
+        },
+        save: () => {},
+      },
+    });
+    await expect(take(subscription, 1)).rejects.toThrow('store offline');
+    await expect(subscription.ready).rejects.toThrow('store offline');
+    expect(s.requests).toHaveLength(0);
+  });
+
+  it('ends with the store error when saving fails', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+        res.write(event('12', {}));
+      },
+    ]);
+    const store = {
+      load: () => null,
+      save: () => {
+        throw new Error('disk full');
+      },
+    };
+    const seen: string[] = [];
+    const failed = (async () => {
+      for await (const e of client(s.url).subscribe('connect', { cursorStore: store })) seen.push(e.id);
+    })();
+    await expect(failed).rejects.toThrow('disk full');
+    expect(seen).toEqual(['11']);
+  });
+});
+
+function answerReady(_req: IncomingMessage, res: ServerResponse) {
+  startStream(res);
+  res.write(ready('10'));
+}
+
+describe('EventsClient.subscribe gaps and planned closes', () => {
+  it('reports a trimmed gap before the events after it', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+        res.write(event('91', {}));
+      },
+    ]);
+    const order: string[] = [];
+    const gaps: EventStreamGap[] = [];
+    const subscription = client(s.url).subscribe('connect', {
+      after: '5',
+      onGap: async gap => {
+        gaps.push(gap);
+        order.push('gap');
+      },
+    });
+    for (const e of await take(subscription, 1)) order.push(e.id);
+    expect(gaps).toEqual([{ reason: 'trimmed', after: '5', resumedAfter: '90' }]);
+    expect(order).toEqual(['gap', '91']);
+  });
+
+  it('keeps delivering past a gap when nobody listens for gaps', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+        res.write(event('91', {}));
+      },
+    ]);
+    const events = await take(client(s.url).subscribe('connect', { after: '5' }), 1);
+    expect(events.map(e => e.id)).toEqual(['91']);
+  });
+
+  it('resumes from just before the stored time when the stored id is rejected', async () => {
+    const s = await server([
+      badCursor,
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('50'));
+        res.write(event('51', {}, 1_000));
+      },
+    ]);
+    const { saved, store } = memoryStore({ eventId: '20', timestamp: 1_000 });
+    const gaps: EventStreamGap[] = [];
+    const events = await take(
+      client(s.url).subscribe('connect', { cursorStore: store, onGap: gap => void gaps.push(gap) }),
+      1,
+    );
+    expect(events.map(e => e.id)).toEqual(['51']);
+    expect(s.requests[0]!.headers['last-event-id']).toBe('20');
+    expect(s.requests[1]!.headers['last-event-id']).toBeUndefined();
+    // One millisecond early, so events from the same millisecond are redelivered rather than skipped.
+    expect(s.requests[1]!.url).toBe('/v1/projects/proj_1/topics/connect?afterTimestamp=999');
+    expect(gaps).toEqual([{ reason: 'cursor_rejected', after: '20', resumedAfter: '50' }]);
+    // The gap is resynced once onGap resolves, so a restart resumes from the new stream.
+    expect(saved).toEqual([{ eventId: '50', timestamp: 1_000 }]);
+  });
+
+  it('falls back to the time of the last event processed this session', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.end(event('11', {}, 4_000));
+      },
+      badCursor,
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('60'));
+        res.write(event('61', {}));
+      },
+    ]);
+    const gaps: EventStreamGap[] = [];
+    const events = await take(client(s.url).subscribe('connect', { onGap: gap => void gaps.push(gap) }), 2);
+    expect(events.map(e => e.id)).toEqual(['11', '61']);
+    expect(s.requests[2]!.url).toContain('?afterTimestamp=3999');
+    expect(gaps).toEqual([{ reason: 'cursor_rejected', after: '11', resumedAfter: '60' }]);
+  });
+
+  it('saves the resumed position once a trimmed gap is handled, and does not report it again', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.end(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+      },
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write(event('91', {}));
+      },
+    ]);
+    const { saved, store } = memoryStore({ eventId: '5', timestamp: 100 });
+    const gaps: EventStreamGap[] = [];
+    const events = await take(
+      client(s.url).subscribe('connect', { cursorStore: store, onGap: gap => void gaps.push(gap) }),
+      1,
+    );
+    expect(events.map(e => e.id)).toEqual(['91']);
+    expect(gaps).toHaveLength(1);
+    expect(saved).toEqual([{ eventId: '90', timestamp: 100 }]);
+    expect(s.requests[1]!.headers['last-event-id']).toBe('90');
+  });
+
+  it('saves a gap position without a time as just the id, and loads null fields as absent', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+        res.write(event('91', {}));
+      },
+    ]);
+    const saves: unknown[] = [];
+    await take(
+      client(s.url).subscribe('connect', {
+        cursorStore: {
+          // As read back from a row with nullable columns.
+          load: () => ({ eventId: '5', timestamp: null }) as unknown as EventCursor,
+          save: cursor => void saves.push(cursor),
+        },
+        onGap: () => {},
+      }),
+      1,
+    );
+    expect(saves).toStrictEqual([{ eventId: '90' }]);
+    expect(Object.keys(saves[0] as object)).toEqual(['eventId']);
+    expect(s.requests[0]!.headers['last-event-id']).toBe('5');
+  });
+
+  it('falls back to a stored time when the stream it started is rejected before any event', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.end(ready('40'));
+      },
+      badCursor,
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('45'));
+        res.write(event('46', {}));
+      },
+    ]);
+    const gaps: EventStreamGap[] = [];
+    const events = await take(
+      client(s.url).subscribe('connect', {
+        cursorStore: memoryStore({ timestamp: 2_000 }).store,
+        onGap: gap => void gaps.push(gap),
+      }),
+      1,
+    );
+    expect(events.map(e => e.id)).toEqual(['46']);
+    expect(s.requests[2]!.url).toContain('?afterTimestamp=1999');
+    expect(gaps).toEqual([{ reason: 'cursor_rejected', after: '40', resumedAfter: '45' }]);
+  });
+
+  it('ends with invalid_cursor when the position it fell back to is rejected too', async () => {
+    const s = await server([
+      badCursor,
+      (_req, res) => {
+        startStream(res);
+        res.end(ready('50'));
+      },
+      badCursor,
+    ]);
+    const error = await failure(
+      take(
+        client(s.url).subscribe('connect', {
+          cursorStore: memoryStore({ eventId: '20', timestamp: 1_000 }).store,
+          onGap: () => {},
+        }),
+        1,
+      ),
+    );
+    expect(error.code).toBe('invalid_cursor');
+    expect(s.requests).toHaveLength(3);
+  });
+
+  it('keeps resuming by time when a ready frame carries no id', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.end('event: ready\nretry: 1000\ndata: \n\n');
+      },
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('40'));
+        res.write(event('41', {}));
+      },
+    ]);
+    await take(client(s.url).subscribe('connect', { afterTimestamp: 5 }), 1);
+    expect(s.requests[1]!.url).toContain('?afterTimestamp=5');
+  });
+
+  it('ends with invalid_cursor when the rejected cursor has no time or no gap handler', async () => {
+    const noTime = await server([badCursor]);
+    const error = await failure(
+      take(
+        client(noTime.url).subscribe('connect', {
+          cursorStore: memoryStore({ eventId: '20' }).store,
+          onGap: () => {},
+        }),
+        1,
+      ),
+    );
+    expect(error.code).toBe('invalid_cursor');
+
+    const noHandler = await server([badCursor]);
+    const unhandled = await failure(
+      take(
+        client(noHandler.url).subscribe('connect', { cursorStore: memoryStore({ eventId: '20', timestamp: 9 }).store }),
+        1,
+      ),
+    );
+    expect(unhandled.code).toBe('invalid_cursor');
+    expect(noHandler.requests).toHaveLength(1);
+  });
+
+  it('ends with the gap handler error when it throws', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write(`event: gap\ndata: ${JSON.stringify({ after: '5', resumedAfter: '90' })}\n\n`);
+        res.write(event('91', {}));
+      },
+    ]);
+    const subscription = client(s.url).subscribe('connect', {
+      after: '5',
+      onGap: () => {
+        throw new Error('resync failed');
+      },
+    });
+    await expect(take(subscription, 1)).rejects.toThrow('resync failed');
+  });
+
+  it('ends with invalid_response on a malformed gap frame', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('90'));
+        res.write('event: gap\ndata: {"after":5}\n\n');
+      },
+    ]);
+    const error = await failure(take(client(s.url).subscribe('connect', { after: '5', onGap: () => {} }), 1));
+    expect(error.code).toBe('invalid_response');
+  });
+
+  it('reconnects on a reconnect frame without waiting for the socket to close', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+        // The socket stays open: the frame alone must end the stream.
+        res.write('event: reconnect\ndata: \n\n');
+      },
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('11'));
+        res.write(event('12', {}));
+      },
+    ]);
+    const events = await take(client(s.url, { idleTimeoutMs: 60_000 }).subscribe('connect'), 2);
+    expect(events.map(e => e.id)).toEqual(['11', '12']);
+    expect(s.requests[1]!.headers['last-event-id']).toBe('11');
   });
 });
 

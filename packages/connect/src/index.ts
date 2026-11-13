@@ -32,7 +32,15 @@ export type {
   ListConnectionsInput,
 } from './connect-client.js';
 export { EventsClient, EventSubscription } from './events.js';
-export type { ConnectEvent, EventsClientOptions, SubscribeOptions, TopicEvent } from './events.js';
+export type {
+  ConnectEvent,
+  EventCursor,
+  EventCursorStore,
+  EventStreamGap,
+  EventsClientOptions,
+  SubscribeOptions,
+  TopicEvent,
+} from './events.js';
 export type {
   ConnectClientOptions,
   ConnectionContext,
