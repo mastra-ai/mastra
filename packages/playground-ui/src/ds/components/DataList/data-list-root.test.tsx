@@ -172,6 +172,21 @@ describe('DataListRoot', () => {
       expect(scrollRef.current?.className).not.toContain('mask-');
     });
 
+    it('passes vertical wheel scrolling on to the page once the list cannot scroll further', () => {
+      const scrollRef = createRef<HTMLDivElement>();
+      render(
+        <DataList columns="1fr 1fr" scrollRef={scrollRef}>
+          <Header />
+        </DataList>,
+      );
+
+      const classes = scrollRef.current?.className.split(' ');
+      expect(classes).toContain('overscroll-x-none');
+      expect(classes).not.toContain('overscroll-none');
+      expect(classes).not.toContain('overscroll-y-none');
+      expect(classes).not.toContain('overscroll-y-contain');
+    });
+
     it('lets max-height classes constrain the scrollable viewport', () => {
       const scrollRef = createRef<HTMLDivElement>();
       render(
