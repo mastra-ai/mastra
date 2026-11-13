@@ -1,7 +1,7 @@
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronsUpDown } from 'lucide-react';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Icon } from '@/ds/icons/Icon';
@@ -139,6 +139,9 @@ export const buttonVariants = cva(
         'icon-sm': cn(controlHeight.sm, 'w-control-sm rounded-full'),
         'icon-md': cn(controlHeight.md, 'w-control-md rounded-full'),
         'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
+        // Inside a line of text (a breadcrumb's switcher or copy): a 20px circle that takes only
+        // its 14px glyph's slot, so it lines up with the text and leaves the text's spacing alone.
+        'icon-inline': '-m-0.75 size-5 rounded-full',
       },
     },
     compoundVariants: [
@@ -214,6 +217,7 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
   'icon-sm': 'sm',
   'icon-md': 'md',
   'icon-lg': 'lg',
+  'icon-inline': 'sm',
 };
 
 function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
@@ -241,15 +245,19 @@ export function ButtonIcon({ size, children }: { size: ButtonSize; children: Rea
  * chevron ink spans the middle half of its box, twice a regular icon's inset, so it pulls in by
  * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
  */
-export function TriggerChevron() {
-  return <ChevronDown aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+export function TriggerChevron({ shape = 'down' }: { shape?: TriggerChevronShape }) {
+  const Chevron = shape === 'up-down' ? ChevronsUpDown : ChevronDown;
+  return <Chevron aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
 }
 
+/** `down` for a list that opens below; `up-down` for a switcher between peers (e.g. a breadcrumb's). */
+export type TriggerChevronShape = 'down' | 'up-down';
+
 /** The trigger chevron in a Button's end slot. */
-export function ButtonChevron({ size }: { size: ButtonSize }) {
+export function ButtonChevron({ size, shape }: { size: ButtonSize; shape?: TriggerChevronShape }) {
   return (
     <ButtonAdornment slot="button-icon-end" size={iconSizeMap[size]}>
-      <TriggerChevron />
+      <TriggerChevron shape={shape} />
     </ButtonAdornment>
   );
 }

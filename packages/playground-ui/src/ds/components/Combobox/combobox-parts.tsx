@@ -149,7 +149,8 @@ function ComboboxTrigger({
           <span className="min-w-0 flex-1 truncate text-left">{children}</span>
         </>
       )}
-      {showChevron && <ButtonChevron size={size} />}
+      {/* With no value text, the trigger is a switcher between peers (e.g. a breadcrumb's), so up-down. */}
+      {showChevron && <ButtonChevron size={size} shape={iconOnly ? 'up-down' : 'down'} />}
     </BaseCombobox.Trigger>
   );
 }
