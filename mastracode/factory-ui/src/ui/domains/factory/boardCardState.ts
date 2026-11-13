@@ -62,7 +62,11 @@ export function boardCardState(input: BoardCardStateInput): BoardCardState {
     };
   }
   const automation =
-    decision === undefined ? undefined : automationOnCard(decision, sessionStatus, input.queuePosition);
+    decision !== undefined
+      ? automationOnCard(decision, sessionStatus, input.queuePosition)
+      : input.queuePosition !== undefined
+        ? queuedOnCard(input.queuePosition)
+        : undefined;
   const refusedMove: BoardCardStatus | undefined =
     transitionReason === undefined ? undefined : { kind: 'error', label: transitionReason };
   const sessionOwner: BoardCardOwner | undefined =
@@ -132,15 +136,17 @@ function automationOnCard(
       owner: { kind: 'automation', progressLabel: 'Retrying…' },
     };
   }
-  if (queuePosition !== undefined) {
-    return {
-      status: { kind: 'busy', label: `Queued (#${queuePosition})` },
-      owner: { kind: 'automation', progressLabel: 'Queued' },
-    };
-  }
+  if (queuePosition !== undefined) return queuedOnCard(queuePosition);
   const owner: BoardCardOwner = { kind: 'automation', progressLabel: copy.progressLabel };
   if (runAnnouncedByWick(decision, sessionStatus)) return { owner };
   return { status: { kind: 'busy', label: copy.busy }, owner };
+}
+
+function queuedOnCard(position: number): { status: BoardCardStatus; owner: BoardCardOwner } {
+  return {
+    status: { kind: 'busy', label: `Queued (#${position})` },
+    owner: { kind: 'automation', progressLabel: 'Queued' },
+  };
 }
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {

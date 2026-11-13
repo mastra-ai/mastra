@@ -200,12 +200,16 @@ export function BoardContent({
   });
   const decisions = useBoardDecisions(factoryProjectId);
   const runQueue = useRunQueue(factoryProjectId);
-  const queuePositions = useMemo(
-    () => new Map(runQueue.data?.queued.map(run => [run.decisionId, run.position])),
-    [runQueue.data],
-  );
-  const queuePositionOf = (decision: { id: string } | undefined) =>
-    decision === undefined ? undefined : queuePositions.get(decision.id);
+  // Keyed by card, not by the card's board decision: the board reads the newest
+  // decisions while the queue lists the oldest waiters, so a waiting run can be
+  // missing from the board's page. A card's first entry is its next run.
+  const queuePositions = useMemo(() => {
+    const positions = new Map<string, number>();
+    for (const run of runQueue.data?.queued ?? []) {
+      if (run.workItem && !positions.has(run.workItem.id)) positions.set(run.workItem.id, run.position);
+    }
+    return positions;
+  }, [runQueue.data]);
   const composer = useBoardComposer(factoryProjectId, definition, currentUserId);
   const filterOptions = useWorkItemFilterOptionsQuery(factoryProjectId).data;
   const activity = useRecentAuditEvents(
@@ -387,7 +391,7 @@ export function BoardContent({
                 evaluatingStage={items.evaluatingStages.get(item.id)}
                 transitionReason={items.transitionReasons[item.id]}
                 decision={decisions.effectByItem.get(item.id)}
-                queuePosition={queuePositionOf(decisions.effectByItem.get(item.id))}
+                queuePosition={queuePositions.get(item.id)}
                 proposal={decisions.proposalByItem.get(item.id)}
                 approvingDecisionId={decisions.approvingId}
                 retryingDecisionId={decisions.retryingId}

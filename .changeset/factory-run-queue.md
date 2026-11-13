@@ -8,6 +8,7 @@ A Factory server now runs at most 10 automated agent runs at once, down from 25.
 
 ```ts
 new MastraFactory({
+  storage,
   dispatcher: { maxInFlight: 25 },
 });
 ```

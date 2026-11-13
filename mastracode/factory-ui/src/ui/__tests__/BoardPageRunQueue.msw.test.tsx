@@ -122,4 +122,15 @@ describe('Board run queue', () => {
     expect(await within(card).findByText('Queued (#3)')).toBeInTheDocument();
     expect(within(card).queryByText('Starting an automated run…')).not.toBeInTheDocument();
   });
+
+  it('labels a waiting card from the run queue even when its run is past the board decision page', async () => {
+    stubWorkBoard();
+    server.use(http.get(`${projectUrl}/run-queue`, () => HttpResponse.json(runQueue)));
+    renderBoard();
+
+    const card = await within(await screen.findByTestId('board-column-triage')).findByRole('article', {
+      name: 'Moved recently',
+    });
+    expect(await within(card).findByText('Queued (#3)')).toBeInTheDocument();
+  });
 });
