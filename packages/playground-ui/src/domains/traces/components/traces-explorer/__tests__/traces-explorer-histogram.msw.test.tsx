@@ -503,7 +503,7 @@ describe('TracesExplorer.Histogram', () => {
     it('marks an invalid restored search as not applied while retaining the histogram', async () => {
       setHandlers({ capabilities: traceTextSearchCapabilities });
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'ab' } });
-      expect(screen.getByText('Not applied')).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
       expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
       expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
       expect(chart()).not.toBeNull();

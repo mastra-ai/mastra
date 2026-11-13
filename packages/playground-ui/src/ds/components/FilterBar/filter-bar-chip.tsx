@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
+import { AlertTriangleIcon, LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
@@ -29,7 +29,7 @@ import { controlIconOnly, controlIconState } from '@/ds/primitives/control-icon'
 import { controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { fieldErrorRim, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
@@ -74,6 +74,7 @@ export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: tr
 export const chipClass = cn(
   'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full p-px [--control-border:1px]',
   inputSurfaceAndFocusWithinStyle,
+  fieldErrorRim,
   controlHeight[FILTER_BAR_CONTROL_SIZE],
   controlSpacing[FILTER_BAR_CONTROL_SIZE],
 );
@@ -239,8 +240,8 @@ export function FilterBarChip({
       <FilterBarChipOperator />
       <FilterBarChipValue />
       {validationMessage && (
-        <span className={segmentClass} title={validationMessage}>
-          Not applied
+        <span className={cn(segmentClass, 'text-destructive-foreground')} title={validationMessage}>
+          <AlertTriangleIcon aria-hidden="true" />
         </span>
       )}
       {removable && <FilterBarChipRemove />}

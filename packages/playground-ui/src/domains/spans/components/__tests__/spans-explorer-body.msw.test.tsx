@@ -148,7 +148,7 @@ describe('SpansExplorerBody', () => {
       });
       const { queries } = renderBodyAtUrl('textSearch=ab');
       await waitFor(() => expect(queries.length).toBeGreaterThan(0));
-      expect(screen.getByText('Not applied')).toBeTruthy();
+      expect(screen.getByRole('group', { name: 'Contains text ab' }).getAttribute('aria-invalid')).toBe('true');
       expect(screen.getByTitle('Enter between 3 and 256 characters to search')).toBeTruthy();
       expect(queries.at(-1)).not.toHaveProperty('textSearch');
       fireEvent.click(screen.getByRole('combobox', { name: 'Value: ab' }));
@@ -156,7 +156,7 @@ describe('SpansExplorerBody', () => {
       fireEvent.change(editor, { target: { value: 'needle' } });
       fireEvent.keyDown(editor, { key: 'Enter' });
       await waitFor(() => expect(queries.at(-1)).toHaveProperty('textSearch', 'needle'));
-      expect(screen.queryByText('Not applied')).toBeNull();
+      expect(screen.getByRole('group', { name: 'Contains text needle' }).getAttribute('aria-invalid')).toBeNull();
     });
 
     it('does not offer an existing search field when editing another chip', async () => {
