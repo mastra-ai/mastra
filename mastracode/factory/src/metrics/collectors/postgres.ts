@@ -56,13 +56,14 @@ FROM pg_stat_activity
 WHERE datname = current_database() AND backend_type = 'client backend' AND pid <> pg_backend_pid()`;
 
 // Lifetime totals of every statement of this database, one row per query ID. pg_stat_statements
-// keeps a row per user (and top-level flag) for the same query ID, so they are summed. No limit:
+// keeps a row per user (and top-level flag) for the same query ID, so they are summed. Without
+// `pg_read_all_stats`, other users' query IDs read as null; those rows are skipped rather than lumped together. No limit:
 // the slowest are picked from the change since the previous sample, which a statement with a small
 // lifetime total can still lead. The extension caps its rows (`pg_stat_statements.max`, 5000 by default).
 const STATEMENTS_SQL = `
 SELECT queryid::text AS id, sum(calls) AS calls, sum(total_exec_time) AS total_exec_time
 FROM pg_stat_statements
-WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
+WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database()) AND queryid IS NOT NULL
 GROUP BY queryid`;
 
 const SLOW_STATEMENTS_LOGGED = 5;
