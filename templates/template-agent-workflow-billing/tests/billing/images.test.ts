@@ -542,12 +542,37 @@ it('local legacy credit transition preserves spent balances once and never seeds
   });
   storage.close();
   storage = await LocalBillingStorage.open({ url: database.url });
-  const reopened = new LocalBillingProvider(storage, imageConfiguration(['spent']));
+  const reopened = new LocalBillingProvider(storage, imageConfiguration(['spent', 'unresolved']));
   await reopened.ensureAccount({ workspaceId: 'spent' });
   expect((await reopened.getState(spent)).meters.some(meter => meter.key === 'credits')).toBe(false);
   expect((await observer.execute('SELECT account_id FROM local_image_credit_migrations')).rows).toEqual([
     { account_id: spent.id },
   ]);
+  // The v1 account was skipped while its provider hold was active. Once released,
+  // a later account lookup must retry both transitions without granting credits.
+  const held = (
+    await observer.execute("SELECT payload FROM local_provider_reservations WHERE id = 'expired-unresolved'")
+  ).rows[0];
+  const release = reopened.reservations.prepareFinalization(
+    { reservation: JSON.parse(String(held.payload)), action: 'release', units: 0 },
+    String(held.payload),
+  );
+  expect(await reopened.reservations.finalize(release)).toMatchObject({ status: 'released' });
+  await reopened.ensureAccount({ workspaceId: 'unresolved' });
+  expect((await reopened.getState(unresolved)).meters.find(meter => meter.key === 'credits')).toMatchObject({
+    key: 'credits',
+    confirmedBalance: 30,
+    consumedUnits: 0,
+  });
+  await reopened.ensureAccount({ workspaceId: 'unresolved' });
+  expect(
+    (
+      await observer.execute({
+        sql: 'SELECT balance, consumed FROM local_image_credit_migrations WHERE account_id = ?',
+        args: [unresolved.id],
+      })
+    ).rows,
+  ).toEqual([{ balance: 30n, consumed: 0n }]);
   storage.close();
 });
 

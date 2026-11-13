@@ -1,4 +1,4 @@
-import { transitionCredits } from './credit-transitions.js';
+import { transitionCredits, transitionImageCredits } from './credit-transitions.js';
 import { randomUUID } from 'node:crypto';
 import { finalizationRequestSchema, reservationRequestSchema } from '../reservations.js';
 import type { Transaction } from '@libsql/client/node';
@@ -58,6 +58,8 @@ export class LocalBillingStorage {
       });
       if (existing.rows.length > 0) {
         const account = requireProvider(existing.rows[0], 'local');
+        if (seed.meters.some(meter => ['credits', 'image-credits'].includes(meter.key)))
+          await transitionImageCredits(transaction, account.id);
         if (seed.meters.some(meter => meter.key === 'credits')) await transitionCredits(transaction, account.id);
         return account;
       }
