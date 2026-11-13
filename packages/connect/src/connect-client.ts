@@ -29,6 +29,7 @@ import type {
   ResolvedClient,
 } from './client.js';
 import { MastraConnectError } from './errors.js';
+import { EventsClient } from './events.js';
 
 /** Default per-request timeout for {@link ConnectClient} calls. */
 export const DEFAULT_CONNECT_CLIENT_TIMEOUT_MS = 15_000;
@@ -87,6 +88,7 @@ export class ConnectClient {
   readonly #config: ConnectClientConfig;
   readonly #client: ResolvedClient;
   readonly #projectId: string | undefined;
+  #events: EventsClient | undefined;
 
   constructor(config: ConnectClientConfig = {}) {
     const timeoutMs = config.timeoutMs ?? DEFAULT_CONNECT_CLIENT_TIMEOUT_MS;
@@ -115,6 +117,15 @@ export class ConnectClient {
   /** The end-user resource key this client asserts, when scoped. */
   get resourceId(): string | undefined {
     return this.#client.resourceId;
+  }
+
+  /**
+   * Events service client sharing this client's credentials and project.
+   * Streams are long-lived, so `timeoutMs` does not apply to them.
+   */
+  get events(): EventsClient {
+    this.#events ??= new EventsClient(this.#config);
+    return this.#events;
   }
 
   /** Returns a client scoped to an end-user resource; this client is unchanged. */

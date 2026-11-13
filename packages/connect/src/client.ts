@@ -77,7 +77,7 @@ function resolveIntegrationsUrl(): string {
 
 // Written as a loop rather than /\/+$/ so a hostile baseUrl of many slashes
 // cannot trigger polynomial regex backtracking (CodeQL js/polynomial-redos).
-function stripTrailingSlashes(url: string): string {
+export function stripTrailingSlashes(url: string): string {
   let end = url.length;
   while (end > 0 && url[end - 1] === '/') end--;
   return url.slice(0, end);
