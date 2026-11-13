@@ -35,6 +35,7 @@ import type { SessionRetirementCoordinator } from '../sandbox/session-retirement
 import type { StateSigner } from '../state-signing.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { IntakeStorage } from '../storage/domains/intake/base.js';
@@ -167,6 +168,8 @@ export interface IntegrationContext {
      * per-project source serves each project its stored boards.
      */
     boards: BoardRegistry | ProjectBoardSource;
+    /** Stored project intake routes for label-driven source reconciliation. */
+    intakeRoutes?: Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
     /**
      * Every project's provider-backed cards, kept in memory between background
      * sweeps so a sweep with nothing to change reads nothing from storage.
