@@ -17,6 +17,10 @@ import {
   paymentsPageView,
   paymentsPageViewAfterEdit,
   paymentsUpdatedNotice,
+  paymentsPageViewWithRelation,
+  partnershipPage,
+  partnershipRef,
+  notionScope,
   runbookSearch,
   knowledgeGraphWithDisplayLabel,
 } from './fixtures/knowledge';
@@ -442,6 +446,34 @@ describe('Knowledge page', () => {
       await new Promise(resolve => setTimeout(resolve, 6_000));
       expect(streamRequests).toBe(1);
     }, 15_000);
+  });
+
+  describe('when a note links a page in a scope the explorer has not loaded', () => {
+    const renderRelation = (related: Parameters<typeof paymentsPageViewWithRelation>[0]) => {
+      withInstance();
+      server.use(
+        http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageViewWithRelation(related))),
+        http.get(`${api}/main/pages/page-partnership`, () =>
+          HttpResponse.json({ ...paymentsPageView, page: partnershipPage, ancestors: [notionScope], notes: [] }),
+        ),
+      );
+      renderPage('/knowledge?page=page-payments');
+    };
+
+    it('names the page, and opens it, once the page read returns its scope', async () => {
+      renderRelation([partnershipPage, notionScope]);
+      const notes = within(await screen.findByRole('region', { name: 'Notes' }));
+      fireEvent.click(await notes.findByRole('button', { name: 'Design partnership Q&A' }));
+      expect(notes.queryByText(partnershipRef, { exact: false })).toBeNull();
+      await waitFor(() => expect(screen.getByTestId('location-search').textContent).toContain('page=page-partnership'));
+    });
+
+    it('leaves the ref as text without its scope, rather than guess which scope it names', async () => {
+      renderRelation([partnershipPage]);
+      const notes = within(await screen.findByRole('region', { name: 'Notes' }));
+      expect(await notes.findByText(partnershipRef, { exact: false })).toBeTruthy();
+      expect(notes.queryByRole('button', { name: 'Design partnership Q&A' })).toBeNull();
+    });
   });
 
   describe('when a link names a page that does not exist and asks for the graph', () => {
