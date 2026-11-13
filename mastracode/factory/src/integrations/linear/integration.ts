@@ -40,12 +40,26 @@ import { IssueReconcileWorker } from '../issue-reconcile-worker.js';
 import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
+import {
+  collectIssueComments,
+  createComment,
+  getIssue,
+  getViewer,
+  invalidLinearCursor,
+  linearHttpTransport,
+  listAllProjects,
+  listAllTeams,
+  listIssues,
+  listWorkflowStates,
+  resolveIssueId,
+  updateIssueState,
+} from './graphql.js';
+import type { LinearGraphqlIssue } from './graphql.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
 import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
-const LINEAR_GRAPHQL_URL = 'https://api.linear.app/graphql';
 const LINEAR_TOKEN_URL = 'https://api.linear.app/oauth/token';
 const LINEAR_AUTHORIZE_URL = 'https://linear.app/oauth/authorize';
 
@@ -191,105 +205,6 @@ export interface LinearConnectionCheck {
    */
   workspaceUrlKey: string | null;
   checkedAt: number;
-}
-
-interface IssuesQueryData {
-  issues: {
-    nodes: Array<{
-      id: string;
-      identifier: string;
-      title: string;
-      url: string;
-      priorityLabel: string;
-      createdAt: string;
-      updatedAt: string;
-      state: { name: string; type: string };
-      project: { id: string } | null;
-      assignee: { name: string } | null;
-      creator: { name: string } | null;
-      team: { id: string; key: string } | null;
-      labels: { nodes: Array<{ name: string }> };
-    }>;
-    pageInfo: { hasNextPage: boolean; endCursor: string | null };
-  };
-}
-
-interface IssueCommentNode {
-  body: string;
-  createdAt: string;
-  user: { name: string } | null;
-}
-
-interface IssueCommentsPage {
-  nodes: IssueCommentNode[];
-  pageInfo: { hasNextPage: boolean; endCursor: string | null };
-}
-
-interface IssueDetailQueryData {
-  issue: {
-    id: string;
-    identifier: string;
-    title: string;
-    description: string | null;
-    url: string;
-    priorityLabel: string;
-    createdAt: string;
-    updatedAt: string;
-    state: { name: string; type: string };
-    project: { id: string } | null;
-    assignee: { name: string } | null;
-    creator: { name: string } | null;
-    team: { id: string; key: string } | null;
-    labels: { nodes: Array<{ name: string }> };
-    comments: IssueCommentsPage;
-  } | null;
-}
-
-interface IssueCommentsQueryData {
-  issue: { comments: IssueCommentsPage } | null;
-}
-
-interface IssueIdQueryData {
-  issue: { id: string } | null;
-}
-
-interface CommentCreateMutationData {
-  commentCreate: { success: boolean; comment: { id: string; url: string } | null };
-}
-
-/** POST a GraphQL query to Linear with the given OAuth access token. */
-async function linearGraphql<T>(accessToken: string, query: string, variables?: Record<string, unknown>): Promise<T> {
-  const res = await fetch(LINEAR_GRAPHQL_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(15_000),
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-    },
-    body: JSON.stringify({ query, variables }),
-  });
-  if (!res.ok) {
-    // Linear returns GraphQL errors (validation, missing scopes, …) with a
-    // 400 status — surface the actual message instead of just the code.
-    let detail: string | null = null;
-    try {
-      const errBody = (await res.json()) as { errors?: Array<{ message?: string }> };
-      detail = errBody.errors?.[0]?.message ?? null;
-    } catch {
-      // Non-JSON error body; fall back to the status code alone.
-    }
-    const err = new Error(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`);
-    (err as { status?: number }).status = res.status;
-    throw err;
-  }
-  const body = (await res.json()) as { data?: T; errors?: Array<{ message?: string }> };
-  if (body.errors?.length) {
-    throw new Error(`Linear API error: ${body.errors[0]?.message ?? 'unknown error'}`);
-  }
-  if (!body.data) {
-    throw new Error('Linear API returned no data.');
-  }
-  return body.data;
 }
 
 export class LinearIntegration implements FactoryIntegration {
@@ -708,11 +623,8 @@ export class LinearIntegration implements FactoryIntegration {
 
   /** Fetch the workspace (organization) the access token is scoped to. */
   async fetchWorkspace(accessToken: string): Promise<LinearWorkspace> {
-    const data = await linearGraphql<{ organization: { name: string; urlKey: string } }>(
-      accessToken,
-      `query { organization { name urlKey } }`,
-    );
-    return { name: data.organization.name, urlKey: data.organization.urlKey };
+    const { workspace } = await getViewer(linearHttpTransport(accessToken));
+    return { name: workspace.name, urlKey: workspace.urlKey };
   }
 
   async #listIntakeIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
@@ -811,16 +723,7 @@ export class LinearIntegration implements FactoryIntegration {
     if (targetState.name === issue.state) {
       return linearIssueToIntakeIssue(issue);
     }
-    const data = await linearGraphql<{ issueUpdate: { success: boolean } }>(
-      accessToken,
-      `mutation UpdateIssueState($id: String!, $stateId: String!) {
-        issueUpdate(id: $id, input: { stateId: $stateId }) { success }
-      }`,
-      { id: issue.id, stateId: targetState.id },
-    );
-    if (!data.issueUpdate.success) {
-      throw new Error('Linear did not accept the issue update.');
-    }
+    await updateIssueState(linearHttpTransport(accessToken), { issueId: issue.id, stateId: targetState.id });
     const fresh = await this.fetchIssueDetail(accessToken, issue.id);
     if (!fresh) return null;
     return linearIssueToIntakeIssue(fresh);
@@ -830,80 +733,24 @@ export class LinearIntegration implements FactoryIntegration {
     accessToken: string,
     teamKey: string,
   ): Promise<Array<{ id: string; name: string; type: string }>> {
-    const data = await linearGraphql<{
-      team: { states: { nodes: Array<{ id: string; name: string; type: string }> } } | null;
-    }>(
-      accessToken,
-      `query TeamStates($key: String!) {
-        team(id: $key) { states(first: 100) { nodes { id name type } } }
-      }`,
-      { key: teamKey },
-    );
-    return data.team?.states.nodes ?? [];
+    const states = await listWorkflowStates(linearHttpTransport(accessToken), teamKey);
+    return states.map(state => ({ id: state.id, name: state.name, type: state.type }));
   }
 
   /** List the workspace's projects (for the Settings intake-source picker). */
   async listProjects(accessToken: string): Promise<LinearProject[]> {
-    type ProjectNode = {
-      id: string;
-      name: string;
-      state: string;
-      teams: { nodes: Array<{ id: string; key: string; name: string }> };
-    };
-    const projects: ProjectNode[] = [];
-    let after: string | undefined;
-    for (let page = 0; page < LINEAR_PROJECTS_MAX_PAGES; page += 1) {
-      const data = await linearGraphql<{
-        projects: { nodes: ProjectNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
-      }>(
-        accessToken,
-        `query Projects($first: Int!, $after: String) {
-          projects(first: $first, after: $after) {
-            nodes { id name state teams(first: 10) { nodes { id key name } } }
-            pageInfo { hasNextPage endCursor }
-          }
-        }`,
-        { first: LINEAR_PROJECTS_PAGE_SIZE, ...(after ? { after } : {}) },
-      );
-      projects.push(...data.projects.nodes);
-      if (!data.projects.pageInfo.hasNextPage || !data.projects.pageInfo.endCursor) break;
-      if (data.projects.pageInfo.endCursor === after) throw invalidLinearCursor();
-      after = data.projects.pageInfo.endCursor;
-    }
-    return projects.map(node => ({
-      id: node.id,
-      name: node.name,
-      state: node.state,
-      teams: node.teams.nodes.map(team => ({ id: team.id, key: team.key, name: team.name })),
-    }));
+    return listAllProjects(linearHttpTransport(accessToken), {
+      pageSize: LINEAR_PROJECTS_PAGE_SIZE,
+      maxPages: LINEAR_PROJECTS_MAX_PAGES,
+    });
   }
 
   /** List the workspace's teams (for the Settings intake-source picker). */
   async listTeams(accessToken: string): Promise<LinearTeam[]> {
-    const teams: Array<{ id: string; key: string; name: string }> = [];
-    let after: string | undefined;
-    for (let page = 0; page < LINEAR_TEAMS_MAX_PAGES; page += 1) {
-      const data = await linearGraphql<{
-        teams: {
-          nodes: Array<{ id: string; key: string; name: string }>;
-          pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        };
-      }>(
-        accessToken,
-        `query Teams($first: Int!, $after: String) {
-          teams(first: $first, after: $after) {
-            nodes { id key name }
-            pageInfo { hasNextPage endCursor }
-          }
-        }`,
-        { first: LINEAR_TEAMS_PAGE_SIZE, ...(after ? { after } : {}) },
-      );
-      teams.push(...data.teams.nodes);
-      if (!data.teams.pageInfo.hasNextPage || !data.teams.pageInfo.endCursor) break;
-      // A page that hands back the cursor it was asked for would replay forever.
-      if (data.teams.pageInfo.endCursor === after) throw invalidLinearCursor();
-      after = data.teams.pageInfo.endCursor;
-    }
+    const teams = await listAllTeams(linearHttpTransport(accessToken), {
+      pageSize: LINEAR_TEAMS_PAGE_SIZE,
+      maxPages: LINEAR_TEAMS_MAX_PAGES,
+    });
     return teams.map(team => ({
       id: team.id,
       key: team.key,
@@ -935,100 +782,17 @@ export class LinearIntegration implements FactoryIntegration {
     teamIds?: string[],
   ): Promise<LinearIssuePage> {
     const normalizedLabels = [...new Set((labels ?? []).map(label => label.trim()).filter(Boolean))];
-    const projectFilter = projectIds?.length ? ', project: { id: { in: $projectIds } }' : '';
-    const projectVar = projectIds?.length ? ', $projectIds: [ID!]' : '';
-    const teamFilter = teamIds?.length ? ', team: { id: { in: $teamIds } }' : '';
-    const teamVar = teamIds?.length ? ', $teamIds: [ID!]' : '';
-    const labelFilter = normalizedLabels.length > 0 ? ', labels: { name: { in: $labels } }' : '';
-    const labelVar = normalizedLabels.length > 0 ? ', $labels: [String!]' : '';
-    const data = await linearGraphql<IssuesQueryData>(
-      accessToken,
-      `query Intake($first: Int!, $after: String${projectVar}${teamVar}${labelVar}) {
-        issues(
-          first: $first
-          after: $after
-          orderBy: updatedAt
-          filter: { state: { type: { in: ["triage", "backlog", "unstarted", "started"] } }${projectFilter}${teamFilter}${labelFilter} }
-        ) {
-          nodes {
-            id
-            identifier
-            title
-            url
-            priorityLabel
-            createdAt
-            updatedAt
-            state { name type }
-            project { id }
-            assignee { name }
-            creator { name }
-            team { id key }
-            labels { nodes { name } }
-          }
-          pageInfo { hasNextPage endCursor }
-        }
-      }`,
-      {
-        first: LINEAR_ISSUES_PAGE_SIZE,
-        after: after ?? null,
-        ...(projectIds?.length ? { projectIds } : {}),
-        ...(teamIds?.length ? { teamIds } : {}),
-        ...(normalizedLabels.length > 0 ? { labels: normalizedLabels } : {}),
-      },
-    );
-    const { nodes, pageInfo } = data.issues;
-    // A page that hands back the cursor it was asked for would replay forever.
-    if (pageInfo.hasNextPage && after && pageInfo.endCursor === after) throw invalidLinearCursor();
+    const page = await listIssues(linearHttpTransport(accessToken), {
+      first: LINEAR_ISSUES_PAGE_SIZE,
+      ...(after ? { after } : {}),
+      ...(projectIds?.length ? { projectIds } : {}),
+      ...(teamIds?.length ? { teamIds } : {}),
+      labels: normalizedLabels,
+    });
     return {
-      issues: nodes.map(node => ({
-        id: node.id,
-        projectId: node.project?.id ?? null,
-        identifier: node.identifier,
-        title: node.title,
-        url: node.url,
-        state: node.state.name,
-        stateType: node.state.type,
-        priorityLabel: node.priorityLabel,
-        assignee: node.assignee?.name ?? null,
-        creator: node.creator?.name ?? null,
-        team: node.team?.key ?? null,
-        labels: node.labels.nodes.map(label => label.name),
-        createdAt: node.createdAt,
-        updatedAt: node.updatedAt,
-        teamId: node.team?.id ?? null,
-      })),
-      nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
+      issues: page.nodes.map(toLinearIssue),
+      nextCursor: page.pageInfo.hasNextPage ? page.pageInfo.endCursor : null,
     };
-  }
-
-  /** Follow `comments.pageInfo` until exhausted so long discussions aren't truncated. */
-  async #fetchRemainingIssueComments(
-    accessToken: string,
-    issueId: string,
-    firstPage: IssueCommentsPage,
-  ): Promise<IssueCommentNode[]> {
-    const nodes = [...firstPage.nodes];
-    let { hasNextPage, endCursor } = firstPage.pageInfo;
-    for (let page = 1; hasNextPage && endCursor && page < ISSUE_COMMENTS_MAX_PAGES; page++) {
-      const data = await linearGraphql<IssueCommentsQueryData>(
-        accessToken,
-        `query IssueComments($id: String!, $first: Int!, $after: String!) {
-          issue(id: $id) {
-            comments(first: $first, after: $after) {
-              nodes { body createdAt user { name } }
-              pageInfo { hasNextPage endCursor }
-            }
-          }
-        }`,
-        { id: issueId, first: ISSUE_COMMENTS_PAGE_SIZE, after: endCursor },
-      );
-      const comments = data.issue?.comments;
-      if (!comments) break;
-      nodes.push(...comments.nodes);
-      if (comments.pageInfo.hasNextPage && comments.pageInfo.endCursor === endCursor) throw invalidLinearCursor();
-      ({ hasNextPage, endCursor } = comments.pageInfo);
-    }
-    return nodes;
   }
 
   /**
@@ -1043,62 +807,17 @@ export class LinearIntegration implements FactoryIntegration {
     _sourceIds?: string[],
     _routedSourceIds?: string[],
   ): Promise<LinearIssueDetail | null> {
-    let data: IssueDetailQueryData;
-    try {
-      data = await linearGraphql<IssueDetailQueryData>(
-        accessToken,
-        `query IssueDetail($id: String!, $commentsFirst: Int!) {
-          issue(id: $id) {
-            id
-            identifier
-            title
-            description
-            url
-            priorityLabel
-            createdAt
-            updatedAt
-            state { name type }
-            project { id }
-            assignee { name }
-            creator { name }
-            team { id key }
-            labels { nodes { name } }
-            comments(first: $commentsFirst) {
-              nodes { body createdAt user { name } }
-              pageInfo { hasNextPage endCursor }
-            }
-          }
-        }`,
-        { id: idOrIdentifier, commentsFirst: ISSUE_COMMENTS_PAGE_SIZE },
-      );
-    } catch (err) {
-      // Linear surfaces unknown ids/identifiers as a GraphQL "Entity not
-      // found" error rather than a null node — map that to "issue doesn't
-      // exist".
-      if (err instanceof Error && /entity not found/i.test(err.message)) return null;
-      throw err;
-    }
-    const issue = data.issue;
+    const transport = linearHttpTransport(accessToken);
+    const issue = await getIssue(transport, idOrIdentifier, { commentsFirst: ISSUE_COMMENTS_PAGE_SIZE });
     if (!issue) return null;
-    const allComments = await this.#fetchRemainingIssueComments(accessToken, issue.id, issue.comments);
+    const allComments = await collectIssueComments(transport, issue.id, issue.comments, {
+      pageSize: ISSUE_COMMENTS_PAGE_SIZE,
+      maxPages: ISSUE_COMMENTS_MAX_PAGES,
+    });
     const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
     return {
-      id: issue.id,
-      projectId: issue.project?.id ?? null,
-      teamId: issue.team?.id ?? null,
-      identifier: issue.identifier,
-      title: issue.title,
+      ...toLinearIssue(issue),
       description: issue.description?.trim() ? issue.description : null,
-      url: issue.url,
-      state: issue.state.name,
-      stateType: issue.state.type,
-      priorityLabel: issue.priorityLabel,
-      assignee: issue.assignee?.name ?? null,
-      creator: issue.creator?.name ?? null,
-      team: issue.team?.key ?? null,
-      labels: issue.labels.nodes.map(label => label.name),
-      createdAt: issue.createdAt,
-      updatedAt: issue.updatedAt,
       comments: comments.map(comment => ({
         author: comment.user?.name ?? null,
         body: comment.body,
@@ -1118,30 +837,11 @@ export class LinearIntegration implements FactoryIntegration {
     idOrIdentifier: string,
     body: string,
   ): Promise<LinearCreatedComment | null> {
-    let issueId: string;
-    try {
-      const data = await linearGraphql<IssueIdQueryData>(
-        accessToken,
-        `query IssueId($id: String!) { issue(id: $id) { id } }`,
-        { id: idOrIdentifier },
-      );
-      if (!data.issue) return null;
-      issueId = data.issue.id;
-    } catch (err) {
-      if (err instanceof Error && /entity not found/i.test(err.message)) return null;
-      throw err;
-    }
-    const data = await linearGraphql<CommentCreateMutationData>(
-      accessToken,
-      `mutation CommentCreate($input: CommentCreateInput!) {
-        commentCreate(input: $input) { success comment { id url } }
-      }`,
-      { input: { issueId, body } },
-    );
-    if (!data.commentCreate.success || !data.commentCreate.comment) {
-      throw new Error('Linear did not accept the comment.');
-    }
-    return data.commentCreate.comment;
+    const transport = linearHttpTransport(accessToken);
+    const issueId = await resolveIssueId(transport, idOrIdentifier);
+    if (!issueId) return null;
+    const comment = await createComment(transport, { issueId, body });
+    return { id: comment.id, url: comment.url };
   }
 
   // ── FactoryIntegration surface ───────────────────────────────────────────
@@ -1250,10 +950,6 @@ async function linearSourceSetFingerprint(sourceIds: string[], attributionSource
   return Buffer.from(await globalThis.crypto.subtle.digest('SHA-256', bytes)).toString('base64url');
 }
 
-function invalidLinearCursor(): Error {
-  return Object.assign(new Error('Linear cursor is invalid or stale.'), { code: 'invalid_cursor' as const });
-}
-
 function isCursorValue(value: unknown): value is string | null {
   return value === null || typeof value === 'string';
 }
@@ -1360,5 +1056,25 @@ function linearIssueToIntakeIssue(issue: Omit<LinearIssue, 'projectId'> & { proj
     commentCount: null,
     createdAt: issue.createdAt,
     updatedAt: issue.updatedAt,
+  };
+}
+
+function toLinearIssue(issue: LinearGraphqlIssue): LinearIssue {
+  return {
+    id: issue.id,
+    projectId: issue.project?.id ?? null,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+    state: issue.state.name,
+    stateType: issue.state.type,
+    priorityLabel: issue.priorityLabel,
+    assignee: issue.assignee?.name ?? null,
+    creator: issue.creator?.name ?? null,
+    team: issue.team?.key ?? null,
+    labels: issue.labels.map(label => label.name),
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    teamId: issue.team?.id ?? null,
   };
 }
