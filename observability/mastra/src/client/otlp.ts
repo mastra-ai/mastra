@@ -18,6 +18,16 @@ import type { AnyExportedSpan, EntityType, ExportedLog, LogLevel } from '@mastra
 
 import { generateClientSignalId } from './id';
 
+function hasReversedTimestamps(start: unknown, end: unknown): boolean {
+  if ((typeof start !== 'string' && typeof start !== 'number') || (typeof end !== 'string' && typeof end !== 'number'))
+    return false;
+  try {
+    return BigInt(end) < BigInt(start);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Convert an OTLP nanosecond timestamp (string or number) to a JS Date.
  *
@@ -72,6 +82,8 @@ function flattenAttributes(otlpAttrs: unknown): Record<string, unknown> | undefi
  * it through the bus.
  */
 export interface DecodedOtlpSpan {
+  /** Preserve reversed sub-millisecond timestamps before Date truncation. */
+  hasReversedTimestamps?: boolean;
   traceId: string;
   spanId: string;
   parentSpanId?: string;
@@ -124,6 +136,7 @@ export function decodeResourceSpans(payload: unknown): DecodedOtlpSpan[] {
           spanId,
           parentSpanId: typeof s.parentSpanId === 'string' && s.parentSpanId ? s.parentSpanId : undefined,
           name,
+          ...(hasReversedTimestamps(s.startTimeUnixNano, s.endTimeUnixNano) ? { hasReversedTimestamps: true } : {}),
           startTime: nanosToDate(s.startTimeUnixNano),
           endTime: s.endTimeUnixNano !== undefined ? nanosToDate(s.endTimeUnixNano) : undefined,
           attributes: flattenAttributes(s.attributes),

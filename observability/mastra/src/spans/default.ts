@@ -139,7 +139,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options) this.applyOutcome(options);
     if (this.outcome === null) this.outcome = 'unknown';
     const endTime = (options as EndSpanOptionsWithTime<TType> | undefined)?.endTime;
-    this.endTime = endTime instanceof Date && endTime >= this.startTime ? endTime : new Date();
+    this.endTime = endTime instanceof Date ? endTime : new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {

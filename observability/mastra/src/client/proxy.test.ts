@@ -2,6 +2,7 @@ import { SpanType } from '@mastra/core/observability';
 import type { AnySpan, ObservabilityEvent, ObservabilityInstance } from '@mastra/core/observability';
 import { describe, expect, it, vi } from 'vitest';
 
+import { DefaultObservabilityInstance } from '../instances';
 import { BaseObservabilityInstance } from '../instances/base';
 import { createClientObservabilityProxy } from './proxy';
 import { formatTraceparent } from './w3c';
@@ -250,5 +251,43 @@ describe('ingest happy path', () => {
     });
     proxy.receive({ spans: spansPayload([makeSpan({ traceId: 'ffffffffffffffffffffffffffffffff' })]) }, carrier());
     expect(warn).toHaveBeenCalled();
+  });
+});
+
+describe('client span timestamp rejection (OBS-935)', () => {
+  it.each([
+    ['1000000000', '999000000'],
+    ['1000000001', '1000000000'],
+  ])('rejects a mixed payload before exporting any records (%s > %s)', (startTimeUnixNano, endTimeUnixNano) => {
+    const events: ObservabilityEvent[] = [];
+    const instance = new DefaultObservabilityInstance({
+      name: 'client-validation',
+      serviceName: 'test',
+      exporters: [
+        {
+          name: 'capture',
+          exportTracingEvent: async event => {
+            events.push(event);
+          },
+          onMetricEvent: event => {
+            events.push(event);
+          },
+          flush: async () => {},
+          shutdown: async () => {},
+        },
+      ],
+    });
+    const proxy = createClientObservabilityProxy({ resolveInstance: () => instance });
+    proxy.receive(
+      {
+        executionDurationMs: 5,
+        spans: spansPayload([
+          makeSpan(),
+          makeSpan({ spanId: SECOND_CHILD_SPAN_ID, startTimeUnixNano, endTimeUnixNano }),
+        ]),
+      },
+      carrier(),
+    );
+    expect(events).toEqual([]);
   });
 });

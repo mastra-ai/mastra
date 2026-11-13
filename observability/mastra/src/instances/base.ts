@@ -1141,6 +1141,14 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * Kept for backward compatibility with subclasses that may override it.
    */
   protected async exportTracingEvent(event: TracingEvent): Promise<void> {
+    const span = event.exportedSpan;
+    if (span.endTime && span.endTime < span.startTime) {
+      this.logger.warn('[Observability] Rejected span: endTime precedes startTime', {
+        traceId: span.traceId,
+        spanId: span.id,
+      });
+      return;
+    }
     // Collect all export targets
     const targets: Array<{ name: string; exportTracingEvent: (event: TracingEvent) => Promise<void> }> = [
       ...this.exporters,

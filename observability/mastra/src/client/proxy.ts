@@ -155,6 +155,11 @@ class ClientObservabilityProxyImpl implements ClientObservabilityProxy {
       return;
     }
 
+    if (decodedSpans.some(span => span.hasReversedTimestamps || (span.endTime && span.endTime < span.startTime))) {
+      this.#warn('Client observability payload contains a span whose end precedes its start; dropping.');
+      return;
+    }
+
     // All validation passed; emit through the bus.
     for (const decoded of decodedSpans) {
       const exported = buildExportedSpan(decoded);

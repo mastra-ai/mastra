@@ -30,6 +30,7 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
   }
 
   const durationMs = span.endTime.getTime() - span.startTime.getTime();
+  if (durationMs < 0) return;
   metrics.emit(durationMetricName, durationMs, {
     status: span.errorInfo ? 'error' : 'ok',
   });
