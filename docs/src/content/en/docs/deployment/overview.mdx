@@ -15,7 +15,7 @@ Mastra applications can be deployed to any Node.js-compatible environment. You c
 
 A Mastra server has no authentication unless you configure it. Anyone who can reach your deployment can list and call your agents, run your workflows, read memory threads, and read observability traces. Agent calls spend your model provider credits.
 
-Signing in to Studio doesn't change this. Studio login, including [platform auth](/docs/mastra-platform/studio#authentication), protects the Studio interface. [Server auth](/docs/auth/overview) protects the HTTP routes.
+Signing in to Studio doesn't change this. Studio login, including [platform auth](/docs/mastra-platform/studio#authentication), protects the Studio interface. [Server auth](/docs/auth/overview) protects the HTTP routes under the default `/api` prefix. If you set `server.apiPrefix`, add that prefix to `server.auth.protected` and keep its sign-in routes public.
 
 Set `server.auth` with [Simple Auth](/docs/auth/simple-auth) for static API keys, or a [custom auth provider](/docs/auth/custom-auth-provider) for your own identity system.
 
