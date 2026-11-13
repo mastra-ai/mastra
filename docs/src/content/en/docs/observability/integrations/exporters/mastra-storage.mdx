@@ -145,10 +145,16 @@ MastraStorageExporter automatically selects the optimal tracing strategy based o
 
 | Strategy | Description | Use Case |
 | - | - | - |
-| **realtime** | Process each event immediately | Development, debugging, low traffic |
+| **realtime** | Process each event immediately | Single-process local development and debugging |
 | **batch-with-updates** | Buffer events and batch write with full lifecycle support | Low volume Production |
 | **insert-only** | Only process completed spans, ignore updates | High volume Production |
 | **event-sourced** | Write one row when a span starts and another when it ends, then collapse them on read | High volume Production, in-progress traces |
+
+:::note
+
+`realtime` assumes one process owns a span from start to end, so it isn't supported with durable execution (durable agents, and Inngest, Temporal, or evented workflows). When any of these is registered, the exporter logs one warning and runs `batch-with-updates`.
+
+:::
 
 ### Strategy Configuration
 
@@ -202,7 +208,7 @@ The following storage providers **don't support** the observability domain. If y
 
 ### Strategy Benefits
 
-- **realtime**: Immediate visibility, best for debugging
+- **realtime**: Immediate visibility, best for debugging in a single process
 - **batch-with-updates**: 10-100x throughput improvement, full span lifecycle
 - **insert-only**: Additional 70% reduction in database operations, perfect for analytics
 - **event-sourced**: Append-only like insert-only, but in-progress traces stay visible in Studio while a run executes
@@ -286,7 +292,7 @@ class DropAlertExporter extends BaseExporter {
 // Zero config - recommended for most users
 new MastraStorageExporter()
 
-// Development override
+// Single-process development override
 new MastraStorageExporter({
   strategy: 'realtime', // Immediate visibility for debugging
 })

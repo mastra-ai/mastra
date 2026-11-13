@@ -1,4 +1,7 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
+import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
 import type {
@@ -13,7 +16,9 @@ import type {
   ObservabilityDropEvent,
 } from '@mastra/core/observability';
 import { InMemoryStore, serializeSpanAttributes } from '@mastra/core/storage';
+import { createEventedWorkflow, createWorkflow } from '@mastra/core/workflows';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { Observability } from '../default';
 import { BaseExporter } from './base';
 import { MastraStorageExporter } from './mastra-storage';
@@ -21,6 +26,8 @@ import { MastraStorageExporter } from './mastra-storage';
 // Mock Mastra and logger
 const mockMastra = {
   getStorage: vi.fn(),
+  listAgents: vi.fn(() => ({})),
+  listWorkflows: vi.fn(() => ({})),
 } as any;
 
 const mockLogger = {
@@ -29,6 +36,30 @@ const mockLogger = {
   debug: vi.fn(),
   error: vi.fn(),
 } as any;
+
+function createMockEvent(
+  type: TracingEventType,
+  traceId = 'trace-1',
+  spanId = 'span-1',
+  isEvent = false,
+): TracingEvent {
+  return {
+    type,
+    exportedSpan: {
+      id: spanId,
+      traceId,
+      type: SpanType.GENERIC,
+      name: 'test-span',
+      startTime: new Date(),
+      endTime: type === TracingEventType.SPAN_ENDED ? new Date() : undefined,
+      isEvent,
+      attributes: { test: 'value' },
+      metadata: undefined,
+      input: 'test input',
+      output: type === TracingEventType.SPAN_ENDED ? 'test output' : undefined,
+    } as any as AnyExportedSpan,
+  };
+}
 
 describe('MastraStorageExporter', () => {
   describe('serializeSpanAttributes', () => {
@@ -1688,30 +1719,6 @@ describe('MastraStorageExporter', () => {
       });
     });
 
-    function createMockEvent(
-      type: TracingEventType,
-      traceId = 'trace-1',
-      spanId = 'span-1',
-      isEvent = false,
-    ): TracingEvent {
-      return {
-        type,
-        exportedSpan: {
-          id: spanId,
-          traceId,
-          type: SpanType.GENERIC,
-          name: 'test-span',
-          startTime: new Date(),
-          endTime: type === TracingEventType.SPAN_ENDED ? new Date() : undefined,
-          isEvent,
-          attributes: { test: 'value' },
-          metadata: undefined,
-          input: 'test input',
-          output: type === TracingEventType.SPAN_ENDED ? 'test output' : undefined,
-        } as any as AnyExportedSpan,
-      };
-    }
-
     function createLogEvent(logId: string): LogEvent {
       return {
         type: 'log',
@@ -1987,5 +1994,86 @@ describe('MastraStorageExporter service name', () => {
     } finally {
       await mastra.shutdown();
     }
+  });
+});
+
+describe('MastraStorageExporter realtime strategy with durable execution', () => {
+  const opened: { shutdown(): Promise<void> }[] = [];
+  afterEach(async () => {
+    await Promise.all(opened.splice(0).map(resource => resource.shutdown()));
+  });
+
+  const plainAgent = (config: { id?: string; durable?: boolean } = {}) =>
+    new Agent({ id: 'support', name: 'support', instructions: 'Help.', model: new MockLanguageModelV2(), ...config });
+  const durableAgent = () => createDurableAgent({ agent: plainAgent() });
+  const workflow = { id: 'orders', inputSchema: z.object({}), outputSchema: z.object({}) };
+
+  async function openApp(
+    registered: Partial<ConstructorParameters<typeof Mastra>[0]>,
+    strategy: 'realtime' | 'batch-with-updates' = 'realtime',
+  ) {
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, logger: false, ...registered });
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn(), error: vi.fn() } as any;
+    const exporter = new MastraStorageExporter({ strategy, logger, maxBatchWaitMs: 60_000 });
+    await exporter.init({ mastra });
+    opened.push(exporter, mastra);
+    const store = (await storage.getStore('observability'))!;
+    return {
+      mastra,
+      exporter,
+      warn: logger.warn,
+      exportSpan: (spanId: string) =>
+        exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', spanId)),
+      isStored: async (spanId: string) => (await store.getSpan({ traceId: 'trace-1', spanId })) !== null,
+    };
+  }
+
+  it.each([
+    ['a durable agent', () => ({ agents: { support: durableAgent() } })],
+    ['an evented agent', () => ({ agents: { support: createEventedAgent({ agent: plainAgent() }) } })],
+    ['an evented workflow', () => ({ workflows: { orders: createEventedWorkflow(workflow).commit() } })],
+  ])('batches spans and warns once when the app has %s', async (_name, registered) => {
+    const { exporter, warn, exportSpan, isStored } = await openApp(registered());
+    await exportSpan('span-1');
+    await exportSpan('span-2');
+    await exportSpan('span-3');
+    expect(await isStored('span-3')).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    await exporter.flush();
+    expect(await isStored('span-3')).toBe(true);
+  });
+
+  it('writes spans at once when the app has a plain agent, resumable streams, and a default workflow', async () => {
+    const { warn, exportSpan, isStored } = await openApp({
+      agents: { support: plainAgent(), streaming: plainAgent({ id: 'streaming', durable: true }) },
+      workflows: { orders: createWorkflow(workflow).commit() },
+    });
+    await exportSpan('span-1');
+    expect(await isStored('span-1')).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('starts batching when a durable agent is added after spans were written', async () => {
+    const { mastra, exporter, warn, exportSpan, isStored } = await openApp({});
+
+    await exportSpan('span-1');
+    expect(await isStored('span-1')).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+
+    mastra.addAgent(durableAgent());
+    await exportSpan('span-2');
+    expect(await isStored('span-2')).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+
+    await exporter.flush();
+    expect(await isStored('span-2')).toBe(true);
+  });
+
+  it('does not warn when a durable app already uses batch-with-updates', async () => {
+    const { warn, exportSpan } = await openApp({ agents: { support: durableAgent() } }, 'batch-with-updates');
+    await exportSpan('span-1');
+    expect(warn).not.toHaveBeenCalled();
   });
 });

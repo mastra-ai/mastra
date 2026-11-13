@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
@@ -73,6 +74,16 @@ function resolveTracingStorageStrategy(
   return observabilityStrategy.preferred;
 }
 
+// Not `isDurableAgentLike`: it shipped in @mastra/core 1.30.0, above this package's peer floor.
+const isDurableAgent = (agent: object) => 'agent' in agent && Boolean(agent.agent);
+
+function usesDurableExecution(mastra: Mastra): boolean {
+  return (
+    Object.values(mastra.listAgents()).some(isDurableAgent) ||
+    Object.values(mastra.listWorkflows()).some(workflow => workflow.engineType !== 'default')
+  );
+}
+
 type FlushResult = {
   failed: boolean;
   retryAttempt?: number;
@@ -98,6 +109,7 @@ export class MastraStorageExporter extends BaseExporter {
   #byteRetryAt = 0;
   #byteDrainers = 0;
 
+  #mastra?: Mastra;
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
@@ -139,6 +151,7 @@ export class MastraStorageExporter extends BaseExporter {
    */
   async init(options: InitExporterOptions): Promise<void> {
     this.#emitDropEvent = options.emitDropEvent;
+    this.#mastra = options.mastra;
     this.#storage = options.mastra?.getStorage();
     if (!this.#storage) {
       this.logger.warn('MastraStorageExporter disabled: Storage not available. Traces will not be persisted.');
@@ -709,6 +722,14 @@ export class MastraStorageExporter extends BaseExporter {
     return this.#byteTracker?.stats(this.#inFlightFlushes.size);
   }
 
+  private fallBackFromRealtimeUnderDurableExecution(): void {
+    if (this.#resolvedStrategy !== 'realtime' || !this.#mastra || !usesDurableExecution(this.#mastra)) return;
+    this.logger.warn('Tracing strategy realtime is not supported with durable execution, using batch-with-updates', {
+      storageAdapter: this.#storage?.constructor.name,
+    });
+    this.#resolvedStrategy = 'batch-with-updates';
+  }
+
   async _exportTracingEvent(event: TracingEvent): Promise<void> {
     await this.ensureInitialized();
     if (!this.#observabilityStorage) {
@@ -716,6 +737,7 @@ export class MastraStorageExporter extends BaseExporter {
       return;
     }
 
+    this.fallBackFromRealtimeUnderDurableExecution();
     this.#eventBuffer.addEvent({ ...event, exportedSpan: withSpanPreviews(event.exportedSpan) });
     await this.handleBatchedFlush();
   }
