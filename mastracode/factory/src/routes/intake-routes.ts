@@ -12,15 +12,19 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
-
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
+
 import type { StatusEvent } from '../boards/board-events.js';
-import { cardRuleFacts } from '../boards/card-facts.js';
-import { intakeTargetProblem, resolveIntake } from '../boards/intake-routing.js';
+import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
+import {
+  arrivalRuleFacts,
+  intakeTargetProblem,
+  resolveIntake,
+  ROUTE_AGAIN_KEY_PREFIX,
+} from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import { applyReroute, planReroute, summarizeReroute } from '../boards/reroute.js';
-import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
@@ -42,13 +46,18 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   projects: FactoryProjectsStorage;
   storage: StoredBoardsStorage;
   /** Cards an intake route change may move to another board. */
-  workItems: Pick<WorkItemsStorage, 'listShared' | 'update' | 'supersedeDecisionsForWorkItem' | 'commitRuleEvaluation'>;
+  workItems: Pick<
+    WorkItemsStorage,
+    'listShared' | 'update' | 'supersedeDecisionsForWorkItem' | 'get' | 'commitRuleEvaluation'
+  >;
   /** The project's installed boards, to check route targets against. */
   boards: Pick<ProjectBoardCache, 'describe'>;
   /** Which evaluator places new items; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
   /** The rule set a Route again commits under. */
   configVersion?: string;
+  /** Measured again after each rule write, which re-derives an order nobody set. */
+  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'restart'>;
 }
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -147,13 +156,18 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
   }
 
+  #rulesChanged(scope: Resolved): void {
+    void this.deps.intakeOrderMeasure?.restart({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+  }
+
   get #evaluator(): IntakeEvaluator {
     return this.deps.intakeEvaluator ?? 'route-list';
   }
 
-  async #order(scope: Resolved, registry: BoardRegistry): Promise<string[]> {
-    if (this.#evaluator !== 'intake-order') return [];
-    return (await this.deps.storage.readIntakeOrder(scope)).boardKeys.filter(key => registry.has(key));
+  async #order(scope: Resolved, registry: BoardRegistry, evaluator = this.#evaluator): Promise<string[]> {
+    if (evaluator !== 'intake-order') return [];
+    const order = await this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
+    return order.boardKeys.filter(key => registry.has(key));
   }
 
   async #planReroute(scope: Resolved) {
@@ -184,7 +198,8 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
 
   /** The project's boards in intake order: the stored order, with any board it lacks slotted in as a new one is. */
   async #intakeOrder(c: Context, scope: Resolved) {
-    const [registry, stored] = await Promise.all([this.#registry(scope), this.deps.storage.readIntakeOrder(scope)]);
+    const registry = await this.#registry(scope);
+    const stored = await this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
     const listed = stored.boardKeys.filter(key => registry.has(key));
     const order = [...listed, ...[...registry.keys()].filter(key => !listed.includes(key))];
     return c.json({
@@ -225,14 +240,15 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     }
     const arrival = decision.arrival as unknown as LinkedDecision;
     const [registry, routes] = await Promise.all([this.#registry(scope), storage.listIntakeRoutes(scope)]);
+    // Only intake order leaves an item Not routed, so it decides again whatever this replica runs.
     const resolution = resolveIntake({
-      evaluator: this.#evaluator,
+      evaluator: 'intake-order',
       routes,
-      order: await this.#order(scope, registry),
-      facts: cardRuleFacts({
-        title: arrival.title,
-        metadata: arrival.metadata ?? {},
-        externalSource: externalSourceForWorkItem(arrival.source, arrival.sourceKey, arrival.url ?? undefined),
+      order: await this.#order(scope, registry, 'intake-order'),
+      facts: await arrivalRuleFacts(arrival, {
+        factoryProjectId: scope.factoryProjectId,
+        registry,
+        card: id => workItems.get({ orgId: scope.orgId, id }),
       }),
       registry,
     });
@@ -242,17 +258,17 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (resolution.routeId === null) {
       throw new Refusal(422, { error: 'intake_not_routed', message: "No board's intake rules match it." });
     }
-    const attempt = globalThis.crypto.randomUUID();
+    const attempt = `${ROUTE_AGAIN_KEY_PREFIX}${decision.id}:${globalThis.crypto.randomUUID()}`;
     await workItems.commitRuleEvaluation({
       orgId: scope.orgId,
       factoryProjectId: scope.factoryProjectId,
       workItemId: null,
-      ingress: { identity: `intake-route-again:${decision.id}:${attempt}`, triggerType: 'intake.route_again' },
+      ingress: { identity: attempt, triggerType: 'intake.route_again' },
       configVersion,
       expectedRevision: null,
       actor: { type: 'system', id: 'factory-intake-route-again' },
       outcome: { status: 'accepted' },
-      decisions: [{ ...arrival, idempotencyKey: `intake-route-again:${decision.id}:${attempt}` }],
+      decisions: [{ ...arrival, idempotencyKey: attempt }],
       causalChain: [],
       now: new Date(),
     });
@@ -309,7 +325,9 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
               { error: error.code, message: error.message },
               error.code === 'intake_route_not_found' || error.code === 'intake_decision_not_found'
                 ? 404
-                : error.code === 'invalid_intake_route' || error.code === 'intake_route_limit'
+                : error.code === 'invalid_intake_route' ||
+                    error.code === 'intake_route_limit' ||
+                    error.code === 'invalid_intake_cursor'
                   ? 422
                   : 409,
             );
@@ -345,7 +363,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         await this.#requireAdmin(c, scope);
         const { boardKeys } = await this.#body(c, contracts.intakeOrderUpdate.bodySchema);
         const registry = await this.#registry(scope);
-        const before = await storage.readIntakeOrder(scope);
+        const before = await storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
         await storage.setIntakeOrder(scope, boardKeys, { boards: [...registry.keys()] });
         await this.deps.audit.emit({
           context: c,
@@ -361,8 +379,19 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
 
       this.#route(contracts.intakeNotRoutedList, async c => {
         const scope = await this.#resolve(c);
-        const notRouted = await storage.listNotRouted(scope);
-        return c.json({ notRouted: notRouted.map(presentDecision), canEdit: await this.#canEdit(c, scope) });
+        const query = contracts.intakeNotRoutedList.querySchema.safeParse({
+          limit: c.req.query('limit'),
+          cursor: c.req.query('cursor'),
+        });
+        if (!query.success) {
+          throw new Refusal(422, { error: 'invalid_request', message: issueMessage(query.error.issues) });
+        }
+        const page = await storage.listNotRouted(scope, query.data);
+        return c.json({
+          notRouted: page.notRouted.map(presentDecision),
+          nextCursor: page.nextCursor,
+          canEdit: await this.#canEdit(c, scope),
+        });
       }),
 
       this.#route(contracts.intakeRouteAgain, async c => {
@@ -410,6 +439,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           boardKey === undefined ? {} : { boardKey },
         );
         await this.#audit(c, scope, 'reordered', routes);
+        this.#rulesChanged(scope);
         return this.#list(c, scope, routes);
       }),
 
@@ -427,6 +457,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
+        this.#rulesChanged(scope);
         return this.#respond(c, scope, route, 201);
       }),
 
@@ -450,6 +481,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
         await this.#audit(c, scope, 'updated', [route]);
+        this.#rulesChanged(scope);
         return this.#respond(c, scope, route);
       }),
 
@@ -467,6 +499,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         if (!route) throw new Refusal(404, { error: 'intake_route_not_found' });
         await storage.deleteIntakeRoute(scope, id, { expectedRevision: parsed.data.expectedRevision });
         await this.#audit(c, scope, 'deleted', [route]);
+        this.#rulesChanged(scope);
         return c.body(null, 204);
       }),
     ];

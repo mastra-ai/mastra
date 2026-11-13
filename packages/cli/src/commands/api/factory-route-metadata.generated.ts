@@ -385,17 +385,19 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "intakeNotRoutedList",
     "method": "GET",
     "path": "/web/factory/projects/:id/intake/not-routed",
-    "description": "Items no board's intake rules took, newest first",
+    "description": "Items no board's intake rules took, oldest first, a page at a time",
     "pathParams": [
       "id"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "cursor",
+      "limit"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
-      "kind": "object-property",
-      "listProperty": "notRouted"
+      "kind": "single"
     }
   },
   "GET /web/factory/projects/:id/metrics": {
@@ -3990,6 +3992,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "id"
       ]
     },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
@@ -4067,12 +4086,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "canEdit": {
           "type": "boolean"
         }
       },
       "required": [
         "notRouted",
+        "nextCursor",
         "canEdit"
       ]
     }

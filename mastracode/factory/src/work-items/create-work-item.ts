@@ -94,6 +94,13 @@ export async function createFactoryWorkItem({
   // person chose. Under the old evaluator a card naming its stages skips the rules too.
   let boardId = input.board;
   let placement: { phase: string; routeId: string } | undefined;
+  if (boardId === undefined && !intakeRoutes && intakeEvaluator === 'intake-order') {
+    return {
+      status: 'refused',
+      code: 'intake_board_required',
+      message: 'Intake rules are unavailable right now. Pick the board to file it on.',
+    };
+  }
   if (boardId === undefined) {
     const scope = { orgId, factoryProjectId };
     const evaluator = intakeRoutes ? intakeEvaluator : 'route-list';
@@ -102,7 +109,9 @@ export async function createFactoryWorkItem({
     const [routes, order] = routed
       ? await Promise.all([
           intakeRoutes.listIntakeRoutes(scope),
-          evaluator === 'intake-order' ? intakeRoutes.readIntakeOrder(scope) : undefined,
+          evaluator === 'intake-order'
+            ? intakeRoutes.readIntakeOrder(scope, { boards: [...boards.keys()] })
+            : undefined,
         ])
       : [[], undefined];
     const resolution = resolveIntake({

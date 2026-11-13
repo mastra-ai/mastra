@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
@@ -1268,7 +1268,7 @@ describe('intake by intake order', () => {
 
     expect(card).toBeUndefined();
     expect(await seeded.workItems.list(seeded.scope)).toEqual([]);
-    const [notRouted, ...rest] = await seeded.boards.listNotRouted(seeded.scope);
+    const [notRouted, ...rest] = (await seeded.boards.listNotRouted(seeded.scope)).notRouted;
     expect(rest).toEqual([]);
     expect(notRouted).toMatchObject({
       outcome: 'not_routed',
@@ -1292,14 +1292,39 @@ describe('intake by intake order', () => {
     const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
 
     expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
-    expect(await seeded.boards.listNotRouted(seeded.scope)).toEqual([]);
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
+  });
+
+  it('resolves the Not routed record on a retry when resolving failed after the card was filed', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    await seeded.route(everything);
+    vi.spyOn(seeded.boards, 'resolveNotRouted').mockRejectedValueOnce(new Error('storage unavailable'));
+
+    const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
+    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toHaveLength(1);
+
+    await seeded.retry();
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
+    expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+  });
+
+  it('files nothing while the intake rules are unavailable, and keeps the arrival to retry', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order', withRoutesReader: false });
+    expect(await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } })).toBeUndefined();
+    const [decision] = await seeded.workItems.listDeferredDecisions('org-1', seeded.project.id);
+    expect(decision).toMatchObject({
+      status: 'retry',
+      lastError: expect.stringContaining('Intake rules are unavailable'),
+    });
   });
 
   it('still files an unmatched arrival on Work under the old evaluator, the default', async () => {
     const seeded = await setup();
     const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
     expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
-    expect(await seeded.boards.listNotRouted(seeded.scope)).toEqual([]);
+    expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
   });
 
   it("files an arrival at once while the project's migration measure has yet to finish", async () => {

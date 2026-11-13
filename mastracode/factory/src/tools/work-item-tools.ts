@@ -7,8 +7,8 @@
 import { randomUUID } from 'node:crypto';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
 import { boardForWorkItem } from '../boards/index.js';
+
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
@@ -18,6 +18,7 @@ import type { IntegrationTools } from '../integrations/base.js';
 import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
+import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -153,7 +154,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
+        "File a new work item on this Factory for the person you are working with, on the board the project's intake rules pick (or the board named). It enters its board's first phase, or the phase an intake rule names, and this session follows it. Check factory_list_work_items for an existing item first. When no intake rule takes it, the call is refused: ask the person which board it belongs on and call again with that board. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -164,9 +165,16 @@ export function createFactoryWorkItemTools(
             .max(8000)
             .describe('What needs doing and why; becomes the card description its runs start from.'),
           repository: repositorySchema.optional(),
+          board: z
+            .string()
+            .trim()
+            .min(1)
+            .max(MAX_BOARD_IDENTIFIER_LENGTH)
+            .optional()
+            .describe("The board's key, when the person picked one; files it in that board's first phase."),
         })
         .strict(),
-      execute: async ({ title, description, repository }) => {
+      execute: async ({ title, description, repository, board }) => {
         if (repository) await requireRepository(repository);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
@@ -179,7 +187,12 @@ export function createFactoryWorkItemTools(
           ...project,
           userId: scope.userId,
           ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
-          input: { title, description, ...(repository ? { metadata: { repository } } : {}) },
+          input: {
+            title,
+            description,
+            ...(board ? { board } : {}),
+            ...(repository ? { metadata: { repository } } : {}),
+          },
         });
         if (created.status === 'refused') throw new Error(created.message);
         if (created.status === 'rejected') throw new Error(`The board refused the new item: ${created.reason}`);

@@ -11,9 +11,10 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
-
 import { BoardWriteError, BoardWrites, issueMessage } from '../boards/board-writes.js';
+
 import type { BoardWriter } from '../boards/board-writes.js';
+import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import { codeBehaviourOf } from '../boards/stored-board.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -32,6 +33,8 @@ export interface BoardRoutesDeps extends RouteDependencies {
   storage: StoredBoardsStorage;
   /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
+  /** Measured again when deleting a board deletes rules. */
+  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'restart'>;
 }
 
 type Resolved = StoredBoardScope & { userId: string };

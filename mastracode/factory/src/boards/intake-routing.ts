@@ -1,11 +1,14 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
+import { externalSourceForWorkItem } from '../rules/types.js';
+import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { BoardEventFacts } from './board-events.js';
+import { cardRuleFacts } from './card-facts.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget } from './semantics.js';
+import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget, isTerminalWorkItem } from './semantics.js';
 
 /** Reads a project's intake routes and intake order, and logs how intake decided each arrival. */
 export type IntakeRoutesReader = Pick<
@@ -192,6 +195,35 @@ export interface IntakeQuery {
 }
 
 /** The env var naming the evaluator when the Factory's `intake.evaluator` option doesn't. */
+/**
+ * What intake rules test of an arrival: its own facts and, for a pull request closing an issue, that
+ * issue's card as it is now (a finished card or one of another project counts as none). The
+ * dispatcher and Route again both read an arrival through this, so they decide alike.
+ */
+export async function arrivalRuleFacts(
+  decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+  context: { factoryProjectId: string; registry: BoardRegistry; card(id: string): Promise<Card | null> },
+): Promise<RuleFacts> {
+  const facts = cardRuleFacts({
+    title: decision.title,
+    metadata: decision.metadata ?? {},
+    externalSource: externalSourceForWorkItem(decision.source, decision.sourceKey, decision.url ?? undefined),
+  });
+  if (!decision.closesIssue) return facts;
+  const closed = await context.card(decision.closesIssue.workItemId);
+  const open =
+    closed && closed.factoryProjectId === context.factoryProjectId && !isTerminalWorkItem(context.registry, closed)
+      ? closed
+      : undefined;
+  return { ...facts, ...closedIssueRuleFacts(open) };
+}
+
+/**
+ * Prefixes the decision an admin's Route again commits. Such an arrival is resolved by intake order
+ * whatever this replica's evaluator: only that evaluator leaves an item Not routed.
+ */
+export const ROUTE_AGAIN_KEY_PREFIX = 'intake-route-again:';
+
 export const INTAKE_EVALUATOR_ENV = 'FACTORY_INTAKE_EVALUATOR';
 
 /**

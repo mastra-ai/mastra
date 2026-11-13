@@ -23,6 +23,7 @@ import {
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import {
+  arrivalRuleFacts,
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
@@ -30,6 +31,7 @@ import {
   resolveEventRoute,
   resolveIntake,
   resolveIntakeRoute,
+  ROUTE_AGAIN_KEY_PREFIX,
   routesHandleEvent,
 } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
@@ -1892,7 +1894,10 @@ export class FactoryDecisionDispatcher {
           record.factoryProjectId,
           `decision:${record.idempotencyKey}:${existing.id}:${suffix}`,
         );
-        if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
+        if (replay?.status === 'accepted' && replay.stage === decision.stage) {
+          await this.#resolveNotRouted(record, decision.sourceKey);
+          return;
+        }
       }
     }
     assertFactoryDecisionTarget(decision, boards);
@@ -1935,13 +1940,8 @@ export class FactoryDecisionDispatcher {
           },
           reuseMode: 'preserve',
         });
-    if (result.created && this.#intakeRoutes) {
-      await this.#intakeRoutes.resolveNotRouted(
-        { orgId: record.orgId, factoryProjectId: record.factoryProjectId },
-        decision.sourceKey,
-        'factory-rule-dispatcher',
-      );
-    }
+    // The item is filed once its card stands past initial entry; a retry of this decision resolves it too.
+    const filed = () => this.#resolveNotRouted(record, decision.sourceKey);
     const itemBoard = boardForWorkItem(result.item);
     // A pull request's own card already on another board that reviews pull requests (the retired
     // Review board, for a project still using it) stays there: filing its pull request again acts
@@ -2018,11 +2018,14 @@ export class FactoryDecisionDispatcher {
         const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
         item = fresh && fresh.revision !== item.revision ? fresh : null;
       }
+      await filed();
       return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
+    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase))) {
+      await filed();
       return;
+    }
 
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
@@ -2046,6 +2049,7 @@ export class FactoryDecisionDispatcher {
       }
       expectedRevision = initial.revision;
     }
+    await filed();
     if (decision.stage === initialPhase) return;
 
     const moved = await this.#transitionService.transition({
@@ -2174,6 +2178,15 @@ export class FactoryDecisionDispatcher {
     });
   }
 
+  /** Marks the item's Not routed record, if any, resolved: its card is filed. */
+  async #resolveNotRouted(record: FactoryDeferredDecisionRecord, sourceKey: string): Promise<void> {
+    await this.#intakeRoutes?.resolveNotRouted(
+      { orgId: record.orgId, factoryProjectId: record.factoryProjectId },
+      sourceKey,
+      'factory-rule-dispatcher',
+    );
+  }
+
   /**
    * Places an arrival where intake says (see `resolveIntake`). The board and phase an
    * integration's rule named don't count; only a decision placing the card outright (`skipRules`)
@@ -2185,39 +2198,34 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> | undefined> {
-    if (!this.#intakeRoutes || decision.skipRules === true) return decision;
+    if (decision.skipRules === true) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
+    if (!this.#intakeRoutes) {
+      // Intake order has no board of its own to fall back on: the arrival waits for the rules.
+      if (this.#intakeEvaluator === 'intake-order') throw new Error('Intake rules are unavailable right now.');
+      return decision;
+    }
     const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
     // The project's one-time intake order measure runs beside the arrival, never ahead of it.
     this.#intakeOrderMeasure?.start(scope);
+    const evaluator = decision.idempotencyKey.startsWith(ROUTE_AGAIN_KEY_PREFIX)
+      ? 'intake-order'
+      : this.#intakeEvaluator;
     const [routes, order] = await Promise.all([
       this.#intakeRoutes.listIntakeRoutes(scope),
-      this.#intakeEvaluator === 'intake-order' ? this.#intakeRoutes.readIntakeOrder(scope) : undefined,
+      evaluator === 'intake-order'
+        ? this.#intakeRoutes.readIntakeOrder(scope, { boards: [...boards.keys()] })
+        : undefined,
     ]);
-    // A route can also test the issue a pull request closes, as it is now.
-    const closedIssue = decision.closesIssue
-      ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
-      : null;
-    const facts = {
-      ...cardRuleFacts({
-        title: decision.title,
-        metadata: decision.metadata ?? {},
-        externalSource: externalSourceForDecision(decision),
-      }),
-      ...(decision.closesIssue
-        ? closedIssueRuleFacts(
-            closedIssue &&
-              closedIssue.factoryProjectId === record.factoryProjectId &&
-              !isTerminalWorkItem(boards, closedIssue)
-              ? closedIssue
-              : undefined,
-          )
-        : {}),
-    };
+    const facts = await arrivalRuleFacts(decision, {
+      factoryProjectId: record.factoryProjectId,
+      registry: boards,
+      card: id => this.#storage.get({ orgId: record.orgId, id }),
+    });
     const resolution = resolveIntake({
-      evaluator: this.#intakeEvaluator,
+      evaluator,
       routes,
       order: order?.boardKeys ?? [],
       facts,
@@ -2225,7 +2233,7 @@ export class FactoryDecisionDispatcher {
     });
     const logged = {
       idempotencyKey: record.idempotencyKey,
-      evaluator: this.#intakeEvaluator,
+      evaluator,
       sourceKey: decision.sourceKey,
       title: decision.title,
       url: decision.url,

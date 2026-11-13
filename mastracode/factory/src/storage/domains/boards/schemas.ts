@@ -106,6 +106,9 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // Board keys in the order intake checks them, separate from the sidebar's `position`. Null
     // until first derived from the route list (`deriveIntakeOrder`).
     intake_order: { type: 'json', nullable: true },
+    // 'explicit' once an admin set the order; null while it is derived from the route list, which
+    // re-derives it on every rule write.
+    intake_order_origin: { type: 'text', nullable: true },
     // The one-time intake order migration: when the order was derived, and how the old and new
     // evaluators compared over the project's recent cards. Null until it ran.
     intake_order_migration: { type: 'json', nullable: true },

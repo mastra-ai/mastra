@@ -162,12 +162,12 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Which evaluator places new items; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Stored boards and their cache; mounts the board management routes when present. */
   storedBoards?: {
     storage: StoredBoardsStorage;
     cache: ProjectBoardCache;
-    /** Which evaluator places new items; the old `route-list` by default. */
-    intakeEvaluator?: IntakeEvaluator;
     intakeOrderMeasure?: IntakeOrderMeasure;
   };
   factoryTransitionService?: FactoryTransitionService;
@@ -1039,7 +1039,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
-          intakeEvaluator: deps.storedBoards?.intakeEvaluator,
+          intakeEvaluator: deps.intakeEvaluator,
           intakeOrderMeasure: deps.storedBoards?.intakeOrderMeasure,
           queueHealth: deps.domains.queueHealth,
           transitionService,
@@ -1056,6 +1056,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeOrderMeasure: deps.storedBoards.intakeOrderMeasure,
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
@@ -1066,8 +1067,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
-          intakeEvaluator: deps.storedBoards.intakeEvaluator,
+          intakeEvaluator: deps.intakeEvaluator,
           configVersion: deps.configVersion,
+          intakeOrderMeasure: deps.storedBoards.intakeOrderMeasure,
         }).routes()
       : []),
     ...(deps.factoryReady

@@ -7,8 +7,8 @@
  */
 
 import type { z } from 'zod';
-
 import { findBoardSkillProblems } from '../skills/app-skills.js';
+
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type {
@@ -22,6 +22,7 @@ import type {
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { LEGACY_REVIEW_BOARD, ReviewBoardInUseError } from '../storage/domains/work-items/legacy-review.js';
 import { codeBoardOf } from './define-board.js';
+import type { IntakeOrderMeasure } from './intake-order-migration.js';
 import { isUntouchedReviewSeed } from './project-boards.js';
 import type { ProjectBoardCache } from './project-boards.js';
 import { boardRegistryOf } from './registry.js';
@@ -40,6 +41,8 @@ export interface BoardWritesDeps {
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
   /** Read to refuse edits that would strand cards; the retired Review board's cards leave `review` through it. */
   workItems: Pick<WorkItemsStorage, 'listShared' | 'releaseReviewCards'>;
+  /** Measured again when deleting a board deletes rules, which re-derives an order nobody set. */
+  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'restart'>;
 }
 
 /** Who writes: stored as the board's author, and the audit event's actor. */
@@ -271,6 +274,7 @@ export class BoardWrites {
         metadata: { boardKey: key, cause: 'board_deleted' },
       });
     }
+    if (intakeRoutes.length > 0) void this.deps.intakeOrderMeasure?.restart(scope);
   }
 
   /** Rewrites a board Factory stores to Factory's current definition of it, at the next revision. */

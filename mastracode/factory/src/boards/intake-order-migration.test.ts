@@ -46,13 +46,23 @@ async function project(routes: StoredIntakeRouteInput[]) {
   return { boards, scope };
 }
 
-function measureWith(boards: Awaited<ReturnType<typeof project>>['boards'], cards: Card[]) {
+function measureWith(
+  boards: Awaited<ReturnType<typeof project>>['boards'],
+  cards: Card[],
+  beforeCompare: () => Promise<void> = async () => {},
+) {
   const audited: IntakeOrderMigration[] = [];
   const measure = new IntakeOrderMeasure({
     storage: boards,
-    cards: async () => cards,
+    cards: async () => {
+      await beforeCompare();
+      return cards;
+    },
     boards: async () => registry,
-    audit: async (_scope, migration) => void audited.push(migration),
+    // Like the audit domain, one entry per measured order however often it is asked.
+    audit: async (_scope, migration) => {
+      if (!audited.some(entry => entry.startedAt === migration.startedAt)) audited.push(migration);
+    },
   });
   return { measure, audited };
 }
@@ -91,6 +101,32 @@ describe('IntakeOrderMeasure', () => {
     expect([...first.audited, ...second.audited]).toHaveLength(1);
   });
 
+  it('writes the audit entry on a later start when writing it failed', async () => {
+    const { boards, scope } = await project([labelled('work', 'bug')]);
+    const audited: IntakeOrderMigration[] = [];
+    let failing = true;
+    const measure = () =>
+      new IntakeOrderMeasure({
+        storage: boards,
+        cards: async () => [card(['bug'])],
+        boards: async () => registry,
+        audit: async (_scope, migration) => {
+          if (failing) throw new Error('audit storage unavailable');
+          if (!audited.some(entry => entry.startedAt === migration.startedAt)) audited.push(migration);
+        },
+        warn: () => {},
+      });
+    const first = measure();
+    await expect(first.measure(scope)).rejects.toThrow('audit storage unavailable');
+    expect((await boards.readIntakeOrder(scope)).migration).toMatchObject({ compared: 1 });
+
+    failing = false;
+    // Still not done on the replica that failed, nor on a fresh one; the entry is written once.
+    expect(await first.measure(scope)).toBeNull();
+    expect(await measure().measure(scope)).toBeNull();
+    expect(audited).toMatchObject([{ compared: 1, differing: 0 }]);
+  });
+
   it('compares only the newest 200 cards', async () => {
     const { boards, scope } = await project([everything('work')]);
     const { measure } = measureWith(
@@ -98,5 +134,44 @@ describe('IntakeOrderMeasure', () => {
       Array.from({ length: 250 }, () => card([])),
     );
     expect(await measure.measure(scope)).toMatchObject({ compared: 200 });
+  });
+
+  it('follows the route list while the order is derived, and stops once someone sets it', async () => {
+    const { boards, scope } = await project([labelled('ship', 'ship'), labelled('work', 'bug'), everything('work')]);
+    const { measure, audited } = measureWith(boards, [card(['ship']), card(['ship', 'x']), card(['bug'])]);
+    expect(await measure.measure(scope)).toMatchObject({ differing: 0 });
+
+    // Work's `bug` rule moves ahead of Ship's in the old list: Work is now asked first, and its
+    // catch-all takes the `ship` cards. The derived order and the count follow.
+    const [ship, bug, all] = await boards.listIntakeRoutes(scope);
+    await boards.reorderIntakeRoutes(scope, [bug!.id, ship!.id, all!.id], 'admin');
+    expect(await measure.restart(scope)).toMatchObject({ compared: 3, differing: 2 });
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work', 'ship']);
+    expect(audited.map(entry => entry.differing)).toEqual([0, 2]);
+
+    // Set: rule writes no longer move the order or measure it again.
+    await boards.setIntakeOrder(scope, ['ship', 'work']);
+    await boards.reorderIntakeRoutes(scope, [ship!.id, bug!.id, all!.id], 'admin');
+    expect(await measure.restart(scope)).toBeNull();
+    expect(await boards.readIntakeOrder(scope)).toMatchObject({
+      boardKeys: ['ship', 'work'],
+      origin: 'explicit',
+      migration: { differing: 2 },
+    });
+    expect(audited).toHaveLength(2);
+  });
+
+  it('measures again when a rule write lands while it compares, keeping only the fresh result', async () => {
+    const { boards, scope } = await project([labelled('ship', 'ship'), labelled('work', 'bug'), everything('work')]);
+    let writes = 0;
+    const { measure, audited } = measureWith(boards, [card(['ship'])], async () => {
+      if (writes++ > 0) return;
+      const [ship, bug, all] = await boards.listIntakeRoutes(scope);
+      await boards.reorderIntakeRoutes(scope, [bug!.id, ship!.id, all!.id], 'admin');
+    });
+
+    expect(await measure.measure(scope)).toMatchObject({ compared: 1, differing: 1 });
+    expect(audited).toEqual([expect.objectContaining({ differing: 1 })]);
+    expect((await boards.readIntakeOrder(scope)).migration).toMatchObject({ differing: 1 });
   });
 });

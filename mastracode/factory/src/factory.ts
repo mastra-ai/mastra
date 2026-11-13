@@ -1072,8 +1072,9 @@ export class MastraFactory {
         cards: scope => workItemsStorage.list(scope),
         boards: scope => projectBoards.load(scope),
         audit: async (scope, migration) => {
-          await auditDomain.record({
-            idempotencyKey: `intake-order-migrated:${scope.orgId}:${scope.factoryProjectId}`,
+          const recorded = await auditDomain.record({
+            // One entry per measured order: a derived order is measured again after each rule write.
+            idempotencyKey: `intake-order-migrated:${scope.orgId}:${scope.factoryProjectId}:${migration.startedAt}`,
             orgId: scope.orgId,
             factoryProjectId: scope.factoryProjectId,
             actorId: 'factory',
@@ -1082,12 +1083,18 @@ export class MastraFactory {
             targets: [{ type: 'factory_project', id: scope.factoryProjectId }],
             metadata: { ...migration },
           });
+          if (!recorded) throw new Error('The intake order migration audit event was not recorded.');
         },
         warn: (message, error) =>
           console.warn(`[factory] ${message}: ${error instanceof Error ? error.message : error}`),
       });
       this.#boardStore = {
-        writes: new BoardWrites({ storage: storedBoardsStorage, boards: projectBoards, workItems: workItemsStorage }),
+        writes: new BoardWrites({
+          storage: storedBoardsStorage,
+          boards: projectBoards,
+          workItems: workItemsStorage,
+          ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
+        }),
         boards: projectBoards,
         projects: factoryProjectsStorage,
         audit: auditDomain,
@@ -1470,10 +1477,11 @@ export class MastraFactory {
       workItems: workItemsStorage,
       audit: auditStorage,
       boards: boards,
+      // Kept without stored boards too, so intake order refuses rather than files where it can't decide.
+      intakeEvaluator: this.#intakeEvaluator,
       ...(this.#projectBoards
         ? {
             intakeRoutes: storedBoardsStorage,
-            intakeEvaluator: this.#intakeEvaluator,
             ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
           }
         : {}),
@@ -2226,12 +2234,12 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: boards,
+            intakeEvaluator: this.#intakeEvaluator,
             ...(this.#projectBoards
               ? {
                   storedBoards: {
                     storage: storedBoardsStorage,
                     cache: this.#projectBoards,
-                    intakeEvaluator: this.#intakeEvaluator,
                     ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
                   },
                 }
@@ -2246,10 +2254,11 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: boards,
+                // Kept without stored boards too, so intake order defers arrivals it can't decide.
+                intakeEvaluator: this.#intakeEvaluator,
                 ...(this.#projectBoards
                   ? {
                       intakeRoutes: storedBoardsStorage,
-                      intakeEvaluator: this.#intakeEvaluator,
                       ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
                     }
                   : {}),

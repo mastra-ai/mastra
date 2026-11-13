@@ -237,8 +237,18 @@ const intakeDecisionSchema = z.object({
   url: z.string().nullable(),
   decidedAt: z.string(),
 });
+const intakeNotRoutedQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).optional(),
+    /** The `nextCursor` of the page before. */
+    cursor: z.string().min(1).max(200).optional(),
+  })
+  .strict();
 const intakeNotRoutedResponseSchema = z.object({
+  /** Oldest first. */
   notRouted: z.array(intakeDecisionSchema),
+  /** Pass as `cursor` for the next page; null on the last. */
+  nextCursor: z.string().nullable(),
   /** Whether the caller may route an item again. */
   canEdit: z.boolean(),
 });
@@ -1362,8 +1372,9 @@ export const FACTORY_ROUTE_CONTRACTS = {
   intakeNotRoutedList: {
     method: 'GET',
     path: '/web/factory/projects/:id/intake/not-routed',
-    description: "Items no board's intake rules took, newest first",
+    description: "Items no board's intake rules took, oldest first, a page at a time",
     pathSchema: projectPathSchema,
+    querySchema: intakeNotRoutedQuerySchema,
     responseSchema: intakeNotRoutedResponseSchema,
   },
   intakeRouteAgain: {

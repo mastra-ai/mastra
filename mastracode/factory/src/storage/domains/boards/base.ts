@@ -192,7 +192,8 @@ export type StoredBoardErrorCode =
   | 'intake_route_limit'
   | 'invalid_intake_route'
   | 'intake_order_set_mismatch'
-  | 'intake_decision_not_found';
+  | 'intake_decision_not_found'
+  | 'invalid_intake_cursor';
 
 /** A board's most intake routes. */
 export const MAX_INTAKE_ROUTES_PER_BOARD = 100;
@@ -215,9 +216,16 @@ export interface IntakeOrderMigration {
   notRouted: number;
 }
 
+/**
+ * `derived` while the order still follows the route list: every rule write re-derives it and drops
+ * its measure. `explicit` once an admin sets it.
+ */
+export type IntakeOrderOrigin = 'derived' | 'explicit';
+
 export interface StoredIntakeOrder {
   /** Board keys in the order intake checks them. */
   boardKeys: string[];
+  origin: IntakeOrderOrigin;
   migration: IntakeOrderMigration | null;
 }
 
@@ -352,6 +360,8 @@ interface IntakeRouteLockRow extends Record<string, unknown> {
   /** Keys of the `DEFAULT_INTAKE_ROUTES` added to the project; null on rows written before the list. */
   seeded_defaults: string[] | null;
   intake_order: string[] | null;
+  /** Null while derived. */
+  intake_order_origin: 'explicit' | null;
   intake_order_migration: IntakeOrderMigration | null;
 }
 
@@ -787,6 +797,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           ops,
           routes.filter(route => route.board_key !== key),
         );
+        await forgetDerivedIntakeOrder(ops, scope);
       }
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
       if (lock.intake_order?.includes(key)) {
@@ -815,27 +826,32 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 
   /**
    * The project's intake order, derived from the route list the first time it is read and kept up
-   * to date with its boards (see `reconcileIntakeOrder`), with the migration marker.
+   * to date with its boards (see `reconcileIntakeOrder`), with the migration marker. Its boards are
+   * the stored ones plus `options.boards` (the caller's registry, so a code board keeps its place).
    */
-  async readIntakeOrder(scope: StoredBoardScope): Promise<StoredIntakeOrder> {
+  async readIntakeOrder(
+    scope: StoredBoardScope,
+    options: { boards?: readonly string[] } = {},
+  ): Promise<StoredIntakeOrder> {
     await this.#ensureIntakeRoutes(scope);
-    const current = await this.#intakeOrderState(this.ops, scope);
+    const current = await this.#intakeOrderState(this.ops, scope, options.boards);
     if (current.lock.intake_order && sameKeys(current.lock.intake_order, current.boardKeys)) {
-      return { boardKeys: current.boardKeys, migration: current.lock.intake_order_migration };
+      return toIntakeOrder(current.lock, current.boardKeys);
     }
     return this.#transact(async ops => {
       await lockIntakeRoutes(ops, scope);
-      const fresh = await this.#intakeOrderState(ops, scope);
+      const fresh = await this.#intakeOrderState(ops, scope, options.boards);
       if (!fresh.lock.intake_order || !sameKeys(fresh.lock.intake_order, fresh.boardKeys)) {
         await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { intake_order: fresh.boardKeys });
       }
-      return { boardKeys: fresh.boardKeys, migration: fresh.lock.intake_order_migration };
+      return toIntakeOrder(fresh.lock, fresh.boardKeys);
     });
   }
 
   /**
-   * Sets the project's intake order; `boardKeys` must name every board of the project exactly once:
-   * its stored boards, or `options.boards` when given (the caller's registry, code boards too).
+   * Sets the project's intake order, which then no longer follows the route list; `boardKeys` must
+   * name every board of the project exactly once: its stored boards, or `options.boards` when given
+   * (the caller's registry, code boards too).
    */
   async setIntakeOrder(
     scope: StoredBoardScope,
@@ -858,49 +874,59 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           'The intake order must list every board of the project exactly once; reload the boards and try again.',
         );
       }
-      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { intake_order: boardKeys });
+      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
+        intake_order: boardKeys,
+        intake_order_origin: 'explicit',
+      });
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
-      return { boardKeys, migration: lock.intake_order_migration };
+      return toIntakeOrder(lock, boardKeys);
     });
   }
 
   /**
-   * Claims the project's one-time intake order measure: true for exactly one caller until it
-   * records its result, or until the claim is old enough that its holder is taken to have died.
+   * Claims the project's intake order measure: the claim's `startedAt` for exactly one caller until
+   * it records its result, or until the claim is old enough that its holder is taken to have died;
+   * null otherwise.
    */
-  async claimIntakeOrderMigration(scope: StoredBoardScope, now = new Date()): Promise<boolean> {
+  async claimIntakeOrderMigration(scope: StoredBoardScope, now = new Date()): Promise<string | null> {
     await this.#ensureIntakeRoutes(scope);
     const unclaimed = (marker: IntakeOrderMigration | null) =>
       !marker || (!marker.measuredAt && now.getTime() - Date.parse(marker.startedAt) >= MIGRATION_CLAIM_MS);
     const before = await this.ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope));
-    if (!unclaimed(before!.intake_order_migration)) return false;
+    if (!unclaimed(before!.intake_order_migration)) return null;
     // Under the route lock, so two replicas reading an unclaimed marker can't both take it.
     return this.#transact(async ops => {
       await lockIntakeRoutes(ops, scope);
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
-      if (!unclaimed(lock.intake_order_migration)) return false;
+      if (!unclaimed(lock.intake_order_migration)) return null;
+      const startedAt = now.toISOString();
       await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
         intake_order_migration: {
-          startedAt: now.toISOString(),
+          startedAt,
           measuredAt: null,
           compared: 0,
           differing: 0,
           notRouted: 0,
         } satisfies IntakeOrderMigration,
       });
-      return true;
+      return startedAt;
     });
   }
 
-  /** Records what the intake order measure found. */
+  /**
+   * Records what the intake order measure found. With `claimed`, only while that claim still holds:
+   * null when a rule write re-derived the order since, so the result describes an order that's gone.
+   */
   async recordIntakeOrderMigration(
     scope: StoredBoardScope,
     result: Pick<IntakeOrderMigration, 'compared' | 'differing' | 'notRouted'>,
-    now = new Date(),
-  ): Promise<IntakeOrderMigration> {
+    options: { claimed?: string; now?: Date } = {},
+  ): Promise<IntakeOrderMigration | null> {
+    const now = options.now ?? new Date();
     return this.#transact(async ops => {
       await lockIntakeRoutes(ops, scope);
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
+      if (options.claimed !== undefined && lock.intake_order_migration?.startedAt !== options.claimed) return null;
       const marker: IntakeOrderMigration = {
         startedAt: lock.intake_order_migration?.startedAt ?? now.toISOString(),
         measuredAt: now.toISOString(),
@@ -945,17 +971,31 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row ? toIntakeDecisionRecord(row) : null;
   }
 
-  /** Items no board took and nobody has filed since, newest first. */
+  /**
+   * Items no board took and nobody has filed since, oldest first, `limit` at a time; pass
+   * `nextCursor` back as `cursor` for the next page.
+   */
   async listNotRouted(
     scope: StoredBoardScope,
-    options: { limit?: number } = {},
-  ): Promise<StoredIntakeDecisionRecord[]> {
+    options: { limit?: number; cursor?: string } = {},
+  ): Promise<{ notRouted: StoredIntakeDecisionRecord[]; nextCursor: string | null }> {
+    const limit = options.limit ?? 50;
+    const after = options.cursor === undefined ? undefined : decodeDecisionCursor(options.cursor);
     const rows = await this.ops.findMany<IntakeDecisionRow>(
       INTAKE_DECISIONS,
       { ...scopeWhere(scope), outcome: 'not_routed', resolved_at: null },
-      { orderBy: [['decided_at', 'desc']], limit: options.limit ?? 100 },
+      {
+        orderBy: DECISION_ORDER,
+        limit: limit + 1,
+        ...(after && { cursor: { values: [after.decidedAt, after.id] } }),
+      },
     );
-    return rows.map(toIntakeDecisionRecord);
+    const page = rows.slice(0, limit).map(toIntakeDecisionRecord);
+    const last = page.at(-1);
+    return {
+      notRouted: page,
+      nextCursor: rows.length > limit && last ? `${last.decidedAt.toISOString()}_${last.id}` : null,
+    };
   }
 
   /** Marks the Not routed rows for a source resolved once a card is filed for it. Returns how many. */
@@ -970,6 +1010,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   async #intakeOrderState(
     ops: FactoryStorageOps,
     scope: StoredBoardScope,
+    extra: readonly string[] = [],
   ): Promise<{ lock: IntakeRouteLockRow; boardKeys: string[] }> {
     const [lock, boards, routes] = await Promise.all([
       ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)),
@@ -979,6 +1020,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     const sidebar = boards
       .sort((left, right) => left.position - right.position || left.board_key.localeCompare(right.board_key))
       .map(board => board.board_key);
+    sidebar.push(...extra.filter(key => !sidebar.includes(key)));
     const records = routes.map(toIntakeRouteRecord);
     const stored = lock!.intake_order ?? deriveIntakeOrder(records, sidebar);
     return { lock: lock!, boardKeys: reconcileIntakeOrder(stored, sidebar, records) };
@@ -1011,6 +1053,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       }
       const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       await insertIntakeRoute(ops, scope, { id, input, position, actor });
+      await forgetDerivedIntakeOrder(ops, scope);
       const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
         ? rows.findIndex(catchesEveryNewCard)
         : -1;
@@ -1045,6 +1088,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         }),
         updated_by: options.actor,
       });
+      await forgetDerivedIntakeOrder(ops, scope);
     });
     return (await this.getIntakeRoute(scope, id))!;
   }
@@ -1064,6 +1108,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         ops,
         rows.filter(route => route.id !== row.id),
       );
+      await forgetDerivedIntakeOrder(ops, scope);
     });
   }
 
@@ -1096,6 +1141,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const order =
         boardKey === undefined ? queue : rows.map(row => (row.board_key === boardKey ? queue.shift()! : row));
       await placeIntakeRoutes(ops, order, actor);
+      await forgetDerivedIntakeOrder(ops, scope);
     });
     return this.listIntakeRoutes(scope, { boardKey });
   }
@@ -1354,6 +1400,37 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
   };
+}
+
+const DECISION_ORDER: [string, 'asc'][] = [
+  ['decided_at', 'asc'],
+  ['id', 'asc'],
+];
+
+function decodeDecisionCursor(cursor: string): { decidedAt: Date; id: string } {
+  const sep = cursor.lastIndexOf('_');
+  const decidedAt = new Date(cursor.slice(0, sep));
+  const id = cursor.slice(sep + 1);
+  if (sep <= 0 || Number.isNaN(decidedAt.getTime()) || !id) {
+    throw new StoredBoardError('invalid_intake_cursor', 'The cursor is not one this list returned.');
+  }
+  return { decidedAt, id };
+}
+
+function toIntakeOrder(lock: IntakeRouteLockRow, boardKeys: string[]): StoredIntakeOrder {
+  return { boardKeys, origin: lock.intake_order_origin ?? 'derived', migration: lock.intake_order_migration };
+}
+
+/**
+ * A rule write changes what a derived order would be: drop it and its measure, so the next read
+ * derives it afresh and the measure runs again. An order an admin set stays.
+ */
+async function forgetDerivedIntakeOrder(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
+  await ops.updateMany(
+    INTAKE_ROUTE_LOCKS,
+    { ...scopeWhere(scope), intake_order_origin: null },
+    { intake_order: null, intake_order_migration: null },
+  );
 }
 
 function sameKeys(left: readonly string[], right: readonly string[]): boolean {
