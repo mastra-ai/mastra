@@ -12,6 +12,7 @@ import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
 import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
+import { useRunQueue } from '../../../hooks/useFactoryDecisions';
 import {
   useBoardPhasesQuery,
   useSidebarWorkItemsQuery,
@@ -25,6 +26,7 @@ import { boardPhasesRequest, deeperPhaseWindow, isCardId } from '../../domains/f
 import { boardLoadingStages } from '../../domains/factory/boardStages';
 import type { BoardKind } from '../../domains/factory/boardStages';
 import { ConfigureBoardButton } from '../../domains/boardConfig/components/ConfigureBoardButton';
+import { RunQueueIndicator } from '../../domains/factory/components/RunQueueIndicator';
 import { RepositoryPickerDialog } from '../../domains/factory/components/RepositoryPickerDialog';
 import { BoardItemsSkeleton } from '../../domains/factory/components/BoardItemsSkeleton';
 import { BoardStageCards } from '../../domains/factory/components/BoardStageCards';
@@ -197,6 +199,13 @@ export function BoardContent({
     parkedSessionIds: snapshot?.parkedSessionIds ?? NO_SESSIONS,
   });
   const decisions = useBoardDecisions(factoryProjectId);
+  const runQueue = useRunQueue(factoryProjectId);
+  const queuePositions = useMemo(
+    () => new Map(runQueue.data?.queued.map(run => [run.decisionId, run.position])),
+    [runQueue.data],
+  );
+  const queuePositionOf = (decision: { id: string } | undefined) =>
+    decision === undefined ? undefined : queuePositions.get(decision.id);
   const composer = useBoardComposer(factoryProjectId, definition, currentUserId);
   const filterOptions = useWorkItemFilterOptionsQuery(factoryProjectId).data;
   const activity = useRecentAuditEvents(
@@ -378,6 +387,7 @@ export function BoardContent({
                 evaluatingStage={items.evaluatingStages.get(item.id)}
                 transitionReason={items.transitionReasons[item.id]}
                 decision={decisions.effectByItem.get(item.id)}
+                queuePosition={queuePositionOf(decisions.effectByItem.get(item.id))}
                 proposal={decisions.proposalByItem.get(item.id)}
                 approvingDecisionId={decisions.approvingId}
                 retryingDecisionId={decisions.retryingId}
@@ -474,7 +484,12 @@ export function BoardContent({
             participants={participants}
             availableLabels={availableLabels}
             currentUserId={currentUserId}
-            aside={<ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />}
+            aside={
+              <div className="flex items-center gap-2">
+                <RunQueueIndicator factoryId={factoryProjectId} queue={runQueue.data} />
+                <ConfigureBoardButton factoryId={factoryProjectId} boardId={definition.id} />
+              </div>
+            }
           />
         }
       />

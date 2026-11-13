@@ -834,7 +834,7 @@ MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
 | `MASTRACODE_PROFILE_SAMPLE_INTERVAL_MS` | Override the process and V8 sample interval |
 | `MASTRACODE_PROFILE_CAPTURE_INTERVAL_MS` | Override the allocation-profile capture interval |
 | `MASTRACODE_PROFILE_ALLOCATION_INTERVAL_BYTES` | Override the V8 allocation-sampling interval |
-| `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent Factory background dispatches per replica; invalid or unset values use the default |
+| `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` | Maximum concurrent automated Factory runs per replica (default `10`); runs past it wait in the board's run queue. Invalid or unset values use the default |
 | `KIMI_API_KEY` | Kimi For Coding API key |
 | `PARALLEL_API_KEY` | Enable Parallel-powered web search and extract tools (selectable as the default web provider in `/settings`) |
 | `TAVILY_API_KEY` | Enable Tavily-powered web search and extract tools |
