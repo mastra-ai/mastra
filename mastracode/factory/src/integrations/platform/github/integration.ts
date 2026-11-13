@@ -1019,12 +1019,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     state: 'open' | 'closed';
   }): Promise<GithubDependabotAlert[]> {
     const { owner, repo } = splitRepository(input.repository);
-    // GitHub has no "closed" alert state; closed covers the three terminal states. Newest 100 per
-    // state is enough to close cards for recently fixed or dismissed alerts.
+    // GitHub has no "closed" alert state; closed covers the three terminal states. The 100 most
+    // recently updated are enough to close cards for recently fixed or dismissed alerts.
     const state = input.state === 'open' ? 'open' : 'fixed,dismissed,auto_dismissed';
+    const query = new URLSearchParams({ state, per_page: '100', sort: 'updated', direction: 'desc' });
     const result = await this.#client.request<{ alerts: GithubDependabotAlert[] }>(
       'GET',
-      `${API_PREFIX}/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?${new URLSearchParams({ state, per_page: '100' })}`,
+      `${API_PREFIX}/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?${query}`,
     );
     return result.alerts;
   }

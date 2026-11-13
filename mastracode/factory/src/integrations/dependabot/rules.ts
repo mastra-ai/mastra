@@ -40,12 +40,17 @@ export interface DependabotRulesIngress {
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
 
-/** A first sighting of an open alert creates its card; a fixed or dismissed one closes it. */
-export function boardEventFor(context: Pick<FactoryDependabotRuleContext, 'event' | 'alert' | 'item'>): BoardEventFacts | undefined {
+/**
+ * A first sighting of an open alert creates its card; a fixed or dismissed one closes it. An open
+ * alert that already has a card reopens it, which the intake routes apply only to a finished card.
+ */
+export function boardEventFor(
+  context: Pick<FactoryDependabotRuleContext, 'event' | 'alert' | 'item'>,
+): BoardEventFacts | undefined {
   if (context.event === 'alertClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.alert.state !== 'fixed') };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? { type: 'work_item.reopened' } : { type: 'work_item.created' };
 }
 
 export class DependabotRules {
@@ -64,10 +69,15 @@ export class DependabotRules {
     if (!project) return { status: 'missing', ingested: 0 };
     await toBoardSource(this.options.boards).load(input);
 
-    const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    const items = await this.options.storage.listShared({
+      orgId: input.orgId,
+      factoryProjectId: input.factoryProjectId,
+    });
     const itemsBySourceKey = new Map(
       items
-        .filter(item => item.externalSource?.integrationId === 'github' && item.externalSource.type === 'dependabot-alert')
+        .filter(
+          item => item.externalSource?.integrationId === 'github' && item.externalSource.type === 'dependabot-alert',
+        )
         .map(item => [item.externalSource?.externalId, item]),
     );
     const statuses: IngressStatus[] = [];

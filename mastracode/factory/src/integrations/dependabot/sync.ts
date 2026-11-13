@@ -59,7 +59,11 @@ function dependabotDescription(alert: GithubDependabotAlert): string | null {
     [advisory?.ghsa_id, advisory?.cve_id].filter(Boolean).length > 0 &&
       `**Advisory:** ${[advisory?.ghsa_id, advisory?.cve_id].filter(Boolean).join(', ')}`,
   ].filter((fact): fact is string => typeof fact === 'string');
-  const parts = [facts.map(fact => `- ${fact}`).join('\n'), advisory?.description?.trim()].filter(Boolean);
+  const parts = [
+    advisory?.summary?.trim(),
+    facts.map(fact => `- ${fact}`).join('\n'),
+    advisory?.description?.trim(),
+  ].filter(Boolean);
   return parts.length > 0 ? truncateDescription(parts.join('\n\n')) : null;
 }
 
@@ -130,13 +134,21 @@ export function createDependabotSync(options: {
           options.listAlerts({ installationId: target.installationId, repository: target.fullName, state: 'closed' }),
         ]);
         const alerts = [...open, ...closed].map(alert => toDependabotIngress(target.fullName, alert));
+        // One project's failed ingest is reported without starving the others linked to the repo.
         for (const project of projects) {
-          await options.ingest({
-            orgId: project.orgId,
-            userId: options.userId,
-            factoryProjectId: project.factoryProjectId,
-            alerts,
-          });
+          try {
+            await options.ingest({
+              orgId: project.orgId,
+              userId: options.userId,
+              factoryProjectId: project.factoryProjectId,
+              alerts,
+            });
+          } catch (error) {
+            summary.errors.push({
+              repository: target.fullName,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          }
         }
         summary.repositories += 1;
         summary.alerts += alerts.length;

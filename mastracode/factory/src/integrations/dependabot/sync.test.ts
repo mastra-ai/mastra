@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { DependabotRules } from './rules.js';
+import { DependabotRules, boardEventFor } from './rules.js';
 import { createDependabotSync } from './sync.js';
 import type { DependabotAlertLister, GithubDependabotAlert } from './sync.js';
 
@@ -65,6 +65,7 @@ describe('createDependabotSync', () => {
     ]);
     const [{ decision }] = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decision).toMatchObject({ description: expect.stringContaining('**Patched in:** `4.17.21`') });
+    expect((decision as { description: string }).description.startsWith('Prototype pollution\n\n')).toBe(true);
   });
 
   it('never reads alerts for a repository the org has not opted in', async () => {
@@ -95,5 +96,46 @@ describe('createDependabotSync', () => {
       failed: 1,
       errors: [{ repository: 'acme/locked', error: 'Dependabot alerts are disabled for this repository' }],
     });
+  });
+
+  it('keeps filing for the other linked projects when one project fails to ingest', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const create = (name: string) => seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
+    const [broken, healthy] = [await create('broken'), await create('healthy')];
+    const rules = new DependabotRules({
+      projects: seeded.projects,
+      storage: seeded.workItems,
+      configVersion: 'factory-config-v1',
+      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+    });
+    const sync = createDependabotSync({
+      listAlerts: async ({ state }) => (state === 'open' ? [openAlert] : []),
+      listProjects: async () => [broken, healthy].map(project => ({ orgId: 'org-1', factoryProjectId: project.id })),
+      repositoryEnabled: async () => true,
+      ingest: async input => {
+        if (input.factoryProjectId === broken.id) throw new Error('storage unavailable');
+        return rules.ingest(input);
+      },
+      userId: 'factory-rule-dispatcher',
+    });
+
+    const summary = await sync([target]);
+
+    expect(summary).toMatchObject({
+      repositories: 1,
+      failed: 0,
+      errors: [{ repository: 'acme/repo', error: 'storage unavailable' }],
+    });
+    expect(await seeded.workItems.listDeferredDecisions('org-1', healthy.id)).toHaveLength(1);
+  });
+});
+
+describe('boardEventFor', () => {
+  const alert = { state: 'open' } as Parameters<typeof boardEventFor>[0]['alert'];
+  const item = {} as NonNullable<Parameters<typeof boardEventFor>[0]['item']>;
+
+  it('reopens the card an open alert already has, so a reopened dismissal returns to the board', () => {
+    expect(boardEventFor({ event: 'alertObserved', alert, item })).toEqual({ type: 'work_item.reopened' });
+    expect(boardEventFor({ event: 'alertObserved', alert })).toEqual({ type: 'work_item.created' });
   });
 });
