@@ -1097,7 +1097,7 @@ export class Mastra<
   #stopWorkflowRecoveryLoop?: () => void;
   /** The recovery leader row while this instance holds it; see `#leadWorkflowRecovery`. */
   #recoveryLeader?: { store: WorkflowsStorage; fence: RunFence; stopRenewing: () => void };
-  /** A claim of the recovery leader row in flight, which the loop's tick and an explicit call share. */
+  /** A tick's claim of the recovery leader row in flight, which `#releaseRecoveryLeader()` waits for. */
   #recoveryLeaderClaim?: Promise<boolean>;
   /** Runs the restarts of every recovery pass, `recovery.workflowConcurrency` at a time. */
   #recoveryRestarts!: ConcurrencyLimiter;
@@ -4608,9 +4608,8 @@ export class Mastra<
    * A default-engine run counts as stopped once no instance holds its run lease and
    * `recovery.workflowGraceMs` passed since it or its lease last changed. A run still live or in
    * its grace period is left to the recovery loop (see {@link Mastra.startWorkers}); this call
-   * doesn't look at it again. The default-engine runs are looked at only by the recovery leader:
-   * when another instance holds that role, this call leaves them to it. Without run fencing in
-   * the store there is no leader, and every active default-engine run is restarted.
+   * doesn't look at it again. Without run fencing in the store, every active default-engine run is
+   * restarted.
    *
    * An evented run on a pubsub whose broker redelivers unacked messages
    * (`PubSub.redeliversUnacked`) is left to the broker and never read, except a scheduled run
@@ -4640,38 +4639,11 @@ export class Mastra<
     const passes = await Promise.all([
       // Tracked, as the shared default-engine pass is, so shutdown() waits while it reads the store.
       this.#trackDurableRecovery(this.#runRecoveryPass({ workflowsStore, runFencing, engine: 'evented' })),
-      this.#recoverDefaultEngineRunsOnce(workflowsStore, runFencing),
+      // Never gated on the recovery leader: the leader lists only the workflows it registers, and a
+      // restarted run executes where it is restarted, so each booting instance restarts its own.
+      this.#recoverStoppedRuns(workflowsStore, runFencing),
     ]);
     await Promise.all(passes.map(pass => pass.settled));
-  }
-
-  /**
-   * The default-engine part of an explicit `restartAllActiveWorkflowRuns()`. With run fencing it
-   * runs only on the recovery leader: an instance that leads runs a pass (or joins the one in
-   * flight), and one that finds the row free takes it for this pass, and keeps it only when its
-   * own recovery loop runs. A live leader elsewhere covers the runs, so the call leaves them.
-   */
-  async #recoverDefaultEngineRunsOnce(workflowsStore: WorkflowsStorage, runFencing: boolean): Promise<RecoveryPass> {
-    if (!runFencing) {
-      return this.#recoverStoppedRuns(workflowsStore, runFencing);
-    }
-
-    const ledBefore = this.#recoveryLeader !== undefined;
-    try {
-      if (!(await this.#leadWorkflowRecovery(workflowsStore))) {
-        return { settled: Promise.resolve() };
-      }
-    } catch (error) {
-      this.#logger.error('Failed to claim the workflow recovery leader lease', { error });
-      return { settled: Promise.resolve() };
-    }
-
-    const pass = await this.#recoverStoppedRuns(workflowsStore, runFencing);
-    if (!ledBefore && !this.#stopWorkflowRecoveryLoop) {
-      await this.#releaseRecoveryLeader();
-    }
-
-    return pass;
   }
 
   /** The default-engine recovery pass still handing out restarts, which overlapping callers share, or a new one. */
@@ -5030,16 +5002,15 @@ export class Mastra<
    * Whether this instance is the recovery leader: it holds the `::recovery-leader` run-owners row,
    * or takes it now when no other instance holds it live. A taken row is renewed until
    * `#releaseRecoveryLeader()`, so the leader keeps it across passes; when this instance dies the
-   * row lapses after the lease TTL and the next instance to try takes it. Concurrent callers share
-   * one claim. Rejects when the store fails the claim.
+   * row lapses after the lease TTL and the next instance to try takes it. Only the loop's ticks call
+   * this, one at a time. Rejects when the store fails the claim.
    */
   #leadWorkflowRecovery(workflowsStore: WorkflowsStorage): Promise<boolean> {
     if (this.#recoveryLeader) {
       return Promise.resolve(true);
     }
 
-    // The server's boot call lands while the loop's first tick is claiming; it joins that claim, and the pass.
-    this.#recoveryLeaderClaim ??= this.#claimRecoveryLeader(workflowsStore).finally(() => {
+    this.#recoveryLeaderClaim = this.#claimRecoveryLeader(workflowsStore).finally(() => {
       this.#recoveryLeaderClaim = undefined;
     });
     return this.#recoveryLeaderClaim;
@@ -5107,8 +5078,8 @@ export class Mastra<
    * workers; the caller checks that this instance handles workflow events.
    *
    * Each tick tries to lead (see `#leadWorkflowRecovery`); only the leader runs a pass, over
-   * default-engine runs only. The first tick runs now, so a `restartAllActiveWorkflowRuns()` call
-   * made meanwhile, such as the server's at boot, joins its pass. Each later tick runs a scan
+   * default-engine runs only. The first tick runs now; a `restartAllActiveWorkflowRuns()` call made
+   * while this instance's pass runs, such as the server's at boot, joins it. Each later tick runs a scan
    * interval after the previous one handed out its restarts, or sooner when a run that pass found
    * in its grace period comes due first (see {@link nextWorkflowScanDelay}). The loop stops for
    * good on a store without run fencing, where nothing tells a live run from a stopped one.
@@ -7998,8 +7969,10 @@ export class Mastra<
    * instance stopped, by the rule of {@link Mastra.restartAllActiveWorkflowRuns}.
    * Instances sharing a store elect one leader through a run lease; the others'
    * ticks only try to take that role, which they get once the leader's
-   * `stopWorkers()` releases it or its lease lapses. The loop never restarts
-   * evented runs, and doesn't run on a store without run fencing.
+   * `stopWorkers()` releases it or its lease lapses. The leader's loop looks
+   * only at the workflows it registers, and the runs it restarts execute on
+   * it. The loop never restarts evented runs, and doesn't run on a store
+   * without run fencing.
    */
   public async startWorkers(name?: string): Promise<void> {
     // Initialize storage before any read so adapters that open/create their

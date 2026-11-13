@@ -19,7 +19,6 @@ import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { InMemoryStore } from '../storage/mock';
 import { MastraWorker } from '../worker';
 import { createStep, createWorkflow } from '../workflows';
-import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { persistActiveRun } from './test-utils/active-runs';
 import { killableProcess } from './test-utils/killable-process';
@@ -51,9 +50,9 @@ const schema = z.object({});
  */
 const drained = () => new Promise(resolve => setImmediate(resolve));
 
-/** The one-step default-engine `recovered-wf`, whose step records `<replica>:work` and then runs `then`. */
-function oneStep(replica: string, executions: string[], then?: () => Promise<void>) {
-  return createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+/** The one-step default-engine workflow `id`, whose step records `<replica>:work` and then runs `then`. */
+function oneStep(replica: string, executions: string[], then?: () => Promise<void>, id = 'recovered-wf') {
+  return createWorkflow({ id, inputSchema: schema, outputSchema: schema })
     .then(
       createStep({
         id: 'work',
@@ -70,11 +69,11 @@ function oneStep(replica: string, executions: string[], then?: () => Promise<voi
 }
 
 /**
- * `storage` as one instance sees it, counting the listings of `recovered-wf` this instance makes;
- * a pass lists its running and its waiting runs.
+ * `storage` as one instance sees it, counting the listings of each workflow (`recovered-wf` unless
+ * named) this instance makes; a pass lists its running and its waiting runs.
  */
 function countingListings(storage: MastraCompositeStore) {
-  let listings = 0;
+  const listings = new Map<string, number>();
   const counted = new Map<object, WorkflowsStorage>();
   const instanceStorage = new Proxy(storage, {
     get(object, prop) {
@@ -93,10 +92,8 @@ function countingListings(storage: MastraCompositeStore) {
                   const value = Reflect.get(store, method, store);
                   if (method === 'listWorkflowRuns') {
                     return (args: { workflowName?: string }) => {
-                      if (args?.workflowName === 'recovered-wf') {
-                        listings++;
-                      }
-
+                      const workflowName = args?.workflowName ?? '';
+                      listings.set(workflowName, (listings.get(workflowName) ?? 0) + 1);
                       return value.call(store, args);
                     };
                   }
@@ -115,7 +112,10 @@ function countingListings(storage: MastraCompositeStore) {
       return typeof value === 'function' ? value.bind(object) : value;
     },
   });
-  return { storage: instanceStorage, listings: () => listings };
+  return {
+    storage: instanceStorage,
+    listings: (workflowName = 'recovered-wf') => listings.get(workflowName) ?? 0,
+  };
 }
 
 /** A replica running `recovered-wf`, not started yet, with the count of its own listings. */
@@ -141,16 +141,6 @@ function replica(
   });
   replicas.push({ mastra, revive });
   return { mastra, listings: counting.listings };
-}
-
-/** Replaces the restarts of `mastra`'s `workflowId` with no-ops, and returns the IDs of the runs it restarts. */
-function stubRestarts(mastra: Mastra, workflowId = 'recovered-wf'): string[] {
-  const restarted: string[] = [];
-  vi.spyOn(mastra.getWorkflow(workflowId), 'createRun').mockImplementation(async ({ runId } = {}) => {
-    restarted.push(runId!);
-    return { restart: async () => {} } as any;
-  });
-  return restarted;
 }
 
 /** The stored status of `runId`. */
@@ -288,45 +278,30 @@ describe('workflow recovery loop (#28712)', () => {
     },
   );
 
-  it('leaves the default-engine runs to the leader from an explicit call on another instance, which still restarts its evented runs', async () => {
+  it("restarts a stopped run of another app's workflow from that app's boot call, which the leader's loop never lists", async () => {
     const storage = new InMemoryStore();
     const leader = replica(storage, 'A', [], scanning);
     await leader.mastra.startWorkers();
     await vi.waitFor(() => expect(leader.listings()).toBeGreaterThan(0));
-    const evented = createEventedWorkflow({ id: 'evented-wf', inputSchema: schema, outputSchema: schema })
-      .then(createEventedStep({ id: 'work', inputSchema: schema, outputSchema: schema, execute: async () => ({}) }))
-      .commit();
-    const other = replica(
+    // Another app on the same store, registering only its own workflow.
+    const executions: string[] = [];
+    const other = new Mastra({
+      logger: false,
       storage,
-      'B',
-      [],
-      { workflowGraceMs: 0, ...scanning },
-      { workflows: { 'evented-wf': evented } },
-    );
-    const eventedRestarts = stubRestarts(other.mastra, 'evented-wf');
-    await persistActiveRun(storage, 'stopped');
-    await persistActiveRun(storage, 'evented-run', { workflowName: 'evented-wf' });
+      recovery: { workflowGraceMs: 0, ...scanning },
+      workflows: { 'other-wf': oneStep('B', executions, undefined, 'other-wf') },
+    });
+    replicas.push({ mastra: other });
+    await persistActiveRun(storage, 'stopped', { workflowName: 'other-wf' });
 
     // As a server boots: its workers and loop, then the explicit call.
-    await other.mastra.startWorkers();
-    await other.mastra.restartAllActiveWorkflowRuns();
+    await other.startWorkers();
+    await other.restartAllActiveWorkflowRuns();
 
-    expect(eventedRestarts).toEqual(['evented-run']);
-    expect(other.listings()).toBe(0);
-  });
-
-  it('takes the leader row for one pass from an explicit call on an instance that runs no loop, and hands it back', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const b = replica(storage, 'B', [], { workflowGraceMs: 0 });
-    const restarted = stubRestarts(b.mastra);
-    await persistActiveRun(storage, 'stopped');
-
-    await b.mastra.restartAllActiveWorkflowRuns();
-
-    expect(restarted).toEqual(['stopped']);
-    // Kept, it would be renewed for as long as the process lives, and no loop elsewhere would ever lead.
-    expect((await store.getRunOwnership({ runId: LEADER }))?.live).toBe(false);
+    expect(executions).toEqual(['B:work']);
+    const passes = leader.listings();
+    await vi.waitFor(() => expect(leader.listings()).toBeGreaterThanOrEqual(passes + 4));
+    expect(leader.listings('other-wf')).toBe(0);
   });
 
   const scanIntervalMs = 123_456;
