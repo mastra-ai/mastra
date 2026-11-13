@@ -90,7 +90,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
  */
 export function useTracesFilterBar() {
   const { scopedFieldIds, withTextSearch } = useTracesConfig();
-  const { filters, setFilterTokens } = useTracesFilters();
+  const { filters, setFilterTokens, setTextSearch } = useTracesFilters();
 
   const items = [
     ...textSearchFilterItems(withTextSearch ? filters.textSearch : undefined),
@@ -119,7 +119,8 @@ export function useTracesFilterBar() {
     const search = expression.nodes.find(node => !isFilterBarGroup(node) && node.fieldId === TEXT_SEARCH_FIELD.id);
     const textSearch =
       search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : undefined;
-    setFilterTokens(tokens, groups, withTextSearch ? { textSearch } : undefined);
+    setFilterTokens(tokens, groups);
+    if (withTextSearch && textSearch !== filters.textSearch) setTextSearch(textSearch);
   };
 
   return {
