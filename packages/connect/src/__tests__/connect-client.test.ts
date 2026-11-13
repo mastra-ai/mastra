@@ -304,6 +304,30 @@ describe('ConnectClient platform errors', () => {
     const error = await caught(makeClient(fetchMock).listConnections());
     expect(error.retryAfterMs).toBeUndefined();
   });
+
+  it('ignores a Retry-After that is neither whole seconds nor an HTTP date', async () => {
+    const { fetchMock } = recordingFetch(() => problem(429, 'rate_limited', 'Slow down', { 'retry-after': '1.5' }));
+    const error = await caught(makeClient(fetchMock).listConnections());
+    expect(error.retryAfterMs).toBeUndefined();
+  });
+
+  it('marks 404s and unexpected shapes from typed endpoints as platform errors with a status', async () => {
+    const { fetchMock } = recordingFetch(({ url }) =>
+      url.pathname.endsWith('/connect-url') ? new Response(null, { status: 404 }) : Response.json({ unexpected: true }),
+    );
+    const client = makeClient(fetchMock);
+
+    expect(await caught(client.getConnectUrl('c_1'))).toMatchObject({
+      code: 'connection_not_found',
+      status: 404,
+      source: 'platform',
+    });
+    expect(await caught(client.getContext('c_1'))).toMatchObject({
+      code: 'platform_error',
+      status: 200,
+      source: 'platform',
+    });
+  });
 });
 
 describe('ConnectClient timeouts', () => {
@@ -323,6 +347,30 @@ describe('ConnectClient timeouts', () => {
       const error = await caught(call());
       expect(error.code).toBe('timeout');
       expect(error.message).toContain('timed out after 20ms');
+    }
+  });
+
+  it('times out when the headers arrive but the body stalls', async () => {
+    const stalledBody = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      const signal = init!.signal!;
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('{"connections":['));
+          signal.addEventListener('abort', () => controller.error(signal.reason), { once: true });
+        },
+      });
+      return new Response(body, { status: 200, headers: { 'content-type': 'application/json' } });
+    });
+    const client = makeClient(stalledBody, { timeoutMs: 20 });
+
+    for (const call of [
+      () => client.listConnections(),
+      () => client.proxy('c_1', { method: 'GET', path: 'slow' }),
+      () => client.request('GET', '/v1/server/slow'),
+      () => client.fetchRaw('GET', '/v1/server/slow'),
+    ]) {
+      const error = await caught(call());
+      expect(error.code).toBe('timeout');
     }
   });
 
@@ -380,6 +428,20 @@ describe('ConnectClient.request', () => {
     expect(calls[1]!.headers.get('x-acting-user-id')).toBeNull();
     expect(calls[1]!.headers.get('content-type')).toBeNull();
     expect(calls[1]!.body).toBeUndefined();
+  });
+
+  it('ignores per-call headers that would change the client identity', async () => {
+    const { fetchMock, calls } = recordingFetch(() => Response.json({}));
+    await makeClient(fetchMock).request('GET', '/v1/server/x', {
+      headers: {
+        'X-Mastra-Project-Id': 'proj_other',
+        'x-organization-id': 'org_other',
+        'x-mastra-resource-id': 'user_other',
+      },
+    });
+    expect(calls[0]!.headers.get('x-mastra-project-id')).toBe('proj_1');
+    expect(calls[0]!.headers.get('x-organization-id')).not.toBe('org_other');
+    expect(calls[0]!.headers.get('x-mastra-resource-id')).toBeNull();
   });
 
   it('maps errors with status, source and problem code', async () => {
