@@ -45,10 +45,10 @@ export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
   const attached = attachedPullRequestSource(item);
   if (!attached) return <SourceIcon source={item.source} />;
   return (
-    <>
+    <span className="flex shrink-0 items-center gap-1">
       <SourceIcon source={item.source} />
       <PullRequestStatusIcon status={pullRequestStatusForSource(attached)} />
-    </>
+    </span>
   );
 }
 
