@@ -87,6 +87,22 @@ url: 'file:/absolute/path/to/your/project/mastra.db'
 Relative paths resolve based on each process's working directory, which differs between `next dev` and `mastra dev`.
 :::
 
+### Configure Next.js
+
+Mastra packages load native Node.js modules, such as the DuckDB bindings that store observability data, which the Next.js bundler can't bundle. Add `serverExternalPackages` to `next.config.ts` so Next.js loads Mastra packages from `node_modules` at runtime:
+
+```ts title="next.config.ts"
+import type { NextConfig } from 'next'
+
+const nextConfig: NextConfig = {
+  serverExternalPackages: ['@mastra/*'],
+}
+
+export default nextConfig
+```
+
+If your `next.config.ts` already sets other options, add `serverExternalPackages` alongside them.
+
 ### Install AI SDK UI & AI elements
 
 Install AI SDK UI along with the Mastra adapter:
