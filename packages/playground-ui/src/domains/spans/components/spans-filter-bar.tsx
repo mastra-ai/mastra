@@ -12,6 +12,7 @@ import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter
 const createItemId = (fieldId: string) => fieldId;
 
 export type SpansFilterBarProps = {
+  withTextSearch?: boolean;
   textSearch?: string;
   onTextSearchChange?: (value: string | undefined) => void;
   datePreset: TraceDatePreset;
@@ -36,6 +37,7 @@ export type SpansFilterBarProps = {
 
 /** The spans filter bar: the time range plus the fields `querySpans()` accepts. */
 export function SpansFilterBar({
+  withTextSearch = false,
   textSearch,
   onTextSearchChange,
   datePreset,
@@ -53,7 +55,7 @@ export function SpansFilterBar({
   describeSuggestionsError,
   disabled,
 }: SpansFilterBarProps) {
-  const fields = useSpansFilterBarFields({ timeRange, withTextSearch: !!onTextSearchChange });
+  const fields = useSpansFilterBarFields({ timeRange, withTextSearch });
   const { filterBarValue, onFilterBarChange } = useSpansFilterBar({
     tokens,
     groups,

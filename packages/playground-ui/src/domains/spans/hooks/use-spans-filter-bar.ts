@@ -61,7 +61,7 @@ export function useSpansFilterBarFields({
   return useMemo(
     () => [
       FILTER_BAR_TIME_RANGE_FIELD,
-      ...(withTextSearch && capabilities?.capabilities.spanQueryTextSearch ? [TEXT_SEARCH_FIELD] : []),
+      ...(withTextSearch ? [TEXT_SEARCH_FIELD] : []),
       ...createSpanFilterBarFields({
         withContextFields,
         withTimeToFirstChunk,
@@ -75,7 +75,6 @@ export function useSpansFilterBarFields({
     ],
     [
       withTextSearch,
-      capabilities?.capabilities.spanQueryTextSearch,
       withContextFields,
       withTimeToFirstChunk,
       withTimeToFirstToken,

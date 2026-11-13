@@ -144,6 +144,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
               <ActionRow.Start>
                 <SpansFilterBar
                   textSearch={filters.searchValue}
+                  withTextSearch={withTextSearch}
                   onTextSearchChange={withTextSearch ? filters.setTextSearch : undefined}
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
