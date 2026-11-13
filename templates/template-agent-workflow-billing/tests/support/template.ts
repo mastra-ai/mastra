@@ -4,7 +4,8 @@ import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { cp, mkdtemp, rm, symlink } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { delimiter, dirname, join } from 'node:path';
+import { existsSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client';
@@ -34,7 +35,13 @@ export function sanitizedEnvironment(): NodeJS.ProcessEnv {
     CI: 'true',
   };
 }
-const npmCli = resolve(dirname(process.execPath), '../lib/node_modules/npm/bin/npm-cli.js');
+const npmPath =
+  process.env.npm_execpath ??
+  process.env.PATH?.split(delimiter)
+    .map(directory => join(directory, 'npm'))
+    .find(filename => existsSync(filename));
+if (!npmPath) throw new Error('The npm CLI must be installed and available on PATH.');
+const npmCli = realpathSync(npmPath);
 export async function command(root: string, args: string[], env: NodeJS.ProcessEnv, success = true) {
   const child = spawn(process.execPath, [npmCli, ...args], {
     cwd: root,
