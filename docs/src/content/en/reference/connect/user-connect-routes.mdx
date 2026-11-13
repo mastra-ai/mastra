@@ -81,17 +81,17 @@ When `providers` is omitted, the routes use the project's end-user provider list
 
 ## Routes
 
-All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path. The [end-user connection UI helpers](/reference/connect/user-connection-ui) use this default prefix; call the routes directly when you configure another `basePath`.
+All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path. The [end-user connection UI helpers](/reference/connect/user-connection-ui) use this default prefix. Call the routes directly when you configure another `basePath`.
 
 | Route | Description |
 | - | - |
 | `GET /connect/providers` | The connectable providers from the platform catalog, filtered by the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. A code allowlist overrides the project's `endUserProviders` configuration. When code omits it, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list returns no providers. |
 | `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, displayName, logoUrl, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered by the provider policy, because the policy gates new connects, not existing connections. `displayName` and `logoUrl` are resolved from the full catalog so rows for providers outside the policy still render. |
 | `POST /connect/:provider/sessions` | Creates a pending session owned by the caller and returns `{ connectionId, integrationId, launchUrl, expiresAt }` with status 201. `launchUrl` is a server-relative path to the launch gate. The session response contains neither the provider authorization URL nor its session token. Providers outside the effective code or project policy, and providers unknown to the catalog, return 404. |
-| `GET /connect/connections/:id/status` | Returns `{ id, status, scope }` for a visible global or caller-owned connection. Another user's connection, another project's connection, and an unknown ID return the same 404. During a newly created attempt, clients can treat a short-lived 404 as pending until the provider handshake makes the row visible. |
-| `DELETE /connect/connections/:id` | Disconnects the caller's own connection and returns 204. Global connections return 403. Invisible and unknown IDs return the same 404. |
+| `GET /connect/connections/:id/status` | Returns `{ id, status, scope }` for a visible global or caller-owned connection. Another user's connection, another project's connection, and an unknown ID return the same 404. During a newly created attempt, clients can treat a short-lived 404 as pending until the provider handshake makes the row visible. A settled status marks the affected [`tools()` snapshots](/reference/connect/tools#the-resolver) in this process as outdated. The next resolution then fetches the change. |
+| `DELETE /connect/connections/:id` | Disconnects the caller's own connection, marks that user's `tools()` snapshots in this process as outdated, and returns 204. Global connections return 403. Invisible and unknown IDs return the same 404. |
 | `GET /connect/connections/:id/launch` | Verifies the caller owns the pending session. Normal navigation returns a 302 into the hosted provider flow. A request with `Accept: application/json` returns `{ sessionToken, expiresAt }` for provider-direct headless authorization. If the stored vendor URL doesn't contain an extractable token, `sessionToken` is null and the client can use the 302 flow. Another user's session, another project's session, an expired session, and an unknown ID return the same 404. |
-| `GET /connect/:provider?returnTo=...` | Renders the hosted connect page. It opens authorization in a popup, polls status, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Top-level navigation carries no bearer header, so the page requires [cookie-readable auth](/docs/mastra-platform/connect/end-user-connections#use-the-hosted-page). Token-only applications use the JSON routes instead. |
+| `GET /connect/:provider?returnTo=...` | Renders the hosted connect page. It opens authorization in a popup, polls status, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Top-level navigation carries no bearer header. The page requires [cookie-readable auth](/docs/mastra-platform/connect/end-user-connections#use-the-hosted-page). Token-only applications use the JSON routes instead. |
 
 ## Provider authorization fields
 
@@ -123,7 +123,7 @@ The hosted page restricts framing with `frame-ancestors 'none'` and validates `r
 
 ## Error responses
 
-Errors are JSON: `{ error: { code, message } }`. Platform failure details don't reach the end user, with one exception: 409 conflict details describe the caller's own connection state (for example a per-resource connection limit), so they're forwarded as the message.
+Errors are JSON in the shape `{ error: { code, message } }`, and platform failure details don't reach the end user. The one exception is a 409 conflict: its details describe the caller's own connection state, such as a per-resource connection limit, and are forwarded as the message.
 
 | Status | Code | When |
 | - | - | - |

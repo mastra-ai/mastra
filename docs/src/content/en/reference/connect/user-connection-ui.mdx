@@ -78,11 +78,11 @@ Returns a function that resolves a server-relative `launchUrl` against the Mastr
 
 Polls the connection every two seconds until its status leaves `pending`, up to five minutes. Pass `null` to disable polling.
 
-A 404 during polling is treated as `pending` because the platform row may not be visible until the provider handshake completes. A settled result invalidates the connections query.
+A 404 during polling is treated as `pending` because the platform row may not be visible until the provider handshake completes. A settled result refetches the connections query and the agent and tool queries, so agent tool lists reflect the change.
 
 ### `useDisconnectUserConnection()`
 
-Returns a mutation that disconnects one of the caller's own connections and refreshes the connections query.
+Returns a mutation that disconnects one of the caller's own connections and refetches the connections query and the agent and tool queries.
 
 ```typescript
 const disconnect = useDisconnectUserConnection()
@@ -223,7 +223,7 @@ Error class used by the route hooks. It carries the HTTP `status`, route error `
 
 ### `isConnectPromptPayload(output)`
 
-Type guard for the structured output of the built-in `request_connection` tool. It returns true when `output` is an object with `type: 'connect-prompt'` and a `providers` array.
+Type guard for the payload of the built-in `request_connection` tool, either its result or the `suspendPayload` of a paused call. It returns true when `output` is an object with `type: 'connect-prompt'` and a `providers` array.
 
 ## Exported types
 
@@ -249,4 +249,5 @@ The module exports route contracts, hook state, headless authorization state, an
 | `HeadlessAuthHandle` | Authorization `result` promise and `close()` callback. |
 | `HeadlessAuthFailure` | `'popup_blocked' \| 'window_closed' \| 'failed'` |
 | `ConnectPromptProvider` | Provider display data plus `connected` and serving `scope`. |
-| `ConnectPromptPayload` | `type: 'connect-prompt'`, optional `requestedProvider`, and provider list. |
+| `ConnectPromptPayload` | `type: 'connect-prompt'`, optional `requestedProvider`, provider list, and the optional `message` and `error` a resumed call reports. |
+| `ConnectPromptResume` | Resume data for a paused `request_connection` call: `{ provider, status: 'active' }` or `{ provider, status: 'failed', error }`. |

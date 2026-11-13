@@ -24,7 +24,7 @@ export const opsAgent = new Agent({
 
 Returns: `ToolsResolver`, a resolver producing a flat tool record keyed by tool key (for example `linear_create_issue`). See [The resolver](#the-resolver).
 
-See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get started.
+See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get started, and [End-user connections](/docs/mastra-platform/connect/end-user-connections) to resolve each user's own connections.
 
 ## Parameters
 
@@ -72,6 +72,20 @@ See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get starte
             type: 'boolean | string[]',
             description:
               'Default tool-approval policy applied to every provider without its own requireApproval. true gates every provider tool except the synthetic <provider>__list_connections helper; an array of keys or * globs gates matching provider tools, with the same exception. A provider opts out with requireApproval: false.',
+            isOptional: true,
+          },
+          {
+            name: 'resourceId',
+            type: 'string | ((ctx?) => string | undefined | Promise<string | undefined>)',
+            description:
+              "Project-scoped end-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. The trimmed value must contain 1 to 256 characters. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
+            isOptional: true,
+          },
+          {
+            name: 'connectPrompt',
+            type: 'boolean',
+            description:
+              "Whether resource-scoped resolutions include the built-in request_connection tool, which lets the agent ask the user to connect a provider account mid-conversation and pauses the run until the connection settles. Defaults to true; never added to global-only resolutions. The tool's connectable set follows the providers allowlist when one is set. Otherwise it uses the project's provider configuration in Mastra Platform: an unset configuration exposes the full catalog, a list restricts providers, and an empty list disables new connections. See End-user connections.",
             isOptional: true,
           },
           {
@@ -201,6 +215,10 @@ Every field except `fetch` and `resourceId` falls back to an environment variabl
 
 The returned `ToolsResolver` caches its tools. Within `ttlMs` of the last fetch, it returns the cache. The first call after expiry still returns the cache right away and starts a background fetch from the platform (stale-while-revalidate). Later calls use the updated snapshot once the fetch succeeds, or keep using the cached snapshot if the refresh fails. Refreshes depend on calls to the resolver rather than idle polling. Use `await connected.refresh()` to wait for a fresh tool record.
 
+Resource-scoped resolvers keep separate snapshots and Model Context Protocol (MCP) clients per resource ID. One shared resolver state retains up to 50 resource scopes and evicts the least recently used scope when the limit is reached. The global scope is retained separately.
+
+When [`userConnectRoutes()`](/reference/connect/user-connect-routes) in the same process sees a connection activate, fail, or disconnect, it marks the affected snapshots as outdated. A user's own connection affects that user's scope, and a global connection affects every scope. The next resolution for an outdated scope waits for a fresh fetch instead of serving the cached tools, so a newly connected provider is available on the next agent call without waiting out `ttlMs`. If that fetch fails, the resolver keeps serving the cached tools and warns.
+
 Call the resolver directly when you need a plain tool record, for example for the `toolsets` option at generate time:
 
 ```typescript
@@ -253,6 +271,72 @@ Error handling depends on the cause:
 - An enabled provider ID that the platform catalog confirms is unknown fails the resolution with `invalid_options`. An unknown tool key or zero-match glob in a per-provider filter does the same. If the catalog can't be reached, an unknown ID downgrades to a warning and is skipped.
 - If a background refresh fails while a snapshot is cached, the resolver keeps serving the cached toolsets and warns. It rejects only when nothing was ever cached.
 - A problem with one provider, such as a connection that needs reauthorization, logs a warning and skips that provider. The other providers' tools still load.
+
+## Built-in `request_connection` tool
+
+A resource-scoped resolution includes a `request_connection` tool unless `connectPrompt` is false. Global-only resolutions never include it. The key is reserved; if a provider also resolves a tool named `request_connection`, resolution fails until you disable the built-in prompt or exclude the conflict.
+
+The agent can pass an optional provider ID:
+
+```typescript
+{
+  provider: 'linear'
+}
+```
+
+A known, policy-allowed ID returns that provider. An omitted, unknown, or unavailable ID returns the full connectable set so the agent can recover instead of failing. Catalog and connection state are loaded again on each tool call, outside the normal tool snapshot TTL.
+
+The tool's payload has this shape:
+
+```typescript
+const payload = {
+  type: 'connect-prompt',
+  requestedProvider: 'linear',
+  providers: [
+    {
+      id: 'linear',
+      displayName: 'Linear',
+      logoUrl: 'https://...',
+      authType: 'OAUTH2',
+      authFields: null,
+      connected: false,
+      scope: null,
+    },
+  ],
+}
+```
+
+`connected` is true when an active global or caller-owned connection can serve the provider. `scope` is `user` when the caller owns an active row, `global` when only a global row serves it, and null when no active connection exists. A caller-owned row takes precedence when both scopes are active. `authFields` lists the fields a UI must collect before headless authorization, or null.
+
+The payload contains no session, token, or authorization URL. A compatible chat interface detects `type: 'connect-prompt'` and drives [`userConnectRoutes()`](/reference/connect/user-connect-routes). Studio provides this renderer.
+
+### Suspend and resume
+
+When the agent requests one specific provider that isn't connected yet, the tool [suspends](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) the run with the payload. The stream emits a `tool-call-suspended` chunk whose `suspendPayload` is the payload above. In every other case, the tool returns the payload as its result right away: an omitted or unknown provider, a provider that's already connected, or a call outside an agent run.
+
+Resume the run with `resumeStream()` once the user's connection settles. The resume data must match one of these shapes:
+
+```typescript
+import type { ConnectPromptResume } from '@mastra/connect'
+
+// The connection became active
+const connected: ConnectPromptResume = { provider: 'linear', status: 'active' }
+
+// The connection failed, with the reason the UI showed (1 to 500 characters)
+const failed: ConnectPromptResume = {
+  provider: 'linear',
+  status: 'failed',
+  error: 'The authorization window was closed.',
+}
+```
+
+The resumed tool checks the platform again instead of trusting the resume data, so a stale or forged resume can't report a false success. Its result is the refreshed payload plus a `message` for the model:
+
+- An active connection returns `message: 'Linear connected successfully.'`, even when the resume reported a failure that raced the success.
+- A failure returns `message: 'Linear could not be connected: <reason>'` and the reason in `error`.
+- An `active` resume for a provider the platform doesn't show as connected returns `message: 'Linear is not connected yet.'`
+
+`@mastra/connect` exports the `ConnectPromptPayload`, `ConnectPromptProvider`, and `ConnectPromptResume` types and the `CONNECT_PROMPT_TOOL_KEY` constant for custom interfaces. See [End-user connections](/docs/mastra-platform/connect/end-user-connections#let-agents-prompt-for-a-connection).
 
 ## Code Mode
 

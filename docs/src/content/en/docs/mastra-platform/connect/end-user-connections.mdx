@@ -21,7 +21,7 @@ Your application authenticates the user and maps them to a stable resource ID. M
 | User isolation | Binds each connection to a project-scoped resource ID and verifies that identity on every sensitive operation. |
 | Runtime tool access | Resolves the project's shared connections plus the current user's connections through the same `tools()` API. |
 | Connection UI | Provides a hosted page, React hooks for custom interfaces, Studio's **Connections** page, and chat connect cards. |
-| Missing connections | Adds a `request_connection` tool so an agent can ask for access at the point of need when a required provider isn't connected. |
+| Missing connections | Adds a `request_connection` tool so an agent can ask for access at the point of need, pause until the user connects, and continue with the new tools. |
 | Operations | Supports provider policies, listing, status polling, retries, disconnect, and user offboarding. |
 
 ## How it works
@@ -39,7 +39,7 @@ The same agent definition serves every user. The resource ID selects the account
 | Global | Every user of the project | Nobody. Manage it from Mastra Platform or the Connect CLI. |
 | End user | The resource ID that owns it | The owning user. |
 
-Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to configure the platform token and project ID.
+Before you start, follow the [Connect setup](/docs/mastra-platform/connect#get-started) to configure the platform token and project ID.
 
 ## Identify your users
 
@@ -76,7 +76,7 @@ export const assistant = new Agent({
   id: 'assistant',
   name: 'assistant',
   instructions: 'You help the user manage their own tasks.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: ctx =>
     tools({
       providers: ['linear'],
@@ -87,7 +87,9 @@ export const assistant = new Agent({
 
 Calling `tools()` per request is cheap. Resolvers with identical options share internal state, with snapshots cached separately per resource ID. The resolver keeps up to 50 resource snapshots and evicts the least recently used scope when the limit is reached.
 
-When the callback returns `undefined`, the agent gets global connections only. If a global and an end-user connection exist for the same provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
+When a user connects or disconnects through the mounted routes, the user's cached tools are marked outdated, and the next agent call fetches fresh tools instead of waiting out the snapshot TTL. A change to a global connection does the same for every user. This applies to resolvers in the server process that handled the request. Other instances of your server pick up the change when their snapshot TTL expires.
+
+When the callback returns `undefined`, the agent gets global connections only. If a global and an end-user connection exist for the same provider, the agent sees both through the usual [multi-connection handling](/reference/connect/tools#connection-resolution).
 
 ## How isolation is enforced
 
@@ -147,7 +149,7 @@ The mounted routes support several interfaces over the same resource-scoped conn
 | Hosted page | You want the smallest integration and use cookie-readable auth. | Mastra renders the page, opens the provider flow, polls, and redirects back. |
 | Custom UI | You need your own connection list, dialogs, or bearer-token auth. | Your frontend calls the JSON routes. It can use provider-direct headless authorization or the hosted launch fallback. |
 | Studio **Connections** page | You are testing or managing the current Studio identity during development. | Studio uses the JSON routes and headless authorization helpers. |
-| Studio chat connect card | You want an agent to ask for a missing connection during a conversation. | The `request_connection` tool produces a structured card that starts the mounted flow. |
+| Studio chat connect card | You want an agent to ask for a missing connection during a conversation. | The `request_connection` tool pauses the run and Studio renders a card that starts the mounted flow, then resumes the run when the connection settles. |
 
 ### Use the hosted page
 
@@ -258,6 +260,8 @@ Authorization completion and connection activation are separate events. The prov
 
 Studio and `usePendingConnect()` poll every two seconds for up to five minutes and allow a 15-second grace period after a popup closes. They settle the interface on active status, non-active terminal status, authorization failure, polling failure, cancellation, closed-popup abandonment, or timeout.
 
+A status poll that returns a settled status also tells the server's tool resolvers that the connection changed, so the next agent call sees the new tools. Studio and the React hooks then refetch the connection list and the agents' tools.
+
 Canceling an interface attempt stops local polling and closes a headless provider window. A hosted window that has already loaded the provider page can't always be closed programmatically, but its eventual result should no longer update the canceled interface state.
 
 ## The launch URL stays bound to its owner
@@ -270,13 +274,45 @@ The hosted page also sets a restrictive Content Security Policy, including `fram
 
 ## Let agents prompt for a connection
 
-Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected, or the user explicitly asks to connect one, the agent calls it and gets a structured provider list with current connection state.
+Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected, or the user explicitly asks to connect one, the agent calls it with the provider ID.
 
-Studio chat renders that payload as a connect card. The user selects **Connect**, authorizes through the mounted routes, and the agent can retry the task against fresh tools. Historical messages render the card read-only.
+If that provider isn't connected yet, the tool pauses the run and waits for the user. The chat interface shows a connect prompt, the user authorizes through the mounted routes, and the interface resumes the run with the outcome. After checking the platform again, the tool tells the model whether the connection succeeded or why it failed, and the agent continues the task with the new provider's tools without another user message.
+
+Without a provider ID, or with an unknown one, the tool returns the list of connectable providers right away so the agent can pick one. A provider that's already connected returns right away too.
 
 The connectable set follows the effective provider policy. A `providers` allowlist passed to `tools()` overrides the project's `endUserProviders` configuration in Mastra Platform. When code omits the allowlist, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list disables new connections. The tool reports what can be connected but doesn't create sessions or return authorization capabilities. Global-only resolutions never include it because they have no user scope.
 
-Disable the prompt tool with `connectPrompt: false`. The [`tools()` reference](/reference/connect/tools) documents its configuration and output behavior.
+The tool stays a direct agent tool when you use [Code Mode](/reference/connect/tools#code-mode), so it can still pause the run.
+
+Disable the prompt tool with `connectPrompt: false`.
+
+### Render the prompt in Studio
+
+Studio chat renders the prompt as a connect card. When the user selects **Connect** and the connection settles, the card resumes the paused run, and Studio refetches the agent's tools. Historical messages render the card read-only.
+
+### Render the prompt in your own interface
+
+The paused call arrives as a [`tool-call-suspended` chunk](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) whose `suspendPayload` has `type: 'connect-prompt'` and the provider list. Render the providers, start the connection with the mounted routes or [`usePendingConnect()`](/reference/connect/user-connection-ui#usependingconnectoptions), and resume the run when the connection settles:
+
+```typescript title="src/chat/connect-prompt.ts"
+import type { ConnectPromptPayload, ConnectPromptResume } from '@mastra/connect'
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-suspended' && chunk.payload.toolName === 'request_connection') {
+    const prompt = chunk.payload.suspendPayload as ConnectPromptPayload
+    const resume: ConnectPromptResume = await showConnectPrompt(prompt)
+
+    const resumed = await assistant.resumeStream(resume, {
+      runId: stream.runId,
+      toolCallId: chunk.payload.toolCallId,
+      // Same authenticated request context, so tools resolve for the same user
+      requestContext,
+    })
+  }
+}
+```
+
+Resume with `{ provider, status: 'active' }` after the connection activates, or `{ provider, status: 'failed', error }` with the reason your interface showed. A finished call, such as a provider list, carries the same payload as the tool result instead. The [`tools()` reference](/reference/connect/tools#built-in-request_connection-tool) documents the payload, resume data, and result messages.
 
 ## Use the Studio Connections page
 
