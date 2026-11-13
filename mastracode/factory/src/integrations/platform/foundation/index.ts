@@ -13,6 +13,8 @@ export type {
 export { DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS, PlatformConnectIntegration } from './integration.js';
 export type { PlatformConnectIntegrationOptions, PlatformConnectProvider } from './integration.js';
 export { PlatformIntakeCapability } from './intake.js';
+export { PlatformVersionControlCapability } from './version-control.js';
+export type { PlatformConnectionCredential } from './version-control.js';
 export { PLATFORM_CONNECT_EVENT_POLLER_STORAGE_ID, PlatformConnectEventPoller } from './connect-event-poller.js';
 export type { PlatformConnectEventPollerConfig, PlatformConnectEventPollerStorage } from './connect-event-poller.js';
 export { isPlatformConnectEventSource } from './connect-events.js';

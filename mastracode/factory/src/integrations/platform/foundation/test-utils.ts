@@ -74,6 +74,10 @@ export class FakePlatform {
   });
   /** Routes a test adds, tried before the built-in ones; `undefined` falls through. */
   route: (method: string, path: string, body: unknown) => FakeReply | undefined = () => undefined;
+  /** `GET /v2/connections/:id/context` bodies, by connection id. */
+  readonly contexts = new Map<string, unknown>();
+  /** `GET /v2/connections/:id/credentials` bodies, by connection id. */
+  readonly credentials = new Map<string, unknown>();
 
   #url = '';
 
@@ -162,6 +166,16 @@ export class FakePlatform {
       const limit = Number(query.get('limit') ?? 100);
       const page = (this.connectionEvents.get(id) ?? []).filter(e => compareStreamIds(e.id, after) > 0).slice(0, limit);
       return { status: 200, body: { events: page, nextCursor: page.at(-1)?.id ?? null } };
+    }
+    const context = /^\/v2\/connections\/([^/]+)\/context$/.exec(path);
+    if (method === 'GET' && context) {
+      const reply = this.contexts.get(decodeURIComponent(context[1]!));
+      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
+    }
+    const credentials = /^\/v2\/connections\/([^/]+)\/credentials$/.exec(path);
+    if (method === 'GET' && credentials) {
+      const reply = this.credentials.get(decodeURIComponent(credentials[1]!));
+      return reply === undefined ? problem(404, 'not_found', path) : { status: 200, body: reply };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
     if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query, body);

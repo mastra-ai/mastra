@@ -471,6 +471,17 @@ export interface SourceControlStorageHandle {
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
     findByExternalId(args: { orgId: string; externalId: string }): Promise<SourceControlInstallation | null>;
     upsert(args: UpsertSourceControlInstallationInput): Promise<SourceControlInstallation>;
+    /**
+     * Points an installation row at another provider installation, keeping its
+     * row id, so its repositories and project connections stay attached. Throws
+     * `UniqueViolationError` when the org already has a row for `externalId`.
+     */
+    repoint(args: {
+      orgId: string;
+      id: string;
+      externalId: string;
+      providerMetadata?: SourceControlProviderMetadata;
+    }): Promise<SourceControlInstallation>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
   };
   readonly repositories: {
@@ -1283,6 +1294,23 @@ export class SourceControlStorage extends FactoryStorageDomain {
             },
           );
           return toInstallation(row);
+        },
+        repoint: async ({ orgId, id, externalId, providerMetadata }) => {
+          const existing = await getInstallation({ orgId, id });
+          if (!existing) throw new Error('Source-control installation not found');
+          await db().updateMany(
+            INSTALLATIONS,
+            { id, integration_id: integrationId, org_id: orgId },
+            {
+              external_id: externalId,
+              ...(providerMetadata ? { provider_metadata: providerMetadata } : {}),
+            },
+          );
+          // Configured keys are addressed by the installation's external id.
+          linkedRepositoriesChanged();
+          const updated = await getInstallation({ orgId, id });
+          if (!updated) throw new Error('Source-control installation disappeared after update');
+          return updated;
         },
         delete: async ({ orgId, id }) => {
           const installation = await getInstallation({ orgId, id });

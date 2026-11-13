@@ -12,6 +12,7 @@ import type {
   SessionBranchKey,
   SetProjectRepositoryBuildStatusInput,
   SourceControlInstallation,
+  SourceControlProviderMetadata,
   SourceControlRepository,
   SourceControlSession,
   SourceControlSessionVisibility,
@@ -109,6 +110,27 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       this.installationsRows.push(created);
       return created;
     },
+    repoint: async ({
+      orgId,
+      id,
+      externalId,
+      providerMetadata,
+    }: {
+      orgId: string;
+      id: string;
+      externalId: string;
+      providerMetadata?: SourceControlProviderMetadata;
+    }): Promise<SourceControlInstallation> => {
+      const existing = this.installationsRows.find(row => row.orgId === orgId && row.id === id);
+      if (!existing) throw new Error('Source-control installation not found');
+      if (this.installationsRows.some(row => row.orgId === orgId && row.id !== id && row.externalId === externalId)) {
+        throw new UniqueViolationError('Source-control installation already exists for this external id');
+      }
+      existing.externalId = externalId;
+      if (providerMetadata) existing.providerMetadata = providerMetadata;
+      this.#linkedRepositoriesChanged();
+      return existing;
+    },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
       const index = this.installationsRows.findIndex(row => row.orgId === orgId && row.id === id);
       if (index < 0) return false;
@@ -128,17 +150,12 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       if (!row) return null;
       return (await this.installations.get({ orgId, id: row.installationId })) ? row : null;
     },
-    findByExternalId: async ({
-      orgId,
-      installationId,
-      externalId,
-    }: {
-      orgId: string;
-      installationId: string;
-      externalId: string;
-    }) => {
-      const rows = await this.repositories.list({ orgId, installationId });
-      return rows.find(row => row.externalId === externalId) ?? null;
+    findByExternalId: async ({ orgId, externalId }: { orgId: string; externalId: string }) => {
+      for (const row of this.repositoriesRows) {
+        if (row.externalId !== externalId) continue;
+        if (await this.installations.get({ orgId, id: row.installationId })) return row;
+      }
+      return null;
     },
     findBySlug: async ({ orgId, installationId, slug }: { orgId: string; installationId: string; slug: string }) => {
       const rows = await this.repositories.list({ orgId, installationId });
