@@ -1,10 +1,14 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Memory } from '../../../../../../memory/src';
 import { Agent } from '../../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
+import { storeRunsInV2 } from '../../../../agent/durable/__tests__/storage-version';
+import { DurableStepIds } from '../../../../agent/durable/constants';
 import type { IFGAProvider } from '../../../../auth';
+import { InMemoryServerCache } from '../../../../cache/inmemory';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import type { OutputProcessor } from '../../../../processors';
 import { MessageHistory } from '../../../../processors/memory/message-history';
@@ -19,6 +23,99 @@ describeForAllEngines('explicit history uses request-context memory safely', eng
 
   // A fresh durable worker must resolve context-dependent processors before resuming (#29772).
   if (engine === 'durable' || engine === 'evented') {
+    for (const lifecycle of ['recover', 'observe'] as const) {
+      it(`cold ${lifecycle} retains explicit history context without a Memory instance`, async () => {
+        const store = new InMemoryStore();
+        const cache = new InMemoryServerCache();
+        const pubsub = new EventEmitterPubSub();
+        const memoryContext = { thread: { id: `cold-${lifecycle}-${engine}` }, resourceId: 'history-resource' };
+        const createWorker = async (workerStore: InMemoryStore, contexts: unknown[]) => {
+          const storage = (await workerStore.getStore('memory'))!;
+          const agent = new Agent({
+            id: 'recover-history',
+            name: 'Recover history',
+            instructions: 'Answer the question.',
+            model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
+            outputProcessors: ({ requestContext }) => {
+              contexts.push(requestContext.get('MastraMemory'));
+              return requestContext.get('MastraMemory') ? [new MessageHistory({ storage })] : [];
+            },
+          });
+          const wrapped = storeRunsInV2(
+            engine === 'evented' ? createEventedAgent({ agent }) : createDurableAgent({ agent }),
+            false,
+          );
+          const mastra = new Mastra({
+            agents: { history: wrapped },
+            storage: workerStore,
+            cache: workerStore === store ? cache : new InMemoryServerCache(),
+            pubsub: workerStore === store ? pubsub : new EventEmitterPubSub(),
+            logger: false,
+            recovery: { durableAgents: 'auto' },
+          });
+          return { agent: mastra.getAgent('history'), mastra, storage };
+        };
+        const workflows = (await store.getStore('workflows'))!;
+        type SnapshotRow = Parameters<typeof workflows.persistWorkflowSnapshot>[0];
+        const rows = new Map<string, SnapshotRow>();
+        let checkpoint: SnapshotRow[] | undefined;
+        const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+        workflows.persistWorkflowSnapshot = async args => {
+          await persist(args);
+          rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+          if (
+            args.workflowName === DurableStepIds.AGENTIC_EXECUTION &&
+            args.snapshot.status === 'pending' &&
+            !checkpoint
+          ) {
+            checkpoint = structuredClone([...rows.values()]);
+          }
+        };
+        getMock().on({ endpoint: 'chat' }, { content: 'Your order is ready.' });
+        const original = await createWorker(store, []);
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', memoryContext);
+        const first = await original.agent.stream('Find my order', { requestContext, runId: crypto.randomUUID() });
+        for await (const _chunk of first.fullStream) {
+          /* Complete the original so the restored worker has no live execution. */
+        }
+        await vi.waitFor(async () => {
+          expect(
+            await workflows.loadWorkflowSnapshot({ workflowName: DurableStepIds.AGENTIC_LOOP, runId: first.runId }),
+          ).toBeFalsy();
+        });
+        expect(checkpoint).toBeDefined();
+        const restoredStore = lifecycle === 'recover' ? new InMemoryStore() : store;
+        const restoredWorkflows = (await restoredStore.getStore('workflows'))!;
+        for (const row of checkpoint!) await restoredWorkflows.persistWorkflowSnapshot(row);
+        const contexts: unknown[] = [];
+        const replacement = await createWorker(restoredStore, contexts);
+        try {
+          const result = await replacement.agent[lifecycle](first.runId);
+          let text = '';
+          for await (const chunk of result.fullStream) {
+            if (chunk.type === 'text-delta') text += chunk.payload.text;
+          }
+          expect(text).toBe('Your order is ready.');
+          expect(contexts).toContainEqual(memoryContext);
+          await vi.waitFor(async () => {
+            const { messages } = await replacement.storage.listMessages({
+              threadId: memoryContext.thread.id,
+              perPage: false,
+            });
+            expect(messages.flatMap(message => message.content.parts)).toContainEqual(
+              expect.objectContaining({ type: 'text', text: 'Your order is ready.' }),
+            );
+          });
+          result.cleanup();
+        } finally {
+          first.cleanup();
+          await replacement.mastra.shutdown();
+          await original.mastra.shutdown();
+        }
+      });
+    }
+
     for (const contextChange of ['unchanged', 'input-redirect', 'input-read-only'] as const) {
       for (const supplyContext of [false, true]) {
         it(`cold resume retains ${contextChange} history with ${supplyContext ? 'supplied' : 'persisted'} request context`, async () => {
