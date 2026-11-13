@@ -18,6 +18,7 @@ import {
   emptyTracesPage,
   idleDeltaBatch,
   traceAggregateCapabilities,
+  traceTextSearchCapabilities,
   traceAggregateError,
   traceCountsAggregate,
   traceQueryCapabilities,
@@ -501,10 +502,7 @@ describe('TracesExplorer.Histogram', () => {
   describe('when text search is supported', () => {
     it('keeps an empty search chip editable after changing another filter field', async () => {
       setHandlers({
-        capabilities: {
-          ...traceAggregateCapabilities,
-          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
-        },
+        capabilities: traceTextSearchCapabilities,
       });
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: FAILED_ONLY } });
       fireEvent.click(screen.getByRole('combobox', { name: 'Field: Status' }));
@@ -524,10 +522,7 @@ describe('TracesExplorer.Histogram', () => {
 
     it('filters the list and hides the histogram until search is cleared', async () => {
       setHandlers({
-        capabilities: {
-          ...traceAggregateCapabilities,
-          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
-        },
+        capabilities: traceTextSearchCapabilities,
       });
       const result = await renderExplorer();
       const search = screen.getByRole('combobox', { name: 'Add filter' });
@@ -575,10 +570,7 @@ describe('TracesExplorer.Histogram', () => {
   describe('when search is too short after normalization', () => {
     it('explains the minimum without sending an invalid query', async () => {
       setHandlers({
-        capabilities: {
-          ...traceAggregateCapabilities,
-          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
-        },
+        capabilities: traceTextSearchCapabilities,
       });
       const result = await renderExplorer();
       const search = screen.getByRole('combobox', { name: 'Add filter' });
@@ -598,10 +590,7 @@ describe('TracesExplorer.Histogram', () => {
   describe('when an indexed search is restored', () => {
     it('normalizes the term and suppresses the initial histogram request', async () => {
       setHandlers({
-        capabilities: {
-          ...traceAggregateCapabilities,
-          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
-        },
+        capabilities: traceTextSearchCapabilities,
       });
       await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: '  NEEDLE  ' } });
       expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' }));
