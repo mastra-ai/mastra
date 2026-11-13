@@ -387,6 +387,34 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     ).toHaveLength(20);
   });
 
+  it("lets a backfill and a sync race to write an issue's owner link, and keeps the link they leave", async () => {
+    const { workItems, scope, file, storage, linkRow } = await setup();
+    const cards = [];
+    for (let index = 0; index < 12; index++) {
+      cards.push(await file({ ...issue12, externalId: `${issue12.externalId}:${index}` }, { state: 'open' }));
+    }
+    await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
+    const sync = (externalId: string) =>
+      workItems.syncWorkItemSource({
+        orgId: scope.orgId,
+        factoryProjectId: scope.factoryProjectId,
+        provider: 'github',
+        externalId,
+        patch: { state: 'closed' },
+      });
+
+    await Promise.all([backfillSourceLinks(storage), ...cards.map(card => sync(card.workItem.sources[0]!.externalId))]);
+
+    const before = await Promise.all(cards.map(card => linkRow(card.workItem.id, card.workItem.sources[0]!.id)));
+    expect(before.map(link => link.role)).toEqual(cards.map(() => 'origin'));
+    await backfillSourceLinks(storage);
+    await Promise.all(cards.map(card => sync(card.workItem.sources[0]!.externalId)));
+    const after = await Promise.all(cards.map(card => linkRow(card.workItem.id, card.workItem.sources[0]!.id)));
+    expect(after.map(link => [link.id, link.role, new Date(link.created_at).getTime()])).toEqual(
+      before.map(link => [link.id, link.role, new Date(link.created_at).getTime()]),
+    );
+  });
+
   it('stops a backfill page as soon as it is aborted', async () => {
     const { scope, file, storage } = await setup();
     for (let index = 0; index < 5; index++) {

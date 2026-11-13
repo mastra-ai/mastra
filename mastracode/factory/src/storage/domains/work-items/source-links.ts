@@ -73,7 +73,11 @@ function linkIsCurrent(link: WorkItemSourceLinkDbRecord, source: WorkItemSourceD
   return !source.synced_at || new Date(link.facts_synced_at).getTime() >= new Date(source.synced_at).getTime();
 }
 
-/** Record that `workItemId` reads `source`, with its current facts. A no-op when it already does. */
+/**
+ * Record that `workItemId` reads `source`, with its current facts. A no-op when it already does.
+ * The caller holds the source's row lock (or inserted the source in this transaction), which is
+ * what serializes link writes: no other writer can add this link between the read and the insert.
+ */
 export async function linkSource(
   ops: FactoryStorageOps,
   source: WorkItemSourceDbRecord,
@@ -82,12 +86,8 @@ export async function linkSource(
   now = new Date(),
 ): Promise<boolean> {
   if (await ops.findOne(LINKS, { work_item_id: workItemId, source_id: source.id })) return false;
-  // Insert if absent: a concurrent writer may add the same link between the read and the write,
-  // and a failed insert would abort the whole transaction on Postgres. Facts the loser writes are
-  // as old as its read of the source, which reads skip in favour of the source row.
-  const id = randomUUID();
-  const written = await ops.upsertOne<WorkItemSourceLinkDbRecord>(LINKS, ['work_item_id', 'source_id'], {
-    id,
+  await ops.insertOne<WorkItemSourceLinkDbRecord>(LINKS, {
+    id: randomUUID(),
     org_id: source.org_id,
     factory_project_id: source.factory_project_id,
     work_item_id: workItemId,
@@ -96,7 +96,7 @@ export async function linkSource(
     ...linkFacts(source, now),
     created_at: now,
   });
-  return written.id === id;
+  return true;
 }
 
 /**
