@@ -20,7 +20,7 @@ import { isValidGitRef } from '../../sandbox/git-ref.js';
 import type { ExecutableSandbox, SandboxCommandResult } from '../../sandbox/materialization.js';
 import { appliedSandboxEnv, maskSandboxEnvValues } from '../../sandbox/sandbox-env.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import { timedPhase } from '../../timing.js';
+import { bootDiagnosticsEnabled, timedPhase } from '../../timing.js';
 
 type MaterializationStore = Pick<SourceControlStorageHandle['sessions'], 'markMaterialized'>;
 
@@ -113,7 +113,7 @@ async function execute(
         ...options,
         timeoutMs: Math.max(deadlineMs - Date.now(), 1),
       });
-      if (options.phase) {
+      if (options.phase && bootDiagnosticsEnabled) {
         process.stderr.write(
           `[factory:timing] ${options.phase} attempt=${attempt + 1} exit=${result.exitCode} ${Math.round(performance.now() - started)}ms\n`,
         );
@@ -472,6 +472,18 @@ export interface SessionBranchOptions {
  */
 const GH_CREDENTIAL_HELPER = '!gh auth git-credential';
 
+/**
+ * The git credential helper for a GitHub checkout whose repository is covered
+ * by a numbered group token (`GH_TOKEN_2`, ...) instead of `GH_TOKEN`. It
+ * falls back to `GH_TOKEN` while the group token is unset, as it is when an
+ * org PAT is installed.
+ */
+export function githubCredentialHelper(tokenEnvName = 'GH_TOKEN'): string {
+  if (tokenEnvName === 'GH_TOKEN') return GH_CREDENTIAL_HELPER;
+  if (!/^GH_TOKEN_\d+$/.test(tokenEnvName)) throw new Error(`Invalid GitHub token variable: ${tokenEnvName}`);
+  return `!f() { GH_TOKEN="\${${tokenEnvName}:-$GH_TOKEN}" gh auth git-credential "$@"; }; f`;
+}
+
 async function fetchStartPoint(
   sandbox: ExecutableSandbox,
   workdir: string,
@@ -542,6 +554,11 @@ export interface SyncEnvironmentRepositoryOptions {
   repoFullName: string;
   cloneUrl?: string;
   authUsername?: string;
+  /**
+   * The sandbox variable carrying this GitHub repository's token; the checkout
+   * gets a credential helper reading it. Ignored when `authUsername` is set.
+   */
+  tokenEnvName?: string;
 }
 
 export interface EnvironmentSyncResult {
@@ -570,6 +587,19 @@ export async function syncEnvironmentRepository(
   }
   const cleanCloneUrl = cloneUrl ?? cleanUrl(repoFullName);
   const authEnv = gitAuthenticationEnvironment(cleanCloneUrl, token, authUsername ?? 'x-access-token', 'pull-failed');
+
+  // Raw git in this checkout (push, fetch) authenticates through gh with the
+  // token that covers this repository, like the session repository does.
+  if (!authUsername) {
+    const configured = await execute(sandbox, 'git', [
+      '-C',
+      workdir,
+      'config',
+      'credential.helper',
+      githubCredentialHelper(options.tokenEnvName),
+    ]);
+    if (configured.exitCode !== 0) throw classifyGitFailure(configured, 'pull-failed');
+  }
 
   await configureGitIdentity(sandbox, workdir, options.identity ?? {});
 
@@ -1175,7 +1205,9 @@ async function runLifecycleCommand(
     // Mask before trimming: a value with an edge newline or space would no longer match once trimmed.
     const output = result.stderr.trim() ? result.stderr : result.stdout;
     const mask = typeof options.mask === 'function' ? options.mask() : options.mask;
-    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env }).trim().slice(-1800);
+    const detail = maskSandboxEnvValues(output, { ...mask, ...options.env })
+      .trim()
+      .slice(-1800);
     const label = options.phase === 'setup' ? 'Setup' : 'Teardown';
     throw new SetupCommandError(
       `${label} command failed (exit ${result.exitCode}): ${detail}`,

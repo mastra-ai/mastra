@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -15,7 +16,6 @@ import {
   HIDDEN_CARD_LABELS,
   SOURCE_LABELS,
   metadataLabelColors,
-  metadataLabels,
   pullRequestStatusForItem,
   pullRequestStatusForSource,
   workItemKey,
@@ -45,10 +45,10 @@ export function WorkItemSourceIcon({ item }: { item: WorkItem }) {
   const attached = attachedPullRequestSource(item);
   if (!attached) return <SourceIcon source={item.source} />;
   return (
-    <>
+    <span className="flex shrink-0 items-center gap-1.5">
       <SourceIcon source={item.source} />
       <PullRequestStatusIcon status={pullRequestStatusForSource(attached)} />
-    </>
+    </span>
   );
 }
 

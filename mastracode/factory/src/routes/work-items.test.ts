@@ -65,6 +65,7 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { boardCheck } from '../work-items/board-check.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { BoardPhasesResponse } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
@@ -2833,6 +2834,26 @@ describe('run activity on the work-item listing', () => {
 
       expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
     });
+
+    it('lists the issue card a pull request is attached to, by its id or its URL', async () => {
+      const issue = await createCard('github:7:issue:1');
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:7:pull-request:2',
+          url: 'https://github.com/acme/app/pull/2',
+        },
+        metadata: { githubPullRequestNumber: 2 },
+      });
+
+      const app = buildApp(orgUser);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('https://github.com/acme/app/pull/2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:3')))).toEqual([]);
+    });
   });
 
   describe('the cards named by their ids (?workItemId=)', () => {
@@ -3070,6 +3091,629 @@ describe('GET /web/factory/projects/:id/work-items/activity', () => {
     const res = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/activity${query}`);
 
     expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /web/factory/projects/:id/boards/:boardKey/phases', () => {
+  type Phases = BoardPhasesResponse;
+  interface Filed {
+    id: string;
+    revision: number;
+  }
+
+  const teammate = { workosId: 'u2', organizationId: 'org1' };
+  const itemsPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const phasesPath = (query = '', board = 'work') =>
+    `/web/factory/projects/${PROJECT_ID}/boards/${board}/phases${query && `?${query}`}`;
+  const at = (instant: string) => vi.setSystemTime(new Date(instant));
+
+  const file = async (externalId: string, overrides: Record<string, unknown> = {}, user = orgUser): Promise<Filed> => {
+    const res = await json(
+      'POST',
+      itemsPath(),
+      createBody({
+        externalSource: { integrationId: 'github', type: 'issue', externalId },
+        title: `Card ${externalId}`,
+        metadata: {},
+        ...overrides,
+      }),
+      user,
+    );
+    expect(res.ok).toBe(true);
+    return (await res.json()).workItem;
+  };
+
+  const move = async (card: Filed, stage: string, user = orgUser) => {
+    const res = await json(
+      'POST',
+      `${itemsPath()}/${card.id}/transition`,
+      { board: 'work', stage, expectedRevision: card.revision, requestId: crypto.randomUUID(), cause: 'board_drag' },
+      user,
+    );
+    expect(res.status).toBe(200);
+  };
+
+  const read = async (query = '', app = buildApp(orgUser)): Promise<Phases> => {
+    const res = await app.request(phasesPath(query));
+    expect(res.status).toBe(200);
+    return FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await res.json());
+  };
+
+  const under = (body: Phases, phase: string) => {
+    const found = body.phases.find(entry => entry.phase === phase);
+    if (!found) throw new Error(`The answer has no ${phase} phase`);
+    return { total: found.total, ids: found.cards.map(card => card.id) };
+  };
+
+  beforeEach(() => void vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-11-01T10:00:00Z') }));
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', phasesPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', phasesPath())).status).toBe(404);
+  });
+
+  it('lists the board’s phases in order, each with how many cards it holds and the first of them, latest entry first', async () => {
+    await file('1');
+    at('2026-11-01T10:01:00Z');
+    const second = await file('2');
+    at('2026-11-01T10:02:00Z');
+    const third = await file('3');
+    const { boards } = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    const phases: string[] = boards
+      .find((board: { id: string }) => board.id === 'work')
+      .phases.map((phase: { id: string }) => phase.id);
+
+    const body = await read('limit=2');
+
+    expect(body.phases.map(entry => entry.phase)).toEqual(phases);
+    expect(under(body, 'intake')).toEqual({ total: 3, ids: [third.id, second.id] });
+    expect(body.phases.filter(entry => entry.phase !== 'intake').map(entry => entry.total)).toEqual(
+      phases.slice(1).map(() => 0),
+    );
+    expect(body).toMatchObject({ boardTotal: 3, matchingTotal: 3, related: [] });
+  });
+
+  it('shows a card that is in none of the board’s phases under the first one, and no card of another board', async () => {
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+      transitionPolicy: () => undefined,
+    });
+    const app = buildApp(orgUser, undefined, undefined, new Set(), createBoardRegistry({ boards: [release] }));
+    const filed = await app.request(itemsPath(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(createBody({ externalSource: null, board: 'release', stages: ['queued'], metadata: {} })),
+    });
+    expect(filed.ok).toBe(true);
+    const onRelease: Filed = (await filed.json()).workItem;
+    const lost = await file('1');
+    await seed.workItems.update({ orgId: 'org1', id: lost.id, userId: 'u1', patch: { stages: ['retired-lane'] } });
+
+    const work = await read('', app);
+    const other = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(
+      await (await app.request(phasesPath('', 'release'))).json(),
+    );
+
+    expect(work.phases[0]?.cards.map(card => card.id)).toEqual([lost.id]);
+    expect(work.phases.slice(1).every(entry => entry.total === 0)).toBe(true);
+    expect(work.boardTotal).toBe(1);
+    expect(other.phases.map(entry => [entry.phase, entry.cards.map(card => card.id)])).toEqual([
+      ['queued', [onRelease.id]],
+      ['shipped', []],
+    ]);
+  });
+
+  it('lists a card that is in two phases under both, and counts it once among the board’s cards', async () => {
+    const both = await file('1', { metadata: { labels: ['bug'] } });
+    await seed.workItems.update({
+      orgId: 'org1',
+      id: both.id,
+      userId: 'u1',
+      patch: { stages: ['triage', 'execute'] },
+    });
+    await file('2');
+
+    const whole = await read();
+    const bugs = await read('label=bug');
+
+    expect(under(whole, 'triage').ids).toEqual([both.id]);
+    expect(under(whole, 'execute').ids).toEqual([both.id]);
+    expect(whole).toMatchObject({ boardTotal: 2, matchingTotal: 2 });
+    expect([under(bugs, 'triage').total, under(bugs, 'execute').total, under(bugs, 'intake').total]).toEqual([1, 1, 0]);
+    // The filters lower how many match; the board still has both cards.
+    expect(bugs).toMatchObject({ boardTotal: 2, matchingTotal: 1 });
+  });
+
+  describe('the order of a phase (?sort=)', () => {
+    it('orders by creation when asked, newest or oldest first, whatever entered the phase last', async () => {
+      const older = await file('1');
+      at('2026-11-01T10:01:00Z');
+      const newer = await file('2');
+      at('2026-11-01T10:02:00Z');
+      await move(newer, 'planning');
+      at('2026-11-01T10:03:00Z');
+      await move(older, 'planning');
+
+      expect(under(await read(), 'planning').ids).toEqual([older.id, newer.id]);
+      expect(under(await read('sort=created-newest'), 'planning').ids).toEqual([newer.id, older.id]);
+      expect(under(await read('sort=created-oldest'), 'planning').ids).toEqual([older.id, newer.id]);
+    });
+
+    it('puts first the cards the signed-in user last moved into the phase', async () => {
+      const [a, b, c] = [await file('1'), await file('2'), await file('3')];
+      at('2026-11-01T10:01:00Z');
+      await move(a, 'planning');
+      at('2026-11-01T10:02:00Z');
+      await move(b, 'planning', teammate);
+      at('2026-11-01T10:03:00Z');
+      await move(c, 'planning');
+
+      expect(under(await read('sort=recent'), 'planning').ids).toEqual([c.id, b.id, a.id]);
+      expect(under(await read('sort=recent-mine'), 'planning').ids).toEqual([c.id, a.id, b.id]);
+      expect(under(await read('sort=recent-mine', buildApp(teammate)), 'planning').ids).toEqual([b.id, c.id, a.id]);
+    });
+
+    it('keeps cards that entered at the same instant in one order: by id, descending', async () => {
+      const cards = [await file('1'), await file('2'), await file('3')];
+
+      expect(under(await read(), 'intake').ids).toEqual(
+        cards
+          .map(card => card.id)
+          .sort()
+          .reverse(),
+      );
+    });
+  });
+
+  describe('how deep a phase is listed (?limit=, ?window=, ?item=)', () => {
+    const fileTwoPhases = async () => {
+      const intake: Filed[] = [];
+      const planning: Filed[] = [];
+      for (const [nth, stage] of ['intake', 'intake', 'intake', 'planning', 'planning'].entries()) {
+        at(`2026-11-01T10:0${nth}:00Z`);
+        const card = await file(String(nth));
+        if (stage === 'planning') await move(card, 'planning');
+        (stage === 'planning' ? planning : intake).push(card);
+      }
+      // Latest entry first, as the phases list them.
+      return { intake: intake.reverse().map(card => card.id), planning: planning.reverse().map(card => card.id) };
+    };
+
+    it('deepens only the phase a window names', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read('limit=1&window=intake:2');
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 2) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
+    });
+
+    it('answers for the asked card with its place and its body, and lists its phase no deeper', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read(`limit=1&item=${intake[2]}&cards=true`);
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning.slice(0, 1) });
+      expect(body.item).toEqual({
+        id: intake[2],
+        version: expect.any(String),
+        places: [{ phase: 'intake', position: 2 }],
+      });
+      // The first card of each phase, then the asked one: three bodies, not the phase above it.
+      expect(body.workItems?.map(card => card.id)).toEqual([intake[0], planning[0], intake[2]]);
+      expect(body.workItems?.[2]?.version).toBe(body.item?.version);
+    });
+
+    it('answers no asked card for one the board does not hold', async () => {
+      await fileTwoPhases();
+
+      const body = await read(`limit=1&item=${crypto.randomUUID()}`);
+
+      expect(body).not.toHaveProperty('item');
+    });
+
+    it('ignores a window for a phase the board no longer has, so a reader that deepened it keeps its board', async () => {
+      const { intake, planning } = await fileTwoPhases();
+
+      const body = await read('limit=1&window=retired-phase:5&window=planning:2');
+
+      expect(under(body, 'intake')).toEqual({ total: 3, ids: intake.slice(0, 1) });
+      expect(under(body, 'planning')).toEqual({ total: 2, ids: planning });
+    });
+  });
+
+  it.each([
+    ['an order it does not know', 'sort=sideways'],
+    ['a window without a count', 'window=intake'],
+    ['a window of no card', 'window=intake:0'],
+    ['two windows for one phase', 'window=intake:2&window=intake:3'],
+    ['an asked card that is not an id', 'item=first'],
+    ['a card bodies flag other than true', 'cards=yes'],
+  ])('refuses %s rather than answering another view', async (_case, query) => {
+    const res = await json('GET', phasesPath(query));
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_phases_query' });
+  });
+
+  it('404s for a board the project does not have', async () => {
+    const res = await json('GET', phasesPath('', 'missing'));
+
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: 'board_not_found' });
+  });
+
+  describe('a searched or filtered view', () => {
+    const fileMixedBoard = async () => {
+      const issue = await file('1', {
+        title: 'Fix the login flow',
+        metadata: { number: 101, labels: ['bug', 'Memory'], author: 'octocat', assignees: ['hubot'] },
+      });
+      const pullRequest = await file('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        title: 'Tidy the palette',
+        metadata: { number: 7, labels: ['bug'], author: 'monalisa', requestedReviewers: ['defunkt'] },
+      });
+      const linearA = await file('LIN-1', {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
+        title: 'Palette contrast',
+        metadata: { linearProjectId: 'project-a', assignee: 'Ada' },
+      });
+      const linearB = await file('LIN-2', {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-2' },
+        title: 'Slow sync',
+        metadata: { linearProjectId: 'project-b' },
+      });
+      const byHand = await file('', { externalSource: null, title: 'Write the changelog' }, teammate);
+      return new Map([
+        [issue.id, 'issue'],
+        [pullRequest.id, 'pull request'],
+        [linearA.id, 'linear a'],
+        [linearB.id, 'linear b'],
+        [byHand.id, 'by hand'],
+      ]);
+    };
+
+    it.each([
+      ['a search word', 'q=palette', ['linear a', 'pull request']],
+      ['every search word', 'q=the%20login', ['issue']],
+      ['a card number', 'q=%23101', ['issue']],
+      ['a label', 'label=bug', ['issue', 'pull request']],
+      ['every picked label', 'label=bug&label=Memory', ['issue']],
+      ['a source', 'source=github', ['issue', 'pull request']],
+      ['cards filed by hand', 'source=manual', ['by hand']],
+      ['pull requests', 'source=pull-request', ['pull request']],
+      ['any picked source', 'source=pull-request&source=linear', ['linear a', 'linear b', 'pull request']],
+      ['a Linear project picked alone', 'linearProject=project-a', ['linear a']],
+      ['a source’s author', 'author=github:octocat', ['issue']],
+      ['the person who filed a card by hand', 'author=factory:u2', ['by hand']],
+      ['an assignee', 'assignee=github:hubot&assignee=linear:ada', ['issue', 'linear a']],
+      ['a requested reviewer', 'reviewer=github:defunkt', ['pull request']],
+      ['a person who worked on the card', 'worked=factory:u2', ['by hand']],
+      ['a person involved in any way', 'teammate=github:defunkt&teammate=github:hubot', ['issue', 'pull request']],
+      ['every field at once', 'label=bug&source=github&author=github:monalisa', ['pull request']],
+      ['a search and a filter at once', 'label=bug&q=login', ['issue']],
+      ['nothing, when no card matches every field', 'label=Memory&reviewer=github:defunkt', []],
+    ])('keeps the cards that match %s, and counts only them', async (_case, query, expected) => {
+      const names = await fileMixedBoard();
+
+      const body = await read(query);
+
+      const intake = under(body, 'intake');
+      expect(intake.ids.map(id => names.get(id)).sort()).toEqual(expected);
+      expect(intake.total).toBe(expected.length);
+      expect(body.matchingTotal).toBe(expected.length);
+      // The board's own count ignores the search and the filters.
+      expect(body.boardTotal).toBe(5);
+    });
+  });
+
+  describe('the cards an answer names', () => {
+    const fileParentAndPullRequest = async () => {
+      const parent = await file('parent');
+      at('2026-11-01T10:01:00Z');
+      const pullRequest = await file('child', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },
+        parentWorkItemId: parent.id,
+      });
+      return { parent, pullRequest };
+    };
+
+    it('names the cards related to a listed card that no phase lists, without any card body', async () => {
+      const { parent, pullRequest } = await fileParentAndPullRequest();
+
+      const res = await json('GET', phasesPath('limit=1'));
+      const raw = await res.json();
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(raw);
+
+      expect(under(body, 'intake')).toEqual({ total: 2, ids: [pullRequest.id] });
+      expect(body.related.map(card => card.id)).toEqual([parent.id]);
+      expect(raw).not.toHaveProperty('workItems');
+      // Once a phase lists the parent, it is no longer only related.
+      expect((await read()).related).toEqual([]);
+    });
+
+    it('sends with cards=true the body of every named card, as the list route sends it', async () => {
+      const { parent, pullRequest } = await fileParentAndPullRequest();
+      await move(await file('unrelated'), 'planning');
+      const listed = await (await json('GET', itemsPath())).json();
+      const wire = (id: string) => listed.workItems.find((card: { id: string }) => card.id === id);
+
+      const raw = await (await json('GET', phasesPath('limit=1&window=planning:1&cards=true'))).json();
+
+      const unrelated = raw.phases.find((entry: { phase: string }) => entry.phase === 'planning').cards[0];
+      const sent = raw.workItems.map(({ version: _version, ...card }: { version: string }) => card);
+      expect(sent).toEqual([wire(pullRequest.id), wire(unrelated.id), wire(parent.id)]);
+      // A reader tells its copy of a card from the answer's by its version.
+      expect(raw.related).toEqual([{ id: parent.id, version: raw.workItems[2].version }]);
+      expect(raw.workItems[2].version).toEqual(expect.any(String));
+    });
+
+    it('declares the version of each body it sends, so a typed reader takes it from the answer', async () => {
+      await file('1');
+      const schema = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema;
+
+      const raw = await (await json('GET', phasesPath('cards=true'))).json();
+
+      expect(schema.parse(raw)).toEqual(raw);
+      const [{ version: _version, ...unversioned }] = raw.workItems;
+      expect(schema.safeParse({ ...raw, workItems: [unversioned] }).success).toBe(false);
+    });
+
+    it('names a card by the same version in the by-id read, so a reader can tell it holds the body', async () => {
+      const card = await file('1');
+
+      const phases = await read();
+      const byId = await (await json('GET', `${itemsPath()}?workItemId=${card.id}`)).json();
+
+      expect(byId.workItems).toMatchObject([{ id: card.id, version: phases.phases[0]?.cards[0]?.version }]);
+    });
+
+    it('reports which sessions of the named cards run or wait, and none of an unlisted card', async () => {
+      const start = async (sessionId: string) => {
+        await seed.workItems.prepareRunStart({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          workItem: { input: { title: `Work for ${sessionId}`, stages: ['execute'] } },
+          role: 'execute',
+          session: { sessionId, branch: `factory/${sessionId}`, threadId: `thread-${sessionId}` },
+          resourceId: sessionId,
+          kickoffKey: `kickoff-${sessionId}`,
+          kickoffMessage: null,
+        });
+      };
+      await start('session-older');
+      at('2026-11-01T10:01:00Z');
+      await start('session-newer');
+      const sessions = new Set(['session-older', 'session-newer']);
+      const app = buildApp(orgUser, undefined, undefined, sessions, undefined, new Set(['session-newer']));
+
+      const firstOnly = await read('limit=1', app);
+      const both = await read('', app);
+
+      expect(firstOnly).toMatchObject({ runningSessionIds: ['session-newer'], parkedSessionIds: ['session-newer'] });
+      expect(both.runningSessionIds.toSorted()).toEqual(['session-newer', 'session-older']);
+      expect(both.parkedSessionIds).toEqual(['session-newer']);
+    });
+  });
+
+  describe('asked again by a board that kept the answer', () => {
+    it('answers 304 without a body while nothing the view shows changed', async () => {
+      await file('1');
+      const app = buildApp(orgUser);
+
+      const first = await app.request(phasesPath());
+      const etag = first.headers.get('etag');
+      expect(first.status).toBe(200);
+      expect(etag).toBeTruthy();
+      expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+      const again = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+      expect(await again.text()).toBe('');
+    });
+
+    it('sends the answer again, with the card’s new version, once a listed card changes', async () => {
+      const card = await file('1');
+      const app = buildApp(orgUser);
+      const first = await app.request(phasesPath());
+      const etag = first.headers.get('etag');
+      const before = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await first.json());
+
+      at('2026-11-01T10:05:00Z');
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+
+      const after = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await after.json());
+      expect(under(body, 'intake').ids).toEqual([card.id]);
+      expect(body.phases[0]?.cards[0]?.version).not.toBe(before.phases[0]?.cards[0]?.version);
+    });
+
+    it('sends a new version when a source sync changes a listed card in the millisecond of its last write', async () => {
+      const card = await file('1');
+      at('2026-11-01T10:00:07Z');
+      await json('PATCH', `/web/factory/work-items/${card.id}`, { title: 'Renamed' });
+      const app = buildApp(orgUser);
+      const view = phasesPath('cards=true');
+      const first = await app.request(view);
+      const before = await first.json();
+
+      // The clock has not moved: the sync stamps the card with the instant the rename did.
+      await seed.workItems.syncWorkItemSource({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        provider: 'github',
+        externalId: before.workItems[0].workItem.externalId,
+        patch: { labels: ['urgent'] },
+      });
+
+      const after = await app.request(view, { headers: { 'if-none-match': first.headers.get('etag')! } });
+      expect(after.status).toBe(200);
+      const body = await after.json();
+      expect(body.workItems[0]).toMatchObject({ changedAt: before.workItems[0].changedAt });
+      expect(body.workItems[0].workItem.labels).toEqual(['urgent']);
+      expect(body.phases[0].cards[0].version).not.toBe(before.phases[0].cards[0].version);
+      expect(body.workItems[0].version).toBe(body.phases[0].cards[0].version);
+    });
+
+    it('sends a new version of a Review card that reads as a Work card once Review closes, though nothing wrote it', async () => {
+      const closed = await file('closed', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'closed' },
+      });
+      const open = await file('open', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'open' },
+      });
+      // Rows as the retired Review board left them: one done, one still in review.
+      const stored = (id: string, stages: string[]) =>
+        seed.storage.ops.updateMany('factory_board_items', { id }, { board: 'review', stages });
+      await stored(closed.id, ['done']);
+      await stored(open.id, ['review']);
+      const app = buildApp(orgUser);
+      const byId = async () =>
+        (await (await app.request(`${itemsPath()}?workItemId=${closed.id}`)).json()).workItems[0];
+      at('2026-11-01T10:01:00Z');
+      await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Still open' });
+      const held = await byId();
+      expect(held).toMatchObject({ board: 'review' });
+      const etag = (await app.request(phasesPath())).headers.get('etag');
+
+      at('2026-11-01T10:02:00Z');
+      await seed.workItems.update({
+        orgId: 'org1',
+        id: open.id,
+        userId: orgUser.workosId,
+        patch: { stages: ['done'] },
+      });
+
+      const after = await app.request(phasesPath(), { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const done = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema
+        .parse(await after.json())
+        .phases.find(entry => entry.phase === 'done');
+      const named = done?.cards.find(card => card.id === closed.id);
+      const now = await byId();
+      expect(now).toMatchObject({ board: 'work', changedAt: held.changedAt });
+      expect(named?.version).toBe(now.version);
+      expect(named?.version).not.toBe(held.version);
+    });
+
+    it('still answers 304 when the card that changed is outside every window', async () => {
+      const deep = await file('1');
+      at('2026-11-01T10:01:00Z');
+      await file('2');
+      const app = buildApp(orgUser);
+      const etag = (await app.request(phasesPath('limit=1'))).headers.get('etag');
+
+      at('2026-11-01T10:05:00Z');
+      await json('PATCH', `/web/factory/work-items/${deep.id}`, { title: 'Renamed below the fold' });
+
+      const again = await app.request(phasesPath('limit=1'), { headers: { 'if-none-match': etag! } });
+      expect(again.status).toBe(304);
+    });
+
+    it('sends the answer again once a total changes, though the listed cards did not', async () => {
+      const oldest = await file('1');
+      const app = buildApp(orgUser);
+      const view = phasesPath('limit=1&sort=created-oldest');
+      const etag = (await app.request(view)).headers.get('etag');
+
+      at('2026-11-01T10:05:00Z');
+      await file('2');
+
+      const after = await app.request(view, { headers: { 'if-none-match': etag! } });
+      expect(after.status).toBe(200);
+      const body = FACTORY_ROUTE_CONTRACTS.boardPhases.responseSchema.parse(await after.json());
+      expect(under(body, 'intake')).toEqual({ total: 2, ids: [oldest.id] });
+    });
+
+    it('gzips the answer for a reader that accepts it', async () => {
+      const card = await file('1');
+
+      const res = await buildApp(orgUser).request(phasesPath(), { headers: { 'accept-encoding': 'gzip' } });
+
+      expect(res.headers.get('content-encoding')).toBe('gzip');
+      const body = JSON.parse(gunzipSync(Buffer.from(await res.arrayBuffer())).toString());
+      expect(under(body, 'intake').ids).toEqual([card.id]);
+    });
+  });
+});
+
+describe('GET /web/factory/projects/:id/work-items/filter-options', () => {
+  const itemsPath = () => `/web/factory/projects/${PROJECT_ID}/work-items`;
+  const optionsPath = () => `${itemsPath()}/filter-options`;
+  const file = (overrides: Record<string, unknown>, user = orgUser) =>
+    json('POST', itemsPath(), createBody({ metadata: {}, ...overrides }), user);
+
+  it('401s without a user and 404s for projects outside the org', async () => {
+    expect((await json('GET', optionsPath(), undefined, null)).status).toBe(401);
+
+    await seedProject('other-org');
+    expect((await json('GET', optionsPath())).status).toBe(404);
+  });
+
+  it('offers every label, every person a source names and every Factory user who acted, over all the project’s cards', async () => {
+    await file({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+      metadata: { labels: ['bug', 'Memory'], author: 'octocat', assignees: ['hubot'] },
+    });
+    await file({
+      externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+      metadata: { labels: ['bug', 'area: docs'], author: 'octocat', requestedReviewers: ['defunkt'] },
+    });
+    await file({
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'LIN-1' },
+      metadata: { assignee: 'Ada' },
+    });
+    await file({ externalSource: null, title: 'Filed by hand' }, { workosId: 'u2', organizationId: 'org1' });
+
+    const res = await json('GET', optionsPath());
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.responseSchema.parse(body)).toEqual(body);
+    expect(body).toEqual({
+      labels: ['area: docs', 'bug', 'Memory'],
+      people: [
+        { id: 'linear:ada', name: 'Ada', source: 'linear' },
+        { id: 'github:defunkt', name: 'defunkt', source: 'github' },
+        { id: 'github:hubot', name: 'hubot', source: 'github' },
+        { id: 'github:octocat', name: 'octocat', source: 'github' },
+      ],
+      actorIds: ['u1', 'u2'],
+    });
+  });
+
+  it('answers 304 while no card changed, and the options again once one did', async () => {
+    await file({ metadata: { labels: ['bug'] } });
+    const app = buildApp(orgUser);
+    const first = await app.request(optionsPath());
+    const etag = first.headers.get('etag');
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+    const again = await app.request(optionsPath(), { headers: { 'if-none-match': etag! } });
+    expect(again.status).toBe(304);
+    expect(await again.text()).toBe('');
+
+    await file({
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '2' },
+      metadata: { labels: ['docs'] },
+    });
+
+    const after = await app.request(optionsPath(), { headers: { 'if-none-match': etag! } });
+    expect(after.status).toBe(200);
+    expect((await after.json()).labels).toEqual(['bug', 'docs']);
   });
 });
 

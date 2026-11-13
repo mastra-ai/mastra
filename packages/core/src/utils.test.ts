@@ -25,6 +25,10 @@ import {
   setNestedValue,
 } from './utils';
 
+// The fetchWithRetry tests assert its backoff timing with fake timers, so these tests need the real waitDelay
+// rather than the instant one from @internal/test-utils/setup.
+vi.unmock('./utils/retry-after');
+
 describe('maskStreamTags', () => {
   async function* makeStream(chunks: string[]) {
     for (const chunk of chunks) {

@@ -1,5 +1,6 @@
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
+import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
 import { isValid } from 'date-fns';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
@@ -34,11 +35,6 @@ export function sourceMetadata(item: Pick<WorkItem, 'metadata' | 'workItem'>): R
     state: item.workItem.state,
     identifier: item.workItem.key,
   };
-}
-
-export function metadataLabels(metadata: Record<string, unknown>): string[] {
-  if (!Array.isArray(metadata.labels)) return [];
-  return metadata.labels.filter((label): label is string => typeof label === 'string');
 }
 
 export function metadataLabelColors(metadata: Record<string, unknown>): Record<string, string> {
@@ -228,16 +224,6 @@ export function workItemMeta(item: WorkItem): readonly string[] {
   return [key, ...(owner ? [owner] : []), age];
 }
 
-/** Free-text card match over what names it on the board: its title and its issue key. */
-export function cardMatchesSearch(
-  card: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'title'>,
-  query: string,
-): boolean {
-  const needle = query.trim().toLowerCase();
-  if (needle === '') return true;
-  return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
-}
-
 /**
  * Branch + thread title for a card's session, shared with the server's runs
  * (`workItemBranch`), so the title click and a later run converge on one
@@ -370,6 +356,11 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
     // The URL names the repository, covering cards filed before they were stamped with one.
     if (item.url && (item.source === 'github-issue' || item.source === 'github-pr')) keys.add(item.url);
+    // A pull request attached to an issue card is filed on that card.
+    for (const source of item.workItem?.sources ?? []) {
+      keys.add(sourceExternalId(source));
+      if (source.url) keys.add(source.url);
+    }
   }
   return keys;
 }

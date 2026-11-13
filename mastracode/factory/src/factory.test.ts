@@ -2213,6 +2213,52 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not register Platform Vanta without Platform credentials', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'vanta',
+            routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-vanta');
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('keeps an explicit Jira integration instead of registering Platform Jira', async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
     try {

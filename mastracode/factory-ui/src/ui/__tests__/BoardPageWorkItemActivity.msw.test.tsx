@@ -443,9 +443,7 @@ describe('Board work-item activity', () => {
         });
       }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: [{ ...linearWorkItem, metadata: { identifier: 'ENG-42' } }],
-        }),
+        HttpResponse.json({ workItems: [linearWorkItem] }),
       ),
     );
     const user = userEvent.setup();

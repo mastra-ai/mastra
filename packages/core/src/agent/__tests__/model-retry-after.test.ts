@@ -3,6 +3,12 @@ import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
+// These tests pin the backoff timing itself with fake timers, so they need the
+// real waitDelay and p-retry backoff rather than the instant ones from
+// @internal/test-utils/setup.
+vi.unmock('../../utils/retry-after');
+vi.mock('../../../node_modules/p-retry', importOriginal => importOriginal());
+
 /**
  * Regression coverage for #19885: an Agent's model-call retry used p-retry's fixed
  * exponential backoff and ignored the provider's `Retry-After` response header, so a
