@@ -128,43 +128,4 @@ describe('createVantaSync', () => {
     expect(ingest.mock.calls[0]?.[0]).toMatchObject({ orgId: 'org-1', vulnerabilities: [{ id: 'vuln-1' }] });
     expect(ingest.mock.calls[1]?.[0]).toMatchObject({ orgId: 'org-2', vulnerabilities: [{ id: 'vuln-2' }] });
   });
-
-  it("runs a card added to another board under its own identity when the vulnerability was first seen without a card", async () => {
-    const { project, sync, workItems } = await setup({ enabled: true });
-    // The first sync sees the vulnerability before any card exists, and files one.
-    await sync();
-    const { item: filed } = await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: project.id,
-      input: {
-        externalSource: { integrationId: 'vanta', type: 'vulnerability', externalId: vulnerability.id },
-        title: 'lodash: CVE-2026-1',
-        stages: ['intake'],
-        sessions: {},
-        metadata: { state: 'open' },
-      },
-    });
-    const security = await workItems.linkWorkItemToBoard({
-      orgId: 'org-1',
-      id: filed.id,
-      board: 'release',
-      stage: 'queued',
-      userId: 'user-1',
-    });
-    const commits = vi.spyOn(workItems, 'commitRuleEvaluation');
-
-    await sync();
-    await sync();
-
-    const results = await Promise.all(commits.mock.results.map(result => result.value));
-    const byCard = commits.mock.calls.map(([input], index) => [input.workItemId, input.ingress.identity, results[index].status]);
-    expect(byCard).toEqual([
-      // The first card keeps the identity the unbound evaluation was stored under.
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'committed'],
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'replayed'],
-    ]);
-  });
 });

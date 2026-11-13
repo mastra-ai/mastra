@@ -1205,28 +1205,16 @@ export class MastraFactory {
         }
       });
     }
-    if (workItemsStorage.legacyBackfillPending || workItemsStorage.sourceLinkBackfillPending) {
+    if (workItemsStorage.legacyBackfillPending) {
       const controller = new AbortController();
-      const splitPending = workItemsStorage.legacyBackfillPending;
       this.#workItemSplitBackfill = {
         controller,
-        promise: (async () => {
-          if (splitPending) {
-            await timedPhase('background.migrate.workItemSplit', () =>
-              backfillUntilDone(
-                () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
-                controller.signal,
-              ),
-            );
-          }
-          // After the split, so cards it copies are linked in the same pass.
-          await timedPhase('background.migrate.sourceLinks', () =>
-            backfillUntilDone(
-              () => workItemsStorage.backfillSourceLinks({ signal: controller.signal }),
-              controller.signal,
-            ),
-          );
-        })(),
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
       };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
