@@ -1,0 +1,151 @@
+/* Credits card (Sidebar.Meter): one card in both states. Its height follows the panel (70px, 34px in the rail);
+ * the label and status lines fold away (height, gap, fade) and the amount shrinks to the rail's size, sliding to
+ * the card's centre. Collapsing, the lines are gone in the first 30%, so their space closes with nothing
+ * in it; expanding, the space opens first and the lines fade in over the last 40%. */
+[data-slot='sidebar-meter'] {
+  interpolate-size: allow-keywords;
+  height: 70px;
+}
+
+/* The amount is as wide as its text (a placeholder, as wide as its bar). In the rail it moves to a fixed point, the
+ * 40px card's centre (10px from its content edge), back by half its own width: it ends centred whatever the number,
+ * moving one way only. */
+[data-slot='sidebar-meter'] [data-meter-value]:not([data-meter-swap]) > * {
+  position: relative;
+  left: 0;
+  width: fit-content;
+}
+
+[data-slot='sidebar-meter'] [data-meter-value] > [data-meter-skeleton] {
+  width: 48px;
+}
+
+[data-slot='sidebar-meter'] [data-meter-value] [data-meter-skeleton] > :last-child {
+  width: 100%;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] {
+  height: 34px;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-fold] {
+  height: 0;
+  margin: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] {
+  margin-top: 0;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value]:not([data-meter-swap]) > * {
+  left: 10px;
+  translate: -50% 0;
+  font-size: var(--text-meta);
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] > [data-meter-skeleton] {
+  width: 20px;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] [data-meter-skeleton] > :last-child {
+  height: 8px;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot='sidebar-meter'] {
+    transition: height var(--resize-dur) var(--resize-ease);
+  }
+
+  [data-slot='sidebar-meter'] [data-meter-fold] {
+    transition:
+      height var(--resize-dur) var(--resize-ease),
+      margin var(--resize-dur) var(--resize-ease),
+      opacity calc(var(--resize-dur) * 0.4) ease-out calc(var(--resize-dur) * 0.6);
+  }
+
+  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-fold] {
+    transition:
+      height var(--resize-dur) var(--resize-ease),
+      margin var(--resize-dur) var(--resize-ease),
+      opacity calc(var(--resize-dur) * 0.3) ease-out;
+  }
+
+  [data-slot='sidebar-meter'] [data-meter-value] {
+    transition: margin var(--resize-dur) var(--resize-ease);
+  }
+
+  [data-slot='sidebar-meter'] [data-meter-value]:not([data-meter-swap]) > * {
+    transition:
+      font-size var(--resize-dur) var(--resize-ease),
+      left var(--resize-dur) var(--resize-ease),
+      translate var(--resize-dur) var(--resize-ease),
+      width var(--resize-dur) var(--resize-ease);
+  }
+}
+
+/* With a rail amount (`railValue`): both amounts sit in the same spot and crossfade, nothing changes size. The full
+ * amount fades out over the first 40% of a collapse, drifting left; the rail amount, centred on the 40px card, fades in
+ * over the last 60%. Expanding plays it back the other way. Only opacity and transform move, so no frame lays out
+ * text. */
+/* One column as wide as the card's content, not the wider amount: the rail amount centres on the card. */
+[data-slot='sidebar-meter'] [data-meter-swap] > * {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+[data-slot='sidebar-meter'] [data-meter-swap] :is([data-meter-full], [data-meter-rail]) {
+  grid-area: 1 / 1;
+  align-self: center;
+  white-space: nowrap;
+  text-box: trim-both cap alphabetic;
+}
+
+[data-slot='sidebar-meter'] [data-meter-swap] [data-meter-full] {
+  justify-self: start;
+}
+
+[data-slot='sidebar-meter'] [data-meter-swap] [data-meter-rail] {
+  justify-self: center;
+  font-size: var(--text-meta);
+  opacity: 0;
+  scale: 0.9;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-full] {
+  opacity: 0;
+  translate: -6px 0;
+}
+
+[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-rail] {
+  opacity: 1;
+  scale: 1;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Expanding (the default direction): the rail amount leaves first, the full amount arrives late. */
+  [data-slot='sidebar-meter'] [data-meter-swap] [data-meter-rail] {
+    transition:
+      opacity calc(var(--resize-dur) * 0.4) ease-out,
+      scale calc(var(--resize-dur) * 0.4) ease-out;
+  }
+
+  [data-slot='sidebar-meter'] [data-meter-swap] [data-meter-full] {
+    transition:
+      opacity calc(var(--resize-dur) * 0.6) ease-out calc(var(--resize-dur) * 0.4),
+      translate var(--resize-dur) var(--resize-ease);
+  }
+
+  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-full] {
+    transition:
+      opacity calc(var(--resize-dur) * 0.4) ease-out,
+      translate var(--resize-dur) var(--resize-ease);
+  }
+
+  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-rail] {
+    transition:
+      opacity calc(var(--resize-dur) * 0.6) ease-out calc(var(--resize-dur) * 0.4),
+      scale calc(var(--resize-dur) * 0.6) var(--resize-ease) calc(var(--resize-dur) * 0.4);
+  }
+}
