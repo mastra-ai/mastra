@@ -7,8 +7,15 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem } from '../boards/index.js';
-import type { BoardRegistry } from '../boards/index.js';
+import {
+  boardFlow,
+  boardForWorkItem,
+  hasPullRequest,
+  isPullRequestReviewPhase,
+  REVIEW_CONTEXT,
+  reviewedChangeRequest,
+} from '../boards/index.js';
+import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -16,25 +23,29 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '.
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
+import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
+import type { FactoryRuleActor } from '../rules/types.js';
+import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactorySourceControl,
+  requireOrganizationModelKey,
 } from '../session/factory-session.js';
-import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
+import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
-import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -42,28 +53,32 @@ import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId, isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
   SessionBranchHeldError,
   SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
+import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   legacyGithubWorkItemBranch,
+  pullRequestBranch,
   workItemBranch,
   workItemBranchSource,
   workItemThreadTitle,
 } from '../work-item-branch.js';
+import type { WorkItemBranchSource } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -72,6 +87,7 @@ import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
 import { invalidateTenantCredentialSnapshots } from './tenant-credentials.js';
+import { VoiceRoutes } from './voice.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const MATERIALIZE_FAILURE_CODE = {
@@ -109,6 +125,8 @@ export interface FactoryApiRoutesDeps {
   sandbox?: FactorySandbox;
   /** Push hand-off for environment builds, present when the sandbox can build templates. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+  /** Saved-environment hand-off for environment builds, present when the sandbox can build templates. */
+  onEnvironmentSaved?: (projectId: string) => void;
   /** Root factory storage backend (distributed locks, app-db diagnostics). */
   factoryStorage?: FactoryStorage;
   integrationStorage: IntegrationStorage;
@@ -125,7 +143,8 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
-    comments: WorkItemCommentsStorage;
+    skillOverrides: SkillOverridesStorage;
+    voiceSettings: VoiceSettingsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -144,18 +163,20 @@ export interface FactoryApiRoutesDeps {
   boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Stored boards and their cache; mounts the board management routes when present. */
   storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
-  /** Work-item feed service, handed to integrations that ingest platform messages. */
-  feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
     prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   }) => void;
 }
+
+const REPEAT_UNAVAILABLE_LOG_MS = 5 * 60_000;
 
 function guardIntegrationRoutes({
   integration,
@@ -164,20 +185,37 @@ function guardIntegrationRoutes({
   routes,
 }: IntegrationRegistration & { routes: ApiRoute[] }): ApiRoute[] {
   if (ready) return routes;
+  // Each retry throws a fresh error, so dedupe by message and repeat it periodically.
+  let lastReported: { message: string; at: number } | undefined;
+  const checkReady = async () => {
+    try {
+      await ensureReady();
+      return undefined;
+    } catch (error) {
+      // The response only names a key mismatch, so this log is the only trace of any other cause.
+      const message = String(error);
+      const now = Date.now();
+      if (lastReported?.message !== message || now - lastReported.at >= REPEAT_UNAVAILABLE_LOG_MS) {
+        lastReported = { message, at: now };
+        console.error(
+          `[factory] ${integration.id} integration is unavailable: its storage failed to initialize:`,
+          error,
+        );
+      }
+      const cause =
+        secretKeyMismatchHint(error) ??
+        `Its storage failed to start. The server log line "[factory] ${integration.id} integration is unavailable" has the cause.`;
+      return { error: 'integration_unavailable', message: `${integration.id} integration is unavailable. ${cause}` };
+    }
+  };
   return routes.map(route => {
     if ('handler' in route) {
       const handler = route.handler;
       return {
         ...route,
         handler: async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context, async () => {});
         },
       };
@@ -189,14 +227,8 @@ function guardIntegrationRoutes({
       createHandler: async (args: Parameters<typeof createHandler>[0]) => {
         const handler = await createHandler(args);
         return async (context: Parameters<typeof handler>[0]) => {
-          try {
-            await ensureReady();
-          } catch {
-            return context.json(
-              { error: 'integration_unavailable', message: `${integration.id} integration is unavailable.` },
-              503,
-            );
-          }
+          const unavailable = await checkReady();
+          if (unavailable) return context.json(unavailable, 503);
           return handler(context);
         };
       },
@@ -261,16 +293,93 @@ async function legacyPlanSession(
   return undefined;
 }
 
+function sameBranch(held: string, branch: string): boolean {
+  return held === branch || held === legacyGithubWorkItemBranch(branch);
+}
+
+/** The branch a binding's session works on: the reviewed pull request's for PR review of an attached one. */
+function reviewBranch(
+  input: FactoryBindingPreparationInput,
+  board: InstalledBoard | undefined,
+  stage: string,
+  source: WorkItemBranchSource,
+): string {
+  const metadata = input.item.workItem.metadata;
+  if (input.role === REVIEW_CONTEXT && isPullRequestReviewPhase(board, stage)) {
+    const change = reviewedChangeRequest({ ...input.item, source });
+    if (change && !change.standalone && change.number !== undefined) {
+      return pullRequestBranch({ id: input.item.id, provider: change.provider, number: change.number });
+    }
+  }
+  return workItemBranch({ id: input.item.id, source, metadata });
+}
+
 /**
- * The lane a run started on a resting card moves it to. Work's phases share
- * contexts, so its roles keep their own lanes: `work` builds and the old `plan`
- * role plans. Other boards use the first phase that runs in the role's context.
+ * The lane a run started on a resting card moves it to: a review of a card with a pull request
+ * goes to the board's pull request review; otherwise the first phase that runs in the role's
+ * context. Work's phases share contexts, so its roles keep their own lanes: `work` builds and
+ * the old `plan` role plans.
  */
-function restingExitLane(
-  board: { phaseForRole(role: string): string | undefined } | undefined,
-  role: string,
-): string | undefined {
+function restingExitLane(board: InstalledBoard | undefined, role: string, hasPullRequest: boolean): string | undefined {
+  const pullRequestReview = boardFlow(board).pullRequestReview;
+  if (hasPullRequest && role === REVIEW_CONTEXT && pullRequestReview) return pullRequestReview;
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
+}
+
+/** What the autonomous start reads to decide who a phase session runs as. */
+export interface PhaseSessionOwnerSources extends OrganizationModelSources {
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
+}
+
+/**
+ * Who a newly minted phase session runs as. Wherever runs use the Factory's credentials
+ * that is the Factory itself, whoever moved the card: the mover is the actor on the move,
+ * not the owner of the run. A Factory whose runs use personal credentials has no keys of
+ * its own, so there a person owns the run: whoever moved or approved the card, or the user
+ * of the session whose agent moved it, else whoever created the Factory. `undefined`
+ * leaves the last resort to the caller: whoever connected the repository.
+ */
+async function phaseSessionOwner(args: {
+  sourceControl: SourceControlStorageHandle;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined;
+  project: FactoryProject;
+  approver: string | undefined;
+}): Promise<string | undefined> {
+  const { sourceControl, workItems, project, approver } = args;
+  if (effectiveModelScope(project.modelScope, 'run') === 'factory') return factoryPrincipalId(project.id);
+  if (approver?.startsWith('agent:')) {
+    // `agent:session:<sessionId>` is a person's own session; `agent:<bindingId>` a phase run.
+    const ref = approver.slice('agent:'.length);
+    const sessionId = ref.startsWith('session:')
+      ? ref.slice('session:'.length)
+      : (await workItems?.findRunBindingById({ orgId: project.orgId, factoryProjectId: project.id, id: ref }))
+          ?.sessionId;
+    const session = sessionId ? await sourceControl.sessions.getBySessionId(sessionId) : null;
+    if (session && session.orgId === project.orgId && isHumanActorId(session.userId)) return session.userId;
+  } else if (isHumanActorId(approver)) {
+    return approver;
+  }
+  return isHumanActorId(project.createdBy) ? project.createdBy : undefined;
+}
+
+/**
+ * Who started the work, as the move that starts the run records them. An agent stays an
+ * agent: recorded as a person, its move would count as a person accepting the work.
+ */
+async function starterOf(
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  approver: string,
+): Promise<FactoryRuleActor> {
+  if (!approver.startsWith('agent:')) return { type: 'human', id: approver };
+  const bindingId = approver.slice('agent:'.length);
+  if (bindingId.startsWith('session:')) return { type: 'agent', bindingId, role: 'session' };
+  const binding = await workItems?.findRunBindingById({
+    orgId: project.orgId,
+    factoryProjectId: project.id,
+    id: bindingId,
+  });
+  return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
 }
 
 /**
@@ -287,6 +396,7 @@ export async function prepareFactoryRuleBinding(
   boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
   intake?: Pick<IntakeStorage, 'getConfig'>,
+  owner?: PhaseSessionOwnerSources,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -294,7 +404,6 @@ export async function prepareFactoryRuleBinding(
         ? sourceControlProvider.sourceControlStorage
         : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
-    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
@@ -307,7 +416,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role)
+          ? restingExitLane(board, input.role, hasPullRequest({ ...input.item, source }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -315,6 +424,9 @@ export async function prepareFactoryRuleBinding(
         `Factory skill invocation has no destination lane (role "${input.role}", stages [${input.item.stages.join(', ')}]).`,
       );
     }
+    // A PR review on an issue card checks the pull request out on its own branch, apart from
+    // the builder's issue branch; every other seat works on the card's own branch.
+    const branch = reviewBranch(input, board, destinationStage, source);
     const connections = await sourceControl.connections.list({
       orgId: input.record.orgId,
       factoryProjectId: input.record.factoryProjectId,
@@ -331,7 +443,11 @@ export async function prepareFactoryRuleBinding(
     }
     // A retry may already own a role session. Check it before treating a
     // repository-less card as ambiguous, but never override an explicit signal.
-    const boundSession = await reuseBoundSession(sourceControl, input);
+    const reusable = await reuseBoundSession(sourceControl, input);
+    // The review seat moves between branches on one card (self-review on the builder's branch,
+    // PR review on each pull request's), so its session is reused only on the branch it holds.
+    const boundSession =
+      reusable && input.role === REVIEW_CONTEXT && !sameBranch(reusable.branch, branch) ? undefined : reusable;
     const intakeConfig = await intake?.getConfig({ orgId: input.record.orgId, integrationIds: ['linear'] });
     let repository = await resolveWorkItemRepository({
       sourceControl,
@@ -372,18 +488,21 @@ export async function prepareFactoryRuleBinding(
     // The session is filed under the card's repository: the sandbox holds
     // every environment repository, but the coordinator, the PR tools and the
     // subscriptions follow the session's link, and the card names which one.
+    const existingSession =
+      boundSession ?? (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId));
+    const ownerUserId =
+      existingSession?.userId ??
+      (await phaseSessionOwner({ sourceControl, workItems: owner?.workItems, project, approver }));
+    if (isFactoryPrincipalId(ownerUserId)) await requireOrganizationModelKey(owner, project);
     const preparedSession =
-      boundSession ??
-      (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId)) ??
+      existingSession ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         projectRepositoryId: repository.projectRepositoryId,
         branch,
-        // A person who approved the run is its interactive user: attribute it to
-        // them, not the repo connector. An agent's pre-approval names no person.
-        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+        attributeToUserId: ownerUserId,
       }).catch(error => {
         if (error instanceof FactorySourceSessionResolutionError && error.reason === 'repository') {
           // The card resolved to a linked repository the sandbox will not check out.
@@ -412,11 +531,12 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
-      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
@@ -426,7 +546,7 @@ export async function prepareFactoryRuleBinding(
           externalSource: input.item.externalSource,
           parentWorkItemId: input.item.parentWorkItemId,
           title: input.item.title,
-          stages: ['intake'],
+          stages: [...input.item.stages],
           sessions: input.item.sessions,
           metadata: input.item.metadata,
         },
@@ -471,13 +591,20 @@ export function buildIntegrationContext(
     emitAudit?: AuditEmitter['emit'];
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
-    boardRegistry: BoardRegistry;
+    boardRegistry: BoardRegistry | ProjectBoardSource;
+    /** Passed for the workers' context only: routes do not sweep. */
+    keptCards?: CardSource;
     factoryReady: boolean;
-    /** Work-item feed service, so a channel integration can ingest platform messages. */
-    feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
-      'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
+      | 'projects'
+      | 'intake'
+      | 'workItems'
+      | 'channelIdentity'
+      | 'memorySettings'
+      | 'modelDefaults'
+      | 'modelCredentials'
+      | 'voiceSettings'
     >;
     /**
      * Stable id of the registered source-control-owning integration (today:
@@ -510,11 +637,18 @@ export function buildIntegrationContext(
       channelIdentity: deps.domains.channelIdentity,
       memorySettings: deps.domains.memorySettings,
       modelDefaults: deps.domains.modelDefaults,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
     },
-    ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady
       ? {
-          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+          runtime: {
+            configVersion: deps.configVersion,
+            workItems: deps.domains.workItems,
+            boards: deps.boardRegistry,
+            ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+          },
         }
       : {}),
     ...(deps.emitAudit || deps.onRepositoryPush
@@ -623,6 +757,48 @@ function absentSlackChannelAccountsRoutes(): ApiRoute[] {
   ];
 }
 
+export interface FactoryStatusProblem {
+  code: 'secret_key_mismatch';
+  title: string;
+  message: string;
+  /** The one step that fixes it. Env var names are wrapped in backticks. */
+  fix: string;
+  /** Where an operator reads more, such as how to rotate keys. */
+  docsUrl: string;
+}
+
+/** Domains that hold encrypted secrets; Factory can't run if they can't be read. */
+const SECRET_DOMAINS = ['integrations', 'model-credentials', 'custom-providers'];
+
+/**
+ * `GET /web/status`: problems that stop the whole Factory from working, so the
+ * UI shows one alert banner instead of every page failing on its own. Only a
+ * key problem counts, since only a redeploy with the right key clears it. Read
+ * from the latest storage init result, so a key failure found by a later init
+ * retry shows up too. Only client-safe copy goes out.
+ */
+function factoryStatusRoutes(storage: FactoryStorage | undefined): ApiRoute[] {
+  return [
+    registerApiRoute('/web/status', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: c => {
+        const problem = SECRET_DOMAINS.map(domain => secretKeyProblem(storage?.domainInitError(domain))).find(Boolean);
+        const problems: FactoryStatusProblem[] = problem
+          ? [
+              {
+                code: 'secret_key_mismatch',
+                ...problem,
+                docsUrl: 'https://factory.mastra.ai/troubleshooting#stored-credentials-stop-working',
+              },
+            ]
+          : [];
+        return c.json({ problems });
+      },
+    }),
+  ];
+}
+
 /**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
@@ -726,6 +902,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           }),
         deps.domains.intake,
         { projects: deps.domains.projects, modelDefaults: deps.domains.modelDefaults },
+        deps.boardRegistry,
       )
     : undefined;
   if (transitionService && startCoordinator) {
@@ -753,6 +930,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.boardRegistry,
                 input,
                 deps.domains.intake,
+                {
+                  workItems: deps.domains.workItems,
+                  modelCredentials: deps.domains.modelCredentials,
+                  customProviders: deps.domains.customProviders,
+                  deploymentModelProviders: deps.deploymentModelProviders,
+                },
               );
             },
           }
@@ -761,11 +944,14 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
+    ...factoryStatusRoutes(deps.factoryStorage),
     ...buildFsRoutes({
       root: deps.fsRoot,
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
+        controller: deps.controller,
+        ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
       },
     }),
     ...new ConfigRoutes({
@@ -791,6 +977,13 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelCredentials: deps.domains.modelCredentials,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
     }).routes(),
+    ...new VoiceRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      voiceSettings: deps.domains.voiceSettings,
+      factoryProjects: deps.domains.projects,
+    }).routes(),
     ...new SkillRoutes({
       auth: deps.auth,
       controllerId: deps.controllerId,
@@ -798,9 +991,16 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
-    ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
+    ...(sourceControls.length === 0
+      ? []
+      : buildSourceControlSettingsRoutes({
+          auth: deps.auth,
+          sourceControls,
+          ...(deps.onEnvironmentSaved ? { onEnvironmentSaved: deps.onEnvironmentSaved } : {}),
+        })),
     ...providerRoutes,
     ...absentStubs,
     ...slackAbsentStubs,
@@ -810,12 +1010,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
-          boardRegistry: deps.boardRegistry,
-          // Relocation reads and writes work items, which init fail-soft separately from intake.
-          ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
-          integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
-            integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
-          ),
+          integrations: (deps.integrations ?? []).flatMap(({ integration }) => [
+            ...(integration.intake ? [{ id: integration.id, intake: integration.intake }] : []),
+            ...(integration.additionalIntakes ?? []),
+          ]),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.knowledgeEnabled
@@ -833,15 +1031,26 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
-          comments: deps.domains.comments,
+          intakeRoutes: deps.storedBoards?.storage,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          runSlots: deps.runSlots,
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
       ? new BoardRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
           auth: deps.auth,
           audit: deps.audit,
           projects: deps.domains.projects,
@@ -857,6 +1066,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           configVersion: deps.configVersion,
+          boards: deps.boardRegistry,
         })
       : []),
   ];

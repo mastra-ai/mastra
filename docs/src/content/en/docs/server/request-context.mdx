@@ -159,6 +159,41 @@ export const weatherAgent = new Agent({
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
+### Accessing the authenticated user
+
+When [server authentication](/docs/auth/overview) is configured, the same configuration callbacks receive an optional `user` argument: the authenticated end user, normalized to a stable `MastraUser` shape (`{ id: string, name?: string, email?: string, avatarUrl?: string, role?: string }`). Use it to personalize instructions, models, or tools without reading auth keys from `requestContext` yourself.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createTool } from '@mastra/core/tools'
+import { getRequestUser } from '@mastra/core/utils'
+import { z } from 'zod'
+
+const accountTool = createTool({
+  id: 'get-account',
+  description: "Look up the signed-in user's account",
+  inputSchema: z.object({}),
+  execute: async (inputData, context) => {
+    const user = getRequestUser(context?.requestContext)
+    return { userId: user?.id, email: user?.email }
+  },
+})
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: ({ user }) =>
+    user
+      ? `You are helping ${user.name ?? user.id}. Be personable.`
+      : 'You are a helpful assistant.',
+  model: ({ user }) =>
+    user?.role === 'admin' ? '__GATEWAY_OPENAI_MODEL__' : '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: ({ user }) => (user ? { accountTool } : {}),
+})
+```
+
+`user` is `undefined` when the request is unauthenticated or no auth provider is configured. It's populated by the Mastra server's auth middleware, so requests served through an `MCPServer` don't receive it. The normalized shape is produced by the auth provider's `toMastraUser()` method, which you can [override on custom providers](/docs/auth/custom-auth-provider). The raw provider-specific user object remains available with `requestContext.get('mastra__user')`.
+
 ### Dynamic instructions
 
 Provide agent instructions through an async function to resolve prompts at runtime. Together with `requestContext`, this supports patterns like:
@@ -300,8 +335,8 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 | Key | Purpose |
 | - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
-| `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
-| `MASTRA_SCOPES_KEY` | Sets the [scopes](/docs/memory/overview#identify-memory-with-scopes) the agent run acts as, as an array of `<type>:<value>` strings. Combined with the agent's `scopes` and per-call `scopes`. A `resource:` or `thread:` scope that conflicts with another resource or thread value returns a 400 error. |
+| `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values. Passing `memory.thread` to an agent call leaves this key unset, so set it yourself wherever you rely on it, such as for a workspace resolver. Tools can read the current run's thread from `context.agent.threadId` instead. |
+| `MASTRA_SCOPES_KEY` | Sets the [scopes](/docs/memory/overview#identify-memory-with-scopes) the agent run acts as, as an array of `<type>:<value>` strings. Combined with per-call `scopes`; the agent's `scopes` list adds to them, and a `scopes` function replaces them. A `resource:` or `thread:` scope that conflicts with another resource or thread value returns a 400 error. |
 | `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions persist it at `content.metadata.signal.author` and mirror it to `providerMetadata.mastra.author` for compatibility, so a thread shared by several people can show who wrote what. |
 
 Server ownership checks read only `MASTRA_RESOURCE_ID_KEY` and `MASTRA_THREAD_ID_KEY`. If your middleware sets identity through `MASTRA_SCOPES_KEY` and you want those checks, set `MASTRA_RESOURCE_ID_KEY` too:
@@ -407,7 +442,7 @@ export const validatedAgent = new Agent({
 
 When validation fails, the error includes the agent ID and details about which fields failed:
 
-```
+```text
 Request context validation failed for agent 'validated-agent':
 - apiKey: Required
 ```
@@ -496,7 +531,7 @@ export const validatedWorkflow = createWorkflow({
 
 When validation fails, the workflow throws an error:
 
-```
+```text
 Request context validation failed for workflow 'validated-workflow':
 - tenantId: Required
 ```

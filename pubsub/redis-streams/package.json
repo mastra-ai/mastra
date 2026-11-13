@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis-streams",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Mastra Redis Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -26,7 +26,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d --wait",
-    "test": "vitest run",
+    "test": "pnpm check:test && vitest run",
+    "check:test": "tsc --project tsconfig.test.json",
     "posttest": "docker compose down",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix ."
@@ -35,7 +36,7 @@
     "redis": "5.12.1"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.137",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.139",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

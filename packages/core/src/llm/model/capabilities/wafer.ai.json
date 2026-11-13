@@ -8,6 +8,20 @@
         "type": "toggle"
       }
     ],
+    "GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm5.2-fast": [
       {
         "type": "toggle"
@@ -24,20 +38,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "Kimi-K2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

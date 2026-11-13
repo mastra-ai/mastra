@@ -3,6 +3,7 @@ import type { SendNotificationSignalInput } from '@mastra/core/notifications';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { WorkItemSubscription } from '../storage/domains/work-items/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import type { FactoryDeliveryTarget } from './deliver.js';
 import {
   createStageChangeNotifier,
@@ -304,6 +305,46 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries).toHaveLength(2);
   });
 
+  it('tells a follower how to approve or decline a tool that paused for a yes or no, whatever the tool', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'sign_off', toolCallId: 'call-9', decision: true },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      kind: 'blocked',
+      priority: 'urgent',
+      summary:
+        'The work session for #7 is waiting on sign_off and needs an answer. Approve or decline it with factory_answer_approval (sessionId "session-w", toolCallId "call-9").',
+      // What the chat needs to answer it in place: the session that waits, and the call.
+      attributes: {
+        'parked-tool': 'sign_off',
+        'tool-call-id': 'call-9',
+        'waiting-for': 'approval',
+        'from-session': SENDER.sessionId,
+        'from-thread': SENDER.threadId,
+      },
+    });
+  });
+
+  it('sends a question to the session that asked it, with no approval to answer', async () => {
+    const env = reporting();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(Date.now() - 1000),
+      outcome: { status: 'blocked', toolName: 'ask_user', toolCallId: 'call-9' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries[0]!.notification).toMatchObject({
+      summary: 'The work session for #7 is waiting on ask_user and needs an answer.',
+    });
+    expect(env.deliveries[0]!.notification.attributes).not.toHaveProperty('waiting-for');
+  });
+
   it('names the failure code and the parked tool', async () => {
     const env = reporting();
     const since = new Date(Date.now() - 1000);
@@ -339,7 +380,20 @@ describe('sendRunEndReport', () => {
 describe('createWorkItemRunEndReporter', () => {
   const workItems = (subscribers: WorkItemSubscription[]) => ({
     listWorkItemSubscribers: vi.fn(async () => subscribers),
-    getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+    getForProject: vi.fn(
+      async () =>
+        ({
+          id: 'item-7',
+          title: 'Item',
+          workItem: createProviderWorkItemForTests({
+            id: 'item-7',
+            title: 'Item',
+            source: { integrationId: 'github', type: 'issue', externalId: '7' },
+            metadata: { number: 7 },
+          }),
+          metadata: {},
+        }) as never,
+    ),
   });
 
   it('reports to every subscriber but the sender, labelled with the item and role', async () => {
@@ -396,7 +450,20 @@ describe('createStageChangeNotifier', () => {
           subscriber('item-7', 'session-1'),
           subscriber('item-7', 'session-2'),
         ]),
-        getForProject: vi.fn(async () => ({ id: 'item-7', title: 'Item', metadata: { number: 7 } }) as never),
+        getForProject: vi.fn(
+          async () =>
+            ({
+              id: 'item-7',
+              title: 'Item',
+              workItem: createProviderWorkItemForTests({
+                id: 'item-7',
+                title: 'Item',
+                source: { integrationId: 'github', type: 'issue', externalId: '7' },
+                metadata: { number: 7 },
+              }),
+              metadata: {},
+            }) as never,
+        ),
       },
       reporting: async () => env.reporting,
     });

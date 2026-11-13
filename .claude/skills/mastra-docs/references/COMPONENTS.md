@@ -102,5 +102,6 @@ Use admonitions for information that deserves visual separation:
 - `warning`: A likely failure mode, security concern, or destructive consequence.
 - `danger`: A severe and immediate risk.
 - `beta`: A feature explicitly presented as Beta.
+- `alpha`: A feature explicitly released as alpha, such as Knowledge.
 
-Do not place routine instructions in admonitions. Use the `beta` admonition only for features presented as Beta.
+Do not place routine instructions in admonitions. Use the `beta` and `alpha` admonitions only for features presented as Beta or Alpha.

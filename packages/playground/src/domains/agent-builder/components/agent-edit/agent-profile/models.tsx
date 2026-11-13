@@ -144,7 +144,7 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
             size="md"
             className="max-w-[30ch] shrink-0"
             data-testid="model-card-picker-search"
-            placeholder="Search models or providers..."
+            placeholder="Search models or providers"
             value={search}
             onValueChange={setSearch}
           />

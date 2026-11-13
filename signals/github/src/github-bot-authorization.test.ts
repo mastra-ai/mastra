@@ -124,7 +124,7 @@ describe('GithubSignals bot authorization by app ownership', () => {
 
       await test.processor.pollThreadNow({ threadId: test.thread.id, resourceId: test.thread.resourceId });
 
-      expect(getOwner).toHaveBeenCalledWith('review-app[bot]', expect.any(Function));
+      expect(getOwner.mock.calls[0]?.slice(0, 2)).toEqual(['review-app[bot]', expect.any(Function)]);
       expect(test.permissionResolver.getPermission).toHaveBeenCalledWith('mastra-ai', 'mastra', 'AppCreator');
       expect(test.sendNotificationSignal).toHaveBeenCalledTimes(1);
     },

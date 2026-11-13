@@ -3,7 +3,7 @@ import type { WorkerDeps } from '@mastra/core/worker';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
-import type { GithubPullRequestReconciler } from '../../github/rules.js';
+import type { GithubPullRequestDiscovery, GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
 import { PlatformApiClient } from '../api-client.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
@@ -70,6 +70,8 @@ function createWorker(input: {
   ingestFactoryEvent?: (event: Parameters<typeof dispatchGithubWebhook>[0]) => Promise<unknown>;
   reconcileFactoryState?: GithubPullRequestReconciler;
   reconcileIssuesFactoryState?: GithubIssueReconciler;
+  discoverPullRequests?: GithubPullRequestDiscovery;
+  pullRequestDiscoveryIntervalMs?: number;
   reconcileIntervalMs?: number;
   pullRequestReconcileIntervalMs?: number;
   issueReconcileIntervalMs?: number;
@@ -118,6 +120,8 @@ function createWorker(input: {
     ingestFactoryEvent: input.ingestFactoryEvent,
     reconcileFactoryState: input.reconcileFactoryState,
     reconcileIssuesFactoryState: input.reconcileIssuesFactoryState,
+    discoverPullRequests: input.discoverPullRequests,
+    pullRequestDiscoveryIntervalMs: input.pullRequestDiscoveryIntervalMs,
     reconcileIntervalMs: input.reconcileIntervalMs,
     pullRequestReconcileIntervalMs: input.pullRequestReconcileIntervalMs,
     issueReconcileIntervalMs: input.issueReconcileIntervalMs,
@@ -1019,6 +1023,59 @@ describe('PlatformGithubEventWorker', () => {
     await worker.stop();
     expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
     expect(reconcileIssuesFactoryState).toHaveBeenCalledTimes(2);
+  });
+
+  it('discovers missed pull request opens every five minutes while the per-card sweep stays hourly', async () => {
+    const settings = createSettingsStorage();
+    const fetchImpl = vi.fn<typeof fetch>(async input => {
+      throw new Error(`Unexpected request: ${String(input)}`);
+    });
+    let clock = 1_000_000;
+    const reconcileFactoryState = vi.fn<GithubPullRequestReconciler>(async () => ({
+      repositories: 1,
+      checked: 1,
+      merged: 0,
+      closed: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const discoverPullRequests = vi.fn<GithubPullRequestDiscovery>(async () => ({
+      repositories: 1,
+      listed: 1,
+      created: 1,
+      repaired: 0,
+      failed: 0,
+      errors: [],
+    }));
+    const worker = createWorker({
+      fetchImpl,
+      storage: settings.storage,
+      now: () => clock,
+      reconcileFactoryState,
+      discoverPullRequests,
+      pollEventsEnabled: false,
+    });
+
+    const deps = createDeps();
+    await worker.init(deps);
+    await worker.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let tick = 0; tick < 12; tick += 1) {
+      clock += 5 * 60_000;
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+    }
+    await worker.stop();
+
+    expect(reconcileFactoryState).toHaveBeenCalledTimes(2);
+    expect(discoverPullRequests).toHaveBeenCalledTimes(13);
+    // With the linked projects the poll already read, so discovery needn't read them again.
+    expect(discoverPullRequests).toHaveBeenCalledWith([
+      { id: 101, fullName: 'acme/repo', installationId: 7, projects: [{ orgId: 'org-1', factoryProjectId: 'proj-1' }] },
+    ]);
+    expect(deps.logger.info).toHaveBeenCalledWith(
+      'Platform GitHub pull request discovery replayed missed opens',
+      expect.objectContaining({ created: 1, candidateRepositories: 1 }),
+    );
   });
 
   it('reconciles without tailing events when event polling is disabled', async () => {

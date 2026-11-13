@@ -7,6 +7,7 @@ import {
   paginationArgsSchema,
   paginationInfoSchema,
 } from '../shared';
+import { observabilityTextSearchSchema } from './text-search';
 import type { SpanRecord } from './tracing';
 
 export const TRACE_QUERY_MAX_DEPTH = 12;
@@ -273,8 +274,8 @@ export const traceAggregateDimensionDescriptorSchema = z
 export const traceAggregateMeasureDescriptorSchema = z
   .object({
     name: z.string(),
-    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
-    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost', 'timeToFirstToken', 'timeToFirstChunk']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum', 'count']).optional(),
     unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
     approximate: z.boolean(),
   })
@@ -340,8 +341,12 @@ const pageSchema = z
   })
   .strict();
 
+export const traceQueryRootSourceSchema = z.enum(['legacy', 'aggregated']);
+
 const traceQueryRequestObjectSchema = z
   .object({
+    rootSource: traceQueryRootSourceSchema.optional(),
+    textSearch: observabilityTextSearchSchema.optional(),
     timeRange: traceQueryTimeRangeSchema,
     where: traceQueryPredicateSchema.optional(),
     /**
@@ -370,8 +375,11 @@ const traceQueryRequestObjectSchema = z
   })
   .strict()
   .superRefine((request, context) => {
+    if (request.rootSource === 'aggregated' && request.mode === 'delta') {
+      context.addIssue({ code: 'custom', path: ['rootSource'], message: 'Aggregated roots do not support delta mode' });
+    }
     if (request.mode === 'delta') {
-      for (const field of ['page', 'pagination', 'group', 'orderBy'] as const) {
+      for (const field of ['page', 'pagination', 'group', 'orderBy', 'textSearch'] as const) {
         if (request[field] !== undefined) {
           context.addIssue({ code: 'custom', path: [field], message: `Delta trace queries do not support ${field}` });
         }
@@ -429,6 +437,9 @@ export const traceQueryTraceSchema = z
   .object({
     traceId: z.string(),
     rootSpanId: z.string(),
+    rootKind: z.enum(['native', 'external']).optional(),
+    runtimeDurationMs: z.number().nonnegative().nullable().optional(),
+    errorCount: z.number().int().nonnegative().nullable().optional(),
     name: z.string(),
     entityId: z.string().nullable(),
     parentSpanId: z.string().nullable(),
@@ -621,6 +632,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
@@ -661,6 +675,9 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     sessionId: stringField(false),
     userId: stringField(false),
     organizationId: stringField(false),
+    requestId: stringField(false),
+    serviceName: stringField(false),
+    experimentId: stringField(false),
   },
   scores: {
     scorerId: stringField(true),
@@ -851,7 +868,9 @@ export interface TraceQueryTenantScope {
 }
 
 export interface TrustedTraceQueryBasePlan {
+  rootSource?: 'aggregated';
   timeRange: { from: string; to: string };
+  textSearch?: string;
   where?: TrustedTraceQueryPredicate;
   scope?: TraceQueryTenantScope;
 }
@@ -1144,6 +1163,8 @@ export function parseGetTraceQueryValuesArgs(input: unknown): NormalizedGetTrace
 }
 
 export interface TraceQueryPlanOptions {
+  /** The host provides an aggregated-root reader. Defaults to false. */
+  allowAggregatedRoots?: boolean;
   /** Opaque host authorization state bound into keyset cursors. */
   authorizationBinding?: string;
   /** Trusted tenant scope; applied by stores and bound into keyset cursors. */

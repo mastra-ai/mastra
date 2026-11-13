@@ -6,6 +6,7 @@ import type {
   CreateSourceControlSessionInput,
   ExternalRepositoryProjectTarget,
   LinkProjectRepositoryInput,
+  ProjectConnectionWithRepositories,
   ProjectRepository,
   ProjectSourceControlConnection,
   SessionBranchKey,
@@ -32,8 +33,23 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   sessionsRows: SourceControlSession[] = [];
   sessionRepositoriesRows: SourceControlSessionRepository[] = [];
 
+  readonly #linkedRepositoryListeners = new Set<() => void>();
+
   constructor(integrationId = 'github') {
     this.integrationId = integrationId;
+  }
+
+  onLinkedRepositoriesChanged(listener: () => void): () => void {
+    this.#linkedRepositoryListeners.add(listener);
+    return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  linkedRepositoryChangesShared(): boolean {
+    return true;
+  }
+
+  #linkedRepositoriesChanged(): void {
+    for (const listener of this.#linkedRepositoryListeners) listener();
   }
 
   readonly installations = {
@@ -80,6 +96,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const index = this.installationsRows.findIndex(row => row.orgId === orgId && row.id === id);
       if (index < 0) return false;
       this.installationsRows.splice(index, 1);
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };
@@ -179,6 +196,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           conn.installationId = newInstallationId;
         }
       }
+      this.#linkedRepositoriesChanged();
       return existing;
     },
   };
@@ -186,6 +204,33 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   readonly connections = {
     list: async ({ factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
       this.connectionsRows.filter(row => row.factoryProjectId === factoryProjectId),
+    listWithRepositories: async ({
+      orgId,
+      factoryProjectIds,
+    }: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]> => {
+      const connections: ProjectConnectionWithRepositories[] = [];
+      for (const row of this.connectionsRows.filter(candidate =>
+        factoryProjectIds.includes(candidate.factoryProjectId),
+      )) {
+        const installation = await this.installations.get({ orgId, id: row.installationId });
+        if (!installation) continue;
+        const links = this.projectRepositoriesRows.filter(link => link.connectionId === row.id);
+        connections.push({
+          ...row,
+          installation,
+          repositories: await Promise.all(
+            links.map(async link => ({
+              ...link,
+              repository: await this.repositories.get({ orgId, id: link.repositoryId }),
+            })),
+          ),
+        });
+      }
+      return connections;
+    },
     get: async ({ orgId, id }: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null> => {
       const row = this.connectionsRows.find(candidate => candidate.id === id);
       if (!row) return null;
@@ -211,6 +256,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         createdAt: new Date(),
       };
       this.connectionsRows.push(created);
+      this.#linkedRepositoriesChanged();
       return created;
     },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
@@ -219,6 +265,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         await this.projectRepositories.unlink({ orgId, id: link.id });
       }
       this.connectionsRows.splice(0, this.connectionsRows.length, ...this.connectionsRows.filter(row => row.id !== id));
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };
@@ -332,6 +379,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         updatedAt: now,
       };
       this.projectRepositoriesRows.push(created);
+      this.#linkedRepositoriesChanged();
       return created;
     },
     update: async ({
@@ -381,6 +429,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         this.projectRepositoriesRows.length,
         ...this.projectRepositoriesRows.filter(row => row.id !== id),
       );
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };

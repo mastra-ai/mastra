@@ -8,7 +8,7 @@
  */
 
 import { knowledgePageKeyProblem } from '@internal/core/knowledge-compat';
-import { parseKnowledgePageRef } from '../storage/domains/knowledge/pages';
+import { MAX_KNOWLEDGE_PIN_LIST_DEPTH, parseKnowledgePageRef } from '../storage/domains/knowledge/pages';
 import { decodeKnowledgeScopeValue, encodeKnowledgeScopeValue } from './scope-address';
 
 /** @experimental */
@@ -51,8 +51,11 @@ export interface KnowledgeScopeDeclaration {
   children?: Array<{ name: string; description?: string; displayLabel?: string; access?: KnowledgeAccessRule[] }>;
   /** Keyed pages created with this scope; they may nest (`pages` inside a page, same scope). */
   pages?: KnowledgePageTemplate[];
-  /** Pages (refs) pinned into the context of every run holding this scope. */
-  pinnedContext?: string[];
+  /**
+   * Pinned into the context of every run holding this scope: pages by ref (`<scope>#<key path>`), or
+   * listings of the page tree under a scope or page ({@link KnowledgePinnedList}).
+   */
+  pinnedContext?: Array<string | KnowledgePinnedList>;
   /** Ordering of stored pins delivered through this scope; higher first. Default 0. */
   pinnedContextPriority?: number;
 }
@@ -67,6 +70,35 @@ export interface KnowledgeScopeDeclarationInfo {
   displayLabel?: string;
   belongsTo?: string;
   children: Array<{ key: string; name: string; description?: string; displayLabel?: string }>;
+}
+
+/**
+ * A pinned listing: the readable pages under `list`, as `knowledge_list` returns them (ref, name and
+ * child count each), kept current in the run's pinned context.
+ * @experimental
+ */
+export interface KnowledgePinnedList {
+  /** A scope (`docs:$orgId`) or a keyed page under one (`docs:$orgId#guides`). */
+  list: string;
+  /** Levels below `list` to include, 1 to 3. Default 1. */
+  depth?: number;
+}
+
+/**
+ * A pinnedContext entry as scope pattern and key path (empty for a listing of the scope itself), or
+ * null when it isn't one.
+ */
+export function knowledgePinTarget(
+  entry: string | KnowledgePinnedList,
+): { scope: string; path: string[]; depth?: number } | null {
+  if (typeof entry === 'string') return parseKnowledgePageRef(entry);
+  const ref = entry.list;
+  if (typeof ref !== 'string' || !ref) return null;
+  const depth = entry.depth ?? 1;
+  if (!Number.isInteger(depth) || depth < 1 || depth > MAX_KNOWLEDGE_PIN_LIST_DEPTH) return null;
+  if (!ref.includes('#')) return { scope: ref, path: [], depth };
+  const parsed = parseKnowledgePageRef(ref);
+  return parsed && { ...parsed, depth };
 }
 
 /**
@@ -211,8 +243,8 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
   if (new Set(params).size !== params.length) {
     throw new KnowledgeDeclarationError(`${what} "${key}" repeats a param.`);
   }
-  // A pattern's literals match raw run scopes as written, so an escape in one would let a raw scope
-  // pass for a different decoded value. Concrete addresses and principals are canonical: `%` there is an escape.
+  // Literals are compared as written while param values are decoded, so a `%` in a literal would be
+  // ambiguous. Concrete addresses and principals are canonical: `%` there is an escape.
   if (params.length > 0 && segments.some(segment => 'literal' in segment && segment.literal.includes('%'))) {
     throw new KnowledgeDeclarationError(
       `${what} "${key}" has a literal containing "%"; only params take encoded values.`,
@@ -223,25 +255,26 @@ function parsePattern(key: string, what: string): KnowledgeScopePattern {
 
 /** Binds raw param values from a canonical address; null when it isn't canonical or doesn't fit. */
 export function matchKnowledgePattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
-  return matchPattern(pattern, address, false);
+  return matchPattern(pattern, address);
 }
 
-function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: boolean): Record<string, string> | null {
+function matchPattern(pattern: KnowledgeScopePattern, address: string): Record<string, string> | null {
   const prefix = `${pattern.type}:`;
   if (!address.startsWith(prefix)) return null;
   const parts = address.slice(prefix.length).split(':');
+  // One segment per param, never more: a value can't hold a raw colon, so `org:x:viewer` is not an
+  // `org:$orgId` address (it would otherwise be `self` there). Colons in ids are encoded as %3A.
+  if (parts.length !== pattern.segments.length) return null;
   const params: Record<string, string> = {};
   for (let i = 0; i < pattern.segments.length; i++) {
     const segment = pattern.segments[i]!;
-    const last = i === pattern.segments.length - 1;
     if ('literal' in segment) {
       if (parts[i] !== segment.literal) return null;
-      if (last && parts.length !== pattern.segments.length) return null;
       continue;
     }
-    const value = last ? parts.slice(i).join(':') : parts[i];
+    const value = parts[i];
     if (!value) return null;
-    const decoded = raw ? value : decodeKnowledgeScopeValue(value, last);
+    const decoded = decodeKnowledgeScopeValue(value);
     if (decoded === null) return null;
     params[segment.param] = decoded;
   }
@@ -249,8 +282,7 @@ function matchPattern(pattern: KnowledgeScopePattern, address: string, raw: bool
 }
 
 /**
- * A canonical address from raw param values. For Knowledge APIs, templates, pins and tools only:
- * NOT for Agent scopes, which always take raw addresses and treat every percent sign literally.
+ * A canonical address from raw param values, the form Knowledge APIs, pins, tools and Agent scopes take.
  * @experimental
  */
 export function knowledgeScopeAddress(pattern: string, params: Record<string, string>): string {
@@ -260,18 +292,20 @@ export function knowledgeScopeAddress(pattern: string, params: Record<string, st
   return bound;
 }
 
-/** Encode raw Agent scopes at Knowledge run startup; never feed the result back into Agent scopes. @internal */
+/**
+ * Agent scopes are canonical addresses, the form Knowledge stores and `encodeKnowledgeScopeId` builds, so
+ * each scope has one spelling: `%` is always an escape and a raw `:`, `/` or `#` inside a value is refused. @internal
+ */
 export function knowledgeRunScopes(compiled: CompiledKnowledgeScopes, scopes: readonly string[]): string[] {
   return [
     ...new Set(
       scopes.map(scope => {
         for (const declaration of compiled.declarations.values()) {
           if (declaration.child) continue;
-          const params = matchPattern(declaration.pattern, scope, true);
-          if (params) return bindKnowledgePattern(declaration.pattern, params)!;
+          if (matchPattern(declaration.pattern, scope)) return scope;
         }
         throw new KnowledgeDeclarationError(
-          `Knowledge run scope "${scope}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`).`,
+          `Knowledge run scope "${scope}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`), and encode ids containing ":", "/", "#" or "%" with encodeKnowledgeScopeId.`,
         );
       }),
     ),
@@ -288,7 +322,7 @@ export function bindKnowledgePattern(pattern: KnowledgeScopePattern, params: Rec
     }
     const value = params[segment.param];
     if (value === undefined || value === '') return null;
-    values.push(encodeKnowledgeScopeValue(value, i === pattern.segments.length - 1));
+    values.push(encodeKnowledgeScopeValue(value));
   }
   return `${pattern.type}:${values.join(':')}`;
 }
@@ -308,7 +342,7 @@ export function knowledgePatternPrefix(pattern: KnowledgeScopePattern, params: R
     const value = params[segment.param];
     if (value === undefined) break;
     if (value === '') return null;
-    prefix += `${encodeKnowledgeScopeValue(value, false)}:`;
+    prefix += `${encodeKnowledgeScopeValue(value)}:`;
   }
   return prefix;
 }
@@ -325,9 +359,7 @@ function patternsOverlap(a: KnowledgeScopePattern, b: KnowledgeScopePattern): bo
     const right = b.segments[i]!;
     if ('literal' in left && 'literal' in right && left.literal !== right.literal) return false;
   }
-  if (a.segments.length === b.segments.length) return true;
-  const shorter = a.segments.length < b.segments.length ? a : b;
-  return 'param' in shorter.segments[shorter.segments.length - 1]!;
+  return a.segments.length === b.segments.length;
 }
 
 /**
@@ -526,12 +558,15 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
     entry.rules = compileRules(address, entry.declaration.access, Object.keys(match.params), undefined, true);
   }
 
-  const checkPins = (owner: string, pins: string[] | undefined, params: string[]) => {
-    for (const ref of pins ?? []) {
-      const parsed = parseKnowledgePageRef(ref);
+  const checkPins = (owner: string, pins: Array<string | KnowledgePinnedList> | undefined, params: string[]) => {
+    for (const entry of pins ?? []) {
+      const parsed = knowledgePinTarget(entry);
+      const ref = typeof entry === 'string' ? entry : String(entry.list);
       if (!parsed) {
         throw new KnowledgeDeclarationError(
-          `Knowledge pinnedContext entry "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`,
+          typeof entry === 'string'
+            ? `Knowledge pinnedContext entry "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`
+            : `Knowledge pinnedContext listing "${ref}" on "${owner}" must name a scope or "<scope>#<key>[/<key>…]", e.g. { list: "docs:$orgId#guides", depth: 1 }, with depth 1 to ${MAX_KNOWLEDGE_PIN_LIST_DEPTH}; keys can't be empty or contain "/", "#" or "%".`,
         );
       }
       const pattern = typedPattern(parsed.scope, `Knowledge pinnedContext scope on "${owner}"`);

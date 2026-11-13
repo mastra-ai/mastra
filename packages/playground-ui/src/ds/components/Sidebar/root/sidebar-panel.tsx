@@ -266,7 +266,8 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           'flex h-full min-h-0 flex-col overflow-hidden',
           'transition-opacity duration-200 motion-reduce:transition-none',
           // Inset on every side, like the mobile drawer's container, so the header and footer never touch an edge.
-          'p-2',
+          // 9px top and bottom puts the header on the same line as the main card's header.
+          'px-2 py-2.25',
           // Collapsed, lay the rail out at its final width from the first frame: `--sidebar-width` is
           // already the rail width while the panel still animates down to it, so items that center
           // themselves (the credits meter, an avatar) don't start mid-panel and slide across
@@ -298,9 +299,11 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
       >
         <ResizeHandleIndicator
           className={cn(
-            'via-foreground/30 group-hover:opacity-100',
-            'group-focus-visible:via-border-focus group-focus-visible:opacity-100',
-            'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100',
+            // Shows only once the pointer rests on the edge, so passing over it shows nothing; dragging and keyboard
+            // focus show it at once.
+            'via-foreground/30 transition-opacity duration-80 group-hover:opacity-100 group-hover:delay-40',
+            'group-focus-visible:via-border-focus group-focus-visible:opacity-100 group-focus-visible:transition-none',
+            'in-data-[sidebar-gesture=active]:via-foreground/45 in-data-[sidebar-gesture=active]:opacity-100 in-data-[sidebar-gesture=active]:transition-none',
           )}
         />
       </div>

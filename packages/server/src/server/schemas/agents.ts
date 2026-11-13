@@ -257,6 +257,7 @@ const agentEditorConfigSchema = z.union([
   z.object({
     instructions: z.boolean().optional(),
     tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+    model: z.boolean().optional(),
   }),
 ]);
 
@@ -739,7 +740,12 @@ export const enhanceInstructionsResponseSchema = z.object({
  */
 export const observeAgentBodySchema = z.object({
   runId: z.string().describe('The run ID to observe/reconnect to'),
-  offset: z.number().optional().describe('Resume from this event index (0-based). If omitted, replays all events.'),
+  offset: z
+    .number()
+    .optional()
+    .describe(
+      'Run-log position to resume from. Every /observe frame, and every /stream frame from a durable or evented agent, carries an `index` except abort frames; pass the index + 1 of the last frame that has one. A client that reconnects between an abort frame and its finish frame gets the abort frame again. A frame whose replay-cache write failed, or any frame when caching is off, arrives without an index, so no offset can resume at it; omitting `offset` replays whatever the transport itself retains, which can repeat frames already received. If omitted, replays the frames still retained.',
+    ),
 });
 
 const signalActiveBehaviorSchema = z.enum(['deliver', 'persist', 'discard']);

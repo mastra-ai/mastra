@@ -171,7 +171,7 @@ export const microsoftWordScenario: Scenario = {
       await attempt('update Word content', 'microsoft_word_update_word_document_content', {
         driveId,
         itemId: documentId,
-        contentBase64: DOCX_BASE64,
+        content: DOCX_BASE64,
       });
       await attempt('update Word metadata', 'microsoft_word_update_word_document_metadata', {
         driveId,

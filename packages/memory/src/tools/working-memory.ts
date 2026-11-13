@@ -426,12 +426,15 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
 
       if (
         workingMemoryInput.searchString &&
-        config.workingMemory?.scope === `resource` &&
+        scope === 'resource' &&
         workingMemoryInput.updateReason === `replace-irrelevant-memory`
       ) {
+        // Resource-scoped memory (the default) is shared by every thread of the resource, so
         // don't allow replacements due to something not being relevant to the current conversation
-        // if there's no searchString, then we will append.
-        workingMemoryInput.searchString = undefined;
+        return {
+          success: false,
+          reason: `working memory is shared across all conversations for this resource, so it can't be replaced just because it isn't relevant to this conversation. Use clarify-existing-memory to correct it, or append-new-memory to add to it.`,
+        };
       }
 
       if (workingMemoryInput.updateReason === `append-new-memory` && workingMemoryInput.searchString) {

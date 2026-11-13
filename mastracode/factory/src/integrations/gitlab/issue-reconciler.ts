@@ -1,6 +1,7 @@
 import { workItemPhaseSemantics } from '../../boards/index.js';
+import { toBoardSource } from '../../boards/project-boards.js';
 import type { IntakeIssue } from '../../capabilities/intake.js';
-import type { WorkItemRow } from '../../storage/domains/work-items/base.js';
+import type { Card } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
@@ -11,13 +12,13 @@ import type { ParsedGitLabWebhook } from './webhook.js';
 
 export type GitLabIssueReconciler = IssueReconciler;
 
-function stringMetadata(item: WorkItemRow, key: string): string | undefined {
-  const value = item.metadata?.[key];
+function stringMetadata(item: Card, key: string): string | undefined {
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
-function numberMetadata(item: WorkItemRow, key: string): number | undefined {
-  const value = item.metadata?.[key];
+function numberMetadata(item: Card, key: string): number | undefined {
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
@@ -25,7 +26,7 @@ function normalizeHost(host: string): string {
   return host.trim().toLowerCase().replace(/\.$/, '');
 }
 
-function identityForItem(item: WorkItemRow): { projectId: number; issueIid: number; host: string } | null {
+function identityForItem(item: Card): { projectId: number; issueIid: number; host: string } | null {
   const reference = decodeIssueReference(item.externalSource?.externalId ?? '');
   const projectId = Number(reference?.projectId);
   if (!reference || !Number.isSafeInteger(projectId) || projectId <= 0) return null;
@@ -99,7 +100,7 @@ export function attachGitLabIssueReconciler(
   const ingest = attachGitLabRules(gitlab, context);
   if (!ingest) return undefined;
   const boards = context.runtime.boards;
-  const reconciledMetadata = async (item: WorkItemRow, issue: IntakeIssue, sourceId: string) => {
+  const reconciledMetadata = async (item: Card, issue: IntakeIssue, sourceId: string) => {
     const identity = identityForItem(item);
     return {
       ...(identity && {
@@ -127,7 +128,8 @@ export function attachGitLabIssueReconciler(
     intake: gitlab.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
-    isTerminal: item => workItemPhaseSemantics(boards, item)?.kind === 'terminal',
+    ...(context.runtime.keptCards ? { cards: context.runtime.keptCards } : {}),
+    isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => {
       const issueIid = identityForItem(item)?.issueIid;
       return issueIid ? String(issueIid) : undefined;

@@ -269,13 +269,13 @@ describe('issues route', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('returns an empty page when there is no saved intake config', async () => {
+  it('treats an org with no saved intake config as Jira intake turned off', async () => {
     seed = await createFactoryStorageForTests();
 
     const res = await buildApp(org1()).request('/web/jira/issues');
 
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toMatchObject({ error: 'jira_intake_disabled' });
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
@@ -317,7 +317,7 @@ describe('issues route — Factory source bindings', () => {
   };
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -407,22 +407,6 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('withholds a source routed to the Factory without a board', async () => {
-    await seedProjects(2);
-    await seed.intake.setBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: '1',
-      factoryProjectId: projectA,
-    });
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
   it('forwards the pagination cursor together with the scoped selection', async () => {
     await seedProjects(2);
     await bind('1', projectA);
@@ -472,7 +456,6 @@ describe('issues route — Factory source bindings', () => {
           sourceId: '1',
         }),
       ],
-      intakeBoards: { '1': 'work' },
     });
   });
 

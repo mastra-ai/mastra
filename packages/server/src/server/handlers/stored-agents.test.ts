@@ -930,6 +930,63 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should export a model-only code agent draft from storage', async () => {
+      mockAgentsData.set('model-agent', {
+        id: 'model-agent',
+        name: 'Model Agent',
+        modelList: [
+          {
+            id: 'fallback',
+            provider: 'openai',
+            modelId: 'gpt-5.5',
+            enabled: true,
+            maxRetries: 2,
+          },
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-5.4-mini',
+            enabled: true,
+            maxRetries: 0,
+          },
+        ],
+      });
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'model-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'model-agent',
+      });
+
+      expect(result.config).toEqual({
+        modelList: [
+          {
+            enabled: true,
+            id: 'fallback',
+            maxRetries: 2,
+            modelId: 'gpt-5.5',
+            provider: 'openai',
+          },
+          {
+            enabled: true,
+            id: 'primary',
+            maxRetries: 0,
+            modelId: 'gpt-5.4-mini',
+            provider: 'openai',
+          },
+        ],
+      });
+    });
+
     it('should omit fields not owned by the editor config', async () => {
       mockMastra = createMockMastra({
         storage: mockStorage,
@@ -1151,7 +1208,7 @@ describe('Stored Agents Handlers', () => {
     it('should persist durable config on the initial version', async () => {
       const storage = new InMemoryStore();
       const mastra = createMockMastra({ storage: storage as unknown as MockStorage });
-      const durable = { maxSteps: 25, cleanupTimeoutMs: 0 };
+      const durable = { cleanupTimeoutMs: 0 };
 
       const result = await CREATE_STORED_AGENT_ROUTE.handler({
         ...createTestContext(mastra),
@@ -1220,9 +1277,57 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.create).toHaveBeenCalledWith({
         agent: expect.objectContaining({
           id: 'description-only-agent',
-          instructions: undefined,
         }),
       });
+      expect(mockAgentsStore.create.mock.calls[0]?.[0].agent).not.toHaveProperty('instructions');
+    });
+
+    it('should persist only the owned model list when creating a model-only code agent override', async () => {
+      const storage = new InMemoryStore();
+      const agentsStore = await storage.getStore('agents');
+      const editor = createMockEditor();
+      editor.agent.create = vi
+        .fn()
+        .mockImplementation(async (input: unknown) => agentsStore.create({ agent: input as never }));
+      const mastra = createMockMastra({
+        storage: storage as unknown as MockStorage,
+        editor,
+        agents: {
+          'model-only-agent': {
+            source: 'code',
+            __getEditorConfig: () => ({ model: true }),
+          },
+        },
+      });
+      const modelList = [
+        {
+          id: 'primary',
+          provider: 'openai',
+          modelId: 'gpt-5.4-mini',
+          enabled: true,
+          maxRetries: 0,
+        },
+      ];
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'model-only-agent',
+        name: 'Model Only Agent',
+        instructions: 'Code-owned instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        modelList,
+        tools: ['code-owned-tool'],
+        autoPublish: false,
+      });
+
+      const version = await agentsStore.getLatestVersion('model-only-agent');
+      expect(version).toMatchObject({
+        name: 'Model Only Agent',
+        modelList,
+      });
+      expect(version).not.toHaveProperty('instructions');
+      expect(version).not.toHaveProperty('model');
+      expect(version).not.toHaveProperty('tools');
     });
 
     it('should strip code-owned fields when creating an override for a file-based agent', async () => {
@@ -1926,6 +2031,25 @@ describe('Stored Agents Handlers', () => {
         expect(published.instructions).toBe('Auto-published instructions');
       });
 
+      it('marks a draft agent as published when a PATCH auto-publishes', async () => {
+        const agentId = 'auto-publish-draft-status-test';
+        const { agentsStore, lifecycleMastra } = await setupPublishedAgent(agentId);
+        await agentsStore.update({ id: agentId, status: 'draft' });
+        await useRealAutoVersioningOnce();
+
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...createTestContext(lifecycleMastra),
+          storedAgentId: agentId,
+          instructions: 'Published from draft',
+          autoPublish: true,
+        });
+
+        const latestVersion = await agentsStore.getLatestVersion(agentId);
+        const stored = await agentsStore.getById(agentId);
+        expect(stored?.activeVersionId).toBe(latestVersion?.id);
+        expect(stored?.status).toBe('published');
+      });
+
       it('preserves the active code-source version while replacing an unpublished rolling draft', async () => {
         const agentId = 'code-source-draft-test';
         const { agentsStore, lifecycleMastra, publishedVersion } = await setupPublishedAgent(agentId, 'code');
@@ -2015,6 +2139,34 @@ describe('Stored Agents Handlers', () => {
       expect(mockAgentsStore.delete).toHaveBeenCalledWith('delete-test');
       expect(mockAgentsData.has('delete-test')).toBe(false);
       expect(mockEditor.agent.clearCache).toHaveBeenCalledWith('delete-test');
+    });
+
+    it('still reports success when unregistering the deleted agent workspace fails', async () => {
+      mockAgentsData.set('delete-test', {
+        id: 'delete-test',
+        name: 'To Be Deleted',
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+      const warn = vi.fn();
+      const removeWorkspace = vi.fn().mockRejectedValue(new Error('workspace registry unavailable'));
+      Object.assign(mockMastra, {
+        listWorkspaces: vi.fn().mockReturnValue({ 'inline-abc': { source: 'agent', agentId: 'delete-test' } }),
+        removeWorkspace,
+        getLogger: () => ({ warn }),
+      });
+
+      const result = await DELETE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'delete-test',
+      });
+
+      expect(result).toEqual({ success: true, message: 'Agent delete-test deleted successfully' });
+      expect(removeWorkspace).toHaveBeenCalledWith('inline-abc');
+      expect(mockAgentsData.has('delete-test')).toBe(false);
+      expect(warn).toHaveBeenCalledWith(
+        'Failed to unregister workspace of deleted agent',
+        expect.objectContaining({ storedAgentId: 'delete-test' }),
+      );
     });
 
     it('should throw 404 when agent does not exist', async () => {
@@ -2684,19 +2836,19 @@ describe('createStoredAgentBodySchema', () => {
   it('should accept durable as a serializable config object', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: 25, cleanupTimeoutMs: 0 },
+      durable: { cleanupTimeoutMs: 0 },
     });
 
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.durable).toEqual({ maxSteps: 25, cleanupTimeoutMs: 0 });
+      expect(result.data.durable).toEqual({ cleanupTimeoutMs: 0 });
     }
   });
 
   it('should reject durable options that are not serializable config', () => {
     const result = createStoredAgentBodySchema.safeParse({
       ...baseAgent,
-      durable: { maxSteps: -1 },
+      durable: { cleanupTimeoutMs: -1 },
     });
 
     expect(result.success).toBe(false);

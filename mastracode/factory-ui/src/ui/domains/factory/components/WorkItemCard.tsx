@@ -13,8 +13,10 @@ import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { itemThreadSession } from '../boardItems';
+import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
+import { reworkReason } from '../reworkReason';
 import type { BoardLayout } from '../boardLayout';
+import { boardLoop } from '../boardFlow';
 import { itemBoard } from '../boardStages';
 import {
   awaitsTriageDecision,
@@ -56,6 +58,7 @@ export function WorkItemCard({
   proposal,
   approvingDecisionId,
   retryingDecisionId,
+  queuePosition,
   onApproveProposal,
   onDismissProposal,
   onRetryDecision,
@@ -81,6 +84,8 @@ export function WorkItemCard({
   evaluatingStage?: string;
   transitionReason?: string;
   decision?: FactoryDecisionSummary;
+  /** The decision's place in the run queue while it waits for a run slot. */
+  queuePosition?: number;
   /** Run a rule wants to start on this card, waiting for someone to release it. */
   proposal?: FactoryDecisionSummary;
   approvingDecisionId?: string;
@@ -100,14 +105,17 @@ export function WorkItemCard({
   const morph = useCardMorph();
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work' && boardId !== 'review';
   const definition = catalog.data?.find(board => board.id === boardId);
+  // A board without a pull request loop advances cards through its own phases instead.
+  const custom = boardLoop(definition) === undefined;
 
   const startingLabel = proposal !== undefined && approvingDecisionId === proposal.id ? 'Starting…' : preparing;
   const sessions = item.sessions;
-  const moves = cardMoves(item, columnStage);
+  const moves = cardMoves(item, columnStage, definition);
   const primaryMove = primaryCardMove(moves, columnStage, { sessions, stageHistory: item.stageHistory });
-  const threadSession = itemThreadSession(sessions);
+  const threadSession = cardThreadSession(item, definition?.phases, columnStage);
+  const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
+  const rework = definition ? reworkReason(item, definition.phases, activityPage?.events) : undefined;
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
     threadSession === undefined
@@ -123,9 +131,10 @@ export function WorkItemCard({
     preparing: startingLabel,
     retryRequested: decision !== undefined && retryingDecisionId === decision.id,
     decision,
+    queuePosition,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
+    held: awaitsTriageDecision(item, columnStage, definition),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -136,9 +145,10 @@ export function WorkItemCard({
   const retryDecisionId = status.kind === 'error' ? status.retryDecisionId : undefined;
   const primaryAction = cardPrimaryAction({
     item,
+    board: definition,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }),
+    resumeStage: resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }, definition),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
@@ -218,6 +228,8 @@ export function WorkItemCard({
       columnStage={columnStage}
       projectRepositoryId={projectRepositoryId}
       activityPage={activityPage}
+      contextSessions={contextSessions}
+      rework={rework}
       morph={morph}
       relatedLinks={relatedLinks}
       status={status}
@@ -246,6 +258,7 @@ export function WorkItemCard({
           status={status}
           actions={actions}
           menu={<WorkItemMenuItems {...menu} />}
+          rework={rework}
         />
         {detailsPanel}
       </>
@@ -293,6 +306,7 @@ export function WorkItemCard({
           status={status}
           actions={actions}
           open={false}
+          rework={rework}
           controls={
             <>
               <CardDetailsHint onOpen={morph.openDetails} />

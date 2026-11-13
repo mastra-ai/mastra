@@ -1,9 +1,13 @@
+import { ACTIVITY_EVENTS, CLOSE_REASONS, STATUS_EVENTS } from '../boards/board-events.js';
+import type { BoardEventFacts } from '../boards/board-events.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type {
   FactoryCommitDecision,
   FactoryRuleDecision,
   FactoryRuleJsonValue,
   FactoryRuleRejectionCode,
+  FactoryRouteEventDecision,
+  FactoryTransitionDecision,
   WorkItemSource,
 } from './types.js';
 
@@ -13,6 +17,7 @@ const MAX_VERSION_LENGTH = 128;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
+const MAX_DESCRIPTION_LENGTH = 8000;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
@@ -25,6 +30,11 @@ const MAX_JSON_DEPTH = 8;
 const MAX_JSON_COLLECTION_SIZE = 100;
 
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
+/** A source reference such as `acme/app#12` or `group/sub/project#3`. */
+const SOURCE_REFERENCE_RE = /^[a-z0-9_][a-z0-9_.\/-]*#\d+$/i;
+/** A provider login such as `octocat`, `dependabot[bot]`, `jane.doe` or GitLab's `_jane`. */
+const LOGIN_RE = /^[a-z0-9_][a-z0-9_.-]*(\[bot\])?$/i;
+const MAX_LOGIN_LENGTH = 100;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
 export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -37,6 +47,8 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'linear-issue',
   'jira-issue',
   'incidentio-follow-up',
+  'github-dependabot-alert',
+  'vanta-vulnerability',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
@@ -92,6 +104,25 @@ function boardIdentifier(value: unknown, label: string): string {
   return value;
 }
 
+function boardEvent(value: unknown, label: string): BoardEventFacts {
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError(`${label} event must be an object.`);
+  assertExactKeys(value, ['type', 'reason'], `${label} event`);
+  const type = enumValue(value.type, STATUS_EVENTS, `${label} event type`);
+  const reason =
+    value.reason === undefined ? undefined : enumValue(value.reason, CLOSE_REASONS, `${label} event reason`);
+  return { type, ...(reason ? { reason } : {}) };
+}
+
+function linkedItemReference(value: unknown, field: 'attachTo' | 'closesIssue'): { workItemId: string } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError(`Factory linked work item ${field} must be an object.`);
+  }
+  assertExactKeys(value as Record<string, unknown>, ['workItemId'], `Factory linked work item ${field}`);
+  const { workItemId } = value as Record<string, unknown>;
+  return { workItemId: boundedString(workItemId, `Factory linked work item ${field}.workItemId`, 128) };
+}
+
 export function assertFactoryDecisionTarget(
   decision: FactoryRuleDecision,
   boards: BoardRegistry,
@@ -106,6 +137,24 @@ export function assertFactoryDecisionTarget(
   if (decision.type === 'transition' && itemBoard !== undefined && itemBoard !== decision.board) {
     throw new FactoryRuleValidationError('Factory transition cannot change the item board.');
   }
+}
+
+const MAX_GOAL_OBJECTIVE_LENGTH = 2_000;
+const MAX_GOAL_RUNS = 50;
+
+function invokeSkillGoal(value: unknown): { objective: string; maxRuns?: number } | undefined {
+  if (value === undefined) return undefined;
+  if (!isPlainObject(value)) throw new FactoryRuleValidationError('Factory skill goal must be an object.');
+  assertExactKeys(value, ['objective', 'maxRuns'], 'Factory skill goal');
+  const objective = boundedString(value.objective, 'Factory skill goal objective', MAX_GOAL_OBJECTIVE_LENGTH);
+  const { maxRuns } = value;
+  if (
+    maxRuns !== undefined &&
+    (typeof maxRuns !== 'number' || !Number.isInteger(maxRuns) || maxRuns < 1 || maxRuns > MAX_GOAL_RUNS)
+  ) {
+    throw new FactoryRuleValidationError('Factory skill goal maxRuns is invalid.');
+  }
+  return { objective, ...(maxRuns !== undefined ? { maxRuns } : {}) };
 }
 
 function optionalBoundedString(value: unknown, label: string, max: number): string | undefined {
@@ -203,7 +252,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
     case 'transition': {
       assertExactKeys(
         value,
-        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter'],
+        ['type', 'idempotencyKey', 'board', 'stage', 'message', 'reenter', 'event'],
         'Factory transition decision',
       );
       if (value.reenter !== undefined && typeof value.reenter !== 'boolean') {
@@ -231,6 +280,52 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         stage: boardIdentifier(value.stage, 'Factory transition stage'),
         ...(message ? { message } : {}),
         ...(value.reenter === true ? { reenter: true } : {}),
+        ...(value.event !== undefined ? { event: boardEvent(value.event, 'Factory transition') } : {}),
+      };
+    }
+    case 'routeEvent': {
+      assertExactKeys(value, ['type', 'idempotencyKey', 'event'], 'Factory routeEvent decision');
+      return { type, ...commonCommitFields(value), event: boardEvent(value.event, 'Factory routeEvent') };
+    }
+    case 'signalActivity': {
+      assertExactKeys(
+        value,
+        ['type', 'idempotencyKey', 'event', 'reference', 'url', 'author', 'authorTrusted', 'idleBehavior'],
+        'Factory signalActivity decision',
+      );
+      const url = value.url;
+      if (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\/\S+$/.test(url)) {
+        throw new FactoryRuleValidationError('Factory signalActivity url must be an http(s) URL.');
+      }
+      if (typeof value.authorTrusted !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory signalActivity authorTrusted must be a boolean.');
+      }
+      const author =
+        value.author === undefined
+          ? undefined
+          : boundedString(value.author, 'Factory signalActivity author', MAX_LOGIN_LENGTH, LOGIN_RE);
+      return {
+        type,
+        ...commonCommitFields(value),
+        event: enumValue(value.event, ACTIVITY_EVENTS, 'Factory signalActivity event'),
+        reference: boundedString(
+          value.reference,
+          'Factory signalActivity reference',
+          MAX_SOURCE_KEY_LENGTH,
+          SOURCE_REFERENCE_RE,
+        ),
+        url,
+        ...(author ? { author } : {}),
+        authorTrusted: value.authorTrusted,
+        ...(value.idleBehavior === undefined
+          ? {}
+          : {
+              idleBehavior: enumValue(
+                value.idleBehavior,
+                ['wake', 'persist'] as const,
+                'Factory signalActivity idleBehavior',
+              ),
+            }),
       };
     }
     case 'upsertLinkedWorkItem': {
@@ -242,11 +337,15 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'board',
           'source',
           'sourceKey',
+          // Decisions saved before claims were dropped still carry it; it is ignored.
           'claimKey',
           'title',
+          'description',
           'url',
           'stage',
           'skipRules',
+          'attachTo',
+          'closesIssue',
           'metadata',
         ],
         'Factory linked work item decision',
@@ -254,27 +353,34 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
         throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
       }
-      const claimKey = optionalBoundedString(
-        value.claimKey,
-        'Factory linked work item claimKey',
-        MAX_SOURCE_KEY_LENGTH,
-      );
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const attachTo = linkedItemReference(value.attachTo, 'attachTo');
+      const closesIssue = linkedItemReference(value.closesIssue, 'closesIssue');
       return {
         type,
         ...commonCommitFields(value),
         board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
-        ...(claimKey ? { claimKey } : {}),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
+        ...(value.description === undefined
+          ? {}
+          : {
+              description: boundedString(
+                value.description,
+                'Factory linked work item description',
+                MAX_DESCRIPTION_LENGTH,
+              ),
+            }),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(attachTo ? { attachTo } : {}),
+        ...(closesIssue ? { closesIssue } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }
@@ -292,6 +398,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'cancelInFlight',
           'startsAfterOwnMove',
           'resume',
+          'goal',
         ],
         'Factory invoke skill decision',
       );
@@ -321,6 +428,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.resume === true && value.skillName === undefined) {
         throw new FactoryRuleValidationError('Factory skill resume requires skillName.');
       }
+      const goal = invokeSkillGoal(value.goal);
       return {
         type,
         ...commonCommitFields(value),
@@ -335,6 +443,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
         ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
+        ...(goal ? { goal } : {}),
       };
     }
     case 'sendMessage': {

@@ -23,6 +23,7 @@ export interface SettingsConfig {
   thinkingLevel: string;
   currentModelId: string;
   escapeAsCancel: boolean;
+  mouse: { dialogs: boolean; input: boolean };
   previewLines: number;
   storageBackend: StorageBackend;
   pgConnectionString: string;
@@ -43,6 +44,7 @@ export interface SettingsCallbacks {
   onYoloChange: (enabled: boolean) => void;
   onThinkingLevelChange: (level: string) => void;
   onEscapeAsCancelChange: (enabled: boolean) => void;
+  onMouseChange: (mouse: { dialogs: boolean; input: boolean }) => void;
   onPreviewLinesChange: (lines: number) => void;
   onStorageBackendChange: (backend: StorageBackend, connectionUrl?: string) => void;
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
@@ -54,6 +56,39 @@ export interface SettingsCallbacks {
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
   onApiKeys?: () => void;
   onClose: () => void;
+}
+
+const MOUSE_CHOICES = [
+  {
+    value: 'off',
+    label: 'Off',
+    dialogs: false,
+    input: false,
+    description: 'The terminal keeps the mouse (native scrolling and selection)',
+  },
+  {
+    value: 'dialogs',
+    label: 'Dialogs only',
+    dialogs: true,
+    input: false,
+    description: 'Click, hover and scroll in dialogs and slash suggestions',
+  },
+  {
+    value: 'input',
+    label: 'Input box only',
+    dialogs: false,
+    input: true,
+    description: 'Typing or editing captures the mouse for the input box',
+  },
+  { value: 'all', label: 'Dialogs + input box', dialogs: true, input: true, description: 'Both of the above' },
+] as const;
+
+function mouseChoice(mouse: { dialogs: boolean; input: boolean }) {
+  return MOUSE_CHOICES.find(c => c.dialogs === mouse.dialogs && c.input === mouse.input) ?? MOUSE_CHOICES[0];
+}
+
+function mouseLabel(mouse: { dialogs: boolean; input: boolean }): string {
+  return mouseChoice(mouse).label;
 }
 
 // =============================================================================
@@ -357,6 +392,29 @@ export class SettingsComponent extends Box implements Focusable {
           ),
       },
       {
+        id: 'mouse',
+        label: 'Mouse',
+        description:
+          'Use the mouse in dialogs and slash suggestions, in the input box while typing, or both. Off leaves the mouse to the terminal.',
+        currentValue: mouseLabel(config.mouse),
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            MOUSE_CHOICES.map(choice => ({
+              value: choice.value,
+              label: `  ${choice.label}`,
+              description: choice.description,
+            })),
+            mouseChoice(config.mouse).value,
+            value => {
+              const choice = MOUSE_CHOICES.find(c => c.value === value)!;
+              config.mouse = { dialogs: choice.dialogs, input: choice.input };
+              callbacks.onMouseChange(config.mouse);
+              done(choice.label);
+            },
+            () => done(),
+          ),
+      },
+      {
         id: 'previewLines',
         label: 'Preview lines',
         description: 'Preview lines shown under each tool, including shell output. Set to None to hide previews.',
@@ -520,7 +578,8 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'on',
                 label: '  On',
-                description: 'Add knowledge_search, knowledge_read, knowledge_page, knowledge_note and knowledge_pin',
+                description:
+                  'Add knowledge_list, knowledge_search, knowledge_read, knowledge_page, knowledge_note and knowledge_pin',
               },
               { value: 'off', label: '  Off', description: 'No Knowledge tools or pinned context' },
             ],

@@ -1,6 +1,6 @@
 {
   "name": "@internal/external-types",
-  "version": "0.0.97",
+  "version": "0.0.99",
   "description": "",
   "type": "module",
   "private": true,
@@ -32,7 +32,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/provider-utils": "^3.0.42",
+    "@ai-sdk/provider-utils": "^3.0.43",
     "@ai-sdk/ui-utils": "^1.2.11",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -57,7 +57,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
-    "directory": "packages/auth"
+    "directory": "packages/_external-types"
   },
   "bugs": {
     "url": "https://github.com/mastra-ai/mastra/issues"

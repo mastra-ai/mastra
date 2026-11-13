@@ -108,26 +108,32 @@ describe('nodeModulesExtensionResolver', () => {
   });
 
   describe('imports with JS extension', () => {
-    it('It will resolve the import to the correct path if no exports present', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
+    it.for([
+      { rootPath: '/project/node_modules/lodash', resolvedId: '/project/node_modules/lodash/fp/get.js' },
+      // #29571: native Windows paths must not leak backslashes into the import specifier
+      { rootPath: 'C:\\project\\node_modules\\lodash', resolvedId: 'C:\\project\\node_modules\\lodash\\fp\\get.js' },
+    ])(
+      'It will resolve the import to the correct path if no exports present ($rootPath)',
+      async ({ rootPath, resolvedId }) => {
+        vi.mocked(getPackageInfo).mockResolvedValue({
+          name: 'lodash',
+          version: '1.0.0',
+          rootPath,
+          packageJsonPath: `${rootPath}/package.json`,
+          packageJson: { name: 'lodash', version: '1.0.0' },
+        });
+        vi.mocked(readFile).mockResolvedValue(JSON.stringify({ name: 'lodash' }));
 
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
+        mockNodeResolveHandler.mockResolvedValue({ id: resolvedId });
 
-      const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
+        const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
 
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.js',
-      });
-    });
+        expect(result).toMatchObject({
+          external: true,
+          id: 'lodash/fp/get.js',
+        });
+      },
+    );
 
     it('handles .mjs extension', async () => {
       const pkgJson = { name: 'lodash' };

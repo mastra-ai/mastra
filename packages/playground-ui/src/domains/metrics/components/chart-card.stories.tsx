@@ -187,6 +187,47 @@ export const TitleLink: Story = {
   ),
 };
 
+function RenamableCard() {
+  const [title, setTitle] = useState('Tokens');
+  return (
+    <ChartCard
+      variant="compact"
+      title={title}
+      onTitleChange={setTitle}
+      dragHandle={{ 'aria-label': 'Move Tokens', draggable: true }}
+      total="1.6M"
+      toolbar={<MetricsLineChartLegend series={tokenSeries} />}
+    >
+      <ChartArea>
+        <MetricsLineChart
+          data={data}
+          series={tokenSeries}
+          height="fill"
+          xLabels="edges"
+          showLegend={false}
+          lineStyle="thin"
+          dots="hover"
+          valueFormatter={tokens.format}
+          axisFormatter={tokens.format}
+          {...EDGE_BUCKET_AXIS}
+        />
+      </ChartArea>
+    </ChartCard>
+  );
+}
+
+/**
+ * `onTitleChange`: the title reads as plain text and edits in place, outlined on hover and focus.
+ * Enter or blur commits, Escape reverts. Shown here next to a drag handle, as a dashboard being arranged.
+ */
+export const EditableTitle: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <RenamableCard />
+    </div>
+  ),
+};
+
 /** `isLoading`: a skeleton in place of the total. */
 export const CompactLoading: Story = {
   render: () => (
@@ -200,6 +241,28 @@ export const CompactLoading: Story = {
       >
         <ChartArea>
           <MetricsLineChart data={data} series={tokenSeries} height="fill" showLegend={false} isLoading />
+        </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
+/** `ChartArea` with `isEmpty`: the dates stay, under dashed rulers and "No data in this range"; the legend hides. */
+export const CompactEmpty: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <ChartCard variant="compact" title="Tokens" total="0" toolbar={<MetricsLineChartLegend series={tokenSeries} />}>
+        <ChartArea isEmpty>
+          <MetricsLineChart
+            data={data.map(d => ({ ...d, input: 0, cached: 0, output: 0 }))}
+            series={tokenSeries}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            valueFormatter={tokens.format}
+            axisFormatter={tokens.format}
+            {...EDGE_BUCKET_AXIS}
+          />
         </ChartArea>
       </ChartCard>
     </div>
@@ -238,6 +301,17 @@ export const Hero: Story = {
           valueFormatter={usd}
           axisFormatter={formatAxisUsd}
         />
+      </ChartCard>
+    </div>
+  ),
+};
+
+/** `variant="hero"` with `isLoading`: the skeleton keeps the total's trimmed height, so the header doesn't move when it lands. */
+export const HeroLoading: Story = {
+  render: () => (
+    <div className="w-[min(56rem,calc(100vw-3rem))]">
+      <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" isLoading>
+        <MetricsLineChart data={data} series={byModel} height={384} showLegend={false} isLoading />
       </ChartCard>
     </div>
   ),

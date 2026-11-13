@@ -1,6 +1,6 @@
 {
   "name": "@mastra/koa",
-  "version": "1.7.25",
+  "version": "1.7.28-alpha.0",
   "description": "Mastra Koa adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.136",
+    "@ai-sdk/openai": "^2.0.139",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
@@ -53,7 +53,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "koa": "^3.0.0"
   },
   "engines": {

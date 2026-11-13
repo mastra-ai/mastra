@@ -56,7 +56,8 @@ The session is organized into sub-objects, each owning one domain of per-convers
   {
     name: 'model',
     type: 'SessionModel',
-    description: 'Active model selection, including per-mode persistence. See model methods below.',
+    description:
+      'Active model selection. One model is persisted per thread and stays active when the session changes modes. See model methods below.',
   },
   {
     name: 'om',
@@ -282,12 +283,15 @@ Returns: `boolean`
 
 ### Tool approvals
 
-#### `resolveToolApproval(toolName)`
+#### `resolveToolApproval(toolName, scope?)`
 
 Return the effective policy after applying explicit tool rules, session grants, and category rules.
 
+Rules belong to each thread. Pass a run's `RequestContext` as `scope` to use the rules and grants of the thread that run belongs to. A thread ID as `scope` checks that thread's grants against the current thread's rules. Without `scope`, the current thread is used.
+
 ```typescript
 const policy = session.resolveToolApproval('execute_command')
+const policyForRun = session.resolveToolApproval('write_file', requestContext)
 ```
 
 Returns: `PermissionPolicy`

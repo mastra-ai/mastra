@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mcp",
-  "version": "2.7.0",
+  "version": "2.9.0",
   "description": "",
   "type": "module",
   "main": "dist/index.js",
@@ -33,6 +33,7 @@
     "test:server": "vitest run ./src/server",
     "test:integration": "cd integration-tests && pnpm test:mcp",
     "test:compat": "bash integration-tests/compat.sh",
+    "test:compat:version-packages": "node integration-tests/version-packages-regression.mjs",
     "test:conformance": "tsx ./src/conformance/run.ts",
     "test:typegen": "vitest run src/cli/typegen.test.ts src/cli/generate.test.ts src/cli/package.test.ts",
     "test": "pnpm test:server && pnpm test:client && pnpm test:typegen && pnpm test:integration",
@@ -54,11 +55,11 @@
     "tsx": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.79.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "zod": "^4.2.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.137",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.139",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",

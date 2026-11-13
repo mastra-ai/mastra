@@ -516,7 +516,23 @@ Runs restart concurrently, up to `recovery.workflowConcurrency` at a time (defau
 
 To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
 
-While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. The boot-time sweep, `mastra.restartAllActiveWorkflowRuns()`, rechecks a skipped run once its lease could have expired, so a run whose process crashed is still recovered. `workflow.restartAllActiveWorkflowRuns()` skips the run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
+While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. `workflow.restartAllActiveWorkflowRuns()` skips such a run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
+
+`mastra.restartAllActiveWorkflowRuns()`, which the server calls on boot, restarts a default-engine run only once it stopped: no instance holds its lease, and neither the run nor its lease changed for `recovery.workflowGraceMs` (2 seconds by default). A run that's still running, or stopped more recently, is checked again when that period could end, so a run whose process crashed is still recovered.
+
+Evented runs on a pubsub whose broker redelivers unacknowledged events (Redis Streams, Valkey Streams, Google Cloud Pub/Sub) are left to the broker: when a worker stops mid-step, the broker redelivers the step's event to another worker, and booting instances don't restart the run. Scheduled runs are the exception, because their events stay in the process that fired them, so recovery restarts them. On any other pubsub, including the default in-process one, recovery restarts every active evented run at once. The in-process pubsub delivers events only inside one process, so running several instances on one storage with it isn't supported for evented workflows.
+
+A restarted run runs the interrupted step again, even if that step finished before the process stopped but its result wasn't saved. On the evented engine, a step that already saved its result doesn't run again when its event arrives late, for example after a broker redelivery or a `restart()` that ran while the step was saving its result. The run continues from the saved result instead. This needs a storage adapter with run-ownership support. Workflows that set `autoRestartActiveRuns: false`, including durable agent workflows, run the step again. Make steps with side effects idempotent, so a repeated step has no additional effect.
+
+A step's `execute` function receives `runId` and `workflowId`. Combine them with the `id` you gave the step in `createStep()`, plus a name for each side effect when the step performs more than one, to build an idempotency key.
+
+Some steps need part of the key to come from their input:
+
+- A nested workflow can receive a new `runId` when it's recovered or redelivered. Pass the parent's `runId` into the nested workflow's input and use it in place of the nested `runId`.
+- `foreach` runs the same step once per item. Add an ID from the step's input that identifies the item.
+- A loop runs the same step on every iteration. Return an iteration number from the step and read it from the input on the next iteration. A repeated or resumed iteration receives the same input, so the number doesn't change.
+
+For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
 
 ### Restarting an active workflow run with `restart()`
 

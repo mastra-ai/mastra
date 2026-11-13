@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.17.0",
+  "version": "1.19.1-alpha.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -57,10 +57,11 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.1",
-    "@ai-sdk/amazon-bedrock": "^5.0.125",
-    "@ai-sdk/anthropic": "^3.0.135",
-    "@ai-sdk/openai": "^3.0.132",
-    "@ai-sdk/openai-compatible": "^2.0.87",
+    "@ai-sdk/amazon-bedrock": "^5.0.130",
+    "@ai-sdk/anthropic": "^4.0.94",
+    "@ai-sdk/google-vertex": "^3.0.186",
+    "@ai-sdk/openai": "^4.0.106",
+    "@ai-sdk/openai-compatible": "^3.0.82",
     "@ast-grep/napi": "^0.42.3",
     "@aws-sdk/credential-providers": "^3.1156.0",
     "@mastra/agent-browser": "workspace:*",
@@ -77,7 +78,10 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
-    "ai": "^6.0.316",
+    "@mastra/voice-deepgram": "workspace:*",
+    "@mastra/voice-mistral": "workspace:*",
+    "@mastra/voice-openai": "workspace:*",
+    "ai": "^7.0.159",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
     "posthog-node": "^5.57.1",
@@ -89,6 +93,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@ai-sdk/provider": "^4.0.35",
     "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
@@ -103,7 +108,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.19.0"

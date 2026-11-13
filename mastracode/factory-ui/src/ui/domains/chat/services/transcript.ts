@@ -1,9 +1,11 @@
 import { stripAnsi } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallExit } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activity';
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { z } from 'zod';
 
 import { sentByOther } from './message-author';
 
@@ -17,6 +19,7 @@ export interface ToolCall {
   output: string;
   // Epoch milliseconds.
   createdAt?: number;
+  exit?: ToolCallExit;
 }
 
 export function toolCallStatus(status: ToolCall['status']): ActivityStatus {
@@ -68,6 +71,8 @@ export interface NotificationEntry {
   notifKind?: string;
   priority?: string;
   metadata?: Record<string, unknown>;
+  /** What the sender said about the notification, e.g. which session sent it and what it waits on. */
+  attributes?: Record<string, unknown>;
 }
 
 export interface NotificationSummaryEntry {
@@ -175,7 +180,10 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ],
       };
     case 'mergeWindow': {
-      const merged = dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages);
+      const merged = settleCommandExits(
+        dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages),
+        action.messages,
+      );
       // `pending` is otherwise cleared only by live stream events. When the
       // stream missed the run (dropped, or the tab was hidden), the refetched
       // window is what brings the reply in, so it has to clear `pending` too.
@@ -227,6 +235,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
       if (!entry || entry.kind !== 'message') return state;
 
       const parts = [...entry.message.content.parts];
+      let sourcePartIndexes = entry.sourcePartIndexes;
       if (event.event.type === 'text-delta') {
         if (event.event.delta.length === 0) return state;
         const partIndex = parts.findLastIndex(part => part.type === 'text');
@@ -234,28 +243,46 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         if (!part || part.type !== 'text') return state;
         parts[partIndex] = { ...part, text: part.text + event.event.delta };
       } else {
-        const mappedIndex = entry.sourcePartIndexes?.indexOf(event.event.index);
-        if (mappedIndex === -1) return state;
-        const partIndex = mappedIndex ?? event.event.index;
-        // Only the append slot sits past the end: a further index would leave a
-        // hole in `parts`, and `find`/`for…of` readers then see that hole as an
-        // undefined part. Dropping the update matches the mapped path; the next
-        // window merge reconciles skipped parts.
-        const outOfRange = mappedIndex === undefined ? partIndex > parts.length : partIndex >= parts.length;
-        if (outOfRange) return state;
-        if (event.event.type === 'reasoning-delta') {
-          const part = parts[partIndex];
+        const { index } = event.event;
+        const mappedIndex = sourcePartIndexes ? sourcePartIndexes.indexOf(index) : index;
+        // A new part lands in the append slot. With a mapping, that is any
+        // stream index past every mapped one, since filtered parts leave gaps.
+        // A further index without a mapping would leave a hole in `parts`, so
+        // it is dropped and the next window merge reconciles it.
+        const appends = sourcePartIndexes
+          ? mappedIndex === -1 && index > Math.max(-1, ...sourcePartIndexes)
+          : index === parts.length;
+        if (appends && event.event.type !== 'reasoning-delta') {
+          const toolCallId = toolCallIdForPart(event.event.part);
+          if (toolCallId && toolCallIdsDrawnElsewhere(state.entries, entryIndex).has(toolCallId)) {
+            // Another entry already draws this tool call; keep mapping later
+            // stream indexes past it instead of drawing it twice.
+            if (sourcePartIndexes) return state;
+            const mapped = parts.map((_, partIndex) => partIndex);
+            return {
+              ...state,
+              entries: state.entries.map((candidate, at) =>
+                at === entryIndex ? { ...entry, sourcePartIndexes: mapped } : candidate,
+              ),
+            };
+          }
+          parts.push(event.event.part);
+          if (sourcePartIndexes) sourcePartIndexes = [...sourcePartIndexes, index];
+        } else if (mappedIndex === -1 || mappedIndex >= parts.length) {
+          return state;
+        } else if (event.event.type === 'reasoning-delta') {
+          const part = parts[mappedIndex];
           if (!part || part.type !== 'reasoning') return state;
           const reasoning = part.reasoning + event.event.delta;
-          parts[partIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
+          parts[mappedIndex] = { ...part, reasoning, details: [{ type: 'text', text: reasoning }] };
         } else {
-          parts[partIndex] = event.event.part;
+          parts[mappedIndex] = event.event.part;
         }
       }
 
       const message = { ...entry.message, content: { ...entry.message.content, parts } };
       const entries = state.entries.map((candidate, index) =>
-        index === entryIndex ? { ...entry, message, streaming: true } : candidate,
+        index === entryIndex ? { ...entry, message, sourcePartIndexes, streaming: true } : candidate,
       );
       const next = { ...state, entries };
       return message.role === 'assistant' && hasAssistantText(next) ? { ...next, pending: false } : next;
@@ -300,15 +327,26 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
+      return withTool(state, event.toolCallId, t => ({
+        ...t,
+        output: appendShellOutput(t.output, stripAnsi(event.output)),
+      }));
+    case 'command_exit':
+      return knownToolIndex(state.entries, event.toolCallId) === -1
+        ? state
+        : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
-    case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+    case 'tool_end': {
+      // A prompt answered in another window never gets a local resolvePrompt;
+      // the call finishing is the only signal this window receives.
+      const settled = withTool(state, event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
       }));
+      return { ...settled, entries: settled.entries.filter(e => !isPromptFor(e, new Set([event.toolCallId]))) };
+    }
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -441,15 +479,91 @@ export function createInitialTranscript({
   messages?: MastraDBMessage[];
   threadId?: string;
 } = {}): TranscriptState {
-  return {
-    ...initialTranscript,
-    entries: messagesToEntries(messages),
-    threadId,
-  };
+  return settleCommandExits({ ...initialTranscript, entries: messagesToEntries(messages), threadId }, messages);
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+  const settled = terminalToolCallIds(messages);
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedPrompts(message).filter(prompt => !settled.has(prompt.toolCallId)),
+  ]);
+}
+
+function terminalToolCallIds(messages: MastraDBMessage[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.content.parts) {
+      if (part.type === 'tool-invocation' && isTerminalInvocationState(part.toolInvocation.state)) {
+        ids.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
+  return ids;
+}
+
+function isPromptFor(entry: TimelineEntry, toolCallIds: { has(id: string): boolean }): boolean {
+  return (entry.kind === 'approval' || entry.kind === 'suspension') && toolCallIds.has(entry.toolCallId);
+}
+
+const sandboxExitSchema = z.object({
+  toolCallId: z.string(),
+  exitCode: z.number(),
+  // These only describe the exit, so a malformed one is dropped rather than the whole exit and its ✕.
+  killed: z.boolean().optional().catch(undefined),
+  timedOut: z.boolean().optional().catch(undefined),
+  error: z.string().optional().catch(undefined),
+});
+
+/** One shape for an exit, whether it streamed as `command_exit` or was saved as `data-sandbox-exit`. */
+function commandExit({ exitCode, killed = false, timedOut = false, error }: ToolCallExit): ToolCallExit {
+  return { exitCode, killed, timedOut, error };
+}
+
+function sameExit(a: ToolCallExit, b: ToolCallExit | undefined): boolean {
+  return a.exitCode === b?.exitCode && a.killed === b.killed && a.timedOut === b.timedOut && a.error === b.error;
+}
+
+/** The exit shares its call's message, unless a sealed message pushed it into a later one. */
+function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, ToolCallExit> {
+  const exits = new Map<string, ToolCallExit>();
+  for (const part of messages.flatMap(message => message.content.parts)) {
+    if (part.type !== 'data-sandbox-exit' || !('data' in part)) continue;
+    const exit = sandboxExitSchema.safeParse(part.data);
+    if (exit.success) exits.set(exit.data.toolCallId, commandExit(exit.data));
+  }
+  return exits;
+}
+
+// SSE gaps can swallow command_exit; the persisted exit settles the row.
+function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const exits = commandExits(messages);
+  if (exits.size === 0) return state;
+
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message') return entry;
+    const exited = exitedTools(entry, exits);
+    if (exited.length === 0) return entry;
+    changed = true;
+    return { ...entry, runtimeTools: { ...entry.runtimeTools, ...Object.fromEntries(exited) } };
+  });
+
+  return changed ? { ...state, entries } : state;
+}
+
+function exitedTools(
+  entry: MessageEntry,
+  exits: ReadonlyMap<string, ToolCallExit>,
+): Array<readonly [string, ToolCall]> {
+  return entry.message.content.parts.flatMap(part => {
+    const persisted = toolCallFromPart(part);
+    if (!persisted) return [];
+    const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
+    const exit = exits.get(tool.toolCallId);
+    if (exit === undefined || sameExit(exit, tool.exit)) return [];
+    return [[tool.toolCallId, { ...tool, exit }] as const];
+  });
 }
 
 function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
@@ -522,29 +636,152 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
-  if (messages.every(message => onScreenIndex.has(message))) return reconciled;
+  const unclaimed = messages.filter(message => !onScreenIndex.has(message));
+  const {
+    state: folded,
+    absorbed,
+    positionOf,
+  } = foldStepsIntoRunEntries(anchored, unclaimed, onScreenIndex, terminalToolCallIds(messages));
+  if (unclaimed.every(message => absorbed.has(message))) return reconcileToolResults(folded, messages);
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
   let missing: MastraDBMessage[] = [];
 
   for (const message of messages) {
+    if (absorbed.has(message)) continue;
     const anchorIndex = onScreenIndex.get(message);
     if (anchorIndex === undefined) {
       missing.push(message);
       continue;
     }
 
-    if (anchorIndex < cursor) continue;
-    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    const position = positionOf(anchorIndex);
+    if (position < cursor) continue;
+    entries.push(...folded.entries.slice(cursor, position), ...messagesToEntries(missing));
     missing = [];
-    cursor = anchorIndex;
+    cursor = position;
   }
-  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...folded.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...reconciled, entries };
+  return reconcileToolResults({ ...folded, entries }, messages);
+}
+
+// The stream draws a whole run as one entry, but storage keeps one message per
+// step. A stored step that shares a tool call with an on-screen entry belongs
+// to that run: fold the parts the entry lacks into it (plus any stored prompt
+// not yet on screen) instead of drawing the step, and its tool calls, again.
+// A streaming entry's part indexes belong to its stream, so what it lacks is
+// drawn as an entry of its own right after it; the stream will not redraw
+// those tool calls (`withoutToolPartsDrawnElsewhere`), and this still holds
+// when the stream dropped the run's `message_end`.
+function foldStepsIntoRunEntries(
+  state: TranscriptState,
+  unclaimed: MastraDBMessage[],
+  anchors: Map<MastraDBMessage, number>,
+  settledInWindow: Set<string>,
+): { state: TranscriptState; absorbed: Set<MastraDBMessage>; positionOf: (index: number) => number } {
+  const absorbed = new Set<MastraDBMessage>();
+  if (unclaimed.length === 0) return { state, absorbed, positionOf: index => index };
+
+  const entries = [...state.entries];
+  const runOf = new Map<string, number>();
+  const settled = new Set(settledInWindow);
+  for (const [index, entry] of entries.entries()) {
+    if (entry.kind !== 'message') continue;
+    for (const part of entry.message.content.parts) {
+      if (part.type !== 'tool-invocation') continue;
+      runOf.set(part.toolInvocation.toolCallId, index);
+      if (isTerminalInvocationState(part.toolInvocation.state)) settled.add(part.toolInvocation.toolCallId);
+    }
+  }
+  // Text a run entry draws that no claimed step accounts for, by occurrence.
+  const spareTexts = new Map<number, string[]>();
+  const spareTextsOf = (index: number, entry: MessageEntry) => {
+    let spare = spareTexts.get(index);
+    if (spare) return spare;
+    spare = drawableTexts(entry.message);
+    for (const [message, anchor] of anchors) {
+      if (anchor !== index) continue;
+      for (const text of drawableTexts(message)) {
+        const at = spare.indexOf(text);
+        if (at !== -1) spare.splice(at, 1);
+      }
+    }
+    spareTexts.set(index, spare);
+    return spare;
+  };
+  const promptIds = new Set(entries.flatMap(entry => (entry.kind === 'message' ? [] : [entry.id])));
+  const after = new Map<number, TimelineEntry[]>();
+  const insertAfter = (index: number, added: TimelineEntry[]) => {
+    if (added.length > 0) after.set(index, [...(after.get(index) ?? []), ...added]);
+  };
+
+  for (const message of unclaimed) {
+    const index = toolCallIdsOf(message.content.parts)
+      .map(toolCallId => runOf.get(toolCallId))
+      .find(candidate => candidate !== undefined);
+    const entry = index === undefined ? undefined : entries[index];
+    if (index === undefined || !entry || entry.kind !== 'message' || entry.message.role !== message.role) continue;
+    absorbed.add(message);
+
+    const drawn = [...entry.message.content.parts, ...(after.get(index) ?? []).flatMap(partsOfMessageEntry)];
+    const unseen = partsMissingFrom(drawn, message.content.parts, spareTextsOf(index, entry));
+    if (unseen.length > 0 && entry.streaming) {
+      const { metadata: _prompts, ...content } = message.content;
+      insertAfter(index, [
+        toMessageEntry({ ...message, content: { ...content, parts: unseen } }, { streaming: false }),
+      ]);
+    } else if (unseen.length > 0) {
+      const parts = [...entry.message.content.parts, ...unseen];
+      entries[index] = { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
+    }
+    for (const toolCallId of toolCallIdsOf(unseen)) runOf.set(toolCallId, index);
+
+    const prompts = persistedPrompts(message).filter(
+      prompt => !settled.has(prompt.toolCallId) && !promptIds.has(prompt.id),
+    );
+    for (const prompt of prompts) promptIds.add(prompt.id);
+    insertAfter(index, prompts);
+  }
+
+  if (absorbed.size === 0) return { state, absorbed, positionOf: index => index };
+  const positions: number[] = [];
+  const folded: TimelineEntry[] = [];
+  for (const [index, entry] of entries.entries()) {
+    positions.push(folded.length);
+    folded.push(entry, ...(after.get(index) ?? []));
+  }
+  return { state: { ...state, entries: folded }, absorbed, positionOf: index => positions[index] ?? folded.length };
+}
+
+function partsOfMessageEntry(entry: TimelineEntry): MastraMessagePart[] {
+  return entry.kind === 'message' ? entry.message.content.parts : [];
+}
+
+// `spareTexts` is consumed: each drawn text accounts for one stored copy.
+function partsMissingFrom(
+  drawn: MastraMessagePart[],
+  parts: MastraMessagePart[],
+  spareTexts: string[],
+): MastraMessagePart[] {
+  const toolCallIds = new Set(toolCallIdsOf(drawn));
+  return parts.filter(part => {
+    if (part.type === 'step-start') return false;
+    if (part.type === 'tool-invocation') return !toolCallIds.has(part.toolInvocation.toolCallId);
+    if (part.type === 'text') {
+      const text = part.text.trim();
+      if (text.length === 0) return false;
+      const at = spareTexts.indexOf(text);
+      if (at === -1) return true;
+      spareTexts.splice(at, 1);
+      return false;
+    }
+    const key = JSON.stringify(part);
+    return !drawn.some(candidate => JSON.stringify(candidate) === key);
+  });
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
@@ -732,13 +969,15 @@ function adoptCoveringWindowCopies(state: TranscriptState, anchors: Map<MastraDB
     const copy = copyByEntry.get(index);
     if (!copy || entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
     const onScreenParts = entry.message.content.parts;
-    const covers = windowCopyCovers(onScreenParts, copy.content.parts);
-    const identical = covers && windowCopyCovers(copy.content.parts, onScreenParts);
+    // Another entry may already draw some of this step's tool calls (a folded run); never adopt them twice.
+    const copyParts = withoutToolPartsDrawnElsewhere(copy, state.entries, index).message.content.parts;
+    const covers = windowCopyCovers(onScreenParts, copyParts);
+    const identical = covers && windowCopyCovers(copyParts, onScreenParts);
     if (!covers || identical) return entry;
     changed = true;
     return {
       ...entry,
-      message: { ...entry.message, content: { ...entry.message.content, parts: copy.content.parts } },
+      message: { ...entry.message, content: { ...entry.message.content, parts: copyParts } },
     };
   });
 
@@ -761,7 +1000,7 @@ function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessag
   });
 }
 
-// SSE gaps can swallow tool_end; persisted results settle the row.
+// SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
 function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   const serverTerminalParts = new Map<string, ToolInvocationMessagePart>();
   for (const message of messages) {
@@ -773,21 +1012,29 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   }
   if (serverTerminalParts.size === 0) return state;
 
-  let changed = false;
-  const entries = state.entries.map(entry => {
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
-    let entryChanged = false;
-    const parts = entry.message.content.parts.map(part => {
-      if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
-      const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
-      if (!serverPart) return part;
-      entryChanged = true;
-      return serverPart;
+  // A prompt answered elsewhere whose tool_end this window missed (SSE gap).
+  const answered = state.entries.filter(entry => isPromptFor(entry, serverTerminalParts));
+  let changed = answered.length > 0;
+  const entries = state.entries
+    .filter(entry => !answered.includes(entry))
+    .map(entry => {
+      if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+      let entryChanged = false;
+      const parts = entry.message.content.parts.map(part => {
+        if (part.type !== 'tool-invocation') return part;
+        const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
+        if (!serverPart) return part;
+        const settled =
+          isTerminalInvocationState(part.toolInvocation.state) &&
+          part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
+        if (settled) return part;
+        entryChanged = true;
+        return serverPart;
+      });
+      if (!entryChanged) return entry;
+      changed = true;
+      return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
     });
-    if (!entryChanged) return entry;
-    changed = true;
-    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
-  });
 
   return changed ? { ...state, entries } : state;
 }
@@ -929,11 +1176,7 @@ function isUnclaimedOptimisticCopy(entry: TimelineEntry, texts: Set<string>): bo
   );
 }
 
-function withoutToolPartsDrawnElsewhere(
-  message: MastraDBMessage,
-  entries: TimelineEntry[],
-  own: number,
-): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
+function toolCallIdsDrawnElsewhere(entries: TimelineEntry[], own: number): Set<string> {
   const drawnElsewhere = new Set<string>();
   for (const [index, entry] of entries.entries()) {
     if (index === own || entry.kind !== 'message' || entry.message.role !== 'assistant') continue;
@@ -942,6 +1185,15 @@ function withoutToolPartsDrawnElsewhere(
       if (toolCallId) drawnElsewhere.add(toolCallId);
     }
   }
+  return drawnElsewhere;
+}
+
+function withoutToolPartsDrawnElsewhere(
+  message: MastraDBMessage,
+  entries: TimelineEntry[],
+  own: number,
+): { message: MastraDBMessage; sourcePartIndexes?: number[] } {
+  const drawnElsewhere = toolCallIdsDrawnElsewhere(entries, own);
   const sourcePartIndexes = message.content.parts.flatMap((part, index) => {
     const toolCallId = toolCallIdForPart(part);
     return toolCallId && drawnElsewhere.has(toolCallId) ? [] : [index];
@@ -1010,14 +1262,19 @@ function hasAssistantText(state: TranscriptState): boolean {
   );
 }
 
-function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+function knownToolIndex(entries: TimelineEntry[], toolCallId: string): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.runtimeTools?.[toolCallId]) return i;
     if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
   }
-  return currentTurnAssistantIndex(entries);
+  return -1;
+}
+
+function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+  const known = knownToolIndex(entries, toolCallId);
+  return known === -1 ? currentTurnAssistantIndex(entries) : known;
 }
 
 function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
@@ -1046,6 +1303,16 @@ function answeredLatestUser(entries: TimelineEntry[], stored: Set<number>): bool
     if (entry.message.role === 'user') return false;
   }
   return false;
+}
+
+/** Live shell output kept per tool call, in string code units. Matches the controller's display state. */
+const MAX_SHELL_OUTPUT = 1024 * 1024;
+
+/** Appends shell output, keeping only the latest `MAX_SHELL_OUTPUT` code units. */
+function appendShellOutput(existing: string, chunk: string): string {
+  // Copy an oversized chunk's tail: a plain `slice` can share, and so retain, the whole chunk.
+  if (chunk.length >= MAX_SHELL_OUTPUT) return JSON.parse(JSON.stringify(chunk.slice(-MAX_SHELL_OUTPUT))) as string;
+  return existing.slice(-(MAX_SHELL_OUTPUT - chunk.length)) + chunk;
 }
 
 function withTool(

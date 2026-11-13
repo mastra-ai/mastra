@@ -36,11 +36,33 @@ export const ConnectionStatus: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Write a message…" disabled />
+          <ComposerInput aria-label="Message" placeholder="Write a message" disabled />
           <ComposerActions />
         </ComposerBox>
       </ComposerRing>
     </Composer>
+  ),
+};
+
+export const OverlayPlacement: Story = {
+  render: () => (
+    <div className="flex h-64 flex-col justify-end gap-2">
+      <p className="text-body-sm text-muted-foreground">The header floats over this content instead of pushing it.</p>
+      <Composer aria-label="Message composer" className="relative">
+        <ComposerHeader placement="overlay">
+          <ComposerHeaderRow role="status" aria-live="polite">
+            <Spinner size="sm" aria-hidden="true" role="presentation" />
+            <ComposerHeaderContent>Reconnecting…</ComposerHeaderContent>
+          </ComposerHeaderRow>
+        </ComposerHeader>
+        <ComposerRing>
+          <ComposerBox>
+            <ComposerInput aria-label="Message" placeholder="Keep typing while reconnecting" />
+            <ComposerActions />
+          </ComposerBox>
+        </ComposerRing>
+      </Composer>
+    </div>
   ),
 };
 
@@ -93,7 +115,7 @@ export const OwnershipAndTasks: Story = {
       </ComposerHeader>
       <ComposerRing>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Steer the agent…" />
+          <ComposerInput aria-label="Message" placeholder="Steer the agent" />
           <ComposerActions>
             <Button type="submit" size="sm">
               Send message
@@ -126,7 +148,7 @@ function ToggleHeaderPreview() {
           <OptionalContext />
         </ComposerHeader>
         <ComposerBox>
-          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes…" />
+          <ComposerInput aria-label="Message" placeholder="Your draft stays when context changes" />
           <ComposerActions />
         </ComposerBox>
       </Composer>

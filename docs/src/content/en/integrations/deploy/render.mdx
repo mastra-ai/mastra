@@ -1,14 +1,30 @@
 ---
 title: "Render | Deploy"
-description: "Deploy Mastra APIs, workers, and distributed agent workflows on Render with web services, background workers, persistent storage, and private networking."
+description: "Give Mastra agents Render tools through Mastra Connect, and deploy Mastra APIs, workers, and distributed agent workflows on Render."
+packages:
+  - "@mastra/connect"
 ---
 
 import Steps from "@site/src/components/Steps";
 import StepItem from "@site/src/components/StepItem";
+import RenderMcpConnectTools from "@site/src/components/connect/generated/render-mcp.mdx";
 
 # Render
 
-Deploy Mastra applications on [Render](https://render.com/?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra). Host the Mastra API as a [web service](https://render.com/docs/web-services?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), or use [Render Workflows](https://render.com/docs/workflows?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for long-running tasks with independent retry policies.
+Use [Render](https://render.com/?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) with Mastra in two ways:
+
+- **Agent tools** let an agent manage Render services, environment variables, logs, and metrics through [Mastra Connect](/docs/mastra-platform/connect).
+- **[Deployment](#deploy-on-render)** runs your Mastra application on Render.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+<RenderMcpConnectTools />
+
+## Deploy on Render
+
+Deploy Mastra applications on Render. Host the Mastra API as a [web service](https://render.com/docs/web-services?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), or use [Render Workflows](https://render.com/docs/workflows?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for long-running tasks with independent retry policies.
 
 Choose the deployment path that fits your application:
 
@@ -16,9 +32,9 @@ Choose the deployment path that fits your application:
 - **Mastra workflow**: Run an entire Mastra workflow within one task. Render controls the outer run, while Mastra manages its steps and state. See [Defining Workflow Tasks](https://render.com/docs/workflows-defining?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra) for configuration details.
 - **Distributed agent operations**: Give each operation its own compute plan, timeout, and retry policy. Render Workflows handles the execution queue and provides run observability.
 
-This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
+This section builds an editorial pipeline that reviews a draft from three perspectives in parallel, then passes the feedback to an editor agent. Use the links above if you want to deploy a Mastra API or execute an entire Mastra workflow as one task.
 
-## How Render Workflows integrate with Mastra
+### How Render Workflows integrate with Mastra
 
 Mastra supplies the agents and application logic, while Render Workflows defines the execution boundaries. A typical pipeline has three layers:
 
@@ -28,9 +44,9 @@ Mastra supplies the agents and application logic, while Render Workflows defines
 
 Calling one Render task from another creates a chained task run. Each chained run executes in its own instance. You can set compute, timeout, and retries on that task alone.
 
-This guide builds an editorial pipeline that reviews a draft from three perspectives in parallel, then uses a Mastra editor agent to produce a revised version. You can try a running copy in the [live demo](https://render-workflows-mastra.onrender.com).
+This section builds an editorial pipeline that reviews a draft from three perspectives in parallel, then uses a Mastra editor agent to produce a revised version. You can try a running copy in the [live demo](https://render-workflows-mastra.onrender.com).
 
-## Setup
+### Setup
 
 You need a Render account and the Render CLI. The CLI runs a local task server during development. You can also use it to create a workflow service on Render.
 
@@ -69,9 +85,9 @@ OPENAI_API_KEY=your_openai_api_key
 
 Any supported [Mastra model provider](/models) works.
 
-## Build a distributed agent pipeline
+### Build a distributed agent pipeline
 
-### Create the agents
+#### Create the agents
 
 In `src/mastra`, create an `agents` directory with `reviewer-agent.ts` and `editor-agent.ts`. Define both agents:
 
@@ -105,7 +121,7 @@ export const editorAgent = new Agent({
 })
 ```
 
-### Configure the Mastra instance
+#### Configure the Mastra instance
 
 Add both agents to the Mastra instance in `src/mastra/index.ts`:
 
@@ -124,7 +140,7 @@ export const mastra = new Mastra({
 
 Retrieving agents from the Mastra instance gives them access to shared application services such as logging, storage, and observability.
 
-### Create the review task
+#### Create the review task
 
 In `src`, create a `tasks` directory. The reviewer agent handles one area of focus. Its compute plan, five-minute timeout, and retry policy apply only to that analysis. A temporary model-provider failure can trigger another attempt without restarting the other reviewers.
 
@@ -165,7 +181,7 @@ export const reviewDraft = task(
 )
 ```
 
-### Create the revision task
+#### Create the revision task
 
 This task combines the feedback and produces a revised draft. It uses a larger compute plan and a longer timeout than each reviewer.
 
@@ -206,9 +222,9 @@ export const reviseDraft = task(
 )
 ```
 
-### Create the orchestration task
+#### Create the orchestration task
 
-The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt cannot duplicate external side effects or other non-idempotent work.
+The parent dispatches three reviews in parallel with `Promise.all()`, then sends their combined feedback to the revision step. Retries are disabled at this level because each child defines its own policy. If you enable orchestration retries, ensure that another attempt can't duplicate external side effects or other non-idempotent work.
 
 ```ts title="src/tasks/editorial-task.ts"
 import { task } from '@renderinc/sdk/workflows'
@@ -234,7 +250,7 @@ export const editorialPipeline = task(
 )
 ```
 
-### Register the tasks
+#### Register the tasks
 
 Create `src/index.ts` and import the editorial task:
 
@@ -272,9 +288,9 @@ Add these scripts to `package.json`:
 
 Those files are the complete pipeline. [render-examples/render-workflows-mastra](https://github.com/render-examples/render-workflows-mastra) mirrors this `src/` layout and adds a web UI that starts the parent task.
 
-## Run the pipeline
+### Run the pipeline
 
-### Local
+#### Local
 
 Start the local Render Workflows development server:
 
@@ -298,7 +314,7 @@ render workflows tasks start editorial_pipeline \
 
 The local server keeps runs and their logs in memory, so you can inspect them after they finish with `render workflows runs list <task-name> --local`.
 
-### Production
+#### Production
 
 Running the pipeline on Render requires a _workflow service_. This is the Render service that holds your task definitions: it builds your repository, registers every task it finds, and provisions an instance for each run.
 
@@ -312,7 +328,7 @@ Running the pipeline on Render requires a _workflow service_. This is the Render
   <StepItem>
     #### Create the workflow service
 
-    In the [Render Dashboard](https://dashboard.render.com?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), click **New > Workflow** and link the repository from the previous step. Then complete the creation form:
+    In the [Render Dashboard](https://dashboard.render.com?utm_source=partner\&utm_medium=partnerships\&utm_campaign=2026_partnership_mastra), select **New > Workflow** and link the repository from the previous step. Then complete the creation form:
 
     | Field | Value |
     | - | - |
@@ -357,7 +373,7 @@ Running the pipeline on Render requires a _workflow service_. This is the Render
   </StepItem>
 </Steps>
 
-## Trigger from your application
+### Trigger from your application
 
 You can trigger the pipeline asynchronously from a Mastra application, web service, or script with the Render SDK.
 

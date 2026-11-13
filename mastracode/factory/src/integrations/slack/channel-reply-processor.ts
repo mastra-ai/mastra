@@ -57,7 +57,7 @@ export class FactoryChannelReplyProcessor implements Processor {
         ? [
             `Only messages you send with \`${REPLY_TOOL}\` reach this thread; your other text stays in the session. Don't write a note about what you posted. After a reply, either keep working or end your turn with an empty message; any text you write after posting is wasted.`,
             `When a request will take tools or more than a moment, post one short line first that says what you are about to do, then do the work and post the outcome when you finish — not a replay of the steps.`,
-            `Post again in between only when you need an answer or have news the people in the thread would want. When a message needs nothing from you, don't call it.`,
+            `Post again in between only when you need an answer or have news the people in the thread would want. When a message that doesn't mention you needs nothing from you, don't call it.`,
             `When you open a pull request, its link is posted to this thread for you, and again when it merges, so don't post the link yourself.`,
           ]
         : [
@@ -101,4 +101,10 @@ export function sessionLink({
 
 export function modelSettingsLink(factoryProjectId: string): string | undefined {
   return factorySettingsUrl(factoryProjectId, 'models');
+}
+
+/** `VOICE_INPUT_ANCHOR` in factory-ui's `settingsSections.ts`; the voice section scrolls itself into view on this hash. */
+export function voiceSettingsLink(factoryProjectId: string): string | undefined {
+  const models = modelSettingsLink(factoryProjectId);
+  return models && `${models}#voice-input`;
 }

@@ -17,20 +17,26 @@ interface ChatThinkingProviderProps {
   children: ReactNode;
 }
 
-export function ChatThinkingProvider({ children }: ChatThinkingProviderProps) {
+export function ChatThinkingProvider({
+  children,
+  initialDraftThinkingLevel,
+}: ChatThinkingProviderProps & { initialDraftThinkingLevel?: ThinkingLevelSetting }) {
   const { draftSessionId } = useChatSessionContext();
   return draftSessionId ? (
-    <DraftChatThinkingProvider>{children}</DraftChatThinkingProvider>
+    <DraftChatThinkingProvider initialOverride={initialDraftThinkingLevel}>{children}</DraftChatThinkingProvider>
   ) : (
     <LiveChatThinkingProvider>{children}</LiveChatThinkingProvider>
   );
 }
 
-function DraftChatThinkingProvider({ children }: ChatThinkingProviderProps) {
+function DraftChatThinkingProvider({
+  children,
+  initialOverride,
+}: ChatThinkingProviderProps & { initialOverride?: ThinkingLevelSetting }) {
   const { catalogTarget, modelScope } = useChatModelScope();
   const { activeModelId } = useChatModels();
   const defaultModelQuery = useDefaultModelQuery();
-  const [override, setOverride] = useState<ThinkingLevelSetting>();
+  const [override, setOverride] = useState(initialOverride);
   const { level, thinkingDefault, loadError } = useEffectiveThinkingLevel({
     modelId: activeModelId,
     modelScope,

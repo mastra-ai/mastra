@@ -14,6 +14,7 @@ import {
   strongerKnowledgeRole,
 } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgeRole, KnowledgeScopeDeclarations } from './declarations';
+import { refreshKnowledgeLinksTo, updateKnowledgeLinks } from './links';
 
 /** Why a run can or can't reach a scope or page. See {@link Knowledge.explainAccess}. @experimental */
 export interface KnowledgeAccessExplanation {
@@ -26,6 +27,12 @@ export interface KnowledgeAccessExplanation {
   /** `missing`: no such page. `hidden`: the page exists but the run can't read its scope. `no-rule`: a scope no rule gives the run. */
   reason?: 'missing' | 'hidden' | 'no-rule';
 }
+
+type ScopeMatch = NonNullable<ReturnType<CompiledKnowledgeScopes['match']>>;
+type HeldPrincipals = Map<string, Array<{ principal: string; params: ScopeMatch['params'] }>>;
+/** The addresses a write-run start looked up, and the scope pages it found or wrote since. */
+type KnownScopes = { looked: Set<string>; byAddress: Map<string, KnowledgePage>; byId: Map<string, KnowledgePage> };
+type MaterializeRun = { held: HeldPrincipals; known?: KnownScopes };
 
 /** Declaration-backed access and lazy scope creation shared by the Knowledge lifecycle and tools. @internal */
 export class KnowledgeScopeRuntime {
@@ -112,19 +119,57 @@ export class KnowledgeScopeRuntime {
     return renamed;
   }
 
+  /**
+   * Whether a stored scope row belongs to the declaration its address matches today. Rows written
+   * before scope params matched exactly one segment can carry another (`org:acme:viewer` stored
+   * under `org:$orgId`); they must not pick up the rules of the declaration that now matches them.
+   */
+  #isCurrent(scope: KnowledgePage): boolean {
+    return !scope.declaration || this.compiled.match(scope.address!)?.declaration === scope.declaration;
+  }
+
+  #assertCurrent(scope: KnowledgePage): void {
+    if (this.#isCurrent(scope)) return;
+    throw new KnowledgeDeclarationError(
+      `Knowledge scope "${scope.address}" was created from "${scope.declaration}", which no longer matches it ` +
+        `(scope params match one segment; encode colons in ids as %3A). It can't be used as a scope of ` +
+        `"${this.compiled.match(scope.address!)?.declaration}".`,
+    );
+  }
+
   async readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
     const storage = await this.getStorage();
-    return knowledgeReadScopeFor(this.compiled, principals, addresses => storage.getScopesByAddress(addresses));
+    // belongsTo parents resolve through current rows only, so a stale row can't parent new children.
+    const read = await knowledgeReadScopeFor(this.compiled, principals, async addresses =>
+      (await storage.getScopesByAddress(addresses)).filter(scope => this.#isCurrent(scope)),
+    );
+    if (read === 'all' || read.addresses.length === 0) return read;
+    const stale = new Set(
+      (await storage.getScopesByAddress(read.addresses))
+        .filter(scope => !this.#isCurrent(scope))
+        .map(scope => scope.address!),
+    );
+    return stale.size ? { ...read, addresses: read.addresses.filter(address => !stale.has(address)) } : read;
   }
 
   async roleOn(principals: readonly string[], scope: KnowledgePage): Promise<KnowledgeRole | null> {
     this.validatePrincipals(principals);
     if (!scope.isScope || !scope.address) throw new Error('Knowledge roles require a scope page.');
+    if (!this.#isCurrent(scope)) return null;
     const storage = await this.getStorage();
-    const parent = scope.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    return knowledgeRoleOn(this.compiled, principals, { address: scope.address, parentAddress: parent?.address });
+    return knowledgeRoleOn(this.compiled, principals, {
+      address: scope.address,
+      parentAddress: await this.#currentParentAddress(storage, scope),
+    });
+  }
+
+  // A stale parent row (its address now matches another declaration) must not bind belongsTo rules.
+  async #currentParentAddress(storage: KnowledgeStorage, scope: KnowledgePage): Promise<string | undefined> {
+    if (!scope.parentId) return undefined;
+    const parent = await storage.getPage({ id: scope.parentId, read: 'all' });
+    return parent && this.#isCurrent(parent) ? (parent.address ?? undefined) : undefined;
   }
 
   async explainAccess(
@@ -161,8 +206,13 @@ export class KnowledgeScopeRuntime {
     }
 
     const address = scope?.address ?? (target as { scope: string }).scope;
-    const parent = scope?.parentId ? await storage.getPage({ id: scope.parentId, read: 'all' }) : null;
-    const reasons = knowledgeAccessGrants(this.compiled, principals, { address, parentAddress: parent?.address });
+    const reasons =
+      scope && !this.#isCurrent(scope)
+        ? []
+        : knowledgeAccessGrants(this.compiled, principals, {
+            address,
+            parentAddress: scope ? await this.#currentParentAddress(storage, scope) : undefined,
+          });
     let role: KnowledgeRole | null = null;
     for (const reason of reasons) role = strongerKnowledgeRole(role, reason.role);
     return {
@@ -201,49 +251,115 @@ export class KnowledgeScopeRuntime {
     address: string,
     principals: readonly string[],
     provenance: KnowledgeProvenance,
-    ancestors: readonly string[] = [],
   ): Promise<KnowledgePage> {
     this.validatePrincipals(principals);
     await this.checkDeclarations();
+    return this.#materialize(address, principals, provenance, [], { held: this.#held(principals) });
+  }
+
+  /**
+   * {@link materializeScope} for each address in turn (a write-run start's principals), reading
+   * scopes from one lookup. `#materialize` skips the store call for a scope that exists, needs no new
+   * `belongsTo` link, has its child scopes and declares no template pages; warnings fire as before.
+   */
+  async materializeScopes(
+    addresses: readonly string[],
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+  ): Promise<void> {
+    this.validatePrincipals(principals);
+    await this.checkDeclarations();
+    const storage = await this.getStorage();
+    const wanted = new Set<string>();
+    for (const address of addresses) {
+      wanted.add(address);
+      const match = this.compiled.match(address);
+      if (match?.compiled.child) wanted.add(address.slice(0, address.lastIndexOf('/')));
+      else for (const child of match?.compiled.children ?? []) wanted.add(`${address}/${child.child!.name}`);
+    }
+    const known: KnownScopes = { looked: wanted, byAddress: new Map(), byId: new Map() };
+    for (const row of await storage.getScopesByAddress([...wanted])) {
+      known.byAddress.set(row.address!, row);
+      known.byId.set(row.id, row);
+    }
+    const run = { held: this.#held(principals), known };
+    for (const address of addresses) await this.#materialize(address, principals, provenance, [], run);
+  }
+
+  /** The run's distinct principals grouped by declaration key, matched once. */
+  #held(principals: readonly string[]): HeldPrincipals {
+    const held: HeldPrincipals = new Map();
+    for (const principal of new Set(principals)) {
+      const match = this.compiled.match(principal);
+      if (!match) continue;
+      const group = held.get(match.compiled.key) ?? [];
+      group.push({ principal, params: match.params });
+      held.set(match.compiled.key, group);
+    }
+    return held;
+  }
+
+  #belongsToCandidates(match: ScopeMatch, held: HeldPrincipals): string[] {
+    const belongsTo = match.compiled.belongsTo!;
+    return (held.get(belongsTo.key) ?? [])
+      .filter(candidate =>
+        belongsTo.params.every(
+          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
+        ),
+      )
+      .map(candidate => candidate.principal);
+  }
+
+  async #materialize(
+    address: string,
+    principals: readonly string[],
+    provenance: KnowledgeProvenance,
+    ancestors: readonly string[],
+    run: MaterializeRun,
+  ): Promise<KnowledgePage> {
     const match = this.compiled.match(address);
     if (!match)
       throw new KnowledgeDeclarationError(`Knowledge scope "${address}" does not match a declared scope type.`);
     if (ancestors.includes(address))
       throw new KnowledgeDeclarationError(`Knowledge scope placement cycle at "${address}".`);
     const storage = await this.getStorage();
+    const known = run.known;
+    const lookUp = async (scope: string) =>
+      known?.looked.has(scope) || known?.byAddress.has(scope)
+        ? known.byAddress.get(scope)
+        : (await storage.getScopesByAddress([scope]))[0];
     if (match.compiled.child) {
       const parentAddress = address.slice(0, address.lastIndexOf('/'));
-      await this.materializeScope(parentAddress, principals, provenance, [...ancestors, address]);
-      const [child] = await storage.getScopesByAddress([address]);
+      await this.#materialize(parentAddress, principals, provenance, [...ancestors, address], run);
+      const child = known?.byAddress.get(address) ?? (await storage.getScopesByAddress([address]))[0];
       if (!child) throw new Error(`Knowledge template child "${address}" was not materialized.`);
       return child;
     }
 
-    const [existing] = await storage.getScopesByAddress([address]);
+    const existing = await lookUp(address);
+    if (existing) this.#assertCurrent(existing);
     let parentId = existing?.parentId;
     const belongsTo = match.compiled.belongsTo;
     if (belongsTo) {
-      const candidates = [...new Set(principals)].filter(principal => {
-        const candidate = this.compiled.match(principal);
-        if (!candidate || candidate.compiled.key !== belongsTo.key) return false;
-        return belongsTo.params.every(
-          param => match.params[param] === undefined || candidate.params[param] === match.params[param],
-        );
-      });
+      const candidates = this.#belongsToCandidates(match, run.held);
       if (candidates.length > 1) {
         this.warn(
           `Knowledge scope "${address}" has ambiguous belongsTo placement: ${candidates.join(', ')}. Keeping its existing placement.`,
         );
       } else if (candidates[0]) {
         if (existing?.parentId) {
-          const parent = await storage.getPage({ id: existing.parentId, read: 'all' });
+          let parent = known?.byId.get(existing.parentId) ?? null;
+          if (!parent) {
+            parent = await storage.getPage({ id: existing.parentId, read: 'all' });
+            if (parent) known?.byId.set(parent.id, parent);
+          }
           if (parent?.address !== candidates[0]) {
             this.warn(
               `Knowledge scope "${address}" already belongs to "${parent?.address}"; ignoring requested parent "${candidates[0]}".`,
             );
           }
         } else if (!ancestors.includes(candidates[0]) && candidates[0] !== address) {
-          parentId = (await this.materializeScope(candidates[0], principals, provenance, [...ancestors, address])).id;
+          parentId = (await this.#materialize(candidates[0], principals, provenance, [...ancestors, address], run)).id;
         } else {
           this.warn(
             `Knowledge scope "${address}" cannot be placed under "${candidates[0]}" because that would form a cycle.`,
@@ -252,6 +368,16 @@ export class KnowledgeScopeRuntime {
       }
     }
     const declaration = match.compiled.declaration;
+    // Placed already: nothing to link, and no template pages to restore or child scopes to create.
+    if (
+      known &&
+      existing &&
+      parentId === existing.parentId &&
+      !declaration.pages?.length &&
+      match.compiled.children.every(child => known.byAddress.has(`${address}/${child.child!.name}`))
+    ) {
+      return existing;
+    }
     const result = await storage.materializeScope({
       address,
       declaration: match.declaration,
@@ -267,8 +393,19 @@ export class KnowledgeScopeRuntime {
       pages: declaration.pages,
       provenance,
     });
+    this.#assertCurrent(result.scope);
+    if (result.created) {
+      // A new scope (and its config pages) can resolve body links written before it existed.
+      await updateKnowledgeLinks(this.warn, () =>
+        refreshKnowledgeLinksTo(storage, [result.scope], { withDescendants: true }),
+      );
+    }
     if (result.parentConflict) {
       this.warn(`Knowledge scope "${address}" was already linked by another run; keeping its persisted parent.`);
+    }
+    if (run.known) {
+      run.known.byAddress.set(address, result.scope);
+      run.known.byId.set(result.scope.id, result.scope);
     }
     return result.scope;
   }

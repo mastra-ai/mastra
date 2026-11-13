@@ -346,6 +346,61 @@ describe('Sidebar resize handle keyboard', () => {
   });
 });
 
+describe('Sidebar minimum width raised at runtime', () => {
+  const SidebarAt = ({ minWidth }: { minWidth: number }) => (
+    <SidebarProvider defaultWidth={240} minWidth={minWidth} collapseBelow={200} maxWidth={480}>
+      <Sidebar>
+        <Sidebar.Nav>
+          <Sidebar.NavList>
+            <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+          </Sidebar.NavList>
+        </Sidebar.Nav>
+      </Sidebar>
+    </SidebarProvider>
+  );
+  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
+
+  it('widens a narrower sidebar, then returns it to the width the user chose', () => {
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={200} />);
+    const scope = getSidebarScope();
+    expect(widthOf(scope)).toBe('240px');
+
+    view.rerender(<SidebarAt minWidth={320} />);
+    expect(widthOf(scope)).toBe('320px');
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('320');
+    expect(window.localStorage.getItem('sidebar:width')).toBeNull();
+
+    view.rerender(<SidebarAt minWidth={200} />);
+    expect(widthOf(scope)).toBe('240px');
+  });
+
+  it('leaves a sidebar that is already wide enough alone', () => {
+    window.localStorage.setItem('sidebar:width', '400');
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={200} />);
+    const scope = getSidebarScope();
+
+    view.rerender(<SidebarAt minWidth={320} />);
+
+    expect(widthOf(scope)).toBe('400px');
+  });
+
+  it('keeps the width the user chose when it first opens on a view that needs more room', () => {
+    window.localStorage.setItem('sidebar:width', '240');
+    mockMatchMedia(false);
+    const view = render(<SidebarAt minWidth={320} />);
+    const scope = getSidebarScope();
+    expect(widthOf(scope)).toBe('320px');
+
+    view.rerender(<SidebarAt minWidth={200} />);
+
+    expect(widthOf(scope)).toBe('240px');
+    expect(screen.getByRole('separator').getAttribute('aria-valuenow')).toBe('240');
+    expect(window.localStorage.getItem('sidebar:width')).toBe('240');
+  });
+});
+
 describe('Sidebar dragging the resize handle', () => {
   const renderSidebar = (props: { defaultState?: 'default' | 'collapsed'; collapsedWidth?: number } = {}) => {
     mockMatchMedia(false);
@@ -757,7 +812,7 @@ describe('Sidebar mobile drawer closing', () => {
   });
 });
 
-function SidebarStackFixture() {
+function SidebarStackFixture({ closeOnEscape }: { closeOnEscape?: boolean }) {
   const { expand } = useSidebar();
   const [view, setView] = useState('root');
   const returnFocusRef = useRef<HTMLButtonElement>(null);
@@ -775,7 +830,12 @@ function SidebarStackFixture() {
       <Sidebar.Nav>
         <Sidebar.NavStack value={view} onValueChange={setView}>
           <Sidebar.NavStack.Root>Grouped navigation</Sidebar.NavStack.Root>
-          <Sidebar.NavStack.View value="account-settings" title="Account settings" returnFocusRef={returnFocusRef}>
+          <Sidebar.NavStack.View
+            value="account-settings"
+            title="Account settings"
+            returnFocusRef={returnFocusRef}
+            closeOnEscape={closeOnEscape}
+          >
             Account navigation
           </Sidebar.NavStack.View>
         </Sidebar.NavStack>
@@ -820,6 +880,27 @@ describe('Sidebar', () => {
 
     await waitFor(() => expect(document.activeElement).toBe(trigger));
     expect(screen.getByText('Grouped navigation')).toBeDefined();
+  });
+
+  it('leaves focus where it is when the sidebar expands onto an open takeover', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-stack-expand-test" disableKeyboardShortcut={false}>
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open account settings' });
+    fireEvent.click(trigger);
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="collapsed"]')).not.toBeNull());
+    trigger.focus();
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="default"]')).not.toBeNull());
+
+    expect(document.activeElement).toBe(trigger);
   });
 
   it('renders only the active takeover page once its exit finishes', async () => {
@@ -875,6 +956,22 @@ describe('Sidebar', () => {
     expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
   });
 
+  it('keeps a view that accompanies a page open on Escape when asked to', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-page-escape-test">
+        <SidebarStackFixture closeOnEscape={false} />
+      </Sidebar.Provider>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    expect(document.activeElement).toBe(back);
+    expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
+  });
+
   it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {
     mockMatchMedia(true);
     render(
@@ -921,7 +1018,8 @@ describe('Sidebar padding', () => {
       </SidebarProvider>,
     );
     const content = document.querySelector('.sidebar-layout > div');
-    expect(content?.className).toMatch(/\bp-2\b/);
+    expect(content?.className).toMatch(/\bpx-2\b/);
+    expect(content?.className).toMatch(/\bpy-2\.25\b/);
     expect(document.querySelector('[data-slot=sidebar-footer]')?.className).not.toMatch(/\bpb-/);
   });
 });

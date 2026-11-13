@@ -4,7 +4,8 @@ import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import type { GithubStatus } from '../../workspaces/services/github';
-import { GithubLabelRouting } from './GithubLabelRouting';
+import { useIntakeSelection } from '../hooks/useIntakeSelection';
+import { GithubConnectButton, GithubManageButton } from './GithubConnectionControls';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -13,11 +14,13 @@ import { IntakeSyncControl } from './common/IntakeSyncControl';
 
 export function GithubIntakeSection({
   config,
-  busy,
-  update,
   listed,
   statusQuery,
 }: IntakeSectionProps & { statusQuery: UseQueryResult<GithubStatus> }) {
+  const selection = useIntakeSelection('github');
+  const dependabotSelection = useIntakeSelection('dependabot');
+  // Present only when the server registers Dependabot intake alongside GitHub.
+  const dependabot = config.dependabot;
   const factoriesQuery = useFactoriesQuery();
   const status = statusQuery.data;
   const connected = status?.connected === true;
@@ -39,15 +42,15 @@ export function GithubIntakeSection({
       icon={<SettingsIntegrationIcon provider="github" />}
       account={status?.installations.map(installation => installation.accountLogin).join(', ')}
       listed={listed}
-      connectable={status?.enabled === true}
+      connection={listed ? connected && <GithubManageButton /> : status?.enabled === true && <GithubConnectButton />}
       description={githubDescription(status, unavailable)}
       syncControl={
         <IntakeSyncControl
           accessibleLabel="Sync GitHub issues"
           description="Import open issues from selected repositories."
           checked={config.github.enabled}
-          disabled={busy || !connected}
-          onCheckedChange={enabled => update({ ...config, github: { ...config.github, enabled } })}
+          disabled={!connected}
+          onCheckedChange={enabled => selection.update(current => ({ ...current, enabled }))}
         />
       }
       action={
@@ -72,32 +75,53 @@ export function GithubIntakeSection({
             itemIcon={<SettingsIntegrationIcon provider="github" />}
             groups={[{ id: 'repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
             selectedIds={config.github.sourceIds}
-            pending={busy}
+            saving={selection.saving}
             loading={factoriesQuery.isPending}
             error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
             onRetry={() => void factoriesQuery.refetch()}
             onToggleItem={slug =>
-              update({
-                ...config,
-                github: { ...config.github, sourceIds: toggleSourceId(config.github.sourceIds, slug) },
-              })
+              selection.update(current => ({ ...current, sourceIds: toggleSourceId(current.sourceIds, slug) }))
             }
           />
           {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />
           )}
-          {slugs.length > 0 &&
-            githubFactories.map(factory => (
-              <GithubLabelRouting
-                key={factory.id}
-                factoryProjectId={factory.id}
-                name={factory.name}
-                showScope={githubFactories.length > 1}
-                repositories={factory.repositories
-                  .filter(repository => repository.provider !== 'gitlab')
-                  .map(repository => repository.slug)}
-              />
-            ))}
+        </>
+      )}
+      {connected && dependabot && (
+        <>
+          <SettingsRow
+            label="Dependabot alerts"
+            description="Create a card for each open Dependabot alert in selected repositories."
+          >
+            <IntakeSyncControl
+              label="Sync alerts"
+              accessibleLabel="Sync Dependabot alerts"
+              description="Poll selected repositories for open Dependabot alerts every 15 minutes. Cards close when the alert is fixed or dismissed."
+              checked={dependabot.enabled}
+              disabled={false}
+              onCheckedChange={enabled => dependabotSelection.update(current => ({ ...current, enabled }))}
+            />
+          </SettingsRow>
+          {dependabot.enabled && (
+            <SourcePicker
+              label="Dependabot repositories"
+              addLabel="Add repository"
+              itemIcon={<SettingsIntegrationIcon provider="github" />}
+              groups={[{ id: 'dependabot-repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
+              selectedIds={dependabot.sourceIds}
+              saving={dependabotSelection.saving}
+              loading={factoriesQuery.isPending}
+              error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
+              onRetry={() => void factoriesQuery.refetch()}
+              onToggleItem={slug =>
+                dependabotSelection.update(current => ({
+                  ...current,
+                  sourceIds: toggleSourceId(current.sourceIds, slug),
+                }))
+              }
+            />
+          )}
         </>
       )}
     </IntakeProviderCard>

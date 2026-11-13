@@ -13,8 +13,10 @@ export type Event = {
    * seen: a newer execution has taken the run over.
    */
   generation?: number;
+  /** Iteration index for durable agent execution boundary events. */
+  stepIndex?: number;
   /**
-   * Position of this event in its topic's log.
+   * Index of this event in its topic's log.
    *
    * Allocated when the event is appended to the shared cache (see
    * `MastraServerCache.listPushIndexed`), so a subscriber can resume from an

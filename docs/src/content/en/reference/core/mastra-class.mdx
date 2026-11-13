@@ -393,7 +393,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description:
       'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5 }",
+    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000 }",
     properties: [
       {
         type: 'object',
@@ -404,7 +404,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'off'",
             description:
-              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+              "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery can run an interrupted tool call again and request a new model response in place of one that wasn't saved, so tools must be idempotent. See [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).",
           },
           {
             name: 'workflows',
@@ -420,7 +420,15 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description:
-              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. Workflow and durable agent recovery run in parallel.',
+              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A restarted run holds its slot until it finishes. Workflow and durable agent recovery run in parallel.',
+          },
+          {
+            name: 'workflowGraceMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '2000',
+            description:
+              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
           },
         ],
       },

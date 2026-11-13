@@ -147,6 +147,28 @@ describe('AGGREGATE_SPANS', () => {
     },
   );
 
+  it('returns 501 for time-to-first measures before calling a store that does not compile them', async () => {
+    const request = {
+      timeRange: TIME_RANGE,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+      measures: ['timeToFirstToken.p50'],
+    };
+    const { mastra, observabilityStore } = createHarness(['span-aggregate', 'trace-query-tenant-scope']);
+    const error = await captureHttpException(AGGREGATE_SPANS.handler(params(mastra, request)));
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Time to first token and chunk measures are not supported by the configured observability store',
+    });
+    expect(observabilityStore.aggregateSpans).not.toHaveBeenCalled();
+
+    const updated = createHarness(['span-aggregate', 'trace-query-tenant-scope', 'aggregate-time-to-first-measures']);
+    await AGGREGATE_SPANS.handler(params(updated.mastra, request));
+    expect(updated.observabilityStore.aggregateSpans).toHaveBeenCalledWith(
+      expect.objectContaining({ measures: [{ type: 'canonical', name: 'timeToFirstToken.p50' }] }),
+    );
+  });
+
   it('returns stable semantic issues from the planner without touching storage', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     const cases = [

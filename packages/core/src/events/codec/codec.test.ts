@@ -1,4 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import { claimSpanError } from '../../observability/error-count';
 import { DefaultGeneratedFile, DefaultGeneratedFileWithType } from '../../stream/aisdk/v5/file';
 import { DefaultStepResult } from '../../stream/aisdk/v5/output-helpers';
 import { encode, decode, registerClass, unregisterClass, CODEC_TAG } from './index';
@@ -54,6 +55,14 @@ describe('codec', () => {
   });
 
   describe('Error', () => {
+    it('does not attribute a transported frozen failure to its parent again', () => {
+      const error = Object.freeze(new Error('tool failed'));
+      expect(claimSpanError(error, 'trace', 'tool')).toBeTypeOf('string');
+      const transported = roundTrip(new Error('wrapped tool failure', { cause: error })) as Error;
+      expect(claimSpanError(transported, 'trace', 'agent')).toBeUndefined();
+      expect(Object.keys(transported)).not.toContain('__mastraSpanErrorOrigin');
+      expect(JSON.stringify(transported)).not.toContain('__mastraSpanErrorOrigin');
+    });
     it('round-trips a plain Error', () => {
       const e = new Error('boom');
       const out = roundTrip(e) as Error;

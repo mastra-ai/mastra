@@ -11,6 +11,7 @@ import type { MastraBrowser } from '../browser/browser';
 import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
 import { GatewayManager } from '../llm/model/gateways';
+import type { GatewayModel, MastraModelGatewayInterface } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
 import type { MastraModelConfig, WidenedMastraModelConfig } from '../llm/model/shared.types';
 import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
@@ -23,11 +24,15 @@ import type { TracingContext, TracingOptions } from '../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraCompositeStore } from '../storage/base';
 import type { MemoryStorage } from '../storage/domains/memory/base';
+import { InMemoryMemory } from '../storage/domains/memory/inmemory';
 import type { ObservationalMemoryRecord, StorageListMessagesInput, StorageListMessagesOutput } from '../storage/types';
+import { validateStorageMetadataFilter } from '../storage/utils';
 import type { DynamicArgument } from '../types';
+import { resolveDynamicArgument } from '../utils/dynamic-argument';
 import type { Workspace } from '../workspace/workspace';
 
 import { SessionNotStartedError } from './errors';
+import { ModelCatalogCache } from './model-catalog-cache';
 import {
   MODEL_PERSISTENCE_VERSION,
   MODEL_PERSISTENCE_VERSION_KEY,
@@ -36,6 +41,7 @@ import {
   THREAD_OWNER_ID_CONTEXT_KEY,
   isReservedThreadMetadataKey,
   migratePersistedModelSelection,
+  readPermissionRules,
   runModelPersistenceOperation,
 } from './session';
 import type { SessionState, SharedRunOptions, ThreadDataStore } from './session';
@@ -160,6 +166,7 @@ export function buildFableFallbackProviderOptions(
 
 /** How much of the tail a rename reads: enough to say where the thread went, bounded so a long thread costs no more than a short one. */
 const TITLE_WINDOW_MESSAGES = 20;
+const THREAD_PAGE_FLOOR = 50;
 
 /**
  * The AgentController orchestrates multiple agent modes, shared state, memory, and storage.
@@ -251,8 +258,6 @@ export class AgentController<TState = {}> {
       retained: boolean;
     }
   >();
-  private availableModelsCache: AvailableModel[] | null = null;
-  private availableModelsCacheTime: number = 0;
   readonly #instructions?: string;
   #internalMastra: Mastra | undefined = undefined;
   /** The application's event bus the backing agents share when the controller has none of its own. */
@@ -265,6 +270,9 @@ export class AgentController<TState = {}> {
    */
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
+  readonly #modelCatalog: ModelCatalogCache;
+  /** Last {@link listAvailableModels} result, reused while its inputs are unchanged. */
+  #availableModels: { catalog: readonly GatewayModel[]; useCountsKey: string; models: AvailableModel[] } | undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
   /** Chat channels running this controller inside messaging threads (from `config.channels`). */
   #channels: AgentControllerChannels | null = null;
@@ -283,6 +291,11 @@ export class AgentController<TState = {}> {
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
     this.#gatewayManager = new GatewayManager([...(config.gateways ?? []), ...defaultGateways]);
+    // The router defaults list the same models whatever the credentials (and
+    // models.dev and Netlify download them), so they refresh in the background
+    // on a slower schedule.
+    const remoteGateways = new Set<MastraModelGatewayInterface>(defaultGateways);
+    this.#modelCatalog = new ModelCatalogCache(this.#gatewayManager, gateway => remoteGateways.has(gateway));
 
     const defaultMode = config.defaultModeId
       ? config.modes.find(mode => mode.id === config.defaultModeId)
@@ -428,6 +441,7 @@ export class AgentController<TState = {}> {
     session.permissions.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
       setState: updates => session.state.set(updates as Partial<TState>),
+      onChange: () => session.applyToolPolicyToParkedApprovals(),
     });
     session.subagents.setResolver({
       getState: () => session.state.get() as Record<string, unknown>,
@@ -450,7 +464,7 @@ export class AgentController<TState = {}> {
             AGENTIC_EXECUTION_WORKFLOW_ID,
             DurableStepIds.AGENTIC_LOOP,
             DurableStepIds.AGENTIC_EXECUTION,
-          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName })),
+          ].map(workflowName => workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 })),
         );
       },
       // History lets the runtime skip retained run parts that storage already
@@ -464,7 +478,7 @@ export class AgentController<TState = {}> {
         }),
       buildStreamOptions: input => this.buildAgentMessageStreamOptions({ session, ...input }),
       buildSharedRunOptions: requestContext => this.buildSharedRunOptions(session, requestContext),
-      resolveModeActiveTools: modeId => this.resolveModeActiveTools(session, modeId),
+      resolveModeActiveTools: (modeId, requestContext) => this.resolveModeActiveTools(session, modeId, requestContext),
       onSessionDeleted: listener =>
         this.onSessionDeleted(deleted => {
           if (deleted === session) listener();
@@ -765,12 +779,18 @@ export class AgentController<TState = {}> {
 
     let workspaceToConnect = overrides?.workspace ?? this.workspace;
     if (typeof workspaceToConnect === 'function') {
-      workspaceToConnect = await workspaceToConnect({ requestContext, mastra: this.getMastra() });
+      workspaceToConnect = await resolveDynamicArgument(workspaceToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     let browserToConnect = overrides?.browser ?? this.browser;
     if (typeof browserToConnect === 'function') {
-      browserToConnect = await browserToConnect({ requestContext, mastra: this.getMastra() });
+      browserToConnect = await resolveDynamicArgument(browserToConnect, {
+        requestContext,
+        mastra: this.getMastra(),
+      });
     }
 
     const session = this.#wireSession(
@@ -806,11 +826,21 @@ export class AgentController<TState = {}> {
       // this session's scope — including one carrying no scope at all — belongs
       // to nobody here and must not be auto-resumed.
       const scopeEntries = Object.entries(session.getThreadScope());
+      let metadata: Record<string, unknown> | undefined;
+      try {
+        if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+      } catch {
+        // Unsupported scope keys can still be matched exactly after loading threads.
+      }
 
-      const threads = await session.thread.list();
-      const candidates = threads.filter(t => {
-        const metadata = (t.metadata as Record<string, unknown> | undefined) ?? {};
-        return scopeEntries.every(([key, value]) => metadata[key] === value);
+      const candidates = await this.queryThreads({
+        resourceId: session.identity.getResourceId(),
+        metadata,
+        limit: scopeEntries.length > 0 && metadata === undefined ? undefined : 1,
+        matchesScope: thread => {
+          const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+          return scopeEntries.every(([key, value]) => values[key] === value);
+        },
       });
 
       if (candidates.length === 0 && overrides?.createInitialThread !== false) {
@@ -824,7 +854,11 @@ export class AgentController<TState = {}> {
       }
     }
 
+    session.setParkedApprovalsRequestContext(requestContext);
     await this.#notifySessionCreated(session);
+    // A run may have parked on approval before this process (or a session-created
+    // hook) installed the rule that allows or denies it.
+    await session.applyToolPolicyToParkedApprovals();
     return session;
   }
 
@@ -846,12 +880,23 @@ export class AgentController<TState = {}> {
     const tagScope = Object.entries(tags ?? {}).filter(([key]) => !isReservedThreadMetadataKey(key));
     const { projectPath } = (initialState ?? {}) as { projectPath?: string };
     const scopeEntries = tagScope.length > 0 ? tagScope : projectPath ? [['projectPath', projectPath] as const] : [];
-    const threads = await this.queryThreads({ resourceId });
-    const recoverable = threads.some(thread => {
-      const metadata = (thread.metadata as Record<string, unknown> | undefined) ?? {};
-      return scopeEntries.every(([key, value]) => metadata[key] === value);
+    let metadata: Record<string, unknown> | undefined;
+    let filterable = true;
+    try {
+      if (scopeEntries.length > 0) metadata = validateStorageMetadataFilter(Object.fromEntries(scopeEntries));
+    } catch {
+      filterable = false;
+    }
+    const threads = await this.queryThreads({
+      resourceId,
+      metadata: filterable ? metadata : undefined,
+      limit: filterable ? 1 : undefined,
+      matchesScope: thread => {
+        const values = (thread.metadata as Record<string, unknown> | undefined) ?? {};
+        return scopeEntries.every(([key, value]) => values[key] === value);
+      },
     });
-    if (!recoverable) throw new SessionNotStartedError(resourceId);
+    if (threads.length === 0) throw new SessionNotStartedError(resourceId);
   }
 
   /**
@@ -1020,7 +1065,9 @@ export class AgentController<TState = {}> {
     if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
+    return (
+      (await resolveDynamicArgument(this.workspace, { requestContext: ctx, mastra: this.getMastra() })) ?? undefined
+    );
   }
 
   /**
@@ -1435,10 +1482,15 @@ export class AgentController<TState = {}> {
     resourceId,
     includeForkedSubagents,
     metadata,
+    limit,
+    matchesScope,
   }: {
     resourceId?: string;
     includeForkedSubagents?: boolean;
     metadata?: Record<string, unknown>;
+    /** Return only the newest `limit` threads by `updatedAt`, read page by page instead of all at once. */
+    limit?: number;
+    matchesScope?: (thread: StorageThreadType) => boolean;
   }): Promise<AgentControllerThread[]> {
     await this.initStorage();
     if (!this.#resolveStorage()) {
@@ -1454,14 +1506,45 @@ export class AgentController<TState = {}> {
             ...(metadata === undefined ? {} : { metadata }),
           };
 
-    const result = await memoryStorage.listThreads({ filter, perPage: false });
+    const keep = (thread: StorageThreadType) =>
+      (includeForkedSubagents || (thread.metadata as Record<string, unknown> | undefined)?.forkedSubagent !== true) &&
+      (!matchesScope || matchesScope(thread));
 
-    const threads = includeForkedSubagents
-      ? result.threads
-      : result.threads.filter(thread => {
-          const metadata = thread.metadata as Record<string, unknown> | undefined;
-          return metadata?.forkedSubagent !== true;
+    const boundedLimit = limit === undefined ? undefined : Math.max(0, Math.floor(limit));
+    if (boundedLimit === 0) return [];
+
+    let threads: StorageThreadType[];
+    if (
+      boundedLimit === undefined ||
+      memoryStorage instanceof InMemoryMemory ||
+      memoryStorage.listThreadsPaginatesInMemory
+    ) {
+      // These adapters scan and sort all matching threads before slicing each page.
+      threads = (
+        await memoryStorage.listThreads({ filter, perPage: false, orderBy: { field: 'updatedAt', direction: 'DESC' } })
+      ).threads
+        .filter(keep)
+        .slice(0, boundedLimit);
+    } else {
+      // Re-read an expanding prefix: offset pagination can skip a thread that
+      // moves into a previously read page when its updatedAt changes mid-scan.
+      const pageSize = Math.max(boundedLimit, THREAD_PAGE_FLOOR);
+      let size = pageSize;
+      while (true) {
+        const result = await memoryStorage.listThreads({
+          filter,
+          perPage: size,
+          page: 0,
+          orderBy: { field: 'updatedAt', direction: 'DESC' },
         });
+        const candidates = result.threads.filter(keep);
+        if (candidates.length >= boundedLimit || !result.hasMore) {
+          threads = candidates.slice(0, boundedLimit);
+          break;
+        }
+        size *= 2;
+      }
+    }
 
     return threads.map((thread: StorageThreadType) => ({
       id: thread.id,
@@ -1646,7 +1729,9 @@ export class AgentController<TState = {}> {
       if (this.#applicationPubSub && !agent.hasOwnPubSub()) {
         agent.__setPubSub(mastra === this.#internalMastra ? this.#applicationPubSub : mastra.pubsub);
       }
-      mastra.addAgent(agent);
+      if (!mastra.listAgents()[agent.id]) {
+        mastra.addAgent(agent);
+      }
     }
 
     if (this.workspace && typeof agent.hasOwnWorkspace === 'function' && !agent.hasOwnWorkspace()) {
@@ -1860,39 +1945,40 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Get available models from the app-provided catalog hook with use counts applied.
+   * Get available models from the configured gateways with use counts applied.
+   *
+   * Remote catalogs (models.dev, Netlify) are served from their last good
+   * download and refreshed in the background once it is a few minutes old;
+   * calls wait for one only until it has downloaded once.
+   * Configured gateways and auth are checked again after a few seconds, or on
+   * the next call after {@link invalidateAvailableModelsCache}.
    */
   async listAvailableModels(): Promise<AvailableModel[]> {
-    const now = Date.now();
-    if (this.availableModelsCache && now - this.availableModelsCacheTime < 10_000) {
-      return this.availableModelsCache;
-    }
-
+    const catalog = await this.#modelCatalog.list();
     const useCounts = this.config.modelUseCountProvider?.() ?? {};
+    // The catalog holds thousands of models: rebuild the list only when the
+    // catalog or the use counts changed since the last call.
+    const useCountsKey = JSON.stringify(useCounts);
+    const previous = this.#availableModels;
+    if (previous?.catalog === catalog && previous.useCountsKey === useCountsKey) return previous.models.slice();
+
     const modelsById = new Map<string, AvailableModel>();
-
-    const upsertModel = (model: Omit<AvailableModel, 'useCount'>): void => {
-      if (!model.id || !model.provider || !model.modelName) return;
-      modelsById.set(model.id, {
-        ...model,
-        useCount: useCounts[model.id] ?? 0,
-      });
-    };
-
-    const catalog = await this.#gatewayManager!.listAvailableModels();
     for (const model of catalog) {
-      upsertModel(model);
+      if (!model.id || !model.provider || !model.modelName) continue;
+      modelsById.set(model.id, { ...model, useCount: useCounts[model.id] ?? 0 });
     }
-
-    const result = [...modelsById.values()];
-    this.availableModelsCache = result;
-    this.availableModelsCacheTime = Date.now();
-    return result;
+    const models = [...modelsById.values()];
+    this.#availableModels = { catalog, useCountsKey, models };
+    return models.slice();
   }
 
+  /**
+   * Make the next {@link listAvailableModels} call check configured gateways and
+   * auth again, and download remote catalogs again in the background. Call it
+   * after credentials or custom providers change.
+   */
   invalidateAvailableModelsCache(): void {
-    this.availableModelsCache = null;
-    this.availableModelsCacheTime = 0;
+    this.#modelCatalog.invalidate();
   }
 
   // ===========================================================================
@@ -2089,8 +2175,15 @@ export class AgentController<TState = {}> {
    * The returned list uses the same exposed tool names the execution pipeline
    * checks against (e.g. `view`, `write_file`, `ask_user`), which matches the
    * names workspace tools are renamed to via `TOOL_NAME_OVERRIDES`.
+   *
+   * Pass the run's `requestContext` to filter with the rules of the run's own
+   * thread rather than the thread the session currently holds.
    */
-  private resolveModeActiveTools(session: Session<TState>, modeId?: string): string[] | undefined {
+  private resolveModeActiveTools(
+    session: Session<TState>,
+    modeId?: string,
+    requestContext?: RequestContext,
+  ): string[] | undefined {
     // An unknown explicit mode throws rather than falling back to the live mode's tools.
     const currentMode = modeId ? session.mode.resolveId(modeId) : session.mode.resolve();
     const availableTools = currentMode?.availableTools;
@@ -2101,7 +2194,7 @@ export class AgentController<TState = {}> {
       return [];
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     const deniedTools = new Set(
       Object.entries(permissionRules.tools)
         .filter(([, policy]) => policy === 'deny')
@@ -2228,7 +2321,9 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(untilIdle !== undefined && { untilIdle }),
+      // Sessions report background work inside the run that started it, and their
+      // completion notices only persist, so runs stay open until that work is done.
+      untilIdle: untilIdle ?? true,
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);
@@ -2237,7 +2332,7 @@ export class AgentController<TState = {}> {
     // the execution pipeline already enforces at tool-call time.  Only set
     // when the helper returns a concrete list so modes without
     // `availableTools` keep unrestricted behaviour.
-    const activeTools = this.resolveModeActiveTools(session);
+    const activeTools = this.resolveModeActiveTools(session, undefined, requestContext);
     if (activeTools !== undefined) {
       streamOptions.activeTools = activeTools;
     }
@@ -2274,7 +2369,16 @@ export class AgentController<TState = {}> {
     const shared: SharedRunOptions = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo && !channelAutoApprove,
+      // Evaluated per call, so a tool the session already allows runs without
+      // pausing for an approval the session would answer itself. `deny` still
+      // reaches the approval gate, where the run engine declines it.
+      requireToolApproval:
+        isYolo || channelAutoApprove
+          ? false
+          : ({ toolName }: { toolName: string }) => session.resolveToolApproval(toolName, requestContext) !== 'allow',
+      // Only the tools a step actually calls decide whether it runs sequentially,
+      // so calls that need no approval and cannot suspend run in parallel.
+      toolCallConcurrency: { strategy: 'called' },
       onStepFinish: this.createUsageRecorder(context?.threadId ?? session.thread.getId()),
     };
 
@@ -2419,8 +2523,7 @@ export class AgentController<TState = {}> {
     // Resolve user-configured controller tools (needed for both the controller toolset and subagent allowedControllerTools)
     let resolvedControllerTools: ToolsInput | undefined = undefined;
     if (this.config.tools) {
-      const tools =
-        typeof this.config.tools === 'function' ? await this.config.tools({ requestContext }) : this.config.tools;
+      const tools = await resolveDynamicArgument(this.config.tools, { requestContext });
       if (tools) {
         resolvedControllerTools = { ...tools };
       }
@@ -2492,7 +2595,7 @@ export class AgentController<TState = {}> {
       }
     }
 
-    const permissionRules = session.permissions.getRules();
+    const permissionRules = readPermissionRules(session.__getRunState(requestContext).state);
     for (const [toolId, policy] of Object.entries(permissionRules.tools)) {
       if (policy === 'deny') {
         delete builtInTools[toolId];
@@ -2668,7 +2771,7 @@ export class AgentController<TState = {}> {
       return mem;
     }
     const requestContext = await this.buildRequestContext(session, callerContext);
-    const resolved = await Promise.resolve(mem({ requestContext }));
+    const resolved = await resolveDynamicArgument(mem, { requestContext, mastra: this.getMastra() });
     if (!resolved) {
       throw new Error('Dynamic memory factory returned empty value');
     }

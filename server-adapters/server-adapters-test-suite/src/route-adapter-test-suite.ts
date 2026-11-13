@@ -4,6 +4,7 @@ import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 
@@ -37,6 +38,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     let context: AdapterTestContext;
     let app: any;
     let setup: Awaited<ReturnType<typeof setupAdapter>>;
+    let netlifyProviders: MockInstance | undefined;
 
     beforeEach(async () => {
       // Create test context - use provided or default
@@ -47,9 +49,18 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         context = await createDefaultTestContext();
       }
 
+      // The provider routes list the Netlify gateway's models with a live request to
+      // api.netlify.com; whenever it answered slowly those route tests timed out.
+      const netlify = context.mastra.listGateways()?.netlify;
+      netlifyProviders = netlify ? vi.spyOn(netlify, 'fetchProviders').mockResolvedValue({}) : undefined;
+
       // Setup adapter and app
       setup = await setupAdapter(context);
       app = setup.app;
+    });
+
+    afterEach(() => {
+      netlifyProviders?.mockRestore();
     });
 
     if (config.supportsPostQueryRequestContext) {
@@ -466,6 +477,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/mcp/:serverId/tasks/find',
       '/mcp/:serverId/tasks/:taskKey/cancel',
       '/mcp/:serverId/tasks/:taskKey/input',
+      // Resuming a background task needs a suspended task with a parked workflow
+      // snapshot; the generic test context seeds a running task, so the route
+      // correctly answers 409. Covered by
+      // packages/server/src/server/handlers/background-tasks.test.ts.
+      '/background-tasks/:backgroundTaskId/resume',
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',

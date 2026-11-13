@@ -42,6 +42,8 @@ Chat with your agent directly, switch [models](/models), and tweak settings like
 
 Model pickers show newer releases first within each provider when the catalog includes release dates. Models with the same release date, or without a release date, use alphabetical order. Models without dates appear after dated models.
 
+To limit the model picker to models from your own [custom gateways](/models/gateways/custom-gateways), set `AUTO_BLOCK_EXTERNAL_PROVIDERS=true`. See [Showing only custom gateways in Studio](/models/gateways/custom-gateways#showing-only-custom-gateways-in-studio).
+
 When you interact with your agent, you can follow its reasoning and view tool call outputs. You can also [observe](#observability) traces and logs to see how responses are generated.
 
 For a markdown table in a response, select **Copy table as markdown** above the table to copy it without the surrounding message. The copied table preserves markdown formatting and includes any link and footnote definitions it uses. To download the table as CSV, open the arrow beside the copy button and select **Download CSV**. Both actions become available once the text segment containing the table finishes streaming and displaying. The agent may still be running tools or writing later segments.
@@ -49,6 +51,8 @@ For a markdown table in a response, select **Copy table as markdown** above the 
 CSV exports contain plain cell text, including link labels rather than URLs. Footnote markers are preserved, but their definitions aren't included in the CSV. Values that could be interpreted as spreadsheet formulas receive a leading apostrophe so spreadsheet apps treat them as text. Ordinary signed numbers are preserved.
 
 You can also attach [scorers](#scorers) to measure and compare response quality over time.
+
+To ask about part of a response, select the text in the message and choose **Add to chat**, or press Tab to reach it from the keyboard. Each passage you add gets a numbered comment bubble in the chat, and the message box counts them, for example **2 annotations**. Select a bubble to write a comment on that passage or remove it, or open the count to find a passage in the chat. When you send, the agent receives a numbered list of the passages, each quoted with its comment, ahead of what you type. You can also send the annotations without typing anything. A selection that spans two messages doesn't offer **Add to chat**.
 
 You can send a follow-up message in the same thread during an agent response stream. Studio shows the message as pending until the stream confirms it, then continues the response below that follow-up. Other Studio tabs that have the same thread open can observe the active stream.
 
@@ -60,7 +64,7 @@ Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully 
 
 Open an agent's **Models** panel to view its primary model and fallback models in priority order. For static model lists, you can reorder models, enable or disable fallbacks, and change the provider or model. The panel stays synchronized when Studio refetches the agent.
 
-These edits change the running server's in-memory agent and are lost when the server restarts. Persistent model-list editing is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
+When the agent sets `editor: { model: true }`, these edits are saved through [Editor](/docs/studio/editor#decide-what-collaborators-can-edit). This requires a configured `MastraEditor` and agent storage; without either, saving fails with HTTP 500. Otherwise they change the running server's in-memory agent and are lost when the server restarts. Persistent editing for other agents is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
 
 Function-valued model lists can vary by request context, so Studio displays them as read-only. Change a dynamic model list in code instead.
 
@@ -70,7 +74,7 @@ Visualize your workflow as a graph and run it step by step with a custom input. 
 
 Workflow traces show tool calls and raw JSON outputs, along with any execution errors.
 
-Select **Run Options** beside the run button to set a **Resource ID** for the runs you start. Studio remembers the value per workflow, and the runs it creates are listed by `GET /api/workflows/:workflowId/runs?resourceId=...`. Leave it empty to create runs without a resource. When your server derives the resource ID from the authenticated user, that value takes precedence over the one you type.
+Select **Run options** beside the run button to set a **Resource ID** for the runs you start. Studio remembers the value per workflow, and the runs it creates are listed by `GET /api/workflows/:workflowId/runs?resourceId=...`. Leave it empty to create runs without a resource. When your server derives the resource ID from the authenticated user, that value takes precedence over the one you type.
 
 ### Processors
 
@@ -80,7 +84,7 @@ See [processors](/docs/agents/processors) and [guardrails](/docs/agents/guardrai
 
 ### MCP servers
 
-List the MCP servers attached to your Mastra instance and explore their available tools.
+List the MCP servers attached to your Mastra instance and explore their available tools. The list starts with **Mastra (built-in)**, the [built-in MCP server](/docs/server/mcp#in-studio) at `/api/mcp`, with its endpoint URL, whether it needs a token, and setup for Claude Code, Cursor, VS Code, and the MCP Inspector.
 
 ### Tools
 
@@ -88,7 +92,7 @@ Run tools on their own to observe behavior and test them before assigning them t
 
 ### Workspaces
 
-Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. The Skills tab lists all discovered skills with their instructions, references, and metadata. Install community skills from [skills.sh](https://skills.sh) or remove existing ones.
+Browse the files in your agent's workspace filesystem using a built-in file browser. Switch between workspace mounts, create directories, and view file contents with syntax highlighting. Writable workspaces allow directory creation and file deletion; read-only workspaces are labeled accordingly. Skills appear in the file tree. Install community skills from [skills.sh](https://skills.sh), update installed skills, or delete a skill folder to remove that skill.
 
 See [workspaces](/docs/sandbox/overview) for configuration details.
 
@@ -99,8 +103,6 @@ Set runtime variables that flow into your agent's instructions and tools through
 See [request context](/docs/server/request-context) for configuration details.
 
 ## Evaluation
-
-Use the date filter to limit score metrics to a preset or custom time range.
 
 ### Scorers
 

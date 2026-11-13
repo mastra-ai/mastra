@@ -9,6 +9,7 @@ import type { ObservabilityContext, MemoryOperationAttributes } from '../../obse
 import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { waitMs } from '../../utils/test-waits';
 
 // Bounds the newest-first scan for continuation tool-call messages that fall outside the history window.
 const CONTINUATION_SCAN_PAGE_SIZE = 100;
@@ -318,20 +319,13 @@ export class MessageHistory implements Processor {
       return messageList;
     }
 
-    // Don't persist an input-only failed turn: if the provider errored before
-    // producing any output, saving the user message would orphan it in history.
-    // A run that accepted the input before failing (e.g. cut off by its total deadline) keeps it.
-    if (result?.finishReason === 'error' && newOutput.length === 0 && !result.inputAccepted) {
-      return messageList;
-    }
-
     // The runner records failures on this span and ends it.
     const span = this.memorySpan(observabilityContext);
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
     // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, waitMs(10, 1)));
 
     return messageList;
   }

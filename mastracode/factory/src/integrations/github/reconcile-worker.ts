@@ -9,10 +9,13 @@ import type {
   SourceControlRepository,
 } from '../../storage/domains/source-control/base.js';
 import type { GithubIssueReconciler } from './issue-reconciler.js';
-import type { GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
+import type { GithubPullRequestDiscovery, GithubPullRequestReconciler, ReconcileRepository } from './rules.js';
 
 // Webhooks are the primary sync; the sweeps only catch drift, so hourly.
 export const DEFAULT_GITHUB_RECONCILE_INTERVAL_MS = 60 * 60_000;
+// Missed-open discovery costs one listing per repository, not a fetch per card,
+// so it runs at the issue sweep's cadence: a lost `opened` webhook surfaces in minutes.
+export const DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS = 5 * 60_000;
 const MIN_LEASE_TTL_MS = 30_000;
 const LEASE_KEY = 'github:pull-request-reconcile';
 
@@ -33,9 +36,12 @@ export interface GithubReconcileRepositorySource {
 export interface GithubReconcileWorkerConfig {
   reconcile?: GithubPullRequestReconciler;
   reconcileIssues?: GithubIssueReconciler;
+  discover?: GithubPullRequestDiscovery;
   sourceControl: GithubReconcileRepositorySource;
   intervalMs?: number;
   issueIntervalMs?: number;
+  /** Defaults to five minutes, or the pull request interval when that is shorter. */
+  discoveryIntervalMs?: number;
   now?: () => number;
 }
 
@@ -49,9 +55,11 @@ export class GithubReconcileWorker extends MastraWorker {
 
   readonly #reconcile: GithubPullRequestReconciler | undefined;
   readonly #reconcileIssues: GithubIssueReconciler | undefined;
+  readonly #discover: GithubPullRequestDiscovery | undefined;
   readonly #sourceControl: GithubReconcileRepositorySource;
   readonly #intervalMs: number;
   readonly #issueIntervalMs: number;
+  readonly #discoveryIntervalMs: number;
   readonly #leaseTtlMs: number;
   readonly #leaseOwner = globalThis.crypto.randomUUID();
   readonly #now: () => number;
@@ -62,24 +70,34 @@ export class GithubReconcileWorker extends MastraWorker {
   #leaseProvider: LeaseProvider = NoopLeaseProvider;
   #nextPullRequestReconcileAt = 0;
   #nextIssueReconcileAt = 0;
+  #nextDiscoveryAt = 0;
 
   constructor(config: GithubReconcileWorkerConfig) {
     super();
-    if (!config.reconcile && !config.reconcileIssues) {
+    if (!config.reconcile && !config.reconcileIssues && !config.discover) {
       throw new Error('GitHub reconcile worker requires a pull request or issue reconciler.');
     }
     this.#reconcile = config.reconcile;
     this.#reconcileIssues = config.reconcileIssues;
+    this.#discover = config.discover;
     this.#sourceControl = config.sourceControl;
     this.#intervalMs = config.intervalMs ?? DEFAULT_GITHUB_RECONCILE_INTERVAL_MS;
     this.#issueIntervalMs = config.issueIntervalMs ?? this.#intervalMs;
+    this.#discoveryIntervalMs =
+      config.discoveryIntervalMs ?? Math.min(DEFAULT_GITHUB_PR_DISCOVERY_INTERVAL_MS, this.#intervalMs);
     if (!Number.isFinite(this.#intervalMs) || this.#intervalMs <= 0) {
       throw new Error('GitHub pull request reconcile interval must be a positive number.');
     }
     if (!Number.isFinite(this.#issueIntervalMs) || this.#issueIntervalMs <= 0) {
       throw new Error('GitHub issue reconcile interval must be a positive number.');
     }
-    this.#leaseTtlMs = Math.max(MIN_LEASE_TTL_MS, Math.min(this.#intervalMs, this.#issueIntervalMs) * 3);
+    if (!Number.isFinite(this.#discoveryIntervalMs) || this.#discoveryIntervalMs <= 0) {
+      throw new Error('GitHub pull request discovery interval must be a positive number.');
+    }
+    this.#leaseTtlMs = Math.max(
+      MIN_LEASE_TTL_MS,
+      Math.min(this.#intervalMs, this.#issueIntervalMs, this.#discoveryIntervalMs) * 3,
+    );
     this.#now = config.now ?? Date.now;
   }
 
@@ -92,9 +110,10 @@ export class GithubReconcileWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('GithubReconcileWorker: call init() before start()');
     this.#running = true;
-    this.deps.logger.info('GitHub reconcile worker started', {
+    this.deps.logger.debug('GitHub reconcile worker started', {
       pullRequestIntervalMs: this.#reconcile ? this.#intervalMs : undefined,
       issueIntervalMs: this.#reconcileIssues ? this.#issueIntervalMs : undefined,
+      pullRequestDiscoveryIntervalMs: this.#discover ? this.#discoveryIntervalMs : undefined,
     });
     // Sweep on boot: a restart is exactly when webhooks were most likely missed.
     this.#schedule(0);
@@ -130,6 +149,7 @@ export class GithubReconcileWorker extends MastraWorker {
     const due = [
       this.#reconcile ? this.#nextPullRequestReconcileAt : undefined,
       this.#reconcileIssues ? this.#nextIssueReconcileAt : undefined,
+      this.#discover ? this.#nextDiscoveryAt : undefined,
     ].filter((at): at is number => at !== undefined);
     return Math.max(0, Math.min(...due) - now);
   }
@@ -138,9 +158,11 @@ export class GithubReconcileWorker extends MastraWorker {
     const now = this.#now();
     const reconcilePullRequests = Boolean(this.#reconcile && now >= this.#nextPullRequestReconcileAt);
     const reconcileIssues = Boolean(this.#reconcileIssues && now >= this.#nextIssueReconcileAt);
-    if (!reconcilePullRequests && !reconcileIssues) return;
+    const discoverPullRequests = Boolean(this.#discover && now >= this.#nextDiscoveryAt);
+    if (!reconcilePullRequests && !reconcileIssues && !discoverPullRequests) return;
     if (reconcilePullRequests) this.#nextPullRequestReconcileAt = now + this.#intervalMs;
     if (reconcileIssues) this.#nextIssueReconcileAt = now + this.#issueIntervalMs;
+    if (discoverPullRequests) this.#nextDiscoveryAt = now + this.#discoveryIntervalMs;
 
     // Replicas share one sweep: the ingress dedupes duplicate writes, but the
     // reads still burn the installation's rate limit.
@@ -194,6 +216,25 @@ export class GithubReconcileWorker extends MastraWorker {
           }
         } catch (error) {
           this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
+            error: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      if (discoverPullRequests && this.#discover && hasLease) {
+        const startedAt = Date.now();
+        try {
+          const { errors, ...counts } = await this.#discover(targets);
+          const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
+          if (counts.failed > 0) {
+            this.deps?.logger.warn('GitHub pull request discovery completed with failures', { ...context, errors });
+          } else if (counts.created > 0 || counts.repaired > 0) {
+            this.deps?.logger.info('GitHub pull request discovery replayed missed opens', context);
+          } else {
+            this.deps?.logger.debug('GitHub pull request discovery completed', context);
+          }
+        } catch (error) {
+          this.deps?.logger.warn('GitHub pull request discovery failed', {
             error: error instanceof Error ? error.message : String(error),
           });
         }

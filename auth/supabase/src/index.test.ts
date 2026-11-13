@@ -149,4 +149,31 @@ describe('MastraAuthSupabase', () => {
     const noPermissionsUser = { sub: 'user789' } as unknown as User;
     expect(await supabase.authorizeUser(noPermissionsUser)).toBe(false);
   });
+
+  it('advertises Supabase Auth as the authorization server', () => {
+    const supabase = new MastraAuthSupabase({ url: 'https://test.supabase.co/', anonKey: mockSupabaseAnonKey });
+    expect(supabase.getOAuthMetadata()).toEqual({ authorizationServers: ['https://test.supabase.co/auth/v1'] });
+  });
+});
+
+describe('MastraAuthSupabase.toMastraUser', () => {
+  it('maps user_metadata and drops the Postgres role', () => {
+    const supabase = new MastraAuthSupabase({ url: 'https://test.supabase.co', anonKey: 'test-anon-key' });
+    const user = {
+      id: 'user-1',
+      email: 'ada@example.com',
+      role: 'authenticated',
+      aud: 'authenticated',
+      created_at: '',
+      app_metadata: {},
+      user_metadata: { full_name: 'Ada Lovelace', avatar_url: 'https://img.test/ada.png' },
+    } as User;
+
+    expect(supabase.toMastraUser(user)).toEqual({
+      id: 'user-1',
+      email: 'ada@example.com',
+      name: 'Ada Lovelace',
+      avatarUrl: 'https://img.test/ada.png',
+    });
+  });
 });

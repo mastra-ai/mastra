@@ -14,6 +14,7 @@
 
 import type { Knowledge, KnowledgeChangeEvent } from '@mastra/core/knowledge';
 import {
+  encodeKnowledgeScopeId,
   KnowledgeDeclarationError,
   listKnowledgeTreeChildren,
   readKnowledgePage,
@@ -30,7 +31,7 @@ import { streamSSE } from 'hono/streaming';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { RouteDependencies } from './route.js';
-import { Route } from './route.js';
+import { loose, Route } from './route.js';
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Ids and cursors are opaque, but bounded so an unbounded query string never reaches storage. */
@@ -110,10 +111,6 @@ function withDisplayLabel<T extends LabelablePage>(knowledge: Knowledge, page: T
   return displayLabel ? { ...page, displayLabel } : page;
 }
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
 export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   /** Tenant, org-owned project, Knowledge runtime and the caller's read scope: the one seam every route shares. */
   async #resolveView(c: Context): Promise<ResolvedView | { response: Response }> {
@@ -149,7 +146,12 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       };
     }
     try {
-      return { knowledge, store, read: await knowledge.readScopeFor([`org:${tenant.orgId}`, `project:${projectId}`]) };
+      // The same canonical addresses a Factory session's runs hold (see the SDK's resolveKnowledgeSessionScopes).
+      const principals = [
+        `org:${encodeKnowledgeScopeId(tenant.orgId)}`,
+        `project:${encodeKnowledgeScopeId(projectId)}`,
+      ];
+      return { knowledge, store, read: await knowledge.readScopeFor(principals) };
     } catch (error) {
       // The host's Knowledge does not declare the scopes a Factory run holds (`org:` and `project:`): a
       // deployment misconfiguration, which its session runs hit too. Never fall back to a guessed scope.

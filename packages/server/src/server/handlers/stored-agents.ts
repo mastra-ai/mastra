@@ -73,6 +73,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -93,6 +94,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
 
 const CODE_AGENT_OVERRIDE_FIELDS = [
   'instructions',
+  'modelList',
   'tools',
   'integrationTools',
   'mcpClients',
@@ -116,26 +118,28 @@ function isCodeBackedAgent<TAgent extends { source?: string }>(agent: TAgent | u
  */
 function getCodeAgentOwnership(editorConfig: unknown): {
   ownsInstructions: boolean;
+  ownsModel: boolean;
   ownsTools: boolean;
   ownsToolDescriptionsOnly: boolean;
 } {
   if (editorConfig === false) {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
   if (editorConfig === undefined || editorConfig === null) {
     // Legacy default: code agents without explicit editor config behave as fully editable.
-    return { ownsInstructions: true, ownsTools: true, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: true, ownsModel: false, ownsTools: true, ownsToolDescriptionsOnly: false };
   }
   if (typeof editorConfig !== 'object') {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
-  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const cfg = editorConfig as { instructions?: unknown; model?: unknown; tools?: unknown };
   const ownsInstructions = cfg.instructions === true;
+  const ownsModel = cfg.model === true;
   const toolsCfg = cfg.tools;
   const ownsTools = toolsCfg === true;
   const ownsToolDescriptionsOnly =
     typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
-  return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+  return { ownsInstructions, ownsModel, ownsTools, ownsToolDescriptionsOnly };
 }
 
 type StoredTools = z.infer<typeof updateStoredAgentBodySchema>['tools'];
@@ -220,6 +224,7 @@ function buildExportConfig(
     if (input[field] === undefined) continue;
     if (ownership) {
       if (field === 'instructions' && !ownership.ownsInstructions) continue;
+      if (field === 'modelList' && !ownership.ownsModel) continue;
       if (
         (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
         !ownership.ownsTools &&
@@ -263,6 +268,12 @@ function sourceChangeRequestMessage(agentId: string, userName?: string, changeMe
 export const LIST_STORED_AGENTS_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'list_stored_agents',
+    description: 'List agents created in the editor or agent builder that you can see.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   queryParamSchema: listStoredAgentsQuerySchema,
   responseSchema: listStoredAgentsResponseSchema,
@@ -429,7 +440,7 @@ async function buildStoredAgentExport({
     throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
   }
 
-  const config = buildExportConfig(body, codeAgent);
+  const config = buildExportConfig({ ...storedAgent, ...body }, codeAgent);
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   return {
@@ -525,6 +536,12 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
 export const GET_STORED_AGENT_ROUTE = createRoute({
   method: 'GET',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'get_stored_agent',
+    description: "Get a stored agent's full configuration.",
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   queryParamSchema: statusQuerySchema,
@@ -580,6 +597,13 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'POST',
   path: '/stored/agents',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'create_stored_agent',
+    description:
+      'Create an agent (instructions, model, tools, memory). Call list_available_models first. The new agent can be called with call_agent right away.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   bodySchema: createStoredAgentBodySchema,
   responseSchema: createStoredAgentResponseSchema,
@@ -598,6 +622,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
     description,
     instructions,
     model,
+    modelList,
     tools,
     defaultOptions,
     workflows,
@@ -691,15 +716,12 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         requestContext,
       });
 
-      const input = {
-        id,
-        authorId,
-        visibility,
-        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+      const snapshotInput = {
         name,
         description,
         instructions: createInstructions,
         model,
+        modelList,
         tools: createTools,
         defaultOptions,
         workflows,
@@ -716,6 +738,17 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         browser: resolvedBrowser,
         durable,
         requestContextSchema,
+      };
+      const snapshot =
+        codeAgentForCreate?.source === 'code'
+          ? { name, ...buildExportConfig(snapshotInput, codeAgentForCreate) }
+          : snapshotInput;
+      const input = {
+        id,
+        authorId,
+        visibility,
+        metadata: scopeStoredResourceMetadata(metadata, await getStoredResourceScope(mastra, requestContext)),
+        ...snapshot,
       } as StorageCreateAgentInput;
 
       // Use editor.agent.create() when available to apply builder defaults
@@ -787,6 +820,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
 > = createRoute({
   method: 'PATCH',
   path: '/stored/agents/:storedAgentId',
+  mcp: {
+    toolset: 'stored_agents',
+    name: 'update_stored_agent',
+    description: 'Update a stored agent. Only the fields you pass change.',
+    requires: capabilities => capabilities.storedAgents,
+  },
   responseType: 'json',
   pathParamSchema: storedAgentIdPathParams,
   bodySchema: updateStoredAgentBodySchema,
@@ -1008,9 +1047,12 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
         const { versions } = await agentsStore.listVersions({ agentId: storedAgentId, perPage: 1 });
         const latestVersion = versions[0];
         if (latestVersion) {
+          // Same as create: publishing a version also publishes the agent, otherwise a
+          // draft agent keeps status 'draft' with a live active version.
           await agentsStore.update({
             id: storedAgentId,
             activeVersionId: latestVersion.id,
+            status: 'published',
           });
         }
       }
@@ -1089,8 +1131,34 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
           ?.warn?.('Failed to cascade-delete favorites for agent', { storedAgentId, error: cascadeError });
       }
 
+      // A record with the id of a code-defined agent is only an override; the code agent and the workspace it
+      // registered stay. Check before clearCache, which unregisters stored agents.
+      let overridesCodeAgent = false;
+      try {
+        overridesCodeAgent = mastra.getAgentById(storedAgentId).source !== 'stored';
+      } catch {
+        // Not registered: a stored agent that hasn't been loaded yet.
+      }
+
       // Clear the cached agent instance
       mastra.getEditor()?.agent.clearCache(storedAgentId);
+
+      // The agent registered its workspace on first use. With the record gone, GET /workspaces can't check who may
+      // see it, so unregister it. The record is already gone, so a cleanup failure is logged rather than failing the
+      // delete.
+      try {
+        if (!overridesCodeAgent && typeof mastra.listWorkspaces === 'function') {
+          for (const [workspaceId, entry] of Object.entries(mastra.listWorkspaces())) {
+            if (entry.source === 'agent' && entry.agentId === storedAgentId) {
+              await mastra.removeWorkspace(workspaceId);
+            }
+          }
+        }
+      } catch (cleanupError) {
+        mastra
+          .getLogger?.()
+          ?.warn?.('Failed to unregister workspace of deleted agent', { storedAgentId, error: cleanupError });
+      }
 
       return { success: true, message: `Agent ${storedAgentId} deleted successfully` };
     } catch (error) {

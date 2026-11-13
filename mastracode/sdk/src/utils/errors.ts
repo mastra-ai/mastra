@@ -247,8 +247,14 @@ export function parseError(error: unknown): ParsedError {
         originalError: err,
       };
     case 'content_filter':
+      // Anthropic reports some safety rejections as a 400 for the entire request,
+      // rather than as a refusal finish reason. Preserve that provider wording so
+      // users can distinguish the rejection from a generated response being filtered.
       return {
-        message: "Content was filtered by the model's safety system.",
+        message:
+          "The provider's safety system blocked this request. This is often a false positive on code, security, or credential-like text.",
+        detail: err.message.trim() ? err.message : detail,
+        requestUrl,
         type,
         retryable: false,
         originalError: err,

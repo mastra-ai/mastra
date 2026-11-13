@@ -11,8 +11,8 @@
  * built on the OpenAI client — `openai` uses the default endpoint, every other
  * OpenAI-compatible host supplies its `baseURL`. Deepgram is the exception: it
  * is not OpenAI-compatible, so it resolves through `@mastra/voice-deepgram`
- * (`DeepgramVoice`). Deepgram is not in the models.dev STT snapshot but is a
- * first-class hosted STT provider, so it is added deliberately.
+ * (`DeepgramVoice`), and Mistral through `@mastra/voice-mistral`. Neither is
+ * in the models.dev STT snapshot, so both are added by hand.
  *
  * The accompanying snapshot test (`__tests__/stt-registry.test.ts`) re-derives
  * the models.dev-backed entries from a checked-in snapshot so this list stays
@@ -26,8 +26,9 @@
  *   (its `/audio/transcriptions` endpoint follows the OpenAI shape).
  * - `deepgram`: `DeepgramVoice` from `@mastra/voice-deepgram` (not
  *   OpenAI-compatible; uses the Deepgram SDK).
+ * - `mistral`: `MistralVoice` from `@mastra/voice-mistral`.
  */
-export type STTResolver = 'openai' | 'openai-compatible' | 'deepgram';
+export type STTResolver = 'openai' | 'openai-compatible' | 'deepgram' | 'mistral';
 
 export interface STTModel {
   /** models.dev provider id (also the AuthStorage key for the API key). */
@@ -40,6 +41,7 @@ export interface STTModel {
   resolver: STTResolver;
   /** Base URL for `openai-compatible` providers (from models.dev `api`). */
   baseURL?: string;
+  realtimeModel?: string;
 }
 
 /**
@@ -74,6 +76,13 @@ export const STT_MODELS: readonly STTModel[] = [
   },
   // Deepgram — dedicated STT provider (not OpenAI-compatible); via @mastra/voice-deepgram.
   { provider: 'deepgram', model: 'nova-3', label: 'Deepgram Nova-3', resolver: 'deepgram' },
+  {
+    provider: 'mistral',
+    model: 'voxtral-mini-latest',
+    label: 'Mistral Voxtral Mini',
+    resolver: 'mistral',
+    realtimeModel: 'voxtral-mini-transcribe-realtime-3',
+  },
   // Alibaba Qwen ASR (OpenAI-compatible endpoints).
   {
     provider: 'alibaba',
@@ -163,19 +172,16 @@ export function defaultModelForProvider(provider: string): STTModel | undefined 
   return STT_MODELS.find(m => m.provider === provider);
 }
 
+export function findSTTModel(provider: string, model: string): STTModel | undefined {
+  return STT_MODELS.find(m => m.provider === provider && m.model === model);
+}
+
 /**
  * Resolve a provider/model pair to a concrete registry entry.
  * Falls back to the provider default (then the global default) so callers
  * always get a usable entry even if settings name an unknown model.
  */
 export function resolveSTTModel(provider?: string, model?: string): STTModel {
-  if (provider) {
-    if (model) {
-      const exact = STT_MODELS.find(m => m.provider === provider && m.model === model);
-      if (exact) return exact;
-    }
-    const providerDefault = defaultModelForProvider(provider);
-    if (providerDefault) return providerDefault;
-  }
-  return DEFAULT_STT_MODEL;
+  if (!provider) return DEFAULT_STT_MODEL;
+  return (model ? findSTTModel(provider, model) : undefined) ?? defaultModelForProvider(provider) ?? DEFAULT_STT_MODEL;
 }

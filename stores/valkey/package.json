@@ -1,6 +1,6 @@
 {
   "name": "@mastra/valkey",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "Valkey storage and cache provider for Mastra, powered by Valkey GLIDE",
   "type": "module",
   "main": "dist/index.js",
@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@valkey/valkey-glide": "2.5.1"
+    "@valkey/valkey-glide": "2.5.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -42,7 +42,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

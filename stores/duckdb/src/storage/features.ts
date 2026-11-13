@@ -3,11 +3,18 @@ import * as coreStorage from '@mastra/core/storage';
 export const threadQueryFeatures =
   typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
+const spanModelProviderSortFeatures: readonly 'span-query-model-provider-sort'[] =
+  coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('model') && coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('provider')
+    ? ['span-query-model-provider-sort']
+    : [];
+
 export const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
     ? ([
         'span-query',
         'span-query-context-fields',
+        ...(coreStorage.SPAN_QUERY_ORDER_FIELDS?.includes('durationMs') ? (['span-query-duration-sort'] as const) : []),
+        ...spanModelProviderSortFeatures,
         // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
         ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
       ] as const)
@@ -23,6 +30,13 @@ export const spanAggregateFeatures =
           : []),
       ] as const)
     : ([] as const);
+
+/** Core before the time-to-first measures rejects them, so they are only declared when core plans them. */
+export const aggregateTimeToFirstFeatures: readonly 'aggregate-time-to-first-measures'[] =
+  'timeToFirstToken.p50' in coreStorage.TRACE_AGGREGATE_MEASURE_REGISTRY ? ['aggregate-time-to-first-measures'] : [];
+/** Core before the fields rejects their trace and span predicates, so the feature is only declared when core plans them. */
+export const contextFieldFeatures: readonly 'trace-query-context-fields'[] =
+  'requestId' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {}) ? ['trace-query-context-fields'] : [];
 
 /** Core versions without the field reject it in trace query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
