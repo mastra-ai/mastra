@@ -59,6 +59,7 @@ export class PlatformLinearMigration {
   readonly #onMigrated: () => void;
   #state: LinearMigrationState = { required: false, pending: [], skipped: [], lastRunAt: null, lastError: null };
   #failures = 0;
+  #statusKnown = false;
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<LinearMigrationRunResult> | undefined;
 
@@ -78,10 +79,16 @@ export class PlatformLinearMigration {
     return this.#state;
   }
 
+  /** True once the platform has confirmed no workspace is left on legacy tokens or unlinked. */
+  get settled(): boolean {
+    return this.#statusKnown && !this.#state.required;
+  }
+
   /** Reads the platform's migration status and updates {@link state}. */
   async refreshStatus(): Promise<LinearMigrationState> {
     const { pending } = await this.#needed();
     this.#state = { ...this.#state, required: pending.length > 0, pending };
+    this.#statusKnown = true;
     return this.#state;
   }
 
@@ -199,6 +206,7 @@ export class PlatformLinearMigration {
 
   #succeeded(state: Omit<LinearMigrationState, 'lastError'>): void {
     this.#failures = 0;
+    this.#statusKnown = true;
     this.stop();
     this.#state = { ...state, lastError: null };
   }
