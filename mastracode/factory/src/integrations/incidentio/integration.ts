@@ -13,7 +13,7 @@ import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from './default-rules.js';
 import { createIncidentioIntake, INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
-import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
+import { incidentioReconciliationInterval } from './reconciliation-config.js';
 import { buildIncidentioRoutes } from './routes.js';
 
 export interface IncidentioIntegrationConfig {
@@ -150,7 +150,6 @@ export class IncidentioIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!incidentioReconciliationEnabled()) return [];
     const reconcile = attachIncidentioIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = incidentioReconciliationInterval();

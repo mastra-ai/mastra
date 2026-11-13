@@ -32,10 +32,7 @@ import {
   INCIDENTIO_INCIDENTS_SOURCE_ID,
 } from '../../incidentio/intake.js';
 import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
-import {
-  incidentioReconciliationEnabled,
-  incidentioReconciliationInterval,
-} from '../../incidentio/reconciliation-config.js';
+import { incidentioReconciliationInterval } from '../../incidentio/reconciliation-config.js';
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
@@ -496,7 +493,6 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!incidentioReconciliationEnabled()) return [];
     const reconcile = attachIncidentioIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = incidentioReconciliationInterval();
