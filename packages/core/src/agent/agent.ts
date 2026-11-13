@@ -8544,6 +8544,24 @@ export class Agent<
   }
 
   /**
+   * The intent `recoverResume()` replays: the one persisted by the resume that holds the run's
+   * current claim. Whether that claim is abandoned is left to the claim's takeover rules.
+   */
+  #getRecoverableResumeIntent(snapshot: WorkflowRunState, runId: string) {
+    const intent = snapshot.resumeClaimIntent;
+    if (intent && RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status) && intent.claimedAt === snapshot.resumeClaimedAt) {
+      return intent;
+    }
+    throw new MastraError({
+      id: 'AGENT_RESUME_NOTHING_TO_RECOVER',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Agent "${this.name}" recoverResume() found no resume to recover for run "${runId}". Either no resume has claimed the run, or the claim was taken by a Mastra version that did not persist the resume data. Continue the run with approveToolCall(), declineToolCall(), or resumeStream().`,
+      details: { agentName: this.name, runId, status: snapshot.status },
+    });
+  }
+
+  /**
    * Claims a suspended agentic-loop run for one resume before the resumed loop starts, so
    * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
    * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
@@ -8569,6 +8587,10 @@ export class Agent<
    * goes back to `suspended` while someone may still run it. Without run fencing a `running` claim
    * is never taken over: nothing can tell a dead claimant from a slow one.
    *
+   * Every claim write also persists what the resume resumes the run with (`resumeClaimIntent`), so
+   * `recoverResume()` can finish a resume whose process died. A recovery passes the `claimedAt` of
+   * the intent it replays as `recoverClaimedAt`, and only takes over that exact claim.
+   *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
    * suspension back to later callers only if the resumed run never started executing.
@@ -8577,11 +8599,15 @@ export class Agent<
     snapshot,
     runId,
     toolCallId,
+    resumeData,
+    recoverClaimedAt,
     method,
   }: {
     snapshot: WorkflowRunState;
     runId: string;
     toolCallId: string | undefined;
+    resumeData: unknown;
+    recoverClaimedAt?: number;
     method: string;
   }): Promise<AgentLoopResumeClaim> {
     const throwAlreadyClaimed = (): never => {
@@ -8608,12 +8634,24 @@ export class Agent<
       };
     }
 
-    const claim = () =>
-      workflowsStore.updateWorkflowState({
+    const claimFrom = (expectedStatus: WorkflowRunStatus | undefined) => {
+      const claimedAt = Date.now();
+      return workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
         runId,
-        opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+        opts: {
+          status: 'pending',
+          expectedStatus,
+          resumeClaimedAt: claimedAt,
+          resumeClaimIntent: { claimedAt, toolCallId, resumeData },
+        },
       });
+    };
+    const claim = () => claimFrom('suspended');
+    // A recovery replays one dead claim's intent, so it must not take over any other claim.
+    const throwIfNotRecoveredClaim = (current: WorkflowRunState | null | undefined) => {
+      if (recoverClaimedAt !== undefined && current?.resumeClaimedAt !== recoverClaimedAt) throwAlreadyClaimed();
+    };
 
     // A probe that fails leaves the claim unleased, which is how a store without fencing behaves.
     const leased = await Promise.resolve()
@@ -8661,21 +8699,32 @@ export class Agent<
           ? current.resumeLeasedClaimAt === current.resumeClaimedAt
           : claimStatus === 'pending' && Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS);
       if (!abandoned) throwAlreadyClaimed();
+      throwIfNotRecoveredClaim(current);
       const owner = await workflowsStore.getRunOwnership({ runId: ownershipRunId });
       if (owner?.live) throwAlreadyClaimed();
       // Racing takers read the same generation, so only one of them gets the lease.
       if (!(await acquireLease({ expectedGeneration: owner?.generation ?? 0 }))) throwAlreadyClaimed();
+      if (recoverClaimedAt !== undefined) {
+        // Another resume may have claimed the run between the read above and taking the lease. Holding
+        // the lease, no other resume can claim it now, so this read settles which claim is recovered.
+        const held = await workflowsStore
+          .loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId })
+          .catch(async error => {
+            await releaseLease();
+            throw error;
+          });
+        if (held?.status !== claimStatus || held?.resumeClaimedAt !== recoverClaimedAt) {
+          await releaseLease();
+          throwAlreadyClaimed();
+        }
+      }
 
       this.logger.warn(
         claimStatus === 'running'
           ? `[Agent:${this.name}] - Taking over resume claim for run ${runId} whose lease lapsed; the suspended tool call runs again.`
           : `[Agent:${this.name}] - Taking over resume claim for run ${runId} that was not started within ${AGENT_RESUME_CLAIM_STALE_MS}ms.`,
       );
-      claimed = await workflowsStore.updateWorkflowState({
-        workflowName: AGENTIC_LOOP_WORKFLOW_ID,
-        runId,
-        opts: { status: 'pending', expectedStatus: claimStatus, resumeClaimedAt: Date.now() },
-      });
+      claimed = await claimFrom(claimStatus);
       if (!claimed) {
         await releaseLease();
         throwAlreadyClaimed();
@@ -8688,6 +8737,7 @@ export class Agent<
         typeof current.resumeClaimedAt === 'number' &&
         Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
       if (!abandoned) throwAlreadyClaimed();
+      throwIfNotRecoveredClaim(current);
 
       // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
       // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
@@ -8700,6 +8750,12 @@ export class Agent<
         runId,
         opts: { status: 'suspended', expectedStatus: 'pending' },
       });
+      if (recoverClaimedAt !== undefined) {
+        // The hand-back cannot tell claims apart, so it may have knocked back a newer claim taken
+        // since the read above. Recover only if the run still carries the claim that was read.
+        const handedBack = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        throwIfNotRecoveredClaim(handedBack);
+      }
       claimed = await claim();
       if (!claimed) throwAlreadyClaimed();
     }
@@ -11435,6 +11491,24 @@ export class Agent<
       toolCallId?: string;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
+    return this.#resumeStream<OUTPUT>(resumeData, streamOptions, false);
+  }
+
+  /**
+   * `resumeStream()`, or with `recover` set, `recoverResume()`: resumes with the intent a dead
+   * claim persisted instead of the caller's `resumeData` and `toolCallId`.
+   */
+  async #resumeStream<OUTPUT>(
+    resumeData: unknown,
+    streamOptions:
+      | (AgentExecutionOptionsBase<any> & {
+          structuredOutput?: PublicStructuredOutputOptions<any>;
+          toolCallId?: string;
+        } & { model?: DynamicArgument<MastraModelConfig> })
+      | undefined,
+    recover: boolean,
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    const method = recover ? 'recoverResume' : 'resumeStream';
     const defaultOptions = await this.getDefaultOptions({
       requestContext: streamOptions?.requestContext,
     });
@@ -11462,14 +11536,15 @@ export class Agent<
           activeStreams: this.#activeStreamUntilIdle,
           bgManager: this.#mastra?.backgroundTaskManager,
         },
+        recover ? opts => this.#resumeStream<OUTPUT>(undefined, opts, true) : undefined,
       );
     }
 
     const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
-      runId,
-      method: 'resumeStream',
-    });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method });
+    const intent = recover ? this.#getRecoverableResumeIntent(existingSnapshot, runId) : undefined;
+    const toolCallId = intent ? intent.toolCallId : streamOptions?.toolCallId;
+    const resumeWith = intent ? intent.resumeData : resumeData;
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
     // Precedence: resume call > the run's own flag > defaultOptions (merged above).
     const persistedReturnScorerData =
@@ -11503,25 +11578,27 @@ export class Agent<
     });
     const resumeSnapshot = await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
-      toolCallId: streamOptions?.toolCallId,
+      toolCallId,
       runId,
-      method: 'resumeStream',
+      method,
     });
     await this.#validateToolResumeData({
       snapshot: resumeSnapshot,
-      toolCallId: streamOptions?.toolCallId,
-      resumeData,
+      toolCallId,
+      resumeData: resumeWith,
       requestContext: mergedStreamOptions.requestContext,
       toolsets: mergedStreamOptions.toolsets,
       clientTools: mergedStreamOptions.clientTools,
       runId,
-      method: 'resumeStream',
+      method,
     });
     const resumeClaim = await this.#claimSuspendedAgenticLoopRun({
       snapshot: resumeSnapshot,
       runId,
-      toolCallId: streamOptions?.toolCallId,
-      method: 'resumeStream',
+      toolCallId,
+      resumeData: resumeWith,
+      recoverClaimedAt: intent?.claimedAt,
+      method,
     });
 
     let preparedOptions: AgentExecutionOptions<OUTPUT> | undefined;
@@ -11576,8 +11653,9 @@ export class Agent<
           : undefined,
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
+        toolCallId,
         resumeContext: {
-          resumeData,
+          resumeData: resumeWith,
           snapshot: resumeSnapshot,
           claim: resumeClaim,
         },
@@ -11730,6 +11808,7 @@ export class Agent<
       snapshot: resumeSnapshot,
       runId,
       toolCallId: options?.toolCallId,
+      resumeData,
       method: 'resumeGenerate',
     });
 
@@ -11831,6 +11910,32 @@ export class Agent<
     }
 
     return fullOutput;
+  }
+
+  /**
+   * Finishes a resume whose process died before the run finished, with the approval decision or
+   * resume data that resume persisted when it claimed the run. Use it when `approveToolCall()`,
+   * `declineToolCall()`, or `resumeStream()` was called but the process handling it stopped, and
+   * the decision is no longer at hand.
+   *
+   * The claim must be abandoned: claimed and not started for `AGENT_RESUME_CLAIM_STALE_MS`, or, on
+   * storage with run fencing, started and no longer renewed for that long. Rejects with
+   * `AGENT_RESUME_ALREADY_CLAIMED` before then, and with `AGENT_RESUME_NOTHING_TO_RECOVER` when no
+   * resume has claimed the run. The resumed tool call runs again, and abandonment is judged by age,
+   * so a stalled claimant may still be running it.
+   *
+   * @example
+   * ```typescript
+   * const stream = await agent.recoverResume({ runId: 'claimed-run-id' });
+   * ```
+   */
+  async recoverResume<OUTPUT = TOutput>(
+    options: AgentExecutionOptionsBase<any> & {
+      runId: string;
+      structuredOutput?: PublicStructuredOutputOptions<any>;
+    } & { model?: DynamicArgument<MastraModelConfig> },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    return this.#resumeStream<OUTPUT>(undefined, options, true);
   }
 
   /**
