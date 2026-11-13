@@ -139,6 +139,16 @@ export function getModelFacingValidationError(value: unknown): ModelFacingValida
 }
 
 /**
+ * Drops the "received …" clause schema libraries append to an issue message, which can quote the
+ * rejected value (Zod v3 enums: `received 'x'`; Valibot: `but received "x"`, `Received "x"`). After
+ * an input transform that value may not be what the model sent. The model knows what it sent, so
+ * the expected part is enough to retry.
+ */
+function withoutReceivedValue(message: string): string {
+  return message.replace(/(?:,|:|\s+but)\s*received\b.*$/i, '');
+}
+
+/**
  * Model-facing form of an error about data the model did not write (tool output, request
  * context, suspend data): the failing field paths only. Issue messages can quote the rejected
  * values, and record keys in the paths come from the data, so both are left out.
@@ -767,16 +777,26 @@ export function validateToolInput<T = unknown>(
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
-  const heading = `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}`;
-  const validationErrors = buildFormattedErrors<T>(finalIssues);
+  const heading = `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:`;
   const error: ValidationError<T> = {
     error: true,
-    message: `${heading}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors,
+    message: `${heading}\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
-  // The model wrote these arguments, so it gets each issue to fix, but not the excerpt of them.
-  return { error: markModelFacing(error, { error: true, message: heading, validationErrors }) };
+  // The model wrote these arguments, so it gets each issue to fix, but not the excerpt of them
+  // nor the rejected values the issue messages quote.
+  const modelFacingIssues = finalIssues.map(issue => ({ ...issue, message: withoutReceivedValue(issue.message) }));
+  const modelFacingMessages = modelFacingIssues
+    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
+    .join('\n');
+  return {
+    error: markModelFacing(error, {
+      error: true,
+      message: `${heading}\n${modelFacingMessages}`,
+      validationErrors: buildFormattedErrors(modelFacingIssues),
+    }),
+  };
 }
 
 /**

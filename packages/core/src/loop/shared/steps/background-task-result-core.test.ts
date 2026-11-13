@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { MessageList } from '../../../agent/message-list';
-import { validateToolInput } from '../../../tools/validation';
+import { getModelFacingValidationError, validateToolInput } from '../../../tools/validation';
 import { applyBackgroundToolResult } from './background-task-result-core';
 
 /**
@@ -263,12 +263,11 @@ describe('applyBackgroundToolResult toModelOutput', () => {
     expect(part.toolInvocation.result).toEqual(validationError);
     expect(part.providerMetadata.mastra.modelOutput).toEqual({
       type: 'error-json',
-      value: {
-        error: true,
-        message: expect.stringContaining('Tool input validation failed for background-work'),
-        validationErrors: validationError?.validationErrors,
-      },
+      value: getModelFacingValidationError(validationError),
     });
+    expect(part.providerMetadata.mastra.modelOutput.value.message).toContain(
+      'Tool input validation failed for background-work',
+    );
     expect(JSON.stringify(part.providerMetadata.mastra.modelOutput)).not.toContain('jane.doe@example.com');
   });
 

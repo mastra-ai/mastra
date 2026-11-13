@@ -1,8 +1,10 @@
 import * as v from 'valibot';
 import { describe, expect, it, vi } from 'vitest';
+import { z as z3 } from 'zod/v3';
 import { z } from 'zod/v4';
 
 import { RequestContext } from '../request-context';
+import { toStandardSchema } from '../schema';
 import { createTool } from './tool';
 import {
   getModelFacingValidationError,
@@ -2640,6 +2642,38 @@ describe('getModelFacingValidationError', () => {
     });
     expect(modelFacing?.message).toContain('- query:');
     expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('drops the rejected value schema libraries quote in input issue messages', () => {
+    // A transform resolves the model's customer id to a stored email, so the value Zod v3's enum
+    // message quotes is not one the model sent.
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const zod3Schema = z3.object({
+      customer: z3
+        .string()
+        .transform(id => emails[id] ?? id)
+        .pipe(z3.enum(['allowed@example.com'])),
+    });
+    const zod3 = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-1' }, 'lookup').error;
+    expect(JSON.stringify(zod3)).toContain(EMAIL);
+    const zod3ModelFacing = getModelFacingValidationError(zod3);
+    expect(zod3ModelFacing?.message).toContain("- customer: Invalid enum value. Expected 'allowed@example.com'");
+    expect(JSON.stringify(zod3ModelFacing)).not.toContain(EMAIL);
+
+    // Valibot only implements StandardSchemaV1; add the JSON Schema half like the tests above.
+    const valibotSchema = v.object({ contact: v.pipe(v.string(), v.email()), count: v.number() });
+    const jsonSchema = () => ({ type: 'object' as const, properties: {} });
+    const valibot = validateToolInput(
+      { '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } } } as any,
+      { contact: 'not-an-email', count: 'four' },
+      'lookup',
+    ).error;
+    expect(JSON.stringify(valibot)).toContain('not-an-email');
+    const valibotModelFacing = getModelFacingValidationError(valibot);
+    expect(valibotModelFacing?.message).toContain('- contact: Invalid email');
+    expect(valibotModelFacing?.message).toContain('- count: Invalid type: Expected number');
+    expect(JSON.stringify(valibotModelFacing)).not.toContain('not-an-email');
+    expect(JSON.stringify(valibotModelFacing)).not.toContain('four');
   });
 
   it('names only the failing output fields, never the output or values an issue message quotes', () => {
