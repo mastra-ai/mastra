@@ -1,0 +1,109 @@
+---
+title: "Quickstart | Gateway"
+description: "Create a Gateway API key and send your first request with cURL, TypeScript, or Python."
+---
+
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+# Quickstart
+
+Add credits, create an API key, then send a request to any supported model.
+
+## Add credits
+
+Gateway uses prepaid credit, so add credits before your first request. Without credit, requests return `402`.
+
+1. Sign in at [projects.mastra.ai](https://projects.mastra.ai).
+1. Open **Billing** in your organization and add credits.
+
+Optionally turn on auto top-up so requests don't fail when your balance runs low.
+
+## Create an API key
+
+1. Open **Gateway** > **API keys** and select **Create key**.
+1. Copy the key. It starts with `msk-gateway-` and is shown only once.
+
+Store the key in an environment variable:
+
+```bash title=".env"
+MASTRA_GATEWAY_API_KEY="msk-gateway-..."
+```
+
+## Send a request
+
+<Tabs>
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl https://gateway-api.mastra.ai/v1/chat/completions \
+      -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "__GATEWAY_OPENAI_MODEL__",
+        "messages": [{ "role": "user", "content": "Say hello in one word." }]
+      }'
+    ```
+  </TabItem>
+
+  <TabItem value="ts" label="TypeScript">
+    ```typescript title="src/index.ts"
+    import OpenAI from 'openai'
+
+    const client = new OpenAI({
+      apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+      baseURL: 'https://gateway-api.mastra.ai/v1',
+    })
+
+    const completion = await client.chat.completions.create({
+      model: '__GATEWAY_OPENAI_MODEL__',
+      messages: [{ role: 'user', content: 'Say hello in one word.' }],
+    })
+
+    console.log(completion.choices[0].message.content)
+    ```
+  </TabItem>
+
+  <TabItem value="py" label="Python">
+    ```python title="main.py"
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        api_key=os.environ["MASTRA_GATEWAY_API_KEY"],
+        base_url="https://gateway-api.mastra.ai/v1",
+    )
+
+    completion = client.chat.completions.create(
+        model="__GATEWAY_OPENAI_MODEL__",
+        messages=[{"role": "user", "content": "Say hello in one word."}],
+    )
+
+    print(completion.choices[0].message.content)
+    ```
+  </TabItem>
+</Tabs>
+
+Change the `model` value to call another provider, for example `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. List every available model with [`GET /v1/models`](/docs/mastra-platform/gateway/api/models).
+
+The response includes an `x-request-id` header. Use it to find the request in your usage logs.
+
+## Use Gateway from a Mastra agent
+
+Set `MASTRA_GATEWAY_API_KEY`, then use a model ID with the `mastra/` prefix:
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You are a helpful assistant.',
+  model: 'mastra/__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Next steps
+
+- [Integrations](/docs/mastra-platform/gateway/integrations): AI SDK, Anthropic SDK, LangGraph, Pydantic AI, and more
+- [Keys and BYOK](/docs/mastra-platform/gateway/keys-and-byok): Restrict keys and use your own provider accounts
+- [Models and routing](/docs/mastra-platform/gateway/models-and-routing): How Gateway picks a provider

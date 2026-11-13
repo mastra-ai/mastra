@@ -1,0 +1,36 @@
+---
+title: "Web search | Gateway"
+description: "Give any chat model live web search with Gateway's mastra:web_search tool."
+---
+
+# Web search
+
+Add the `mastra:web_search` tool to a [Chat Completions](/docs/mastra-platform/gateway/api/chat-completions) request to let the model search the web. Gateway runs the search, so it works with chat models that don't have built-in search.
+
+```bash
+curl https://gateway-api.mastra.ai/v1/chat/completions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_ANTHROPIC_MODEL_HAIKU__",
+    "messages": [{ "role": "user", "content": "What changed in the latest Node.js release?" }],
+    "tools": [{ "type": "mastra:web_search" }]
+  }'
+```
+
+## Options
+
+Set `web_search_options` at the request level:
+
+| Field | Description |
+| - | - |
+| `search_context_size` | `low`, `medium`, or `high`. More context costs more. |
+| `user_location` | Approximate location (`city`, `region`, `country`, `timezone`) to localize results. |
+
+## OpenRouter compatibility
+
+Gateway also runs `{ "type": "openrouter:web_search" }` when it has no options. With options such as `max_results` or `engine`, the tool is passed to OpenRouter natively and works only on OpenRouter routes.
+
+## Pricing
+
+Each search call is priced separately from model tokens and is listed in your usage logs. If a request fails over, Gateway reuses search results instead of searching again.

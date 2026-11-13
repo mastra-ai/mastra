@@ -1,0 +1,81 @@
+---
+title: "Keys and BYOK | Gateway"
+description: "Gateway API key types, model restrictions, rotation, deployment keys, and bring-your-own-key provider connections."
+---
+
+# Keys and BYOK
+
+## API keys
+
+Gateway keys start with `msk-gateway-`. Send a key in either header:
+
+```text
+Authorization: Bearer msk-gateway-...
+x-api-key: msk-gateway-...
+```
+
+| Key type | Scope | Created from |
+| - | - | - |
+| Project key | One project. Usage is attributed to the project, and responses include `x-gateway-project`. | **Gateway** > **API keys** inside a project |
+| Organization key | The whole organization. | **Gateway** > **API keys** at organization level |
+
+Keys are shown once when created. Gateway stores only a hash.
+
+Keys that start with `msk_` belong to the previous Memory Gateway and don't work with the current API. See [Migrate](/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway).
+
+## Restrict a key
+
+When you create a key, you can set:
+
+- **Label**: A name to identify the key.
+- **Expiry**: A date after which the key stops working.
+- **Allowed models**: The only models the key can call. `/v1/models` lists only those models for the key.
+- **Disable failover**: Keep each request on a single route.
+
+Restrictions are fixed at creation. To change them, create a new key and revoke the old one.
+
+:::info[Rolling out]
+
+Per-key spend limits (daily, weekly, monthly, or lifetime, from $1) are rolling out and may not appear in your organization yet.
+
+:::
+
+## Rotate and revoke
+
+- **Organization keys** can be rotated. Rotation issues a new secret for the same key.
+- **Project keys** are revoked and replaced. Create the new key, update your application, then revoke the old one.
+
+Revoked and expired keys return `401`.
+
+## Deployment keys
+
+:::info[Rolling out]
+
+Automatic deployment keys are rolling out by organization.
+
+:::
+
+When enabled, Mastra platform injects a Gateway key into each deploy as `MASTRA_GATEWAY_API_KEY`, so deployed agents can call Gateway without manual setup. The key is scoped to the deploy and is revoked when the deploy stops, fails, or is cancelled. A key you set yourself isn't replaced.
+
+Turn injection on or off, and restrict allowed models, in project settings. A deployment-key spend limit can be saved in project settings, but it isn't enforced on the key yet.
+
+## Bring your own key
+
+A BYOK connection routes requests through your own provider account. The provider bills you directly, and Gateway doesn't charge Mastra credit for those requests.
+
+| Provider | Supported endpoints |
+| - | - |
+| OpenAI | Chat Completions, Responses, Embeddings, Decisions |
+| Anthropic | Messages |
+| Google | Chat Completions (OpenAI-compatible) |
+| Custom HTTPS endpoint | Chat Completions |
+
+Images, audio, and rerank aren't available over BYOK.
+
+To set up a connection:
+
+1. Open **Gateway** > **BYOK** in [projects.mastra.ai](https://projects.mastra.ai).
+1. Add a connection with your provider API key.
+1. Optionally assign the connection to projects. Keys in those projects then use it for that provider.
+
+BYOK requests make one attempt on your connection and don't fail over to another provider. Allowed-model restrictions and organization policy still apply. If the connection is inactive, requests return `403` with `byok_connection_inactive`.

@@ -1,0 +1,69 @@
+---
+title: "Chat Completions | Gateway"
+description: "Send OpenAI-compatible chat completion requests, with streaming and tools, to any Gateway model."
+---
+
+# Chat Completions
+
+```text
+POST https://gateway-api.mastra.ai/v1/chat/completions
+```
+
+Compatible with the OpenAI Chat Completions API. Works with every chat model in the catalog, including non-OpenAI providers.
+
+## Request
+
+```bash
+curl https://gateway-api.mastra.ai/v1/chat/completions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_ANTHROPIC_MODEL_HAIKU__",
+    "messages": [
+      { "role": "system", "content": "Answer in one sentence." },
+      { "role": "user", "content": "What is a gateway?" }
+    ],
+    "max_tokens": 100
+  }'
+```
+
+Common fields:
+
+| Field | Description |
+| - | - |
+| `model` | Required. A `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models). |
+| `messages` | Required. System, developer, user, assistant, and tool messages. |
+| `stream` | Stream server-sent events. Set `stream_options.include_usage` to receive a final usage chunk. |
+| `tools`, `tool_choice` | Function tools, plus Gateway tools such as [web search](/docs/mastra-platform/gateway/web-search). |
+| `response_format` | Text, JSON object, or JSON schema output. |
+| `max_tokens`, `max_completion_tokens`, `temperature`, `top_p`, `stop`, `seed` | Standard sampling controls. |
+| `web_search_options` | Search context size and approximate user location for web search. |
+
+Gateway validates the request before routing. Unknown fields return `400`.
+
+## Streaming
+
+```typescript
+const stream = await client.chat.completions.create({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  messages: [{ role: 'user', content: 'Count to five.' }],
+  stream: true,
+  stream_options: { include_usage: true },
+})
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content ?? '')
+}
+```
+
+Gateway fails over only before the first chunk is sent. After streaming starts, an upstream error ends the stream. See [Models and routing](/docs/mastra-platform/gateway/models-and-routing#failover).
+
+## Response headers
+
+| Header | Description |
+| - | - |
+| `x-request-id` | Unique request ID. Matches the entry in your usage logs. |
+| `x-gateway-provider` | The provider that served the request. |
+| `x-gateway-project` | The project the key belongs to. Sent for project keys only. |
+
+See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#errors) for error codes.

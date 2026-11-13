@@ -824,41 +824,29 @@ const sidebars = {
             contextualSidebar: true,
           },
           items: [
-            { type: 'doc', id: 'mastra-platform/gateway/features', label: 'Features' },
-            { type: 'doc', id: 'mastra-platform/gateway/models', label: 'Models' },
-            { type: 'doc', id: 'mastra-platform/gateway/limits', label: 'Limits' },
-            { type: 'doc', id: 'mastra-platform/gateway/api', label: 'API' },
+            { type: 'doc', id: 'mastra-platform/gateway/quickstart', label: 'Quickstart' },
+            { type: 'doc', id: 'mastra-platform/gateway/migrate', label: 'Migrate' },
             {
               type: 'category',
-              label: 'Examples',
-              link: { type: 'doc', id: 'mastra-platform/gateway/examples/overview' },
-              collapsed: true,
+              label: 'APIs',
               items: [
-                {
-                  type: 'category',
-                  label: 'TypeScript',
-                  collapsed: false,
-                  items: [
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/anthropic-sdk', label: 'Anthropic SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/deep-agents-ts', label: 'Deep Agents' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/langgraph', label: 'LangGraph' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/openai-sdk', label: 'OpenAI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/ai-sdk', label: 'Vercel AI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/mastra-framework', label: 'Mastra Framework' },
-                  ],
-                },
-                {
-                  type: 'category',
-                  label: 'Python',
-                  collapsed: false,
-                  items: [
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/deep-agents-py', label: 'Deep Agents' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/python-openai', label: 'OpenAI SDK' },
-                    { type: 'doc', id: 'mastra-platform/gateway/examples/pydantic-ai', label: 'Pydantic AI' },
-                  ],
-                },
+                { type: 'doc', id: 'mastra-platform/gateway/api/chat-completions', label: 'Chat Completions' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/responses', label: 'Responses' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/messages', label: 'Anthropic Messages' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/embeddings', label: 'Embeddings' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/decisions', label: 'Decisions' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/rerank', label: 'Rerank' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/images', label: 'Images' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/audio', label: 'Audio' },
+                { type: 'doc', id: 'mastra-platform/gateway/api/models', label: 'Models list' },
               ],
             },
+            { type: 'doc', id: 'mastra-platform/gateway/models-and-routing', label: 'Models and routing' },
+            { type: 'doc', id: 'mastra-platform/gateway/keys-and-byok', label: 'Keys and BYOK' },
+            { type: 'doc', id: 'mastra-platform/gateway/web-search', label: 'Web search' },
+            { type: 'doc', id: 'mastra-platform/gateway/usage-and-limits', label: 'Usage, pricing, and limits' },
+            { type: 'doc', id: 'mastra-platform/gateway/integrations', label: 'Integrations' },
+            { type: 'doc', id: 'mastra-platform/gateway/faq', label: 'FAQ' },
           ],
         },
         {
@@ -907,6 +895,6 @@ const sidebars = {
       ],
     },
   ],
-}
+};
 
-export default sidebars
+export default sidebars;

@@ -1,0 +1,22 @@
+---
+title: "Audio | Gateway"
+description: "Speech and transcription endpoints are rolling out on Gateway."
+---
+
+# Audio
+
+:::info[Rolling out]
+
+Audio endpoints aren't available yet. Requests return an error until models are enabled. This page will list supported models when they launch.
+
+:::
+
+```text
+POST https://gateway-api.mastra.ai/v1/audio/speech
+POST https://gateway-api.mastra.ai/v1/audio/transcriptions
+```
+
+When available, these endpoints follow the OpenAI Audio API:
+
+- **Speech**: 1 to 4,096 characters of input, returned as MP3. A speech request stays on one voice and model, so it doesn't fail over to a different model.
+- **Transcriptions**: Audio files up to 8 MiB.

@@ -1,10 +1,223 @@
 ---
-title: "Gateway | Mastra platform"
-description: "Placeholder for the Gateway page."
+title: "Overview | Gateway"
+description: "Mastra Gateway is one OpenAI- and Anthropic-compatible API for many model providers, with routing, failover, BYOK, spend controls, and per-request cost tracking."
 ---
+
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+import { ArrowRightLeft, Blocks, ChartColumn, Code, Gauge, Globe, KeyRound, Receipt, Rocket, Route, ShieldCheck, Shuffle, Wallet } from "lucide-react"
+import { CardGrid, CardGridItem } from '@site/src/components/cards/card-grid'
 
 # Gateway
 
+Mastra Gateway lets you call models from many providers through one managed API. It centralizes credentials, fails over between providers, controls spend, and records the cost of every request. You don't have to run your own proxy or routing layer.
+
+- **One key, many providers**: Call OpenAI, Anthropic, Google, and other providers with one Gateway key and a `provider/model` model ID.
+- **Routing and failover**: Gateway retries eligible failures on another route before any output reaches your client.
+- **Bring your own key (BYOK)**: Send traffic through your own provider accounts.
+- **Usage and spend controls**: Every request records its attempts and cost, and keys can be limited by model.
+- **Gateway tools**: Add web search to any chat model with one tool entry.
+
+Gateway uses the OpenAI and Anthropic wire formats. To use it with an existing SDK or framework, change the base URL and the API key. The model ID picks the provider:
+
+<Tabs>
+  <TabItem value="mastra" label="Mastra">
+    ```typescript title="src/mastra/agents/assistant.ts"
+    import { Agent } from '@mastra/core/agent'
+
+    export const assistant = new Agent({
+      id: 'assistant',
+      name: 'Assistant',
+      instructions: 'You are a helpful assistant.',
+      model: 'mastra/__GATEWAY_OPENAI_MODEL__',
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="typescript" label="OpenAI SDK">
+    ```typescript title="index.ts"
+    import OpenAI from 'openai'
+
+    const client = new OpenAI({
+      baseURL: 'https://gateway-api.mastra.ai/v1',
+      apiKey: process.env.MASTRA_GATEWAY_API_KEY,
+    })
+
+    const completion = await client.chat.completions.create({
+      model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+      messages: [{ role: 'user', content: 'Explain Mastra Gateway in one sentence.' }],
+    })
+
+    console.log(completion.choices[0].message.content)
+    ```
+  </TabItem>
+
+  <TabItem value="python" label="Python">
+    ```python title="main.py"
+    import os
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://gateway-api.mastra.ai/v1",
+        api_key=os.environ["MASTRA_GATEWAY_API_KEY"],
+    )
+
+    completion = client.chat.completions.create(
+        model="__GATEWAY_GOOGLE_MODEL_FLASH__",
+        messages=[{"role": "user", "content": "Explain Mastra Gateway in one sentence."}],
+    )
+
+    print(completion.choices[0].message.content)
+    ```
+  </TabItem>
+
+  <TabItem value="curl" label="cURL">
+    ```bash
+    curl https://gateway-api.mastra.ai/v1/chat/completions \
+      -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "__GATEWAY_OPENAI_MODEL__",
+        "messages": [{ "role": "user", "content": "Explain Mastra Gateway in one sentence." }]
+      }'
+    ```
+  </TabItem>
+</Tabs>
+
+## Connect from your stack
+
+| If you use | Connect with |
+| - | - |
+| Mastra framework | A `mastra/provider/model` model ID and the `MASTRA_GATEWAY_API_KEY` environment variable. See [Integrations](/docs/mastra-platform/gateway/integrations#mastra-framework). |
+| AI SDK | The OpenAI-compatible or Anthropic provider with the Gateway base URL. See [Integrations](/docs/mastra-platform/gateway/integrations#ai-sdk). |
+| OpenAI SDK (TypeScript or Python) | `baseURL` set to `https://gateway-api.mastra.ai/v1`. See [Chat Completions](/docs/mastra-platform/gateway/api/chat-completions) and [Responses](/docs/mastra-platform/gateway/api/responses). |
+| Anthropic SDK | `baseURL` set to `https://gateway-api.mastra.ai`, without `/v1`. See [Anthropic Messages](/docs/mastra-platform/gateway/api/messages). |
+| LangGraph, Deep Agents, or Pydantic AI | The framework's OpenAI-compatible model client. See [Integrations](/docs/mastra-platform/gateway/integrations). |
+| Any other language | Any HTTP client that can call the [OpenAI](/docs/mastra-platform/gateway/api/chat-completions) or [Anthropic](/docs/mastra-platform/gateway/api/messages) API. |
+
+## What Gateway handles
+
+<CardGrid columns={3}>
+  <CardGridItem
+    title="Centralized credentials"
+    logo={<KeyRound size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/keys-and-byok"
+    description="Authenticate with one Gateway key. Gateway calls providers with Mastra-managed credentials or your own accounts through BYOK."
+  />
+
+  <CardGridItem
+    title="Provider failover"
+    logo={<Shuffle size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/models-and-routing"
+    description="When a provider fails before any output reaches your client, Gateway retries on another eligible route."
+  />
+
+  <CardGridItem
+    title="Key scoping"
+    logo={<ShieldCheck size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/keys-and-byok"
+    description="Project and organization keys, each with an optional expiry date and allowed-model list."
+  />
+
+  <CardGridItem
+    title="Cost tracking"
+    logo={<Receipt size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/usage-and-limits#usage-logs"
+    description="Every request records its model, provider attempts, tokens, and cost. Search logs by x-request-id."
+  />
+
+  <CardGridItem
+    title="Spending controls"
+    logo={<Wallet size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/usage-and-limits#spend-caps"
+    description="An organization spend cap rejects new requests with 402 when it's reached. Per-key limits are rolling out."
+  />
+
+  <CardGridItem
+    title="Rate limits"
+    logo={<Gauge size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/usage-and-limits#rate-limits"
+    description="Per-key request limits. 429 responses include retry-after and name the limit that was hit."
+  />
+
+  <CardGridItem
+    title="Web search"
+    logo={<Globe size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/web-search"
+    description="Add mastra:web_search to any chat model. Results are reused if the request fails over."
+  />
+</CardGrid>
+
+You pay only for the attempt that served your request. Failed attempts aren't charged. BYOK requests are billed by your provider, not from Mastra credit. Your provider's own limits and behavior apply to BYOK requests, and they don't fail over. Gateway doesn't store prompts or completions.
+
 :::note
-Placeholder page for the sidebar draft. Until this page is written, see the [Mastra Gateway docs](https://gateway.mastra.ai/docs).
+
+Conversation memory is a separate product. To give agents memory, see [Memory](/docs/memory/overview).
+
 :::
+
+## Choose how to start
+
+<CardGrid>
+  <CardGridItem
+    title="Make your first request"
+    logo={<Rocket size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/quickstart"
+    description="Add credits, create a key, and call a model with cURL, TypeScript, or Python."
+  />
+
+  <CardGridItem
+    title="Migrate existing model calls"
+    logo={<ArrowRightLeft size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/migrate"
+    description="Move from OpenAI, Anthropic, OpenRouter, or Vercel AI Gateway by changing the base URL and key."
+  />
+
+  <CardGridItem
+    title="Use a framework"
+    logo={<Blocks size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/integrations"
+    description="Connect the Mastra framework, AI SDK, LangGraph, Deep Agents, or Pydantic AI."
+  />
+
+  <CardGridItem
+    title="Browse the API"
+    logo={<Code size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/api/chat-completions"
+    description="Chat Completions, Responses, Messages, Embeddings, Decisions, Rerank, Images, and Models."
+  />
+</CardGrid>
+
+## Configure and operate Gateway
+
+<CardGrid>
+  <CardGridItem
+    title="Models and routing"
+    logo={<Route size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/models-and-routing"
+    description="Model IDs, route selection, failover rules, and cooldowns."
+  />
+
+  <CardGridItem
+    title="Keys and BYOK"
+    logo={<KeyRound size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/keys-and-byok"
+    description="Project and organization keys, rotation, model restrictions, and your own provider accounts."
+  />
+
+  <CardGridItem
+    title="Usage, pricing, and limits"
+    logo={<ChartColumn size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/usage-and-limits"
+    description="Credits, spend caps, usage logs, rate limits, and error codes."
+  />
+
+  <CardGridItem
+    title="Web search"
+    logo={<Globe size={28} strokeWidth={1.5} />}
+    href="/docs/mastra-platform/gateway/web-search"
+    description="Ground any chat model with the mastra:web_search tool."
+  />
+</CardGrid>
+
+To list every available model and its ID, call [`GET /v1/models`](/docs/mastra-platform/gateway/api/models). For answers to common questions about credits, keys, and errors, see the [FAQ](/docs/mastra-platform/gateway/faq).

@@ -1,0 +1,55 @@
+---
+title: "Decisions | Gateway"
+description: "Ask a model structured predicate, choice, and score questions about an input in a single request."
+---
+
+# Decisions
+
+```text
+POST https://gateway-api.mastra.ai/v1/decisions
+```
+
+Compatible with the OpenAI Decisions API. Ask a model up to 400 structured questions about one input and get a typed answer for each. Use it for classification, routing, moderation, and grading. Decisions doesn't stream.
+
+## Request
+
+```bash
+curl https://gateway-api.mastra.ai/v1/decisions \
+  -H "Authorization: Bearer $MASTRA_GATEWAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "__GATEWAY_OPENAI_MODEL__",
+    "input": "My order arrived broken and I want my money back.",
+    "questions": [
+      { "type": "predicate", "name": "is_complaint", "instructions": "Is the customer complaining?" },
+      {
+        "type": "choice",
+        "name": "intent",
+        "instructions": "What does the customer want?",
+        "choices": [{ "value": "refund" }, { "value": "replacement" }, { "value": "information" }]
+      },
+      {
+        "type": "score",
+        "name": "urgency",
+        "instructions": "How urgent is this?",
+        "levels": [{ "label": "low" }, { "label": "medium" }, { "label": "high" }]
+      }
+    ]
+  }'
+```
+
+| Field | Description |
+| - | - |
+| `model` | Required. A model that supports Decisions. |
+| `input` | Required. A string, or messages whose content can include `input_text`, `input_image`, and `input_json` parts. |
+| `questions` | Required. 1 to 400 questions with unique `name` values. |
+
+Question types:
+
+- `predicate`: Answers with a `probability` between 0 and 1.
+- `choice`: Picks one of 2 to 255 `choices`. Values can be strings or booleans.
+- `score`: Picks one of 2 to 10 ordered `levels`.
+
+## Response
+
+The response has one entry in `answers` per question, in the same order and with the same `name`. A model can return an answer of type `refusal` instead of the requested type.
