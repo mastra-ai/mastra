@@ -13,7 +13,6 @@ import type {
   ResolvedIntakeDispatch,
 } from '../../../capabilities/intake.js';
 import type { IntegrationContext } from '../../base.js';
-import { DEFAULT_ISSUE_RECONCILE_INTERVAL_MS } from '../../issue-reconcile-worker.js';
 import type { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import type { IssueReconcileSummary, IssueReconciler } from '../../issue-reconciler.js';
 import { DEFAULT_VANTA_SYNC_INTERVAL_MS } from '../../vanta/sync.js';
@@ -115,11 +114,12 @@ describe('PlatformConnectIntegration reconcile worker', () => {
   });
 
   it('honors the integrations’ own defaults and their operator overrides', () => {
+    // Jira and incident.io get their changes as events, so they only reconcile hourly.
     expect(new PlatformJiraIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(
-      DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
+      DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
     );
     expect(new PlatformIncidentioIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(
-      DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
+      DEFAULT_PLATFORM_RECONCILE_INTERVAL_MS,
     );
     expect(new PlatformVantaIntegration({ connect: OFFLINE }).reconcileIntervalMs).toBe(DEFAULT_VANTA_SYNC_INTERVAL_MS);
 

@@ -1183,7 +1183,7 @@ With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLA
 
 Linking a GitLab repository imports its open issues and merge requests (up to five pages each). Without a webhook, later items are discovered when their lists are requested, and changed merge-request heads are recorded when the merge-request list is requested. Existing cards can still be reconciled. For ongoing issue changes, comments, and merge-request lifecycle events, configure the direct project webhook with `GITLAB_WEBHOOK_SECRET`.
 
-For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active connection of the organization on the Platform's `gitlab` (OAuth) integration, proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
+For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active connection of the organization on the Platform's `gitlab` (OAuth) integration, proxies provider requests through `/v2/connections/{connectionId}/proxy`, and receives GitLab events from the Platform events service. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
 
 ```typescript
 import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform/gitlab/integration';
@@ -1191,14 +1191,9 @@ import { PlatformGitLabIntegration } from '@mastra/factory/integrations/platform
 const gitlab = new PlatformGitLabIntegration(); // Optionally { connectionId: 'connection-id' } to pin one connection.
 ```
 
-In Platform mode, issue, note, merge request and push events reach Factory by polling the Platform's event log for each connection, the same way Platform GitHub deployments do. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
+In Platform mode, issue, note, merge request and push events reach Factory from the Platform events service: the Platform publishes every Nango-forwarded GitLab webhook to the Factory project's `connect` topic, and the shared `platform-events` worker hands each one to the same webhook processor the direct route uses. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
 
-| Variable | Default | Purpose |
-| -------------------------------------------- | ------- |
-| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` | `true` | Set `false` to stop polling the Platform event log for GitLab events. |
-| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds. |
-
-These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. One replica polls at a time; the cursor for each connection is stored in the integration settings table and only advances once a page of events has been processed. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
+Events the Platform could not verify are dropped, and `diagnostics()` counts them as `unverifiedEventsDropped`. An hourly reconcile repairs anything a missed event left stale; set `MASTRACODE_GITLAB_RECONCILE_INTERVAL_MS` to change its interval. The Platform GitLab polling variables (`MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`, `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS`) are gone.
 
 ### incident.io intake
 

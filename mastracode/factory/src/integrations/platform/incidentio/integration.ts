@@ -8,17 +8,21 @@ import type { IntegrationContext, IntegrationTools } from '../../base.js';
 import { buildIncidentioAgentTools } from '../../incidentio/agent-tools.js';
 import { resolveIncidentioRules } from '../../incidentio/default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from '../../incidentio/default-rules.js';
-import { attachIncidentioIssueReconciler } from '../../incidentio/issue-reconciler.js';
+import {
+  attachIncidentioIssueReconcileOne,
+  attachIncidentioIssueReconciler,
+} from '../../incidentio/issue-reconciler.js';
 import {
   incidentioReconciliationEnabled,
   incidentioReconciliationInterval,
 } from '../../incidentio/reconciliation-config.js';
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { attachIncidentioRules } from '../../incidentio/rules.js';
-import { DEFAULT_ISSUE_RECONCILE_INTERVAL_MS } from '../../issue-reconcile-worker.js';
-import type { IssueReconciler } from '../../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler } from '../../issue-reconciler.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
+import { handleIncidentioConnectEvent } from './connect-events.js';
 import { PlatformIncidentioIntake, UUID_RE } from './intake.js';
 
 export { decodeScopedSourceId, encodeScopedSourceId } from './intake.js';
@@ -47,6 +51,7 @@ export class PlatformIncidentioIntegration extends PlatformConnectIntegration {
   #auth: RouteAuth | undefined;
   #intakeStorage: IntakeStorage | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
+  readonly #reconcileOne = new WeakMap<IntegrationContext, IssueReconcileOne | null>();
 
   constructor(config: PlatformIncidentioIntegrationConfig = {}) {
     const rules = resolveIncidentioRules(config.rules);
@@ -58,7 +63,6 @@ export class PlatformIncidentioIntegration extends PlatformConnectIntegration {
       linkOrgConnectionsAtBoot: true,
       connectProviders: [{ provider: 'incident-io', integrationId: PLATFORM_INCIDENTIO_PROVIDER_CONFIG_KEY }],
       ...(intervalMs ? { reconcileIntervalMs: intervalMs } : {}),
-      reconcileDefaultIntervalMs: DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
     });
     this.#rules = rules;
     this.#endpointHost = new URL(this.connect.baseUrl).host;
@@ -152,6 +156,18 @@ export class PlatformIncidentioIntegration extends PlatformConnectIntegration {
   protected override reconcile(ctx: IntegrationContext): IssueReconciler | null {
     if (!incidentioReconciliationEnabled()) return null;
     return attachIncidentioIssueReconciler(this, ctx) ?? null;
+  }
+
+  protected override async handleConnectEvent(
+    event: PlatformConnectEventDelivery,
+    ctx: IntegrationContext,
+  ): Promise<void> {
+    let reconcileOne = this.#reconcileOne.get(ctx);
+    if (reconcileOne === undefined) {
+      reconcileOne = attachIncidentioIssueReconcileOne(this, ctx) ?? null;
+      this.#reconcileOne.set(ctx, reconcileOne);
+    }
+    await handleIncidentioConnectEvent(event, reconcileOne);
   }
 
   /**

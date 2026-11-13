@@ -40,6 +40,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
+import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -93,6 +94,11 @@ import {
   isPlatformConnectProviderSource,
 } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import {
+  PLATFORM_EVENTS_STORAGE_ID,
+  PlatformEventsWorker,
+  isPlatformConnectEventSource,
+} from './integrations/platform/foundation/events-worker.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
@@ -2502,34 +2508,60 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              integrations: integrationRegistrations,
-              configVersion,
-              boardRegistry: this.#projectBoards ?? this.#boards,
-              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
-              factoryReady,
-              domains,
-              // The Platform GitHub lane only receives pushes through its polling worker.
-              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
-          ),
+    const readyContexts = integrationRegistrations
+      .filter(({ ready }) => ready)
+      .map(({ integration }) => ({
+        integration,
+        context: buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+            factoryReady,
+            domains,
+            // The Platform GitHub lane only receives pushes through its polling worker.
+            ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
         ),
+      }));
+    const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
+      integration.workers ? integration.workers(context) : [],
+    );
+    // One events subscription per deployment: the project's `connect` topic
+    // carries every connection, so each event is routed to the integration
+    // that owns its provider key. Integrations without an event source (Vanta)
+    // add no route, and a deployment with no routes opens no stream.
+    const eventRoutes = hasPlatformCredentials()
+      ? readyContexts.flatMap(({ integration, context }) => {
+          if (!isPlatformConnectEventSource(integration)) return [];
+          const route = integration.connectEventRoute(context);
+          return route ? [route] : [];
+        })
+      : [];
+    if (eventRoutes.length > 0 && !process.env.MASTRA_PROJECT_ID?.trim()) {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
       );
+    } else if (eventRoutes.length > 0) {
+      integrationWorkers.push(
+        new PlatformEventsWorker({
+          events: createPlatformConnectClient().events,
+          storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
+          routes: eventRoutes,
+        }),
+      );
+    }
 
     return {
       ...prepared.mastraArgs,

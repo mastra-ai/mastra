@@ -3056,6 +3056,52 @@ describe('MastraFactory.prepare integrations', () => {
     expect(args).not.toHaveProperty('workers');
   });
 
+  it('runs one Platform events worker, routing to the Platform integrations that take events', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const args = await factory.prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names.filter(name => name === 'platform-events')).toHaveLength(1);
+    expect(names).not.toContain('platform-gitlab-events');
+    const events = args.workers!.find(worker => worker.name === 'platform-events') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(events.diagnostics().integrations.sort()).toEqual(['gitlab', 'incidentio', 'jira']);
+  });
+
+  it('runs no Platform events worker, and says why, when the deployment has no project id', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('MASTRA_PROJECT_ID is missing, so Platform integrations receive no events'),
+    );
+  });
+
+  it('opens no Platform events stream when no installed integration takes events', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    // Explicit integrations fill every Platform slot but Vanta, which has no event source.
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
+    });
+    const args = await factory.prepare();
+
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect((args.workers ?? []).map(worker => worker.name)).toContain('vanta-issue-reconcile');
+  });
+
   it('omits the workers option when no integration contributes workers', async () => {
     const factory = new MastraFactory({
       secretEncryption,

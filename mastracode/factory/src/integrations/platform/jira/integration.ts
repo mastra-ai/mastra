@@ -4,18 +4,19 @@ import type { ApiRoute } from '@mastra/core/server';
 import type { RouteAuth } from '../../../routes/route.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { IntegrationContext, IntegrationTools } from '../../base.js';
-import { DEFAULT_ISSUE_RECONCILE_INTERVAL_MS } from '../../issue-reconcile-worker.js';
-import type { IssueReconciler } from '../../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler } from '../../issue-reconciler.js';
 import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules.js';
 import { resolveJiraRules } from '../../jira/default-rules.js';
 import type { JiraIntakeScope } from '../../jira/intake-jql.js';
-import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
+import { attachJiraIssueReconcileOne, attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { attachJiraRules } from '../../jira/rules.js';
+import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
 import { logPlatformInfo } from '../logging.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
+import { handleJiraConnectEvent } from './connect-events.js';
 import { PlatformJiraIntake, UUID_PATTERN } from './intake.js';
 import type { JiraActiveIssuePage } from './intake.js';
 import { buildPlatformJiraRoutes } from './routes.js';
@@ -37,6 +38,7 @@ export class PlatformJiraIntegration extends PlatformConnectIntegration {
   #projects: FactoryProjectsStorage | undefined;
   #auth: RouteAuth | undefined;
   readonly #orgIdByResourceId = new Map<string, string | null>();
+  readonly #reconcileOne = new WeakMap<IntegrationContext, IssueReconcileOne | null>();
 
   readonly #rules: JiraEventRules;
 
@@ -54,7 +56,6 @@ export class PlatformJiraIntegration extends PlatformConnectIntegration {
       linkOrgConnectionsAtBoot: true,
       connectProviders: [{ provider: 'jira', integrationId: PLATFORM_JIRA_PROVIDER_CONFIG_KEY }],
       ...(intervalMs ? { reconcileIntervalMs: intervalMs } : {}),
-      reconcileDefaultIntervalMs: DEFAULT_ISSUE_RECONCILE_INTERVAL_MS,
     });
     this.#rules = rules;
     this.#endpointHost = new URL(this.connect.baseUrl).host;
@@ -115,6 +116,18 @@ export class PlatformJiraIntegration extends PlatformConnectIntegration {
   protected override reconcile(ctx: IntegrationContext): IssueReconciler | null {
     if (!jiraReconciliationEnabled()) return null;
     return attachJiraIssueReconciler(this, ctx) ?? null;
+  }
+
+  protected override async handleConnectEvent(
+    event: PlatformConnectEventDelivery,
+    ctx: IntegrationContext,
+  ): Promise<void> {
+    let reconcileOne = this.#reconcileOne.get(ctx);
+    if (reconcileOne === undefined) {
+      reconcileOne = attachJiraIssueReconcileOne(this, ctx) ?? null;
+      this.#reconcileOne.set(ctx, reconcileOne);
+    }
+    await handleJiraConnectEvent(event, reconcileOne);
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {
