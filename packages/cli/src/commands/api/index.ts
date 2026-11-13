@@ -923,6 +923,10 @@ export function registerApiCommand(program: CommanderCommand): void {
     input: 'optional',
     routePlacement: 'origin',
   });
+  addAction(factoryDecision, 'queue', FACTORY_API_ROUTE_CATALOG.runQueue, {
+    description: 'List automated runs waiting for a run slot and the runs holding one',
+    routePlacement: 'origin',
+  });
   addAction(factoryDecision, 'approve', FACTORY_API_ROUTE_CATALOG.decisionApprove, {
     description: 'Approve a Factory decision',
     routePlacement: 'origin',

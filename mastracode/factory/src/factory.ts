@@ -429,6 +429,7 @@ export type { FactorySandboxStart } from './workspace.js';
  * limit shared across deployments.
  */
 export interface MastraFactoryDispatcherConfig {
+  /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
 }
 
@@ -2174,6 +2175,7 @@ export class MastraFactory {
               ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
               : {}),
             factoryTransitionService: transitionService,
+            runSlots: () => this.#dispatcher?.runSlots(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({

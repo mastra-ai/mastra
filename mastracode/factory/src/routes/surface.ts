@@ -167,6 +167,8 @@ export interface FactoryApiRoutesDeps {
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
+  /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
+  runSlots?: () => { inUse: number; cap: number } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -1034,6 +1036,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           transitionService,
           startCoordinator,
           liveSessions: deps.liveSessions,
+          runSlots: deps.runSlots,
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
