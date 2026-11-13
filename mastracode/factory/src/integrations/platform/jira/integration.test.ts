@@ -41,7 +41,7 @@ const connections = [
 
 function integration(): PlatformJiraIntegration {
   return new PlatformJiraIntegration({
-    clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
+    connect: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
   });
 }
 
