@@ -363,6 +363,24 @@ describe('workflow recovery loop (#28712)', () => {
     expect(listings()).toBe(listed);
   });
 
+  it('writes no leader row from an instance with no default-engine workflow, until one is added', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const claims = vi.spyOn(store, 'claimRunOwnership');
+    const mastra = new Mastra({ logger: false, storage, recovery: scanning });
+    replicas.push({ mastra });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await mastra.startWorkers();
+    // Every wait is at most a fifth longer than the interval: this is several ticks.
+    await vi.advanceTimersByTimeAsync(scanning.workflowScanIntervalMs * 5);
+    expect(claims).not.toHaveBeenCalled();
+
+    mastra.addWorkflow(oneStep('B', []), 'recovered-wf');
+    await vi.advanceTimersByTimeAsync(scanning.workflowScanIntervalMs * 2);
+
+    expect(claims).toHaveBeenCalledWith(expect.objectContaining({ runId: LEADER }));
+  });
+
   it('runs the loop on an instance that starts only its orchestration worker', async () => {
     /** Stands in for the orchestration worker of a pull-mode pubsub, which the in-process one has none of. */
     class OrchestrationWorker extends MastraWorker {

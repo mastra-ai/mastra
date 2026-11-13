@@ -5107,6 +5107,12 @@ export class Mastra<
     // Never rejects, as `repeatAfterSettled` requires.
     const tick = async () => {
       dueAt = undefined;
+      // With no default-engine workflow to recover there is nothing to lead: no claim, and no lease renewals.
+      // Checked per tick, as workflows can be added after startWorkers().
+      if (!this.#restartableWorkflows().some(usesRunLease)) {
+        return;
+      }
+
       try {
         const workflowsStore = await this.#storage?.getStore('workflows');
         if (!workflowsStore) {

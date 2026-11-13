@@ -546,7 +546,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The loop never restarts evented runs. A broker that redelivers unacknowledged events recovers them, and on other pubsubs `restartAllActiveWorkflowRuns()` restarts them at boot. The loop also leaves workflows that set `autoRestartActiveRuns: false` alone. It doesn't run when `recovery.workflows` is `'off'`, on an instance started with `workers: false` or a `MASTRA_WORKERS` filter without `orchestration`, or on a storage adapter without run-ownership support. A process that calls `restartAllActiveWorkflowRuns()` but never `startWorkers()` runs no loop.
+The loop never restarts evented runs. A broker that redelivers unacknowledged events recovers them, and on other pubsubs `restartAllActiveWorkflowRuns()` restarts them at boot. The loop also leaves workflows that set `autoRestartActiveRuns: false` alone, and an instance that registers no other default-engine workflow never claims the leader row. It doesn't run when `recovery.workflows` is `'off'`, on an instance started with `workers: false` or a `MASTRA_WORKERS` filter without `orchestration`, or on a storage adapter without run-ownership support. A process that calls `restartAllActiveWorkflowRuns()` but never `startWorkers()` runs no loop.
 
 ### Restarting an active workflow run with `restart()`
 
