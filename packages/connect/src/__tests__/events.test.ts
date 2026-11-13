@@ -414,6 +414,97 @@ describe('EventsClient.subscribe', () => {
     ]);
     await take(client(s.url).subscribe('github-app', { projectId: 'proj 2' }), 1);
     expect(s.requests[0]!.url).toBe('/v1/projects/proj%202/topics/github-app');
+    expect(s.requests[0]!.headers['x-mastra-project-id']).toBe('proj 2');
+  });
+
+  it('starts from the server retry and floors a zero retry', async () => {
+    const closeAfterReady: Handler = (_req, res) => {
+      startStream(res);
+      res.end(ready('10', 0));
+    };
+    const s = await server([
+      closeAfterReady,
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
+    const started = Date.now();
+    const events = await take(client(s.url, { reconnectDelayMs: undefined }).subscribe('connect'), 1);
+
+    expect(events.map(e => e.id)).toEqual(['11']);
+    expect(s.requests).toHaveLength(2);
+    // retry: 0 is floored to 100ms, jittered to at least 50ms.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(50);
+  });
+
+  it('waits for Retry-After on a 503, up to maxReconnectDelayMs', async () => {
+    const s = await server([
+      (_req, res) => {
+        res.writeHead(503, { 'content-type': 'application/json', 'retry-after': '5' });
+        res.end('{}');
+      },
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
+    const started = Date.now();
+    await take(client(s.url, { maxReconnectDelayMs: 150 }).subscribe('connect'), 1);
+    const elapsed = Date.now() - started;
+
+    expect(s.requests).toHaveLength(2);
+    expect(elapsed).toBeGreaterThanOrEqual(140);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
+  it('keeps the connection while the consumer handles a slow event', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+        const ping = setInterval(() => res.write(': ping\n\n'), 10);
+        setTimeout(() => {
+          clearInterval(ping);
+          res.write(event('12', {}));
+        }, 200);
+        res.on('close', () => clearInterval(ping));
+      },
+    ]);
+    const ids: string[] = [];
+    for await (const e of client(s.url, { idleTimeoutMs: 50 }).subscribe('connect')) {
+      ids.push(e.id);
+      if (ids.length === 1) await new Promise(resolve => setTimeout(resolve, 150));
+      if (ids.length === 2) break;
+    }
+
+    expect(ids).toEqual(['11', '12']);
+    expect(s.requests).toHaveLength(1);
+  });
+
+  it('removes its abort listener from the caller signal when it ends', async () => {
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    const subscription = client('http://127.0.0.1:1').subscribe('connect', { signal: controller.signal });
+    subscription.close();
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+  });
+
+  it('rejects invalid timing options and events URLs at construction', () => {
+    for (const options of [
+      { reconnectDelayMs: 0 },
+      { reconnectDelayMs: -1 },
+      { maxReconnectDelayMs: Number.NaN },
+      { idleTimeoutMs: 0 },
+    ]) {
+      expect(() => client('http://127.0.0.1:1', options)).toThrow(MastraConnectError);
+    }
+    for (const eventsUrl of ['not a url', 'ftp://events.test']) {
+      expect(() => client(eventsUrl)).toThrow(/Invalid events service URL/);
+    }
   });
 });
 
@@ -488,6 +579,20 @@ describe('ConnectClient.events', () => {
     expect(s.requests[0]!.url).toBe('/v1/projects/proj_9/topics/connect');
     expect(s.requests[0]!.headers.authorization).toBe('Bearer tok_shared');
   });
+
+  it('does not apply the client timeout to the event stream', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        setTimeout(() => res.write(event('11', {})), 100);
+      },
+    ]);
+    const connect = new ConnectClient({ accessToken: 'tok', projectId: 'proj_9', eventsUrl: s.url, timeoutMs: 20 });
+    const events = await take(connect.events.subscribe('connect'), 1);
+    expect(events.map(e => e.id)).toEqual(['11']);
+    expect(s.requests).toHaveLength(1);
+  });
 });
 
 describe('resolveEventsUrl', () => {
@@ -544,5 +649,14 @@ describe('parseServerSentEvents', () => {
     const text = 'event: event\r\nid: 7\r\ndata: {"a":1}\r\n\r\n';
     const frames = await parse(text.split(''));
     expect(frames).toEqual([{ event: 'event', id: '7', data: '{"a":1}' }]);
+  });
+
+  it('dispatches a retry-only block and keeps lines split across many chunks intact', async () => {
+    const payload = 'x'.repeat(5_000);
+    const frames = await parse(['retry: 2000\n\n', 'data: ', ...payload.match(/.{1,7}/g)!, '\n\n']);
+    expect(frames).toEqual([
+      { event: 'message', data: '', retry: 2000 },
+      { event: 'message', data: payload },
+    ]);
   });
 });

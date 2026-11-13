@@ -87,6 +87,8 @@ export function parseRetryAfterMs(response: Response, now: number = Date.now()):
   const value = response.headers.get('retry-after')?.trim();
   if (!value) return undefined;
   if (/^\d+$/.test(value)) return Number(value) * 1000;
+  // HTTP dates always name a weekday (RFC 9110); this keeps `Date.parse` from accepting bare numbers like "1.5".
+  if (!/^[a-z]{3,9},? /i.test(value)) return undefined;
   const date = Date.parse(value);
   if (Number.isNaN(date)) return undefined;
   return Math.max(0, date - now);

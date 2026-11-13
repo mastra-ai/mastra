@@ -154,11 +154,12 @@ export async function platformFetch(client: ResolvedClient, path: string, init?:
   const signal =
     timeoutSignal && init?.signal ? AbortSignal.any([init.signal, timeoutSignal]) : (timeoutSignal ?? init?.signal);
   try {
-    const response = await client.fetch(`${client.baseUrl}${path}`, {
+    let response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       ...(signal ? { signal } : {}),
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    if (timeoutSignal) response = await bufferResponse(response);
     endPlatformCallSpan(span, response.status);
     return response;
   } catch (error) {
@@ -181,12 +182,33 @@ export async function platformFetch(client: ResolvedClient, path: string, init?:
   }
 }
 
+const NULL_BODY_STATUSES = new Set([101, 103, 204, 205, 304]);
+
+/**
+ * Reads the whole body while the timeout signal is still armed, so a stalled
+ * body surfaces as `timeout` instead of a late abort during parsing.
+ */
+async function bufferResponse(response: Response): Promise<Response> {
+  if (response.status === 0 || NULL_BODY_STATUSES.has(response.status)) return response;
+  const body = await response.arrayBuffer();
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
+}
+
+/** Metadata for errors raised after the platform answered. */
+function platformMeta(response: Response): { status: number; source: 'platform' } {
+  return { status: response.status, source: 'platform' };
+}
+
 /** Parses a successful platform response body, mapping invalid JSON to the platform_error contract. */
 async function parsePlatformJson(response: Response, context: string): Promise<unknown> {
   try {
     return await response.json();
   } catch {
-    throw new MastraConnectError('platform_error', `Platform returned an unparseable response body while ${context}.`);
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unparseable response body while ${context}.`,
+      platformMeta(response),
+    );
   }
 }
 
@@ -389,6 +411,7 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected connection list shape for project ${projectId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data.connections;
@@ -401,7 +424,11 @@ export async function listIntegrations(client: ResolvedClient): Promise<Integrat
   }
   const parsed = integrationCatalogResponseSchema.safeParse(await parsePlatformJson(response, 'listing integrations'));
   if (!parsed.success) {
-    throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
+    throw new MastraConnectError(
+      'platform_error',
+      'Platform returned an unexpected integration catalog shape.',
+      platformMeta(response),
+    );
   }
   return parsed.data.integrations;
 }
@@ -412,9 +439,11 @@ export async function getProjectIntegrationSettings(
 ): Promise<ProjectIntegrationSettings> {
   const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/integration-settings`);
   if (response.status === 404) {
-    throw new MastraConnectError('platform_error', `Integration settings were not found for project ${projectId}.`, {
-      status: 404,
-    });
+    throw new MastraConnectError(
+      'platform_error',
+      `Integration settings were not found for project ${projectId}.`,
+      platformMeta(response),
+    );
   }
   if (!response.ok) {
     await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
@@ -426,6 +455,7 @@ export async function getProjectIntegrationSettings(
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected integration settings shape for project ${projectId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;
@@ -436,11 +466,14 @@ export async function getConnectionContext(client: ResolvedClient, connectionId:
   if (!response.ok) {
     await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
   }
-  const parsed = connectionContextSchema.safeParse(await response.json());
+  const parsed = connectionContextSchema.safeParse(
+    await parsePlatformJson(response, `retrieving context for connection ${connectionId}`),
+  );
   if (!parsed.success) {
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected context shape for connection ${connectionId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;
@@ -458,6 +491,7 @@ export async function getCredential(client: ResolvedClient, connectionId: string
     throw new MastraConnectError(
       'unsupported_credential_type',
       `Platform returned an unsupported credential type for connection ${connectionId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;
@@ -737,6 +771,7 @@ export async function createProjectConnectSession(
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected connect-session shape for ${integrationId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;
@@ -763,6 +798,7 @@ export async function createReconnectSession(client: ResolvedClient, connectionI
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected reconnect-session shape for connection ${connectionId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;
@@ -809,6 +845,7 @@ export async function getConnectUrl(client: ResolvedClient, connectionId: string
     throw new MastraConnectError(
       'connection_not_found',
       `No launchable connect session found for connection ${connectionId}.`,
+      platformMeta(response),
     );
   }
   if (!response.ok) {
@@ -821,6 +858,7 @@ export async function getConnectUrl(client: ResolvedClient, connectionId: string
     throw new MastraConnectError(
       'platform_error',
       `Platform returned an unexpected connect-url shape for ${connectionId}.`,
+      platformMeta(response),
     );
   }
   return parsed.data;

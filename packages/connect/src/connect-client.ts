@@ -12,6 +12,7 @@ import {
   platformFetch,
   proxyRequest,
   proxyRequestWithResponse,
+  RESOURCE_ID_HEADER,
   resolveClient,
   throwPlatformError,
   validateResourceId,
@@ -32,6 +33,15 @@ import { MastraConnectError } from './errors.js';
 import { EventsClient } from './events.js';
 
 /** Default per-request timeout for {@link ConnectClient} calls. */
+/** Auth and identity headers the client sets; per-call headers can't override them. */
+const RESERVED_REQUEST_HEADERS = new Set([
+  'authorization',
+  'proxy-authorization',
+  'x-organization-id',
+  'x-mastra-project-id',
+  RESOURCE_ID_HEADER,
+]);
+
 export const DEFAULT_CONNECT_CLIENT_TIMEOUT_MS = 15_000;
 
 export interface ConnectClientConfig extends ConnectClientOptions {
@@ -61,7 +71,7 @@ export type ConnectRequestMethod = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'PATCH' | '
 export interface ConnectRequestInit {
   /** JSON-encoded request body. */
   body?: unknown;
-  /** Extra headers for this call only. Authorization headers are ignored. */
+  /** Extra headers for this call only. Authorization, organization, project and resource headers are ignored. */
   headers?: Record<string, string>;
   /** Query parameters; `undefined` values are skipped. */
   query?: Record<string, string | undefined>;
@@ -244,7 +254,7 @@ export class ConnectClient {
     const headers: Record<string, string> = {};
     for (const [name, value] of Object.entries(init.headers ?? {})) {
       const lower = name.toLowerCase();
-      if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+      if (RESERVED_REQUEST_HEADERS.has(lower)) continue;
       headers[lower] = value;
     }
     const request: RequestInit = { method, headers };

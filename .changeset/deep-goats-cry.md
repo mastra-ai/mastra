@@ -14,7 +14,7 @@ const [jira] = await connect.listConnections({ providerKeys: ['jira'] });
 const issue = await connect.proxy(jira.id, { method: 'GET', path: '/rest/api/3/issue/ENG-1' });
 ```
 
-**EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive, reconnects on its own, and resumes from a cursor you store, so no events are lost across restarts.
+**EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive, reconnects on its own, and resumes from a cursor you store, so a restart picks up where it stopped.
 
 ```typescript
 for await (const event of connect.events.connectEvents({ after: savedCursor })) {
