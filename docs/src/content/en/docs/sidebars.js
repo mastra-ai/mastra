@@ -802,7 +802,7 @@ const sidebars = {
         {
           type: 'category',
           label: 'Deploys',
-          link: { type: 'doc', id: 'mastra-platform/deploy' },
+          link: { type: 'doc', id: 'mastra-platform/deploy/overview' },
           collapsed: true,
           items: [
             { type: 'doc', id: 'mastra-platform/server', label: 'Server' },
@@ -858,7 +858,7 @@ const sidebars = {
         {
           type: 'category',
           label: 'Observability',
-          link: { type: 'doc', id: 'mastra-platform/observability' },
+          link: { type: 'doc', id: 'mastra-platform/observability/overview' },
           collapsed: true,
           items: [
             { type: 'doc', id: 'mastra-platform/trace-intelligence', label: 'Trace Intelligence' },

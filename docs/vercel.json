@@ -20,12 +20,12 @@
     {
       "source": "/docs/mastra-platform/connect/end-user-connections",
       "destination": "/docs/mastra-platform/connect",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/reference/connect/user-connect-routes",
       "destination": "/reference/connect/tools",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/docs/workspace/overview",
@@ -59,7 +59,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -1974,7 +1974,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2308,14 +2308,24 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/deploy",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/reference/connect/user-connect-routes/llms.txt",
       "destination": "/reference/connect/tools/llms.txt",
-      "permanent": false
+      "permanent": true
     },
     {
       "source": "/docs/workspace/overview/llms.txt",
@@ -2349,7 +2359,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
-      "destination": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
     },
     {
@@ -3929,7 +3939,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
-      "destination": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
     },
     {
@@ -4280,6 +4290,16 @@
     {
       "source": "/docs/deployment/cloud-providers/vercel/llms.txt",
       "destination": "/integrations/deploy/vercel/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/deploy/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability/llms.txt",
+      "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
     },
     {
