@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkCell, expectedCapture } from './expected';
+import { checkCell, expectedCapture, parseFrames } from './expected';
 import { UNFILED, UNFILED_DIFFERENCES } from './known-differences';
+import { normalise } from './normalise';
 import { SCENARIO_NAMES } from './scenarios';
 import { LAYOUTS, READERS } from './types';
 import type { Cell, Frame, RunCapture } from './types';
@@ -125,6 +126,74 @@ describe('checkCell with the real observations', () => {
       'live-resume vs plain',
     ]);
     expect(drift.map(d => d.reader)).toEqual(['live-resume']);
+  });
+
+  it.each([
+    { toolName: 'lookup', args: { query: 'corrupted' } },
+    { toolName: 'nothing', args: { query: 'harness' } },
+  ])('rejects corrupted raw tool calls after normalization: %j', payload => {
+    const cell: Cell = { scenario: 'tool-approval', engine: 'plain', backend: 'redis', topology: 'single' };
+    const capture = clone(expectedCapture(cell));
+    const replaceCall = (value: { toolName: string; args: object }) => {
+      const [call] = normalise([{ type: 'tool-call', payload: value }]);
+      capture.live = capture.live!.map(frame => (frame.type === 'tool-call' ? call! : frame));
+    };
+    replaceCall({ toolName: 'lookup', args: { query: 'harness' } });
+    expect(checkCell(cell, capture)).toEqual({ verdict: { unlisted: [], stale: [] }, drift: [] });
+    replaceCall(payload);
+    expect(checkCell(cell, capture).drift).toEqual([
+      expect.objectContaining({ reader: 'live', kind: 'shape', detail: expect.stringContaining('tool-call#') }),
+    ]);
+  });
+
+  it('rejects a same-key error message mutation after normalization', () => {
+    const cell = durable('redis', 'tool-throws');
+    const plain = expectedCapture(plainOf(cell));
+    const capture = clone(expectedCapture(cell));
+    const replaceError = (message: string) => {
+      const [error] = normalise([
+        { type: 'tool-error', payload: { error: { message, name: 'Error', stack: 'not compared' } } },
+      ]);
+      capture.live = capture.live!.map(frame => (frame.type === 'tool-error' ? error! : frame));
+    };
+    replaceError('kaboom');
+    expect(checkCell(cell, capture, plain)).toEqual({ verdict: { unlisted: [], stale: [] }, drift: [] });
+    replaceError('unrelated failure');
+    expect(checkCell(cell, capture, plain).drift).toEqual([
+      expect.objectContaining({ reader: 'live', kind: 'shape', detail: expect.stringContaining('unrelated failure') }),
+    ]);
+  });
+
+  it('parses streamed argument fragments without counting quoted braces or commas as frame delimiters', () => {
+    const deltas = ['{"qu', 'ery"', ':"ha', 'rnes', 's"}', '],{\\"'];
+    const compact = deltas.map(delta => `tool-call-delta[${JSON.stringify(delta)}]`).join(',') + ',finish';
+    expect(parseFrames(compact)).toEqual([
+      ...normalise(deltas.map(argsTextDelta => ({ type: 'tool-call-delta', payload: { argsTextDelta } }))),
+      { type: 'finish' },
+    ]);
+  });
+
+  it.each(['live', 'all'] as const)('rejects streamed tool argument corruption affecting %s readers', affected => {
+    const cell: Cell = { scenario: 'tool-approval', engine: 'plain', backend: 'redis', topology: 'single' };
+    const capture = clone(expectedCapture(cell));
+    const replaceDelta = (argsTextDelta: string) => {
+      const [delta] = normalise([{ type: 'tool-call-delta', payload: { argsTextDelta } }]);
+      for (const reader of affected === 'live' ? ['live' as const] : READERS) {
+        const index = capture[reader]!.findIndex(frame => frame.type === 'tool-call-delta');
+        capture[reader]![index] = delta!;
+      }
+    };
+    replaceDelta('{"qu');
+    expect(checkCell(cell, capture)).toEqual({ verdict: { unlisted: [], stale: [] }, drift: [] });
+    replaceDelta('{"NO');
+    const { verdict, drift } = checkCell(cell, capture);
+    expect(drift).toContainEqual(
+      expect.objectContaining({ reader: 'live', kind: 'shape', detail: expect.stringContaining('tool-call-delta#') }),
+    );
+    if (affected === 'all') {
+      expect(verdict.unlisted).toEqual([]);
+      expect(drift).toHaveLength(READERS.length);
+    }
   });
 
   it('lists every difference still waiting for a ticket', () => {

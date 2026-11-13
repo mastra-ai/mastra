@@ -1,3 +1,4 @@
+import { FLOOD_REASONING } from './scenarios';
 import { ENGINES } from './types';
 import type { Cause, Engine, LayoutName, ReaderName } from './types';
 
@@ -37,12 +38,14 @@ export interface Observation extends Attribution {
 
 const APPROVAL_HEAD =
   'start,step-start,tool-call-input-streaming-start,' +
-  'tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,' +
-  'tool-call-input-streaming-end,tool-call,tool-call-approval';
+  ['{\"qu', 'ery\"', ':\"ha', 'rnes', 's\"}'].map(delta => `tool-call-delta[${JSON.stringify(delta)}],`).join('') +
+  'tool-call-input-streaming-end,tool-call[{"args":{"query":"harness"},"name":"lookup"}],tool-call-approval';
 const APPROVAL_TAIL =
   'tool-call-resumed,tool-result[{"value":"found:harness"}],step-finish,' +
   'step-start,text-start,text-delta[The lookup found it.],text-end,step-finish,finish';
 const APPROVAL_FULL = `${APPROVAL_HEAD},${APPROVAL_TAIL}`;
+const FAULT_TURN =
+  'start,step-start,text-start,text-delta[This answer streams slowly on purpose, so that something can happen to the run before it ends.],text-end,step-finish,finish';
 
 /** Plain's live stream for each scenario: the reference every reader of every engine is held to. */
 export const BASELINES: Record<string, string> = {
@@ -51,13 +54,13 @@ export const BASELINES: Record<string, string> = {
     'object-result[{"answer":"forty-two"}],step-finish,finish',
   'structured-invalid':
     'start,step-start,text-start,text-delta[{"answer":42}],object[{"answer":42}],text-end,' +
-    'error[isError=true keys=category|cause|details|domain|id|message type=object],step-finish,finish',
+    'error[isError=true keys=category|cause|details|domain|id|message type=object message="Structured output validation failed: - answer: Invalid input: expected string, received number"],step-finish,finish',
   'tool-throws':
-    'start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-input-streaming-end,tool-call,' +
-    'tool-error[isError=true keys=category|cause|details|domain|id|name type=object],step-finish,' +
+    'start,step-start,tool-call-input-streaming-start,tool-call-delta["{}"],tool-call-input-streaming-end,tool-call[{"args":{},"name":"boom"}],' +
+    'tool-error[isError=true keys=category|cause|details|domain|id|name type=object message="kaboom"],step-finish,' +
     'step-start,text-start,text-delta[The tool failed.],text-end,step-finish,finish',
   'tool-undefined':
-    'start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-input-streaming-end,tool-call,' +
+    'start,step-start,tool-call-input-streaming-start,tool-call-delta["{}"],tool-call-input-streaming-end,tool-call[{"args":{},"name":"nothing"}],' +
     'tool-result[null],step-finish,step-start,text-start,text-delta[The tool returned nothing.],text-end,step-finish,finish',
   'input-tripwire': 'tripwire[blocked by harness]',
   'tool-approval': APPROVAL_HEAD,
@@ -67,6 +70,12 @@ export const BASELINES: Record<string, string> = {
   abort: 'start,step-start,text-start,text-delta,abort,finish',
   'direct-abort': 'start,step-start,text-start,text-delta,abort,finish',
   'key-cleanup': 'start,step-start,text-start,text-delta[Done.],text-end,step-finish,finish',
+  'transport-control': FAULT_TURN,
+  'pause-5s': FAULT_TURN,
+  'pause-60s': FAULT_TURN,
+  'connection-reset': FAULT_TURN,
+  'reasoning-flood': `start,step-start,reasoning-start,reasoning-delta[${FLOOD_REASONING}],reasoning-end,text-start,text-delta[Done.],text-end,step-finish,finish`,
+  'publisher-death': 'start,step-start,text-start,text-delta,(killed)',
 };
 
 /** Plain's value of each fact a scenario records (single frames, compared with plain only). */
@@ -83,6 +92,8 @@ export const FACT_BASELINES: Record<string, Partial<Record<ReaderName, string>>>
     generate: 'generate[finish=aborted text=empty callback=empty calls=1 matches=true]',
   },
   'key-cleanup': { keys: '(memory)' },
+  'reasoning-flood': { retention: 'retention[reasoning=trimmed start=false]' },
+  'publisher-death': { 'run-status': 'run-status[record=running workflow=absent]' },
 };
 
 const PLAIN = ['plain'] as const;
@@ -302,7 +313,55 @@ const EVENTED_KEYS =
   'key[:lease:workflow-step-run:<id>:<id> ttl=seconds],key[:lease:workflow-step-run:<run>:<id> ttl=seconds],' +
   'key[:scheduler ttl=hours],key[:workflow.control ttl=hours],key[:workflows ttl=hours],key[:workflows-finish ttl=hours]';
 
+const INTERRUPTED = 'start,step-start,text-start,text-delta';
+const PUBLISHER_DIED: Attribution = {
+  ticket: 'COR-1536',
+  cause: 'plain-layer',
+  evidence: `${MAIN}, agent/agent.ts:12478-12494: observe tails the run topic without a publisher-liveness deadline; SIGKILL leaves only the published prefix. The 8s timeout is imposed by this harness, not by observe().`,
+};
+
 export const OBSERVATIONS: readonly Observation[] = [
+  obs(
+    'publisher-death',
+    ENGINES,
+    ['observe-mid', 'observe-0', 'http-observe'],
+    `${INTERRUPTED},(timeout)`,
+    PUBLISHER_DIED,
+  ),
+  obs('publisher-death', ENGINES, ['topic'], INTERRUPTED, PUBLISHER_DIED),
+  obs(
+    'publisher-death',
+    ENGINES,
+    ['thread'],
+    `${INTERRUPTED},error[isError=true keys=name type=object message="Thread run <run> lost its lease before publishing a terminal event"]`,
+    PUBLISHER_DIED,
+  ),
+  ...DURABLE.map(engine =>
+    obs('publisher-death', [engine], ['run-status'], 'run-status[record=absent workflow=unfinished]', {
+      ticket: 'COR-1536',
+      cause: 'engine',
+      evidence: `${MAIN}, agent/durable/durable-agent.ts:5710: killing the execution process leaves its stored workflow pending or running at the bounded observation deadline (both classified unfinished; the exact status is retained in run-status-detail).`,
+    }),
+  ),
+  ...ENGINES.map(engine =>
+    obs(
+      'reasoning-flood',
+      [engine],
+      ['broker'],
+      'reasoning-delta[retained-suffix],reasoning-end,text-start,text-delta[Done.],text-end,step-finish,' +
+        (engine === 'plain' ? '' : 'iteration-complete,') +
+        'finish',
+      {
+        ticket: 'COR-1535',
+        cause: 'plain-layer',
+        evidence: `${MAIN}, pubsub/redis-streams/src/index.ts:693: MAXLEN ~ trims the retained broker head, including start and early reasoning deltas; the harness validates the remaining reasoning is an exact suffix.`,
+      },
+      engine === 'plain' ? {} : { againstPlain: ITERATION },
+    ),
+  ),
+  ...['transport-control', 'pause-5s', 'pause-60s', 'connection-reset', 'reasoning-flood'].map(scenario =>
+    obs(scenario, DURABLE, ['topic'], BASELINES[scenario]!.replace(',finish', ',iteration-complete,finish'), ITERATION),
+  ),
   obs(
     'generate-partial-abort',
     DURABLE,
@@ -408,7 +467,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     PLAIN,
     ['observe-mid', 'topic', 'observe-0'],
     'start,step-start,text-start,text-delta,object,text-end,' +
-      'error[isError=false keys=category|details|domain|id|message|name|stack type=object],step-finish,finish',
+      'error[isError=false keys=category|details|domain|id|message|name|stack type=object message="Structured output validation failed: - answer: Invalid input: expected string, received number"],step-finish,finish',
     PLAIN_ERROR_PUBLISH,
   ),
   obs(
@@ -416,7 +475,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     PLAIN,
     ['http-observe'],
     'start,step-start,text-start,text-delta,object,text-end,' +
-      'error[isError=false keys=category|details|domain|id|message|name type=object],step-finish,finish',
+      'error[isError=false keys=category|details|domain|id|message|name type=object message="Structured output validation failed: - answer: Invalid input: expected string, received number"],step-finish,finish',
     PLAIN_ERROR_PUBLISH,
   ),
   obs(
@@ -434,11 +493,21 @@ export const OBSERVATIONS: readonly Observation[] = [
     PLAIN,
     ['thread'],
     'start,step-start,text-start,text-delta,object,text-end,' +
-      'error[isError=false keys=category|code|details|domain|message type=object]',
+      'error[isError=false keys=category|code|details|domain|message type=object message="Structured output validation failed: - answer: Invalid input: expected string, received number"]',
     THREAD_ENDS_AT_TERMINAL,
     { layouts: SPLIT },
   ),
-  obs('structured-invalid', DURABLE, ['live', 'observe-mid'], INVALID_DURABLE, REBUILT_OBJECT),
+  obs('structured-invalid', DURABLE, ['live'], INVALID_DURABLE, REBUILT_OBJECT),
+  obs('structured-invalid', DURABLE, ['observe-mid'], INVALID_DURABLE, REBUILT_OBJECT, { layouts: SINGLE }),
+  obs(
+    'structured-invalid',
+    DURABLE,
+    ['observe-mid'],
+    'start,step-start,text-start,text-delta,object,text-end,step-finish,' +
+      'error[isError=true keys=category|cause|details|domain|id|message type=object message="Structured output validation failed: - answer: must be string"],finish',
+    REBUILT_OBJECT,
+    { layouts: SPLIT },
+  ),
   obs('structured-invalid', DURABLE, ['observe-0'], INVALID_DURABLE, REBUILT_OBJECT, { layouts: SINGLE }),
   obs('structured-invalid', DURABLE, ['topic'], STRUCTURED_TOPIC, NOT_ON_TOPIC),
   obs('structured-invalid', DURABLE, ['http-observe'], STRUCTURED_PUBLISHED, NO_REBUILD),
@@ -456,7 +525,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     DURABLE,
     ['thread'],
     'start,step-start,text-start,text-delta,object,text-end,step-finish,' +
-      'error[isError=false keys=category|code|details|domain|message type=object]',
+      'error[isError=false keys=category|code|details|domain|message type=object message="Structured output validation failed: - answer: Invalid input: expected string, received number"]',
     REBUILT_OBJECT,
     { layouts: SPLIT, againstLive: THREAD_ENDS_AT_TERMINAL },
   ),
@@ -466,7 +535,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     PLAIN,
     ['http-observe'],
-    toolThrows('isError=false keys=category|cause|details|domain|id|message|name type=object'),
+    toolThrows('isError=false keys=category|cause|details|domain|id|message|name type=object message="kaboom"'),
     SERVER_ROUTE_ERROR,
     { layouts: ['single/memory'] },
   ),
@@ -474,7 +543,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     PLAIN,
     ['observe-mid', 'topic', 'observe-0', 'http-observe'],
-    toolThrows('isError=false keys=category|cause|details|domain|id|name type=object'),
+    toolThrows('isError=false keys=category|cause|details|domain|id|name type=object message=undefined'),
     PLAIN_TOOL_ERROR_JSON,
     { layouts: OVER_BUS },
   ),
@@ -482,7 +551,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     PLAIN,
     ['thread'],
-    toolThrows('isError=false keys=category|cause|details|domain|id|name type=object'),
+    toolThrows('isError=false keys=category|cause|details|domain|id|name type=object message=undefined'),
     PLAIN_TOOL_ERROR_JSON,
     { layouts: SPLIT },
   ),
@@ -490,7 +559,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     DURABLE,
     ['live', 'observe-mid', 'observe-0', 'thread'],
-    toolThrows('isError=false keys=__mastraSpanErrorOrigin|message|name|stack type=object'),
+    toolThrows('isError=false keys=__mastraSpanErrorOrigin|message|name|stack type=object message="kaboom"'),
     DURABLE_TOOL_ERROR,
     { layouts: ['single/memory'] },
   ),
@@ -498,7 +567,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     DURABLE,
     ['topic'],
-    toolThrows('isError=false keys=__mastraSpanErrorOrigin|message|name|stack type=object', true),
+    toolThrows('isError=false keys=__mastraSpanErrorOrigin|message|name|stack type=object message="kaboom"', true),
     ITERATION,
     { layouts: ['single/memory'] },
   ),
@@ -506,7 +575,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     DURABLE,
     ['live', 'observe-mid', 'observe-0', 'thread'],
-    toolThrows('isError=false keys=message|name|stack type=object'),
+    toolThrows('isError=false keys=message|name|stack type=object message="kaboom"'),
     DURABLE_TOOL_ERROR,
     { layouts: OVER_BUS },
   ),
@@ -514,7 +583,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     DURABLE,
     ['topic'],
-    toolThrows('isError=false keys=message|name|stack type=object', true),
+    toolThrows('isError=false keys=message|name|stack type=object message="kaboom"', true),
     ITERATION,
     {
       layouts: OVER_BUS,
@@ -524,7 +593,7 @@ export const OBSERVATIONS: readonly Observation[] = [
     'tool-throws',
     DURABLE,
     ['http-observe'],
-    toolThrows('isError=false keys=message|name type=object'),
+    toolThrows('isError=false keys=message|name type=object message="kaboom"'),
     DURABLE_TOOL_ERROR,
     {
       againstLive: SERVER_ROUTE_ERROR,

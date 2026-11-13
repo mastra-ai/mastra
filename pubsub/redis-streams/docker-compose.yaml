@@ -1,4 +1,10 @@
 services:
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.12.0
+    ports:
+      - '8474:8474'
+      - '8661:8661'
+      - '8663:8663'
   postgres:
     image: pgvector/pgvector:0.8.7-pg16
     ports:

@@ -3,7 +3,7 @@ import type { ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 
-import { PACKAGE_DIR, REDIS_URL, TSX_BIN } from '../../test-fixtures/harness';
+import { PACKAGE_DIR, REDIS_URL } from '../../test-fixtures/harness';
 import type { Backend, Engine, Frame, ReaderName } from './types';
 
 const ENTRY = resolve(PACKAGE_DIR, 'test-fixtures/stream-harness-node.entry.ts');
@@ -16,6 +16,8 @@ export interface NodeOptions {
   storageUrl: string;
   nodeId?: string;
   cleanupMs?: number;
+  busUrl?: string;
+  maxStreamLength?: number;
   /** Serve the Mastra HTTP API on this port (for the `/observe` route reader). */
   port?: number;
 }
@@ -28,13 +30,15 @@ export class HarnessNode {
   #proc: ChildProcess;
 
   private constructor(readonly opts: NodeOptions) {
-    this.#proc = spawn(TSX_BIN, [ENTRY], {
+    this.#proc = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), ENTRY], {
       cwd: PACKAGE_DIR,
       env: {
         ...process.env,
         ENGINE: opts.engine,
         BACKEND: opts.backend,
-        REDIS_URL,
+        REDIS_URL: opts.backend === 'redis' ? (opts.busUrl ?? REDIS_URL) : REDIS_URL,
+        ...(opts.backend === 'valkey' && opts.busUrl ? { VALKEY_URL: opts.busUrl } : {}),
+        ...(opts.maxStreamLength === undefined ? {} : { MAX_STREAM_LENGTH: String(opts.maxStreamLength) }),
         KEY_PREFIX: opts.keyPrefix,
         STORAGE_URL: opts.storageUrl,
         LLM_URL: opts.llmUrl,
@@ -65,8 +69,17 @@ export class HarnessNode {
 
   static async start(opts: NodeOptions): Promise<HarnessNode> {
     const node = new HarnessNode(opts);
-    await node.next(e => e.type === 'ready', 30_000);
-    return node;
+    try {
+      await node.next(e => e.type === 'ready', 30_000);
+      return node;
+    } catch (error) {
+      await node.kill();
+      throw error;
+    }
+  }
+
+  get stderr(): string {
+    return this.#stderr;
   }
 
   send(cmd: Record<string, unknown>) {
@@ -92,6 +105,13 @@ export class HarnessNode {
     this.send({ ...cmd, id });
     const event = await this.next(e => e.type === 'frames' && e.id === id && e.reader === reader, timeoutMs);
     return event.frames;
+  }
+
+  async kill() {
+    this.#proc.kill('SIGKILL');
+    const deadline = Date.now() + 5_000;
+    while (!this.#exited && Date.now() < deadline) await new Promise(r => setTimeout(r, 25));
+    if (!this.#exited) throw new Error('publisher did not exit after SIGKILL');
   }
 
   async stop() {

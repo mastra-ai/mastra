@@ -1,4 +1,5 @@
-import type { Frame } from './types';
+import { isFact } from './types';
+import type { Frame, RunCapture } from './types';
 
 /** A chunk as a reader received it, before reduction. */
 export interface RawFrame {
@@ -50,7 +51,12 @@ function stable(value: unknown): string {
 export function errorShape(error: unknown): string {
   const isError = error instanceof Error;
   const keys = error && typeof error === 'object' ? Object.keys(error).sort() : [];
-  return `isError=${isError} keys=${keys.join('|') || '-'} type=${error === null ? 'null' : typeof error}`;
+  const message = (error as any)?.message;
+  const stableMessage =
+    typeof message === 'string' && (error as any)?.name === 'AgentThreadLeaseLostError'
+      ? message.replace(/^Thread run [0-9a-f-]{36} lost its lease/, 'Thread run <run> lost its lease')
+      : message;
+  return `isError=${isError} keys=${keys.join('|') || '-'} type=${error === null ? 'null' : typeof error} message=${stable(stableMessage)}`;
 }
 
 function shapeOf(frame: RawFrame): string | undefined {
@@ -62,6 +68,10 @@ function shapeOf(frame: RawFrame): string | undefined {
     case 'object':
     case 'object-result':
       return stable(p?.object);
+    case 'tool-call-delta':
+      return stable(p?.argsTextDelta);
+    case 'tool-call':
+      return stable({ name: p?.toolName, args: p?.args });
     case 'tool-result':
       return stable(p?.result);
     case '(threw)':
@@ -71,6 +81,51 @@ function shapeOf(frame: RawFrame): string | undefined {
     default:
       return undefined;
   }
+}
+
+/** Broker trimming may remove a prefix, never an interior delta or a suffix. */
+export function retainedReasoningFrames(raw: RawFrame[], original: string): Frame[] {
+  const frames = normalise(raw);
+  const reasoning = frames.filter(frame => frame.type === 'reasoning-delta');
+  const retained = reasoning[0]?.shape;
+  if (reasoning.length !== 1 || !retained || retained.length >= original.length || !original.endsWith(retained)) {
+    throw new Error('Broker must retain an exact, nonempty reasoning suffix after trimming');
+  }
+  reasoning[0]!.shape = 'retained-suffix';
+  return frames;
+}
+
+/** Validate result and callback payloads before reducing them to generate facts. */
+export function classifyInterruptedText(value: string | undefined, answer: string): string {
+  if (value === undefined) return 'missing';
+  if (!answer.startsWith(value)) throw new Error('Interrupted generate text is not a prefix of the scripted answer');
+  return value === answer ? 'whole' : value ? 'cut' : 'empty';
+}
+
+/** Cut points may vary between runs, but readers of one run must agree. */
+export function withoutInterruptedText(capture: RunCapture, answer: string): RunCapture {
+  const liveText = capture.live
+    ?.filter(frame => frame.type === 'text-delta')
+    .map(frame => frame.shape)
+    .join('');
+  return Object.fromEntries(
+    Object.entries(capture).map(([reader, frames]) => {
+      if (isFact(reader)) return [reader, frames];
+      const text = frames!.filter(frame => frame.type === 'text-delta');
+      const joined = text.map(frame => frame.shape).join('');
+      if (
+        text.some(frame => typeof frame.shape !== 'string' || !frame.shape) ||
+        !answer.startsWith(joined) ||
+        frames!.some(frame => frame.type === 'reasoning-delta')
+      ) {
+        throw new Error(`${reader}: interrupted output is not a prefix of the scripted answer`);
+      }
+      if (liveText !== undefined && joined !== liveText) {
+        throw new Error(`${reader}: interrupted output differs from live`);
+      }
+      return [reader, frames!.map(frame => (frame.type === 'text-delta' ? { type: frame.type } : frame))];
+    }),
+  );
 }
 
 /**

@@ -8,7 +8,11 @@ import { ENGINES, LAYOUTS, isFact, layoutName } from './types';
 import type { Cell } from './types';
 
 const CELLS: Cell[] = LAYOUTS.flatMap(layout =>
-  ENGINES.flatMap(engine => SCENARIO_NAMES.map(scenario => ({ scenario, engine, ...layout }))),
+  ENGINES.flatMap(engine =>
+    SCENARIO_NAMES.filter(
+      scenario => !getScenario(scenario).layouts || getScenario(scenario).layouts!.includes(layoutName(layout)),
+    ).map(scenario => ({ scenario, engine, ...layout })),
+  ),
 );
 
 /** Checks the observations file itself, for every grid group. Needs no Redis. */

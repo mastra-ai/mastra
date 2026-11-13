@@ -9,8 +9,10 @@ import { checkCell } from './expected';
 import { httpAbort, httpObserve } from './http-observe';
 import { HarnessNode } from './node';
 import type { NodeOptions } from './node';
-import { SCENARIO_GROUPS, getScenario } from './scenarios';
+import { normalise, withoutInterruptedText } from './normalise';
+import { ABORT_ANSWER, SCENARIO_GROUPS, getScenario } from './scenarios';
 import type { Scenario, ScenarioGroup } from './scenarios';
+import { createProxy } from './toxiproxy';
 import { ENGINES, LAYOUTS } from './types';
 import type { Backend, Cell, Engine, Frame, RunCapture, Topology } from './types';
 
@@ -25,20 +27,31 @@ interface Nodes {
   reader: HarnessNode;
   /** The reader's HTTP port (server `/observe` and abort routes). */
   port: number;
+  proxy?: Awaited<ReturnType<typeof createProxy>>;
 }
 
 async function subscribeThread(reader: HarnessNode, threadId: string) {
   const id = randomUUID();
   reader.send({ cmd: 'subscribeThread', id, threadId, resourceId: RESOURCE });
   await reader.next(e => e.type === 'subscribed' && e.id === id);
-  return () => reader.frames({ cmd: 'stopThread', id }, 'thread');
+  return (waitForTerminalMs?: number) =>
+    reader.frames({ cmd: 'stopThread', id, waitForTerminalMs }, 'thread', (waitForTerminalMs ?? 0) + 30_000);
 }
 
 function startStream(publisher: HarnessNode, scenario: Scenario, runId: string, threadId?: string, variant?: string) {
   const id = randomUUID();
-  publisher.send({ cmd: 'stream', id, scenario: scenario.name, variant, runId, threadId, resourceId: RESOURCE });
+  publisher.send({
+    cmd: 'stream',
+    id,
+    scenario: scenario.name,
+    variant,
+    runId,
+    threadId,
+    resourceId: RESOURCE,
+    timeoutMs: scenario.timeoutMs,
+  });
   const live = publisher
-    .next(e => e.type === 'frames' && e.id === id && e.reader === 'live', 45_000)
+    .next(e => e.type === 'frames' && e.id === id && e.reader === 'live', (scenario.timeoutMs ?? 45_000) + 5_000)
     .then(e => e.frames as Frame[]);
   const event = (type: string) => publisher.next(e => (e.type === type || e.type === 'stream-done') && e.id === id);
   return { id, live, event };
@@ -55,6 +68,7 @@ async function observeMid(reader: HarnessNode, started: Promise<unknown>, runId:
   return reader.frames(
     { cmd: 'observe', runId, reader: 'observe-mid', afterPersisted: true, timeoutMs },
     'observe-mid',
+    timeoutMs + 5_000,
   );
 }
 
@@ -81,7 +95,24 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
     const live = await turn.live;
     const observe = await mid;
-    return { live, 'observe-mid': observe, ...(await readBack(nodes, runId)), thread: await stopThread() };
+    const capture: RunCapture = {
+      live,
+      'observe-mid': observe,
+      ...(await readBack(nodes, runId)),
+      thread: await stopThread(),
+    };
+    if (scenario.name === 'reasoning-flood') {
+      const id = randomUUID();
+      capture.broker = await nodes.reader.frames({ cmd: 'broker', id, runId }, 'broker');
+      capture.retention = (
+        await nodes.reader.next(e => e.type === 'frames' && e.id === id && e.reader === 'retention')
+      ).frames;
+      console.log(
+        'RETENTION',
+        JSON.stringify(nodes.reader.events.find(e => e.type === 'broker-inventory' && e.id === id)),
+      );
+    }
+    return capture;
   },
 
   /**
@@ -241,7 +272,106 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     return { ack, generate: result };
   },
 
-  /** One turn; 4s after it ends (both processes clean up after 2s), list the run's keys. */
+  async 'transport-fault'(nodes, scenario) {
+    if (!nodes.proxy || !scenario.fault) throw new Error('transport fault requires a proxy and a fault');
+    const runId = randomUUID();
+    const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
+    const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId, scenario.timeoutMs);
+    // Observe both failures immediately, including those that arrive during the outage.
+    const completed = Promise.allSettled([turn.live, mid]);
+    const firstText = await nodes.reader.next(e => e.type === 'observer-text' && e.runId === runId);
+    const began = Date.now();
+    console.log(
+      'FAULT-START',
+      JSON.stringify({
+        scenario: scenario.name,
+        engine: nodes.publisher.opts.engine,
+        backend: nodes.publisher.opts.backend,
+        split: nodes.publisher !== nodes.reader,
+        runId,
+        firstText,
+      }),
+    );
+    await nodes.proxy.inject(scenario.fault.kind);
+    try {
+      await sleep(scenario.fault.durationMs);
+    } finally {
+      await nodes.proxy.recover();
+    }
+    console.log('FAULT', JSON.stringify({ scenario: scenario.name, outageMs: Date.now() - began }));
+    const [liveResult, observeResult] = await completed;
+    if (process.env.STREAM_HARNESS_VERBOSE) console.log('PUBLISHER-STDERR', JSON.stringify(nodes.publisher.stderr));
+    console.log(
+      'FAULT-END',
+      JSON.stringify({
+        scenario: scenario.name,
+        recoveryMs: Date.now() - began - scenario.fault.durationMs,
+        live: liveResult.status,
+        observer: observeResult.status,
+      }),
+    );
+    console.log(
+      'OBSERVER-TIMELINE',
+      JSON.stringify(nodes.reader.events.filter(e => e.type === 'observer-text' && e.runId === runId)),
+    );
+    if (liveResult.status === 'rejected') throw liveResult.reason;
+    if (observeResult.status === 'rejected') throw observeResult.reason;
+    return {
+      live: liveResult.value,
+      'observe-mid': observeResult.value,
+      ...(await readBack(nodes, runId)),
+      thread: await stopThread(),
+    };
+  },
+  async 'publisher-death'(nodes, scenario) {
+    const runId = randomUUID();
+    const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
+    const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
+    // The caller process will die, so its normal stream-completed report cannot arrive.
+    const killedCaller = turn.live.catch(() => undefined);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
+    await nodes.reader.next(e => e.type === 'observer-text' && e.runId === runId);
+    expect(
+      nodes.publisher.events.some(e => e.type === 'stream-done' && e.id === turn.id),
+      'publisher must still be running when killed',
+    ).toBe(false);
+    const killedAt = Date.now();
+    await nodes.publisher.kill();
+    await killedCaller;
+    const live = normalise(
+      nodes.publisher.events.filter(e => e.type === 'live-chunk' && e.id === turn.id).map(e => e.chunk),
+    );
+    expect(
+      live.some(f => f.type === 'finish'),
+      'SIGKILL must interrupt a live run, not a finished one',
+    ).toBe(false);
+    live.push({ type: '(killed)' });
+    const observe = await mid;
+    const replay = await readBack(nodes, runId);
+    // A check just before lease expiry can defer failure until the next 15s check.
+    const thread = await stopThread(35_000);
+    const status = await nodes.reader.frames({ cmd: 'runStatus', runId }, 'run-status');
+    console.log(
+      'PUBLISHER-DEATH',
+      JSON.stringify({
+        engine: nodes.publisher.opts.engine,
+        backend: nodes.publisher.opts.backend,
+        runId,
+        waitedAfterKillMs: Date.now() - killedAt,
+        observer: nodes.reader.events.find(e => e.type === 'observer-ended'),
+        status,
+        storedStatus: nodes.reader.events.find(e => e.type === 'run-status-detail' && e.runId === runId),
+      }),
+    );
+    return {
+      live,
+      'observe-mid': observe,
+      ...replay,
+      thread,
+      'run-status': status,
+    };
+  },
   async 'key-cleanup'(nodes, scenario) {
     const runId = randomUUID();
     const threadId = `thread-${runId}`;
@@ -251,13 +381,6 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
   },
 };
 
-/** Drops text bodies when a scenario's text is cut at a timing-dependent point. */
-function withoutText(capture: RunCapture): RunCapture {
-  const strip = (frames: Frame[]) =>
-    frames.map(f => (f.type === 'text-delta' || f.type === 'reasoning-delta' ? { type: f.type } : f));
-  return Object.fromEntries(Object.entries(capture).map(([reader, frames]) => [reader, strip(frames!)]));
-}
-
 async function startNodes(
   topology: Topology,
   common: Omit<NodeOptions, 'nodeId' | 'cleanupMs' | 'port'>,
@@ -265,14 +388,40 @@ async function startNodes(
 ): Promise<Nodes> {
   const port = await getFreePort();
   if (topology === 'single') {
-    const node = await HarnessNode.start({ ...common, port, cleanupMs: cleanup.readerCleanupMs ?? cleanup.cleanupMs });
+    const node = await HarnessNode.start({
+      ...common,
+      maxStreamLength: cleanup.maxStreamLength,
+      port,
+      cleanupMs: cleanup.readerCleanupMs ?? cleanup.cleanupMs,
+    });
     return { publisher: node, reader: node, port };
   }
-  const [publisher, reader] = await Promise.all([
-    HarnessNode.start({ ...common, nodeId: 'publisher', cleanupMs: cleanup.cleanupMs }),
-    HarnessNode.start({ ...common, nodeId: 'reader', port, cleanupMs: cleanup.readerCleanupMs }),
+  const started = await Promise.allSettled([
+    HarnessNode.start({
+      ...common,
+      maxStreamLength: cleanup.maxStreamLength,
+      nodeId: 'publisher',
+      cleanupMs: cleanup.cleanupMs,
+    }),
+    HarnessNode.start({
+      ...common,
+      busUrl: undefined,
+      maxStreamLength: cleanup.maxStreamLength,
+      nodeId: 'reader',
+      port,
+      cleanupMs: cleanup.readerCleanupMs,
+    }),
   ]);
-  return { publisher, reader, port };
+  const failure = started.find(result => result.status === 'rejected');
+  if (failure) {
+    await Promise.all(started.map(result => (result.status === 'fulfilled' ? result.value.stop() : undefined)));
+    throw failure.reason;
+  }
+  const [publisher, reader] = started.map(result => {
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
+  });
+  return { publisher: publisher!, reader: reader!, port };
 }
 
 const stopNodes = (nodes?: Nodes) => Promise.all([nodes?.publisher.stop(), nodes?.reader.stop()]);
@@ -301,7 +450,14 @@ export function defineGrid(group: ScenarioGroup) {
       await llm?.stop();
     });
 
-    describe.each(LAYOUTS)('$topology / $backend', ({ topology, backend }) => {
+    describe.each(
+      LAYOUTS.filter(layout =>
+        scenarios.some(name => {
+          const layouts = getScenario(name).layouts;
+          return !layouts || layouts.includes(`${layout.topology}/${layout.backend}`);
+        }),
+      ),
+    )('$topology / $backend', ({ topology, backend }) => {
       const plain = new Map<string, RunCapture>();
 
       describe.each(ENGINES)('%s', engine => {
@@ -324,30 +480,47 @@ export function defineGrid(group: ScenarioGroup) {
           await storage?.cleanup();
         });
 
-        it.each(scenarios)('%s', async name => {
-          const scenario = getScenario(name);
-          const cell: Cell = { scenario: name, engine, backend, topology };
-          let own: Nodes | undefined;
-          let capture: RunCapture;
-          try {
-            if (scenario.nodes) {
-              own = await startNodes(topology, common(engine, backend), scenario.nodes);
-            } else {
-              shared ??= await startNodes(topology, common(engine, backend));
-            }
-            capture = await FLOWS[scenario.flow ?? 'turn'](own ?? shared!, scenario);
-          } finally {
-            await stopNodes(own);
-          }
-          if (scenario.ignoreText) capture = withoutText(capture);
-          if (engine === 'plain') plain.set(name, capture);
-
-          const { verdict, drift: drifted } = checkCell(cell, capture, plain.get(name));
-          const drift = drifted.map(d => `  DRIFT ${d.reader} [${d.kind}] ${d.detail}`);
-          const report = [formatVerdict(cell, verdict), ...drift].join('\n');
-          if (process.env.STREAM_HARNESS_VERBOSE) console.log(`${report}\n${JSON.stringify(capture)}`);
-          expect(verdict.unlisted.length + verdict.stale.length + drift.length, report).toBe(0);
+        const applicable = scenarios.filter(name => {
+          const layouts = getScenario(name).layouts;
+          return !layouts || layouts.includes(`${topology}/${backend}`);
         });
+        it.each(applicable)(
+          '%s',
+          async name => {
+            const scenario = getScenario(name);
+            const cell: Cell = { scenario: name, engine, backend, topology };
+            let own: Nodes | undefined;
+            let capture: RunCapture;
+            let proxy: Awaited<ReturnType<typeof createProxy>> | undefined;
+            try {
+              if (scenario.fault || scenario.name === 'transport-control') {
+                if (backend === 'memory') throw new Error('transport fault needs a real backend');
+                proxy = await createProxy(backend);
+              }
+              if (scenario.nodes) {
+                own = await startNodes(topology, { ...common(engine, backend), busUrl: proxy?.url }, scenario.nodes);
+                own.proxy = proxy;
+              } else {
+                shared ??= await startNodes(topology, common(engine, backend));
+              }
+              capture = await FLOWS[scenario.flow ?? 'turn'](own ?? shared!, scenario);
+            } finally {
+              await stopNodes(own);
+              await proxy?.close();
+            }
+            if (process.env.STREAM_HARNESS_VERBOSE) console.log('RAW-CAPTURE', JSON.stringify({ cell, capture }));
+            if (scenario.ignoreText) capture = withoutInterruptedText(capture, ABORT_ANSWER);
+            if (engine === 'plain') plain.set(name, capture);
+            if (process.env.STREAM_HARNESS_VERBOSE) console.log('CAPTURE', JSON.stringify({ cell, capture }));
+
+            const { verdict, drift: drifted } = checkCell(cell, capture, plain.get(name));
+            const drift = drifted.map(d => `  DRIFT ${d.reader} [${d.kind}] ${d.detail}`);
+            const report = [formatVerdict(cell, verdict), ...drift].join('\n');
+            if (process.env.STREAM_HARNESS_VERBOSE) console.log(`${report}\n${JSON.stringify(capture)}`);
+            expect(verdict.unlisted.length + verdict.stale.length + drift.length, report).toBe(0);
+          },
+          group === 'faults' ? 150_000 : 60_000,
+        );
       });
     });
   });

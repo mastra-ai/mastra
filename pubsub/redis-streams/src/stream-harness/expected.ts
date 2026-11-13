@@ -11,7 +11,17 @@ function splitFrames(compact: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let current = '';
+  let quoted = false;
+  let escaped = false;
   for (const char of compact) {
+    if (quoted) {
+      current += char;
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') quoted = true;
     if (char === '[' || char === '{') depth++;
     if (char === ']' || char === '}') depth--;
     if (char === ',' && depth === 0) {

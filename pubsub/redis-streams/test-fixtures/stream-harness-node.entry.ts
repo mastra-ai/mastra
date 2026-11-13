@@ -45,9 +45,15 @@ import { z } from 'zod';
 
 import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cache';
 import { RedisStreamsPubSub } from '../src/index';
-import { fromChunk, fromTopicEvent, normalise } from '../src/stream-harness/normalise';
+import {
+  classifyInterruptedText,
+  fromChunk,
+  fromTopicEvent,
+  normalise,
+  retainedReasoningFrames,
+} from '../src/stream-harness/normalise';
 import type { RawFrame } from '../src/stream-harness/normalise';
-import { ABORT_ANSWER, getScenario } from '../src/stream-harness/scenarios';
+import { ABORT_ANSWER, FLOOD_REASONING, getScenario } from '../src/stream-harness/scenarios';
 
 const {
   ENGINE = 'plain',
@@ -114,6 +120,8 @@ const tripwire = {
   },
 };
 
+const maxStreamLength = process.env.MAX_STREAM_LENGTH ? Number(process.env.MAX_STREAM_LENGTH) : undefined;
+
 const TERMINAL = new Set(['finish', 'error', 'tripwire', 'abort', 'suspended']);
 
 async function drain(iterable: AsyncIterable<any>, timeoutMs: number, onChunk?: (chunk: any) => void) {
@@ -151,9 +159,11 @@ async function main() {
   } else if (BACKEND === 'redis') {
     const cacheClient = createClient({ url: REDIS_URL });
     const tapClient = createClient({ url: REDIS_URL });
+    cacheClient.on('error', error => emit({ type: 'cache-client-error', message: error.message }));
+    tapClient.on('error', error => emit({ type: 'tap-client-error', message: error.message }));
     await Promise.all([cacheClient.connect(), tapClient.connect()]);
     clients.push(cacheClient, tapClient);
-    transport = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+    transport = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200, maxStreamLength });
     const preset = { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` };
     cache = new RedisServerCache({ client: cacheClient as any }, preset);
     // A separate connection, so the topic reader reads what reached Redis.
@@ -162,7 +172,7 @@ async function main() {
     const [cacheClient, tapClient] = await Promise.all([glideClient(VALKEY_URL), glideClient(VALKEY_URL)]);
     clients.push({ quit: async () => cacheClient.close() }, { quit: async () => tapClient.close() });
     valkeyScanClient = tapClient;
-    transport = new ValkeyStreamsPubSub({ url: VALKEY_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+    transport = new ValkeyStreamsPubSub({ url: VALKEY_URL, keyPrefix: KEY_PREFIX, blockMs: 200, maxStreamLength });
     cache = new ValkeyServerCache({ client: cacheClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
     tapCache = new ValkeyServerCache({ client: tapClient }, { keyPrefix: `${KEY_PREFIX}:cache:` });
   } else {
@@ -235,6 +245,7 @@ async function main() {
       }
       await new Promise(r => setTimeout(r, 25));
     }
+    throw new Error(`No durable run snapshot persisted for ${runId} within 5 seconds`);
   };
 
   const handlers: Record<string, (cmd: any) => Promise<void> | void> = {
@@ -256,13 +267,39 @@ async function main() {
         return;
       }
       emit({ type: 'run', id: cmd.id, runId: out.runId });
-      frames(cmd.id, 'live', await drain(out.fullStream, cmd.timeoutMs ?? 20_000, onLiveChunk(cmd.id, out.runId)));
+      const onChunk = onLiveChunk(cmd.id, out.runId);
+      frames(
+        cmd.id,
+        'live',
+        await drain(out.fullStream, cmd.timeoutMs ?? 20_000, chunk => {
+          if (scenario.flow === 'publisher-death') emit({ type: 'live-chunk', id: cmd.id, chunk: fromChunk(chunk) });
+          onChunk(chunk);
+        }),
+      );
       emit({ type: 'stream-done', id: cmd.id, runId: out.runId });
     },
     async observe(cmd) {
       if (cmd.afterPersisted && ENGINE !== 'plain') await waitForPersistedRun(cmd.runId);
       const observation = await registered.observe(cmd.runId, cmd.offset === undefined ? {} : { offset: cmd.offset });
-      const raw = await drain(observation.fullStream, cmd.timeoutMs ?? 5_000);
+      emit({ type: 'observer-attached', id: cmd.id, runId: cmd.runId });
+      const began = Date.now();
+      const raw = await drain(observation.fullStream, cmd.timeoutMs ?? 5_000, chunk => {
+        if (chunk.type === 'text-delta')
+          emit({
+            type: 'observer-text',
+            id: cmd.id,
+            runId: cmd.runId,
+            index: chunk.index,
+            text: chunk.payload?.text,
+            elapsedMs: Date.now() - began,
+          });
+      });
+      emit({
+        type: 'observer-ended',
+        id: cmd.id,
+        elapsedMs: Date.now() - began,
+        timeout: raw.at(-1)?.type === '(timeout)',
+      });
       observation.detach?.();
       frames(cmd.id, cmd.reader ?? 'observe-0', raw);
     },
@@ -284,6 +321,59 @@ async function main() {
       }
       frames(cmd.id, 'topic', raw);
     },
+    async broker(cmd) {
+      const client = createClient({ url: BACKEND === 'redis' ? REDIS_URL : VALKEY_URL.replace('valkey:', 'redis:') });
+      client.on('error', error => emit({ type: 'broker-client-error', message: error.message }));
+      await client.connect();
+      try {
+        const entries = await client.xRange(`${KEY_PREFIX}:agent.stream.${cmd.runId}`, '-', '+');
+        const raw = entries.map(entry => fromTopicEvent(JSON.parse(entry.message.event!)));
+        const retained = retainedReasoningFrames(raw, FLOOD_REASONING);
+        emit({ type: 'frames', id: cmd.id, reader: 'broker', frames: retained });
+        emit({
+          type: 'frames',
+          id: cmd.id,
+          reader: 'retention',
+          frames: [{ type: 'retention', shape: `reasoning=trimmed start=${raw.some(f => f.type === 'start')}` }],
+        });
+        emit({
+          type: 'broker-inventory',
+          id: cmd.id,
+          entries: entries.length,
+          reasoning: raw.filter(f => f.type === 'reasoning-delta').length,
+        });
+      } finally {
+        await client.quit();
+      }
+    },
+    async runStatus(cmd) {
+      const record = await registered.__getRunRecord(cmd.runId);
+      const workflows = await mastra.getStorage()?.getStore('workflows');
+      let status = 'absent';
+      for (const workflowName of ['durable-agentic-loop', 'durable-agentic-execution']) {
+        const run = await workflows?.getWorkflowRunById({ workflowName, runId: cmd.runId });
+        if (run) {
+          const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+          status = snapshot.status;
+          break;
+        }
+      }
+      emit({
+        type: 'run-status-detail',
+        id: cmd.id,
+        runId: cmd.runId,
+        record: record?.status ?? 'absent',
+        workflow: status,
+      });
+      // SIGKILL can land on either side of the pending-to-running storage update.
+      const workflow = status === 'pending' || status === 'running' ? 'unfinished' : status;
+      emit({
+        type: 'frames',
+        id: cmd.id,
+        reader: 'run-status',
+        frames: [{ type: 'run-status', shape: `record=${record?.status ?? 'absent'} workflow=${workflow}` }],
+      });
+    },
     async subscribeThread(cmd) {
       const subscription = await registered.subscribeToThread({ threadId: cmd.threadId, resourceId: cmd.resourceId });
       const raw: RawFrame[] = [];
@@ -300,6 +390,13 @@ async function main() {
     async stopThread(cmd) {
       const thread = threads.get(cmd.id);
       if (!thread) throw new Error(`no thread subscription ${cmd.id}`);
+      if (cmd.waitForTerminalMs) {
+        const deadline = Date.now() + cmd.waitForTerminalMs;
+        while (!thread.raw.some(frame => TERMINAL.has(frame.type)) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+        if (!thread.raw.some(frame => TERMINAL.has(frame.type))) thread.raw.push({ type: '(timeout)' });
+      }
       thread.unsubscribe();
       await Promise.race([thread.done, new Promise(resolve => setTimeout(resolve, 1_000))]);
       threads.delete(cmd.id);
@@ -343,17 +440,15 @@ async function main() {
             { ...options, toolCallId: suspended.suspendPayload?.toolCallId },
           );
           const text = String(result?.text ?? '');
-          const classify = (value: string | undefined) =>
-            value === undefined ? 'missing' : value === ABORT_ANSWER ? 'whole' : value ? 'cut' : 'empty';
-          shape = `finish=${result?.finishReason ?? '-'} text=${classify(text)} callback=${classify(abortedText)} calls=${abortCalls} matches=${text === abortedText}`;
+          shape = `finish=${result?.finishReason ?? '-'} text=${classifyInterruptedText(text, ABORT_ANSWER)} callback=${classifyInterruptedText(abortedText, ABORT_ANSWER)} calls=${abortCalls} matches=${text === abortedText}`;
           emit({ type: 'abort-output', id: cmd.id, runId: cmd.runId, text, abortedText });
         } else {
           const result = await registered.generate(scenario.prompt, options);
           const text = String(result?.text ?? '');
-          const whole = text === ABORT_ANSWER ? 'whole' : text ? 'cut' : 'empty';
+          const whole = classifyInterruptedText(text, ABORT_ANSWER);
           shape = `finish=${result?.finishReason ?? '-'} text=${whole}`;
           if (cmd.checkCallback) {
-            const callback = abortedText === undefined ? 'missing' : abortedText ? 'cut' : 'empty';
+            const callback = classifyInterruptedText(abortedText, ABORT_ANSWER);
             shape += ` callback=${callback} calls=${abortCalls} matches=${text === abortedText}`;
             emit({ type: 'abort-output', id: cmd.id, runId: cmd.runId, text, abortedText });
           }

@@ -28,7 +28,11 @@ export interface Scenario {
    * reader process (in the single topology the one process takes
    * `readerCleanupMs ?? cleanupMs`).
    */
-  nodes?: { cleanupMs?: number; readerCleanupMs?: number };
+  nodes?: { cleanupMs?: number; readerCleanupMs?: number; maxStreamLength?: number };
+  layouts?: readonly string[];
+  timeoutMs?: number;
+  fault?: { kind: 'pause' | 'reset'; durationMs: number };
+
   /** The text is cut wherever an abort lands, so only text frame types are compared. */
   ignoreText?: boolean;
 }
@@ -50,7 +54,9 @@ export type Flow =
   | 'abort'
   | 'generate-abort'
   | 'resume-generate-abort'
-  | 'key-cleanup';
+  | 'key-cleanup'
+  | 'transport-fault'
+  | 'publisher-death';
 
 export const readersOf = (scenario: Scenario): readonly ReaderName[] => scenario.readers ?? READERS;
 
@@ -82,6 +88,9 @@ function toolTurn(name: string, tool: string, answer: string, args = '{}'): Scen
     );
   };
 }
+
+const BUS_LAYOUTS = ['single/redis', 'single/valkey', 'split/redis', 'split/valkey'] as const;
+export const FLOOD_REASONING = Array.from({ length: 975 }, (_, index) => String(index).padStart(4, '0')).join('');
 
 export const SCENARIOS: Record<string, Scenario> = {
   'structured-output': {
@@ -222,7 +231,55 @@ export const SCENARIOS: Record<string, Scenario> = {
     readers: ['live', 'keys'],
     nodes: { cleanupMs: 2_000, readerCleanupMs: 2_000 },
   },
+  'transport-control': {
+    name: 'transport-control',
+    prompt: `${marker('transport-control')} Talk slowly.`,
+    script: llm =>
+      llm.on({ endpoint: 'chat', predicate: hasMarker('transport-control') }, { content: LONG_ANSWER }, CRAWL),
+    nodes: {},
+    layouts: BUS_LAYOUTS,
+  },
+  'pause-5s': transportFault('pause-5s', 'pause', 5_000),
+  'pause-60s': transportFault('pause-60s', 'pause', 60_000),
+  'connection-reset': transportFault('connection-reset', 'reset', 1_000),
+  'reasoning-flood': {
+    name: 'reasoning-flood',
+    prompt: `${marker('reasoning-flood')} Think, then answer.`,
+    script: llm =>
+      llm.on(
+        { endpoint: 'chat', predicate: hasMarker('reasoning-flood') },
+        { reasoning: FLOOD_REASONING, content: 'Done.' },
+        { chunkSize: 4, streamingProfile: { ttft: 500, tps: 10_000 } },
+      ),
+    nodes: { maxStreamLength: 500 },
+    readers: [...READERS, 'broker', 'retention'],
+    layouts: BUS_LAYOUTS,
+  },
+  'publisher-death': {
+    name: 'publisher-death',
+    prompt: `${marker('publisher-death')} Talk slowly.`,
+    script: llm =>
+      llm.on({ endpoint: 'chat', predicate: hasMarker('publisher-death') }, { content: LONG_ANSWER }, CRAWL),
+    flow: 'publisher-death',
+    layouts: ['split/redis', 'split/valkey'],
+    nodes: {},
+    readers: ['live', 'observe-mid', 'topic', 'observe-0', 'http-observe', 'thread', 'run-status'],
+    ignoreText: true,
+  },
 };
+
+function transportFault(name: string, kind: 'pause' | 'reset', durationMs: number): Scenario {
+  return {
+    name,
+    prompt: `${marker(name)} Talk slowly.`,
+    script: llm => llm.on({ endpoint: 'chat', predicate: hasMarker(name) }, { content: LONG_ANSWER }, CRAWL),
+    flow: 'transport-fault',
+    fault: { kind, durationMs },
+    nodes: {},
+    layouts: BUS_LAYOUTS,
+    timeoutMs: durationMs + 40_000,
+  };
+}
 
 /** The full answer of the abort scenarios, to tell a cut answer from a whole one. */
 export const ABORT_ANSWER = LONG_ANSWER;
@@ -244,6 +301,7 @@ export const SCENARIO_GROUPS = {
     'resume-generate-abort',
     'key-cleanup',
   ],
+  faults: ['transport-control', 'pause-5s', 'pause-60s', 'connection-reset', 'reasoning-flood', 'publisher-death'],
 } as const satisfies Record<string, readonly string[]>;
 export type ScenarioGroup = keyof typeof SCENARIO_GROUPS;
 export const SCENARIO_NAMES: string[] = Object.values(SCENARIO_GROUPS).flat();
