@@ -43,6 +43,7 @@ import type {
   InputProcessorOrWorkflow,
   OutputProcessor,
   OutputProcessorOrWorkflow,
+  WorkingMemoryInstructionArgs,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
@@ -1914,23 +1915,25 @@ ${workingMemory}`;
 
     // In readOnly or non-agent-managed mode, provide context without tool instructions.
     // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
-    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
-      return this.getReadOnlyWorkingMemoryInstruction({
-        template: workingMemoryTemplate,
-        data: workingMemoryData,
-        autoUpdated: !config?.readOnly,
-      });
-    }
-
-    return this.isVNextWorkingMemoryConfig(memoryConfig)
-      ? this.__experimental_getWorkingMemoryToolInstructionVNext({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        })
-      : this.getWorkingMemoryToolInstruction({
-          template: workingMemoryTemplate,
-          data: workingMemoryData,
-        });
+    // Render through getWorkingMemoryInstruction, the same method agents use, so both paths agree.
+    // `undefined` keeps the built-in text (the agent's processor falls back the same way), and an
+    // override that returns an empty string sends no instruction, so report that as null.
+    const args: WorkingMemoryInstructionArgs =
+      config?.readOnly || workingMemoryConfig.agentManaged === false
+        ? {
+            kind: 'read-only',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+            autoUpdated: !config?.readOnly,
+          }
+        : {
+            // Same check the agent's WorkingMemory processor uses (see MastraMemory.getInputProcessors).
+            kind: 'version' in workingMemoryConfig && workingMemoryConfig.version === 'vnext' ? 'vnext' : 'tool',
+            template: workingMemoryTemplate,
+            data: workingMemoryData,
+          };
+    const instruction = this.getWorkingMemoryInstruction(args) ?? this.renderBuiltInWorkingMemoryInstruction(args);
+    return instruction || null;
   }
 
   /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
@@ -2295,7 +2298,7 @@ ${workingMemory}`;
 - **Projects**: 
 `;
 
-  protected getWorkingMemoryToolInstruction({
+  private builtInWorkingMemoryToolInstruction({
     template,
     data,
   }: {
@@ -2349,13 +2352,14 @@ Notes:
 - IMPORTANT: Preserve the ${template.format === 'json' ? 'JSON' : 'Markdown'} formatting structure above while updating the content.`;
   }
 
-  protected __experimental_getWorkingMemoryToolInstructionVNext({
+  private builtInWorkingMemoryToolInstructionVNext({
     template,
     data,
   }: {
     template: WorkingMemoryTemplate;
     data: string | null;
   }) {
+    const templateContent = typeof template.content === 'string' ? template.content : JSON.stringify(template.content);
     return `WORKING_MEMORY_SYSTEM_INSTRUCTION:
 Store and update any conversation-relevant information by calling the updateWorkingMemory tool.
 
@@ -2368,7 +2372,7 @@ Guidelines:
 6. Information not being relevant to the current conversation is not a valid reason to replace or remove working memory information. Your working memory spans across multiple conversations and may be needed again later, even if it's not currently relevant.
 
 <working_memory_template>
-${template.content}
+${templateContent}
 </working_memory_template>
 
 <working_memory_data>
@@ -2378,7 +2382,7 @@ ${data || 'No working memory data available.'}
 Notes:
 - Update memory whenever referenced information changes
 ${
-  template.content !== this.defaultWorkingMemoryTemplate
+  templateContent !== this.defaultWorkingMemoryTemplate
     ? `- Only store information if it's in the working memory template, do not store other information unless the user asks you to remember it, as that non-template information may be irrelevant`
     : `- If you're unsure whether to store something, store it (eg if the user tells you information about themselves, call updateWorkingMemory immediately to update it)
 `
@@ -2390,12 +2394,7 @@ ${
 `;
   }
 
-  /**
-   * Generate read-only working memory instructions.
-   * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
-   */
-  protected getReadOnlyWorkingMemoryInstruction({
+  private builtInReadOnlyWorkingMemoryInstruction({
     data,
     autoUpdated = false,
   }: {
@@ -2422,6 +2421,64 @@ Guidelines:
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
 - The user will not see the working memory data directly`;
+  }
+
+  /** Instruction for agents that update working memory with the updateWorkingMemory tool. Override to customize it. */
+  protected getWorkingMemoryToolInstruction(args: { template: WorkingMemoryTemplate; data: string | null }): string {
+    return this.builtInWorkingMemoryToolInstruction(args);
+  }
+
+  /** Instruction for `version: 'vnext'` template working memory. Override to customize it. */
+  protected __experimental_getWorkingMemoryToolInstructionVNext(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+  }): string {
+    return this.builtInWorkingMemoryToolInstructionVNext(args);
+  }
+
+  /**
+   * Generate read-only working memory instructions.
+   * This provides the working memory context without any tool update instructions.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
+   * Override to customize it.
+   */
+  protected getReadOnlyWorkingMemoryInstruction(args: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+    autoUpdated?: boolean;
+  }): string {
+    return this.builtInReadOnlyWorkingMemoryInstruction(args);
+  }
+
+  /**
+   * Renders the working memory instruction an agent receives, using the instruction methods above,
+   * so a subclass that overrides them changes what the model sees. Return `undefined` to use the
+   * built-in instruction, or an empty string to send none.
+   */
+  override getWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string | undefined {
+    switch (args.kind) {
+      case 'read-only':
+        return this.getReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.__experimental_getWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.getWorkingMemoryToolInstruction(args);
+    }
+  }
+
+  /**
+   * The built-in text, ignoring subclass overrides of the instruction methods. Used when
+   * getWorkingMemoryInstruction returns `undefined`, matching the agent processor's own fallback.
+   */
+  private renderBuiltInWorkingMemoryInstruction(args: WorkingMemoryInstructionArgs): string {
+    switch (args.kind) {
+      case 'read-only':
+        return this.builtInReadOnlyWorkingMemoryInstruction(args);
+      case 'vnext':
+        return this.builtInWorkingMemoryToolInstructionVNext(args);
+      case 'tool':
+        return this.builtInWorkingMemoryToolInstruction(args);
+    }
   }
 
   private isVNextWorkingMemoryConfig(config?: MemoryConfig): boolean {

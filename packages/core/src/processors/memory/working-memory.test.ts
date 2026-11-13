@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MessageList } from '../../agent';
 import { MemoryRunState } from '../../memory';
-import type { MastraDBMessage } from '../../memory';
+import type { MastraDBMessage, MemoryConfigInternal } from '../../memory';
 import { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
 
-import type { WorkingMemoryTemplate } from './working-memory';
+import type { WorkingMemoryInstructionArgs, WorkingMemoryTemplate } from './working-memory';
 import { WorkingMemory } from './working-memory';
 
 describe('WorkingMemory', () => {
@@ -1081,5 +1081,97 @@ describe('WorkingMemory', () => {
         expect(resultMessages[0].content).not.toContain('<working_memory_data>\nnull');
       },
     );
+  });
+
+  // A Memory subclass customizes the instruction through the instruction provider. (#29752)
+  describe('instruction provider', () => {
+    const run = async (
+      options: Partial<ConstructorParameters<typeof WorkingMemory>[0]>,
+      memoryConfig?: MemoryConfigInternal,
+    ) => {
+      vi.mocked(mockStorage.getResourceById).mockResolvedValue({
+        id: 'resource-1',
+        workingMemory: '# Stored',
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+      requestContext.set('MastraMemory', { resourceId: 'resource-1', memoryConfig });
+      const messageList = new MessageList();
+      await new WorkingMemory({ storage: mockStorage, ...options }).processInput({
+        messages: [],
+        messageList,
+        abort: () => {
+          throw new Error('Aborted');
+        },
+        requestContext,
+      });
+      return messageList
+        .getSystemMessages('memory')
+        .map(message => String(message.content))
+        .join('\n');
+    };
+
+    it.each([
+      [{}, undefined, { kind: 'tool' }],
+      [{ useVNext: true }, undefined, { kind: 'vnext' }],
+      [{ readOnly: true }, undefined, { kind: 'read-only', autoUpdated: false }],
+      [{}, { workingMemory: { enabled: true, agentManaged: false } }, { kind: 'read-only', autoUpdated: true }],
+    ] as const)(
+      'sends the instruction the provider returns (%o, config %o)',
+      async (options, memoryConfig, expected) => {
+        const calls: WorkingMemoryInstructionArgs[] = [];
+        const text = await run(
+          {
+            ...options,
+            instructionProvider: {
+              getWorkingMemoryInstruction: args => {
+                calls.push(args);
+                return `CUSTOM ${args.kind}: ${args.data}`;
+              },
+            },
+          },
+          memoryConfig,
+        );
+
+        expect(text).toBe(`CUSTOM ${expected.kind}: # Stored`);
+        expect(calls).toHaveLength(1);
+        expect(calls[0]).toMatchObject({ ...expected, data: '# Stored', template: { format: 'markdown' } });
+      },
+    );
+
+    it('passes the template from the template provider to the instruction provider', async () => {
+      const calls: WorkingMemoryInstructionArgs[] = [];
+      const resolved = {
+        format: 'json' as const,
+        content: '{"type":"object","properties":{"city":{"type":"string"}}}',
+      };
+      await run({
+        template: { format: 'markdown', content: '# Fallback' },
+        templateProvider: { getWorkingMemoryTemplate: async () => resolved },
+        instructionProvider: {
+          getWorkingMemoryInstruction: args => {
+            calls.push(args);
+            return 'CUSTOM';
+          },
+        },
+      });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]!.template).toEqual(resolved);
+    });
+
+    it('adds no instruction when the provider returns an empty string', async () => {
+      const text = await run({ instructionProvider: { getWorkingMemoryInstruction: () => '' } });
+
+      expect(text).toBe('');
+    });
+
+    it('falls back to the built-in instruction when the provider returns undefined', async () => {
+      const withProvider = await run({ instructionProvider: { getWorkingMemoryInstruction: () => undefined } });
+      const builtIn = await run({});
+
+      expect(builtIn).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION');
+      expect(withProvider).toBe(builtIn);
+    });
   });
 });

@@ -18,6 +18,7 @@ import type {
 } from '../processors';
 import { isProcessorWorkflow, TokenLimiterProcessor } from '../processors';
 import { MemoryInputFilter, MessageHistory, WorkingMemory, SemanticRecall } from '../processors/memory';
+import type { WorkingMemoryInstructionArgs } from '../processors/memory';
 import { assertEmbeddingDimension } from '../processors/memory/embedding-dimension';
 import type { RequestContext } from '../request-context';
 import type {
@@ -776,6 +777,14 @@ https://mastra.ai/en/docs/memory/overview`,
     memoryConfig?: MemoryConfigInternal;
   }): Promise<WorkingMemoryTemplate | null>;
 
+  /**
+   * Renders the working memory instruction that the `WorkingMemory` input processor adds to an agent's
+   * system prompt. Return `undefined` to use the processor's built-in instruction, or an empty string to add none.
+   */
+  getWorkingMemoryInstruction(_args: WorkingMemoryInstructionArgs): string | undefined {
+    return undefined;
+  }
+
   abstract updateWorkingMemory({
     threadId,
     resourceId,
@@ -922,6 +931,7 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
+            instructionProvider: this,
             readOnly: effectiveConfig.readOnly,
             agentManaged:
               typeof effectiveConfig.workingMemory === 'object'
