@@ -283,6 +283,8 @@ export function runPermissionHooksForEvent(state: TUIState, event: AgentControll
       // Sandbox check first, mirroring the dispatch routing order.
       if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
         hookMgr.runPermissionRequest('sandbox_access', event.toolCallId, event.toolName, payload).catch(() => {});
+      } else if (event.toolName === 'ask_user') {
+        hookMgr.runPermissionRequest('ask_question', event.toolCallId, event.toolName, payload).catch(() => {});
       } else if (event.toolName === 'submit_plan') {
         hookMgr.runPermissionRequest('plan_approval', event.toolCallId, event.toolName, payload).catch(() => {});
       }
