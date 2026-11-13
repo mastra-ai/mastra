@@ -559,4 +559,28 @@ describe('ConnectClient token redaction', () => {
       expect(error.message).toContain('[REDACTED]');
     }
   });
+
+  it('redacts the access token a platform or provider error echoes back', async () => {
+    const echo = (contentType: string) => () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ detail: `Rejected Bearer ${TOKEN}` }), {
+          status: 502,
+          headers: { 'content-type': contentType },
+        }),
+      );
+    const platform = makeClient(vi.fn<typeof fetch>(echo('application/problem+json')));
+    const provider = makeClient(vi.fn<typeof fetch>(echo('application/json')));
+
+    for (const call of [
+      () => platform.listConnections(),
+      () => platform.request('GET', '/v1/server/x'),
+      () => platform.proxy('conn_1', { method: 'GET', path: '/x' }),
+      () => provider.proxy('conn_1', { method: 'GET', path: '/x' }),
+    ]) {
+      const error = (await call().catch((e: unknown) => e)) as MastraConnectError;
+      expect(error).toBeInstanceOf(MastraConnectError);
+      expect(`${error.message} ${error.detail}`).not.toContain(TOKEN);
+      expect(error.detail).toBe('Rejected Bearer [REDACTED]');
+    }
+  });
 });

@@ -153,6 +153,19 @@ interface ProblemJson {
  */
 export async function extractProblemDetail(
   response: Response,
+  secret?: string,
+): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
+  const problem = await readProblemDetail(response);
+  // A server that echoes the request's bearer token must not leak it into
+  // error messages and logs.
+  if (secret && problem.detail?.includes(secret)) {
+    return { ...problem, detail: problem.detail.split(secret).join('[REDACTED]') };
+  }
+  return problem;
+}
+
+async function readProblemDetail(
+  response: Response,
 ): Promise<{ detail?: string; code?: string; type?: string; isProblemJson: boolean }> {
   const contentType = response.headers.get('content-type') ?? '';
   // Platform-originated errors are identified strictly by the RFC-7807 content
