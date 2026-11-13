@@ -1650,7 +1650,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           ...inputData,
           ...(approvalGrant ?? {}),
           // Read here, in the process that ran the tool: the marker does not survive serialization.
-          validationError: getModelFacingValidationError(outcome.result),
+          // Read the marker from the live value: ensureSerializable may return a JSON copy without it.
+          validationError: getModelFacingValidationError(outcome.rawResult),
         };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
