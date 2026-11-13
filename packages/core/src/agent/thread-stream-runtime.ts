@@ -3443,8 +3443,12 @@ export class AgentThreadStreamRuntime {
           // The lease has dropped that run, so a remote run this runtime saw register but never saw end (its observer
           // unsubscribed) no longer holds the thread; left marked active, it would keep the drain waiting. A run that
           // registered here, or a new stream that took the slot while the lease was read, is not that remote run.
-          if (state.threadRunsById.has(runId) || state.activeThreadStreamIds.get(key) !== streamBeforeRead) continue;
-          if (state.activeThreadRunIds.get(key) === runId) {
+          // The drain still runs either way: it waits while any run holds the thread.
+          if (
+            !state.threadRunsById.has(runId) &&
+            state.activeThreadStreamIds.get(key) === streamBeforeRead &&
+            state.activeThreadRunIds.get(key) === runId
+          ) {
             state.activeThreadRunIds.delete(key);
             state.activeThreadStreamIds.delete(key);
           }
