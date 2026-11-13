@@ -43,9 +43,13 @@ function renderRouteState(initialEntry: string) {
 
 describe('useTracesRouteState', () => {
   describe('when a shared URL contains a text search', () => {
-    it('restores the search and removes it when cleared', () => {
-      const { result, params } = renderRouteState('/traces?textSearch=needle');
+    it('restores the search', () => {
+      const { result } = renderRouteState('/traces?textSearch=needle');
       expect(result.current.route.filters.textSearch).toBe('needle');
+    });
+
+    it('removes a cleared search from the URL', () => {
+      const { result, params } = renderRouteState('/traces?textSearch=needle');
       act(() =>
         result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
       );
@@ -54,11 +58,15 @@ describe('useTracesRouteState', () => {
   });
 
   describe('when a filter field changes to an empty text search', () => {
-    it('preserves the editable chip through URL state and distinguishes removal', () => {
+    it('preserves the editable chip through URL state', () => {
       const { result, params } = renderRouteState('/traces');
       act(() => result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: '' })));
       expect(params().get('textSearch')).toBe('');
       expect(result.current.route.filters.textSearch).toBe('');
+    });
+
+    it('removes an empty draft from the URL', () => {
+      const { result, params } = renderRouteState('/traces?textSearch=');
       act(() =>
         result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
       );

@@ -1405,7 +1405,7 @@ describe('FilterBar', () => {
     };
 
     describe('when a field is restricted to the root', () => {
-      it('omits it from both the nested picker and nested field editor', async () => {
+      it('offers the field in the root picker', async () => {
         render(
           <ExpressionHarness
             initial={EXPRESSION}
@@ -1414,12 +1414,29 @@ describe('FilterBar', () => {
         );
         getInput().focus();
         expect(await screen.findByRole('option', { name: 'Contains text' })).toBeTruthy();
-        key('Escape');
+      });
+
+      it('omits the field from the nested field editor', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
         const editor = await openPopover();
         fireEvent.click(within(editor).getAllByRole('combobox', { name: 'Field: Tags' })[0]);
         await screen.findByRole('option', { name: 'Trace ID' });
         expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
-        pressActive({ key: 'Escape' });
+      });
+
+      it('omits the field from the nested condition picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
         fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
         const add = within(editor).getByPlaceholderText('Add condition');
         fireEvent.focus(add);
