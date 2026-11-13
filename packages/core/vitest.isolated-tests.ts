@@ -40,6 +40,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-lease-loss-parked.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-tool-scope.test.ts', // env
   'src/agent/__tests__/thread-shutdown-lease-release.test.ts', // env
+  'src/agent/__tests__/thread-stream-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
