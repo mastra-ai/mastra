@@ -600,6 +600,18 @@ Suspended runs only survive restarts when your Mastra instance is configured wit
 
 :::
 
+### Recovering a decision after a crash
+
+When `approveToolCall()`, `declineToolCall()`, or `resumeStream()` runs, the run is claimed in storage together with the decision or resume data and the targeted `toolCallId`. If the process handling the resume stops before the run finishes, call `recoverResume()` from any process to finish the run with that stored decision:
+
+```typescript
+const stream = await agent.recoverResume({ runId })
+
+for await (const chunk of stream.textStream) process.stdout.write(chunk)
+```
+
+The resumed tool call runs again. `recoverResume()` only takes over a claim whose process stopped: one that was claimed but not started for 60 seconds, or, on storage with run fencing, one whose lease wasn't renewed for 60 seconds. While the original process may still be running, it rejects with `AGENT_RESUME_ALREADY_CLAIMED`. For a run that no resume has claimed, it rejects with `AGENT_RESUME_NOTHING_TO_RECOVER`.
+
 ## Tool approval: Supervisor agents
 
 A [supervisor agent](/docs/subagents) coordinates multiple subagents using `.stream()` or `.generate()`. When a subagent calls a tool that requires approval, the request propagates up through the delegation chain and surfaces at the supervisor level:
