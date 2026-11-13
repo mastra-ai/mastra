@@ -38,5 +38,5 @@ describe('LibSQL workflow recovery passes', () => {
     connect,
     cases: [{ pubsub: 'in-process', exit: 'shuts down' }],
   });
-  describeRecoveryReadCases({ getStorage: () => storage });
+  describeRecoveryReadCases({ getStorage: () => storage, connect });
 });

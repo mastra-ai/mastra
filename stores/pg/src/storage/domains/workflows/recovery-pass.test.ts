@@ -29,5 +29,5 @@ describe('Postgres workflow recovery passes', () => {
   };
   // The in-memory suite runs every row; here one, a crashed pod on a shared broker.
   describeRecoveryExitCases({ getStorage: () => storage, connect, cases: [{ pubsub: 'broker', exit: 'crashes' }] });
-  describeRecoveryReadCases({ getStorage: () => storage });
+  describeRecoveryReadCases({ getStorage: () => storage, connect });
 });
