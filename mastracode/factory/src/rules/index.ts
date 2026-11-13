@@ -1,5 +1,6 @@
 export {
   FACTORY_GITHUB_EVENTS,
+  FACTORY_DEPENDABOT_EVENTS,
   FACTORY_VANTA_EVENTS,
   FACTORY_INCIDENTIO_EVENTS,
   FACTORY_JIRA_EVENTS,
@@ -12,6 +13,8 @@ export type {
   FactoryCommitDecision,
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryDependabotEventName,
+  FactoryDependabotRuleContext,
   FactoryVantaEventName,
   FactoryVantaRuleContext,
   FactoryIncidentioEventName,

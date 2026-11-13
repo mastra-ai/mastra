@@ -10,6 +10,7 @@ export type WorkItemSource =
   | 'linear-issue'
   | 'jira-issue'
   | 'incidentio-follow-up'
+  | 'github-dependabot-alert'
   | 'vanta-vulnerability'
   | 'manual';
 
@@ -33,9 +34,11 @@ export function externalSourceForWorkItem(
                 ? ['jira', 'issue']
                 : source === 'incidentio-follow-up'
                   ? ['incidentio', 'issue']
-                  : source === 'vanta-vulnerability'
-                    ? ['vanta', 'vulnerability']
-                    : ['factory', 'manual'];
+                  : source === 'github-dependabot-alert'
+                    ? ['github', 'dependabot-alert']
+                    : source === 'vanta-vulnerability'
+                      ? ['vanta', 'vulnerability']
+                      : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -72,6 +75,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
   if (source.integrationId !== 'github') return 'manual';
+  if (source.type === 'dependabot-alert') return 'github-dependabot-alert';
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
@@ -127,6 +131,7 @@ export const FACTORY_RULE_SOURCES = [
   'linearIssue',
   'jiraIssue',
   'incidentioFollowUp',
+  'dependabotAlert',
   'vantaVulnerability',
   'manual',
 ] as const;
@@ -173,6 +178,8 @@ export type FactoryJiraEventName = (typeof FACTORY_JIRA_EVENTS)[number];
 export const FACTORY_INCIDENTIO_EVENTS = ['followUpObserved', 'followUpClosed'] as const;
 export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[number];
 
+export const FACTORY_DEPENDABOT_EVENTS = ['alertObserved', 'alertClosed'] as const;
+export type FactoryDependabotEventName = (typeof FACTORY_DEPENDABOT_EVENTS)[number];
 export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClosed'] as const;
 export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
 
@@ -569,6 +576,42 @@ export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export interface FactoryDependabotRuleContext extends FactoryRuleContextBase {
+  /** The status change this sync reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  /** Where the card's board sends it when its tracked source closes. */
+  boardClosure?: FactoryRuleBoardClosure;
+  /** What the card's current phase means on its board; absent without a card or when the board does not declare the phase. */
+  phase?: FactoryRulePhaseContext;
+  /** Where a new card is filed before the project's intake routes place it. */
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryDependabotEventName;
+  alert: {
+    /** Stable alert reference — `owner/repo#dependabot-<number>`. */
+    id: string;
+    number: number;
+    repository: string;
+    title: string;
+    url: string;
+    /** `open`, `dismissed`, `fixed`, or `auto_dismissed`. */
+    state: string;
+    severity: string | null;
+    packageName: string | null;
+    ecosystem: string | null;
+    manifestPath: string | null;
+    /** Markdown writeup for the card's description. */
+    description: string | null;
+    ghsaId: string | null;
+    cveId: string | null;
+    labels: readonly string[];
+    createdAt: string;
+    updatedAt: string;
+  };
+}
+
 export interface FactoryVantaRuleContext extends FactoryRuleContextBase {
   boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
@@ -848,6 +891,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'jiraIssue';
     case 'incidentio-follow-up':
       return 'incidentioFollowUp';
+    case 'github-dependabot-alert':
+      return 'dependabotAlert';
     case 'vanta-vulnerability':
       return 'vantaVulnerability';
     case 'manual':
