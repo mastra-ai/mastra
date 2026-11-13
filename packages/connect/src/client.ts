@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { extractProblemDetail, MastraConnectError } from './errors.js';
+import { extractProblemDetail, MastraConnectError, parseRetryAfterMs } from './errors.js';
 import {
   describePlatformCall,
   endPlatformCallSpan,
@@ -50,6 +50,12 @@ export interface ResolvedClient {
   accessToken: string;
   /** Validated end-user resource key this client asserts, when scoped. */
   resourceId?: string;
+  /**
+   * Per-request timeout. Unset (no timeout) for every client `resolveClient`
+   * builds, so tools, channels and long downloads are never cut off; only
+   * `ConnectClient` sets it.
+   */
+  timeoutMs?: number;
 }
 
 const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
@@ -140,18 +146,30 @@ function redact(message: string, accessToken: string): string {
   return message.split(accessToken).join('[REDACTED]');
 }
 
-async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+export async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
   // Single choke point for outbound connect HTTP (platform API + vendor
   // proxy), so one span here covers every external call this package makes.
   const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
+  const timeoutSignal = client.timeoutMs !== undefined ? AbortSignal.timeout(client.timeoutMs) : undefined;
+  const signal =
+    timeoutSignal && init?.signal ? AbortSignal.any([init.signal, timeoutSignal]) : (timeoutSignal ?? init?.signal);
   try {
     const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
+      ...(signal ? { signal } : {}),
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
     endPlatformCallSpan(span, response.status);
     return response;
   } catch (error) {
+    if (timeoutSignal?.aborted && !init?.signal?.aborted) {
+      const timeout = new MastraConnectError(
+        'timeout',
+        `Platform request ${init?.method ?? 'GET'} ${path.split('?', 1)[0]} timed out after ${client.timeoutMs}ms.`,
+      );
+      errorPlatformCallSpan(span, timeout);
+      throw timeout;
+    }
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
@@ -173,31 +191,36 @@ async function parsePlatformJson(response: Response, context: string): Promise<u
 }
 
 /** Maps a non-2xx response from the platform's own endpoints to a typed error. */
-async function throwPlatformError(response: Response, context: string): Promise<never> {
-  const { detail, code } = await extractProblemDetail(response);
+export async function throwPlatformError(response: Response, context: string): Promise<never> {
+  const { detail, code, type, isProblemJson } = await extractProblemDetail(response);
+  const meta = {
+    status: response.status,
+    detail,
+    source: 'platform' as const,
+    problemCode: isProblemJson ? type : undefined,
+    retryAfterMs: parseRetryAfterMs(response),
+  };
   if (response.status === 401 || response.status === 403) {
-    throw new MastraConnectError('unauthorized', `Unauthorized while ${context}${detail ? `: ${detail}` : '.'}`, {
-      status: response.status,
-      detail,
-    });
+    throw new MastraConnectError('unauthorized', `Unauthorized while ${context}${detail ? `: ${detail}` : '.'}`, meta);
   }
   if (response.status === 404) {
-    throw new MastraConnectError('connection_not_found', `Not found while ${context}${detail ? `: ${detail}` : '.'}`, {
-      status: response.status,
-      detail,
-    });
+    throw new MastraConnectError(
+      'connection_not_found',
+      `Not found while ${context}${detail ? `: ${detail}` : '.'}`,
+      meta,
+    );
   }
   if (code === 'unsupported_credential_type') {
     throw new MastraConnectError(
       'unsupported_credential_type',
       `Unsupported credential type while ${context}${detail ? `: ${detail}` : '.'}`,
-      { status: response.status, detail },
+      meta,
     );
   }
   throw new MastraConnectError(
     'platform_error',
     `Platform request failed (${response.status}) while ${context}${detail ? `: ${detail}` : '.'}`,
-    { status: response.status, detail },
+    meta,
   );
 }
 
@@ -474,7 +497,7 @@ export interface ProxyRequestOptions {
  * sent, which would let a crafted path escape the connection-proxy prefix and
  * hit an arbitrary platform route with the caller's bearer token.
  */
-function hasDotSegment(path: string): boolean {
+export function hasDotSegment(path: string): boolean {
   return path.split('/').some(segment => {
     let decoded: string;
     try {
@@ -617,37 +640,36 @@ export async function proxyRequestWithResponse(
   const response = await platformFetch(client, url, init);
 
   if (!response.ok) {
-    const { detail, isProblemJson } = await extractProblemDetail(response);
+    const { detail, type, isProblemJson } = await extractProblemDetail(response);
+    const retryAfterMs = parseRetryAfterMs(response);
     if (isProblemJson) {
       // Platform-originated error (bad path, unknown connection, auth, limits).
+      const meta = { status: response.status, detail, source: 'platform' as const, problemCode: type, retryAfterMs };
       if (response.status === 401 || response.status === 403) {
         throw new MastraConnectError(
           'unauthorized',
           `Unauthorized calling the connection proxy${detail ? `: ${detail}` : '.'}`,
-          { status: response.status, detail },
+          meta,
         );
       }
       if (response.status === 404) {
         throw new MastraConnectError(
           'connection_not_found',
           `Connection ${connectionId} not found${detail ? `: ${detail}` : '.'}`,
-          { status: response.status, detail },
+          meta,
         );
       }
       throw new MastraConnectError(
         'proxy_error',
         `Proxy request failed (${response.status})${detail ? `: ${detail}` : '.'}`,
-        {
-          status: response.status,
-          detail,
-        },
+        meta,
       );
     }
     // Provider-originated error passed through the proxy.
     throw new MastraConnectError(
       'proxy_error',
       `Provider request failed (${response.status})${detail ? `: ${detail}` : '.'}`,
-      { status: response.status, detail },
+      { status: response.status, detail, source: 'provider', retryAfterMs },
     );
   }
 
@@ -718,6 +740,52 @@ export async function createProjectConnectSession(
     );
   }
   return parsed.data;
+}
+
+/**
+ * Mints a reconnect session for an existing `active` or `needs_reauth`
+ * connection. The response has the same shape as a connect session.
+ */
+export async function createReconnectSession(client: ResolvedClient, connectionId: string): Promise<ConnectSession> {
+  const context = `creating a reconnect session for connection ${connectionId}`;
+  const response = await platformFetch(
+    client,
+    `/v2/connections/${encodeURIComponent(connectionId)}/reconnect-session`,
+    {
+      method: 'POST',
+    },
+  );
+  if (!response.ok) {
+    await throwPlatformError(response, context);
+  }
+  const parsed = connectSessionSchema.safeParse(await parsePlatformJson(response, context));
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected reconnect-session shape for connection ${connectionId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+/**
+ * Links an existing org connection to a project, so it appears in the
+ * project's connection listing and its provider events are published to the
+ * project. Idempotent: linking an already-linked connection succeeds.
+ */
+export async function linkConnectionToProject(
+  client: ResolvedClient,
+  projectId: string,
+  connectionId: string,
+): Promise<void> {
+  const response = await platformFetch(
+    client,
+    `/v2/projects/${encodeURIComponent(projectId)}/connections/${encodeURIComponent(connectionId)}`,
+    { method: 'POST' },
+  );
+  if (!response.ok) {
+    await throwPlatformError(response, `linking connection ${connectionId} to project ${projectId}`);
+  }
 }
 
 export const connectUrlSchema = z.object({
