@@ -2222,8 +2222,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Nothing serializes two deliveries of this occurrence except the event-id fence in
     // #handleDelivery, which keeps same-id deliveries apart and only on a pubsub with a lease
     // provider (Google Cloud Pub/Sub has none). Deliveries it doesn't fence that read the same saved
-    // result can both continue the run from it: one extra chain per late delivery, which the next
-    // step's own check drops once that step has finished.
+    // result can both continue the run from it. The extra chain can run the next step a second time
+    // and ends at the first step whose check finds that step finished and the run past it.
     const store = await this.#finishedCheckStore(workflow);
     const finished = store ? await this.#finishedOccurrence(args, leaf, { store, snapshot: control.storedRun }) : 'run';
 
@@ -2374,6 +2374,11 @@ export class WorkflowEventProcessor extends EventProcessor {
    * again on purpose and skip the check. With `deferToGuards` (the default),
    * records the store's step guards stamped are left to those guards on the
    * deliveries they arbitrate.
+   *
+   * It calls the workflow's `shouldPersistSnapshot` once more per leaf
+   * delivery, with the arguments `runLeafStep` passes it (the delivery's step
+   * results and `workflowStatus: 'running'`), and runs the step when that
+   * declines running snapshots.
    */
   async #finishedOccurrence(
     args: ProcessorArgs,
