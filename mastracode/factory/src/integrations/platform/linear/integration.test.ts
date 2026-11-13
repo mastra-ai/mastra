@@ -787,6 +787,8 @@ describe('PlatformLinearIntegration', () => {
       skipped: [{ linearWorkspaceId: 'workspace-1', reason: 'connection_inactive' }],
     });
     expect(integration.migration.settled).toBe(true);
+    // Like a disconnected workspace, a deleted connection's issues read as gone, so their cards can close.
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-42' })).resolves.toBeNull();
     await integration.migration.run('schedule');
     expect(fake.migrateRequests).toHaveLength(2);
     await integration.migration.run('admin');

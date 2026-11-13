@@ -1,3 +1,4 @@
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -155,6 +156,18 @@ export function LinearIntakeSection({
       }
     >
       {status?.migration && <LinearMigrationNotice migration={status.migration} />}
+      {Boolean(status?.unidentified?.length) && (
+        <Notice variant="warning" title="Linear isn't answering for some connections">
+          <Notice.Message>
+            Factory couldn't reach{' '}
+            {status!.unidentified!.length === 1
+              ? '1 Linear connection'
+              : `${status!.unidentified!.length} Linear connections`}{' '}
+            and keeps checking. Until they answer, their workspaces' sources are paused and Factory won't close cards
+            for issues it can't find.
+          </Notice.Message>
+        </Notice>
+      )}
       {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
         <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}

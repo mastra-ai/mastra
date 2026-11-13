@@ -62,7 +62,10 @@ export class PlatformLinearMigration {
   #statusKnown = false;
   /** Migrated connections, by id, as the platform last reported them. */
   #migratedConnections = new Map<string, string>();
-  /** Migrated workspaces whose connection the platform reported gone; only a fresh connect brings them back. */
+  /**
+   * Migrated workspaces whose connection the platform reported gone; only a fresh connect brings them back.
+   * In memory only: after a restart, one idempotent migrate call per such workspace finds them again.
+   */
   readonly #inactive = new Set<string>();
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<LinearMigrationRunResult> | undefined;

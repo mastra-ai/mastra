@@ -673,6 +673,22 @@ describe('IntakeSection linear', () => {
       expect(authCalls.map(call => call.integrationId)).toEqual(['linear']);
     });
 
+    it("says when Linear isn't answering for a connection, so paused sources aren't a mystery", async () => {
+      useIntakeHandlers({
+        status: platformStatus({
+          connected: true,
+          reason: 'ready',
+          workspace: { name: 'Acme', urlKey: 'acme' },
+          workspaces: [{ id: 'acme', name: 'Acme', urlKey: 'acme', connected: true }],
+          unidentified: [{ connectionId: 'conn-beta', error: 'Linear returned 503' }],
+        }),
+      });
+      renderIntakeSection();
+
+      expect(await screen.findByText("Linear isn't answering for some connections")).toBeInTheDocument();
+      expect(screen.getByText(/Factory couldn't reach 1 Linear connection and keeps checking/)).toBeInTheDocument();
+    });
+
     it('shows a move to Mastra Connect in progress without asking anyone to act', async () => {
       orgAdmin(true);
       useIntakeHandlers({
