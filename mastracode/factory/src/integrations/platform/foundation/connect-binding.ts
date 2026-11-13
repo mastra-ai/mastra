@@ -77,6 +77,8 @@ export function isPlatformNeedsReauth(error: unknown): boolean {
 
 const PERMISSION_REMEDY =
   "The Factory's platform credential cannot link this connection to the project. Grant it the integrations:write permission, or link the connection to the project in Mastra Platform.";
+const NOT_LISTED_AFTER_LINK =
+  'The platform accepted the link, but the connection is not in the Factory project yet. Retry linking, or link it in the platform.';
 
 /**
  * The Connect plumbing a Platform integration needs: project-scoped
@@ -251,7 +253,7 @@ export class PlatformConnectBinding {
   async linkOrgConnections(): Promise<LinkOrgConnectionsResult> {
     const candidates = await this.#orgCandidates();
     const linkedBefore = new Set((await this.connect.listConnections()).map(connection => connection.id));
-    const linked: string[] = [];
+    const attempted: string[] = [];
     for (const connection of candidates) {
       if (linkedBefore.has(connection.id)) {
         this.#needsLinking.delete(connection.id);
@@ -259,8 +261,7 @@ export class PlatformConnectBinding {
       }
       try {
         await this.connect.linkConnection(connection.id);
-        this.#needsLinking.delete(connection.id);
-        linked.push(connection.id);
+        attempted.push(connection.id);
       } catch (error) {
         const status = platformErrorStatus(error);
         const reason = status === 401 || status === 403 ? PERMISSION_REMEDY : platformErrorMessage(error);
@@ -271,6 +272,19 @@ export class PlatformConnectBinding {
           ...(status === undefined ? {} : { status }),
           error: platformErrorMessage(error),
         });
+      }
+    }
+    const linked: string[] = [];
+    if (attempted.length > 0) {
+      // A 204 doesn't prove the link: only a connection the project listing now shows counts.
+      const linkedAfter = new Set((await this.connect.listConnections()).map(connection => connection.id));
+      for (const connectionId of attempted) {
+        if (linkedAfter.has(connectionId)) {
+          this.#needsLinking.delete(connectionId);
+          linked.push(connectionId);
+        } else {
+          this.#needsLinking.set(connectionId, { connectionId, reason: NOT_LISTED_AFTER_LINK });
+        }
       }
     }
     if (linked.length > 0) {
