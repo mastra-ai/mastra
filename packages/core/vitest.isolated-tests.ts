@@ -51,6 +51,7 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-memory-message-refs.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-model-list-settings-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
+  'src/agent/durable/__tests__/durable-agent-recover-processor-failure.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-background-tools-redelivery.test.ts', // timers
