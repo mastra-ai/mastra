@@ -39,6 +39,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-lease-loss-no-abort-run-stream.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-tool-scope.test.ts', // env
   'src/agent/__tests__/thread-shutdown-lease-release.test.ts', // env
+  'src/agent/__tests__/thread-stream-initial-history.test.ts', // timers
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
@@ -153,6 +154,7 @@ export const isolatedTestFiles = [
   'src/workflows/fetch-import.test.ts', // global
   'src/workflows/on-start.test.ts', // vi.mock
   'src/workflows/schedule-declaration.test.ts', // env
+  'src/workflows/storage-v2-suite.test.ts', // global: patches RunJournal.prototype.write
   'src/workflows/workflow.test.ts', // vi.mock
   'src/workspace/filesystem/local-filesystem-race.test.ts', // vi.mock
   'src/workspace/lsp/manager.test.ts', // vi.mock
