@@ -210,7 +210,7 @@ describe('SpansExplorerBody', () => {
       server.use(
         http.post(SPANS_AGGREGATE_URL, () => {
           aggregate();
-          return HttpResponse.json({ rows: [], truncated: false });
+          return HttpResponse.json<AggregateSpansResponse>({ rows: [], truncated: false });
         }),
       );
       const { queries } = renderBodyAtUrl('textSearch=needle');
