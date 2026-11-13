@@ -41,7 +41,7 @@ const connections = [
 
 function integration(): PlatformJiraIntegration {
   return new PlatformJiraIntegration({
-    clientConfig: { baseUrl: PLATFORM_BASE, accessToken: 'platform-token' },
+    connect: { baseUrl: PLATFORM_BASE, projectId: 'proj_factory', accessToken: 'platform-token' },
   });
 }
 
@@ -82,7 +82,7 @@ function stubRoutes(
   const fetchMock = vi.fn<typeof fetch>(async (input, init) => {
     const target = String(input);
     const method = init?.method ?? 'GET';
-    if (target.endsWith('/v2/connections?providerKey=jira')) {
+    if (target.endsWith('/v2/projects/proj_factory/connections')) {
       return json({ connections: visibleConnections });
     }
     const contextMatch = target.match(/\/v2\/connections\/([^/]+)\/context$/);
@@ -187,12 +187,14 @@ describe('PlatformJiraIntegration discovery', () => {
     expect(logged).not.toContain('a1b_acme');
   });
 
-  it('discovers connections by the jira provider configuration key', async () => {
+  it("discovers Jira connections from the Factory project's connection listing", async () => {
     const fetchMock = stubRoutes([]);
 
-    await expect(integration().listConnections()).resolves.toEqual(connections);
+    await expect(integration().listConnections()).resolves.toEqual(
+      connections.map(connection => ({ ...connection, resourceId: null, connectedAt: null })),
+    );
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/projects/proj_factory/connections`);
   });
 
   it('reports active connections only when a discovered connection is active', async () => {
@@ -209,7 +211,7 @@ describe('PlatformJiraIntegration discovery', () => {
     } satisfies Partial<JiraApiError>);
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections?providerKey=jira`);
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${PLATFORM_BASE}/v2/projects/proj_factory/connections`);
     expect(String(fetchMock.mock.calls[1]?.[0])).toBe(`${PLATFORM_BASE}/v2/connections/a1b_acme/context`);
   });
 });

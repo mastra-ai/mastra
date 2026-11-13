@@ -25,6 +25,7 @@ export class IssueReconcileWorker extends MastraWorker {
   readonly #leaseOwner = globalThis.crypto.randomUUID();
 
   #running = false;
+  #rerun = false;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<void> | undefined;
   #leaseProvider: LeaseProvider = NoopLeaseProvider;
@@ -67,13 +68,29 @@ export class IssueReconcileWorker extends MastraWorker {
     return this.#running;
   }
 
+  /**
+   * Runs a sweep now instead of waiting for the next interval. A request
+   * that arrives during a sweep runs one more sweep right after it.
+   */
+  requestRun(): void {
+    if (!this.#running) return;
+    if (this.#inFlight) {
+      this.#rerun = true;
+      return;
+    }
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#schedule(0);
+  }
+
   #schedule(delayMs: number): void {
     if (!this.#running) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       const run = this.#tick().finally(() => {
         this.#inFlight = undefined;
-        this.#schedule(this.#intervalMs);
+        const rerun = this.#rerun;
+        this.#rerun = false;
+        this.#schedule(rerun ? 0 : this.#intervalMs);
       });
       this.#inFlight = run;
     }, delayMs);

@@ -109,7 +109,7 @@ const paths: JiraPath[] = [
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
           const target = String(input);
-          if (target.endsWith('/v2/connections?providerKey=jira')) {
+          if (target.endsWith('/v2/projects/proj_factory/connections')) {
             return json({
               connections: [
                 { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
@@ -128,7 +128,11 @@ const paths: JiraPath[] = [
         }),
       );
       const jira = new PlatformJiraIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
       });
       return buildPlatformJiraRoutes({
         jira,
@@ -330,9 +334,9 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await fileProposedCards(async tenant => {
       if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
       takeover = (async () => {
-        expect(
-          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
-        ).toBe(204);
+        expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(
+          204,
+        );
         const growth = await takeOverWithGrowth();
         expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
         return growth;

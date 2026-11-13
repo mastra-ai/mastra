@@ -1580,6 +1580,9 @@ describe('MastraFactory.prepare', () => {
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('[factory] incidentio tools are unavailable for this run'),
+        );
       });
 
       it("offers the host's own tools instead of the project's connections", async () => {
@@ -2208,6 +2211,52 @@ describe('MastraFactory.prepare', () => {
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
       const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not register Platform Vanta without Platform credentials', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'vanta',
+            routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-vanta');
+      expect(paths).not.toContain('/web/vanta/status');
     } finally {
       vi.unstubAllEnvs();
     }
@@ -3005,6 +3054,52 @@ describe('MastraFactory.prepare integrations', () => {
     const args = await factory.prepare();
     expect(workers).not.toHaveBeenCalled();
     expect(args).not.toHaveProperty('workers');
+  });
+
+  it('runs one Platform events worker, routing to the Platform integrations that take events', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+    const args = await factory.prepare();
+
+    const names = (args.workers ?? []).map(worker => worker.name);
+    expect(names.filter(name => name === 'platform-events')).toHaveLength(1);
+    expect(names).not.toContain('platform-gitlab-events');
+    const events = args.workers!.find(worker => worker.name === 'platform-events') as unknown as {
+      diagnostics(): { integrations: string[] };
+    };
+    expect(events.diagnostics().integrations.sort()).toEqual(['gitlab', 'incidentio', 'jira']);
+  });
+
+  it('runs no Platform events worker, and says why, when the deployment has no project id', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const args = await new MastraFactory({ secretEncryption, storage: fakeStorage() }).prepare();
+
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('MASTRA_PROJECT_ID is missing, so Platform integrations receive no events'),
+    );
+  });
+
+  it('opens no Platform events stream when no installed integration takes events', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_factory');
+    onTestFinished(() => vi.unstubAllEnvs());
+    // Explicit integrations fill every Platform slot but Vanta, which has no event source.
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      integrations: ['github', 'incidentio', 'jira', 'gitlab', 'linear'].map(id => fakeIntegration({ id })),
+    });
+    const args = await factory.prepare();
+
+    expect((args.workers ?? []).map(worker => worker.name)).not.toContain('platform-events');
+    expect((args.workers ?? []).map(worker => worker.name)).toContain('vanta-issue-reconcile');
   });
 
   it('omits the workers option when no integration contributes workers', async () => {

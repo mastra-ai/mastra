@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearRulesIngress } from '../../linear/rules.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformLinearEventWorker } from './event-worker.js';
 import type {
   LinearEventLogEntry,
@@ -138,7 +138,7 @@ function createWorker(input: {
     ];
   }
   return new PlatformLinearEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     linear: {
       listWorkspaces: async () => input.workspaces ?? [{ linearWorkspaceId: 'workspace-1' }],
     },
@@ -452,10 +452,10 @@ describe('PlatformLinearEventWorker', () => {
     });
 
     const worker = new PlatformLinearEventWorker({
-      client: new PlatformApiClient({
+      client: createPlatformConnectClient({
         baseUrl,
         accessToken,
-        fetchImpl: async () => {
+        fetch: async () => {
           throw new Error('fetch must not be called in reconcile-only mode');
         },
       }),
@@ -495,7 +495,7 @@ describe('PlatformLinearEventWorker', () => {
     });
 
     const worker = new PlatformLinearEventWorker({
-      client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+      client: createPlatformConnectClient({ baseUrl, accessToken, fetch: fetchImpl }),
       linear: { listWorkspaces: async () => [{ linearWorkspaceId: 'workspace-1' }] } as never,
       storage: settings.storage,
       projects: { listAll } as never,

@@ -1,15 +1,15 @@
+import type { ConnectClient } from '@mastra/connect';
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
-import type { WorkerDeps } from '@mastra/core/worker';
 
+import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import type { PlatformApiClient} from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { platformErrorStatus, platformRetryDelayMs } from '../platform-connect.js';
 
 const API_PREFIX = '/v1/server/linear';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -67,7 +67,7 @@ export interface PlatformLinearEventDispatchIntegration {
 }
 
 export interface PlatformLinearEventWorkerConfig {
-  client: PlatformApiClient;
+  client: ConnectClient;
   linear: PlatformLinearEventDispatchIntegration;
   storage: PlatformLinearEventStorage;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
@@ -116,7 +116,7 @@ export interface PlatformLinearEventWorkerConfig {
 export class PlatformLinearEventWorker extends MastraWorker {
   readonly name = 'platform-linear-events';
 
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #linear: PlatformLinearEventDispatchIntegration;
   readonly #storage: PlatformLinearEventStorage;
   readonly #projects: Pick<FactoryProjectsStorage, 'listAll'>;
@@ -217,7 +217,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
       if (!(await this.#ensureLease())) return;
       nextDelay = await this.#poll();
     } catch (error) {
-      nextDelay = retryDelay(error, this.#intervalMs);
+      nextDelay = platformRetryDelayMs(error, this.#intervalMs);
       this.deps?.logger.error('Platform Linear event polling cycle failed', {
         error: error instanceof Error ? error.message : String(error),
         retryInMs: nextDelay,
@@ -279,7 +279,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
       try {
         workspaces = await this.#linear.listWorkspaces();
       } catch (error) {
-        const delay = retryDelay(error, this.#intervalMs);
+        const delay = platformRetryDelayMs(error, this.#intervalMs);
         retryInMs = Math.max(retryInMs, delay);
         this.deps?.logger.error('Platform Linear workspace listing failed', {
           error: error instanceof Error ? error.message : String(error),
@@ -292,14 +292,14 @@ export class PlatformLinearEventWorker extends MastraWorker {
         try {
           await this.#pollWorkspace(workspace.linearWorkspaceId);
         } catch (error) {
-          const delay = retryDelay(error, this.#intervalMs);
+          const delay = platformRetryDelayMs(error, this.#intervalMs);
           retryInMs = Math.max(retryInMs, delay);
           this.deps?.logger.error('Platform Linear workspace event polling failed', {
             linearWorkspaceId: workspace.linearWorkspaceId,
             error: error instanceof Error ? error.message : String(error),
             retryInMs: delay,
           });
-          if (error instanceof PlatformApiError && error.status === 429) break;
+          if (platformErrorStatus(error) === 429) break;
         }
       }
     }
@@ -478,13 +478,6 @@ function normalizeSettings(value: PlatformLinearEventWorkerSettings | null): Pla
     return { version: 1, workspaces: {} };
   }
   return { version: 1, workspaces: { ...value.workspaces } };
-}
-
-function retryDelay(error: unknown, fallbackMs: number): number {
-  if (error instanceof PlatformApiError && error.status === 429 && error.retryAfterSeconds !== null) {
-    return Math.max(fallbackMs, error.retryAfterSeconds * 1_000);
-  }
-  return fallbackMs;
 }
 
 /**

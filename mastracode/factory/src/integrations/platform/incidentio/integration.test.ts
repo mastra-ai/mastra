@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
 import { INCIDENTIO_INCIDENTS_SOURCE_ID } from '../../incidentio/intake.js';
@@ -43,7 +43,11 @@ afterEach(() => {
 describe('PlatformIncidentioIntegration', () => {
   it('registers an incident and follow-up reconciliation worker', () => {
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+      },
     });
     const workers = integration.workers({
       storage: { projects: { listAll: async () => [] } },
@@ -56,7 +60,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('discovers incident-io connections and proxies through each one', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection/1', 'acme')] }),
       },
       {
@@ -65,7 +69,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     const page = await integration.intake.listItems({
@@ -99,7 +108,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('lists connection-scoped sources for every active connection', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () =>
           json({
             connections: [
@@ -111,7 +120,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     const sources = await integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
@@ -135,7 +149,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('pages across connections and keeps items scoped to the owning connection', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a', 'acme'), connection('connection-b', 'beta')] }),
       },
       {
@@ -149,7 +163,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
     const sourceIds = [
       encodeScopedSourceId('connection-a', INCIDENTIO_INCIDENTS_SOURCE_ID),
@@ -179,10 +198,16 @@ describe('PlatformIncidentioIntegration', () => {
     // Page cursors are keyed by connection ID, not index: when the cursor's
     // connection disappears between pages, paging resumes at its sorted
     // successor instead of replaying an earlier connection or skipping one.
+    // The connection listing is cached briefly, so the second page is read
+    // after the cache expires.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
     let listCalls = 0;
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => {
           listCalls += 1;
           const connections =
@@ -203,7 +228,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
     const sourceIds = [
       encodeScopedSourceId('connection-a', INCIDENTIO_INCIDENTS_SOURCE_ID),
@@ -215,6 +245,8 @@ describe('PlatformIncidentioIntegration', () => {
     expect(first.items).toEqual([
       expect.objectContaining({ metadata: expect.objectContaining({ connectionId: 'connection-a' }) }),
     ]);
+
+    vi.setSystemTime(Date.now() + 60_000);
 
     // The cursor points at connection-b, which is gone by the second page;
     // paging resumes at connection-c (its sorted successor), never back at
@@ -237,7 +269,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('resolves dispatches against the sole connection and keeps Platform credentials out of Intake connections', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-1', 'acme')] }),
       },
       {
@@ -246,7 +278,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     const resolved = await integration.intake.resolveIntakeDispatch!({
@@ -273,7 +310,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('probes each connection to resolve a dispatch when multiple accounts are connected', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a', 'acme'), connection('connection-b', 'beta')] }),
       },
       {
@@ -286,7 +323,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     const resolved = await integration.intake.resolveIntakeDispatch!({
@@ -304,7 +346,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('reads issues through the connection encoded in the Intake connection token', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a', 'acme'), connection('connection-b', 'beta')] }),
       },
       {
@@ -313,7 +355,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     const issue = await integration.intake.getIssue({
@@ -327,7 +374,7 @@ describe('PlatformIncidentioIntegration', () => {
   it('drops foreign-scoped source ids when the sole-connection fallback resolves the connection', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a', 'acme')] }),
       },
       {
@@ -336,7 +383,12 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     // No connection id in the token: the fallback resolves the sole active
@@ -353,12 +405,17 @@ describe('PlatformIncidentioIntegration', () => {
   it('rejects a connection token whose id is not among the discovered active connections', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a', 'acme')] }),
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     // A correctly prefixed but foreign token must not mint a proxy request
@@ -375,12 +432,17 @@ describe('PlatformIncidentioIntegration', () => {
   it('rejects ambiguous requests when multiple accounts are connected and no connection is identified', async () => {
     const fetchImpl = fetchRouter([
       {
-        match: url => url.includes('/v2/connections?providerKey=incident-io'),
+        match: url => url.includes('/v2/projects/proj_factory/connections'),
         respond: () => json({ connections: [connection('connection-a'), connection('connection-b')] }),
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-secret',
+        fetch: fetchImpl,
+      },
     });
 
     await expect(

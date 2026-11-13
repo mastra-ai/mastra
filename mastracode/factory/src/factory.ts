@@ -40,6 +40,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage, FactoryStorageOps } from '@mastra/core/storage';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import type { MastraVector } from '@mastra/core/vector';
+import type { MastraWorker } from '@mastra/core/worker';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription, WorkspaceSandbox } from '@mastra/core/workspace';
 import {
@@ -87,9 +88,18 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import {
+  buildConnectToolsRoute,
+  buildPlatformConnectRoutes,
+  isPlatformConnectProviderSource,
+} from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import {
+  PLATFORM_EVENTS_STORAGE_ID,
+  PlatformEventsWorker,
+  isPlatformConnectEventSource,
+} from './integrations/platform/foundation/events-worker.js';
+import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
@@ -838,6 +848,10 @@ export class MastraFactory {
       if (!integrations.some(integration => integration.id === 'linear')) {
         const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
+      }
+      if (!integrations.some(integration => integration.id === 'vanta')) {
+        const { PlatformVantaIntegration } = await import('./integrations/platform/vanta/integration.js');
+        integrations.push(new PlatformVantaIntegration());
       }
     }
     // Never let the key be a silent no-op: it only applies to the integration
@@ -2070,7 +2084,13 @@ export class MastraFactory {
               }
             }
             if (integration.agentTools) {
-              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              try {
+                mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              } catch (error) {
+                console.warn(
+                  `[factory] ${integration.id} tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
@@ -2268,13 +2288,15 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: new PlatformApiClient(platformApiClientConfigFromEnv()),
+                providers: integrations.flatMap(integration =>
+                  isPlatformConnectProviderSource(integration) ? integration.platformConnectProviders() : [],
+                ),
               })
             : []),
           buildConnectToolsRoute(
             routeAuth,
             connectToolsProjectId
-              ? { client: new PlatformApiClient(platformApiClientConfigFromEnv()), projectId: connectToolsProjectId }
+              ? { client: createPlatformConnectClient(), projectId: connectToolsProjectId }
               : undefined,
           ),
         ],
@@ -2486,34 +2508,63 @@ export class MastraFactory {
     // workers and `finalize()`'s `startWorkers()` starts them alongside the
     // built-ins. Never passed for the disabled/not-ready case — a worker for
     // an unavailable integration must not run.
-    const integrationWorkers = integrationRegistrations
-      .filter(({ integration, ready }) => ready && integration.workers)
-      .flatMap(({ integration }) =>
-        integration.workers!(
-          buildIntegrationContext(
-            {
-              controller: prepared.base.controller,
-              publicOrigin,
-              auth: routeAuth,
-              stateSigner,
-              sandbox: sandboxConfig,
-              factoryStorage: storage,
-              integrationStorage,
-              sourceControlStorage,
-              integrations: integrationRegistrations,
-              configVersion,
-              boardRegistry: this.#projectBoards ?? this.#boards,
-              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
-              factoryReady,
-              domains,
-              // The Platform GitHub lane only receives pushes through its polling worker.
-              ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
-              ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-            },
-            integration.id,
-          ),
+    const readyContexts = integrationRegistrations
+      .filter(({ ready }) => ready)
+      .map(({ integration }) => ({
+        integration,
+        context: buildIntegrationContext(
+          {
+            controller: prepared.base.controller,
+            publicOrigin,
+            auth: routeAuth,
+            stateSigner,
+            sandbox: sandboxConfig,
+            factoryStorage: storage,
+            integrationStorage,
+            sourceControlStorage,
+            integrations: integrationRegistrations,
+            configVersion,
+            boardRegistry: this.#projectBoards ?? this.#boards,
+            ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
+            factoryReady,
+            domains,
+            // The Platform GitHub lane only receives pushes through its polling worker.
+            ...(this.#environmentBuilds ? { onRepositoryPush: this.#environmentBuilds.onRepositoryPush } : {}),
+            ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
+          },
+          integration.id,
         ),
+      }));
+    const integrationWorkers: MastraWorker[] = readyContexts.flatMap(({ integration, context }) =>
+      integration.workers ? integration.workers(context) : [],
+    );
+    // One events subscription per deployment: the project's `connect` topic
+    // carries every connection, so each event is routed to the integration
+    // that owns its provider key. Integrations without an event source (Vanta)
+    // add no route, and a deployment with no routes opens no stream.
+    const eventRoutes = hasPlatformCredentials()
+      ? readyContexts.flatMap(({ integration, context }) => {
+          if (!isPlatformConnectEventSource(integration)) return [];
+          const route = integration.connectEventRoute(context);
+          return route ? [route] : [];
+        })
+      : [];
+    if (eventRoutes.length > 0 && !process.env.MASTRA_PROJECT_ID?.trim()) {
+      console.warn(
+        'MastraFactory: Platform credentials are set but MASTRA_PROJECT_ID is missing, so Platform integrations receive no events.',
       );
+    } else if (eventRoutes.length > 0) {
+      integrationWorkers.push(
+        new PlatformEventsWorker({
+          // Built from env like every auto-installed Platform integration's client, so it reads
+          // the same project they list. An explicit integration given its own `connect` config
+          // for another project would get no events here.
+          events: createPlatformConnectClient().events,
+          storage: integrationStorage.forIntegration(PLATFORM_EVENTS_STORAGE_ID),
+          routes: eventRoutes,
+        }),
+      );
+    }
 
     return {
       ...prepared.mastraArgs,

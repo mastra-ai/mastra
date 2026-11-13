@@ -2,8 +2,8 @@ import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
-import { createIssueReconciler } from '../issue-reconciler.js';
-import type { IssueReconciler } from '../issue-reconciler.js';
+import { createIssueReconcileOne, createIssueReconciler } from '../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler, IssueReconcilerOptions } from '../issue-reconciler.js';
 import type { JiraEventRules } from './default-rules.js';
 import { JiraRules } from './rules.js';
 import type { JiraIssueIngress } from './rules.js';
@@ -29,10 +29,10 @@ function issueToIngress(issueRef: string, issue: IntakeIssue): JiraIssueIngress 
   };
 }
 
-export function attachJiraIssueReconciler(
+function reconcilerOptions(
   jira: { intake: Intake; rules: JiraEventRules },
   context: IntegrationContext,
-): JiraIssueReconciler | undefined {
+): IssueReconcilerOptions | undefined {
   if (!context.runtime || !jira.intake.resolveIntakeDispatch) return undefined;
   const boards = context.runtime.boards;
 
@@ -44,7 +44,7 @@ export function attachJiraIssueReconciler(
     jiraRules: jira.rules,
   });
 
-  return createIssueReconciler({
+  return {
     integrationId: 'jira',
     intake: jira.intake,
     projects: context.storage.projects,
@@ -76,5 +76,22 @@ export function attachJiraIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
-  });
+  };
+}
+
+export function attachJiraIssueReconciler(
+  jira: { intake: Intake; rules: JiraEventRules },
+  context: IntegrationContext,
+): JiraIssueReconciler | undefined {
+  const options = reconcilerOptions(jira, context);
+  return options ? createIssueReconciler(options) : undefined;
+}
+
+/** Reconciles just the cards an event names, through the same path as the full sweep. */
+export function attachJiraIssueReconcileOne(
+  jira: { intake: Intake; rules: JiraEventRules },
+  context: IntegrationContext,
+): IssueReconcileOne | undefined {
+  const options = reconcilerOptions(jira, context);
+  return options ? createIssueReconcileOne(options) : undefined;
 }

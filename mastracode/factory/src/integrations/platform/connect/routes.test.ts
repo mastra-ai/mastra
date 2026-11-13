@@ -3,7 +3,8 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
+import { PlatformConnectBinding } from '../foundation/connect-binding.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
 
 const SESSION = {
@@ -25,22 +26,32 @@ function connection(id: string, integrationId: string, status: 'active' | 'needs
 function buildApp(
   user: TestAuthUser | null,
   fetchImpl: typeof fetch,
-  options: { authEnabled?: boolean; connectToolsProjectId?: string } = {},
+  options: { authEnabled?: boolean; connectToolsProjectId?: string; isAdmin?: boolean } = {},
 ): Hono {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  const auth = fakeRouteAuth({ enabled: options.authEnabled ?? true });
-  const client = new PlatformApiClient({
+  const auth = fakeRouteAuth({
+    enabled: options.authEnabled ?? true,
+    isOrganizationAdmin: async () => options.isAdmin ?? true,
+  });
+  const client = createPlatformConnectClient({
     baseUrl: 'https://integrations.example.com',
     accessToken: 'platform-secret',
-    fetchImpl,
+    projectId: 'proj_factory',
+    fetch: fetchImpl,
   });
+  const providers = ['jira', 'incident-io', 'gitlab', 'vanta'].map(integrationId => ({
+    provider: integrationId,
+    integrationId,
+    connectionIntegrationIds: [integrationId],
+    binding: new PlatformConnectBinding({ integrationId, providerKeys: [integrationId], connect: client }),
+  }));
   const projectId = options.connectToolsProjectId;
   mountApiRoutes(app, [
-    ...buildPlatformConnectRoutes({ auth, client }),
+    ...buildPlatformConnectRoutes({ auth, providers }),
     buildConnectToolsRoute(auth, projectId ? { client, projectId } : undefined),
   ]);
   return app;
@@ -102,11 +113,13 @@ describe('platform connect routes', () => {
   it('still lists the attached connections on a local Factory without auth when the catalog is down', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input =>
-      String(input).endsWith('/v2/projects/proj_1/connections')
-        ? json({ connections: [connection('conn-linear', 'linear')] })
-        : json({ detail: 'catalog unavailable' }, 503),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-linear', 'linear')] })
+          : json({ detail: 'catalog unavailable' }, 503),
+      );
     const app = buildApp(null, fetchImpl, { authEnabled: false, connectToolsProjectId: 'proj_1' });
 
     const response = await app.request('/web/integrations/platform/connect-tools');
@@ -142,7 +155,7 @@ describe('platform connect routes', () => {
     });
   });
 
-  it('mints a connect session with the provider integration id', async () => {
+  it("mints a connect session with the provider integration id, linked to the Factory's project", async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(SESSION, 201));
     const app = buildApp(org1(), fetchImpl);
 
@@ -150,7 +163,7 @@ describe('platform connect routes', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(SESSION);
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/incident-io/connect-sessions',
+      'https://integrations.example.com/v2/projects/proj_factory/integrations/incident-io/connect-sessions',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ authorization: 'Bearer platform-secret' }),
@@ -158,10 +171,10 @@ describe('platform connect routes', () => {
     );
   });
 
-  it('mints a reconnect session only for a connection owned by the provider', async () => {
+  it('mints a reconnect session only for a project connection owned by the provider', async () => {
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
       const url = String(input);
-      if (url.endsWith('/v2/connections')) {
+      if (url.endsWith('/v2/projects/proj_factory/connections')) {
         return json({ connections: [connection('conn-jira', 'jira', 'needs_reauth')] });
       }
       if (url.endsWith('/v2/connections/conn-jira/reconnect-session')) return json(SESSION, 201);
@@ -185,6 +198,62 @@ describe('platform connect routes', () => {
     await expect(crossProvider.json()).resolves.toEqual({ error: 'connection_not_found' });
   });
 
+  it("refuses to reconnect an organization connection that isn't linked to the Factory's project", async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
+      const url = String(input);
+      if (url.endsWith('/v2/projects/proj_factory/connections')) return json({ connections: [] });
+      if (url.endsWith('/v2/connections')) return json({ connections: [connection('conn-jira', 'jira')] });
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    const app = buildApp(org1(), fetchImpl);
+
+    const response = await app.request('/web/integrations/platform/jira/connections/conn-jira/reconnect-session', {
+      method: 'POST',
+    });
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toEqual({ error: 'connection_not_found' });
+    expect(fetchImpl).not.toHaveBeenCalledWith(expect.stringContaining('reconnect-session'), expect.anything());
+  });
+
+  it("lets organization admins link the organization's existing connections to the Factory's project", async () => {
+    const linked = new Set<string>();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (input, init) => {
+      const url = String(input);
+      if (url.endsWith('/v2/connections')) {
+        return json({ connections: [connection('conn-jira', 'jira'), connection('conn-gitlab', 'gitlab')] });
+      }
+      if (url.endsWith('/v2/projects/proj_factory/connections')) {
+        return json({ connections: [...linked].map(id => connection(id, 'jira')) });
+      }
+      if (init?.method === 'POST' && url.endsWith('/v2/projects/proj_factory/connections/conn-jira')) {
+        linked.add('conn-jira');
+        return new Response(null, { status: 204 });
+      }
+      throw new Error(`Unexpected fetch: ${init?.method ?? 'GET'} ${url}`);
+    });
+
+    const member = await buildApp(org1(), fetchImpl, { isAdmin: false }).request(
+      '/web/integrations/platform/jira/link-connections',
+      { method: 'POST' },
+    );
+    expect(member.status).toBe(403);
+    await expect(member.json()).resolves.toMatchObject({ error: 'organization_admin_required' });
+    expect(fetchImpl).not.toHaveBeenCalled();
+
+    const admin = await buildApp(org1(), fetchImpl).request('/web/integrations/platform/jira/link-connections', {
+      method: 'POST',
+    });
+    expect(admin.status).toBe(200);
+    await expect(admin.json()).resolves.toEqual({ linked: ['conn-jira'], needsLinking: [] });
+    expect(linked).toEqual(new Set(['conn-jira']));
+
+    const signedOut = await buildApp(null, fetchImpl).request('/web/integrations/platform/jira/link-connections', {
+      method: 'POST',
+    });
+    expect(signedOut.status).toBe(401);
+  });
+
   it('mints a GitLab connect session through the platform registry', async () => {
     const gitlabSession = { ...SESSION, integrationId: 'gitlab' };
     const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () => json(gitlabSession, 201));
@@ -194,7 +263,7 @@ describe('platform connect routes', () => {
     expect(response.status).toBe(201);
     await expect(response.json()).resolves.toEqual(gitlabSession);
     expect(fetchImpl).toHaveBeenCalledWith(
-      'https://integrations.example.com/v2/integrations/gitlab/connect-sessions',
+      'https://integrations.example.com/v2/projects/proj_factory/integrations/gitlab/connect-sessions',
       expect.objectContaining({ method: 'POST' }),
     );
   });

@@ -1,7 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
+import { createBoardRegistry } from '../../boards/index.js';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { SourceControlStorageInMemory } from '../../storage/domains/source-control/inmemory.js';
+import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
 import { PlatformGitLabIntegration } from '../platform/gitlab/integration.js';
 import {
   decodeIssueReference,
@@ -61,7 +64,7 @@ const platformConnections = [
 
 function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {
   return new PlatformGitLabIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connect: { baseUrl: 'https://integrations.example.com', projectId: 'proj_factory', accessToken: 'platform-token' },
     connectionId,
   });
 }
@@ -462,50 +465,48 @@ describe('PlatformGitLabIntegration', () => {
       mode: 'platform',
       connectionFilterConfigured: true,
       webhookConfigured: false,
-      pollingEnabled: true,
     });
-    expect(gitlab.diagnostics()).not.toHaveProperty('pollingIntervalMs');
+    expect(gitlab.diagnostics()).not.toHaveProperty('pollingEnabled');
   });
 
-  it('runs the Platform event poller by default and reports its settings without needing a webhook secret', () => {
+  it('runs no event poller: events come through its events route, and the reconcile sweeps hourly', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => void vi.useRealTimers());
+    const seeded = await createFactoryStorageForTests();
     const context = {
-      controller: {},
-      storage: { generic: { integrationId: 'gitlab', settings: { get: async () => null, save: async () => {} } } },
-    } as never;
+      storage: { projects: seeded.projects, sourceControl: new SourceControlStorageInMemory(), intake: seeded.intake },
+      runtime: { configVersion: 'gitlab-test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const gitlab = platform();
+    vi.spyOn(gitlab, 'listConnections').mockResolvedValue([]);
 
-    expect(
-      platform()
-        .workers(context)
-        .map(worker => worker.name),
-    ).toEqual(['platform-gitlab-events']);
+    const workers = gitlab.workers(context);
+    expect(workers.map(worker => worker.name)).toEqual(['gitlab-issue-reconcile']);
+    const route = gitlab.connectEventRoute(context);
+    expect(route.binding.providerKeys).toEqual(['gitlab']);
 
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '45000');
-    const tuned = platform();
-    expect(tuned.diagnostics()).toMatchObject({
-      pollingEnabled: true,
-      pollingIntervalMs: 45_000,
-      webhookConfigured: false,
-    });
-    expect(tuned.workers(context)).toHaveLength(1);
-    expect(() => tuned.workers({ storage: context.storage } as never)).toThrow(
-      'Platform GitLab event polling requires the mounted Mastra Code controller.',
-    );
+    const acquireLease = vi.fn(async () => ({ acquired: true }));
+    const lease = { acquireLease, renewLease: async () => true, releaseLease: async () => {} };
+    const [worker] = workers;
+    await worker!.init({
+      pubsub: { getLeaseProvider: () => lease },
+      storage: {},
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    } as never);
+    await worker!.start();
+    onTestFinished(() => worker!.stop());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(acquireLease).toHaveBeenCalledTimes(1);
 
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '0');
-    expect(() => platform()).toThrow('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS must be a positive integer.');
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS', '');
-
-    vi.stubEnv('MASTRA_PLATFORM_GITLAB_POLLING_ENABLED', 'false');
-    const disabled = platform();
-    expect(disabled.diagnostics()).toMatchObject({ pollingEnabled: false });
-    expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
-    expect(
-      new PlatformGitLabIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
-        pollingEnabled: true,
-        pollingIntervalMs: 30_000,
-      }).diagnostics(),
-    ).toMatchObject({ pollingEnabled: true, pollingIntervalMs: 30_000 });
+    // The old five-minute cadence no longer applies.
+    await vi.advanceTimersByTimeAsync(30 * 60_000);
+    expect(acquireLease).toHaveBeenCalledTimes(1);
+    // The events worker asks for a sweep when it can't vouch for what it missed.
+    route.reconcile();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(acquireLease).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(60 * 60_000);
+    expect(acquireLease).toHaveBeenCalledTimes(3);
   });
   it.each([
     {
@@ -525,7 +526,7 @@ describe('PlatformGitLabIntegration', () => {
       let credentialStatus = 200;
       const fetchMock = vi.fn<typeof fetch>(async input => {
         const url = String(input);
-        if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+        if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
         if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
         throw new Error(`Unexpected request: ${url}`);
       });
@@ -577,7 +578,7 @@ describe('PlatformGitLabIntegration', () => {
   it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -585,7 +586,7 @@ describe('PlatformGitLabIntegration', () => {
 
     const sources = await platform().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      'https://integrations.example.com/v2/connections?providerKey=gitlab',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     );
 
     expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
@@ -601,7 +602,7 @@ describe('PlatformGitLabIntegration', () => {
   it('keeps issue references scoped to the configured connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([issue(10, 42, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -652,14 +653,18 @@ describe('PlatformGitLabIntegration', () => {
   it('tries another account only when the first account cannot access a canonical project', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Not found' }, 404);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -676,14 +681,18 @@ describe('PlatformGitLabIntegration', () => {
   it('preserves transient project lookup failures instead of masking them as another account miss', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Temporarily unavailable' }, 503);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -731,28 +740,34 @@ describe('PlatformGitLabIntegration', () => {
     await expect(gitlab.getWorkItemAuthorUsername('direct', '10', 'merge_request', 17)).resolves.toBe('review-author');
   });
   it('uses MASTRA_GITLAB_CONNECTION_ID as an optional filter and otherwise discovers every GitLab connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async input => {
-      const providerKey = new URL(String(input)).searchParams.get('providerKey');
-      return json({ connections: platformConnections.filter(connection => connection.integrationId === providerKey) });
-    });
+    // The project listing returns every provider's connections; GitLab keeps only its own.
+    const fetchMock = vi.fn<typeof fetch>(async () => json({ connections: platformConnections }));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
     const filtered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(filtered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }]);
     expect(filtered.diagnostics()).toMatchObject({ connectionFilterConfigured: true });
 
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', '');
     const discovered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }, { id: 'a1b_acme' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });
-    // One query per listing: only the Platform's `gitlab` integration is discovered.
-    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('providerKey'))).toEqual([
-      'gitlab',
-      'gitlab',
+    // One project listing per integration; the Jira connection in it is never discovered.
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     ]);
   });
 });

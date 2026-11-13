@@ -88,7 +88,7 @@ const createProject = async (id: string) => {
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connect: { baseUrl: 'https://integrations.example.com', projectId: 'proj_factory', accessToken: 'platform-token' },
   });
   vi.spyOn(jira, 'listConnections').mockResolvedValue([
     {

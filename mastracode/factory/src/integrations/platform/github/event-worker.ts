@@ -1,9 +1,10 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
+import type { ConnectClient } from '@mastra/connect';
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
-import type { WorkerDeps } from '@mastra/core/worker';
 
+import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { ExternalRepositoryProjectTarget } from '../../../storage/domains/source-control/base.js';
 import { DEFAULT_DEPENDABOT_SYNC_INTERVAL_MS } from '../../dependabot/sync.js';
@@ -24,8 +25,7 @@ import type {
   GithubWebhookNotification,
   ParsedGithubWebhook,
 } from '../../github/webhook.js';
-import type { PlatformApiClient } from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { platformErrorStatus, platformRetryDelayMs } from '../platform-connect.js';
 
 const API_PREFIX = '/v1/server/github-app';
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
@@ -88,7 +88,7 @@ type Repository = {
 export type PlatformGithubEventDispatchIntegration = GithubWebhookDispatchIntegration;
 
 export interface PlatformGithubEventWorkerConfig {
-  client: PlatformApiClient;
+  client: ConnectClient;
   controller: MountedMastraCode['controller'];
   github: PlatformGithubEventDispatchIntegration;
   storage: PlatformGithubEventStorage;
@@ -136,7 +136,7 @@ export interface PlatformGithubEventWorkerConfig {
 export class PlatformGithubEventWorker extends MastraWorker {
   readonly name = 'platform-github-events';
 
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #controller: MountedMastraCode['controller'];
   readonly #github: PlatformGithubEventDispatchIntegration;
   readonly #storage: PlatformGithubEventStorage;
@@ -289,7 +289,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       if (!(await this.#ensureLease())) return;
       nextDelay = await this.#poll();
     } catch (error) {
-      nextDelay = retryDelay(error, this.#intervalMs);
+      nextDelay = platformRetryDelayMs(error, this.#intervalMs);
       this.deps?.logger.error('Platform GitHub event polling cycle failed', {
         error: error instanceof Error ? error.message : String(error),
         retryInMs: nextDelay,
@@ -347,14 +347,14 @@ export class PlatformGithubEventWorker extends MastraWorker {
         try {
           await this.#pollRepository(repository.id);
         } catch (error) {
-          const delay = retryDelay(error, this.#intervalMs);
+          const delay = platformRetryDelayMs(error, this.#intervalMs);
           retryInMs = Math.max(retryInMs, delay);
           this.deps?.logger.error('Platform GitHub repository event polling failed', {
             repositoryId: repository.id,
             error: error instanceof Error ? error.message : String(error),
             retryInMs: delay,
           });
-          if (error instanceof PlatformApiError && error.status === 429) break;
+          if (platformErrorStatus(error) === 429) break;
         }
       }
     }
@@ -794,11 +794,4 @@ function parseEvent(event: EventLogEntry): ParsedGithubWebhook | null {
     deliveryId: event.deliveryId,
     payload: event.payload as Record<string, unknown>,
   };
-}
-
-function retryDelay(error: unknown, fallbackMs: number): number {
-  if (error instanceof PlatformApiError && error.status === 429 && error.retryAfterSeconds !== null) {
-    return Math.max(fallbackMs, error.retryAfterSeconds * 1_000);
-  }
-  return fallbackMs;
 }

@@ -2,8 +2,8 @@ import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
-import { createIssueReconciler } from '../issue-reconciler.js';
-import type { IssueReconciler } from '../issue-reconciler.js';
+import { createIssueReconcileOne, createIssueReconciler } from '../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler, IssueReconcilerOptions } from '../issue-reconciler.js';
 import type { IncidentioEventRules } from './default-rules.js';
 import { IncidentioRules } from './rules.js';
 import type { IncidentioIssueIngress } from './rules.js';
@@ -28,10 +28,10 @@ function issueToIngress(itemRef: string, issue: IntakeIssue): IncidentioIssueIng
   };
 }
 
-export function attachIncidentioIssueReconciler(
+function reconcilerOptions(
   incidentio: { intake: Intake; rules: IncidentioEventRules },
   context: IntegrationContext,
-): IncidentioIssueReconciler | undefined {
+): IssueReconcilerOptions | undefined {
   if (!context.runtime || !incidentio.intake.resolveIntakeDispatch) return undefined;
   const boards = context.runtime.boards;
 
@@ -43,7 +43,7 @@ export function attachIncidentioIssueReconciler(
     incidentioRules: incidentio.rules,
   });
 
-  return createIssueReconciler({
+  return {
     integrationId: 'incidentio',
     intake: incidentio.intake,
     projects: context.storage.projects,
@@ -81,5 +81,22 @@ export function attachIncidentioIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
-  });
+  };
+}
+
+export function attachIncidentioIssueReconciler(
+  incidentio: { intake: Intake; rules: IncidentioEventRules },
+  context: IntegrationContext,
+): IncidentioIssueReconciler | undefined {
+  const options = reconcilerOptions(incidentio, context);
+  return options ? createIssueReconciler(options) : undefined;
+}
+
+/** Reconciles just the cards an event names, through the same path as the full sweep. */
+export function attachIncidentioIssueReconcileOne(
+  incidentio: { intake: Intake; rules: IncidentioEventRules },
+  context: IntegrationContext,
+): IssueReconcileOne | undefined {
+  const options = reconcilerOptions(incidentio, context);
+  return options ? createIssueReconcileOne(options) : undefined;
 }
