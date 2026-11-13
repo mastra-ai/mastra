@@ -2526,7 +2526,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * identity suffixed with its id. Which one a card gets never depends on the record's other cards
    * once an evaluation is stored: a card keeps an identity it already evaluated under, and the
    * event's own identity stays with the card that stored it, so deleting that card does not hand
-   * its evaluation to another.
+   * its evaluation to another. An evaluation stored before the record had a card belongs to the
+   * record's first card, which the event filed; cards added later evaluate under their own.
    */
   async cardIngressIdentity({
     orgId,
@@ -2541,13 +2542,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }): Promise<string> {
     if (!cardId) return base;
     const own = `${base}:${cardId}`;
-    if (await this.getTransitionResultByIngress(orgId, factoryProjectId, own)) return own;
     const stored = await this.getTransitionResultByIngress(orgId, factoryProjectId, base);
-    if (stored) return typeof stored.itemId === 'string' && stored.itemId !== cardId ? own : base;
+    if (stored?.itemId === cardId) return base;
+    if (await this.getTransitionResultByIngress(orgId, factoryProjectId, own)) return own;
+    if (typeof stored?.itemId === 'string') return own;
     const card = await this.get({ orgId, id: cardId });
     if (!card?.externalSource) return base;
     const cards = await this.listByProjectSource({ orgId, factoryProjectId, source: card.externalSource });
-    return cards.length > 1 ? own : base;
+    if (cards.length <= 1) return base;
+    return stored && cards[0]?.id === cardId ? base : own;
   }
 
   async getTransitionResultByIngress(
