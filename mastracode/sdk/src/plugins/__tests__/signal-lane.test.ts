@@ -186,6 +186,20 @@ describe('PluginSignalLane', () => {
     expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to start'), expect.any(Error), 'acme.demo');
   });
 
+  it('reports a provider that throws while stopping, naming its plugin', async () => {
+    const onError = vi.fn();
+    const provider = new TestProvider('stubborn-signals');
+    provider.stop = () => {
+      throw new Error('stop exploded');
+    };
+    const lane = laneWithMastra({ onError });
+
+    lane.sync(contributions('acme.demo', 'v1', [provider]));
+    lane.sync([]);
+
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('failed to stop'), expect.any(Error), 'acme.demo');
+  });
+
   it('drops the processors of a provider whose getter throws, leaving its siblings contributing', async () => {
     const onError = vi.fn();
     const broken = new TestProvider('broken-signals');
