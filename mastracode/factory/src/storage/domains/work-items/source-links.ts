@@ -198,13 +198,12 @@ export async function sourceGroup(ops: FactoryStorageOps, workItemIds: readonly 
 }
 
 /**
- * Lock the cards of every work item in `workItemIds`' source group in id order: the order every
- * write that fans facts out to sibling work items takes them in, so two such writes never deadlock.
- * Returns the group. A lone work item takes no extra lock.
+ * Lock the cards of every work item in `workItemIds`' source group in id order, a lone work item's
+ * card included: every write takes card locks before source locks, so two writes never deadlock.
+ * Returns the group.
  */
 export async function lockSourceGroup(ops: FactoryStorageOps, workItemIds: readonly string[]): Promise<string[]> {
   const group = await sourceGroup(ops, workItemIds);
-  if (group.length <= 1) return group;
   const boards = await findIn<BoardItemDbRecord>(ops, BOARD_ITEMS, 'work_item_id', group);
   for (const id of boards.map(board => board.id).sort()) await ops.updateAtomic(BOARD_ITEMS, { id }, () => null);
   return group;

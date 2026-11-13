@@ -673,15 +673,16 @@ export class Cards {
     let deleted = 0;
     for (const board of boards) {
       const scope = { org_id: board.org_id, factory_project_id: board.factory_project_id };
-      // The cards sharing its sources first, in id order, as every write sharing a source takes
-      // them; locking its own row first could deadlock against a sync locking a lower sibling.
-      await lockSourceGroup(this.ops, [board.work_item_id]);
+      // The card's split lock comes before any card rows, as the split copy takes it.
       const guard = await this.ops.updateAtomic(
         FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name,
         { id: board.id },
         () => null,
       );
       if (!guard) await this.ops.insertOne(FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name, { ...scope, id: board.id });
+      // Then the cards sharing its sources, in id order, as every write sharing a source takes
+      // them; locking its own row first could deadlock against a sync locking a lower sibling.
+      await lockSourceGroup(this.ops, [board.work_item_id]);
       // Re-check the whole filter under the row lock, so a write that landed since the read
       // above (e.g. a bumped revision) keeps the row.
       const locked = await this.ops.updateAtomic(BOARD_ITEMS, { ...boardWhere, ...scope, id: board.id }, () => null);

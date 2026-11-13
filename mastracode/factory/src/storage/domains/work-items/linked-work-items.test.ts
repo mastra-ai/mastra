@@ -345,6 +345,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     }
   });
 
+  it('joins a pull request to a single-card issue while the issue syncs', async () => {
+    const { workItems, scope, file } = await setup();
+    for (let round = 0; round < 12; round++) {
+      const card = await file({ ...issue12, externalId: `${issue12.externalId}:${round}` }, { state: 'open' });
+      const pause = new Promise(resolve => setTimeout(resolve, round % 6));
+      await Promise.all([
+        pause.then(() =>
+          workItems.attachSource({
+            orgId: scope.orgId,
+            id: card.id,
+            source: { ...pullRequest34, externalId: `${pullRequest34.externalId}:${round}` },
+            metadata: { state: 'open' },
+          }),
+        ),
+        workItems.syncWorkItemSource({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          provider: 'github',
+          externalId: card.workItem.sources[0]!.externalId,
+          patch: { state: 'closed' },
+        }),
+      ]);
+      const stored = (await workItems.get({ orgId: scope.orgId, id: card.id }))!;
+      expect(stored.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+    }
+  });
+
   it('lets two backfills run at once without either failing on a link the other wrote', async () => {
     const { workItems, scope, file, storage } = await setup();
     for (let index = 0; index < 20; index++) {
