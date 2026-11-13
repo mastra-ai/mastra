@@ -2500,7 +2500,8 @@ export class FactoryDecisionDispatcher {
     if (await this.#statusEventOvertaken(record)) throw new FactoryDecisionSuperseded();
     const resolve = async () => {
       const item = await this.#requireItem(record);
-      const board = (await this.#boards.load(record)).get(boardForWorkItem(item));
+      const boards = await this.#boards.load(record);
+      const board = boards.get(boardForWorkItem(item));
       if (!board) return undefined;
       const stage = item.stages.length === 1 ? item.stages[0] : undefined;
       const finished = stage !== undefined && board.isTerminal(stage);
@@ -2510,18 +2511,26 @@ export class FactoryDecisionDispatcher {
         : [];
       if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
       const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
-      const route = resolveEventRoute(routes, event, facts, board, hasPullRequest(item));
+      const route = resolveEventRoute(routes, event, facts, board, {
+        registry: boards,
+        carriesPullRequest: hasPullRequest(item),
+        onSkip: skipped =>
+          console.warn(
+            `[factory] card-move rule ${skipped.routeId} matched ${event.type} on ${item.id} but was skipped: ${skipped.reason}`,
+          ),
+      });
       // A pull request event the rules already decided keeps that decision when no enabled route
       // takes the card: disabling or narrowing a route must not strand a merged card in review.
       if (!route)
         return fallback && isPullRequestEvent(event.type) ? { item, board, fallback: true as const } : undefined;
       // A route that agrees with the rule's own pull request move keeps it whole: its message, and
       // the re-entry that restarts a review in the phase the card already sits in.
-      if (fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
+      const crossesBoards = route.board !== board.id;
+      if (!crossesBoards && fallback && isPullRequestEvent(event.type) && route.phase === fallback.stage) {
         return { item, board, fallback: true as const };
       }
-      if (stage === route.phase) return undefined;
-      return { item, board, route };
+      if (!crossesBoards && stage === route.phase) return undefined;
+      return { item, board, route, target: boards.get(route.board)! };
     };
     const first = await resolve();
     if (!first) return;
@@ -2530,15 +2539,17 @@ export class FactoryDecisionDispatcher {
       return;
     }
     // Checked again on the next claim: the card may have moved, or the routes changed, by then.
-    if (!first.board.isTerminal(first.route.phase) && (await this.#cardRunInFlight(record, first.item))) {
+    if (!first.target.isTerminal(first.route.phase) && (await this.#cardRunInFlight(record, first.item))) {
       throw new FactoryDecisionPostponed();
     }
     const { item, board, route } = first;
+    const crossesBoards = route.board !== board.id;
     const result = await this.#transitionService.transition({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
       workItemId: item.id,
       board: board.id,
+      ...(crossesBoards ? { toBoard: route.board } : {}),
       stage: route.phase,
       expectedRevision: item.revision,
       actor: { type: 'system', id: `intake-route:${route.routeId}` },
@@ -2549,6 +2560,15 @@ export class FactoryDecisionDispatcher {
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+    // Work the old board proposed for the card is not the new board's to run.
+    if (result.status === 'accepted' && crossesBoards) {
+      await this.#storage.supersedeDecisionsForWorkItem({
+        orgId: record.orgId,
+        factoryProjectId: record.factoryProjectId,
+        workItemId: item.id,
+        supersededAt: new Date(),
+      });
+    }
   }
 
   /**

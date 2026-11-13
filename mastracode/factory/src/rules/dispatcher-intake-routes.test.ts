@@ -80,6 +80,8 @@ async function setup(
   });
   const configVersion = 'intake-routes-v1';
   const workItems = seeded.workItems;
+  /** The contexts cards left, whose sandboxes stop. */
+  const contextsLeft: Array<{ workItemId: string; context: string; toContext: string | undefined }> = [];
   const dispatcherWith = (withRoutesReader: boolean) =>
     new FactoryDecisionDispatcher({
       controller: {} as never,
@@ -88,6 +90,9 @@ async function setup(
         configVersion,
         boards,
         audit: seeded.audit,
+        onContextLeft: ({ workItemId, context, toContext }) => {
+          contextsLeft.push({ workItemId, context, toContext });
+        },
       }),
       storage: workItems,
       boards,
@@ -235,6 +240,7 @@ async function setup(
     stageAudits,
     runs,
     retry,
+    contextsLeft,
   };
 }
 
@@ -1178,6 +1184,108 @@ describe('intake routes moving existing cards on status events', () => {
     const after = await workItems.get({ orgId: 'org-1', id: card.id });
     expect(after).toMatchObject({ stages: ['canceled'] });
     expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(1);
+  });
+
+  describe('a card-move rule sending the card to another board', () => {
+    const shipBoard = {
+      key: 'ship',
+      name: 'Ship',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting' as const, nextPhases: ['ready'] },
+        {
+          key: 'ready',
+          name: 'Ready',
+          kind: 'working' as const,
+          runner: { context: 'release', skill: 'factory-ship' },
+          autoStart: true,
+          nextPhases: ['shipped'],
+        },
+        { key: 'shipped', name: 'Shipped', kind: 'terminal' as const },
+      ],
+    };
+
+    it('moves the same card from Work › Building to Ship › Ready, stopping Work and starting Ship', async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, runs, contextsLeft, workItems } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      const ship = await route({
+        name: 'Opened pull requests ship',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+
+      const moved = (await deliverEvent(card.id, { type: 'pull_request.opened' })).card!;
+
+      expect(moved.id).toBe(card.id);
+      expect(placed(moved)).toEqual({ board: 'ship', stages: ['ready'] });
+      expect(moved.stageHistory.at(-1)).toMatchObject({ stage: 'ready', by: `intake-route:${ship.id}` });
+      expect(await workItems.list(scope)).toHaveLength(1);
+      expect(contextsLeft).toContainEqual({ workItemId: card.id, context: 'work', toContext: 'release' });
+      const started = await runs(card.id);
+      expect(started).toHaveLength(1);
+      expect(started).not.toContain('proposed');
+    });
+
+    it('moves a card once per event when two boards send cards to each other', async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt, retry, workItems } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      await route({
+        name: 'Work to Ship',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      });
+      await route({
+        name: 'Ship to Work',
+        on: ['pull_request.synchronized'],
+        target: { boardKey: 'ship', moveToBoardKey: 'work', phaseKey: 'execute' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+
+      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-1')).card)).toEqual({
+        board: 'ship',
+        stages: ['ready'],
+      });
+      await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-1');
+      await retry();
+      const replayed = await workItems.get({ orgId: 'org-1', id: card.id });
+      expect(placed(replayed!)).toEqual({ board: 'ship', stages: ['ready'] });
+
+      expect(placed((await deliverEvent(card.id, { type: 'pull_request.synchronized' }, 'push-2')).card)).toEqual({
+        board: 'work',
+        stages: ['execute'],
+      });
+      const after = await workItems.get({ orgId: 'org-1', id: card.id });
+      expect(after!.stageHistory.filter(entry => entry.by.startsWith('intake-route:'))).toHaveLength(2);
+    });
+
+    it("skips a matching rule whose target can't hold the card, with a warning, and takes the next one", async () => {
+      const { boards, scope, route, deliver, deliverEvent, putAt } = await setup();
+      await boards.create(scope, shipBoard, 'admin');
+      const broken = await route({
+        name: 'Gone phase',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'staging' },
+      });
+      await route({
+        name: 'Plan again',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'work', phaseKey: 'planning' },
+      });
+      const card = (await deliver({ sourceKey: 'github-issue:1' }))!;
+      await putAt(card.id, 'execute');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(placed((await deliverEvent(card.id, { type: 'pull_request.opened' })).card)).toEqual({
+          board: 'work',
+          stages: ['planning'],
+        });
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining(`card-move rule ${broken.id} matched`));
+      } finally {
+        warn.mockRestore();
+      }
+    });
   });
 
   it('moves nothing without a routes reader under a forced route list', async () => {

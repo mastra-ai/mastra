@@ -479,6 +479,8 @@ export interface CommitFactoryTransitionInput {
   workItemId: string;
   expectedRevision: number;
   destinationStage: string;
+  /** The board the card moves to with this transition, when a card-move rule sends it to another one. */
+  destinationBoard?: string;
   actorId: string;
   ingress: { identity: string; transitionId: string };
   causalChain: Array<{ ingressId: string; decisionType: string }>;
@@ -2426,7 +2428,8 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             const accept = input.accept === true && !existing.acceptedAt;
             const triageType = existing.triageType ?? input.triageType ?? null;
             const classified = triageType !== existing.triageType;
-            if (existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
+            const changesBoard = input.destinationBoard !== undefined && input.destinationBoard !== existing.board;
+            if (!changesBoard && existing.stages.length === 1 && existing.stages[0] === input.destinationStage) {
               // Classification is part of a terminal handoff, so unlike an
               // autonomy flip alone it is a revisioned work-item change.
               return arm || disarm || accept || classified
@@ -2443,6 +2446,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               ...(disarm ? { autonomyArmedAt: null } : {}),
               ...(accept ? { acceptedAt: now } : {}),
               ...(classified ? { triageType } : {}),
+              ...(changesBoard ? { board: input.destinationBoard } : {}),
               stages: [input.destinationStage],
               stageHistory: applyStageTransition(
                 existing.stageHistory,

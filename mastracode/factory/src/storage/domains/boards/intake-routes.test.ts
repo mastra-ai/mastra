@@ -351,6 +351,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       boardKey: 'work',
       phaseKey: 'intake',
       joinClosedIssue: false,
+      moveToBoardKey: null,
     });
 
     const added = (await boards.listIntakeRoutes(scope)).find(row => row.name === PULL_REQUEST_INTAKE_ROUTE.name)!;
@@ -591,7 +592,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('keeps a board-only target without a phase', async () => {
     const { boards, scope } = await setup();
     const created = await boards.createIntakeRoute(scope, route('Docs', { target: { boardKey: 'docs' } }), 'u');
-    expect(created.target).toEqual({ boardKey: 'docs', phaseKey: null, joinClosedIssue: false });
+    expect(created.target).toEqual({ boardKey: 'docs', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null });
+  });
+
+  it('keeps the board a card-move route sends cards to, apart from the board whose cards it moves', async () => {
+    const { boards, scope } = await setup();
+    const created = await boards.createIntakeRoute(
+      scope,
+      route('Ship', {
+        on: ['pull_request.opened'],
+        target: { boardKey: 'work', moveToBoardKey: 'ship', phaseKey: 'ready' },
+      }),
+      'u',
+    );
+    expect(created.target).toEqual({
+      boardKey: 'work',
+      phaseKey: 'ready',
+      joinClosedIssue: false,
+      moveToBoardKey: 'ship',
+    });
+    const edited = await boards.updateIntakeRoute(
+      scope,
+      created.id,
+      { target: { boardKey: 'work', phaseKey: 'done' } },
+      { expectedRevision: created.revision, actor: 'u' },
+    );
+    expect(edited.target).toEqual({ boardKey: 'work', phaseKey: 'done', joinClosedIssue: false, moveToBoardKey: null });
   });
 
   it('keeps two projects apart', async () => {

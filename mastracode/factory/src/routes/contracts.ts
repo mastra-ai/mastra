@@ -115,6 +115,11 @@ const intakeRouteTargetSchema = z
      * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
      */
     joinClosedIssue: z.boolean().optional(),
+    /**
+     * On a route moving existing cards on later events, the board the card moves to, at `phaseKey`;
+     * `boardKey` stays the board whose cards the route moves. Unset keeps the card on `boardKey`.
+     */
+    moveToBoardKey: boardIdentifierSchema.nullable().optional(),
   })
   .strict();
 const intakeRouteWhenSchema = ruleGroupSchema(INTAKE_ROUTE_RULE_FIELDS);
@@ -187,7 +192,12 @@ const intakeRouteSchema = z.object({
   /** 0 is evaluated first. */
   position: z.number().int(),
   when: intakeRouteWhenSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable(), joinClosedIssue: z.boolean() }),
+  target: z.object({
+    boardKey: z.string(),
+    phaseKey: z.string().nullable(),
+    joinClosedIssue: z.boolean(),
+    moveToBoardKey: z.string().nullable(),
+  }),
   on: z.array(z.enum(ROUTE_EVENTS)),
   /**
    * True on a route stored by 0.28 naming `pull_request.opened`: there it only moves a card, and

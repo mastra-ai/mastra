@@ -153,6 +153,12 @@ export interface IntakeRouteTarget {
    * more source instead of a card of its own. The route doesn't match any other arrival.
    */
   joinClosedIssue?: boolean;
+  /**
+   * On a route moving existing cards (one naming events besides `work_item.created`), the board the
+   * card moves to, at `phaseKey`. `boardKey` stays the board whose cards the route moves. Unset
+   * keeps the card on `boardKey`.
+   */
+  moveToBoardKey?: string | null;
 }
 
 /** An intake route as it is written. */
@@ -176,7 +182,7 @@ export interface StoredIntakeRouteRecord {
   enabled: boolean;
   position: number;
   when: RuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean };
+  target: { boardKey: string; phaseKey: string | null; joinClosedIssue: boolean; moveToBoardKey: string | null };
   on: RouteEvent[];
   /**
    * Set on a route stored before `pull_request.opened` filed pull requests with no card (0.28): it
@@ -349,6 +355,7 @@ interface IntakeRouteRow extends Record<string, unknown> {
   join_closed_issue: boolean | null;
   /** Null on rows written before `pull_request.opened` filed pull requests: there it only moves a card. */
   opened_files_pull_requests?: boolean | null;
+  move_to_board_key: string | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -1078,6 +1085,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           board_key: patch.target.boardKey,
           phase_key: patch.target.phaseKey ?? null,
           join_closed_issue: patch.target.joinClosedIssue ?? false,
+          move_to_board_key: patch.target.moveToBoardKey ?? null,
         }),
         updated_by: options.actor,
       });
@@ -1401,7 +1409,12 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     enabled: row.enabled,
     position: row.position,
     when: row.when_condition,
-    target: { boardKey: row.board_key, phaseKey: row.phase_key, joinClosedIssue: row.join_closed_issue === true },
+    target: {
+      boardKey: row.board_key,
+      phaseKey: row.phase_key,
+      joinClosedIssue: row.join_closed_issue === true,
+      moveToBoardKey: row.move_to_board_key ?? null,
+    },
     on: routeEvents(row),
     ...(routeArrivals(row).pullRequestOpenedMovesOnly && { pullRequestOpenedMovesOnly: true as const }),
     revision: row.revision,
@@ -1525,6 +1538,7 @@ async function insertIntakeRoute(
     on_events: route.input.on ?? null,
     join_closed_issue: route.input.target.joinClosedIssue ?? false,
     opened_files_pull_requests: route.input.pullRequestOpenedMovesOnly ? null : true,
+    move_to_board_key: route.input.target.moveToBoardKey ?? null,
     revision: 1,
     created_by: route.actor,
     created_at: now,

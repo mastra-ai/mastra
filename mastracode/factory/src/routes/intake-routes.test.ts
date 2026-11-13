@@ -369,7 +369,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
       [{ boardKey: 'work', phaseKey: 'done', joinClosedIssue: true }, 'terminal_phase'],
       [{ boardKey: 'work', phaseKey: 'nope', joinClosedIssue: true }, 'unknown_phase'],
+      // Only a route moving existing cards sends them to another board.
+      [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'reported' }, 'move_on_arrival'],
     ] as const;
+    const moves = [
+      [{ boardKey: 'work', moveToBoardKey: 'nope' }, 'unknown_board'],
+      [{ boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'nope' }, 'unknown_phase'],
+    ] as const;
+    for (const [target, error] of moves) {
+      expect(await replicaA.send('POST', base, { name: 'Bad', on: ['pull_request.opened'], target })).toMatchObject({
+        status: 422,
+        body: { error },
+      });
+    }
+    // A card-move route may send a card into any phase of another board, working ones included.
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'Ship',
+        on: ['pull_request.opened'],
+        target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' },
+      }),
+    ).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { target: { boardKey: 'work', moveToBoardKey: 'stepwise', phaseKey: 'fixing' } } },
+    });
     for (const [target, error] of cases) {
       expect(await replicaA.send('POST', base, { name: 'Bad', target })).toMatchObject({
         status: 422,
@@ -378,7 +401,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     }
     const route = (await replicaA.send('POST', base, { name: 'Ok', when: DOCS, target: { boardKey: 'work' } })).body
       .intakeRoute as Route;
-    expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false });
+    expect(route.target).toEqual({ boardKey: 'work', phaseKey: null, joinClosedIssue: false, moveToBoardKey: null });
     // A card a pull request joins moves to any phase its board allows from where it is, so a
     // joining route may name a phase new cards can't land in.
     const joining = await replicaA.send('POST', base, {
@@ -396,6 +419,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
     expect(await list(replicaA.send, base)).toEqual([
+      expect.objectContaining({ name: 'Ship', revision: 1 }),
       expect.objectContaining({ name: 'Ok', revision: 1 }),
       expect.objectContaining({ name: 'Join', revision: 1 }),
     ]);

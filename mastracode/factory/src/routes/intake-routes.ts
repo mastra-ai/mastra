@@ -148,7 +148,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   async #checkTarget(
     scope: Resolved,
     route: {
-      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean };
+      target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean; moveToBoardKey?: string | null };
       on: readonly RouteEvent[];
       pullRequestOpenedMovesOnly?: boolean;
     },

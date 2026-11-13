@@ -17,10 +17,11 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted' | 'intakeEvaluator'
 >;
 
-type IntakeRoute = Pick<
-  StoredIntakeRouteRecord,
-  'id' | 'enabled' | 'when' | 'target' | 'on' | 'pullRequestOpenedMovesOnly'
->;
+type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'on' | 'pullRequestOpenedMovesOnly'> & {
+  target: Pick<StoredIntakeRouteRecord['target'], 'boardKey' | 'phaseKey' | 'joinClosedIssue'> & {
+    moveToBoardKey?: string | null;
+  };
+};
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: RouteArrivals): boolean {
@@ -47,7 +48,13 @@ export function placedByIntakeRoute(item: Pick<Card, 'metadata'>): boolean {
 }
 
 export type IntakeTargetProblem = {
-  code: 'unknown_board' | 'unknown_phase' | 'terminal_phase' | 'unreachable_phase' | 'join_on_event';
+  code:
+    | 'unknown_board'
+    | 'unknown_phase'
+    | 'terminal_phase'
+    | 'unreachable_phase'
+    | 'join_on_event'
+    | 'move_on_arrival';
   message: string;
 };
 
@@ -58,12 +65,25 @@ export type IntakeTargetProblem = {
  */
 export function intakeTargetProblem(
   registry: BoardRegistry,
-  route: RouteArrivals & { target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean } },
+  route: RouteArrivals & {
+    target: { boardKey: string; phaseKey?: string | null; joinClosedIssue?: boolean; moveToBoardKey?: string | null };
+  },
 ): IntakeTargetProblem | undefined {
   const { target } = route;
-  const board = registry.get(target.boardKey);
-  if (!board) {
+  const owner = registry.get(target.boardKey);
+  if (!owner) {
     return { code: 'unknown_board', message: `Board "${target.boardKey}" is not installed in this project.` };
+  }
+  if (target.moveToBoardKey && (target.joinClosedIssue || placesNewCards(route))) {
+    return {
+      code: 'move_on_arrival',
+      message:
+        'Only a route moving existing cards on later events can send them to another board: its `on` must not name an arrival event (`work_item.opened`, `pull_request.opened` or `work_item.created`).',
+    };
+  }
+  const board = target.moveToBoardKey ? registry.get(target.moveToBoardKey) : owner;
+  if (!board) {
+    return { code: 'unknown_board', message: `Board "${target.moveToBoardKey}" is not installed in this project.` };
   }
   if (
     target.joinClosedIssue &&
@@ -79,29 +99,29 @@ export function intakeTargetProblem(
   if (target.joinClosedIssue && board.phaseKind(target.phaseKey) === 'terminal') {
     return {
       code: 'terminal_phase',
-      message: `Phase "${target.phaseKey}" on board "${target.boardKey}" is terminal; a card a pull request joins can't move there.`,
+      message: `Phase "${target.phaseKey}" on board "${board.id}" is terminal; a card a pull request joins can't move there.`,
     };
   }
   if (target.joinClosedIssue) {
     return board.phaseKind(target.phaseKey)
       ? undefined
-      : { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${target.phaseKey}".` };
+      : { code: 'unknown_phase', message: `Board "${board.id}" has no phase "${target.phaseKey}".` };
   }
   const kind = board.phaseKind(target.phaseKey);
   if (!kind) {
-    return { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${target.phaseKey}".` };
+    return { code: 'unknown_phase', message: `Board "${board.id}" has no phase "${target.phaseKey}".` };
   }
   if (!placesNewCards(route)) return undefined;
   if (kind === 'terminal') {
     return {
       code: 'terminal_phase',
-      message: `Phase "${target.phaseKey}" on board "${target.boardKey}" is terminal; new cards can't land there.`,
+      message: `Phase "${target.phaseKey}" on board "${board.id}" is terminal; new cards can't land there.`,
     };
   }
   if (!board.allowsTransition(board.initialPhase, target.phaseKey)) {
     return {
       code: 'unreachable_phase',
-      message: `Board "${target.boardKey}" doesn't allow moving a card from its first phase "${board.initialPhase}" to "${target.phaseKey}".`,
+      message: `Board "${board.id}" doesn't allow moving a card from its first phase "${board.initialPhase}" to "${target.phaseKey}".`,
     };
   }
   return undefined;
@@ -381,26 +401,48 @@ export function routesHandleEvent(
   return routes.some(route => route.target.boardKey === board.id && route.on.includes(event.type));
 }
 
+/** A card-move route that matched but can't take the card where it points, and why. */
+export interface SkippedEventRoute {
+  routeId: string;
+  reason: string;
+}
+
 /**
- * Where a status event moves an existing card: the first enabled route whose `on` names the
- * event, whose `when` matches the card and the event, and whose board is the card's own and can
- * hold it there. A route without a phase moves the card to its board's first phase. Undefined
- * leaves the card where it is.
+ * Where a status event moves an existing card: the first enabled route on the card's board whose
+ * `on` names the event, whose `when` matches the card and the event, and whose target can hold the
+ * card. The target is the route's own board unless it names another (`moveToBoardKey`); a route
+ * without a phase moves the card to the target board's first phase. A matching route whose target
+ * is gone or can't take the card is skipped and reported through `onSkip`. Undefined leaves the
+ * card where it is.
  */
 export function resolveEventRoute(
   routes: readonly IntakeRoute[],
   event: BoardEventFacts,
   cardFacts: RuleFacts,
   board: InstalledBoard,
-  carriesPullRequest = false,
-): { phase: string; routeId: string } | undefined {
+  options: { registry: BoardRegistry; carriesPullRequest?: boolean; onSkip?: (skipped: SkippedEventRoute) => void },
+): { board: string; phase: string; routeId: string } | undefined {
   const facts: RuleFacts = { ...cardFacts, ...eventRuleFacts(event) };
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;
-    const phase = route.target.phaseKey ?? board.initialPhase;
-    if (board.phaseKind(phase) === undefined || !placementTakesCard(board, phase, facts, carriesPullRequest)) continue;
-    return { phase, routeId: route.id };
+    const skip = (reason: string) => options.onSkip?.({ routeId: route.id, reason });
+    const targetKey = route.target.moveToBoardKey ?? board.id;
+    const target = targetKey === board.id ? board : options.registry.get(targetKey);
+    if (!target) {
+      skip(`board "${targetKey}" is not installed`);
+      continue;
+    }
+    const phase = route.target.phaseKey ?? target.initialPhase;
+    if (target.phaseKind(phase) === undefined) {
+      skip(`board "${target.id}" has no phase "${phase}"`);
+      continue;
+    }
+    if (!placementTakesCard(target, phase, facts, options.carriesPullRequest ?? false)) {
+      skip(`phase "${phase}" on board "${target.id}" can't hold this card`);
+      continue;
+    }
+    return { board: target.id, phase, routeId: route.id };
   }
   return undefined;
 }
