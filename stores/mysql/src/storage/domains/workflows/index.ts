@@ -70,6 +70,8 @@ const OWNER_ID = quoteIdentifier('ownerId', 'column name');
 const LEASE_EXPIRES_AT = quoteIdentifier('leaseExpiresAt', 'column name');
 const UPDATED_AT = quoteIdentifier('updatedAt', 'column name');
 const RUN_OWNER_COLUMNS = `generation, ${OWNER_ID} AS ownerId, ${LEASE_EXPIRES_AT} AS leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
+/** Run ids per query in `getRunOwnerships`, keeping each prepared statement small. */
+const RUN_OWNERSHIP_BATCH_SIZE = 500;
 
 function toRunOwnershipRecord(runId: string, row: RowDataPacket): RunOwnershipRecord {
   const leaseExpiresAt = row.leaseExpiresAt === null ? null : Number(row.leaseExpiresAt);
@@ -89,6 +91,23 @@ async function readRunOwner(q: Queryable, runId: string): Promise<RunOwnershipRe
   );
   return rows[0] ? toRunOwnershipRecord(runId, rows[0]) : null;
 }
+
+const SUMMARY_WORKFLOW_ID_SQL = `JSON_EXTRACT(snapshot, '$.parentWorkflow.workflowId')`;
+const SUMMARY_RUN_ID_SQL = `JSON_EXTRACT(snapshot, '$.parentWorkflow.runId')`;
+
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns: `status` and `timestamp`
+ * when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are non-empty
+ * strings. Only these paths are read, so `context` is never sent. JSON_OBJECT() keeps a SQL NULL
+ * as a JSON null, and merge-patching `{}` with it drops those keys. The snapshot column is JSON,
+ * stored parsed, so each JSON_EXTRACT reads it without parsing it again.
+ */
+const SUMMARY_SNAPSHOT_SQL = `JSON_MERGE_PATCH('{}', JSON_OBJECT(
+    'status', JSON_EXTRACT(snapshot, '$.status'),
+    'timestamp', JSON_EXTRACT(snapshot, '$.timestamp'),
+    'parentWorkflow', CASE WHEN JSON_TYPE(${SUMMARY_WORKFLOW_ID_SQL}) = 'STRING' AND JSON_TYPE(${SUMMARY_RUN_ID_SQL}) = 'STRING'
+        AND JSON_UNQUOTE(${SUMMARY_WORKFLOW_ID_SQL}) <> '' AND JSON_UNQUOTE(${SUMMARY_RUN_ID_SQL}) <> ''
+      THEN JSON_OBJECT('workflowId', ${SUMMARY_WORKFLOW_ID_SQL}, 'runId', ${SUMMARY_RUN_ID_SQL}) END))`;
 
 function mapWorkflowRow(row: WorkflowRow): WorkflowRun {
   return {
@@ -338,6 +357,44 @@ export class WorkflowsMySQL extends WorkflowsStorage {
       return await readRunOwner(this.pool, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one query per {@link RUN_OWNERSHIP_BATCH_SIZE} runs. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+
+    try {
+      for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
+        const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
+
+        // Joining the requested ids lets the column's collation match them, as the single-run
+        // read does (case, trailing spaces), and returns each record under the id asked for.
+        const requested = chunk.map((_, i) => (i === 0 ? 'SELECT ? AS reqId' : 'SELECT ?')).join(' UNION ALL ');
+        const [rows] = await this.pool.execute<RowDataPacket[]>(
+          `SELECT j.reqId, ${RUN_OWNER_COLUMNS} FROM (${requested}) j
+           JOIN ${RUN_OWNERS_TABLE} o ON o.${RUN_ID} = j.reqId`,
+          chunk,
+        );
+
+        for (const row of rows) {
+          const runId = String(row.reqId);
+          records.set(runId, toRunOwnershipRecord(runId, row));
+        }
+      }
+
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('MYSQL', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
     }
   }
 
@@ -679,8 +736,12 @@ export class WorkflowsMySQL extends WorkflowsStorage {
     }
   }
 
+  /**
+   * Lists runs newest first, with optional filters and pagination. With `summary`, each run's
+   * snapshot holds only `status`, `timestamp` and `parentWorkflow`.
+   */
   async listWorkflowRuns(args: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
-    const { workflowName, fromDate, toDate, perPage, page, resourceId, status } = args;
+    const { workflowName, fromDate, toDate, perPage, page, resourceId, status, summary } = args;
 
     const conditions: string[] = [];
     const params: any[] = [];
@@ -733,8 +794,9 @@ export class WorkflowsMySQL extends WorkflowsStorage {
         paginationClause = ` LIMIT ${Number(normalizedPerPage)} OFFSET ${Number(offset)}`;
       }
 
+      const snapshot = summary ? `${SUMMARY_SNAPSHOT_SQL} AS snapshot` : 'snapshot';
       const [rows] = await this.pool.execute<RowDataPacket[]>(
-        `SELECT workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt FROM ${tableName}${whereSql} ORDER BY ${quoteIdentifier('createdAt', 'column name')} DESC${paginationClause}`,
+        `SELECT workflow_name, run_id, resourceId, ${snapshot}, createdAt, updatedAt FROM ${tableName}${whereSql} ORDER BY ${quoteIdentifier('createdAt', 'column name')} DESC${paginationClause}`,
         params,
       );
 

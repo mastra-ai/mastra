@@ -11,6 +11,7 @@ import {
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { createSpanFilterBarFields } from '../span-filters';
+import { TEXT_SEARCH_FIELD, textSearchFilterItems } from '@/domains/observability/lib/text-search-filter';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 import {
@@ -34,13 +35,17 @@ const NO_SUGGESTIONS: string[] = [];
 export type UseSpansFilterBarFieldsOptions = {
   /** Window the value suggestions are looked up in. */
   timeRange: TraceQueryDiscoveryTimeRange;
+  withTextSearch?: boolean;
 };
 
 /**
  * The fields the spans filter bar offers: the time range plus the fields `querySpans()` accepts.
  * Context, model and outcome fields and streaming timings are only included when the store declares them.
  */
-export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOptions): FilterBarField[] {
+export function useSpansFilterBarFields({
+  timeRange,
+  withTextSearch = false,
+}: UseSpansFilterBarFieldsOptions): FilterBarField[] {
   const client = useMastraClient();
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
@@ -56,6 +61,7 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
   return useMemo(
     () => [
       FILTER_BAR_TIME_RANGE_FIELD,
+      ...(withTextSearch ? [TEXT_SEARCH_FIELD] : []),
       ...createSpanFilterBarFields({
         withContextFields,
         withTimeToFirstChunk,
@@ -68,6 +74,7 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
       }),
     ],
     [
+      withTextSearch,
       withContextFields,
       withTimeToFirstChunk,
       withTimeToFirstToken,
@@ -82,6 +89,8 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
 }
 
 export type UseSpansFilterBarOptions = {
+  textSearch?: string;
+  onTextSearchChange?: (value: string | undefined) => void;
   tokens: TraceFilterToken[];
   groups: TraceFilterGroup[];
   onFiltersChange: (tokens: TraceFilterToken[], groups: TraceFilterGroup[]) => void;
@@ -91,7 +100,13 @@ export type UseSpansFilterBarOptions = {
  * The span filters as a filter bar value, and the handlers that write bar edits back.
  * The time range is a synthetic, always-present item; it never round-trips to tokens.
  */
-export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansFilterBarOptions): {
+export function useSpansFilterBar({
+  tokens,
+  groups,
+  onFiltersChange,
+  textSearch,
+  onTextSearchChange,
+}: UseSpansFilterBarOptions): {
   filterBarValue: FilterBarExpression;
   onFilterBarChange: (expression: FilterBarExpression) => void;
   /** Replaces any filter on `fieldId` with `is value`, e.g. from a list cell. */
@@ -101,20 +116,29 @@ export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansF
 
   const filterBarValue = useMemo<FilterBarExpression>(() => {
     const groupsExpression = traceFiltersToFilterBarExpression([], groups);
-    return { ...groupsExpression, nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
-  }, [items, groups]);
+    return {
+      ...groupsExpression,
+      nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...textSearchFilterItems(textSearch), ...items, ...groupsExpression.nodes],
+    };
+  }, [items, groups, textSearch]);
 
   const onFilterBarChange = useCallback(
     (expression: FilterBarExpression) => {
       const next = filterBarExpressionToTraceFilters({
         ...expression,
         nodes: expression.nodes.filter(
-          node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID,
+          node =>
+            isFilterBarGroup(node) ||
+            (node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID && node.fieldId !== TEXT_SEARCH_FIELD.id),
         ),
       });
       onFiltersChange(next.tokens, next.groups);
+      const search = expression.nodes.find(node => !isFilterBarGroup(node) && node.fieldId === TEXT_SEARCH_FIELD.id);
+      const nextText =
+        search && !isFilterBarGroup(search) && typeof search.value === 'string' ? search.value : undefined;
+      if (nextText !== textSearch) onTextSearchChange?.(nextText);
     },
-    [onFiltersChange],
+    [onFiltersChange, textSearch, onTextSearchChange],
   );
 
   const onFilterByField = useCallback(
@@ -122,9 +146,12 @@ export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansF
       const withoutField = items.filter(item => item.fieldId !== fieldId);
       const item: FilterBarItem = { id: `${fieldId}:${value}`, fieldId, operatorId: 'is', value };
       const groupNodes = filterBarValue.nodes.filter(isFilterBarGroup);
-      onFilterBarChange({ ...filterBarValue, nodes: [...withoutField, item, ...groupNodes] });
+      onFilterBarChange({
+        ...filterBarValue,
+        nodes: [...textSearchFilterItems(textSearch), ...withoutField, item, ...groupNodes],
+      });
     },
-    [items, filterBarValue, onFilterBarChange],
+    [items, filterBarValue, onFilterBarChange, textSearch],
   );
 
   return { filterBarValue, onFilterBarChange, onFilterByField };

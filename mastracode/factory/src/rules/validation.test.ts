@@ -30,6 +30,24 @@ describe('Factory rule validation', () => {
     },
   );
 
+  it('keeps a linked-item description and rejects one over the length limit', () => {
+    const linked = {
+      type: 'upsertLinkedWorkItem',
+      idempotencyKey: 'vuln:1',
+      board: 'work',
+      stage: 'intake',
+      source: 'manual',
+      sourceKey: 'vuln:1',
+      title: 'Upgrade lodash',
+      description: '**Severity:** high',
+      url: null,
+    };
+    expect(validateFactoryRuleDecision(linked)).toEqual(linked);
+    expect(() => validateFactoryRuleDecision({ ...linked, description: 'x'.repeat(8001) })).toThrow(
+      FactoryRuleValidationError,
+    );
+  });
+
   it('accepts a saved linked-item decision that still carries a claim key and drops the claim', () => {
     const unclaimed = {
       type: 'upsertLinkedWorkItem',

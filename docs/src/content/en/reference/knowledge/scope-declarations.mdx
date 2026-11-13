@@ -100,9 +100,17 @@ export const knowledge = new Knowledge({
 
 A key such as `team:$orgId:$teamId` is a pattern. The text before the first `:` is the type, and each `$name` segment is a param. The address `team:acme:support` matches it with `$orgId = acme` and `$teamId = support`.
 
-The last param takes the rest of the value, so `resource:$resourceId` matches `resource:user:123` with `$resourceId = user:123`. Memory ids that contain `:` keep working.
+Each param matches exactly one segment, so an address has as many segments as its pattern. `resource:user:123` doesn't match `resource:$resourceId`. An ID that contains `:`, `/`, `#` or `%` is encoded into one segment, so user `user:123` is `resource:user%3A123`. Build addresses with [`encodeKnowledgeScopeId()` or `knowledgeScopeAddress()`](/reference/knowledge/knowledge-memory-scopes#encodeknowledgescopeid). Memory IDs are encoded for you.
 
-A type can have several patterns only when no address can match two of them. Each pair must have different literal text at the same position:
+:::warning[Scopes stored by earlier alpha releases]
+
+Earlier releases let the last param take the rest of the address, raw colons included. A scope stored that way, such as `resource:slack:U123` for Memory resource `slack:U123`, now has a new address, `resource:slack%3AU123`. Runs reach the new, empty scope. Pages, pins and notes under the old address stay in storage, but runs with that Memory resource no longer reach them, and Knowledge doesn't move them.
+
+A stored scope whose address now matches a different pattern, such as `org:acme:viewer` stored as an `org:$orgId` scope before you declared `org:$orgId:viewer`, gets no rules from the new pattern. Using it as a scope of the new pattern throws.
+
+:::
+
+A type can have several patterns only when no address can match two of them. Patterns with different numbers of segments never overlap. Patterns with the same number must have different literal text at the same position:
 
 ```typescript oxfmt:false
 scopes: {
@@ -117,7 +125,7 @@ Overlapping patterns fail at startup. There's no precedence between them:
 Knowledge scope patterns "role:$orgId:$role" and "role:$orgId:admin" overlap; patterns of a type must be pairwise disjoint.
 ```
 
-A pattern ending in a param overlaps a longer one with the same start, so `kb:$orgId` and `kb:$orgId:public` overlap too. Use two types, such as `kb-public:$orgId` and `kb-internal:$orgId`.
+`kb:$orgId` and `kb:$orgId:public` can be declared together, because `kb:acme` and `kb:acme:public` have different numbers of segments. Each is its own scope with its own rules. Holding `kb:acme` gives no role on `kb:acme:public` unless a rule on `kb:$orgId:public` names `kb:$orgId`.
 
 ## Rules
 

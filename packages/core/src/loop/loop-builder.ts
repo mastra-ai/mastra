@@ -385,7 +385,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           writeScoped(
             scopeCtx,
@@ -407,6 +416,9 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             return toolCallForeachOptions.concurrency;
           }
           const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          // Verdicts cached before the step suspended are stale: the policy may have changed
+          // while it waited. Calls that have not run yet are judged again when they start.
+          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', undefined);
           const toolCalls = Array.isArray(inputData) ? (inputData as { toolName?: unknown }[]) : [];
           return resolveToolCallConcurrency({
             requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
