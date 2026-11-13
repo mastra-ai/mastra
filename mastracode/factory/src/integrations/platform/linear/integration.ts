@@ -453,7 +453,6 @@ export class PlatformLinearIntegration implements FactoryIntegration {
         baseUrl: ctx.baseUrl,
         intake: ctx.storage.intake,
         projects: ctx.storage.projects,
-        ingestFactoryIssues: attachLinearRules(this, ctx),
         workItems: ctx.runtime?.workItems,
         boards: ctx.runtime?.boards,
       }).filter(route => !route.path.startsWith('/auth/linear/')),
