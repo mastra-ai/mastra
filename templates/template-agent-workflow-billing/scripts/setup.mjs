@@ -34,7 +34,7 @@ try {
     'Personal image profiles and local allowances are ready. Credentials remain private in data/local-profiles.json.',
   );
 } catch (error) {
-  if (error?.name === 'SetupLockError') console.error(error.message);
+  if (['SetupLockError', 'UnsupportedPlatformError'].includes(error?.name)) console.error(error.message);
   console.error(
     'Setup failed safely. Check local mode, private state, and current credentials. Existing state was preserved.',
   );

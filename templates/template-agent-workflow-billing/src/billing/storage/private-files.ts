@@ -3,6 +3,16 @@ import { open, lstat, mkdir } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { BillingError } from '../contracts.js';
 
+function requirePrivateFilePlatform() {
+  if (!['darwin', 'linux'].includes(process.platform) || typeof process.getuid !== 'function') {
+    const error = new Error(
+      'Unsupported platform: this template requires macOS or Linux with POSIX file ownership and permissions. Windows is not supported.',
+    );
+    error.name = 'UnsupportedPlatformError';
+    throw error;
+  }
+}
+
 async function restrictFile(filename: string, create: boolean): Promise<void> {
   let handle: FileHandle | undefined;
   try {
@@ -25,6 +35,7 @@ async function restrictFile(filename: string, create: boolean): Promise<void> {
 }
 
 export async function privateWorkflowFiles(filename: string): Promise<void> {
+  requirePrivateFilePlatform();
   // SQLite inherits the existing database's mode for new WAL/SHM files. Create
   // the main file privately before the adapter can open SQLite; also repair
   // legacy sidecars before initialization can write any additional content.
@@ -34,6 +45,7 @@ export async function privateWorkflowFiles(filename: string): Promise<void> {
 }
 
 export async function verifyPrivateFiles(filename: string): Promise<void> {
+  requirePrivateFilePlatform();
   for (const [index, path] of [filename, `${filename}-wal`, `${filename}-shm`].entries()) {
     try {
       const info = await lstat(path);
@@ -47,6 +59,7 @@ export async function verifyPrivateFiles(filename: string): Promise<void> {
 }
 
 export async function privateDirectory(directory: string) {
+  requirePrivateFilePlatform();
   await mkdir(directory, { recursive: true, mode: 0o700 });
   const info = await lstat(directory);
   if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0)

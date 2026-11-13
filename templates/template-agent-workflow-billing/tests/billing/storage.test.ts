@@ -4,7 +4,7 @@ import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promis
 import { unlinkSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { privateWorkflowFiles } from '../../src/billing/storage/private-files.js';
+import { privateWorkflowFiles, verifyPrivateFiles, privateDirectory } from '../../src/billing/storage/private-files.js';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
 import { readLocalProfiles } from '../../src/billing/local-profiles.js';
@@ -35,6 +35,24 @@ async function fixture() {
 }
 
 describe('local billing storage', () => {
+  it('private storage rejects Windows with an explicit platform error', async () => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const platform = Object.getOwnPropertyDescriptor(process, 'platform')!;
+    Object.defineProperty(process, 'platform', { ...platform, value: 'win32' });
+    try {
+      for (const operation of [
+        () => privateWorkflowFiles(database.filename),
+        () => verifyPrivateFiles(database.filename),
+        () => privateDirectory(database.directory),
+      ])
+        await expect(operation()).rejects.toThrow('Unsupported platform: this template requires macOS or Linux');
+    } finally {
+      Object.defineProperty(process, 'platform', platform);
+    }
+    await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
   it.each(['wal', 'shm'] as const)(
     'a disappearing SQLite %s sidecar preserves restart and durable data',
     async sidecar => {

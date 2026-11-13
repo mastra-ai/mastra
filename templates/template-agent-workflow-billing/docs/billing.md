@@ -2,6 +2,10 @@
 
 Configure billing independently of your agents and workflows. The template uses `createBilling(...)` to resolve its provider and commercial configuration, optional registration wrappers to select paid resources, and an ordinary `new Mastra({...})` for the application itself.
 
+## Supported platforms
+
+Run this template on macOS or Linux with Node.js 22.13+ or 24. Private billing databases, credentials and image artifacts require POSIX file ownership and permissions. Windows is unsupported; setup and storage initialization fail explicitly before accessing private state. Use a Linux environment such as WSL to run it on a Windows host.
+
 ## Configure the application
 
 `src/mastra/index.ts` contains the provider environment, logical `credits` meter, `starter` offer, resource policies and the Mastra constructor. Example-specific factories stay in `src/mastra/agents` and `src/mastra/workflows`. Nothing in the billing integration imports the image example.
