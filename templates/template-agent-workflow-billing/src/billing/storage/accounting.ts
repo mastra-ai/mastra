@@ -580,11 +580,8 @@ export class AccountingStorage {
     ).rows[0];
     if (!previous) return null;
     if (previous.fingerprint !== claim.fingerprint) throw new BillingError('conflict');
-    // A claimed invocation is never dispatched again, including after restart.
-    await transaction.execute({
-      sql: "UPDATE billing_executions SET status = 'uncertain', settlement = CASE WHEN settlement = 'reserved' THEN 'uncertain' ELSE settlement END WHERE id = ? AND status = 'running' AND runtime_id != ?",
-      args: [previous.execution_id, claim.runtimeId],
-    });
+    // Replay cannot establish owner death. Recovery checks liveness and fences
+    // interrupted owners; a duplicate request only reads the durable result.
     return response(await this.find(transaction, String(previous.execution_id)), true);
   }
   replay(claim: OperationClaim): Promise<BillingResponse | null> {

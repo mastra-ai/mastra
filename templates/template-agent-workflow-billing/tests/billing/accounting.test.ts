@@ -16,6 +16,22 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
+it('another runtime replays active work without changing the owner execution', async () => {
+  const f = await fixture();
+  const worker = accountingWorker(f.database.url, f.config, f.alice.credential!, f.alice.workspaceId);
+  cleanups.push(worker.close);
+  await worker.wait('ready');
+  worker.send({ type: 'hang', round: 0, key: 'live-owner' });
+  await worker.wait('executing', 0);
+  const before = (await f.observer.execute('SELECT id, status, settlement FROM billing_executions')).rows;
+  expect((await f.gateway.execute(f.context, f.request('live-owner'))).billing).toMatchObject({
+    executionStatus: 'running',
+    replayed: true,
+    billedUnits: null,
+  });
+  expect((await f.observer.execute('SELECT id, status, settlement FROM billing_executions')).rows).toEqual(before);
+});
+
 it('agent payload validation rejects malformed requests before reserving credit', async () => {
   let computes = 0;
   const f = await fixture(charges[1], {
@@ -637,8 +653,8 @@ describe('transactional billing gateway', () => {
     expect(pending.billing).toMatchObject({ executionStatus: 'running', billedUnits: null, replayed: true });
     await rollback.observer.execute('DROP TRIGGER fail_outbox');
 
-    // A terminated process leaves a durable claim. A new runtime reports the
-    // ambiguous execution and retains the hold instead of executing it again.
+    // Replay retains the durable claim even after termination. Only explicit
+    // liveness-based recovery can fence the owner and mark it uncertain.
     const crashed = await fixture();
     const worker = accountingWorker(
       crashed.database.url,
@@ -653,8 +669,8 @@ describe('transactional billing gateway', () => {
     await worker.close();
     const recovered = await crashed.gateway.execute(crashed.context, crashed.request('crashed'));
     expect(recovered.billing).toMatchObject({
-      executionStatus: 'uncertain',
-      settlementStatus: 'uncertain',
+      executionStatus: 'running',
+      settlementStatus: 'reserved',
       billedUnits: null,
       replayed: true,
     });
