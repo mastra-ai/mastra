@@ -13,5 +13,12 @@ import { describeRecoveryExitCases } from './test-utils/recovery-exit-cases';
 
 describe('in-memory store', () => {
   const storage = new InMemoryStore();
-  describeRecoveryExitCases({ getStorage: () => storage });
+  // The broker rows run on Postgres.
+  describeRecoveryExitCases({
+    getStorage: () => storage,
+    cases: [
+      { pubsub: 'in-process', exit: 'crashes' },
+      { pubsub: 'in-process', exit: 'shuts down' },
+    ],
+  });
 });

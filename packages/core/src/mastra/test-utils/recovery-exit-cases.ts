@@ -46,26 +46,19 @@ export interface RecoveryExitCase {
   exit: 'crashes' | 'shuts down';
 }
 
-const ALL_EXIT_CASES: RecoveryExitCase[] = [
-  { pubsub: 'in-process', exit: 'crashes' },
-  { pubsub: 'in-process', exit: 'shuts down' },
-  { pubsub: 'broker', exit: 'crashes' },
-  { pubsub: 'broker', exit: 'shuts down' },
-];
-
 /**
  * `getStorage` is the store the test reads. `connect` opens the store an
  * instance uses, on the same database; it defaults to `getStorage`. `cases`
- * picks the rows to run; it defaults to all of them.
+ * picks the rows to run.
  */
 export function describeRecoveryExitCases({
   getStorage,
   connect = getStorage,
-  cases = ALL_EXIT_CASES,
+  cases,
 }: {
   getStorage: () => MastraStorage;
   connect?: () => MastraStorage | Promise<MastraStorage>;
-  cases?: RecoveryExitCase[];
+  cases: RecoveryExitCase[];
 }) {
   describe('recovery of a default-engine run whose instance stopped (#28712)', () => {
     const instances: { mastra: Mastra; revive: () => void }[] = [];

@@ -31,7 +31,7 @@ describe('LibSQL workflow recovery passes', () => {
     await instance.init();
     return instance;
   };
-  // The in-memory suite runs every row; here one, a graceful reload as `mastra dev` does on its default store.
+  // One row: a graceful reload, as `mastra dev` does on its default store.
   describeRecoveryExitCases({
     getStorage: () => storage,
     connect,
