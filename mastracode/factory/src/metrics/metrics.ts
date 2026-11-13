@@ -190,7 +190,10 @@ export class FactoryMetrics {
       }
       this.#observations.clear();
 
-      const results = await Promise.allSettled(this.#collectors.map(collector => collector.collect(sink)));
+      // A collector that throws synchronously becomes a rejection here, so it never orphans the others.
+      const results = await Promise.allSettled(
+        this.#collectors.map(collector => Promise.resolve().then(() => collector.collect(sink))),
+      );
       for (const result of results) {
         if (result.status === 'rejected') {
           this.#targets?.getLogger()?.warn('[factory:metrics] Collector failed.', { error: String(result.reason) });

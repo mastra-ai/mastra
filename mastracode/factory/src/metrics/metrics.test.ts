@@ -348,6 +348,25 @@ describe('redis collectors', () => {
 });
 
 describe('review follow-ups', () => {
+  it('a collector that throws synchronously does not orphan the others', async () => {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['process'] }, {}), 'all');
+    const { records, targets } = capture();
+    const warn = vi.fn();
+    metrics.start({ ...targets, getLogger: () => ({ info: vi.fn(), warn }) }, [
+      { collect: sink => sink.emit('mastra_factory_first', 1, {}) },
+      {
+        collect: () => {
+          throw new Error('boom');
+        },
+      },
+      { collect: async sink => sink.emit('mastra_factory_last', 1, {}) },
+    ]);
+    await metrics.tick();
+    metrics.stop();
+    expect(records.map(r => r.name)).toEqual(expect.arrayContaining(['mastra_factory_first', 'mastra_factory_last']));
+    expect(warn).toHaveBeenCalledWith('[factory:metrics] Collector failed.', { error: 'Error: boom' });
+  });
+
   function deferred() {
     let resolve!: () => void;
     let reject!: (error: unknown) => void;
