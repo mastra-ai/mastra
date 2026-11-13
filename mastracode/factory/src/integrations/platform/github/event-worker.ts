@@ -218,6 +218,10 @@ export class PlatformGithubEventWorker extends MastraWorker {
 
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
+    // Nothing was listening while stopped, and a read that was in flight
+    // during stop() may have cached its result after stop() returned.
+    this.#repositoryChanges += 1;
+    this.#repositories = undefined;
     this.#unsubscribeRepositoryChanges = this.#onRepositoriesChanged?.(() => {
       this.#repositoryChanges += 1;
       this.#repositories = undefined;
@@ -238,7 +242,6 @@ export class PlatformGithubEventWorker extends MastraWorker {
     this.#stopLeaseRenewal();
     this.#unsubscribeRepositoryChanges?.();
     this.#unsubscribeRepositoryChanges = undefined;
-    this.#repositories = undefined;
     await this.#inFlight;
     if (this.#hasLease) {
       await this.#leaseProvider.releaseLease(this.#leaseKey(), this.#leaseOwner).catch(() => undefined);

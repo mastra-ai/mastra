@@ -276,6 +276,30 @@ describe.each(databases)('PlatformGithubEventWorker linked repositories on $name
     expect(storageReads()).toBe(readsForFirstPoll);
   });
 
+  it('reads the linked repositories again after a restart that interrupted a read', async () => {
+    await linkRepository(polling, '101');
+    const reading = Promise.withResolvers<void>();
+    const finishRead = Promise.withResolvers<void>();
+    const { projectRepositories } = polling.github;
+    const listConfiguredExternalKeys = projectRepositories.listConfiguredExternalKeys.bind(projectRepositories);
+    vi.spyOn(projectRepositories, 'listConfiguredExternalKeys').mockImplementationOnce(async () => {
+      reading.resolve();
+      await finishRead.promise;
+      return listConfiguredExternalKeys();
+    });
+    await startWorker();
+    await reading.promise;
+
+    const stopped = worker!.stop();
+    finishRead.resolve();
+    await stopped;
+    // Linked while stopped, so no change listener hears it.
+    await linkRepository(polling, '202');
+    await worker!.start();
+
+    await polls('202', 1);
+  });
+
   it('re-reads the linked repositories on every poll while it is still subscribing to other replicas', async () => {
     const connected = Promise.withResolvers<void>();
     const pubsub = connection();
