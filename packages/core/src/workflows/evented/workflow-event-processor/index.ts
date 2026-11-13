@@ -1357,7 +1357,11 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         opts: {
           status: finalStatus,
-          result: normalizedPrevResult,
+          // The stored result is the workflow output (as on the default engine), not the step record.
+          result:
+            finalStatus === 'success' && normalizedPrevResult.status === 'success'
+              ? normalizedPrevResult.output
+              : undefined,
           activePaths: executionPath,
           activeStepsPath: activeStepsPath,
         },
@@ -3303,10 +3307,29 @@ export class WorkflowEventProcessor extends EventProcessor {
           recordedParent?.runId === runId &&
           recordedParent.executionPath?.length === executionPath.length &&
           recordedParent.executionPath.every((index, depth) => index === executionPath[depth]);
-        const finishedResult =
-          snapshot.status === 'success' &&
-          (snapshot.result as StepResult<any, any, any, any> | undefined)?.status === 'success'
-            ? (snapshot.result as StepResult<any, any, any, any>)
+        // The stored result is the workflow output. Runs stored before #29759 hold the last
+        // step's result record instead, so hand those up as they are.
+        const storedResult = snapshot.result as any;
+        const isLegacyStepRecord =
+          storedResult?.status === 'success' &&
+          typeof storedResult === 'object' &&
+          'output' in storedResult &&
+          typeof storedResult.startedAt === 'number' &&
+          typeof storedResult.endedAt === 'number';
+        // Rebuild the record's timing from this step's running record and the run's last write,
+        // as this record replaces the step's record in the parent.
+        const runningRecord = stepResults?.[leafId] as StepResult<any, any, any, any> | undefined;
+        const finishedResult: StepResult<any, any, any, any> | undefined =
+          snapshot.status === 'success'
+            ? isLegacyStepRecord
+              ? storedResult
+              : {
+                  status: 'success',
+                  output: storedResult,
+                  payload: runningRecord?.payload,
+                  startedAt: runningRecord?.startedAt ?? snapshot.timestamp ?? Date.now(),
+                  endedAt: snapshot.timestamp ?? Date.now(),
+                }
             : undefined;
         if (ranForThisStep && (finishedResult || snapshot.status === 'failed')) {
           const parentContext: ParentWorkflow = {
@@ -4056,7 +4079,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           opts: {
             status: 'suspended',
-            result: { status: 'suspended' } as any,
+            result: undefined,
             suspendedPaths,
             resumeLabels,
             ...(suspendTracingContext ? { tracingContext: suspendTracingContext } : {}),
@@ -4594,7 +4617,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               runId,
               opts: {
                 status: 'suspended',
-                result: foreachSuspendResult,
+                result: undefined,
                 suspendedPaths,
                 resumeLabels: collectedResumeLabels,
                 activePaths: executionPath,
@@ -4856,7 +4879,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           runId,
           opts: {
             status: 'suspended',
-            result: prevResult,
+            result: undefined,
             suspendedPaths,
             resumeLabels,
             activePaths: executionPath,
