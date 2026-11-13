@@ -200,7 +200,7 @@ describe('ArizeExporter', () => {
         "mastra.span.type": "model_inference",
         "openinference.span.kind": "LLM",
         "output.mime_type": "application/json",
-        "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}]}]",
+        "output.value": "[{"role":"assistant","parts":[{"type":"text","content":"The weather in Tokyo is sunny."}],"finish_reason":"unknown"}]",
       }
     `);
   });

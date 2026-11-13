@@ -23,13 +23,11 @@ import {
 import { getAttributes, getSpanName, isModelCallSpan } from './gen-ai-semantics.js';
 import type { OtelExporterConfig } from './types.js';
 
-export type SpanFormat = 'GenAI_v1_38_0';
+export type SpanFormat = 'GenAI_v1_41_0';
 
-// If more formats come later:
-// export type SpanFormat =
-//   | "GenAI_v1_38_0"
-//   | "GenAI_v1_38_0"
-//   | "Custom_v2";
+export const SCHEMA_URLS: Record<SpanFormat, string> = {
+  GenAI_v1_41_0: 'https://opentelemetry.io/schemas/1.41.0',
+};
 
 export class SpanConverter {
   private resource?: Resource;
@@ -61,14 +59,19 @@ export class SpanConverter {
       const packageVersion = (await getPackageVersion(this.params.packageName)) ?? 'unknown';
 
       const serviceVersion = (await getPackageVersion('@mastra/core')) ?? 'unknown';
+      const exporterMayRewriteAttributes = this.params.config?.exporter !== undefined;
+      const schemaUrl = exporterMayRewriteAttributes ? undefined : SCHEMA_URLS[this.format];
 
-      let resource = resourceFromAttributes({
-        [ATTR_SERVICE_NAME]: this.params.serviceName || 'mastra-service',
-        [ATTR_SERVICE_VERSION]: serviceVersion,
-        [ATTR_TELEMETRY_SDK_NAME]: this.params.packageName,
-        [ATTR_TELEMETRY_SDK_VERSION]: packageVersion,
-        [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
-      });
+      let resource = resourceFromAttributes(
+        {
+          [ATTR_SERVICE_NAME]: this.params.serviceName || 'mastra-service',
+          [ATTR_SERVICE_VERSION]: serviceVersion,
+          [ATTR_TELEMETRY_SDK_NAME]: this.params.packageName,
+          [ATTR_TELEMETRY_SDK_VERSION]: packageVersion,
+          [ATTR_TELEMETRY_SDK_LANGUAGE]: 'nodejs',
+        },
+        { schemaUrl },
+      );
 
       if (this.params.config?.resourceAttributes) {
         resource = resource.merge(
@@ -81,6 +84,7 @@ export class SpanConverter {
       this.scope = {
         name: this.params.packageName,
         version: packageVersion,
+        schemaUrl,
       };
     })();
 

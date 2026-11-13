@@ -823,7 +823,7 @@ describe('OtelBridge', () => {
       // OtelBridge uses SpanConverter which should set mastra.tags on root spans
       const { SpanConverter } = await import('@mastra/otel-exporter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -851,7 +851,7 @@ describe('OtelBridge', () => {
     it('should not include mastra.tags attribute for child spans', async () => {
       const { SpanConverter } = await import('@mastra/otel-exporter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -877,7 +877,7 @@ describe('OtelBridge', () => {
     it('should not include mastra.tags attribute when tags is empty or undefined', async () => {
       const { SpanConverter } = await import('@mastra/otel-exporter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -1177,6 +1177,45 @@ describe('OtelBridge', () => {
         trace.setGlobalTracerProvider(tracerProvider);
       }
     });
+  });
+
+  it('keeps list-valued attributes such as stop sequences on the OpenTelemetry span', async () => {
+    trace.disable();
+    try {
+      const spanExporter = new InMemorySpanExporter();
+      const customProvider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(spanExporter)] });
+      const bridge = new OtelBridge({ tracerProvider: customProvider });
+      bridge.init({ config: { serviceName: 'array-attrs' } });
+      const attributes = { model: 'gpt-4o', finishReason: 'stop', parameters: { stopSequences: ['END'] } };
+      const ids = bridge.createSpan({
+        type: SpanType.MODEL_INFERENCE,
+        name: 'llm',
+        attributes,
+      } as CreateSpanOptions<SpanType.MODEL_INFERENCE>);
+
+      await bridge.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: {
+          id: ids!.spanId,
+          traceId: ids!.traceId,
+          type: SpanType.MODEL_INFERENCE,
+          name: 'llm',
+          startTime: new Date(),
+          endTime: new Date(),
+          isRootSpan: true,
+          attributes,
+        } as any,
+      });
+
+      const [span] = spanExporter.getFinishedSpans();
+      expect(span!.attributes['gen_ai.request.stop_sequences']).toEqual(['END']);
+      expect(span!.attributes['gen_ai.response.finish_reasons']).toEqual(['stop']);
+
+      await bridge.shutdown();
+      await customProvider.shutdown();
+    } finally {
+      trace.setGlobalTracerProvider(tracerProvider);
+    }
   });
 
   describe('span map cleanup', () => {

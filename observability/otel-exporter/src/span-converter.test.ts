@@ -49,7 +49,7 @@ describe('SpanConverter', () => {
     converter = new SpanConverter({
       packageName: '@mastra/otel-exporter',
       serviceName: 'test-service',
-      format: 'GenAI_v1_38_0',
+      format: 'GenAI_v1_41_0',
     });
   });
 
@@ -393,7 +393,7 @@ describe('SpanConverter', () => {
 
       expect(attrs['gen_ai.usage.input_tokens']).toBe(100);
       expect(attrs['gen_ai.usage.output_tokens']).toBe(50);
-      expect(attrs['gen_ai.usage.reasoning_tokens']).toBe(20);
+      expect(attrs['gen_ai.usage.reasoning.output_tokens']).toBe(20);
       expect(attrs['gen_ai.usage.cache_read.input_tokens']).toBe(30);
 
       // Should NOT have old naming
@@ -501,8 +501,8 @@ describe('SpanConverter', () => {
       expect(attrs['gen_ai.request.top_k']).toBe(40);
       expect(attrs['gen_ai.request.presence_penalty']).toBe(0.1);
       expect(attrs['gen_ai.request.frequency_penalty']).toBe(0.2);
-      expect(attrs['gen_ai.request.stop_sequences']).toBe('["\\\\n","END"]');
-      expect(attrs['gen_ai.response.finish_reasons']).toBe('["stop"]');
+      expect(attrs['gen_ai.request.stop_sequences']).toEqual(['\\n', 'END']);
+      expect(attrs['gen_ai.response.finish_reasons']).toEqual(['stop']);
     });
 
     it('should include all OTEL Gen AI semantic conventions', async () => {
@@ -675,6 +675,9 @@ describe('SpanConverter', () => {
         entityId: 'test',
         attributes: {
           availableTools: ['tool1', 'tool2'],
+          instructions: 'Be brief.',
+          model: 'grok-4',
+          provider: 'x-ai',
         } as AgentRunAttributes,
       };
 
@@ -682,7 +685,14 @@ describe('SpanConverter', () => {
       const attrs = result.attributes;
 
       expect(attrs['gen_ai.agent.id']).toBe('test');
-      expect(attrs['gen_ai.tool.definitions']).toBe('["tool1","tool2"]');
+      expect(attrs['gen_ai.provider.name']).toBe('x_ai');
+      expect(JSON.parse(attrs['gen_ai.system_instructions'] as string)).toEqual([
+        { type: 'text', content: 'Be brief.' },
+      ]);
+      expect(JSON.parse(attrs['gen_ai.tool.definitions'] as string)).toEqual([
+        { type: 'function', name: 'tool1' },
+        { type: 'function', name: 'tool2' },
+      ]);
     });
   });
 
