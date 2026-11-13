@@ -14,6 +14,7 @@ import {
   pairOrphanedToolCalls,
   sanitizeOrphanedToolPairs,
 } from '../utils/provider-compat';
+import { hasReplayableReasoningMetadata } from '../utils/reasoning-metadata';
 import {
   getResponseProviderItemId,
   getResponseProviderItemKey,
@@ -694,26 +695,6 @@ function restoreAssistantFileProviderMetadata(
  * That requirement belongs to the provider protocol, not to the caller's preference.
  */
 export type ToolCallConversionMode = 'response' | 'prompt' | 'prompt-with-suspended';
-
-/**
- * A step that dies after the model starts thinking but before the reasoning
- * signature arrives leaves a step block holding only unsigned reasoning.
- * Providers that require signed thinking (Anthropic, Bedrock) drop such parts,
- * sending `content: []` and failing every later turn with a 400 (#24558).
- */
-const REPLAYABLE_REASONING_KEYS = [
-  'signature',
-  'redactedData',
-  'itemId',
-  'reasoningEncryptedContent',
-  'thoughtSignature',
-];
-
-function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
-  return Object.values(providerOptions ?? {}).some(
-    value => !!value && typeof value === 'object' && REPLAYABLE_REASONING_KEYS.some(key => key in value),
-  );
-}
 
 function isUnforwardableReasoningOnlyMessage(message: AIV5Type.ModelMessage): boolean {
   if (message.role !== 'assistant' || !Array.isArray(message.content) || message.content.length === 0) return false;
