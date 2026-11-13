@@ -31,6 +31,7 @@ export type TracesFilters = {
   dateFrom?: Date;
   /** Only read when `datePreset` is `custom`. */
   dateTo?: Date;
+  textSearch?: string;
   tokens: TraceFilterToken[];
   groups: TraceFilterGroup[];
 };
@@ -112,7 +113,9 @@ export const applyFilterTokens = (
 
 /** Switching to `custom` keeps the current dates so the picker opens on them; any other preset drops them. */
 export const applyDatePreset = (filters: TracesFilters, datePreset: TraceDatePreset): TracesFilters =>
-  datePreset === 'custom' ? { ...filters, datePreset } : { datePreset, tokens: filters.tokens, groups: filters.groups };
+  datePreset === 'custom'
+    ? { ...filters, datePreset }
+    : { datePreset, textSearch: filters.textSearch, tokens: filters.tokens, groups: filters.groups };
 
 // The picker can report a date right after switching away from `custom`; those are ignored.
 export const applyDate = (filters: TracesFilters, date: Date | undefined, end: 'from' | 'to'): TracesFilters => {

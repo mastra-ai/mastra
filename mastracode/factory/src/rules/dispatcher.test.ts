@@ -6,6 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { readObjective, resolveGoalStore, writeObjective } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
+import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { boardRegistryOf, createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
@@ -23,6 +24,8 @@ import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { prepareFactoryRuleBinding } from '../routes/surface.js';
+import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
+import { WorkItemRoutes } from '../routes/work-items.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -1407,6 +1410,175 @@ describe('FactoryDecisionDispatcher', () => {
       accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await vi.advanceTimersByTimeAsync(2_000);
       expect(await find('run-2')).not.toMatchObject({ status: 'pending' });
+      await dispatcher.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds ten runs per server unless configured otherwise', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      boards: autoStartingBoards(),
+      transitionService: new FactoryTransitionService({
+        storage,
+        configVersion: 'rules-v1',
+        boards: autoStartingBoards(),
+      }),
+      storage,
+    });
+    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10 });
+  });
+
+  it('lists the runs waiting for a slot on the run queue, oldest first, beside the run holding it', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
+    try {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const now = new Date();
+      await seed.storage.ops.insertOne('factory_projects', {
+        id: PROJECT_ID,
+        org_id: 'org-1',
+        created_by: 'user-1',
+        name: 'Queue project',
+        description: null,
+        default_model_id: null,
+        model_scope: 'hybrid',
+        created_at: now,
+        updated_at: now,
+      });
+      const { item: holding, transitionService } = await queueDecision(storage, {
+        type: 'sendMessage',
+        role: 'work',
+        message: 'Holds the only slot.',
+        idempotencyKey: 'holding',
+      });
+      let accept!: (value: unknown) => void;
+      const { controller } = createSession(
+        new Promise<unknown>(resolve => {
+          accept = resolve;
+        }),
+      );
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: holding.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Fix issue',
+            stages: ['execute'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'kickoff-holding',
+        kickoffMessage: null,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: 1,
+      });
+      dispatcher.start();
+      await vi.advanceTimersByTimeAsync(0);
+
+      vi.setSystemTime(new Date('2030-01-01T00:00:01Z'));
+      const { item: first } = await queueDecision(
+        storage,
+        { type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: 'first' },
+        { sourceKey: 'github-issue:2', ingress: 'queue-2' },
+      );
+      vi.setSystemTime(new Date('2030-01-01T00:00:02Z'));
+      const { item: second } = await queueDecision(
+        storage,
+        { type: 'sendMessage', role: 'work', message: 'Behind it.', idempotencyKey: 'second' },
+        { sourceKey: 'github-issue:3', ingress: 'queue-3' },
+      );
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        app as never,
+        new WorkItemRoutes({
+          auth: fakeRouteAuth(),
+          audit: { emit: async () => {} },
+          projects: seed.projects,
+          workItems: storage,
+          boardRegistry: autoStartingBoards(),
+          queueHealth: seed.queueHealth,
+          liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+          runSlots: () => dispatcher.runSlots(),
+        }).routes(),
+      );
+      const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1 });
+      expect(body.running).toBe(1);
+      expect(body.claimed).toEqual([
+        expect.objectContaining({
+          state: 'claimed',
+          type: 'sendMessage',
+          workItem: expect.objectContaining({ id: holding.id }),
+        }),
+      ]);
+      expect(body.queuedCount).toBe(2);
+      expect(body.queued).toEqual([
+        expect.objectContaining({
+          state: 'waiting',
+          position: 1,
+          type: 'invokeSkill',
+          skillName: 'factory-plan',
+          role: 'work',
+          queuedSince: '2030-01-01T00:00:01.000Z',
+          workItem: { id: first.id, key: first.workItem.key, title: 'Fix issue', board: first.board, phase: 'execute' },
+        }),
+        expect.objectContaining({
+          state: 'waiting',
+          position: 2,
+          type: 'sendMessage',
+          skillName: null,
+          queuedSince: '2030-01-01T00:00:02.000Z',
+          workItem: expect.objectContaining({ id: second.id }),
+        }),
+      ]);
+
+      const elsewhere = new Hono();
+      elsewhere.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, { workosId: 'user-2', organizationId: 'org-2' } as never);
+        await next();
+      });
+      mountApiRoutes(
+        elsewhere as never,
+        new WorkItemRoutes({
+          auth: fakeRouteAuth(),
+          audit: { emit: async () => {} },
+          projects: seed.projects,
+          workItems: storage,
+          boardRegistry: autoStartingBoards(),
+          queueHealth: seed.queueHealth,
+          liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+          runSlots: () => dispatcher.runSlots(),
+        }).routes(),
+      );
+      expect((await elsewhere.request(`/web/factory/projects/${PROJECT_ID}/run-queue`)).status).toBe(404);
+
+      accept({ action: 'wake', output: { consumeStream: vi.fn(async () => {}) } });
       await dispatcher.stop();
     } finally {
       vi.useRealTimers();

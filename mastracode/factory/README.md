@@ -676,6 +676,22 @@ const releaseBoard = defineBoard({
 
 **Migration:** `defineBoard()` still accepts the old field names and maps them to the new ones straight away: `title` → `name`, `role` → `runner.context`, `next` → `nextPhases`. It logs one warning per board that still uses them. Setting both `title` and `name`, or `role` and `runner.context`, to different values is rejected. `outcomes`, `onEnter` and `onExit` are ignored (see [Board lifecycle rules](#board-lifecycle-rules)); outcome targets are added to `nextPhases`. The board `defineBoard()` returns still has the old names as read-only copies — `board.title` and `phase.title` equal `name`, a working phase's `role` equals `runner.context`, and `phase.next` is set when the phase declared `next` — so code that reads them, or passes a defined board's phases to `defineBoard()` again, keeps working. They are deprecated; read `name`, `runner.context` and `nextPhases` instead. The board catalog (`GET /web/factory/projects/:id/boards`) still sends `title` and `role` beside the new fields for older clients. Card session keys do not change: a phase's context is its old role.
 
+### Run cap and the run queue
+
+Each server process runs at most 10 automated runs at once. A run is a skill or prompt started on a card (`invokeSkill`), a message sent to a card's session (`sendMessage`), or pull request activity delivered to one (`signalActivity`). Runs past the cap wait, oldest first, until a slot frees. Raise or lower the cap with `dispatcher.maxInFlight`, or `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` in the Mastra Code web server:
+
+```ts
+const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 25 } });
+```
+
+The cap counts per process, not per deployment: three replicas with the default run up to 30 at once.
+
+The board shows how many automated runs are waiting, and opens a list of them, oldest first. A waiting card reads `Queued (#3)`. Manual starts take the same slots and are claimed ahead of these runs, but are not listed. `GET /web/factory/projects/:id/run-queue` returns the same data:
+
+- `slots` — this server's `inUse` and `cap`, or `null` when it runs no dispatcher. Other replicas keep their own.
+- `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
+- `queuedCount` and `queued` — every automated run waiting for a slot, and the oldest 50 with their `position`, card, phase and the skill they will run. A retry still backing off is not waiting yet.
+
 ### The `factory-work-item` signal
 
 Every session bound to a card gets a `<factory-work-item>` state signal describing it, re-rendered only when the card, its sources or the binding change. It carries the card's key, title, URL, board and phase, next phases, labels, author and whether they're trusted, and the session's branch; its sources (issue and each pull or merge request, with state, head commit, a head branch that passes Factory's branch-name check, and the tool to fetch details); and Factory's state: whether the plan was approved, self-review rounds used, the last self-review and PR review verdicts with the commits they covered and findings, and the card's open change request. The session that reviews a pull request also gets the procedure to follow, the checkout steps and the pull request head to review. The source description is included, inside an `<untrusted-source-description>` block when an outside author wrote it. Comment threads are not included.

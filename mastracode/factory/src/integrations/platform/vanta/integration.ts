@@ -76,12 +76,24 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     return [{ id: VANTA_VULNERABILITIES_SOURCE_ID, name: 'Vulnerabilities', type: 'vulnerabilities' }];
   }
 
-  /** Every active vulnerability across all active Vanta connections, de-duplicated by id. */
+  /**
+   * Every active vulnerability across all Vanta connections, de-duplicated by id.
+   * The sync reads a vulnerability missing from this list as resolved, so it
+   * throws rather than return a list missing any connection's vulnerabilities.
+   */
   async listVulnerabilities(): Promise<VantaVulnerability[]> {
+    const connections = (await this.listConnections()).sort((a, b) => a.id.localeCompare(b.id));
+    if (connections.length === 0) throw new Error('There is no active Vanta connection.');
+    const unreadable = connections.find(connection => connection.status !== 'active');
+    if (unreadable) throw new Error(`Vanta connection ${unreadable.id} is ${unreadable.status}.`);
     const byId = new Map<string, VantaVulnerability>();
-    for (const connection of await this.#activeConnections()) {
+    for (const connection of connections) {
       let cursor: string | null = null;
-      for (let page = 0; page < MAX_PAGES; page++) {
+      for (let page = 0; ; page++) {
+        if (page === MAX_PAGES) {
+          // A cut-off list would read as the rest being resolved.
+          throw new Error(`Vanta connection ${connection.id} has more than ${MAX_PAGES} pages of vulnerabilities.`);
+        }
         const query = new URLSearchParams({ isDeactivated: 'false', pageSize: String(PAGE_SIZE) });
         if (cursor) query.set('pageCursor', cursor);
         const result: VantaVulnerabilityPage = await this.#client.request<VantaVulnerabilityPage>(
@@ -101,7 +113,8 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     if (!ingest) return [];
     const { projects, intake } = ctx.storage;
     const sync = createVantaSync({
-      listVulnerabilities: async () => ((await this.#activeConnections()).length ? this.listVulnerabilities() : []),
+      connected: async () => (await this.#activeConnections()).length > 0,
+      listVulnerabilities: () => this.listVulnerabilities(),
       listProjects: () => projects.listAll(),
       intakeEnabled: async orgId =>
         (await intake.getConfig({ orgId, integrationIds: [this.id] }))[this.id]?.enabled ?? false,

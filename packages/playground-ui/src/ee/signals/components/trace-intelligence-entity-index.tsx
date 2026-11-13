@@ -17,7 +17,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataListSkeleton } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { ListSearch } from '@/ds/components/ListSearch';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
@@ -75,11 +75,12 @@ function EntityIndexControls({
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="max-w-120 flex-1">
-        <ListSearch
+        <SearchInput
+          {...listSearchProps}
           value={search}
-          onSearch={onSearchChange}
-          label="Filter agents"
-          placeholder="Filter by agent identifier"
+          onValueChange={onSearchChange}
+          label="Search agents"
+          placeholder="Search by agent identifier"
         />
       </div>
       <div className="flex items-center justify-between gap-2 sm:ml-auto sm:justify-end">

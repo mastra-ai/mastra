@@ -3,9 +3,10 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import type { FactoryProject } from '../../storage/domains/projects/base.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
-import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
+import { storageCards } from '../kept-cards.js';
 import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
 import type { GitLabIntegrationBase } from './integration.js';
 import { attachGitLabRules } from './rules.js';
@@ -171,6 +172,9 @@ export function attachGitLabMergeRequestReconciler(
   const ingest = attachGitLabRules(gitlab, context);
   if (!ingest) return undefined;
   const boards = context.runtime.boards;
+  const source =
+    context.runtime.keptCards ??
+    storageCards({ projects: context.storage.projects, workItems: context.runtime.workItems });
 
   return async () => {
     const summary: IssueReconcileSummary = {
@@ -182,21 +186,23 @@ export function attachGitLabMergeRequestReconciler(
       failed: 0,
       errors: [],
     };
-    for (const project of await context.storage.projects.listAll()) {
-      let cards: Awaited<ReturnType<WorkItemsStorage['listShared']>>;
+    for (const project of await source.projects()) {
+      let mergeRequests: Card[];
       try {
+        const cards = await source.cards({ orgId: project.orgId, factoryProjectId: project.id });
+        mergeRequests = cards.filter(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.type === 'pull-request',
+        );
+        // Before the boards are loaded: a project with no merge request cards costs no read.
+        if (mergeRequests.length === 0) continue;
         await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
-        cards = await context.runtime!.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id });
       } catch (error) {
         // One project whose boards or cards cannot be read must not end the sweep for the others.
         summary.failed += 1;
         summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
         continue;
       }
-      const items = cards.filter(item => {
-        if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
-          return false;
-        }
+      const items = mergeRequests.filter(item => {
         if (workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind !== 'terminal') return true;
         // Same contract as the GitHub sweep: a terminal card is settled once
         // the provider's terminal outcome has been replayed and stamped. Done
