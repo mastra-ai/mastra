@@ -28,7 +28,8 @@ export function toVantaIngress(vulnerability: VantaVulnerability): VantaVulnerab
     id: vulnerability.id,
     name: vulnerability.name,
     title: packageIdentifier ? `${packageIdentifier}: ${vulnerability.name}` : vulnerability.name,
-    description: vulnerability.description && vulnerability.description !== vulnerability.name ? vulnerability.description : null,
+    description:
+      vulnerability.description && vulnerability.description !== vulnerability.name ? vulnerability.description : null,
     url: vulnerability.externalURL ?? null,
     state: 'open',
     severity,
@@ -46,6 +47,11 @@ export function toVantaIngress(vulnerability: VantaVulnerability): VantaVulnerab
  * vulnerabilities source to it or binds it to no project at all.
  */
 export function createVantaSync(options: {
+  /**
+   * Whether any Vanta connection is active. Without one the vulnerability list
+   * is empty, which would read as every filed vulnerability being resolved.
+   */
+  connected: () => Promise<boolean>;
   listVulnerabilities: VantaVulnerabilityLister;
   listProjects: () => Promise<ReadonlyArray<{ orgId: string; id: string }>>;
   intakeEnabled: (orgId: string) => Promise<boolean>;
@@ -54,7 +60,16 @@ export function createVantaSync(options: {
   userId: string;
 }): () => Promise<IssueReconcileSummary> {
   return async () => {
-    const summary: IssueReconcileSummary = { projects: 0, checked: 0, updated: 0, closed: 0, missing: 0, failed: 0, errors: [] };
+    const summary: IssueReconcileSummary = {
+      projects: 0,
+      checked: 0,
+      updated: 0,
+      closed: 0,
+      missing: 0,
+      failed: 0,
+      errors: [],
+    };
+    if (!(await options.connected())) return summary;
     const projects = await options.listProjects();
     if (projects.length === 0) return summary;
     const vulnerabilities = (await options.listVulnerabilities()).map(toVantaIngress);
