@@ -183,6 +183,11 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
       { reservation: pending.request, action: 'confirm', units: 1 },
       pending.payload,
     );
+    // Never release a possibly confirmed intent in cleanup, even if dispatch assertions fail.
+    active.splice(
+      active.findIndex(item => item.request.id === pending.request.id),
+      1,
+    );
     try {
       assert.equal((await lossy.reservations.finalize(payload)).status, 'uncertain');
       assert.equal(forwarded, 1);
@@ -191,11 +196,6 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
       proxy.closeAllConnections();
       await new Promise<void>(resolve => proxy.close(() => resolve()));
     }
-    // Never release a possibly confirmed intent in cleanup.
-    active.splice(
-      active.findIndex(item => item.request.id === pending.request.id),
-      1,
-    );
     const evidenceDeadline = Date.now() + 120000;
     let recovered = await provider.reservations.reconcileFinalization(payload);
     while (recovered.status === 'uncertain' && Date.now() < evidenceDeadline) {
