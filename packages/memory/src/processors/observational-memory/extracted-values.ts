@@ -238,7 +238,11 @@ export async function applyExtractorHooks(opts: {
   failures?: ExtractionFailure[];
   previousValues?: Record<string, unknown>;
   rawObservations?: string;
-  recentMessages?: string;
+  /**
+   * Rendered recent conversation for hooks. Pass a function to defer rendering: it only runs
+   * (once) when a non-internal `onExtracted` hook is about to receive it.
+   */
+  recentMessages?: string | (() => string);
   threadId: string;
   resourceId?: string;
   mainAgent?: ProcessorContext['agent'];
@@ -252,6 +256,15 @@ export async function applyExtractorHooks(opts: {
 }): Promise<{ values?: Record<string, unknown>; failures?: ExtractionFailure[] }> {
   const values = normalizeExtractedValues(opts.values) ?? {};
   const failures: ExtractionFailure[] = [...(opts.failures ?? [])];
+  let recentMessages: string | undefined;
+  let recentMessagesResolved = false;
+  const resolveRecentMessages = () => {
+    if (!recentMessagesResolved) {
+      recentMessages = typeof opts.recentMessages === 'function' ? opts.recentMessages() : opts.recentMessages;
+      recentMessagesResolved = true;
+    }
+    return recentMessages;
+  };
 
   for (const extractor of opts.extractors) {
     const isHook = extractor.mode === 'hook';
@@ -279,7 +292,7 @@ export async function applyExtractorHooks(opts: {
         previous: isHook ? undefined : opts.previousValues?.[extractor.slug],
         current,
         rawObservations: opts.rawObservations,
-        recentMessages: opts.recentMessages,
+        recentMessages: resolveRecentMessages(),
         mainAgent: opts.mainAgent,
         memory: opts.memory,
         sendSignal: opts.sendSignal,
