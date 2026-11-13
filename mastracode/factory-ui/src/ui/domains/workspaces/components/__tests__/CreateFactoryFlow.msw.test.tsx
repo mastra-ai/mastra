@@ -10,13 +10,27 @@ import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { GithubStatus } from '../../services/github';
 import { CreateFactoryWizard } from '../create-factory/CreateFactoryWizard';
+
+const nangoAuths: string[] = [];
+vi.mock('@nangohq/frontend', () => {
+  class Nango {
+    auth(integrationId: string) {
+      nangoAuths.push(integrationId);
+      return Promise.resolve({ connectionId: 'vendor-connection', providerConfigKey: integrationId });
+    }
+  }
+  class AuthError extends Error {
+    type = 'unknown';
+  }
+  return { default: Nango, AuthError };
+});
 
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -526,6 +540,69 @@ describe('Create Factory wizard', () => {
 
     expect(await screen.findByRole('option', { name: /Reconnect Linear/ })).toBeInTheDocument();
     expect(screen.getByRole('option', { name: /Skip for now/ })).toBeInTheDocument();
+  });
+
+  it('connects Linear through Mastra Connect on a Platform server without leaving the wizard', async () => {
+    seedDraft('project-management');
+    nangoAuths.length = 0;
+    let connected = false;
+    const sessions: string[] = [];
+    const root = `${TEST_BASE_URL}/web/integrations/platform/linear`;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json(
+          connected
+            ? {
+                enabled: true,
+                connected: true,
+                reason: 'ready',
+                mode: 'platform',
+                workspace: { name: 'Acme', urlKey: 'acme' },
+              }
+            : { enabled: true, connected: false, reason: 'not_connected', mode: 'platform', workspace: null },
+        ),
+      ),
+      http.get(`${TEST_BASE_URL}/web/linear/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'lin-1',
+              name: 'Mobile App',
+              state: 'started',
+              teams: [{ id: 't1', key: 'ENG', name: 'Engineering' }],
+            },
+          ],
+        }),
+      ),
+      http.post(`${root}/connect-session`, () => {
+        connected = true;
+        sessions.push('connect');
+        return HttpResponse.json(
+          {
+            connectionId: 'linear-new',
+            integrationId: 'linear',
+            connectUrl: 'https://example.com/consent',
+            sessionToken: 'session-token',
+            expiresAt: '2099-01-01T00:00:00.000Z',
+          },
+          { status: 201 },
+        );
+      }),
+      http.get(`${root}/connections`, () =>
+        HttpResponse.json({
+          connections: [{ id: 'linear-new', integrationId: 'linear', status: 'active', accountLabel: 'Acme' }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderFlow();
+    await user.click(await screen.findByRole('option', { name: /Connect Linear/ }));
+
+    expect(await screen.findByRole('option', { name: /Mobile App/ })).toBeInTheDocument();
+    expect(sessions).toEqual(['connect']);
+    expect(nangoAuths).toEqual(['linear']);
+    expect(screen.getByTestId('pathname')).toHaveTextContent(WIZARD_PATH);
   });
 
   it('resumes at the stored step after an OAuth round-trip, listing the workspace projects', async () => {

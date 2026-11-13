@@ -1,22 +1,22 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-import { useApiConfig } from '../../../../api/config';
+import { useLinearConnect } from '../../../../hooks/useLinearConnect';
 import type { IntakeFeed, IntakeSource } from '../boardCandidates';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
-import { connectLinear, isLinearReauthError } from '../services/linear';
+import { isLinearReauthError } from '../services/linear';
 
 /**
  * Why a column has no candidates when its feed failed. Without it the column
  * falls back to its empty state and reads as an empty backlog.
  */
 export function IntakeFeedNotice({ source, feed }: { source?: IntakeSource; feed: IntakeFeed }) {
-  const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   if (!feed.error) return null;
   const label = BOARD_SOURCE_OPTIONS.find(option => option.value === source?.split('-')[0])?.label;
 
   return source === 'linear' && isLinearReauthError(feed.error) ? (
-    <LinearReauthNotice onConnect={() => connectLinear(baseUrl)} />
+    <LinearReauthNotice onConnect={() => void linear.connect()} />
   ) : (
     // A page that failed is not stored, so only fetchNextPage requests it again.
     <FeedFailureNotice

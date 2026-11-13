@@ -1,10 +1,12 @@
 /**
  * Browser-side helpers for the Linear intake source.
  *
- * All requests go to the server's `/web/linear/*` and `/auth/linear/*` routes,
- * which sit behind the WorkOS auth gate and are scoped to the caller's
- * organization. The Linear OAuth token never reaches the browser — the server
- * talks to Linear's GraphQL API on the org's behalf.
+ * All requests go to the server's `/web/linear/*` routes, which sit behind the
+ * WorkOS auth gate and are scoped to the caller's organization. A self-managed
+ * server connects through its own `/auth/linear/*` OAuth routes; a Platform
+ * server connects through Mastra Connect (`platformConnect.ts`). The Linear
+ * token never reaches the browser — the server talks to Linear's GraphQL API on
+ * the org's behalf.
  */
 
 import { RequestError } from './request';
@@ -15,7 +17,26 @@ export type LinearStatusReason =
   | 'organization_required'
   | 'not_connected'
   | 'ready'
-  | 'unavailable';
+  | 'unavailable'
+  | 'migration_required';
+
+/** Platform servers move workspaces from the platform's legacy Linear tokens onto Mastra Connect. */
+export interface LinearMigrationStatus {
+  /** Workspaces are still waiting to move. */
+  required: boolean;
+  /** Linear workspace ids still waiting. */
+  pending: string[];
+  /** Workspaces the platform couldn't move, with why. */
+  skipped: Array<{ linearWorkspaceId: string; reason: string }>;
+  lastError?: { message: string; at: string } | null;
+}
+
+/** A Connect connection that can't be reconnected in place: it needs a fresh connect. */
+export interface LinearFreshConnect {
+  connectionId: string;
+  accountLabel: string | null;
+  linearWorkspaceId: string | null;
+}
 
 export interface LinearStatus {
   mode?: 'platform';
@@ -25,6 +46,10 @@ export interface LinearStatus {
   connected: boolean;
   workspace: { name: string | null; urlKey: string | null } | null;
   reason?: LinearStatusReason;
+  /** Platform servers only. */
+  migration?: LinearMigrationStatus;
+  /** Platform servers only: connections Linear revoked, which only a fresh connect restores. */
+  requiresFreshConnect?: LinearFreshConnect[];
 }
 
 export interface LinearWorkspaceConnection {
@@ -108,7 +133,7 @@ export async function fetchLinearStatus(baseUrl: string): Promise<LinearStatus> 
   }
 }
 
-/** Begin the Linear OAuth connect flow (full-page redirect). */
+/** Begin a self-managed server's Linear OAuth connect flow (full-page redirect). */
 export function connectLinear(baseUrl: string, workspaceId?: string): void {
   const params = new URLSearchParams({ return_to: `${window.location.pathname}${window.location.search}` });
   if (workspaceId) params.set('workspace_id', workspaceId);
@@ -137,6 +162,27 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     throw err;
   }
   return (await res.json()) as T;
+}
+
+export interface LinearMigrateResult {
+  migration: LinearMigrationStatus;
+}
+
+/**
+ * Retry moving the org's legacy Linear workspaces onto Mastra Connect. The
+ * server does this on its own; this is the organization admin's manual retry.
+ */
+export async function migrateLinearWorkspaces(baseUrl: string): Promise<LinearMigrateResult> {
+  const res = await fetch(`${baseUrl}/web/integrations/platform/linear/migrate`, {
+    method: 'POST',
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  const body = (await res.json().catch(() => ({}))) as LinearMigrateResult & { error?: string; message?: string };
+  if (!res.ok) {
+    throw new RequestError(body.message ?? body.error ?? `Request failed (${res.status})`, res.status);
+  }
+  return body;
 }
 
 /**

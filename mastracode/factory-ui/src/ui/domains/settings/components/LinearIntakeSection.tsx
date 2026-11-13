@@ -13,13 +13,13 @@ import {
 } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
 import { useIntakeSelection } from '../hooks/useIntakeSelection';
-import { useLinearReconnectResult } from '../hooks/useLinearReconnectResult';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
 import { LinearConnectButton } from './LinearConnectionControls';
+import { LinearMigrationNotice } from './LinearMigrationNotice';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
@@ -38,7 +38,6 @@ export function LinearIntakeSection({
     });
   const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
-  const reconnect = useLinearReconnectResult(statusQuery);
   const connected = Boolean(status?.enabled && status.connected);
   const projectsQuery = useLinearProjectListingQuery(connected);
   const teamsQuery = useLinearTeamListingQuery(connected);
@@ -90,6 +89,10 @@ export function LinearIntakeSection({
     if (status?.enabled === false) return 'Linear is not configured on this server.';
     if (reauthRequired) return 'Linear authorization expired. Reconnect to keep syncing issues.';
     if (!connected && paused.length > 0) return 'Intake is paused until you reconnect your Linear workspace.';
+    if (!connected && status?.reason === 'migration_required') return 'Linear workspaces are moving to Mastra Connect.';
+    if (!connected && status?.requiresFreshConnect?.length) {
+      return 'Linear access was revoked. Reconnect to keep syncing issues.';
+    }
     if (!connected) return 'Connect a Linear workspace to sync its issues.';
     return undefined;
   }
@@ -121,7 +124,9 @@ export function LinearIntakeSection({
     if (status?.enabled === false || statusUnavailable) return null;
     if (!listed) return <LinearConnectButton />;
     if (reauthRequired) return <LinearConnectButton action="Reconnect" />;
-    if (!connected && paused.length === 0) return <LinearConnectButton />;
+    if (!connected && paused.length === 0) {
+      return <LinearConnectButton action={status?.requiresFreshConnect?.length ? 'Reconnect' : 'Connect'} />;
+    }
     return null;
   }
   return (
@@ -149,6 +154,7 @@ export function LinearIntakeSection({
         )
       }
     >
+      {status?.migration && <LinearMigrationNotice migration={status.migration} />}
       {connected && config.linear.enabled && !reauthRequired && inferredSources.disconnected.length > 0 && (
         <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}
@@ -176,8 +182,6 @@ export function LinearIntakeSection({
           key={workspace.id}
           workspace={workspace}
           count={sourceIds.length}
-          reconnect={reconnect.resultFor(workspace)}
-          onRetry={() => void reconnect.retry()}
           onRemove={() => removeSources(sourceIds)}
         />
       ))}

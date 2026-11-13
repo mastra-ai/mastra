@@ -1,8 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2 } from 'lucide-react';
 
-import { useApiConfig } from '../../../../api/config';
-import { connectLinear } from '../../factory/services/linear';
+import { useLinearConnect } from '../../../../hooks/useLinearConnect';
 import { IntegrationItem } from './IntegrationItem';
 
 export function LinearConnectButton({
@@ -12,10 +11,16 @@ export function LinearConnectButton({
   action?: 'Connect' | 'Reconnect';
   label?: string;
 }) {
-  const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   return (
-    <Button size="sm" icon={<Link2 />} aria-label={label} onClick={() => connectLinear(baseUrl)}>
-      {action}
+    <Button
+      size="sm"
+      icon={<Link2 />}
+      aria-label={linear.pending ? undefined : label}
+      disabled={linear.pending}
+      onClick={() => void linear.connect()}
+    >
+      {linear.pending ? 'Connecting…' : action}
     </Button>
   );
 }
