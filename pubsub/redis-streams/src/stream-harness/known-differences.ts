@@ -90,10 +90,10 @@ const OVER_BUS: readonly LayoutName[] = ['single/redis', 'single/valkey', 'split
 
 const MAIN = 'main ef2c03fc121';
 
-// Durable's own stream code: expected to disappear once durable runs on plain's stream layer.
+// Engine output: consolidation alone cannot publish chunks the engine never emits.
 const REBUILT_OBJECT: Attribution = {
   ticket: 'COR-1547',
-  cause: 'durable-stream',
+  cause: 'engine',
   evidence:
     'Durable never publishes object/object-result or the structured-output validation error: its read-back ' +
     'MastraModelOutput rebuilds them from the text after step-finish (agent/durable/stream-adapter.ts:878, :1209; ' +
@@ -101,7 +101,7 @@ const REBUILT_OBJECT: Attribution = {
 };
 const NOT_ON_TOPIC: Attribution = {
   ticket: 'COR-1547',
-  cause: 'durable-stream',
+  cause: 'engine',
   evidence:
     'The raw topic carries only what durable published: no object/object-result/validation error (rebuilt ' +
     'reader-side, agent/durable/stream-adapter.ts:878) plus an iteration-complete event per step ' +
@@ -109,7 +109,7 @@ const NOT_ON_TOPIC: Attribution = {
 };
 const NO_REBUILD: Attribution = {
   ticket: 'COR-1547',
-  cause: 'durable-stream',
+  cause: 'engine',
   evidence:
     'Readers without the run schema get only what durable published: the /observe route forwards the raw topic ' +
     '(packages/server/src/server/handlers/agents.ts:3155), and observe() in another process after the run recovers ' +
@@ -117,7 +117,7 @@ const NO_REBUILD: Attribution = {
     `Harness split observe-0 vs observe-mid (${MAIN}).`,
 };
 const ITERATION: Attribution = {
-  ticket: 'COR-1390',
+  ticket: 'COR-1557',
   cause: 'durable-stream',
   evidence:
     'The durable loop publishes iteration-complete on the run topic after every step ' +
@@ -226,7 +226,7 @@ const toolThrows = (error: string, iterations = false) => {
  * (unlisted).
  */
 const SUSPENSION_BOUNDARY: Attribution = {
-  ticket: 'COR-1543',
+  ticket: 'COR-1559',
   cause: 'durable-stream',
   evidence:
     'The original durable stream stays open across suspension (agent/durable/stream-adapter.ts:934), ' +
@@ -278,7 +278,7 @@ const REMAINING_KEYS: Attribution = {
     `claimed as leaked run logs. TTLs bucketed 4s after finish (${MAIN}; stream-harness-node.entry.ts:332).`,
 };
 const DURABLE_REMAINING_KEYS: Attribution = {
-  ticket: 'COR-1534',
+  ticket: 'COR-1540',
   cause: 'durable-stream',
   evidence:
     'Durable cleanup clears its run topic (agent/durable/durable-agent.ts:6123), leaving agent.control.<run> ' +

@@ -83,8 +83,8 @@ describe('checkCell with the real observations', () => {
 
     expect(fixedCheck.verdict.unlisted).toEqual([]);
     expect(fixedCheck.verdict.stale.map(d => `${d.ticket} ${d.reader} vs ${d.against}`).sort()).toEqual([
-      'COR-1390 topic vs live',
-      'COR-1390 topic vs plain',
+      'COR-1557 topic vs live',
+      'COR-1557 topic vs plain',
     ]);
     expect(fixedCheck.drift.map(d => d.reader)).toEqual(['topic']);
     expect(untouchedCheck).toEqual({ verdict: { unlisted: [], stale: [] }, drift: [] });
