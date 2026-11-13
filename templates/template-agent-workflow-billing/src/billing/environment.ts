@@ -2,7 +2,8 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
+import { identifierSchema, parseInput } from './contracts.js';
+import { readConfigurationFile, validateConfigurationFiles } from './configuration-file.js';
 import { JwtIdentityAdapter } from './identity.js';
 import type { JwtIdentityOptions } from './identity.js';
 import { OrganizationService } from './organizations.js';
@@ -21,18 +22,12 @@ export async function billingDatabaseUrl(environment: NodeJS.ProcessEnv) {
   return pathToFileURL(resolve(directory, 'billing.db')).href;
 }
 export async function configuredOrganizations(environment: NodeJS.ProcessEnv = process.env) {
+  validateConfigurationFiles(environment);
   const storage = await OrganizationStorage.open({ url: await billingDatabaseUrl(environment) });
   try {
     let identity;
-    if (environment.BILLING_JWT_CONFIGURATION) {
-      let options: JwtIdentityOptions;
-      try {
-        options = JSON.parse(environment.BILLING_JWT_CONFIGURATION) as JwtIdentityOptions;
-      } catch {
-        throw new BillingError('invalid_configuration');
-      }
-      identity = new JwtIdentityAdapter(storage, options);
-    }
+    const options = readConfigurationFile(environment, 'BILLING_IDENTITY_CONFIG_FILE');
+    if (options !== undefined) identity = new JwtIdentityAdapter(storage, options as JwtIdentityOptions);
     return new OrganizationService(storage, {
       identity,
       mode: applicationMode(environment),
@@ -46,10 +41,5 @@ export async function configuredOrganizations(environment: NodeJS.ProcessEnv = p
 
 /** Parse the complete optional policy override without exposing malformed JSON or secrets. */
 export function readBillingConfiguration(environment: NodeJS.ProcessEnv): unknown {
-  if (!environment.BILLING_CONFIGURATION) return undefined;
-  try {
-    return JSON.parse(environment.BILLING_CONFIGURATION);
-  } catch {
-    throw new BillingError('invalid_configuration');
-  }
+  return readConfigurationFile(environment, 'BILLING_CONFIG_FILE');
 }

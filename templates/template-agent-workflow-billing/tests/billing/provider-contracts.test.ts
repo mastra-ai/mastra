@@ -1,3 +1,4 @@
+import { rawConfigurationFile } from '../support/configuration-files.js';
 import { providerContractFixture } from '../support/provider-contracts.js';
 import { stat } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -252,7 +253,11 @@ it.each([undefined, '', '{invalid-json', 'null', '{}'])(
       initializeBilling({
         configuration: input,
         storage: { url: database.url },
-        environment: { BILLING_PROVIDER: 'autumn', AUTUMN_SECRET_KEY: 'controlled', AUTUMN_BINDINGS: bindings },
+        environment: {
+          BILLING_PROVIDER: 'autumn',
+          AUTUMN_SECRET_KEY: 'controlled',
+          AUTUMN_CONFIG_FILE: rawConfigurationFile(database.directory, bindings),
+        },
       }),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
     await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });

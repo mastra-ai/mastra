@@ -16,9 +16,10 @@ import { validateResourceCatalog } from '../../src/billing/resource-catalog.js';
 import type { ResourceCatalog } from '../../src/billing/resource-catalog.js';
 
 export function imageBillingCatalog(environment: NodeJS.ProcessEnv = process.env, workspaceIds?: readonly string[]) {
-  const { resourcePolicies: configuredResources, ...configuration } = environment.BILLING_CONFIGURATION
-    ? validateProviderConfiguration(readBillingConfiguration(environment))
-    : imageConfiguration(workspaceIds);
+  const { resourcePolicies: configuredResources, ...configuration } =
+    environment.BILLING_CONFIG_FILE !== undefined
+      ? validateProviderConfiguration(readBillingConfiguration(environment))
+      : imageConfiguration(workspaceIds);
   const configure = <R extends ResourceDefinition>(definition: R) => {
     const configured = configuredResources.find(resource => resource.id === definition.id);
     if (!configured || configured.kind !== definition.kind) throw new BillingError('invalid_configuration');
@@ -49,7 +50,7 @@ export async function createImageApplication(
   options: {
     /** Driver selection, identity settings and image credentials. */
     environment?: NodeJS.ProcessEnv;
-    /** Logical billing keys and versioned plans; full BILLING_CONFIGURATION takes precedence. */
+    /** Logical billing keys and versioned plans; full BILLING_CONFIG_FILE takes precedence. */
     billing?: Pick<BillingConfiguration, 'billingKeys' | 'catalog'>;
     /** Optional billing driver for embedded integrations. */
     billingProvider?: BillingProvider;
@@ -59,12 +60,12 @@ export async function createImageApplication(
   let catalog = imageBillingCatalog(environment);
   // Reject invalid policies before reading private local profile state.
   validateResourceCatalog(catalog);
-  if ((environment.BILLING_PROVIDER ?? 'local') === 'local' && !environment.BILLING_JWT_CONFIGURATION) {
+  if ((environment.BILLING_PROVIDER ?? 'local') === 'local' && environment.BILLING_IDENTITY_CONFIG_FILE === undefined) {
     const root = resolve(environment.BILLING_PROJECT_ROOT ?? environment.MASTRA_PROJECT_ROOT ?? '.');
     const profiles = await readLocalProfiles(root);
     if (!profiles?.ready || profiles.databaseUrl !== (await billingDatabaseUrl(environment)))
       throw new BillingError('state_unavailable');
-    if (!environment.BILLING_CONFIGURATION)
+    if (environment.BILLING_CONFIG_FILE === undefined)
       catalog = {
         ...catalog,
         configuration: {
@@ -74,7 +75,7 @@ export async function createImageApplication(
         },
       };
   }
-  if (options.billing && !environment.BILLING_CONFIGURATION)
+  if (options.billing && environment.BILLING_CONFIG_FILE === undefined)
     catalog = { ...catalog, configuration: { ...catalog.configuration, ...options.billing } };
   return createBillingApplication({ environment, catalog, billingProvider: options.billingProvider });
 }

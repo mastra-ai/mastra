@@ -121,6 +121,18 @@ export class WorkflowStorage {
       return this.find(transaction, id, identity);
     });
   }
+  readRequest(identity: AdmissionIdentity, resourceId: string, key: string) {
+    return this.database.write(async transaction => {
+      await this.authorize(transaction, identity);
+      const row = (
+        await transaction.execute({
+          sql: "SELECT r.id FROM billing_workflow_runs r JOIN billing_workflow_operations o ON o.run_id = r.id WHERE r.actor_id = ? AND r.workspace_id = ? AND r.resource_id = ? AND o.operation = 'create' AND o.key = ?",
+          args: [identity.actorId, identity.workspaceId, resourceId, key],
+        })
+      ).rows[0];
+      return row ? this.find(transaction, String(row.id), identity) : null;
+    });
+  }
   read(identity: AdmissionIdentity, id: string) {
     parseInput(identifierSchema, id);
     return this.database.write(async transaction => {

@@ -1,3 +1,5 @@
+import { removeConversationMigration } from '../support/billing.js';
+import { configurationFile } from '../support/configuration-files.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import { afterEach, expect, it } from 'vitest';
 import { readFile, writeFile, unlink, symlink, link, stat } from 'node:fs/promises';
@@ -299,6 +301,7 @@ it('recognized v1 image migration preserves financial workflow and request ident
     Promise.all(tables.map(async table => (await f.database.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows));
   const before = await snapshot();
   // Removing only the empty additive tables reconstructs the exact recognized v1 catalog.
+  await removeConversationMigration(f.database);
   for (const table of ['local_credit_migrations', 'image_artifacts', 'image_slots', 'local_image_credit_migrations'])
     await f.database.execute(`DROP TABLE ${table}`);
   await f.database.execute('DELETE FROM billing_migrations WHERE version >= 2');
@@ -313,7 +316,7 @@ it('recognized v1 image migration preserves financial workflow and request ident
   expect(await snapshot()).toEqual(before);
   await f.database.execute('DROP TABLE unexpected_data');
   await f.restart();
-  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(3n);
+  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(4n);
   expect(await snapshot()).toEqual(before);
   expect((await f.call(`${f.base}/workflows/image-kit/runs`, {}, 'pre-migration-kit')).body.executionId).toBe(id);
   expect(f.boundary.images).toHaveLength(0);
@@ -383,7 +386,7 @@ it('a lost financial confirmation reconciles the saved artifact after restart wi
   const environment = {
     BILLING_PROVIDER: 'autumn',
     BILLING_MODE: 'production',
-    BILLING_JWT_CONFIGURATION: JSON.stringify(autumn.jwtConfiguration),
+    BILLING_IDENTITY_CONFIG_FILE: configurationFile(autumn.database.directory, autumn.jwtConfiguration),
     BILLING_DATABASE_URL: autumn.database.url,
     BILLING_PROJECT_ROOT: autumn.database.directory,
     OPENAI_API_KEY: 'controlled',
@@ -478,6 +481,7 @@ it('local legacy credit transition preserves spent balances once and never seeds
   const observer = await independentClient(database.url);
   cleanups.push(async () => observer.close());
   await observer.execute({ sql: "UPDATE billing_accounts SET provider = 'autumn' WHERE id = ?", args: [remote.id] });
+  await removeConversationMigration(observer);
   for (const table of ['local_credit_migrations', 'image_artifacts', 'image_slots', 'local_image_credit_migrations'])
     await observer.execute(`DROP TABLE ${table}`);
   await observer.execute('DELETE FROM billing_migrations WHERE version >= 2');

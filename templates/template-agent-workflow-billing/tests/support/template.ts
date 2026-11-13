@@ -92,7 +92,7 @@ export async function query(root: string, sql: string, args: (string | number)[]
     client.close();
   }
 }
-export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 'start' = 'dev') {
+export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 'start' = 'dev', credential?: string) {
   const listener = createServer();
   listener.listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -139,7 +139,7 @@ export async function serve(root: string, env: NodeJS.ProcessEnv, mode: 'dev' | 
       method: body === undefined ? 'GET' : 'POST',
       signal: AbortSignal.timeout(30000),
       headers: {
-        authorization: `Bearer ${manifest.profiles[profile]!.credential}`,
+        authorization: `Bearer ${credential ?? manifest.profiles[profile]!.credential}`,
         'content-type': 'application/json',
         'idempotency-key': key,
       },

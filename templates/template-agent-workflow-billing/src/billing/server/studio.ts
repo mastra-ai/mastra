@@ -68,8 +68,12 @@ export function createBillingStudio({
     maxSize: 16 * 1024,
     onError: context => context.json({ error: { code: 'invalid_input' } }, 413),
   });
+  let apiPrefix = '/api';
   const middleware: MiddlewareHandler = async (context, next) => {
-    const { path, method } = context.req;
+    const { method } = context.req;
+    const path = context.req.path.startsWith(apiPrefix + '/')
+      ? '/api/' + context.req.path.slice(apiPrefix.length + 1)
+      : context.req.path;
     if (path === '/' && method === 'GET') return context.redirect('/tools');
     if (path.startsWith('/billing/') || nativeAccess?.(path, method)) return next();
     const publicShell =
@@ -100,5 +104,11 @@ export function createBillingStudio({
     context.header('Cache-Control', 'no-store');
     return limit(context, () => request.run(bearer[1], next));
   };
-  return { tools, middleware };
+  return {
+    tools,
+    middleware,
+    prefix: (value: string) => {
+      apiPrefix = value;
+    },
+  };
 }

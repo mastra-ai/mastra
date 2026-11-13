@@ -362,6 +362,47 @@ const creditStatements = [
   `CREATE TRIGGER local_credit_migration_no_update BEFORE UPDATE ON local_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transitions are immutable'); END`,
   `CREATE TRIGGER local_credit_migration_no_delete BEFORE DELETE ON local_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transition tombstones are retained'); END`,
 ];
+const studioStatements = [
+  `CREATE TABLE billing_studio_threads (
+    thread_id TEXT PRIMARY KEY,
+    actor_id TEXT NOT NULL REFERENCES identities(id),
+    workspace_id TEXT NOT NULL REFERENCES workspaces(id),
+    agent_id TEXT NOT NULL,
+    resource_id TEXT NOT NULL
+  ) STRICT`,
+  `CREATE TRIGGER billing_studio_threads_no_update BEFORE UPDATE ON billing_studio_threads BEGIN SELECT RAISE(ABORT, 'Conversation ownership is immutable'); END`,
+  `CREATE TRIGGER billing_studio_threads_no_delete BEFORE DELETE ON billing_studio_threads BEGIN SELECT RAISE(ABORT, 'Conversation ownership is retained'); END`,
+  `CREATE TABLE billing_studio_runs (
+    run_id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL REFERENCES billing_studio_threads(thread_id)
+  ) STRICT`,
+  `CREATE TRIGGER billing_studio_runs_no_update BEFORE UPDATE ON billing_studio_runs BEGIN SELECT RAISE(ABORT, 'Conversation run ownership is immutable'); END`,
+  `CREATE TRIGGER billing_studio_runs_no_delete BEFORE DELETE ON billing_studio_runs BEGIN SELECT RAISE(ABORT, 'Conversation run ownership is retained'); END`,
+  `CREATE TABLE billing_studio_operations (
+    id TEXT PRIMARY KEY,
+    thread_id TEXT NOT NULL REFERENCES billing_studio_threads(thread_id),
+    message_id TEXT NOT NULL,
+    tool_call_id TEXT NOT NULL,
+    resource_id TEXT NOT NULL,
+    action TEXT NOT NULL,
+    fingerprint TEXT NOT NULL,
+    request_key TEXT NOT NULL UNIQUE,
+    execution_id TEXT,
+    pending TEXT,
+    UNIQUE (thread_id, tool_call_id)
+  ) STRICT`,
+  `CREATE TRIGGER billing_studio_operation_identity_immutable BEFORE UPDATE OF id, thread_id, message_id, tool_call_id, resource_id, action, fingerprint, request_key, pending ON billing_studio_operations BEGIN SELECT RAISE(ABORT, 'Conversation invocation is immutable'); END`,
+  `CREATE TRIGGER billing_studio_operation_execution_immutable BEFORE UPDATE OF execution_id ON billing_studio_operations WHEN OLD.execution_id IS NOT NULL BEGIN SELECT RAISE(ABORT, 'Conversation execution is immutable'); END`,
+  `CREATE TRIGGER billing_studio_operations_no_delete BEFORE DELETE ON billing_studio_operations BEGIN SELECT RAISE(ABORT, 'Conversation invocation is retained'); END`,
+  `CREATE TABLE billing_studio_approvals (
+    operation_id TEXT PRIMARY KEY REFERENCES billing_studio_operations(id),
+    approved INTEGER NOT NULL CHECK (approved IN (0, 1)),
+    accepted INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0, 1))
+  ) STRICT`,
+  `CREATE TRIGGER billing_studio_approval_identity_immutable BEFORE UPDATE OF operation_id, approved ON billing_studio_approvals BEGIN SELECT RAISE(ABORT, 'Native approval decision is immutable'); END`,
+  `CREATE TRIGGER billing_studio_approval_accepted_monotonic BEFORE UPDATE OF accepted ON billing_studio_approvals WHEN OLD.accepted = 1 BEGIN SELECT RAISE(ABORT, 'Native approval acknowledgement is retained'); END`,
+  `CREATE TRIGGER billing_studio_approvals_no_delete BEFORE DELETE ON billing_studio_approvals BEGIN SELECT RAISE(ABORT, 'Native approval decisions are retained'); END`,
+];
 const checksum = (statements: readonly string[]) => createHash('sha256').update(statements.join('\n')).digest('hex');
 const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 async function validateCatalog(transaction: Transaction, statements: readonly string[]) {
@@ -387,7 +428,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       args: [checksum(schemaStatements), new Date().toISOString()],
     });
   } else {
-    if (![1n, 2n, 3n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
+    if (![1n, 2n, 3n, 4n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
       throw new BillingError('storage_incompatible');
     const history = (await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
       .rows;
@@ -396,7 +437,8 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       history[0].version !== 1n ||
       history[0].checksum !== checksum(schemaStatements) ||
       (Number(version) >= 2 && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements))) ||
-      (version === 3n && (history[2].version !== 3n || history[2].checksum !== checksum(creditStatements)))
+      (Number(version) >= 3 && (history[2].version !== 3n || history[2].checksum !== checksum(creditStatements))) ||
+      (version === 4n && (history[3].version !== 4n || history[3].checksum !== checksum(studioStatements)))
     )
       throw new BillingError('storage_incompatible');
     // Validate the complete recognized old schema before the first migration write.
@@ -406,7 +448,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
         ? schemaStatements
         : version === 2n
           ? [...schemaStatements, ...imageStatements]
-          : [...schemaStatements, ...imageStatements, ...creditStatements],
+          : [...schemaStatements, ...imageStatements, ...creditStatements, ...(version === 4n ? studioStatements : [])],
     );
   }
   if (Number(version) < 2) {
@@ -426,5 +468,18 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     });
     await transaction.execute('PRAGMA user_version = 3');
   }
-  await validateCatalog(transaction, [...schemaStatements, ...imageStatements, ...creditStatements]);
+  if (Number(version) < 4) {
+    for (const sql of studioStatements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (4, ?, ?)',
+      args: [checksum(studioStatements), new Date().toISOString()],
+    });
+    await transaction.execute('PRAGMA user_version = 4');
+  }
+  await validateCatalog(transaction, [
+    ...schemaStatements,
+    ...imageStatements,
+    ...creditStatements,
+    ...studioStatements,
+  ]);
 }

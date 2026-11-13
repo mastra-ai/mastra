@@ -77,3 +77,16 @@ export async function independentClient(url: string) {
   await client.execute('PRAGMA foreign_keys = ON');
   return client;
 }
+
+/** Build a recognized historical fixture; never run against application databases. */
+export async function removeConversationMigration(client: { execute: import('@libsql/client').Client['execute'] }) {
+  for (const table of [
+    'billing_studio_approvals',
+    'billing_studio_operations',
+    'billing_studio_runs',
+    'billing_studio_threads',
+  ])
+    await client.execute(`DROP TABLE ${table}`);
+  await client.execute('DELETE FROM billing_migrations WHERE version = 4');
+  await client.execute('PRAGMA user_version = 3');
+}

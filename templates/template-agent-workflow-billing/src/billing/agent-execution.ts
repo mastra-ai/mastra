@@ -85,6 +85,21 @@ export class AgentExecution<Agents extends AgentRegistry> {
       },
     });
   }
+  async read(id: string, context: BillingContext, key: string) {
+    const resource = this.options.agents[id];
+    if (!resource) throw new BillingError('unsupported');
+    const response = await this.options.accounting.readRequest(
+      await this.options.organizations.accountingIdentity(context),
+      id,
+      parseInput(identifierSchema, key),
+    );
+    return response === null
+      ? null
+      : {
+          result: response.result === null ? null : resource.parseProjection(response.result),
+          billing: response.billing,
+        };
+  }
   nestedAgent<K extends keyof Agents & string>(id: K) {
     const resource = this.options.agents[id];
     if (!resource) throw new BillingError('unsupported');

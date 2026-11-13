@@ -1,4 +1,6 @@
 import { Mastra } from '@mastra/core/mastra';
+import { createStudioBillingWrapper } from '../studio-with-billing/index.js';
+import { createStudioAssistantAgent } from './agents/studio-assistant.js';
 import { createBilling } from '../billing/integration.js';
 import { localDemoAccounts } from '../billing/local-accounts.js';
 import { registerApplicationShutdown } from '../billing/lifecycle.js';
@@ -41,9 +43,20 @@ const integration = await billing.prepare({
   artifacts: images,
 });
 
+const studioWrapper =
+  process.env.BILLING_STUDIO_ENABLED === 'true' ? createStudioBillingWrapper({ integration }) : undefined;
+if (studioWrapper)
+  studioWrapper.decorateAgent(
+    createStudioAssistantAgent({
+      image: studioWrapper.agentTool('image-agent'),
+      ...studioWrapper.workflowTools('image-kit', { approvalSteps: ['approval'] }),
+    }),
+  );
+
 export const mastra = new Mastra({
   agents: {
     ...integration.agents,
+    ...studioWrapper?.agents,
     // Add ordinary native agents here to run without billing.
   },
   workflows: {
@@ -53,7 +66,7 @@ export const mastra = new Mastra({
   tools: integration.tools,
   storage: integration.storage,
   logger: false,
-  server: integration.server({ host: '127.0.0.1', port: Number(process.env.BILLING_PORT ?? 4111) }),
+  server: integration.server({ host: '127.0.0.1', port: Number(process.env.BILLING_PORT ?? 4111) }, { studioWrapper }),
 });
 
 await integration.attach(mastra);

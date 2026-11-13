@@ -35,6 +35,12 @@ const jwtOptionsSchema = z.strictObject({
     .array(z.enum(['RS256', 'RS384', 'RS512', 'PS256', 'PS384', 'PS512', 'ES256', 'ES384', 'ES512', 'EdDSA']))
     .min(1),
 });
+/** Public verification configuration; private and symmetric keys never belong here. */
+export const jwtIdentityConfigurationSchema = jwtOptionsSchema
+  .extend({
+    jwks: z.strictObject({ keys: z.array(z.object({ kty: z.enum(['RSA', 'EC', 'OKP']) }).passthrough()).min(1) }),
+  })
+  .refine(options => !options.jwks.keys.some(key => 'd' in key || 'k' in key));
 export interface JwtIdentityOptions {
   readonly issuer: string;
   readonly audience: string;
@@ -51,19 +57,11 @@ export class JwtIdentityAdapter implements IdentityAdapter {
     private readonly directory: IdentityDirectory,
     options: JwtIdentityOptions,
   ) {
-    if (!options || typeof options !== 'object' || !options.jwks) throw new BillingError('invalid_configuration');
-    const parsed = jwtOptionsSchema.safeParse({
-      issuer: options.issuer,
-      audience: options.audience,
-      algorithms: options.algorithms,
-    });
-    const keys = z
-      .strictObject({ keys: z.array(z.object({ kty: z.enum(['RSA', 'EC', 'OKP']) }).passthrough()).min(1) })
-      .safeParse(options.jwks);
-    if (!parsed.success || !keys.success || options.jwks.keys.some(key => 'd' in key || 'k' in key))
-      throw new BillingError('invalid_configuration');
-    this.options = parsed.data;
-    this.keys = createLocalJWKSet(structuredClone(options.jwks));
+    const parsed = jwtIdentityConfigurationSchema.safeParse(options);
+    if (!parsed.success) throw new BillingError('invalid_configuration');
+    const { jwks, ...configuration } = parsed.data;
+    this.options = configuration;
+    this.keys = createLocalJWKSet(structuredClone(jwks) as JSONWebKeySet);
   }
 
   async authenticate(credential: string): Promise<Identity> {

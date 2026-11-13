@@ -56,6 +56,14 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
     },
     private readonly context: InvocationContext,
   ) {}
+  async readRequest(id: string, billing: BillingContext, key: string) {
+    const record = await this.options.workflowStorage.readRequest(
+      await this.options.organizations.accountingIdentity(billing),
+      id,
+      parseInput(identifierSchema, key),
+    );
+    return record ? this.read(id, record.id, billing) : null;
+  }
   workflow<K extends keyof Workflows & string>(id: K) {
     const resource = this.options.workflows[id];
     if (!resource) throw new BillingError('unsupported');
@@ -344,15 +352,11 @@ export class WorkflowExecution<Agents extends AgentRegistry, Workflows extends W
           : result.status === 'suspended'
             ? {
                 suspendedSteps: [...new Set(result.suspended.flat())],
-                ...(resource.artifactSlots
-                  ? {
-                      pending: Object.fromEntries(
-                        Object.entries(result.steps)
-                          .filter(([, step]) => step.status === 'suspended')
-                          .map(([id, step]) => [id, step.suspendPayload]),
-                      ),
-                    }
-                  : {}),
+                pending: Object.fromEntries(
+                  Object.entries(result.steps)
+                    .filter(([, step]) => step.status === 'suspended')
+                    .map(([id, step]) => [id, step.suspendPayload]),
+                ),
               }
             : {};
       const nativeStatus =

@@ -15,6 +15,7 @@ const suites = [
   ],
   ['tests/billing/http.test.ts'],
   ['tests/billing/autumn-reservations.test.ts'],
+  ['tests/template/studio.test.ts'],
 ];
 for (const [index, major] of [
   [1, '22'],

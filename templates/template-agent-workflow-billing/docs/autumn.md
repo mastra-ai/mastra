@@ -11,8 +11,8 @@ Set these server environment variables:
 - `BILLING_MODE=production` and `BILLING_PROVIDER=autumn`, including when using an Autumn sandbox key. Production here selects verified JWT identity; it does not change a sandbox key into a live key.
 - `OPENAI_API_KEY` for generation, independently of billing, and optionally `BILLING_STUDIO_ENABLED=true` for Studio Tools.
 - `AUTUMN_SECRET_KEY` from your Autumn environment, never a browser header.
-- `BILLING_JWT_CONFIGURATION` with your trusted issuer, audience, allowed asymmetric algorithms and public JWKS. See [identity provisioning](#identity-provisioning).
-- Optional `BILLING_CONFIGURATION` containing the complete JSON below, matching the protected registrations in `src/mastra/index.ts`. Leave it unset to use the entry-point configuration. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The override must agree with the registered policies, operations and measurements; it cannot add native resources or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
+- `BILLING_IDENTITY_CONFIG_FILE` pointing to a JSON file with your trusted issuer, audience, allowed asymmetric algorithms and public JWKS. See [identity provisioning](#identity-provisioning).
+- Optional `BILLING_CONFIG_FILE` pointing to a file containing the complete JSON below, matching the protected registrations in `src/mastra/index.ts`. Leave it unset to use the entry-point configuration. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The override must agree with the registered policies, operations and measurements; it cannot add native resources or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
 
 ```json
 {
@@ -51,7 +51,7 @@ Set these server environment variables:
 }
 ```
 
-Set `AUTUMN_BINDINGS` to this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` with the personal workspace returned by trusted provisioning of John below. `johns-org`, `generated_images` and `image_credits` must be the IDs of your existing sandbox resources, not IDs supplied by the browser. The sandbox proof uses the same logical `credits` mapping with its isolated `johns-org-sandbox-proof` workspace.
+Set `AUTUMN_CONFIG_FILE` to the path of a file containing this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` with the personal workspace returned by trusted provisioning of John below. `johns-org`, `generated_images` and `image_credits` must be the IDs of your existing sandbox resources, not IDs supplied by the browser. The sandbox proof uses the same logical `credits` mapping with its isolated `johns-org-sandbox-proof` workspace.
 
 ```json
 {
@@ -64,11 +64,11 @@ Set `AUTUMN_BINDINGS` to this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` 
 }
 ```
 
-For `.env`, serialize each JSON object on one line with the quoting supported by your environment loader, or inject the JSON directly through your process environment. Since the customer name contains an apostrophe, avoid wrapping that JSON in unescaped single quotes. Do not place secret keys inside `BILLING_CONFIGURATION` or `AUTUMN_BINDINGS`.
+Save each JSON object in its own external file, for example `configuration/billing.json`, `configuration/autumn.json` and `configuration/identity.json`. Set `BILLING_CONFIG_FILE`, `AUTUMN_CONFIG_FILE` and `BILLING_IDENTITY_CONFIG_FILE` to those paths. Relative paths resolve from the project root in setup, dev and built serving. Absolute paths are supported. Explicit empty, missing, unreadable, malformed or schema-invalid files fail startup with a sanitized configuration error; they never fall back to defaults. The previous serialized environment JSON variables are no longer read. Keep `AUTUMN_SECRET_KEY` and model keys as scalar environment variables; files contain configuration and public identity keys, not secrets.
 
 ### Identity provisioning
 
-`BILLING_JWT_CONFIGURATION` has this shape: `{ issuer, audience, algorithms, jwks: { keys: [...] } }`. Supply the actual issuer URL and audience used by your identity provider, an explicit list such as `["RS256"]`, and its matching public asymmetric JWKs. Empty keys, private key material and symmetric algorithms are rejected. Tokens need valid `iss`, `aud`, `sub` and `exp` claims. The app verifies tokens but does not issue them or provide login.
+The JSON file selected by `BILLING_IDENTITY_CONFIG_FILE` has this shape: `{ issuer, audience, algorithms, jwks: { keys: [...] } }`. Supply the actual issuer URL and audience used by your identity provider, an explicit list such as `["RS256"]`, and its matching public asymmetric JWKs. Empty keys, private key material and symmetric algorithms are rejected. Tokens need valid `iss`, `aud`, `sub` and `exp` claims. The app verifies tokens but does not issue them or provide login.
 
 Provision John once in trusted server-side TypeScript against the same configured database and environment used by the app:
 

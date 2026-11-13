@@ -14,8 +14,8 @@ We built this template to provide a straightforward starting point for billing i
 
 - **[OpenAI API key](https://platform.openai.com/api-keys)**: set `OPENAI_API_KEY` in `.env` for the image agent and its OpenAI image tool. Account access to the fixed `gpt-image-2.5-flare` image profile is required. Model usage is billed to your OpenAI account.
 - Local mode needs no payment credentials. Keep `BILLING_MODE=local` and `BILLING_PROVIDER=local`. OpenAI generation is billed separately to the operator.
-- Set `BILLING_STUDIO_ENABLED=true` to enable the billing tools in Studio. Authentication uses an `Authorization` header; local setup creates the credential and workspace ID used below.
-- Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, JWT identity, and `BILLING_CONFIGURATION` as described in the [Autumn guide](docs/autumn.md). Local setup does not need Autumn credentials.
+- Set `BILLING_STUDIO_ENABLED=true` to enable native Studio Assistant text chat and the billing tools. Authentication uses an `Authorization` header; local setup creates the credential and workspace ID used below.
+- Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, JWT identity, and `BILLING_CONFIG_FILE` as described in the [Autumn guide](docs/autumn.md). Local setup does not need Autumn credentials.
 
 ## Quickstart 🚀
 
@@ -41,15 +41,15 @@ We built this template to provide a straightforward starting point for billing i
 }
 ```
 
-The Studio demo runs through **Tools → Playground**. These tools call the image agent and workflow through the billing gateway; native agent chat and native workflow execution remain closed. The [image guide](docs/images.md) covers protected image downloads, and the [Studio guide](docs/studio.md) lists tool inputs. Local mode simulates billing in your local database.
+Open **Agents → Studio Assistant** for persistent text chat with the same billed image and workflow operations. Ask “Generate one private illustration of a blue bird in a quiet forest.” Ordinary conversation costs no credits; business tool results carry the actual receipt. Native approval/decline controls review a saved kit. Stop ends the conversation activity, while explicit business cancellation uses the workflow cancel tool. **Tools → Playground** remains available. The [image guide](docs/images.md) covers protected image downloads, and the [Studio guide](docs/studio.md) lists tool inputs. Local mode simulates billing in your local database.
 
 ## Try it out
 
+- Reopen a saved **Studio Assistant** conversation and ask it to query the previous `operationId`. If Stop hid the initial result, ask it to query saved operations without an ID. History and structured tool results persist; querying existing work does not regenerate an image.
 - Read **billing-account** before a new image and call its observed balance **B**. One successful image leaves **B − 1**; the full kit then leaves **B − 4**. A fresh local account starts at 30, so these values are 29 and 26. Existing accounts start at their current balance; setup never refills them.
 - Run **billing-image-generate** again with the exact same input and key. The receipt sets `replayed: true` and keeps its original `billedUnits: 1`, without another charge. Change the key for a new image.
 - John uses `profiles.owner`; Emma uses `profiles.member`; Alex uses `profiles.outsider`. Switch to Emma's credential in **Settings → Mastra Connection → Headers** and use her own `workspaceId` for an independent balance. John's workspace denies her access until John explicitly converts it to shared and invites her.
-- Open **billing-image-kit-start** and use the brief input with a new key, such as `first-kit`. The workflow holds three credits without a confirmed charge and saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before generating images. Copy `result.executionId` into **billing-image-kit-approve**, together with the same `workspaceId`, a new `idempotencyKey`, and `"approval": {"approved": true}`. Successful completion produces three private artifacts and confirms one three-credit parent charge.
-- Use **billing-image-kit-status** with `workspaceId` and `executionId` to inspect your kit, including after restarting the server. For a suspended kit, use **billing-image-kit-cancel** with those fields and a new `idempotencyKey` to release its reservation without charging. Other members cannot read or resume your kit.
+- Open **billing-image-kit-start** and use the brief input with a new key, such as `first-kit`. The workflow holds three credits without a confirmed charge and saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before generating images. Copy `result.executionId` into **billing-image-kit-approve**, together with the same `workspaceId`, a new `idempotencyKey`, and `"approval": {"approved": true}`. Successful completion produces three private artifacts and confirms one three-credit parent charge. Use **billing-image-kit-status** with `workspaceId` and `executionId` to inspect your kit, including after restarting the server. For a suspended kit, use **billing-image-kit-cancel** with those fields and a new `idempotencyKey` to release its reservation without charging. Other members cannot read or resume your kit.
 
 ## Customization
 

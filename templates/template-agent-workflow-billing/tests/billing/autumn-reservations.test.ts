@@ -1,3 +1,4 @@
+import { configurationFile } from '../support/configuration-files.js';
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import { imagePolicies } from '../support/image-configuration.js';
 import { createImageApplication } from '../support/image-application.js';
@@ -279,10 +280,10 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
         environment: {
           BILLING_PROVIDER: 'autumn',
           BILLING_MODE: 'production',
-          BILLING_JWT_CONFIGURATION: JSON.stringify(invalid.jwtConfiguration),
+          BILLING_IDENTITY_CONFIG_FILE: configurationFile(invalid.database.directory, invalid.jwtConfiguration),
           BILLING_DATABASE_URL: invalid.database.url,
           BILLING_PROJECT_ROOT: invalid.database.directory,
-          BILLING_CONFIGURATION: JSON.stringify(configuration),
+          BILLING_CONFIG_FILE: configurationFile(invalid.database.directory, configuration),
           OPENAI_API_KEY: 'controlled',
         },
         billingProvider: await AutumnBillingProvider.open({ url: invalid.database.url }, invalid.options),
@@ -306,10 +307,10 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       environment: {
         BILLING_PROVIDER: 'autumn',
         BILLING_MODE: 'production',
-        BILLING_JWT_CONFIGURATION: JSON.stringify(invalid.jwtConfiguration),
+        BILLING_IDENTITY_CONFIG_FILE: configurationFile(invalid.database.directory, invalid.jwtConfiguration),
         BILLING_DATABASE_URL: invalid.database.url,
         BILLING_PROJECT_ROOT: invalid.database.directory,
-        BILLING_CONFIGURATION: JSON.stringify(validConfiguration),
+        BILLING_CONFIG_FILE: configurationFile(invalid.database.directory, validConfiguration),
         OPENAI_API_KEY: 'controlled',
       },
       billingProvider: await AutumnBillingProvider.open({ url: invalid.database.url }, invalid.options),
@@ -1699,10 +1700,10 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     const environment = {
       BILLING_PROVIDER: 'autumn',
       BILLING_MODE: 'production',
-      BILLING_JWT_CONFIGURATION: JSON.stringify(f.jwtConfiguration),
+      BILLING_IDENTITY_CONFIG_FILE: configurationFile(f.database.directory, f.jwtConfiguration),
       BILLING_DATABASE_URL: f.database.url,
       BILLING_PROJECT_ROOT: f.database.directory,
-      BILLING_CONFIGURATION: JSON.stringify(configuration),
+      BILLING_CONFIG_FILE: configurationFile(f.database.directory, configuration),
       OPENAI_BASE_URL: model.url,
       OPENAI_API_KEY: 'controlled',
     };
@@ -1717,7 +1718,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
         environment: {
           ...environment,
           AUTUMN_SECRET_KEY: f.options.secretKey,
-          AUTUMN_BINDINGS: JSON.stringify(bindings),
+          AUTUMN_CONFIG_FILE: configurationFile(f.database.directory, bindings),
           AUTUMN_SERVER_URL: f.options.serverURL,
         },
         catalog: { definitions: resources, configuration: billingConfiguration },

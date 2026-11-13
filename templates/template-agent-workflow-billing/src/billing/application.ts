@@ -1,3 +1,4 @@
+import { validateConfigurationFiles } from './configuration-file.js';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
 import { createBillingStudio } from './server/studio.js';
@@ -27,6 +28,7 @@ export async function createBillingApplication<const D extends readonly Resource
   options: BillingApplicationOptions<D>,
 ) {
   const environment = options.environment ?? process.env;
+  validateConfigurationFiles(environment);
   const catalog = options.catalog;
   const settings = parseInput(
     z.strictObject({

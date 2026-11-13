@@ -1,3 +1,6 @@
+import { configuredOrganizations } from '../../src/billing/environment.js';
+import { ConversationStorage } from '../../src/billing/storage/conversations.js';
+import { removeConversationMigration } from '../support/billing.js';
 import { LocalBillingProvider } from '../../src/billing/providers/local.js';
 import { createImageApplication } from '../support/image-application.js';
 import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
@@ -266,9 +269,9 @@ describe('local billing storage', () => {
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
     expect(history.rows).toEqual(
-      [1n, 2n, 3n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
+      [1n, 2n, 3n, 4n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
     );
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(3n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(4n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -572,6 +575,7 @@ it('v2 local credit names transition without refilling spent or unresolved accou
   storage.close();
   const observer = await independentClient(database.url);
   cleanups.push(() => observer.close());
+  await removeConversationMigration(observer);
   await observer.execute('DROP TABLE local_credit_migrations');
   await observer.execute('DELETE FROM billing_migrations WHERE version = 3');
   await observer.execute('PRAGMA user_version = 2');
@@ -604,4 +608,72 @@ it('v2 local credit names transition without refilling spent or unresolved accou
   await provider.ensureAccount({ workspaceId: 'spent' });
   expect((await provider.getState(spent)).meters.some(meter => meter.key === 'credits')).toBe(false);
   expect((await observer.execute('SELECT COUNT(*) AS count FROM local_credit_migrations')).rows[0].count).toBe(2n);
+});
+
+it('native invocation claims survive concurrent replay and reject changed input or message ownership', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const environment = {
+    MASTRA_PROJECT_ROOT: database.directory,
+    BILLING_DATABASE_URL: database.url,
+    BILLING_PROVIDER: 'local',
+    BILLING_MODE: 'local',
+  };
+  const profiles = await setupLocal(environment);
+  const organizations = await configuredOrganizations(environment);
+  cleanups.push(() => organizations.close());
+  const context = await organizations.context({ credential: profiles.profiles.owner!.credential });
+  const observer = await independentClient(database.url);
+  cleanups.push(() => observer.close());
+  const historical = (await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version < 4'))
+    .rows;
+  await removeConversationMigration(observer);
+  let conversations = await ConversationStorage.open(database.url, organizations);
+  expect((await observer.execute('SELECT version, checksum FROM billing_migrations WHERE version < 4')).rows).toEqual(
+    historical,
+  );
+  const owner = await conversations.thread(context, 'assistant', 'durable-conversation', true);
+  const input = {
+    messageId: 'persisted-native-user-message',
+    toolCallId: 'native-call',
+    resourceId: 'business-agent',
+    action: 'generate',
+    input: { prompt: 'Create this exact artifact' },
+  };
+  for (let round = 0; round < 20; round++) {
+    const invocation = { ...input, toolCallId: `native-call-${round}` };
+    const claims = await Promise.all([
+      conversations.claim(context, owner, invocation),
+      conversations.claim(context, owner, invocation),
+    ]);
+    expect(claims.filter(claim => claim.claimed)).toHaveLength(1);
+    expect(claims[0].id).toBe(claims[1].id);
+    expect(claims[0].requestKey).toBe(claims[1].requestKey);
+    await expect(
+      conversations.claim(context, owner, { ...invocation, input: { prompt: 'Changed input' } }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+    await expect(
+      conversations.claim(context, owner, { ...invocation, messageId: 'another-native-message' }),
+    ).rejects.toMatchObject({ code: 'conflict' });
+  }
+  const original = await conversations.claim(context, owner, input);
+  conversations.close();
+  conversations = await ConversationStorage.open(database.url, organizations);
+  cleanups.push(() => conversations.close());
+  expect(await conversations.claim(context, owner, input)).toEqual({ ...original, claimed: false });
+  const next = await conversations.claim(context, owner, { ...input, toolCallId: 'new-native-call' });
+  expect(next.id).not.toBe(original.id);
+  expect(next.requestKey).not.toBe(original.requestKey);
+  const recovered = await conversations.list(context, owner, 'business-agent');
+  expect(recovered).toHaveLength(20);
+  expect(recovered[0].id).toBe(next.id);
+  expect(await conversations.list(context, owner, 'another-resource')).toEqual([]);
+  const member = await organizations.context({ credential: profiles.profiles.member!.credential });
+  await expect(conversations.thread(member, 'assistant', owner.threadId)).rejects.toMatchObject({ code: 'forbidden' });
+  await expect(conversations.list(member, owner, 'business-agent')).rejects.toMatchObject({ code: 'forbidden' });
+  await expect(observer.execute('DELETE FROM billing_studio_operations')).rejects.toBeDefined();
+  expect((await observer.execute('SELECT COUNT(*) AS count FROM billing_studio_operations')).rows).toEqual([
+    { count: 22n },
+  ]);
+  expect((await observer.execute('SELECT COUNT(*) AS count FROM billing_executions')).rows).toEqual([{ count: 0n }]);
 });

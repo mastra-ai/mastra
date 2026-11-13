@@ -24,6 +24,9 @@ import { initializeMastraBilling } from './mastra-setup.js';
 import { createBillingStudio } from './server/studio.js';
 import { createBillingServer } from './server/boundary.js';
 import { ExecutionArtifacts } from './storage/artifacts.js';
+import { validateConfigurationFiles } from './configuration-file.js';
+import { ConversationStorage } from './storage/conversations.js';
+import type { StudioServerWrapper } from '../studio-with-billing/studio-wrapper-contracts.js';
 import { Lifecycle } from './lifecycle.js';
 
 type ConfigurationInput = z.input<typeof billingConfigurationSchema>;
@@ -57,6 +60,10 @@ type WorkflowBillingOptions<W extends AnyWorkflow> = Omit<
   'id' | 'kind' | 'create' | 'operations' | 'measurements' | 'adapter'
 > &
   Partial<Pick<WorkflowDefinition<W>, 'operations' | 'measurements' | 'adapter'>>;
+const preparedIntegrations = new WeakSet<object>();
+/** Authenticate the prepared integration contract at wrapper composition time. */
+export const isPreparedBillingIntegration = (value: unknown): value is object =>
+  !!value && typeof value === 'object' && preparedIntegrations.has(value);
 const registration = Symbol('billing-registration');
 interface Registration<T, Options> {
   readonly [registration]: true;
@@ -91,6 +98,7 @@ const isRegistration = (value: object): value is Registration<any, any> => regis
 /** Collect optional billing registrations, then prepare services before constructing Mastra. */
 export function createBilling(options: BillingOptions) {
   const environment = options.environment ?? process.env;
+  validateConfigurationFiles(environment);
   const provider = options.provider ?? environment.BILLING_PROVIDER ?? 'local';
   if (environment.BILLING_PROVIDER && environment.BILLING_PROVIDER !== provider)
     throw new BillingError('invalid_configuration');
@@ -169,6 +177,7 @@ export function createBilling(options: BillingOptions) {
         } else nativeRoutes.add(`/api/workflows/${encodeURIComponent(id)}`);
       }
       const nativeAccess = (path: string) =>
+        ![...protectedRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/')) &&
         [...nativeRoutes].some(prefix => path === prefix || path.startsWith(prefix + '/'));
       try {
         const localAccounts =
@@ -203,6 +212,9 @@ export function createBilling(options: BillingOptions) {
         });
         lifecycle.own(runtime.close);
         const current = runtime;
+        const conversations = await ConversationStorage.open(await billingDatabaseUrl(environment), organizations);
+        lifecycle.own(() => conversations.close());
+        let configuredWrapper: StudioServerWrapper | undefined;
         const studio =
           environment.BILLING_STUDIO_ENABLED === 'true'
             ? createBillingStudio({
@@ -215,7 +227,9 @@ export function createBilling(options: BillingOptions) {
             : undefined;
         let attached = false;
         const boundaries = new Set<unknown>();
-        return {
+        const preparedIntegration = {
+          conversations,
+          resources: { agents: protectedResources.agents, workflows: protectedResources.workflows },
           agents: agents as NativeRegistry<Agents>,
           workflows: workflows as NativeRegistry<Workflows>,
           storage: current.storage,
@@ -227,11 +241,20 @@ export function createBilling(options: BillingOptions) {
           /** Typed billing facade for server-side execution; native routes of protected resources stay closed. */
           billing: current.billing as MastraBilling<ProtectedAgents<Agents>, ProtectedWorkflows<Workflows>>,
           /** Merge billing transport with the application's own Hono routes and middleware. */
-          server(settings: ServerConfig = {}): ServerConfig {
+          server(settings: ServerConfig = {}, options: { studioWrapper?: StudioServerWrapper } = {}): ServerConfig {
+            const wrapper = options.studioWrapper;
+            if (
+              wrapper &&
+              (wrapper.integration.organizations !== organizations ||
+                wrapper.integration.execution !== current.billing.http)
+            )
+              throw new BillingError('invalid_configuration');
+            configuredWrapper = wrapper;
             const customRoutes = settings.apiRoutes ?? [];
             const router = new TrieRouter<boolean>();
             for (const route of customRoutes) router.add(route.method, route.path, true);
             const apiPrefix = settings.apiPrefix ?? '/api';
+            studio?.prefix(apiPrefix);
             const canonicalPath = (path: string) =>
               path.startsWith(apiPrefix + '/') ? '/api/' + path.slice(apiPrefix.length + 1) : path;
             const passthrough = (path: string, method = 'GET') => {
@@ -244,12 +267,23 @@ export function createBilling(options: BillingOptions) {
               organizations,
               execution: current.billing.http,
               commercial: current.commercial,
-              studio: studio
-                ? {
-                    middleware: async (context, next) =>
-                      passthrough(context.req.path, context.req.method) ? next() : studio.middleware(context, next),
-                  }
-                : undefined,
+              studio:
+                studio || wrapper
+                  ? {
+                      middleware: wrapper
+                        ? wrapper.middleware(apiPrefix, async (context, next) =>
+                            passthrough(context.req.path, context.req.method)
+                              ? next()
+                              : studio
+                                ? studio.middleware(context, next)
+                                : context.json({ error: 'billing_gateway_required' }, 403),
+                          )
+                        : async (context, next) =>
+                            passthrough(context.req.path, context.req.method)
+                              ? next()
+                              : studio!.middleware(context, next),
+                    }
+                  : undefined,
               artifacts: resources.artifacts,
               nativeAccess: passthrough,
               allowNative: true,
@@ -259,7 +293,18 @@ export function createBilling(options: BillingOptions) {
                 ? settings.middleware
                 : [settings.middleware]
               : [];
-            const ownMiddleware = Array.isArray(boundary.middleware) ? boundary.middleware : [boundary.middleware!];
+            const ownMiddleware = (
+              Array.isArray(boundary.middleware) ? boundary.middleware : [boundary.middleware!]
+            ).map(item => {
+              const handled = new WeakSet<object>();
+              const handler = typeof item === 'function' ? item : item.handler;
+              const once: import('hono').MiddlewareHandler = (context, next) => {
+                if (handled.has(context)) return next();
+                handled.add(context);
+                return handler(context, next);
+              };
+              return typeof item === 'function' ? once : { ...item, handler: once };
+            });
             for (const item of ownMiddleware) boundaries.add(item);
             return {
               ...settings,
@@ -278,6 +323,11 @@ export function createBilling(options: BillingOptions) {
               if (mastra.listWorkflows()[id] !== native) throw new BillingError('invalid_configuration');
             if ((await mastra.getStorage()?.getStore('workflows')) !== (await current.storage.getStore('workflows')))
               throw new BillingError('invalid_configuration');
+            if (configuredWrapper)
+              for (const [id, agent] of Object.entries(configuredWrapper.agents)) {
+                if (mastra.listAgents()[id] !== agent || !(await agent.getMemory()))
+                  throw new BillingError('invalid_configuration');
+              }
             const protectedAgents = new Set(
               definitions.filter(definition => definition.kind === 'agent').map(definition => agents[definition.id]),
             );
@@ -288,13 +338,18 @@ export function createBilling(options: BillingOptions) {
             );
             for (const [id, native] of Object.entries(mastra.listAgents())) {
               const path = `/api/agents/${encodeURIComponent(id)}`;
-              if (protectedAgents.has(native)) protectedRoutes.add(path);
+              if (configuredWrapper?.registerAlias(id, native)) {
+                if (Object.hasOwn(agents, id)) throw new BillingError('invalid_configuration');
+                protectedRoutes.add(path);
+              } else if (protectedAgents.has(native)) protectedRoutes.add(path);
               else nativeRoutes.add(path);
+              if (protectedRoutes.has(path)) nativeRoutes.delete(path);
             }
             for (const [id, native] of Object.entries(mastra.listWorkflows())) {
               const path = `/api/workflows/${encodeURIComponent(id)}`;
               if (protectedWorkflows.has(native)) protectedRoutes.add(path);
               else nativeRoutes.add(path);
+              if (protectedRoutes.has(path)) nativeRoutes.delete(path);
             }
             const configured = mastra.getServer()?.middleware;
             const configuredMiddleware = configured ? (Array.isArray(configured) ? configured : [configured]) : [];
@@ -309,6 +364,8 @@ export function createBilling(options: BillingOptions) {
           },
           close: integration.close,
         };
+        preparedIntegrations.add(preparedIntegration);
+        return preparedIntegration;
       } catch (error) {
         return lifecycle.fail(error);
       }

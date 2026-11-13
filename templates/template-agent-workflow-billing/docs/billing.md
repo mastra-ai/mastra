@@ -70,13 +70,13 @@ The lower-level `createBillingApplication({ catalog, createMastra })` remains av
 
 ## Providers, plans and local development
 
-`BILLING_PROVIDER=local` selects persistent simulated accounting. `BILLING_PROVIDER=autumn` selects the driver that reads `AUTUMN_SECRET_KEY` and `AUTUMN_BINDINGS`. An explicit `provider` option must agree with the environment. `billingProvider` optionally supplies an implementation of the common contract in `billing/providers/contracts.ts`.
+`BILLING_PROVIDER=local` selects persistent simulated accounting. `BILLING_PROVIDER=autumn` selects the driver that reads `AUTUMN_SECRET_KEY` and `AUTUMN_CONFIG_FILE`. An explicit `provider` option must agree with the environment. `billingProvider` optionally supplies an implementation of the common contract in `billing/providers/contracts.ts`.
 
 `billingKeys` describes logical meters and access keys. `plans.allowances` defines versioned quantities and expiry terms; `plans.offers` groups these terms into products. Declaring a plan never creates a remote plan, starts a subscription or grants funds. Autumn resources must exist and be bound separately. See the [Autumn guide](autumn.md).
 
 Local simulation accepts `localAccounts` seeds or an async seed resolver. Seeds initialize new accounts only and never replenish an existing one. The template's optional `localDemoAccounts` helper reads the private identities prepared by `npm run setup` and seeds the generic `credits` meter. Replace or omit that development helper for your own identity provisioning. Agents and workflows never read profiles, memberships or SQL.
 
-`BILLING_CONFIGURATION` remains an optional complete override for canonical configuration (`resourcePolicies`, `billingKeys`, `catalog`, `localAccounts`, `hosted`, `provider`). Its resource policies must agree with the protected registrations. Leave it unset when maintaining configuration in `index.ts`.
+`BILLING_CONFIG_FILE` selects an external JSON file providing an optional complete override for canonical configuration (`resourcePolicies`, `billingKeys`, `catalog`, `localAccounts`, `hosted`, `provider`). Its resource policies must agree with the protected registrations. Leave it unset when maintaining configuration in `index.ts`.
 
 ## Choose a policy
 

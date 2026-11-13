@@ -64,7 +64,7 @@ export async function mastraServer(databaseUrl: string, credential: string) {
         BILLING_DATABASE_URL: databaseUrl,
         BILLING_PORT: String(port),
         BILLING_PROVIDER: 'local',
-        BILLING_JWT_CONFIGURATION: '',
+        BILLING_IDENTITY_CONFIG_FILE: undefined,
         MASTRA_TELEMETRY_DISABLED: 'true',
       },
       stdio: ['ignore', 'pipe', 'pipe'],

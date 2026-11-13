@@ -1,3 +1,4 @@
+import { readConfigurationFile } from '../configuration-file.js';
 import { createHash } from 'node:crypto';
 // autumn-js 1.5.72 imports fzstd without declaring it. The pinned MIT fzstd
 // dependency supplies that intrinsic SDK runtime dependency on clean installs.
@@ -19,7 +20,7 @@ import type { ReservationProtocol } from '../reservations.js';
 import { BillingDatabase } from '../storage/database.js';
 import { AutumnAccountStorage } from '../storage/autumn-accounts.js';
 
-const bindingSchema = z
+export const bindingSchema = z
   .strictObject({
     customers: z
       .array(
@@ -533,12 +534,7 @@ export async function openAutumnProvider(options: {
   configuration: import('../policy-configuration.js').BillingConfiguration;
   environment: NodeJS.ProcessEnv;
 }): Promise<BillingProvider> {
-  let bindings: unknown;
-  try {
-    bindings = JSON.parse(options.environment.AUTUMN_BINDINGS ?? 'null');
-  } catch {
-    throw new BillingError('invalid_configuration');
-  }
+  const bindings = readConfigurationFile(options.environment, 'AUTUMN_CONFIG_FILE');
   if (!options.environment.AUTUMN_SECRET_KEY?.trim()) throw new BillingError('invalid_configuration');
   const parsed = bindingSchema.safeParse(bindings);
   if (!parsed.success) throw new BillingError('invalid_configuration');

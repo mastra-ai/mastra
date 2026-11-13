@@ -20,4 +20,6 @@ export function currentExecution(): ExecutionScope {
   if (!scope) throw new BillingError('forbidden');
   return scope;
 }
+/** Leave only the financial scope; conversation cancellation is not business cancellation. */
+export const outsideExecution = <T>(work: () => T): T => execution.exit(work);
 export const withinExecution = <T>(scope: ExecutionScope, work: () => Promise<T>) => execution.run(scope, work);

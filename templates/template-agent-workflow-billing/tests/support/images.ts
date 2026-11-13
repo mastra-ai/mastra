@@ -34,6 +34,7 @@ export function pngFixture(width = 1024, height = 1024) {
   ]);
 }
 export async function imageBoundary() {
+  const toolCallPrefix = globalThis.crypto.randomUUID();
   const png = pngFixture();
   const images: Record<string, any>[] = [],
     models: Record<string, any>[] = [];
@@ -48,6 +49,59 @@ export async function imageBoundary() {
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const body = JSON.parse(Buffer.concat(chunks).toString());
+    if (request.url === '/v1/chat/completions') {
+      models.push({ path: request.url!, body });
+      const lastUser = body.messages.findLastIndex((message: any) => message.role === 'user');
+      const userText = JSON.stringify(body.messages[lastUser]?.content ?? '');
+      const instruction = /CALL ([-a-zA-Z0-9_]+) (\{.*\})/.exec(JSON.parse(userText));
+      const already = body.messages.slice(lastUser + 1).some((message: any) => message.role === 'tool');
+      const tool = instruction && !already;
+      const argumentsValue = instruction?.[2] ?? '{}';
+      const name = instruction?.[1];
+      const delta = tool
+        ? {
+            role: 'assistant',
+            tool_calls: [
+              {
+                index: 0,
+                id: `studio-call-${toolCallPrefix}-${models.length}`,
+                type: 'function',
+                function: { name, arguments: argumentsValue },
+              },
+            ],
+          }
+        : { role: 'assistant', content: 'Saved conversation result.' };
+      if (!body.stream) {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            id: 'studio-generate',
+            object: 'chat.completion',
+            created: 1,
+            model: body.model,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: body.response_format ? '{"answer":"controlled"}' : 'Controlled business answer.',
+                },
+                finish_reason: 'stop',
+              },
+            ],
+            usage: { prompt_tokens: 3, completion_tokens: 2, total_tokens: 5 },
+          }),
+        );
+        return;
+      }
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      const part = (delta: unknown, finish: string | null) =>
+        `data: ${JSON.stringify({ id: 'studio-chat', object: 'chat.completion.chunk', created: 1, model: body.model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
+      response.write(part(delta, null));
+      response.write(part({}, tool ? 'tool_calls' : 'stop'));
+      response.end('data: [DONE]\n\n');
+      return;
+    }
     if (request.url === '/v1/images/generations') {
       images.push(body);
       started?.();

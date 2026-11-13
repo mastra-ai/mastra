@@ -20,6 +20,17 @@ export type { GenerationResponse, WorkflowResponse } from './execution-types.js'
 const measures = ['tokens', 'input-tokens', 'output-tokens', 'model-calls'] as const;
 type Receipt = BillingResponse['billing'];
 export interface BillingHttpGateway {
+  /** Read the current admitted generation by its immutable request identity, without executing. */
+  workflowStatus(
+    resourceId: string,
+    billing: BillingContext,
+    key: string,
+  ): Promise<{ result: Json; billing: Receipt | null } | null>;
+  agentStatus(
+    resourceId: string,
+    billing: BillingContext,
+    key: string,
+  ): Promise<{ result: Json | null; billing: Receipt } | null>;
   generate(
     resourceId: string,
     prompt: string,
@@ -146,6 +157,21 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
     return this.workflowExecution.expireSuspensions(now);
   }
   readonly http: BillingHttpGateway = {
+    workflowStatus: async (id, billing, key) => {
+      const response = await this.workflowExecution.readRequest(id, billing, key);
+      return response
+        ? {
+            result: boundedJson(response.kind === 'immediate' ? response.projection : response.result),
+            billing: response.billing,
+          }
+        : null;
+    },
+    agentStatus: async (resourceId, billing, key) => {
+      const response = await this.agentExecution.read(resourceId, billing, key);
+      return response === null
+        ? null
+        : { ...response, result: response.result === null ? null : boundedJson(response.result) };
+    },
     generate: async (resourceId, prompt, billing, key) => {
       const response = await this.agent(resourceId).generate(prompt, { billing, idempotencyKey: key });
       if (response.kind === 'nested') throw new BillingError('unsupported');

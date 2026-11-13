@@ -1,7 +1,12 @@
 import { privateDirectory } from '../src/billing/storage/private-files.js';
 import { constants } from 'node:fs';
 import { open, unlink } from 'node:fs/promises';
-import { configuredOrganizations, applicationMode, billingDatabaseUrl } from '../src/billing/environment.js';
+import {
+  configuredOrganizations,
+  applicationMode,
+  billingDatabaseUrl,
+  readBillingConfiguration,
+} from '../src/billing/environment.js';
 import { BillingError } from '../src/billing/contracts.js';
 import { initializeBilling } from '../src/billing/setup.js';
 import { billingConfigurationSchema } from '../src/billing/policy-configuration.js';
@@ -13,8 +18,7 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
   if (
     applicationMode(environment) !== 'local' ||
     environment.BILLING_PROVIDER !== 'local' ||
-    environment.BILLING_JWT_CONFIGURATION ||
-    environment.BILLING_CONFIGURATION
+    environment.BILLING_IDENTITY_CONFIG_FILE !== undefined
   )
     throw new BillingError('invalid_configuration');
   const paths = localPaths(root);
@@ -69,15 +73,17 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         if (context.actorId !== profile.actorId) throw new BillingError('conflict');
       }
       const initialized = await initializeBilling({
-        configuration: billingConfigurationSchema.parse({
-          provider: 'local',
-          resourcePolicies: [],
-          billingKeys: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
-          localAccounts: Object.values(manifest.profiles).map(profile => ({
-            workspaceId: profile!.workspaceId,
-            meters: [{ key: 'credits', funding: 'prepaid', balance: 30 }],
-          })),
-        }),
+        configuration:
+          readBillingConfiguration(environment) ??
+          billingConfigurationSchema.parse({
+            provider: 'local',
+            resourcePolicies: [],
+            billingKeys: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+            localAccounts: Object.values(manifest.profiles).map(profile => ({
+              workspaceId: profile!.workspaceId,
+              meters: [{ key: 'credits', funding: 'prepaid', balance: 30 }],
+            })),
+          }),
         storage: { url: databaseUrl },
       });
       try {

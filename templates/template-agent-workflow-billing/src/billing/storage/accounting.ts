@@ -1005,6 +1005,18 @@ export class AccountingStorage {
     await this.settleReservation(executionId);
     return this.database.write(async tx => response(await this.find(tx, executionId), completion.billing.replayed));
   }
+  readRequest(identity: AdmissionIdentity, resourceId: string, key: string): Promise<BillingResponse | null> {
+    return this.database.write(async tx => {
+      await this.authorize(tx, identity);
+      const row = (
+        await tx.execute({
+          sql: "SELECT execution_id FROM billing_operations WHERE actor_id = ? AND workspace_id = ? AND resource_id = ? AND operation = 'generate' AND key = ?",
+          args: [identity.actorId, identity.workspaceId, resourceId, key],
+        })
+      ).rows[0];
+      return row ? response(await this.find(tx, String(row.execution_id)), true) : null;
+    });
+  }
   read(identity: AdmissionIdentity, executionId: string): Promise<BillingResponse> {
     return this.database.write(async transaction => {
       await this.authorize(transaction, identity);
