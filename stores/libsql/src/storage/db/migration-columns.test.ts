@@ -1,3 +1,4 @@
+import { noopLogger } from '@mastra/core/logger';
 import { OLD_SPAN_SCHEMA, TABLE_SCHEMAS, TABLE_SPANS } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 import { LibSQLDB } from './index';
@@ -25,7 +26,7 @@ describe('LibSQLDB span column migration', () => {
       }),
     };
 
-    const mockDbOps = new LibSQLDB({ client: mockClient as any });
+    const mockDbOps = new LibSQLDB({ client: mockClient as any, getLogger: () => noopLogger });
     await mockDbOps.createTable({ tableName: TABLE_SPANS, schema: TABLE_SCHEMAS[TABLE_SPANS] });
 
     const tableInfoCalls = calls.filter(sql => /PRAGMA\s+table_info\("mastra_ai_spans"\)/i.test(sql));
