@@ -1,7 +1,7 @@
-import { sourceExternalId } from '../boards/semantics.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardSearchText } from '../work-items/card-search-text.js';
 import { hasEveryWord, searchWords } from '../work-items/search-words.js';
+import { sourceExternalId } from '../work-items/source-external-id.js';
 
 interface UnstartedCard {
   card: Card;
