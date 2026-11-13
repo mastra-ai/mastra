@@ -509,12 +509,21 @@ export class Cards {
       { workItemId: board.work_item_id },
     ).source;
     if (!next) throw new Error('[cards] an attached source must carry provider facts.');
-    const existing = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
+    const filed = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
       org_id: board.org_id,
       factory_project_id: board.factory_project_id,
       provider: next.provider,
       external_id: next.external_id,
     });
+    // Lock the card's sources and the pull request's, in id order like every write linking a
+    // source, so neither's holders change under us: a card added to another board meanwhile
+    // waits, then links the pull request too.
+    const locks = [...(joined.work_item_sources ?? []).map(row => row.id), ...(filed ? [filed.id] : [])];
+    let existing: WorkItemSourceDbRecord | null = null;
+    for (const id of [...new Set(locks)].sort()) {
+      const locked = await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
+      if (id === filed?.id) existing = locked;
+    }
     // A pull request joins the issue, so every card of the issue carries it.
     const issueCards = await this.#originSiblings(joined);
     if (existing) {
@@ -577,12 +586,17 @@ export class Cards {
     await lockSourceGroup(this.ops, [found.work_item_id]);
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, { ...where, id: found.id });
     if (!board) return null;
+    const [read] = await this.#join([board]);
+    if (!read) return null;
+    if (!read.work_item_sources?.some(source => source.role !== 'attached')) return { noSource: true };
+    // Lock the card's sources in id order, then read them again: a pull request joined or a
+    // source removed between the first read and the locks must be what the new card links to.
+    for (const id of (read.work_item_sources ?? []).map(source => source.id).sort()) {
+      await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
+    }
     const [card] = await this.#join([board]);
-    if (!card) return null;
-    const origin = card.work_item_sources?.find(source => source.role !== 'attached');
-    if (!origin) return { noSource: true };
-    const source = await this.ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id: origin.id }, () => null);
-    if (!source) return null;
+    const source = card?.work_item_sources?.find(row => row.role !== 'attached');
+    if (!card || !source) return null;
     const holders = (await linkedItems(this.ops, [source])).get(source.id)!.map(link => link.workItemId);
     const placed = await this.#join(
       await this.ops.findMany<BoardItemDbRecord>(BOARD_ITEMS, { work_item_id: { in: holders } }),

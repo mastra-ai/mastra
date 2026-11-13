@@ -82,8 +82,12 @@ export async function linkSource(
   now = new Date(),
 ): Promise<boolean> {
   if (await ops.findOne(LINKS, { work_item_id: workItemId, source_id: source.id })) return false;
-  await ops.insertOne<WorkItemSourceLinkDbRecord>(LINKS, {
-    id: randomUUID(),
+  // Insert if absent: a concurrent writer may add the same link between the read and the write,
+  // and a failed insert would abort the whole transaction on Postgres. Facts the loser writes are
+  // as old as its read of the source, which reads skip in favour of the source row.
+  const id = randomUUID();
+  const written = await ops.upsertOne<WorkItemSourceLinkDbRecord>(LINKS, ['work_item_id', 'source_id'], {
+    id,
     org_id: source.org_id,
     factory_project_id: source.factory_project_id,
     work_item_id: workItemId,
@@ -92,7 +96,7 @@ export async function linkSource(
     ...linkFacts(source, now),
     created_at: now,
   });
-  return true;
+  return written.id === id;
 }
 
 /**
@@ -257,17 +261,19 @@ export interface SourceLinkBackfillReport {
 
 /**
  * Give every source written before links existed a link for its owner, carrying the source's
- * facts. Idempotent and resumable: a source that already has its owner's link is skipped. Reads
- * fall back to the source row for any link it has not reached yet.
+ * facts. Idempotent and resumable: a source that already has its owner's link is skipped. Each
+ * source is locked and read again first, so its owner is current (a card deleted since the page
+ * was read is not linked back) and two passes never both insert one link: every link insert holds
+ * its source's row lock. Reads fall back to the source row for any link it has not reached yet.
  */
 export async function backfillSourceLinks(
-  storage: { ops: FactoryStorageOps },
+  storage: { ops: FactoryStorageOps; withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> },
   { signal, pageSize = BATCH }: { signal?: AbortSignal; pageSize?: number } = {},
 ): Promise<SourceLinkBackfillReport> {
   const report: SourceLinkBackfillReport = { links: 0, aborted: false };
   const orderBy: Array<[string, 'asc']> = [['id', 'asc']];
   let cursor: string | undefined;
-  while (!signal?.aborted) {
+  pages: while (!signal?.aborted) {
     const page = await storage.ops.findMany<WorkItemSourceDbRecord>(
       SOURCES,
       {},
@@ -275,10 +281,13 @@ export async function backfillSourceLinks(
     );
     if (!page.length) break;
     cursor = page[page.length - 1]!.id;
-    for (const source of page) {
-      if (await linkSource(storage.ops, source, source.work_item_id, ownerRole(source), source.created_at)) {
-        report.links++;
-      }
+    for (const { id } of page) {
+      if (signal?.aborted) break pages;
+      const linked = await storage.withTransaction(async ops => {
+        const source = await ops.updateAtomic<WorkItemSourceDbRecord>(SOURCES, { id }, () => null);
+        return source ? linkSource(ops, source, source.work_item_id, ownerRole(source), source.created_at) : false;
+      });
+      if (linked) report.links++;
     }
   }
   report.aborted = signal?.aborted ?? false;

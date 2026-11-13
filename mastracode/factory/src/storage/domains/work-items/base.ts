@@ -1401,7 +1401,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       this.#sourceLinksPending = false;
       return null;
     }
-    const report = await backfillSourceLinks({ ops: super.ops }, { signal });
+    const report = await backfillSourceLinks(
+      { ops: super.ops, withTransaction: fn => this.#withTransaction(fn) },
+      { signal },
+    );
     if (!report.aborted) {
       await super.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
         id: SOURCE_LINKS_MARKER_ID,

@@ -6,6 +6,7 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { WorkItemAlreadyOnBoardError } from './base.js';
 import type { ExternalWorkItemSource } from './base.js';
+import { backfillSourceLinks } from './source-links.js';
 import {
   FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
@@ -210,6 +211,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     expect(second.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
   });
 
+  it('gives a card added while the PR joins the PR too', async () => {
+    const { workItems, scope, file, addTo } = await setup();
+    for (let round = 0; round < 10; round++) {
+      const first = await file({ ...issue12, externalId: `${issue12.externalId}:${round}` }, { state: 'open' });
+      const [, second] = await Promise.all([
+        workItems.attachSource({
+          orgId: scope.orgId,
+          id: first.id,
+          source: { ...pullRequest34, externalId: `${pullRequest34.externalId}:${round}` },
+          metadata: { state: 'open' },
+        }),
+        addTo(first.id, 'security'),
+      ]);
+
+      const stored = (await workItems.get({ orgId: scope.orgId, id: second.id }))!;
+      expect(stored.workItem.sources.map(source => source.sourceType)).toEqual(['issue', 'pull-request']);
+    }
+  });
+
   it('deletes one card of an issue without taking the issue or its other cards with it', async () => {
     const { workItems, scope, file, addTo, sourceRows, storage } = await setup();
     const first = await file(issue12, { state: 'open' });
@@ -323,6 +343,91 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       ]);
       expect(await workItems.get({ orgId: scope.orgId, id: child!.id })).toMatchObject({ parentWorkItemId: null });
     }
+  });
+
+  it('lets two backfills run at once without either failing on a link the other wrote', async () => {
+    const { workItems, scope, file, storage } = await setup();
+    for (let index = 0; index < 20; index++) {
+      await file({ ...issue12, externalId: `${issue12.externalId}:${index}` }, { state: 'open' });
+    }
+    await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
+
+    const reports = await Promise.all([backfillSourceLinks(storage), backfillSourceLinks(storage)]);
+
+    expect(reports[0]!.links + reports[1]!.links).toBe(20);
+    expect(
+      await storage.ops.findMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId }),
+    ).toHaveLength(20);
+  });
+
+  it('stops a backfill page as soon as it is aborted', async () => {
+    const { scope, file, storage } = await setup();
+    for (let index = 0; index < 5; index++) {
+      await file({ ...issue12, externalId: `${issue12.externalId}:${index}` }, { state: 'open' });
+    }
+    await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
+    const controller = new AbortController();
+    const linksTable = FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name;
+    const abortOnFirstLink = (ops: typeof storage.ops): typeof storage.ops =>
+      new Proxy(ops, {
+        get(target, key, receiver) {
+          const value = Reflect.get(target, key, receiver);
+          if (key !== 'insertOne' && key !== 'upsertOne') {
+            return typeof value === 'function' ? value.bind(target) : value;
+          }
+          return async (collection: string, ...args: unknown[]) => {
+            const written = await (value as (...a: unknown[]) => Promise<unknown>).call(target, collection, ...args);
+            if (collection === linksTable) controller.abort();
+            return written;
+          };
+        },
+      });
+
+    const report = await backfillSourceLinks(
+      {
+        ops: abortOnFirstLink(storage.ops),
+        withTransaction: fn => storage.withTransaction(ops => fn(abortOnFirstLink(ops))),
+      },
+      { signal: controller.signal },
+    );
+
+    expect(report).toEqual({ links: 1, aborted: true });
+    expect(await storage.ops.findMany(linksTable, { org_id: scope.orgId })).toHaveLength(1);
+  });
+
+  it("does not relink a card deleted while the backfill read its issue's page", async () => {
+    const { workItems, scope, file, addTo, storage, sourceRows } = await setup();
+    const first = await file(issue12, { state: 'open' });
+    const second = await addTo(first.id, 'security');
+    const linksTable = FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name;
+    // The first card's link predates links; the second card's was written when it was added.
+    await storage.ops.deleteMany(linksTable, { work_item_id: first.workItemId });
+    let deleted = false;
+    const ops = new Proxy(storage.ops, {
+      get(target, key, receiver) {
+        const value = Reflect.get(target, key, receiver);
+        if (key !== 'findMany') return typeof value === 'function' ? value.bind(target) : value;
+        return async (collection: string, ...rest: unknown[]) => {
+          const rows = await (target.findMany as (...args: unknown[]) => Promise<unknown[]>)(collection, ...rest);
+          if (collection === FACTORY_WORK_ITEM_SOURCES_SCHEMA.name && !deleted) {
+            deleted = true;
+            // The page now names a card that is gone; the issue has passed to the second card.
+            await workItems.delete({ orgId: scope.orgId, id: first.id });
+          }
+          return rows;
+        };
+      },
+    });
+
+    await backfillSourceLinks({ ops, withTransaction: fn => storage.withTransaction(fn) });
+
+    expect(
+      (await storage.ops.findMany<Record<string, unknown>>(linksTable, { org_id: scope.orgId })).map(
+        link => link.work_item_id,
+      ),
+    ).toEqual([second.workItemId]);
+    await workItems.delete({ orgId: scope.orgId, id: second.id });
+    expect(await sourceRows()).toHaveLength(0);
   });
 
   it('reads a sync an older release wrote to the source row only, until a link catches up', async () => {
