@@ -8703,6 +8703,15 @@ export class Agent<
       if (owner?.live) throwAlreadyClaimed();
       // Racing takers read the same generation, so only one of them gets the lease.
       if (!(await acquireLease({ expectedGeneration: owner?.generation ?? 0 }))) throwAlreadyClaimed();
+      if (recoverClaimedAt !== undefined) {
+        // Another resume may have claimed the run between the read above and taking the lease. Holding
+        // the lease, no other resume can claim it now, so this read settles which claim is recovered.
+        const held = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+        if (held?.status !== claimStatus || held?.resumeClaimedAt !== recoverClaimedAt) {
+          await releaseLease();
+          throwAlreadyClaimed();
+        }
+      }
 
       this.logger.warn(
         claimStatus === 'running'
@@ -11874,12 +11883,13 @@ export class Agent<
    * Finishes a resume whose process died before the run finished, with the approval decision or
    * resume data that resume persisted when it claimed the run. Use it when `approveToolCall()`,
    * `declineToolCall()`, or `resumeStream()` was called but the process handling it stopped, and
-   * the decision is no longer at hand. The resumed tool call runs again.
+   * the decision is no longer at hand.
    *
-   * The dead resume's claim must be abandoned: claimed and not started for
-   * `AGENT_RESUME_CLAIM_STALE_MS`, or, on storage with run fencing, started and no longer renewed
-   * for that long. Rejects with `AGENT_RESUME_ALREADY_CLAIMED` while the claimant may still be
-   * alive, and with `AGENT_RESUME_NOTHING_TO_RECOVER` when no resume has claimed the run.
+   * The claim must be abandoned: claimed and not started for `AGENT_RESUME_CLAIM_STALE_MS`, or, on
+   * storage with run fencing, started and no longer renewed for that long. Rejects with
+   * `AGENT_RESUME_ALREADY_CLAIMED` before then, and with `AGENT_RESUME_NOTHING_TO_RECOVER` when no
+   * resume has claimed the run. The resumed tool call runs again, and abandonment is judged by age,
+   * so a stalled claimant may still be running it.
    *
    * @example
    * ```typescript

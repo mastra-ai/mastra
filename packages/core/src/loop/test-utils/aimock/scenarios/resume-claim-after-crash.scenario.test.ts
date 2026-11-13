@@ -229,45 +229,58 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
   }, 30_000);
 
   // Technical: a recovery only takes over the claim whose intent it read; a newer claim persisted
-  // its own intent, which a later recovery replays instead. (#30285)
-  it('never replaces a newer decision with the one a slow recovery read (#30285)', async () => {
-    const { storage, runId, workerA } = await setup();
-    const cRead = deferred();
-    const cContinue = deferred();
-    const workerC = createWorker(storage, 'C', async () => {}, {
-      holdWrite: (method, args, phase) => {
-        if (method !== 'updateWorkflowState' || phase !== 'before' || args.opts.status !== 'pending') return undefined;
-        cRead.resolve();
-        return cContinue.promise;
-      },
-    });
-    const bEntered = deferred();
-    const workerB = createWorker(storage, 'B', () => {
-      bEntered.resolve();
-      return new Promise(() => {});
-    });
-    const workerD = createWorker(storage, 'D', async () => {});
+  // its own intent, which a later recovery replays instead. C stalls either before it checks the
+  // claim, or after checking it and before taking the lease. (#30285)
+  it.each([
+    [
+      'before it checks the claim',
+      (method: string, args: any) => method === 'updateWorkflowState' && args.opts.status === 'pending',
+    ],
+    ['after it checks the claim', (method: string) => method === 'getRunOwnership'],
+  ])(
+    'never replaces a newer decision with an older one when recovery stalls %s (#30285)',
+    async (_when, stallsAt) => {
+      const { storage, runId, workerA } = await setup();
+      const cRead = deferred();
+      const cContinue = deferred();
+      let stalled = false;
+      const workerC = createWorker(storage, 'C', async () => {}, {
+        holdWrite: (method, args, phase) => {
+          if (stalled || phase !== 'before' || !stallsAt(method, args)) return undefined;
+          stalled = true;
+          cRead.resolve();
+          return cContinue.promise;
+        },
+      });
+      const bEntered = deferred();
+      const workerB = createWorker(storage, 'B', () => {
+        bEntered.resolve();
+        return new Promise(() => {});
+      });
+      const workerD = createWorker(storage, 'D', async () => {});
 
-    workerA.die();
-    await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
+      workerA.die();
+      await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
 
-    // C reads A's claim and its decision, then stalls before taking it over.
-    const recoverC = outcome(workerC.agent.recoverResume({ runId }).then(r => r.getFullOutput()));
-    await cRead.promise;
+      // C reads A's claim and its decision, then stalls before taking it over.
+      const recoverC = outcome(workerC.agent.recoverResume({ runId }).then(r => r.getFullOutput()));
+      await cRead.promise;
 
-    // Meanwhile someone answers again with a different decision, and that process dies too.
-    void workerB.agent.resumeGenerate({ name: 'Grace' }, { runId }).catch(() => {});
-    await bEntered.promise;
-    workerB.die();
-    await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
+      // Meanwhile someone answers again with a different decision, and that process dies too.
+      void workerB.agent.resumeGenerate({ name: 'Grace' }, { runId }).catch(() => {});
+      await bEntered.promise;
+      workerB.die();
+      await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
 
-    cContinue.resolve();
-    await expect(recoverC).resolves.toBe('AGENT_RESUME_ALREADY_CLAIMED');
+      cContinue.resolve();
+      await expect(recoverC).resolves.toBe('AGENT_RESUME_ALREADY_CLAIMED');
 
-    const recovered = await (await workerD.agent.recoverResume({ runId })).getFullOutput();
-    expect(recovered.text).toBe('Found Ada.');
-    expect([...workerC.resumedWith, ...workerD.resumedWith]).toEqual(['Ada:Grace']);
-  }, 60_000);
+      const recovered = await (await workerD.agent.recoverResume({ runId })).getFullOutput();
+      expect(recovered.text).toBe('Found Ada.');
+      expect([...workerC.resumedWith, ...workerD.resumedWith]).toEqual(['Ada:Grace']);
+    },
+    60_000,
+  );
 
   it('does not recover a resume that is still alive', async () => {
     const { storage, runId, workerA, resumeA, finishA } = await setup();

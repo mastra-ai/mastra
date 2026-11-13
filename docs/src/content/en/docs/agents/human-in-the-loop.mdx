@@ -610,7 +610,13 @@ const stream = await agent.recoverResume({ runId })
 for await (const chunk of stream.textStream) process.stdout.write(chunk)
 ```
 
-The resumed tool call runs again. `recoverResume()` only takes over a claim whose process stopped: one that was claimed but not started for 60 seconds, or, on storage with run fencing, one whose lease wasn't renewed for 60 seconds. While the original process may still be running, it rejects with `AGENT_RESUME_ALREADY_CLAIMED`. For a run that no resume has claimed, it rejects with `AGENT_RESUME_NOTHING_TO_RECOVER`.
+`recoverResume()` takes over a claim once it's abandoned: claimed but not started for 60 seconds, or, on storage with run fencing, started and its lease not renewed for 60 seconds. Before that, it rejects with `AGENT_RESUME_ALREADY_CLAIMED`. For a run that no resume has claimed, it rejects with `AGENT_RESUME_NOTHING_TO_RECOVER`.
+
+:::warning
+
+The resumed tool call runs again. A claim counts as abandoned by its age, so a process that stalled for 60 seconds may still be running the tool when the recovery runs it. Make tools with side effects safe to repeat, for example with an idempotency key.
+
+:::
 
 ## Tool approval: Supervisor agents
 
