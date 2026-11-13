@@ -37,7 +37,7 @@ function issueToIngress(itemRef: string, issue: IntakeIssue): IncidentioIssueIng
  * first-sight path.
  */
 export function attachIncidentioIssueReconciler(
-  incidentio: { intake: Intake; rules: IncidentioEventRules },
+  incidentio: { intake: Intake; rules: IncidentioEventRules; isFollowUpSource(sourceId: string): boolean },
   context: IntegrationContext,
 ): IncidentioIssueReconciler | undefined {
   if (!context.runtime || !incidentio.intake.resolveIntakeDispatch) return undefined;
@@ -95,12 +95,14 @@ export function attachIncidentioIssueReconciler(
     intake: context.storage.intake,
     projects: context.storage.projects,
     open: async (project, selectedIds) => {
-      const sourceIds = await scopeSourceIdsToProject({
+      const bound = await scopeSourceIdsToProject({
         intake: context.storage.intake,
         orgId: project.orgId,
         factoryProjectId: project.id,
         selectedIds,
       });
+      // A board shows follow-ups only, so the page budget is not spent on incidents.
+      const sourceIds = bound.filter(sourceId => incidentio.isFollowUpSource(sourceId));
       if (sourceIds.length === 0) return null;
       return async cursor => {
         const page = await incidentio.intake.listItems({

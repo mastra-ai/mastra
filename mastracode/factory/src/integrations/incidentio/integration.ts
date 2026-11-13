@@ -11,7 +11,7 @@ import { buildIncidentioAgentTools } from './agent-tools.js';
 import { IncidentioApiClient } from './api.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioEventRules, IncidentioRuleOverrides } from './default-rules.js';
-import { createIncidentioIntake } from './intake.js';
+import { createIncidentioIntake, INCIDENTIO_FOLLOW_UPS_SOURCE_ID } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
 import { buildIncidentioRoutes } from './routes.js';
@@ -143,6 +143,10 @@ export class IncidentioIntegration implements FactoryIntegration {
    */
   async agentTools(args: { requestContext: RequestContext }): Promise<IntegrationTools> {
     return buildIncidentioAgentTools({ requestContext: args.requestContext, incidentio: this });
+  }
+
+  isFollowUpSource(sourceId: string): boolean {
+    return sourceId === INCIDENTIO_FOLLOW_UPS_SOURCE_ID;
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

@@ -168,12 +168,14 @@ describe('incident.io first-sight intake', () => {
 
     await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
     await expect(sweep()).resolves.toMatchObject({ observed: 1, failed: 0 });
-    // Incidents are listed with the bound sources but only the follow-up is filed.
     expect(await filed('org-1', bound)).toEqual(['incidentio:follow-up:follow-up-1']);
     expect(await filed('org-1', unbound)).toEqual([]);
     expect(await filed('org-2', unselected)).toEqual([]);
-    // Two sweeps, two sources each, for the one project that has selected sources bound.
-    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    // One follow-up listing per sweep, for the one project with a selected source bound; incidents are never listed.
+    expect(fetchImpl.mock.calls.map(([input]) => new URL(String(input)).pathname)).toEqual([
+      '/v3/follow_ups',
+      '/v3/follow_ups',
+    ]);
   });
 
   it('stops listing a project after five pages', async () => {

@@ -490,6 +490,11 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
     return scoped ? { ...input, sourceId: scoped.sourceId } : input;
   }
 
+  /** Scoped ids name their base source; legacy unscoped ids are the base source. */
+  isFollowUpSource(sourceId: string): boolean {
+    return (decodeScopedSourceId(sourceId)?.sourceId ?? sourceId) === INCIDENTIO_FOLLOW_UPS_SOURCE_ID;
+  }
+
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!incidentioReconciliationEnabled()) return [];
     const reconcile = attachIncidentioIssueReconciler(this, ctx);
