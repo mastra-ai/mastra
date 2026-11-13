@@ -89,6 +89,8 @@ export class KeptCards implements CardSource {
   }
 
   async cards(scope: BoardScope): Promise<readonly Card[]> {
+    // Only a listed project's cards are kept; the list is usually kept too.
+    await this.projects();
     const key = scopeKey(scope);
     const kept = this.#cards.get(key);
     if (kept) return kept;

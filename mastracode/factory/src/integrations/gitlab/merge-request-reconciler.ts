@@ -173,7 +173,8 @@ export function attachGitLabMergeRequestReconciler(
   if (!ingest) return undefined;
   const boards = context.runtime.boards;
   const source =
-    context.runtime.keptCards ?? storageCards({ projects: context.storage.projects, workItems: context.runtime.workItems });
+    context.runtime.keptCards ??
+    storageCards({ projects: context.storage.projects, workItems: context.runtime.workItems });
 
   return async () => {
     const summary: IssueReconcileSummary = {
