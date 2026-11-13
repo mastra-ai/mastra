@@ -3,12 +3,12 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
 import { withIntakeDiscovery } from '../intake-discovery.js';
-import { createIssueReconciler } from '../issue-reconciler.js';
-import type { IssueReconciler } from '../issue-reconciler.js';
+import { createIssueReconcileOne, createIssueReconciler } from '../issue-reconciler.js';
+import type { IssueReconcileOne, IssueReconciler, IssueReconcilerOptions } from '../issue-reconciler.js';
 import type { IncidentioEventRules } from './default-rules.js';
-import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 import { IncidentioRules } from './rules.js';
 import type { IncidentioIssueIngress } from './rules.js';
+import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 
 export type IncidentioIssueReconciler = IssueReconciler;
 
@@ -30,16 +30,10 @@ function issueToIngress(itemRef: string, issue: IntakeIssue): IncidentioIssueIng
   };
 }
 
-/**
- * One incident.io sweep: refresh carded items (metadata, closes), then list
- * what every project's board shows so follow-ups nobody has carded yet get
- * their card. incident.io sends Factory no events, so this is the only
- * first-sight path.
- */
-export function attachIncidentioIssueReconciler(
-  incidentio: { intake: Intake; rules: IncidentioEventRules; isFollowUpSource(sourceId: string): boolean },
+function reconcilerOptions(
+  incidentio: { intake: Intake; rules: IncidentioEventRules },
   context: IntegrationContext,
-): IncidentioIssueReconciler | undefined {
+): { options: IssueReconcilerOptions; rules: IncidentioRules } | undefined {
   if (!context.runtime || !incidentio.intake.resolveIntakeDispatch) return undefined;
   const boards = context.runtime.boards;
 
@@ -51,7 +45,7 @@ export function attachIncidentioIssueReconciler(
     incidentioRules: incidentio.rules,
   });
 
-  const reconcile = createIssueReconciler({
+  const options: IssueReconcilerOptions = {
     integrationId: 'incidentio',
     intake: incidentio.intake,
     projects: context.storage.projects,
@@ -89,9 +83,23 @@ export function attachIncidentioIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
-  });
+  };
+  return { options, rules };
+}
 
-  return withIntakeDiscovery(reconcile, {
+/**
+ * One incident.io sweep: refresh carded items (metadata, closes), then list
+ * what every project's board shows so follow-ups no event carded yet get
+ * their card.
+ */
+export function attachIncidentioIssueReconciler(
+  incidentio: { intake: Intake; rules: IncidentioEventRules; isFollowUpSource(sourceId: string): boolean },
+  context: IntegrationContext,
+): IncidentioIssueReconciler | undefined {
+  const resolved = reconcilerOptions(incidentio, context);
+  if (!resolved) return undefined;
+  const { options, rules } = resolved;
+  return withIntakeDiscovery(createIssueReconciler(options), {
     integrationId: 'incidentio',
     intake: context.storage.intake,
     projects: context.storage.projects,
@@ -120,4 +128,13 @@ export function attachIncidentioIssueReconciler(
     maxPages: Number.POSITIVE_INFINITY,
     ingest: input => rules.ingest(input),
   });
+}
+
+/** Reconciles just the cards an event names, through the same path as the full sweep. */
+export function attachIncidentioIssueReconcileOne(
+  incidentio: { intake: Intake; rules: IncidentioEventRules },
+  context: IntegrationContext,
+): IssueReconcileOne | undefined {
+  const resolved = reconcilerOptions(incidentio, context);
+  return resolved ? createIssueReconcileOne(resolved.options) : undefined;
 }
