@@ -93,6 +93,25 @@ async function nativeFixture(
   return { ...f, model, runtime, open };
 }
 
+it('equivalent provider accounts allow execution regardless of property insertion order', async () => {
+  const f = await fixture();
+  const ensureAccount = f.provider().ensureAccount.bind(f.provider());
+  vi.spyOn(f.provider(), 'ensureAccount').mockImplementation(async input => {
+    const account = await ensureAccount(input);
+    return {
+      externalReference: account.externalReference,
+      provider: account.provider,
+      workspaceId: account.workspaceId,
+      id: account.id,
+    };
+  });
+  expect((await f.execute('reordered-account')).billing).toMatchObject({
+    executionStatus: 'completed',
+    billedUnits: 3,
+  });
+  expect(f.computes()).toBe(1);
+});
+
 describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
   it('Autumn reservation success and failure have one financial effect', async () => {
     const f = await fixture();

@@ -129,7 +129,7 @@ export class BillingGateway {
         if (
           account.provider !== this.provider.id ||
           account.workspaceId !== identity.workspaceId ||
-          JSON.stringify(snapshot.account) !== JSON.stringify(account)
+          Object.entries(snapshot.account).some(([key, value]) => account[key as keyof typeof account] !== value)
         )
           throw new BillingError('state_unavailable');
         const current = await this.organizations.accountingIdentity(context);
