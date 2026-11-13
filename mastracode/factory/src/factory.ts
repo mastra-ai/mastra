@@ -248,8 +248,6 @@ export interface MastraFactoryConfig {
    * one connection, every feature on.
    */
   storage: FactoryStorage;
-  /** Disable persistence of rich scorer results. Default: true. */
-  disableScoreStorage?: boolean;
   /**
    * Vector store instance for recall search — `PgVector` (`@mastra/pg`) on
    * the same database as `storage`. Omitted → the SDK mount's default vector
@@ -1887,7 +1885,6 @@ export class MastraFactory {
           gitBranch: '',
         },
         storage: storage.getMastraStorage(),
-        disableScoreStorage: this.#config.disableScoreStorage ?? true,
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         // Factory owns Knowledge: without its own config, Knowledge stays off
         // rather than following the host's Mastra Code settings toggle.

@@ -97,7 +97,6 @@ import {
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import {
   resolveAgentStreamsOff,
   resolveExperimentalAgent,
@@ -146,7 +145,6 @@ import type { MastraCodeState } from './schema.js';
 import { mastraBrand } from './theme-palette.js';
 import { isThinkingLevelSetting } from './thinking.js';
 import type { ThinkingLevelSetting } from './thinking.js';
-import { DiscardingScoresStorage } from './utils/discarding-scores-storage.js';
 import { syncGateways } from './utils/gateway-sync.js';
 import { openLocalObservabilityStore } from './utils/local-observability.js';
 import { registerSessionAndWaitForMaintenance, UNKNOWN_OWNER, unregisterSession } from './utils/maintenance-lock.js';
@@ -362,8 +360,6 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
-  /** Disable persistence of rich scorer results. Default: true. */
-  disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
@@ -797,9 +793,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      // Rich scorer results can retain large prompts, messages, inputs, and outputs.
-      // Discard them by default; hosts may opt into persistence for Studio access.
-      ...((config?.disableScoreStorage ?? true) ? { scores: new DiscardingScoresStorage() } : {}),
     },
   });
 
@@ -958,10 +951,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
-
-  // Scorers (live evaluation with sampling)
-  const outcomeScorer = createOutcomeScorer();
-  const efficiencyScorer = createEfficiencyScorer();
 
   // Notification delivery. Every local Mastra Code process shares one database,
   // so one notification store and one dispatch schedule, and whichever process
@@ -1493,16 +1482,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       scheduleTools,
     ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
-    scorers: {
-      outcome: {
-        scorer: outcomeScorer,
-        sampling: { type: 'none' },
-      },
-      efficiency: {
-        scorer: efficiencyScorer,
-        sampling: { type: 'ratio', rate: 0.3 },
-      },
-    },
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.

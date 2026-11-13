@@ -284,10 +284,10 @@ describe('storage maintenance exclusion', () => {
           };
         }),
     );
-    vi.mocked(createStorage).mockImplementationOnce((async () => {
+    vi.mocked(createStorage).mockImplementationOnce(async () => {
       order.push('storage');
-      return { storage: {}, backend: 'memory' };
-    }) as never);
+      return { storage: new InMemoryStore({ id: 'maintenance-test' }), backend: 'memory' };
+    });
     const { createMastraCode } = await import('./index.js');
 
     const started = createMastraCode();
@@ -313,69 +313,6 @@ describe('storage maintenance exclusion', () => {
 
     await expect(createMastraCode()).rejects.toBe(failure);
     expect(unregisterSession).toHaveBeenCalled();
-  });
-});
-
-describe('scores storage domain', () => {
-  it('keeps scorer results out of the default libsql store', async () => {
-    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
-    const { createMastraCode } = await import('./index.js');
-
-    const result = await createMastraCode();
-
-    // mastracode's scorers persist every result through the `scores` domain, and
-    // nothing reads them back. The domain must accept writes (a missing domain
-    // makes validateAndSaveScore() throw MASTRA_SCORES_STORAGE_NOT_AVAILABLE)
-    // without writing to libsql (#22056) or retaining payloads in memory.
-    const scores = await result.storage.getStore('scores');
-    expect(scores).toBeInstanceOf(DiscardingScoresStorage);
-
-    const saved = await scores!.saveScore({
-      scorerId: 'outcome',
-      entityId: 'thread-1',
-      runId: 'run-1',
-      output: { ok: true },
-      score: 1,
-      scorer: {},
-      source: 'LIVE',
-      entity: {},
-    });
-    expect(saved.score.id).toEqual(expect.any(String));
-    expect(await scores!.getScoreById({ id: saved.score.id })).toBeNull();
-    const listed = await scores!.listScoresByRunId({ runId: 'run-1', pagination: { page: 0, perPage: 10 } });
-    expect(listed.scores).toEqual([]);
-  });
-
-  it('uses the configured storage scores domain when persistence is enabled', async () => {
-    const injectedStorage = new InMemoryStore({ id: 'persistent-scores' });
-    const { DiscardingScoresStorage } = await import('./utils/discarding-scores-storage.js');
-    const { createMastraCode } = await import('./index.js');
-
-    const result = await createMastraCode({
-      storage: injectedStorage,
-      storageBackend: 'libsql',
-      disableScoreStorage: false,
-    });
-    const scores = await result.storage.getStore('scores');
-
-    expect(scores).not.toBeInstanceOf(DiscardingScoresStorage);
-    const saved = await scores!.saveScore({
-      scorerId: 'outcome',
-      entityId: 'thread-1',
-      runId: 'run-1',
-      output: { ok: true },
-      score: 1,
-      scorer: {},
-      source: 'LIVE',
-      entity: {},
-      traceId: 'trace-1',
-      spanId: 'span-1',
-    });
-    expect(await scores!.getScoreById({ id: saved.score.id })).toMatchObject({
-      scorerId: 'outcome',
-      traceId: 'trace-1',
-      spanId: 'span-1',
-    });
   });
 });
 
