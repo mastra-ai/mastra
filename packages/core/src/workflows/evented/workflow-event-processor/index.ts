@@ -1314,7 +1314,12 @@ export class WorkflowEventProcessor extends EventProcessor {
           'foreach';
         const parentSnap = await parentStorage.loadStep(workflowId);
         const existing = parentSnap?.context?.[workflowId] as any;
-        await parentStorage.writeStepResult({
+        // Every foreach child start carries only its own index, so the write must merge with the
+        // stored result: v2 would otherwise drop the sibling run ids restart relies on.
+        const writeParentStep = parentIsForeach
+          ? parentStorage.mergeStepResult.bind(parentStorage)
+          : parentStorage.writeStepResult.bind(parentStorage);
+        await writeParentStep({
           stepId: workflowId,
           result: {
             startedAt: existing?.startedAt ?? Date.now(),
@@ -4276,8 +4281,15 @@ export class WorkflowEventProcessor extends EventProcessor {
         // A failed iteration fails the whole foreach, like a failed regular step. Only the iteration
         // the stored foreach failed with fails the run; a later failing sibling stops here like any
         // other late sibling. A redelivered first failure still matches and fails the run.
+        //
+        // Once a failed index is recorded it is the only source of truth: a sibling that failed
+        // first (and recorded its index) must still fail the run on redelivery, even though
+        // `priorFailure` now sees its own stored failure.
         const failedIndex = (foreachResult?.metadata as StepResult<any, any, any, any>['metadata'])?.foreachFailedIndex;
-        if (prevResult.status === 'failed' && !priorFailure && (failedIndex ?? currentIdx) === currentIdx) {
+        if (
+          prevResult.status === 'failed' &&
+          (failedIndex !== undefined ? failedIndex === currentIdx : !priorFailure)
+        ) {
           await this.#pubsub.publish('workflows', {
             type: 'workflow.fail',
             runId,
