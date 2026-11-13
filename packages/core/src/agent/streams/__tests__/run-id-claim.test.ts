@@ -4,16 +4,21 @@
  * on an id another run already holds is refused instead of taking that run over.
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
-import { describe, expect, it } from 'vitest';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
+import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { AgentConfig } from '../../types';
-import { AGENT_STREAM_TOPIC } from '../constants';
+import { AGENT_STREAM_TOPIC, RUN_RECORD_ADMISSION_TIMEOUT_MS } from '../constants';
 import { writeAgentRunRecord } from '../run-records';
 
 class RecordingPubSub extends EventEmitterPubSub {
@@ -58,6 +63,54 @@ describe('run id ownership', () => {
 
   const resource = (id: string) => new RequestContext([[MASTRA_RESOURCE_ID_KEY, id]]);
 
+  // An agent whose first model call asks for a tool that needs approval, so the run
+  // suspends and can be resumed (and refused a resume) with a caller-supplied run id.
+  const makeApprovalAgent = () => {
+    const approveTool = createTool({
+      id: 'needs_approval',
+      description: 'Runs only after a caller approves it.',
+      inputSchema: z.object({}),
+      requireApproval: true,
+      execute: async () => ({ approved: true }),
+    });
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }) => {
+        const approved = JSON.stringify(prompt).includes('approved');
+        const chunks = approved
+          ? [
+              { type: 'text-start', id: 't-1' },
+              { type: 'text-delta', id: 't-1', delta: 'Done.' },
+              { type: 'text-end', id: 't-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]
+          : [
+              { type: 'tool-call', toolCallId: 'approval-tc', toolName: 'needsApproval', input: '{}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ];
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'approval-resp', modelId: 'mock-model-id', timestamp: new Date(0) },
+            ...chunks,
+          ] as any),
+        };
+      },
+    });
+    return new Agent({
+      id: 'approval-agent',
+      name: 'approval-agent',
+      instructions: 'Call the tool.',
+      model,
+      tools: { needsApproval: approveTool },
+    });
+  };
+
   it('refuses a runId another resource is already running', async () => {
     const pubsub = new RecordingPubSub();
     const agent = makeAgent();
@@ -91,6 +144,47 @@ describe('run id ownership', () => {
     const again = await agent.stream('Say hello.', { runId: 'finished-run', requestContext: resource('tenant-a') });
     await again.consumeStream();
     expect(await agent.__getRunRecord('finished-run')).toMatchObject({ resourceId: 'tenant-a' });
+  });
+
+  // The ownership check must not run before the run's setup has resolved: a run admitted
+  // early can hold that admission across a paused setup, let another run take and finish
+  // on the same id, and then claim it, overwriting the finished run's record.
+  it('refuses a run whose setup outlives another run of the same id', async () => {
+    const pubsub = new RecordingPubSub();
+    let releaseSetup = () => {};
+    const setupReleased = new Promise<void>(resolve => {
+      releaseSetup = resolve;
+    });
+    let enterSetup = () => {};
+    const setupEntered = new Promise<void>(resolve => {
+      enterSetup = resolve;
+    });
+    let setupCalls = 0;
+    const agent = makeAgent({
+      instructions: async () => {
+        setupCalls += 1;
+        if (setupCalls === 1) {
+          enterSetup();
+          await setupReleased;
+        }
+        return 'Be brief.';
+      },
+    });
+    new Mastra({ agents: { agent }, pubsub, logger: false });
+
+    // Tenant A is parked inside its own setup and has not claimed the id yet.
+    const parked = agent.stream('Say hello.', { runId: 'gated-run', requestContext: resource('tenant-a') });
+    await setupEntered;
+
+    // Tenant B takes the same id and runs it to completion while A is still setting up.
+    const finished = await agent.stream('Say hello.', { runId: 'gated-run', requestContext: resource('tenant-b') });
+    await finished.consumeStream();
+
+    releaseSetup();
+
+    // A must not take the id from the run that finished on it, and B keeps the record.
+    await expect(parked).rejects.toMatchObject(RUN_ID_CLAIMED);
+    expect(await agent.__getRunRecord('gated-run')).toMatchObject({ resourceId: 'tenant-b' });
   });
 
   it('refuses a scoped run id to a caller without a resource id', async () => {
@@ -184,5 +278,149 @@ describe('run id ownership', () => {
     const replay = await collect((await agent.observe('reused-run')).fullStream);
     expect(replay.types.at(-1)).toBe('finish');
     expect(pubsub.count('reused-run')).toBe(published);
+  });
+
+  describe('when the run record cannot be read', () => {
+    const RECORD_UNAVAILABLE = { id: 'AGENT_RUN_RECORD_UNAVAILABLE' };
+
+    afterEach(() => {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    });
+
+    // A paused or partitioned cache answers nothing; the run must be refused
+    // within the bound instead of waiting out the outage.
+    it.each([
+      ['a generated run id', undefined],
+      ['a caller-supplied run id', 'caller-run'],
+    ])('refuses to start %s when the cache does not answer', async (_label, runId) => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      vi.spyOn(cache, 'get').mockReturnValue(new Promise(() => {}));
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+
+      const started = agent.stream('Say hello.', { runId, requestContext: resource('tenant-a') });
+      const refused = expect(started).rejects.toMatchObject(RECORD_UNAVAILABLE);
+      await vi.advanceTimersByTimeAsync(RUN_RECORD_ADMISSION_TIMEOUT_MS);
+      await refused;
+
+      expect(pubsub.published).toEqual([]);
+    });
+
+    it('refuses to start a run when the cache read fails', async () => {
+      const pubsub = new RecordingPubSub();
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub, cache, logger: false });
+      const outage = new Error('Socket closed unexpectedly');
+      vi.spyOn(cache, 'get').mockRejectedValue(outage);
+
+      const error = await agent.stream('Say hello.', { requestContext: resource('tenant-a') }).catch(e => e);
+
+      expect(error).toMatchObject(RECORD_UNAVAILABLE);
+      expect(error.cause).toMatchObject({ message: 'Socket closed unexpectedly' });
+      expect(pubsub.published).toEqual([]);
+    });
+
+    it('still refuses a claimed run id once the cache answers within the bound', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      await writeAgentRunRecord(agent.__getStreamBus()!.runRecordCache, {
+        agentId: agent.id,
+        runId: 'slow-claimed-run',
+        resourceId: 'tenant-a',
+        status: 'running',
+        updatedAt: Date.now(),
+      });
+      const get = cache.get.bind(cache);
+      vi.spyOn(cache, 'get').mockImplementation(async key => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        return get(key);
+      });
+
+      await expect(
+        agent.stream('Say hello.', { runId: 'slow-claimed-run', requestContext: resource('tenant-b') }),
+      ).rejects.toMatchObject(RUN_ID_CLAIMED);
+    });
+
+    // A refused run must leave no half-started trace: the run span is opened only once
+    // the run is admitted, so a refusal opens none.
+    it('opens no run span when a run is refused', async () => {
+      const cache = new InMemoryServerCache();
+      const agent = makeAgent();
+      new Mastra({ agents: { agent }, pubsub: new RecordingPubSub(), cache, logger: false });
+      vi.spyOn(cache, 'get').mockRejectedValue(new Error('Socket closed unexpectedly'));
+
+      const opened: string[] = [];
+      const observabilityUtils = await import('../../../observability/utils');
+      vi.spyOn(observabilityUtils, 'getOrCreateSpan').mockImplementation((opts: any) => {
+        opened.push(opts.type);
+        return undefined;
+      });
+
+      await expect(
+        agent.stream('Say hello.', { runId: 'refused-span-run', requestContext: resource('tenant-a') }),
+      ).rejects.toMatchObject(RECORD_UNAVAILABLE);
+
+      expect(opened).not.toContain('agent_run');
+    });
+
+    // A refusal tells the caller to retry, so the retry must still resume with the output
+    // processors the suspended run was holding.
+    it('keeps the output processors a refused resume is holding, so the retry still gets them', async () => {
+      const retained = { id: 'retained-processor', processOutputResult: async ({ messages }: any) => messages };
+      const agent = makeApprovalAgent();
+      const cache = new InMemoryServerCache();
+      new Mastra({
+        agents: { agent },
+        pubsub: new RecordingPubSub(),
+        cache,
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      const stream = await agent.stream('Approve it.', {
+        runId: 'retained-run',
+        requireToolApproval: true,
+        outputProcessors: [retained],
+        requestContext: resource('tenant-a'),
+      });
+      let toolCallId = '';
+      for await (const chunk of stream.fullStream) {
+        if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+      }
+      expect(toolCallId).toBeTruthy();
+
+      const get = cache.get.bind(cache);
+      let cacheDown = true;
+      vi.spyOn(cache, 'get').mockImplementation(async (key: string) => {
+        if (cacheDown && key.includes('agent.run.')) throw new Error('Socket closed unexpectedly');
+        return get(key);
+      });
+
+      await expect(
+        agent.approveToolCall({ runId: 'retained-run', toolCallId, requestContext: resource('tenant-a') }),
+      ).rejects.toMatchObject(RECORD_UNAVAILABLE);
+
+      const overridesSeen: unknown[] = [];
+      const original = (agent as any).listResolvedOutputProcessors.bind(agent);
+      vi.spyOn(agent as any, 'listResolvedOutputProcessors').mockImplementation(async (rc: any, overrides: any) => {
+        overridesSeen.push(overrides);
+        return original(rc, overrides);
+      });
+
+      cacheDown = false;
+      const resumed = await agent.approveToolCall({
+        runId: 'retained-run',
+        toolCallId,
+        requestContext: resource('tenant-a'),
+      });
+      await resumed.consumeStream();
+
+      expect(overridesSeen.some(overrides => Array.isArray(overrides) && overrides.includes(retained))).toBe(true);
+    }, 30000);
   });
 });

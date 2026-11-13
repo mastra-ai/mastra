@@ -64,5 +64,12 @@ export const AgentStreamEventTypes = {
   OWNERSHIP_CLAIMED: 'ownership-claimed',
 } as const;
 
+/**
+ * How long starting a run waits for its run record to be read. Past this the run
+ * is refused: an unreachable cache would otherwise hold the caller for the
+ * whole outage.
+ */
+export const RUN_RECORD_ADMISSION_TIMEOUT_MS = 5_000;
+
 /** How long a finished run's stream stays replayable before it is cleaned up. */
 export const DEFAULT_STREAM_CLEANUP_TIMEOUT_MS = 30_000;

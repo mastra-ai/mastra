@@ -244,7 +244,7 @@ import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idl
 import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
-import { AGENT_STREAM_TOPIC } from './streams/constants';
+import { AGENT_STREAM_TOPIC, RUN_RECORD_ADMISSION_TIMEOUT_MS } from './streams/constants';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -779,6 +779,22 @@ function runIdAlreadyClaimedError({ agentName, runId }: { agentName: string; run
     text: `Agent "${agentName}" cannot start a run with id "${runId}" because another run already owns it.`,
     details: { agentName, runId },
   });
+}
+
+function runRecordUnavailableError(
+  { agentName, runId }: { agentName: string; runId: string },
+  cause: unknown,
+): MastraError {
+  return new MastraError(
+    {
+      id: 'AGENT_RUN_RECORD_UNAVAILABLE',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.SYSTEM,
+      text: `Agent "${agentName}" cannot start run "${runId}" because its run record could not be read from the server cache.`,
+      details: { agentName, runId, timeoutMs: RUN_RECORD_ADMISSION_TIMEOUT_MS },
+    },
+    cause,
+  );
 }
 
 function alreadyClaimedResumeError({
@@ -1854,7 +1870,24 @@ export class Agent<
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
     }
 
-    const record = await readAgentRunRecord(bus.runRecordCache, this.id, runId);
+    // Fail closed: without the record we cannot tell whether another run owns this id.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let record: AgentRunRecord | undefined;
+    try {
+      record = await Promise.race([
+        readAgentRunRecord(bus.runRecordCache, this.id, runId),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error(`No response within ${RUN_RECORD_ADMISSION_TIMEOUT_MS}ms`)),
+            RUN_RECORD_ADMISSION_TIMEOUT_MS,
+          );
+        }),
+      ]);
+    } catch (error) {
+      throw runRecordUnavailableError({ agentName: this.name, runId }, error);
+    } finally {
+      clearTimeout(timer);
+    }
     if (!record) return undefined;
     if (record.resourceId && record.resourceId !== resourceId) {
       throw runIdAlreadyClaimedError({ agentName: this.name, runId });
@@ -9272,17 +9305,38 @@ export class Agent<
         resourceId,
       }) ||
       globalThis.crypto.randomUUID();
-    const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
-    this.#suspendedRunOutputProcessors.delete(runId);
-    if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
-      options = { ...options, outputProcessors: keptOutputProcessors };
-    }
+
     const instructions = options.instructions || (await this.getInstructions({ requestContext }));
     const mcpServerGuidance = await this.getMcpServerGuidance({
       requestContext,
       toolsets: options.toolsets,
       clientTools: options.clientTools,
     });
+
+    const memory = await this.getMemory({ requestContext });
+    // Reuse early workspace (resolved earlier for browser context) to avoid
+    // duplicate factory resolution which could create different instances
+    const workspace = earlyWorkspace;
+
+    const saveQueueManager = new SaveQueueManager({
+      logger: this.logger,
+      memory,
+    });
+
+    // Admit the run once its setup has resolved, and before any of its state is claimed.
+    // The check must not run before the setup awaits: a run admitted early can hold that
+    // admission through a paused setup, let another run finish on the same id, and then
+    // claim it. A refused run must not open a span or consume the output processors a
+    // resume is holding either, or the retry it is told to make would start without them.
+    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
+      resuming: Boolean(resumeContext?.claim),
+    });
+
+    const keptOutputProcessors = this.#suspendedRunOutputProcessors.get(runId);
+    this.#suspendedRunOutputProcessors.delete(runId);
+    if (resumeContext && options.outputProcessors === undefined && keptOutputProcessors) {
+      options = { ...options, outputProcessors: keptOutputProcessors };
+    }
 
     // Set Tracing context
     // Note this span is ended at the end of #executeOnFinish
@@ -9333,16 +9387,6 @@ export class Agent<
       requestContext,
       mastra: this.#mastra,
       resumeFrom: persistedTracingContext,
-    });
-
-    const memory = await this.getMemory({ requestContext });
-    // Reuse early workspace (resolved earlier for browser context) to avoid
-    // duplicate factory resolution which could create different instances
-    const workspace = earlyWorkspace;
-
-    const saveQueueManager = new SaveQueueManager({
-      logger: this.logger,
-      memory,
     });
 
     // Create a capabilities object with bound methods
@@ -9404,10 +9448,6 @@ export class Agent<
       normalizeToolPayloadTransformPolicy(
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
-
-    const priorRunRecord = await this.#assertRunIdAvailable(runId, resourceId, {
-      resuming: Boolean(resumeContext?.claim),
-    });
 
     // A finished run's log stays on the topic until its cleanup timer fires, so a reused id
     // starts the new run on top of the old frames: a reader replaying from the start would
