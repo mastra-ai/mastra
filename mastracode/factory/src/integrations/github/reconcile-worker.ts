@@ -200,7 +200,12 @@ export class GithubReconcileWorker extends MastraWorker {
 
     try {
       const targets = await this.#targets();
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        // Nothing to sweep is a clean sweep, not a stalled one.
+        if (reconcilePullRequests) recordReconcileSweep('github', 'merge_close', { replayed: 0, ok: true });
+        if (discoverPullRequests) recordReconcileSweep('github', 'open', { replayed: 0, ok: true });
+        return;
+      }
 
       if (reconcilePullRequests && this.#reconcile) {
         const startedAt = Date.now();

@@ -55,14 +55,15 @@ SELECT
 FROM pg_stat_activity
 WHERE datname = current_database() AND backend_type = 'client backend' AND pid <> pg_backend_pid()`;
 
-// Most expensive statements of this database since the extension was last reset. Statement text is
-// normalized by pg_stat_statements (literals become $1, $2, …).
+// Lifetime totals of every statement of this database, one row per query ID. pg_stat_statements
+// keeps a row per user (and top-level flag) for the same query ID, so they are summed. No limit:
+// the slowest are picked from the change since the previous sample, which a statement with a small
+// lifetime total can still lead. The extension caps its rows (`pg_stat_statements.max`, 5000 by default).
 const STATEMENTS_SQL = `
-SELECT queryid::text AS id, calls, total_exec_time
+SELECT queryid::text AS id, sum(calls) AS calls, sum(total_exec_time) AS total_exec_time
 FROM pg_stat_statements
 WHERE dbid = (SELECT oid FROM pg_database WHERE datname = current_database())
-ORDER BY total_exec_time DESC
-LIMIT 200`;
+GROUP BY queryid`;
 
 const SLOW_STATEMENTS_LOGGED = 5;
 
