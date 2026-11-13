@@ -17,7 +17,7 @@ mastra deploy
 ```
 
 :::note
-This page covers the unified deploy flow. The earlier split commands, [`mastra server deploy`](/docs/mastra-platform/server) and [`mastra studio deploy`](/docs/mastra-platform/studio), still work but `mastra deploy` is the recommended path.
+This page covers the unified deploy flow. The earlier split commands, [`mastra server deploy`](/docs/mastra-platform/deploy/server) and [`mastra studio deploy`](/docs/mastra-platform/deploy/studio), still work but `mastra deploy` is the recommended path.
 :::
 
 ## Before you begin
@@ -107,7 +107,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
 
 Replacing the running server process during each deploy can interrupt agent turns that are still streaming when the new version goes live because Mastra Platform doesn't currently let you configure or rely on guaranteed extra time before termination. Don't rely on a raised `server.drainTimeout` for turns that may outlast the default drain window. Use [durable agents](/docs/harness/durable-agents) with persistent storage and cache when turns must survive a deploy, or handle an interrupted stream in the client. The available strategies are documented in [graceful shutdown and rolling deploys](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys).
 
-The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/environments) commands target the same project without extra flags.
+The first deploy writes a `.mastra-project.json` file linking your directory to the platform project. Commit it so later deploys, CI runs, and [`mastra env`](/docs/mastra-platform/deploy/environments) commands target the same project without extra flags.
 
 ## Deploy to another environment
 
@@ -119,7 +119,7 @@ mastra deploy --env staging
 
 Each environment gets a separate URL and environment variables. It can also have its own [hosted database](/docs/mastra-platform/database).
 
-See [Environments](/docs/mastra-platform/environments) for the full model.
+See [Environments](/docs/mastra-platform/deploy/environments) for the full model.
 
 ## Choose a region
 
@@ -129,7 +129,7 @@ When a deploy creates an environment interactively, select the United States or 
 mastra deploy --env production --region eu
 ```
 
-The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/regions) for the full list of supported regions and database placement, along with observability co-location.
+The region is fixed when the environment is created. Databases attached to an environment are placed near that environment's region automatically, and observability data is routed to the ingest region that matches the environment's residency zone. See [Regions](/docs/mastra-platform/deploy/regions) for the full list of supported regions and database placement, along with observability co-location.
 
 ## Preflight checks
 
@@ -297,11 +297,11 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
 
   <StepItem>
     Deploy once. Your project is auto-adopted onto the environment pipeline and the `production` environment is created on
-    first deploy. See [Environments](/docs/mastra-platform/environments) for the full model.
+    first deploy. See [Environments](/docs/mastra-platform/deploy/environments) for the full model.
   </StepItem>
 
   <StepItem>
-    Move any project-level environment variables to the environment that needs them, in the dashboard under **Environments → \<env> → Variables**. See [Environment variables](/docs/mastra-platform/environments#environment-variables).
+    Move any project-level environment variables to the environment that needs them, in the dashboard under **Environments → \<env> → Variables**. See [Environment variables](/docs/mastra-platform/deploy/environments#environment-variables).
   </StepItem>
 </Steps>
 
@@ -315,8 +315,8 @@ The deploy log is the source of truth: the legacy pipeline prints a deprecation 
 
 ## Related
 
-- [Environments](/docs/mastra-platform/environments)
-- [Regions](/docs/mastra-platform/regions)
+- [Environments](/docs/mastra-platform/deploy/environments)
+- [Regions](/docs/mastra-platform/deploy/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy)
 - [Configuration](/docs/mastra-platform/configuration)
