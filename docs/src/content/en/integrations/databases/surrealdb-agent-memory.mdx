@@ -1,0 +1,195 @@
+---
+title: "SurrealDB Agent Memory | Database"
+description: "Give Mastra agents long-term memory with SurrealDB Agent Memory: server-side fact extraction, semantic recall, user profiles, agent tools and document search."
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+  - "@mastra/surrealdb"
+  - "@mastra/surrealdb-agent-memory"
+---
+
+# SurrealDB Agent Memory
+
+[SurrealDB Agent Memory](https://surrealdb.com/agent-memory) is a hosted memory service that extracts facts from conversations, recalls them semantically and manages documents for retrieval. `@mastra/surrealdb-agent-memory` connects it to Mastra as a memory provider, a set of agent tools and document helpers.
+
+Agent Memory is a service you reach over HTTPS with an API key, not a database you run. To store verbatim threads and messages durably, combine it with a Mastra storage adapter such as [`SurrealDBStore`](/integrations/databases/surrealdb).
+
+## Installation
+
+```bash npm2yarn
+npm install @mastra/surrealdb-agent-memory@latest zod
+```
+
+You need an Agent Memory endpoint, a context ID and an API key.
+
+## Usage
+
+`AgentMemory` keeps verbatim message history in a Mastra store and mirrors each conversation into Agent Memory, which extracts facts on the server. Calls to Agent Memory are guarded: if the service is unavailable, the agent keeps working with verbatim history only.
+
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import { AgentMemory } from '@mastra/surrealdb-agent-memory'
+import { SurrealDBStore } from '@mastra/surrealdb'
+
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'You are a helpful assistant with long-term memory.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new AgentMemory({
+    endpoint: process.env.AGENT_MEMORY_ENDPOINT!,
+    context: process.env.AGENT_MEMORY_CONTEXT!,
+    apiKey: process.env.AGENT_MEMORY_API_KEY!,
+    storage: new SurrealDBStore({
+      id: 'surrealdb-storage',
+      url: process.env.SURREALDB_URL!,
+      username: process.env.SURREALDB_USERNAME!,
+      password: process.env.SURREALDB_PASSWORD!,
+    }),
+  }),
+})
+```
+
+Without `storage`, verbatim history is kept in memory and is lost when the process restarts.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'endpoint',
+    type: 'string',
+    description: 'Agent Memory API endpoint, without a trailing slash. Required unless `agentMemory` is passed.',
+    isOptional: true,
+  },
+  {
+    name: 'context',
+    type: 'string',
+    description: 'Agent Memory context ID.',
+    isOptional: true,
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'Agent Memory API key.',
+    isOptional: true,
+  },
+  {
+    name: 'agentMemory',
+    type: 'AgentMemoryClient',
+    description: 'An existing Agent Memory client, instead of `endpoint`, `context` and `apiKey`.',
+    isOptional: true,
+  },
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description: 'Store for verbatim threads, messages and working memory.',
+    isOptional: true,
+    defaultValue: 'InMemoryStore',
+  },
+  {
+    name: 'options',
+    type: 'SharedMemoryConfig["options"]',
+    description: 'Mastra memory options such as `lastMessages` and `workingMemory`.',
+    isOptional: true,
+  },
+  {
+    name: 'agentMemoryRecall',
+    type: 'boolean | { topK?: number; scope?: "thread" | "resource" }',
+    description: 'Add Agent Memory hits to `recall()` when a search string is provided.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'injectProfile',
+    type: 'boolean',
+    description:
+      'Add what Agent Memory knows about the current user to the system prompt. Only facts from the current resource and thread are read.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'blocking',
+    type: 'boolean',
+    description: 'Wait for writes to Agent Memory before continuing. By default they run in the background.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'includeToolCalls',
+    type: 'boolean',
+    description: 'Include tool calls in the text sent to Agent Memory for fact extraction.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'scopePrefix',
+    type: 'string',
+    description:
+      'Scope path prefix. Writes are tagged with `<prefix>/resource/<resourceId>` and `<prefix>/thread/<threadId>`, and reads only see those scopes.',
+    isOptional: true,
+    defaultValue: "'mastra'",
+  },
+]}
+/>
+
+## Agent tools
+
+`createAgentMemoryTools()` lets an agent call Agent Memory explicitly. It returns `agentMemoryRemember`, `agentMemoryRecall`, `agentMemoryForget`, `agentMemoryContext` and `agentMemorySearchDocuments`. When an agent with memory calls them, `agentMemoryRemember` writes to the scopes of the current resource and thread, and `agentMemoryRecall` and `agentMemoryContext` read only from them. If you set `scopePrefix` on `AgentMemory`, pass the same value: `createAgentMemoryTools(client, { scopePrefix })`.
+
+A call without a resource or thread returns an error instead of reaching every user's facts, and `agentMemoryForget` is turned off because Agent Memory can't scope it. For a context that serves a single user, pass `allowUnscoped: true` to enable both.
+
+```typescript
+import { Agent } from '@mastra/core/agent'
+import { AgentMemoryClient, createAgentMemoryTools } from '@mastra/surrealdb-agent-memory'
+
+const client = new AgentMemoryClient({
+  endpoint: process.env.AGENT_MEMORY_ENDPOINT!,
+  context: process.env.AGENT_MEMORY_CONTEXT!,
+  apiKey: process.env.AGENT_MEMORY_API_KEY!,
+})
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'assistant',
+  instructions: 'Use agentMemoryRecall before answering questions about the user.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: createAgentMemoryTools(client),
+})
+```
+
+## Documents
+
+Upload documents to Agent Memory and search them for retrieval-augmented generation (RAG):
+
+```typescript
+import { ingestDocument, searchDocuments } from '@mastra/surrealdb-agent-memory'
+
+await ingestDocument(client, { file, title: 'Handbook' })
+const results = await searchDocuments(client, { query: 'refund policy', k: 5 })
+```
+
+## Observational memory extractors
+
+When you use Mastra's observational memory with extractors, `agentMemoryExtractedSink()` stores each extracted value in Agent Memory as a fact:
+
+```typescript
+import { agentMemoryExtractedSink } from '@mastra/surrealdb-agent-memory'
+
+const onExtracted = agentMemoryExtractedSink(client)
+```
+
+Pass `onExtracted` to an extractor. Values are stored as they are, without running Agent Memory's extraction on them again.
+
+## Limitations
+
+- Deleting a thread or messages removes only the verbatim rows. Facts Agent Memory already derived from them stay in Agent Memory.
+- `agentMemoryForget` matches its query across the whole Agent Memory context, so it only runs with `allowUnscoped: true`.
+- Documents are a shared corpus: `searchDocuments` and `agentMemorySearchDocuments` search every document in the Agent Memory context.
+- `recall()` adds Agent Memory hits only when a search string is provided. For recall the agent decides on, use the `agentMemoryRecall` tool.
+- With a shared API key, `resourceId` maps to Agent Memory scopes, not a hard tenant boundary.
+
+## Related
+
+- [SurrealDB storage](/integrations/databases/surrealdb)
+- [Memory overview](/docs/memory/overview)
