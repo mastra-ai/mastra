@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createObservabilityCollector, getCurrentObservabilityCollector } from './collector';
 
@@ -253,4 +253,24 @@ describe('ObservabilityCollector', () => {
       expect(spans[0]!.parentSpanId).toBe('0000000000000000');
     }
   });
+});
+
+it('rejects negative client timings without changing the tool result (OBS-935)', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1000);
+    const collector = createObservabilityCollector(makeCarrier());
+    const result = await collector.withContext(() =>
+      collector.span('clock moved backwards', () => {
+        vi.setSystemTime(999);
+        return 42;
+      }),
+    );
+    expect(result).toBe(42);
+    const payload = collector.flush();
+    expect(flushSpans(payload)).toEqual([]);
+    expect(payload.executionDurationMs).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
 });
