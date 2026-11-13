@@ -60,9 +60,10 @@ To poll from startup regardless of whether schedules exist (for example, when yo
 
 You can run more than one scheduler instance against the same storage. Before it publishes, a scheduler claims each occurrence with a compare-and-swap update of the schedule's next fire time. Only one instance wins the claim, and the others skip that occurrence. The built-in storage adapters (PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, Convex) all perform this update atomically. A custom storage adapter must do the same in `updateScheduleNextFire`, or instances can fire the same occurrence twice.
 
-The claim prevents duplicate publishes of one occurrence. It doesn't make firing exactly-once:
+The claim stops other scheduler instances from publishing the same occurrence. It doesn't make firing exactly-once:
 
 - **Claim and publish aren't one transaction.** If the instance that won the claim crashes, or fails to publish after three attempts, that occurrence can be lost. Mastra records a failed publish as a `failed` trigger with an unknown publication outcome and doesn't replay it automatically.
+- **Retries can publish an occurrence twice.** If a publish reaches the PubSub backend but still reports an error, the retry publishes the occurrence again with the same run ID. The worker skips a start for a run that already exists, but a duplicate that arrives before the first run is stored can still start.
 - **Occurrences can overlap.** A new occurrence fires on time even if the run from the previous one hasn't finished.
 
 Extra scheduler instances add availability, not throughput. Each one polls storage on every tick.
