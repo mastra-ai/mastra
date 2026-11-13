@@ -95,8 +95,10 @@ export class PluginManager {
       this.updateGithubPoller(this.loadedPlugins);
       this.updatePluginRenderConfigs(this.loadedPlugins);
       this.updatePluginTools(collectActivePluginTools(this.loadedPlugins));
-      await this.notifyReloadListeners(this.loadedPlugins);
+      // Before the reload listeners: one that rejects must not swallow the notice,
+      // which is reported only once per distinct error.
       this.reportReloadFailures(previous, this.loadedPlugins);
+      await this.notifyReloadListeners(this.loadedPlugins);
       return this.loadedPlugins;
     })().finally(() => {
       this.reloadInFlight = undefined;
@@ -132,9 +134,12 @@ export class PluginManager {
       if (plugin.reloadError === undefined) continue;
       const before = previous.find(entry => entry.id === plugin.id && entry.scope === plugin.scope);
       if (before?.reloadError === plugin.reloadError) continue;
+      // A kept load that ends up conflicted is not running, so only an active one
+      // can say it still is.
+      const outcome = plugin.status === 'active' ? ' Still running the previous version.' : '';
       this.reportPluginError({
         pluginId: plugin.id,
-        message: `Plugin "${plugin.name ?? plugin.id}" failed to reload: ${plugin.reloadError}. Still running the previous version.`,
+        message: `Plugin "${plugin.name ?? plugin.id}" failed to reload: ${plugin.reloadError}.${outcome}`,
       });
     }
   }
@@ -382,13 +387,15 @@ export class PluginManager {
 
     await this.reload();
     // Derive names from the reloaded state so a manifest display-name change reports the new name.
-    // Multiple plugins can share one checkout — report every plugin whose source changed.
+    // Multiple plugins can share one checkout — report every plugin whose source changed. A plugin
+    // whose update failed to load kept its previous version and reports that error instead.
     const updatedPluginNames = this.loadedPlugins
       .filter(
         plugin =>
           plugin.source === 'github' &&
           plugin.status !== 'inactive' &&
           plugin.status !== 'blocked' &&
+          plugin.reloadError === undefined &&
           changedCheckouts.has(this.resolvePluginSourcePath(plugin)),
       )
       .map(plugin => plugin.name ?? plugin.id);
