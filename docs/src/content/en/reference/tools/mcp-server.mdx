@@ -11,6 +11,8 @@ The `MCPServer` class provides the functionality to expose your existing Mastra 
 
 Note that if you only need to use your tools or agents directly within your Mastra application, you don't necessarily need to create an MCP server. This API is specifically for exposing your Mastra tools and agents to _external_ MCP clients.
 
+To expose every agent, workflow, and tool on your Mastra app without defining a server, use the [built-in MCP server](/docs/server/mcp) at `/api/mcp` instead. It builds its tool list per caller and runs each call through the matching HTTP route's auth and permission checks. Use `MCPServer` to publish a chosen set of tools and agents with your own prompts and resources, or to serve over stdio.
+
 It supports the [stdio (subprocess) and Streamable HTTP MCP transports](https://modelcontextprotocol.io/docs/concepts/transports) of the MCP `2026-07-28` revision.
 
 :::note

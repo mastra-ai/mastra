@@ -145,7 +145,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('Factory boot ov
           ),
         );
       const backfilled = () => vi.waitFor(() => expect(domain().legacyBackfillPending).toBe(false), 10_000);
-      const marker = () => storage.ops.findMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, {});
+      // The split's own marker; the table also records the source-link backfill.
+      const marker = () => storage.ops.findMany(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, { id: 'work_item_split' });
       return {
         storage,
         factory,

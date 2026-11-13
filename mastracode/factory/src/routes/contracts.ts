@@ -177,6 +177,11 @@ const intakeRouteListResponseSchema = z.object({
   /** Whether the caller may add, edit, reorder, or delete routes. */
   canEdit: z.boolean(),
 });
+const intakeRerouteResponseSchema = z.object({
+  total: z.number().int(),
+  moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
+});
+const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -221,6 +226,39 @@ const cardSchema = z
   .passthrough();
 const workItemResponseSchema = z.object({ workItem: cardSchema });
 const decisionResponseSchema = z.object({ decision: entitySchema });
+
+const runQueueEntrySchema = z.object({
+  decisionId: z.string(),
+  /** `waiting`: no slot yet. `claimed`: a server holds a slot for it, starting or running the run. */
+  state: z.enum(['waiting', 'claimed']),
+  type: z.enum(['invokeSkill', 'sendMessage', 'signalActivity']),
+  role: z.string().nullable(),
+  /** The skill an `invokeSkill` run starts; `null` for a prompt run and for messages and activity. */
+  skillName: z.string().nullable(),
+  /** When it became claimable for `waiting`, when it was claimed for `claimed`. */
+  queuedSince: z.string(),
+  workItem: z
+    .object({
+      id: z.string(),
+      key: z.string().nullable(),
+      title: z.string(),
+      board: z.string().nullable(),
+      phase: z.string().nullable(),
+    })
+    .nullable(),
+});
+
+export const runQueueResponseSchema = z.object({
+  /** This server process's run slots; `null` when it runs no dispatcher. Other servers keep their own. */
+  slots: z.object({ scope: z.literal('server'), inUse: z.number().int(), cap: z.number().int() }).nullable(),
+  /** The project's runs holding a slot on any server. */
+  running: z.number().int(),
+  claimed: z.array(runQueueEntrySchema),
+  /** Every waiting run, though `queued` lists at most the oldest 50. */
+  queuedCount: z.number().int(),
+  queued: z.array(runQueueEntrySchema.extend({ position: z.number().int().positive() })),
+});
+export type RunQueueResponse = z.infer<typeof runQueueResponseSchema>;
 
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
@@ -1215,6 +1253,20 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
   },
+  intakeRouteReroutePreview: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Untouched cards the project's intake routes would now file on a different board",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteResponseSchema,
+  },
+  intakeRouteRerouteApply: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Move untouched cards to the start of the board the project's intake routes now file them on",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteApplyResponseSchema,
+  },
   intakeRouteReorder: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes/reorder',
@@ -1320,6 +1372,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: decisionQuerySchema,
     responseSchema: z.object({ decisions: z.array(entitySchema), nextCursor: z.string().optional() }),
+  },
+  runQueue: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/run-queue',
+    description:
+      "List the project's automated runs waiting for a run slot, oldest first, and the runs holding one. The cap is per server process; manual starts are claimed ahead of this queue.",
+    pathSchema: projectPathSchema,
+    responseSchema: runQueueResponseSchema,
   },
   decisionApprove: {
     method: 'POST',

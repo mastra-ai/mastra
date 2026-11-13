@@ -29,6 +29,67 @@ export const FACTORY_WORK_ITEMS_SCHEMA: CollectionSchema = {
   indexes: [{ name: 'factory_work_items_org_project_idx', columns: ['org_id', 'factory_project_id'] }],
 };
 
+/**
+ * Which work items an external record belongs to, and its provider facts as each one reads them.
+ * One issue can back a work item on each of several boards; the source row's own `work_item_id`
+ * is the first (owning) one. Every sync writes the facts to all of a source's links together.
+ */
+export const FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_source_links',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    work_item_id: { type: 'text' },
+    source_id: { type: 'text' },
+    role: { type: 'text' },
+    state: { type: 'text', nullable: true },
+    labels: { type: 'json', nullable: true },
+    author: { type: 'text', nullable: true },
+    /** Provider metadata, assignees included. */
+    metadata: { type: 'json', nullable: true },
+    /**
+     * When the facts above were copied from the source. Null, or older than the source's own
+     * `synced_at` (a sync by a release before links had facts), reads the source row instead.
+     */
+    facts_synced_at: { type: 'timestamp', nullable: true },
+    created_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [
+    { name: 'factory_work_item_source_links_item_source_unique', columns: ['work_item_id', 'source_id'] },
+  ],
+  indexes: [
+    { name: 'factory_work_item_source_links_source_idx', columns: ['source_id'] },
+    {
+      name: 'factory_work_item_source_links_project_item_idx',
+      columns: ['org_id', 'factory_project_id', 'work_item_id'],
+    },
+  ],
+};
+
+export interface WorkItemSourceLinkDbRecord extends Record<string, unknown> {
+  id: string;
+  org_id: string;
+  factory_project_id: string;
+  work_item_id: string;
+  source_id: string;
+  role: WorkItemSourceRole;
+  state: string | null;
+  labels: string[] | null;
+  author: string | null;
+  metadata: Record<string, unknown> | null;
+  facts_synced_at: Date | null;
+  created_at: Date;
+}
+
+/** One source's provider facts as a link stores them. */
+export interface WorkItemSourceFacts {
+  state: string | null;
+  labels: string[];
+  author: string | null;
+  metadata: Record<string, unknown> | null;
+}
+
 /** Several external records can describe one work item. Native work has no source. */
 export const FACTORY_WORK_ITEM_SOURCES_SCHEMA: CollectionSchema = {
   name: 'factory_work_item_sources',
