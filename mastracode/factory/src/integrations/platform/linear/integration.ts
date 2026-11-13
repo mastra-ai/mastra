@@ -18,10 +18,7 @@ import type {
   LinearIssueDetail as LinearRouteIssueDetail,
 } from '../../linear/integration.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
-import {
-  linearIssueReconciliationEnabled,
-  linearIssueReconciliationInterval,
-} from '../../linear/reconciliation-config.js';
+import { linearIssueReconciliationInterval } from '../../linear/reconciliation-config.js';
 import { buildLinearRoutes } from '../../linear/routes.js';
 import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
@@ -399,11 +396,8 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   workers(ctx: IntegrationContext): MastraWorker[] {
     const pollingEnabled = process.env.MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
-    const reconcileEnabled = linearIssueReconciliationEnabled();
-    if (!pollingEnabled && !reconcileEnabled) return [];
-
     const ingest = attachLinearRules(this, ctx);
-    const reconcile = reconcileEnabled ? attachLinearIssueReconciler(this, ctx) : undefined;
+    const reconcile = attachLinearIssueReconciler(this, ctx);
     const workItems = ctx.runtime?.workItems;
     if (!workItems) return [];
     if (!ingest && !reconcile) return [];

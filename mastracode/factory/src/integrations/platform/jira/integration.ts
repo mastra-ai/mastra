@@ -30,7 +30,7 @@ import { resolveJiraRules } from '../../jira/default-rules.js';
 import { buildIntakeJql, unfilteredJiraScopes } from '../../jira/intake-jql.js';
 import type { JiraIntakeScope } from '../../jira/intake-jql.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
-import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
+import { jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
@@ -521,7 +521,6 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!jiraReconciliationEnabled()) return [];
     const reconcile = attachJiraIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = jiraReconciliationInterval();

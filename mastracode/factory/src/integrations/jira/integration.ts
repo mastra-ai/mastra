@@ -48,7 +48,7 @@ import { resolveJiraRules } from './default-rules.js';
 import { buildIntakeJql, unfilteredJiraScopes } from './intake-jql.js';
 import type { JiraIntakeScope } from './intake-jql.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
-import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
+import { jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
 
 /** Deployment-global Jira Cloud credentials. All credential fields are required. */
@@ -457,7 +457,6 @@ export class JiraIntegration implements FactoryIntegration {
    * reconciliation is enabled.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!jiraReconciliationEnabled()) return [];
     const reconcile = attachJiraIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = jiraReconciliationInterval();

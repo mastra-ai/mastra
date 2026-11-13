@@ -41,7 +41,7 @@ import { buildLinearAgentTools } from './agent-tools.js';
 import type { LinearEventRules, LinearRuleOverrides } from './default-rules.js';
 import { resolveLinearRules } from './default-rules.js';
 import { attachLinearIssueReconciler } from './issue-reconciler.js';
-import { linearIssueReconciliationEnabled, linearIssueReconciliationInterval } from './reconciliation-config.js';
+import { linearIssueReconciliationInterval } from './reconciliation-config.js';
 import { buildLinearRoutes } from './routes.js';
 import type { LinearConnectionRow, LinearStorageHandle, UpsertLinearConnectionInput } from './storage.js';
 
@@ -1147,7 +1147,6 @@ export class LinearIntegration implements FactoryIntegration {
   // ── FactoryIntegration surface ───────────────────────────────────────────
 
   workers(ctx: IntegrationContext): MastraWorker[] {
-    if (!linearIssueReconciliationEnabled()) return [];
     const reconcile = attachLinearIssueReconciler(this, ctx);
     if (!reconcile) return [];
     const intervalMs = linearIssueReconciliationInterval();
