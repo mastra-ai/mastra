@@ -355,7 +355,7 @@ const agent = new Agent({
     adapters: {
       slack: {
         adapter: createSlackAdapter(),
-        streaming: true, // already the Slack default
+        streaming: true, // off by default on every adapter
         toolDisplay: 'timeline',
       },
     },
