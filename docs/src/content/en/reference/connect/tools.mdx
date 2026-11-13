@@ -78,7 +78,7 @@ See [Connect](/docs/mastra-platform/connect#add-tools-to-an-agent) to get starte
             name: 'resourceId',
             type: 'string | ((ctx?) => string | undefined | Promise<string | undefined>)',
             description:
-              "Project-scoped end-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. The trimmed value must contain 1 to 256 characters. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
+              "Project-scoped end-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. The trimmed value must contain 1 to 256 characters. Pass a string (the per-request pattern tools: ({ user }) => tools({ resourceId: user?.id }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
             isOptional: true,
           },
           {

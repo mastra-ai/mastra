@@ -45,9 +45,12 @@ export const mastra = new Mastra({
   server: {
     auth: {
       authenticateToken: async token => verifyToken(token),
-      mapUserToResourceId: user => user.id,
     },
-    apiRoutes: [...userConnectRoutes({})],
+    apiRoutes: [
+      ...userConnectRoutes({
+        resourceId: ({ user }) => (user as { id: string } | undefined)?.id,
+      }),
+    ],
   },
 })
 ```

@@ -43,7 +43,7 @@ Before you start, follow the [Connect setup](/docs/mastra-platform/connect#get-s
 
 ## Identify your users
 
-End-user connections require authenticated users. Configure [server auth](/docs/server/middleware#authentication) and map each authenticated user to a stable resource ID:
+End-user connections require authenticated users. Configure [server auth](/docs/server/middleware#authentication) so that every request carries a user:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -51,25 +51,23 @@ import { Mastra } from '@mastra/core'
 export const mastra = new Mastra({
   server: {
     auth: {
+      // Return a user with a stable `id` that is never reassigned to another user.
       authenticateToken: async token => verifyToken(token),
-      // Use a stable identifier that is never reassigned to another user.
-      mapUserToResourceId: user => user.id,
     },
   },
 })
 ```
 
-The server derives the resource ID after authentication, so a client can't claim another user's key. The value is scoped to the project, trimmed, and must contain 1 to 256 characters. Keep it stable across sessions. If your identity system can recycle usernames or email addresses, use its immutable user ID instead.
+The user's `id` is the resource ID that owns their connections. The connection routes and the agent's tools both read it from the authenticated user, as the following sections show. Both must return the same value, or the agent won't see the connections the user made.
 
-You can override the server-derived value with the `resourceId` callback on [`userConnectRoutes()`](/reference/connect/user-connect-routes). The callback still runs on the server and must derive the value from trusted request context.
+Mastra sets the user on the server after authentication, so a client can't claim another user's ID. The value is scoped to the project, trimmed, and must contain 1 to 256 characters. Keep it stable across sessions. If your identity system can recycle usernames or email addresses, use its immutable user ID instead.
 
 ## Scope agent tools to the calling user
 
-Pass `resourceId` to [`tools()`](/reference/connect/tools) inside a dynamic `tools` function. The agent then resolves global connections plus that user's connections on every call:
+Pass the user's ID as `resourceId` to [`tools()`](/reference/connect/tools) inside a dynamic `tools` function. Mastra passes the authenticated user to the function as `user`. On every call, the agent resolves global connections plus that user's connections:
 
 ```typescript title="src/mastra/agents/assistant.ts"
 import { Agent } from '@mastra/core/agent'
-import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
 import { tools } from '@mastra/connect'
 
 export const assistant = new Agent({
@@ -77,11 +75,7 @@ export const assistant = new Agent({
   name: 'assistant',
   instructions: 'You help the user manage their own tasks.',
   model: '__GATEWAY_OPENAI_MODEL_LUNA__',
-  tools: ctx =>
-    tools({
-      providers: ['linear'],
-      resourceId: () => ctx.requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined,
-    }),
+  tools: ({ user }) => tools({ providers: ['linear'], resourceId: user?.id }),
 })
 ```
 
@@ -89,13 +83,13 @@ Calling `tools()` per request is cheap. Resolvers with identical options share i
 
 When a user connects or disconnects through the mounted routes, the user's cached tools are marked outdated, and the next agent call fetches fresh tools instead of waiting out the snapshot TTL. A change to a global connection does the same for every user. This applies to resolvers in the server process that handled the request. Other instances of your server pick up the change when their snapshot TTL expires.
 
-When the callback returns `undefined`, the agent gets global connections only. If a global and an end-user connection exist for the same provider, the agent sees both through the usual [multi-connection handling](/reference/connect/tools#connection-resolution).
+When there is no authenticated user, `resourceId` is `undefined` and the agent gets global connections only. Requests served through an [MCP server](/docs/connections/mcp) don't carry `user` yet, so they also resolve global connections only. If a global and an end-user connection exist for the same provider, the agent sees both through the usual [multi-connection handling](/reference/connect/tools#connection-resolution).
 
 ## How isolation is enforced
 
 Scoping by an identifier is only as strong as the binding between the signed-in user and that identifier. Mastra verifies the binding at each layer instead of accepting a resource ID from request input.
 
-- The server derives the resource ID. `mapUserToResourceId` runs after authentication and writes the value to reserved request context that clients can't set.
+- The resource ID comes from the authenticated user. Mastra sets the user after authentication from your auth configuration, and request input can't replace it.
 - `userConnectRoutes()` creates a platform client scoped to that resource ID for every request.
 - The platform compares the resource assertion to the connection's stored resource ID before listing connections, returning credentials, proxying tools, reconnecting, or disconnecting.
 - A scope mismatch returns the same 404 as an unknown connection. This prevents an existence oracle for another user's rows.
@@ -115,10 +109,11 @@ export const mastra = new Mastra({
   server: {
     auth: {
       authenticateToken: async token => verifyToken(token),
-      mapUserToResourceId: user => user.id,
     },
     apiRoutes: [
       ...userConnectRoutes({
+        // `user` is the object authenticateToken returned for this request
+        resourceId: ({ user }) => (user as { id: string } | undefined)?.id,
         // Optional: override the project's provider policy in code.
         // Omit to use endUserProviders from Mastra Platform.
         providers: ['linear', 'slack'],
@@ -128,7 +123,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The routes don't authenticate users themselves. The server auth pipeline must authenticate the request before the route runs. Every route returns 401 when Mastra can't derive a resource ID.
+The routes don't authenticate users themselves. The server auth pipeline must authenticate the request before the route runs. Every route returns 401 when the `resourceId` callback doesn't return an ID.
 
 All platform calls happen on the server with your platform token. The browser communicates only with the mounted routes. Responses use `Cache-Control: no-store`.
 
@@ -171,7 +166,6 @@ const auth = {
     // Top-level hosted-page navigation must authenticate from the request.
     return verifySessionCookie(request.headers.get('cookie'))
   },
-  mapUserToResourceId: (user: { id: string }) => user.id,
 }
 ```
 
@@ -322,7 +316,7 @@ With `userConnectRoutes()` mounted, Studio shows **Connections** in the sidebar 
 - **Global connections**: Project-wide rows, shown as read-only.
 - **Add connection**: A searchable, policy-filtered provider picker with headless credential forms, provider consent windows, hosted fallback, status polling, cancellation, and retry states.
 
-Studio requires `server.auth` with `mapUserToResourceId`, or a `resourceId` callback on `userConnectRoutes()`. Without a resource identity, the page shows setup guidance. When the routes aren't mounted, the sidebar item stays hidden, but the page remains directly reachable with setup instructions.
+Studio requires `server.auth` and a `resourceId` callback on `userConnectRoutes()`, or `mapUserToResourceId` in the auth configuration. Without a resource identity, the page shows setup guidance. When the routes aren't mounted, the sidebar item stays hidden, but the page remains directly reachable with setup instructions.
 
 ## Handle errors
 
