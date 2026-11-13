@@ -825,19 +825,34 @@ const sidebars = {
       },
     },
     {
-      type: 'doc',
-      id: 'mastra-platform/observability',
+      type: 'category',
       label: 'Observability',
+      link: {
+        type: 'doc',
+        id: 'mastra-platform/observability/overview',
+      },
+      items: [
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability/trace-intelligence',
+          label: 'Trace Intelligence',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability/dashboards',
+          label: 'Dashboards',
+        },
+        {
+          type: 'doc',
+          id: 'mastra-platform/observability/alerts',
+          label: 'Observability Alerts',
+        },
+      ],
     },
     {
       type: 'doc',
       id: 'mastra-platform/alerts',
       label: 'Alerts',
-    },
-    {
-      type: 'doc',
-      id: 'mastra-platform/trace-intelligence',
-      label: 'Trace Intelligence',
     },
     {
       type: 'doc',

@@ -42,7 +42,7 @@
     },
     {
       "source": "/docs/observability/tracing/exporters/cloud",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2012,7 +2012,7 @@
     },
     {
       "source": "/docs/observability/integrations/exporters/mastra-platform",
-      "destination": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
     },
     {
@@ -2363,6 +2363,16 @@
     {
       "source": "/docs/deployment/cloud-providers/vercel",
       "destination": "/integrations/deploy/vercel",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/observability",
+      "destination": "/docs/mastra-platform/observability/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/trace-intelligence",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence",
       "permanent": true
     }
   ]
