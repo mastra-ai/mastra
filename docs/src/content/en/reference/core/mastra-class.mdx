@@ -428,7 +428,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '2000',
             description:
-              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
+              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
           },
         ],
       },
