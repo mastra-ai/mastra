@@ -2,6 +2,8 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
+import { ExportResultCode } from '@opentelemetry/core';
+import type { ReadableSpan, SpanExporter } from '@opentelemetry/sdk-trace-base';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { OtelExporter } from './tracing';
 import type { OtelExporterConfig } from './types';
@@ -147,6 +149,53 @@ describe('OTLP exports', () => {
       await exporter.flush();
       expect(requests).toEqual([]);
     });
+  });
+
+  function bodies(path: string) {
+    return requests.filter(request => request.path === path).map(request => JSON.parse(request.body.toString()));
+  }
+
+  it('declares the semantic conventions version on exported traces and logs', async () => {
+    exporter = new OtelExporter({ provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } } });
+    await sendSpan();
+    await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+    await exporter.flush();
+
+    const [traces] = bodies('/v1/traces');
+    const [logs] = bodies('/v1/logs');
+    expect([traces.resourceSpans[0].schemaUrl, traces.resourceSpans[0].scopeSpans[0].schemaUrl]).toEqual([
+      'https://opentelemetry.io/schemas/1.41.0',
+      'https://opentelemetry.io/schemas/1.41.0',
+    ]);
+    expect([logs.resourceLogs[0].schemaUrl, logs.resourceLogs[0].scopeLogs[0].schemaUrl]).toEqual([
+      'https://opentelemetry.io/schemas/1.41.0',
+      'https://opentelemetry.io/schemas/1.41.0',
+    ]);
+  });
+
+  it('declares no trace schema URL when a custom span exporter is set', async () => {
+    const exported: ReadableSpan[] = [];
+    const spanExporter: SpanExporter = {
+      export: (spans, done) => {
+        exported.push(...spans);
+        done({ code: ExportResultCode.SUCCESS });
+      },
+      shutdown: async () => {},
+    };
+    exporter = new OtelExporter({
+      provider: { custom: { endpoint: baseUrl, protocol: 'http/json' } },
+      exporter: spanExporter,
+    });
+    await sendSpan();
+    await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
+    await exporter.flush();
+
+    expect(exported).toHaveLength(1);
+    expect(exported[0]!.resource.schemaUrl).toBeUndefined();
+    expect(exported[0]!.instrumentationScope.schemaUrl).toBeUndefined();
+    expect(bodies('/v1/logs').map(body => body.resourceLogs[0].schemaUrl)).toEqual([
+      'https://opentelemetry.io/schemas/1.41.0',
+    ]);
   });
 
   async function attributes(metadata?: Record<string, unknown>, metadataMapping?: Record<string, string>) {

@@ -1,10 +1,10 @@
 /**
  * Utilities for converting Mastra Spans to OTel Spans
  * with Semantic conventions for generative AI systems
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/README.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-events.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-spans.md
- * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.38.0/docs/gen-ai/gen-ai-agent-spans.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/README.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-events.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-spans.md
+ * @see https://github.com/open-telemetry/semantic-conventions/blob/v1.41.0/docs/gen-ai/gen-ai-agent-spans.md
  * @see https://opentelemetry.io/docs/specs/semconv/gen-ai/non-normative/examples-llm-calls/
  * @see https://opentelemetry.io/docs/specs/semconv/registry/attributes/gen-ai/
  */
@@ -62,9 +62,11 @@ import {
   ATTR_SERVER_ADDRESS,
   ATTR_SERVER_PORT,
   ATTR_GEN_AI_TOOL_NAME,
+  ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS,
+  ATTR_GEN_AI_WORKFLOW_NAME,
 } from '@opentelemetry/semantic-conventions/incubating';
 import { isModelInferenceEnabled } from './features';
-import { convertMastraMessagesToGenAIMessages } from './gen-ai-messages';
+import { convertMastraMessagesToGenAIMessages, convertMastraOutputToGenAIMessages } from './gen-ai-messages';
 
 /**
  * Token usage attributes following OTel GenAI semantic conventions.
@@ -77,7 +79,7 @@ export interface OtelUsageMetrics {
   [ATTR_GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS]?: number;
   'gen_ai.usage.cache_creation.5m_input_tokens'?: number;
   'gen_ai.usage.cache_creation.1h_input_tokens'?: number;
-  'gen_ai.usage.reasoning_tokens'?: number;
+  [ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS]?: number;
   'gen_ai.usage.audio_input_tokens'?: number;
   'gen_ai.usage.audio_output_tokens'?: number;
 }
@@ -100,7 +102,7 @@ export function formatUsageMetrics(usage?: UsageStats): OtelUsageMetrics {
 
   // Reasoning tokens from outputDetails
   if (usage.outputDetails?.reasoning !== undefined) {
-    metrics['gen_ai.usage.reasoning_tokens'] = usage.outputDetails.reasoning;
+    metrics[ATTR_GEN_AI_USAGE_REASONING_OUTPUT_TOKENS] = usage.outputDetails.reasoning;
   }
 
   // Cache read input tokens (subset of input_tokens)
@@ -307,7 +309,10 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     const outputStr = typeof span.output === 'string' ? span.output : JSON.stringify(span.output);
     // Add specific attributes based on span type
     if (modelCall) {
-      attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(outputStr);
+      attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraOutputToGenAIMessages(
+        outputStr,
+        (span.attributes as ModelCallAttributes | undefined)?.finishReason,
+      );
       // TODO
       // attributes['gen_ai.output.type'] = image/json/speech/text/<other>
     } else if (
@@ -357,7 +362,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
         attributes[ATTR_GEN_AI_REQUEST_FREQUENCY_PENALTY] = modelAttrs.parameters.frequencyPenalty;
       }
       if (modelAttrs.parameters.stopSequences) {
-        attributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] = JSON.stringify(modelAttrs.parameters.stopSequences);
+        attributes[ATTR_GEN_AI_REQUEST_STOP_SEQUENCES] = modelAttrs.parameters.stopSequences;
       }
       if (modelAttrs.parameters.seed) {
         attributes[ATTR_GEN_AI_REQUEST_SEED] = modelAttrs.parameters.seed;
@@ -371,7 +376,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
 
     // Response attributes
     if (modelAttrs.finishReason) {
-      attributes[ATTR_GEN_AI_RESPONSE_FINISH_REASONS] = JSON.stringify([modelAttrs.finishReason]);
+      attributes[ATTR_GEN_AI_RESPONSE_FINISH_REASONS] = [modelAttrs.finishReason];
     }
     if (modelAttrs.responseModel) {
       attributes[ATTR_GEN_AI_RESPONSE_MODEL] = modelAttrs.responseModel;
@@ -462,6 +467,9 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (span.entityName) {
       attributes[ATTR_GEN_AI_AGENT_NAME] = span.entityName;
     }
+    if (agentAttrs.provider) {
+      attributes[ATTR_GEN_AI_PROVIDER_NAME] = normalizeProvider(agentAttrs.provider);
+    }
     if (agentAttrs.conversationId) {
       attributes[ATTR_GEN_AI_CONVERSATION_ID] = agentAttrs.conversationId;
     }
@@ -469,14 +477,20 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
       attributes[`mastra.${spanType}.max_steps`] = agentAttrs.maxSteps;
     }
     if (agentAttrs.availableTools) {
-      attributes[`gen_ai.tool.definitions`] = JSON.stringify(agentAttrs.availableTools);
+      attributes['gen_ai.tool.definitions'] = JSON.stringify(
+        agentAttrs.availableTools.map(name => ({ type: 'function', name })),
+      );
     }
 
     //TODO:
     // attributes[ATTR_GEN_AI_AGENT_DESCRIPTION] = agentAttrs.description;
     // attributes[ATTR_GEN_AI_REQUEST_MODEL] = agentAttrs.model.name;
 
-    attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
+    if (agentAttrs.instructions) {
+      attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = JSON.stringify([
+        { type: 'text', content: agentAttrs.instructions },
+      ]);
+    }
   }
 
   // Add MCP server request attributes (OTel MCP semantic conventions where they exist)
@@ -499,6 +513,10 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (requestAttrs.clientVersion) {
       attributes[`mastra.${spanType}.client_version`] = requestAttrs.clientVersion;
     }
+  }
+
+  if (span.type === SpanType.WORKFLOW_RUN && span.entityName) {
+    attributes[ATTR_GEN_AI_WORKFLOW_NAME] = span.entityName;
   }
 
   // Add workflow-specific attributes. Control-flow spans carry native branch,
@@ -634,12 +652,12 @@ const PROVIDER_ALIASES: Record<string, string[]> = {
   anthropic: ['anthropic', 'claude'],
   'aws.bedrock': ['awsbedrock', 'bedrock', 'amazonbedrock'],
   'azure.ai.inference': ['azureaiinference', 'azureinference'],
-  'azure.ai.openai': ['azureaiopenai', 'azureopenai', 'msopenai', 'microsoftopenai'],
+  'azure.ai.openai': ['azureaiopenai', 'azureopenai', 'msopenai', 'microsoftopenai', 'azure'],
   cohere: ['cohere'],
   deepseek: ['deepseek'],
-  'gcp.gemini': ['gcpgemini', 'gemini'],
+  'gcp.gemini': ['gcpgemini', 'gemini', 'google', 'googlegenerativeai'],
   'gcp.gen_ai': ['gcpgenai', 'googlegenai', 'googleai'],
-  'gcp.vertex_ai': ['gcpvertexai', 'vertexai'],
+  'gcp.vertex_ai': ['gcpvertexai', 'vertexai', 'vertex', 'googlevertex'],
   groq: ['groq'],
   'ibm.watsonx.ai': ['ibmwatsonxai', 'watsonx', 'watsonxai'],
   mistral_ai: ['mistral', 'mistralai'],
@@ -656,21 +674,23 @@ function normalizeProviderString(input: string): string {
   return input.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+const PROVIDER_BY_ALIAS = new Map(
+  Object.entries(PROVIDER_ALIASES).flatMap(([canonical, aliases]) => aliases.map(alias => [alias, canonical])),
+);
+
 /**
  * Attempts to map a providerName to one of the canonical OTel provider names.
- * If no match is found, returns the original providerName unchanged.
+ * AI SDK provider ids add the API after a dot (`openai.chat`, `google.vertex.chat`),
+ * so shorter dot prefixes are tried until one matches.
+ * If no match is found, returns the original providerName in lowercase.
  */
 function normalizeProvider(providerName: string): string {
-  const normalized = normalizeProviderString(providerName);
-
-  for (const [canonical, aliases] of Object.entries(PROVIDER_ALIASES)) {
-    for (const alias of aliases) {
-      if (normalized === alias) {
-        return canonical;
-      }
+  const segments = providerName.split('.');
+  for (let end = segments.length; end > 0; end--) {
+    const canonical = PROVIDER_BY_ALIAS.get(normalizeProviderString(segments.slice(0, end).join('.')));
+    if (canonical) {
+      return canonical;
     }
   }
-
-  // No match → return the raw input in lowercase
   return providerName.toLowerCase();
 }

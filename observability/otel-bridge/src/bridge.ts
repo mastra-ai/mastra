@@ -186,7 +186,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
     this.spanConverter = new SpanConverter({
       packageName: '@mastra/otel-bridge',
       serviceName: options.config?.serviceName,
-      format: 'GenAI_v1_38_0',
+      format: 'GenAI_v1_41_0',
     });
   }
 
@@ -368,7 +368,7 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
 
       // Set all attributes from the converter (includes OTEL semantic conventions)
       for (const [key, value] of Object.entries(readableSpan.attributes)) {
-        if (value !== undefined && value !== null && typeof value !== 'object') {
+        if (value !== undefined && value !== null && (typeof value !== 'object' || Array.isArray(value))) {
           otelSpan.setAttribute(key, value);
         }
       }

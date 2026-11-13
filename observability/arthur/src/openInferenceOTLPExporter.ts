@@ -34,7 +34,7 @@ import {
 } from '@opentelemetry/semantic-conventions/incubating';
 
 // GenAI usage attribute keys (not all are in @opentelemetry/semantic-conventions yet)
-const GEN_AI_USAGE_REASONING_TOKENS = 'gen_ai.usage.reasoning_tokens';
+const GEN_AI_USAGE_REASONING_TOKENS = 'gen_ai.usage.reasoning.output_tokens';
 const GEN_AI_USAGE_CACHE_READ_INPUT_TOKENS = 'gen_ai.usage.cache_read.input_tokens';
 const GEN_AI_USAGE_CACHE_CREATION_INPUT_TOKENS = 'gen_ai.usage.cache_creation.input_tokens';
 const GEN_AI_USAGE_AUDIO_INPUT_TOKENS = 'gen_ai.usage.audio_input_tokens';

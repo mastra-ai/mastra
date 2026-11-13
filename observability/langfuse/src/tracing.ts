@@ -129,7 +129,7 @@ export class LangfuseExporter extends BaseExporter {
       packageName: '@mastra/langfuse',
       serviceName: options.config?.serviceName,
       config: { resourceAttributes: this.#resourceAttributes },
-      format: 'GenAI_v1_38_0',
+      format: 'GenAI_v1_41_0',
     });
   }
 
@@ -147,7 +147,7 @@ export class LangfuseExporter extends BaseExporter {
         packageName: '@mastra/langfuse',
         serviceName: 'mastra-service',
         config: { resourceAttributes: this.#resourceAttributes },
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
       });
     }
 
@@ -297,11 +297,6 @@ function mapMastraToLangfuseAttributes(
   environment?: string,
   release?: string,
 ): void {
-  if (attributes['gen_ai.usage.reasoning_tokens'] !== undefined) {
-    attributes['gen_ai.usage.reasoning.output_tokens'] = attributes['gen_ai.usage.reasoning_tokens'];
-    delete attributes['gen_ai.usage.reasoning_tokens'];
-  }
-
   // A run attached under an existing span (tracingOptions.nestUnderParent) does
   // not own the trace. Langfuse applies trace-level attributes from any span,
   // so none of its spans may write them: they would replace the outer run's.

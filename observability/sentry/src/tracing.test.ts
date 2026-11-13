@@ -190,7 +190,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
           'gen_ai.agent.name': 'customer-agent',
-          'gen_ai.system_instructions': 'Help customers',
+          'gen_ai.system_instructions': JSON.stringify([{ type: 'text', content: 'Help customers' }]),
         }),
       );
     });
@@ -505,7 +505,7 @@ describe('SentryExporter', () => {
 
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
-          'gen_ai.usage.reasoning_tokens': 1000,
+          'gen_ai.usage.reasoning.output_tokens': 1000,
         }),
       );
     });
@@ -594,8 +594,14 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttributes).toHaveBeenCalledWith(
         expect.objectContaining({
           'gen_ai.agent.name': 'support-agent',
-          'gen_ai.system_instructions': 'Help customers with support requests',
-          'gen_ai.tool.definitions': '["search","calculator","email"]',
+          'gen_ai.system_instructions': JSON.stringify([
+            { type: 'text', content: 'Help customers with support requests' },
+          ]),
+          'gen_ai.tool.definitions': JSON.stringify([
+            { type: 'function', name: 'search' },
+            { type: 'function', name: 'calculator' },
+            { type: 'function', name: 'email' },
+          ]),
         }),
       );
     });
@@ -1008,7 +1014,7 @@ describe('SentryExporter', () => {
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.output_tokens', 50);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_read.input_tokens', 20);
       expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.cache_creation.input_tokens', 10);
-      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning_tokens', 30);
+      expect(mockSpan.setAttribute).toHaveBeenCalledWith('gen_ai.usage.reasoning.output_tokens', 30);
     });
 
     it('should isolate token usage per AGENT_RUN (no cascading to parent agents)', async () => {

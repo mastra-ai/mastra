@@ -520,7 +520,9 @@ new OtelExporter({
 
 ### `OpenTelemetry` semantic conventions
 
-The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai), ensuring compatibility with observability platforms:
+The exporter follows [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai). Traces and logs exported over OTLP declare this version with the schema URL `https://opentelemetry.io/schemas/1.41.0`, so backends that read attributes by version read them correctly. Traces sent through a custom `exporter` declare no version, because that exporter can change the attributes.
+
+The conventions cover the following span names and attributes:
 
 #### Span Naming
 
@@ -588,7 +590,7 @@ Install the suggested package for your provider.
 
 - [Tracing Overview](/docs/observability/tracing/overview)
 - [OpenTelemetry Bridge](#bridge)
-- [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai)
+- [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai)
 - [OTEL Exporter Reference](/reference/observability/tracing/exporters/otel)
 
 ## Bridge
@@ -744,7 +746,7 @@ Mastra's `flush()` and `shutdown()` ask the registered OTEL providers to flush, 
 
 ### Semantic conventions
 
-The `OtelBridge` exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.38.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.38.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
+The `OtelBridge` exports Mastra spans using [OpenTelemetry Semantic Conventions for GenAI v1.41.0](https://github.com/open-telemetry/semantic-conventions/tree/v1.41.0/docs/gen-ai). This includes standardized span names (`chat {model}`, `execute_tool {tool_name}`, etc.) and attributes (`gen_ai.usage.input_tokens`, `gen_ai.request.model`, etc.).
 
 For details on span naming and attributes, see the [OpenTelemetry Exporter semantic conventions](#opentelemetry-semantic-conventions).
 

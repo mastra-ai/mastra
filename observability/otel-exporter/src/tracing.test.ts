@@ -420,7 +420,7 @@ describe('OtelExporter', () => {
       // This test captures the expected behavior: tags should be included as span attributes
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -448,7 +448,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute when tags array is empty', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -473,7 +473,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute when tags is undefined', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -498,7 +498,7 @@ describe('OtelExporter', () => {
     it('should not include mastra.tags attribute for child spans (tags only on root spans)', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
@@ -525,7 +525,7 @@ describe('OtelExporter', () => {
     it('should include tags with workflow spans', async () => {
       const { SpanConverter } = await import('./span-converter');
       const converter = new SpanConverter({
-        format: 'GenAI_v1_38_0',
+        format: 'GenAI_v1_41_0',
         packageName: 'test',
       });
 
