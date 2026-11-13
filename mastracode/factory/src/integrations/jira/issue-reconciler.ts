@@ -102,9 +102,8 @@ export function attachJiraIssueReconciler(
         factoryProjectId: project.id,
         selectedIds,
       });
-      if (scopes.length === 0) return null;
-      return async cursor => {
-        const page = await jira.listActiveIssues(cursor, scopes);
+      return scopes.map(scope => async (cursor: string | undefined) => {
+        const page = await jira.listActiveIssues(cursor, [scope]);
         return {
           issues: page.issues.map(issue => ({
             ...issueToIngress(issue.externalId ?? issue.id, issue),
@@ -113,7 +112,7 @@ export function attachJiraIssueReconciler(
           })),
           nextCursor: page.nextCursor,
         };
-      };
+      });
     },
     ingest: input => rules.ingest(input),
   });
