@@ -3128,9 +3128,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
     try {
-      // Verify agent exists and get its pubsub for stream subscription.
-      // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
-      // so we must subscribe to the agent's pubsub to receive the correct stream events.
+      // Authorize against the execution's ownership record before subscribing to its stream bus.
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       const run = await authorizeRunAccess({
         mastra,
@@ -3141,7 +3139,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       });
       if (!run) throw new HTTPException(404, { message: 'Run not found' });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
-      // Plain agents with resumable streams publish on their own stream bus.
+      // Inngest still exposes its transport through pubsub rather than the core stream-bus accessor.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;
       const topic = AGENT_STREAM_TOPIC(runId);
 
