@@ -28,7 +28,17 @@ export function accountingWorker(
     reject: (error: Error) => void;
   }[] = [];
   let stderr = '';
-  let exited = false;
+  let closed = false;
+  let failure: Error | undefined;
+  const fail = (error: Error) => {
+    if (failure) return;
+    failure = error;
+    for (const waiter of waiters.splice(0)) waiter.reject(error);
+  };
+  child.on('error', fail);
+  child.on('close', () => {
+    closed = true;
+  });
   child.stderr?.on('data', chunk => {
     stderr += String(chunk);
   });
@@ -38,21 +48,23 @@ export function accountingWorker(
     else waiters.splice(index, 1)[0].resolve(message);
   });
   child.on('exit', code => {
-    exited = true;
-    for (const waiter of waiters.splice(0)) waiter.reject(new Error(`Accounting worker exited (${code}): ${stderr}`));
+    fail(new Error(`Accounting worker exited (${code}): ${stderr}`));
   });
   return {
-    send: (message: object) => child.send(message),
+    send: (message: object) =>
+      child.send(message, error => {
+        if (error) fail(error);
+      }),
     wait: (type: string, round?: number): Promise<Message> => {
       const index = inbox.findIndex(message => message.type === type && message.round === round);
       if (index !== -1) return Promise.resolve(inbox.splice(index, 1)[0]);
-      if (exited) return Promise.reject(new Error(`Accounting worker exited: ${stderr}`));
+      if (failure) return Promise.reject(failure);
       return new Promise((resolve, reject) => waiters.push({ type, round, resolve, reject }));
     },
     close: async () => {
-      if (!exited) {
+      if (!closed) {
         child.kill();
-        await once(child, 'exit');
+        await once(child, 'close');
       }
     },
   };
