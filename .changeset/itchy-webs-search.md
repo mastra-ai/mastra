@@ -19,7 +19,7 @@ Booting instances still restart these evented runs, each of them, as before:
 - A run whose step message Redis or Valkey Streams trimmed. The streams trim to `maxStreamLength` entries (10,000 by default), pending ones included, so a step that is still running while that many newer events are published loses its message if its instance then exits. Raise `maxStreamLength` if you run long steps with a high event volume.
 - A run whose message the broker dropped after `maxDeliveryAttempts` or `inFlightTimeoutMs`, a run whose failure couldn't be published after several attempts, and runs on a Redis instance that restarted without persistence.
 
-**Default-engine runs.** A `running` or `waiting` run counts as stopped when no instance holds its run lease and neither the run nor that lease changed for `recovery.workflowGraceMs` (2 seconds by default). A run that stopped more recently is checked again once its grace period ends. Without run fencing in the store, every active run is still restarted, as before.
+**Default-engine runs.** A `running` or `waiting` run counts as stopped when no instance holds its run lease and neither the run nor that lease changed for `recovery.workflowGraceMs` (2 seconds by default). The workflow recovery loop that `startWorkers()` starts looks at a run that stopped more recently again. Without run fencing in the store, every active run is still restarted, as before.
 
 ```ts
 const mastra = new Mastra({
