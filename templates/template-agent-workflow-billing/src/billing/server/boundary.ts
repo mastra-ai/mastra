@@ -1,19 +1,19 @@
-import type { ArtifactReader } from '../billing/artifacts.js';
+import type { BillingServerOptions } from './contracts.js';
 import type { MiddlewareHandler } from 'hono';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';
-import type { OrganizationService } from '../billing/organizations.js';
-import type { CommercialService } from '../billing/commercial.js';
-import type { BillingHttpGateway } from '../billing/mastra.js';
-import { billingApiRoutes } from './billing.js';
+import { billingApiRoutes } from './routes.js';
 
-export function billingOnlyServer(
-  organizations: OrganizationService,
-  execution?: BillingHttpGateway,
-  commercial?: CommercialService,
-  studio?: { middleware: MiddlewareHandler },
-  artifacts?: ArtifactReader,
-): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
+export function createBillingServer({
+  organizations,
+  execution,
+  commercial,
+  studio,
+  artifacts,
+}: BillingServerOptions & {
+  /** Optional authenticated Studio tool middleware. */
+  studio?: { middleware: MiddlewareHandler };
+}): Pick<ServerConfig, 'apiRoutes' | 'middleware' | 'cors'> {
   return {
     cors: false,
     middleware: [
@@ -28,7 +28,12 @@ export function billingOnlyServer(
       },
     ],
     apiRoutes: [
-      ...billingApiRoutes(organizations, execution, commercial, artifacts),
+      ...billingApiRoutes({
+        organizations,
+        execution,
+        commercial,
+        artifacts,
+      }),
       // Public native auth handlers skip user middleware. The constrained Hono
       // path excludes capabilities so Studio can still discover authentication.
       ...(studio

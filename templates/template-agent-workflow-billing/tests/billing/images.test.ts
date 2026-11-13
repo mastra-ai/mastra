@@ -1,16 +1,17 @@
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
 import { afterEach, expect, it } from 'vitest';
 import { readFile, writeFile, unlink, symlink, link, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { LocalBillingProvider } from '../../src/billing/providers/local.js';
-import { imageConfiguration } from '../../src/images/configuration.js';
+import { imageConfiguration } from '../../src/mastra/image-plans.js';
 import { weatherConfiguration } from '../support/weather/configuration.js';
 import { usage, temporaryDatabase, independentClient } from '../support/billing.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
-import { imageFixture, imageBoundary } from '../support/images.js';
+import { imageFixture, imageBoundary, pngFixture } from '../support/images.js';
 import { autumnFixture } from '../support/autumn.js';
-import { createBillingApplication } from '../../src/mastra/setup.js';
-import { applicationCatalog } from '../../src/resources.js';
+import { createBillingApplication } from '../../src/billing/application.js';
+import { imageBillingCatalog } from '../../src/mastra/image-billing.js';
 import type { Artifact } from '../../src/images/schemas.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -388,10 +389,10 @@ it('a lost financial confirmation reconciles the saved artifact after restart wi
     OPENAI_API_KEY: 'controlled',
     OPENAI_BASE_URL: boundary.url,
   };
-  const catalog = applicationCatalog(environment);
+  const catalog = imageBillingCatalog(environment);
   const options = {
     catalog,
-    autumn: {
+    driverOptions: {
       ...autumn.options,
       bindings: {
         ...autumn.options.bindings,
@@ -399,7 +400,11 @@ it('a lost financial confirmation reconciles the saved artifact after restart wi
       },
     },
   };
-  let app = await createBillingApplication(environment, options);
+  let app = await createBillingApplication({
+    environment,
+    ...options,
+    billingProvider: await AutumnBillingProvider.open({ url: autumn.database.url }, options.driverOptions),
+  });
   cleanups.push(() => app.close());
   const context = () => app.organizations.context({ credential: autumn.owner.credential });
   autumn.behavior.dropFinalize = true;
@@ -419,7 +424,11 @@ it('a lost financial confirmation reconciles the saved artifact after restart wi
   expect(autumn.behavior.balance).toBe(9);
   expect(boundary.images).toHaveLength(1);
   await app.close();
-  app = await createBillingApplication(environment, options);
+  app = await createBillingApplication({
+    environment,
+    ...options,
+    billingProvider: await AutumnBillingProvider.open({ url: autumn.database.url }, options.driverOptions),
+  });
   const replay = await app.runtime.billing
     .agent('image-agent')
     .generate('A blue bird', { billing: await context(), idempotencyKey: 'lost-image-confirm' });
@@ -539,3 +548,47 @@ it('local legacy credit transition preserves spent balances once and never seeds
   ]);
   storage.close();
 });
+
+it.each(['1024x1024', '1536x1024', '1024x1536'])(
+  'operator image settings reach the provider and replay preserves the saved artifact (%s)',
+  async size => {
+    const f = await fixture({
+      environment: {
+        OPENAI_IMAGE_MODEL: 'operator-image-model',
+        OPENAI_IMAGE_QUALITY: 'medium',
+        OPENAI_IMAGE_SIZE: size,
+      },
+    });
+    const result = await f.generate();
+    expect(result).toMatchObject({ status: 200, body: { billing: { billedUnits: 1, settlementStatus: 'settled' } } });
+    expect(f.boundary.images).toHaveLength(1);
+    expect(f.boundary.images[0]).toMatchObject({
+      model: 'operator-image-model',
+      quality: 'medium',
+      size,
+      n: 1,
+      output_format: 'png',
+    });
+    const artifact = artifacts(result)[0];
+    const [width, height] = size.split('x').map(Number);
+    expect(artifact).toMatchObject({ width, height });
+    const slot = (
+      await f.database.execute({
+        sql: 'SELECT identity FROM image_slots WHERE execution_id = ?',
+        args: [artifact.executionId],
+      })
+    ).rows[0];
+    expect(JSON.parse(String(slot.identity)).profile).toMatchObject({
+      model: 'operator-image-model',
+      quality: 'medium',
+    });
+    await f.restart();
+    expect((await f.generate()).body.result).toEqual(result.body.result);
+    expect(f.boundary.images).toHaveLength(1);
+    const download = await fetch(`${f.url()}${f.base}/artifacts/${artifact.id}`, {
+      headers: { authorization: `Bearer ${f.owner.credential}` },
+    });
+    expect(download.status).toBe(200);
+    expect(Buffer.from(await download.arrayBuffer())).toEqual(pngFixture(width, height));
+  },
+);

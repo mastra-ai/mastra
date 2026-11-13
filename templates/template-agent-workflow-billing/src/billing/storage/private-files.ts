@@ -1,5 +1,5 @@
 import { constants } from 'node:fs';
-import { open, lstat } from 'node:fs/promises';
+import { open, lstat, mkdir } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import { BillingError } from '../contracts.js';
 
@@ -44,4 +44,11 @@ export async function verifyPrivateFiles(filename: string): Promise<void> {
       throw error instanceof BillingError ? error : new BillingError('storage_unavailable');
     }
   }
+}
+
+export async function privateDirectory(directory: string) {
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  const info = await lstat(directory);
+  if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0)
+    throw new BillingError('storage_unavailable');
 }

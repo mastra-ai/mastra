@@ -1,7 +1,7 @@
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
-import type { BillingConfiguration } from '../../src/billing/configuration.js';
+import type { BillingConfiguration } from '../../src/billing/policy-configuration.js';
 
 interface Message {
   type: string;

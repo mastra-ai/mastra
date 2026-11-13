@@ -4,12 +4,12 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client/node';
 import type { ProviderAccount, UsageEvent } from '../../src/billing/contracts.js';
-import { billingConfigurationSchema } from '../../src/billing/configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
 
 export function configuration() {
   return billingConfigurationSchema.parse({
     provider: 'local',
-    resources: [
+    resourcePolicies: [
       {
         id: 'assistant',
         kind: 'agent',
@@ -24,7 +24,7 @@ export function configuration() {
         policy: { version: 'v1', charge: { type: 'none' } },
       },
     ],
-    mappings: {
+    billingKeys: {
       entitlements: ['access'],
       subscriptions: ['subscription'],
       meters: [

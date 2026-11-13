@@ -12,14 +12,14 @@ Set these server environment variables:
 - `OPENAI_API_KEY` for generation, independently of billing, and optionally `BILLING_STUDIO_ENABLED=true` for Studio Tools.
 - `AUTUMN_SECRET_KEY` from your Autumn environment, never a browser header.
 - `BILLING_JWT_CONFIGURATION` with your trusted issuer, audience, allowed asymmetric algorithms and public JWKS. See [identity provisioning](#identity-provisioning).
-- `BILLING_CONFIGURATION` containing the complete JSON below, matching the bundled definitions in `src/images/resources.ts`. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The bundled catalog applies the configured policies, operations and measurements to its existing image definitions; it cannot add factories or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
+- `BILLING_CONFIGURATION` containing the complete JSON below, matching the bundled definitions in `src/mastra/image-definitions.ts`. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The bundled catalog applies the configured policies, operations and measurements to its existing image definitions; it cannot add factories or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
 
 ```json
 {
   "provider": "autumn",
   "hosted": { "returnUrls": [] },
   "catalog": { "allowances": [], "offers": [] },
-  "resources": [
+  "resourcePolicies": [
     {
       "id": "image-agent",
       "kind": "agent",
@@ -42,7 +42,7 @@ Set these server environment variables:
       }
     }
   ],
-  "mappings": {
+  "billingKeys": {
     "entitlements": [],
     "subscriptions": [],
     "meters": [{ "key": "image-credits", "unit": "credits", "funding": ["prepaid"] }]
@@ -73,7 +73,7 @@ For `.env`, serialize each JSON object on one line with the quoting supported by
 Provision John once in trusted server-side TypeScript against the same configured database and environment used by the app:
 
 ```ts
-import { configuredOrganizations } from './src/mastra/environment.js';
+import { configuredOrganizations } from './src/billing/environment.js';
 
 const organizations = await configuredOrganizations(process.env);
 try {
@@ -94,7 +94,7 @@ try {
 
 Customers are selected by authenticated workspace ID, never a client-supplied customer ID. Optional configured names/emails are trusted provisioning data. Each customer ID must map to one workspace. The driver verifies that the feature is consumable and that the credit pool has a flat 1:1 conversion with no dimensions or multipliers. Unlimited balances, overage and unsupported mappings fail closed.
 
-The same options can be passed to `initializeMastraBilling({ autumn: { secretKey, bindings }, ... })`. Keep credentials outside configuration snapshots and source control. Account setup uses Autumn's get-or-create with the stable configured customer ID; it does not attach a plan or replenish credits. Configure plans and test balances separately in Autumn.
+`initializeBilling` and `initializeMastraBilling` resolve Autumn automatically from `BILLING_PROVIDER=autumn` and the server environment. For an embedded integration, pass `billingProvider: await AutumnBillingProvider.open({ url: databaseUrl }, { secretKey, bindings })` instead; the option accepts the common provider interface. `environment` defaults to `process.env` and can be supplied explicitly for an isolated application. Keep credentials outside configuration snapshots and source control. Account setup uses Autumn's get-or-create with the stable configured customer ID; it does not attach a plan or replenish credits. Configure plans and test balances separately in Autumn.
 
 Checkout maps a logical catalog offer key to `plans[].planId`. Both the application `hosted.returnUrls` and provider `returnUrls` must allow the exact return URL. Checkout/portal dispatch retains the existing owner authorization and durable action key. Hosted payments require a separately configured payment processor; a reservation proof does not verify purchases.
 
@@ -143,3 +143,5 @@ node --env-file=.env scripts/test-autumn-sandbox.mjs --live
 ```
 
 It requires `AUTUMN_SECRET_KEY`, `AUTUMN_TEST_CUSTOMER_ID=johns-org` and `AUTUMN_TEST_FEATURE_ID=generated_images`; `AUTUMN_TEST_CREDIT_POOL_ID` defaults to `image_credits`. It checks the customer's sandbox environment before mutations, requires at least six available test credits, consumes at most two, and never invokes OpenAI or purchases a plan. It measures fresh opening/closing balances, atomic contention, duplicate requests, partial confirm, release, eventual expiry and lost finalization acknowledgement through a real socket. The named personal-customer configuration proof shares the existing reserve/partial-confirm lifecycle through a memoized result, so selecting the whole file still consumes at most two credits. It proves the documented logical image meter and trusted personal customer mapping, not a separate image-generation scenario. Missing evidence fails the proof. This command does not certify real payments or image generation.
+
+For deterministic integration tests only, `AUTUMN_SERVER_URL` can select a loopback HTTP endpoint. Remote overrides are rejected. `AUTUMN_TIMEOUT_MS` optionally sets the request timeout from 100 to 30,000 milliseconds. Neither setting enables SDK retries or fail-open behavior.

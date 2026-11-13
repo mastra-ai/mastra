@@ -15,7 +15,7 @@ const cleanups: (() => void | Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
-type Charge = ReturnType<typeof configuration>['resources'][number]['policy']['charge'];
+type Charge = ReturnType<typeof configuration>['resourcePolicies'][number]['policy']['charge'];
 const charges: Charge[] = [
   { type: 'none' },
   { type: 'credits', meter: 'credits', units: 3 },
@@ -61,10 +61,10 @@ async function fixture(
   const bob = await organizations.provisionLocal({ profileId: 'bob', displayName: 'Bob' });
   const context = await organizations.context({ credential: alice.credential! });
   const config = configuration();
-  config.resources = [config.resources[0]];
-  config.resources[0].kind = options.kind ?? 'agent';
-  config.resources[0].operations = [options.kind === 'workflow' ? 'start' : 'generate'];
-  config.resources[0].policy = {
+  config.resourcePolicies = [config.resourcePolicies[0]];
+  config.resourcePolicies[0].kind = options.kind ?? 'agent';
+  config.resourcePolicies[0].operations = [options.kind === 'workflow' ? 'start' : 'generate'];
+  config.resourcePolicies[0].policy = {
     version: 'v1',
     charge,
     ...(options.access === 'entitlement'
@@ -105,7 +105,7 @@ async function fixture(
   const provider = new LocalBillingProvider(commercial, config);
   const storage = await AccountingStorage.open({ url: database.url }, directory);
   cleanups.push(() => storage.close());
-  const registered = { ...executor(options.run), operation: config.resources[0].operations[0] };
+  const registered = { ...executor(options.run), operation: config.resourcePolicies[0].operations[0] };
   const gateway = new BillingGateway(organizations, storage, provider, config, [registered]);
   const observer = await independentClient(database.url);
   cleanups.push(() => observer.close());
@@ -233,7 +233,7 @@ describe('transactional billing gateway', () => {
     });
     const running = f.gateway.execute(f.context, f.request('original'));
     await entered.promise;
-    f.config.resources[0].policy = { version: 'v2', charge: { type: 'credits', meter: 'credits', units: 99 } };
+    f.config.resourcePolicies[0].policy = { version: 'v2', charge: { type: 'credits', meter: 'credits', units: 99 } };
     const edited = new BillingGateway(f.organizations, f.storage, f.provider, f.config, [f.registered]);
     const duplicate = await edited.execute(f.context, f.request('original'));
     expect(duplicate.billing).toMatchObject({
@@ -529,7 +529,7 @@ describe('transactional billing gateway', () => {
       code: 'conflict',
     });
     const ledger = (await totals(f)).ledger;
-    const noResources = { ...f.config, resources: [] };
+    const noResources = { ...f.config, resourcePolicies: [] };
     const edited = new BillingGateway(f.organizations, f.storage, f.provider, noResources, []);
     expect((await edited.execute(f.context, f.request('same', { b: 2, a: { y: 1, x: 0 } }))).billing).toMatchObject({
       executionId: first.billing.executionId,

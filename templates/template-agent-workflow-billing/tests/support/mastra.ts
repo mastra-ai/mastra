@@ -10,12 +10,13 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
-import type { BillingProvider } from '../../src/billing/contracts.js';
+import type { BillingProvider } from '../../src/billing/providers/contracts.js';
+
 import type { BillingContext } from '../../src/billing/organizations.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
 import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
-import { billingConfigurationSchema } from '../../src/billing/configuration.js';
-import type { BillingConfiguration } from '../../src/billing/configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
+import type { BillingConfiguration } from '../../src/billing/policy-configuration.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
@@ -180,7 +181,7 @@ export function mastraConfiguration(
   ];
   return billingConfigurationSchema.parse({
     provider: 'local',
-    resources: [
+    resourcePolicies: [
       {
         id: 'assistant',
         kind: 'agent',
@@ -205,7 +206,7 @@ export function mastraConfiguration(
         },
       },
     ],
-    mappings: {
+    billingKeys: {
       meters: [
         { key: 'tokens', unit: 'tokens', funding: ['metered', 'prepaid'] },
         { key: 'tasks', unit: 'tasks', funding: ['prepaid'] },

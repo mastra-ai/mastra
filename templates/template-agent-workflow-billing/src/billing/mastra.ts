@@ -1,11 +1,12 @@
 import { z } from 'zod';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { BillingProvider } from './contracts.js';
+import type { BillingProvider } from './providers/contracts.js';
+
 import { boundedJson } from './accounting.js';
 import type { BillingResponse, BoundedExecutor, Json } from './accounting.js';
 import { BillingGateway } from './gateway.js';
-import { parseBillingConfiguration } from './configuration.js';
+import { parseBillingConfiguration } from './policy-configuration.js';
 import type { OrganizationService, BillingContext } from './organizations.js';
 import type { AccountingStorage } from './storage/accounting.js';
 import type { WorkflowStorage } from './storage/workflows.js';
@@ -67,7 +68,7 @@ export class MastraBilling<Agents extends AgentRegistry, Workflows extends Workf
     // Resolve the configuration once, then certify only capabilities this adapter actually supplies.
     const raw = parseBillingConfiguration(options.configuration, options.provider.capabilities);
     for (const executor of executors) {
-      const resource = raw.resources?.find(item => item.id === executor.resourceId);
+      const resource = raw.resourcePolicies?.find(item => item.id === executor.resourceId);
       if (!resource) throw new BillingError('invalid_configuration');
       const agent = options.agents[executor.resourceId];
       const workflow = options.workflows[executor.resourceId];

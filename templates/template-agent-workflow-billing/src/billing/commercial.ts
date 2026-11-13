@@ -1,9 +1,10 @@
 import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { BillingProvider, HostedSession } from './contracts.js';
+import type { BillingProvider } from './providers/contracts.js';
+import type { HostedSession } from './contracts.js';
 import type { BillingContext, OrganizationService } from './organizations.js';
 import { fingerprint } from './accounting.js';
-import type { BillingConfiguration } from './configuration.js';
+import type { BillingConfiguration } from './policy-configuration.js';
 import { CommercialStorage } from './storage/commercial.js';
 
 const checkoutSchema = z.strictObject({ product: identifierSchema, returnUrl: z.url().max(2083) });

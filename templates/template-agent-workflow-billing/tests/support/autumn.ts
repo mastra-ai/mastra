@@ -167,7 +167,10 @@ export async function autumnFixture() {
   let computes = 0;
   const configuration = {
     ...identity.configuration,
-    resources: identity.configuration.resources.map(resource => ({ ...resource, policy: { ...resource.policy } })),
+    resourcePolicies: identity.configuration.resourcePolicies.map(resource => ({
+      ...resource,
+      policy: { ...resource.policy },
+    })),
     provider: 'autumn',
   };
   let outcome: ExecutorOutcome | (() => Promise<ExecutorOutcome>) = {

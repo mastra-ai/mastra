@@ -27,3 +27,14 @@ export class Lifecycle {
     throw error;
   }
 }
+
+/** Release application resources when the serving process exits. */
+export function registerApplicationShutdown(close: () => Promise<void>) {
+  process.once('beforeExit', () => {
+    void close();
+  });
+  for (const signal of ['SIGTERM', 'SIGINT'] as const)
+    process.once(signal, () => {
+      void close().finally(() => process.exit(0));
+    });
+}

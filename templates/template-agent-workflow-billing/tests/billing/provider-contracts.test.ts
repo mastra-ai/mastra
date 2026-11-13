@@ -96,8 +96,8 @@ describe('local provider contracts', () => {
 
   it('preserves grant validity and excludes expired or future commercial eligibility', async () => {
     const input = configuration();
-    input.mappings.entitlements.push('expired', 'future');
-    input.mappings.subscriptions.push('expired-subscription');
+    input.billingKeys.entitlements.push('expired', 'future');
+    input.billingKeys.subscriptions.push('expired-subscription');
     input.localAccounts[0].entitlements.push(
       { key: 'expired', validFrom: '2000-01-01T00:00:00Z', validUntil: '2001-01-01T00:00:00Z' },
       { key: 'future', validFrom: '2098-01-01T00:00:00Z', validUntil: null },
@@ -214,7 +214,7 @@ describe('local reservation provider contracts', () => {
     const database = await temporaryDatabase();
     cleanups.push(database.cleanup);
     const input = structuredClone(f.configuration);
-    Object.assign(input.resources[0].policy.charge, { meter: 'unmapped' });
+    Object.assign(input.resourcePolicies[0].policy.charge, { meter: 'unmapped' });
     await expect(f.initialize(input, database.url)).rejects.toMatchObject({
       code: 'invalid_configuration',
       retryable: false,
@@ -241,3 +241,20 @@ describe('local reservation provider contracts', () => {
     expect((await f.observer.execute('SELECT SUM(units) AS units FROM billing_ledger')).rows).toEqual([{ units: 3n }]);
   });
 });
+
+it.each([undefined, '', '{invalid-json', 'null', '{}'])(
+  'invalid Autumn environment bindings cannot initialize local billing as a fallback (%s)',
+  async bindings => {
+    const database = await temporaryDatabase();
+    cleanups.push(database.cleanup);
+    const input = { ...configuration(), provider: 'autumn', localAccounts: [] };
+    await expect(
+      initializeBilling({
+        configuration: input,
+        storage: { url: database.url },
+        environment: { BILLING_PROVIDER: 'autumn', AUTUMN_SECRET_KEY: 'controlled', AUTUMN_BINDINGS: bindings },
+      }),
+    ).rejects.toMatchObject({ code: 'invalid_configuration' });
+    await expect(stat(database.filename)).rejects.toMatchObject({ code: 'ENOENT' });
+  },
+);

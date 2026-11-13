@@ -1,9 +1,9 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
+import { lstat, open, rename, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
+import { BillingError, identifierSchema, parseInput } from './contracts.js';
 
 const profileSchema = z.strictObject({
   name: z.string().min(1).max(100),
@@ -27,12 +27,6 @@ export type ProfileName = 'owner' | 'member' | 'outsider';
 export function localPaths(root: string) {
   const directory = resolve(root, 'data');
   return { directory, manifest: resolve(directory, 'local-profiles.json'), lock: resolve(directory, 'setup.lock') };
-}
-export async function privateDirectory(directory: string) {
-  await mkdir(directory, { recursive: true, mode: 0o700 });
-  const info = await lstat(directory);
-  if (!info.isDirectory() || info.uid !== process.getuid?.() || (info.mode & 0o077) !== 0)
-    throw new BillingError('storage_unavailable');
 }
 async function privateHandle(filename: string) {
   const handle = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);

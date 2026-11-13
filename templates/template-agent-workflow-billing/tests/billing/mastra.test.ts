@@ -6,7 +6,8 @@ import { Hono } from 'hono';
 import { RequestContext } from '@mastra/core/request-context';
 import { EXECUTE_TOOL_ROUTE } from '@mastra/server/handlers/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { createBillingApplication, configuredOrganizations } from '../../src/mastra/setup.js';
+import { createBillingApplication } from '../../src/billing/application.js';
+import { configuredOrganizations } from '../../src/billing/environment.js';
 import { resourceAction } from '../../src/billing/resource-catalog.js';
 import type { ResourceCatalog, ResourceDefinition, ResourceDependencies } from '../../src/billing/resource-catalog.js';
 import { billingSocket } from '../support/http.js';
@@ -20,7 +21,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { Agent } from '@mastra/core/agent';
 import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
 import { initializeMastraBilling } from '../../src/billing/mastra-setup.js';
-import { billingConfigurationSchema } from '../../src/billing/configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
 import { BillingRecovery } from '../../src/billing/recovery.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
@@ -158,9 +159,9 @@ describe('billed Mastra runtime', () => {
     const reopen = (extra: boolean, version = 'unrelated-v1') => {
       const configuration = {
         ...runtime.configuration,
-        resources: [
-          ...runtime.configuration.resources,
-          ...(extra ? [{ ...runtime.configuration.resources[0], id: 'unrelated' }] : []),
+        resourcePolicies: [
+          ...runtime.configuration.resourcePolicies,
+          ...(extra ? [{ ...runtime.configuration.resourcePolicies[0], id: 'unrelated' }] : []),
         ],
       };
       return new MastraBilling({
@@ -236,7 +237,10 @@ describe('billed Mastra runtime', () => {
     ) => {
       const configuration = {
         ...runtime.configuration,
-        resources: [...runtime.configuration.resources, { ...runtime.configuration.resources[0], id: 'unrelated' }],
+        resourcePolicies: [
+          ...runtime.configuration.resourcePolicies,
+          { ...runtime.configuration.resourcePolicies[0], id: 'unrelated' },
+        ],
       };
       return new MastraBilling({
         organizations: runtime.organizations,
@@ -549,7 +553,7 @@ describe('billed Mastra runtime', () => {
   it('suspension expiry and resume race cannot double release or charge', async () => {
     const { runtime, model, observer, database } = await fixture({
       configure: configuration => {
-        configuration.resources[1].policy.suspendedReservationTtlMs = 15;
+        configuration.resourcePolicies[1].policy.suspendedReservationTtlMs = 15;
         return configuration;
       },
     });
@@ -679,7 +683,7 @@ describe('billed Mastra runtime', () => {
   it('instrumented workflow segments accumulate usage and retain their original policy', async () => {
     const { runtime, database, model, observer } = await fixture({
       configure: configuration => {
-        configuration.resources[1].policy.charge = {
+        configuration.resourcePolicies[1].policy.charge = {
           type: 'usage',
           meter: 'tokens',
           measure: 'tokens',
@@ -699,8 +703,8 @@ describe('billed Mastra runtime', () => {
     });
     expect(suspended.billing).toMatchObject({ observedUnits: 5, billedUnits: null });
     const changed = mastraConfiguration(runtime.billingContext.workspaceId, { workflowUsage: true });
-    changed.resources[1].policy.version = 'new-policy';
-    changed.resources[1].policy.charge = { type: 'per-task', meter: 'tasks', units: 7, funding: 'prepaid' };
+    changed.resourcePolicies[1].policy.version = 'new-policy';
+    changed.resourcePolicies[1].policy.charge = { type: 'per-task', meter: 'tasks', units: 7, funding: 'prepaid' };
     const restarted = await runtimeFixture({
       databaseUrl: database.url,
       directory: database.directory,
@@ -739,7 +743,7 @@ describe('billed Mastra runtime', () => {
       const { runtime, observer } = await fixture({
         workflowAfterPrompt: status === 'failure' ? '[model-error] stop after approval' : undefined,
         configure: configuration => {
-          configuration.resources[1].policy.charge = {
+          configuration.resourcePolicies[1].policy.charge = {
             type: 'usage',
             meter: 'tokens',
             measure: 'tokens',
@@ -802,8 +806,8 @@ describe('billed Mastra runtime', () => {
         workflows: runtime.workflows,
       });
     const unbounded = billingConfigurationSchema.parse(runtime.configuration);
-    unbounded.resources[0].measurements.find(measure => measure.key === 'tokens')!.enforceableBound = true;
-    unbounded.resources[0].policy.charge = {
+    unbounded.resourcePolicies[0].measurements.find(measure => measure.key === 'tokens')!.enforceableBound = true;
+    unbounded.resourcePolicies[0].policy.charge = {
       type: 'usage',
       meter: 'tokens',
       measure: 'tokens',
@@ -813,7 +817,7 @@ describe('billed Mastra runtime', () => {
     expect(() => build(unbounded)).toThrowError(expect.objectContaining({ code: 'invalid_configuration' }));
     expect(model.requests).toHaveLength(0);
     const bounded = billingConfigurationSchema.parse(runtime.configuration);
-    bounded.resources[0].policy.charge = {
+    bounded.resourcePolicies[0].policy.charge = {
       type: 'usage',
       meter: 'calls',
       measure: 'model-calls',
@@ -1258,7 +1262,7 @@ describe('billed Mastra runtime', () => {
     for (const incomplete of ['missing-usage', 'missing-checkpoint'] as const) {
       const { runtime, observer, model } = await fixture({
         configure: configuration => {
-          configuration.resources[1].policy.charge = {
+          configuration.resourcePolicies[1].policy.charge = {
             type: 'usage',
             meter: 'tokens',
             measure: 'tokens',
@@ -1317,7 +1321,7 @@ describe('billed Mastra runtime', () => {
   it('persistent setup recovers due suspensions at worker startup without replaying work', async () => {
     const { runtime, database, model, observer } = await fixture({
       configure: configuration => {
-        configuration.resources[1].policy.suspendedReservationTtlMs = 5;
+        configuration.resourcePolicies[1].policy.suspendedReservationTtlMs = 5;
         return configuration;
       },
     });
@@ -1440,7 +1444,7 @@ describe('billed Mastra runtime', () => {
       processorRetry: true,
       agentMaxSteps: 1,
       configure: configuration => {
-        configuration.resources[0].policy.charge = {
+        configuration.resourcePolicies[0].policy.charge = {
           type: 'usage',
           meter: 'calls',
           measure: 'model-calls',
@@ -1752,16 +1756,16 @@ async function catalogFixture() {
       },
     },
   ] as const satisfies readonly ResourceDefinition[];
-  const { resources: _, ...configuration } = billingConfigurationSchema.parse({
+  const { resourcePolicies: _, ...configuration } = billingConfigurationSchema.parse({
     provider: 'local',
-    resources: [],
-    mappings: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+    resourcePolicies: [],
+    billingKeys: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
     localAccounts: workspaceIds.map(workspaceId => ({
       workspaceId,
       meters: [{ key: 'credits', funding: 'prepaid', balance: 100 }],
     })),
   });
-  const catalog = { resources, configuration } satisfies ResourceCatalog<typeof resources>;
+  const catalog = { definitions: resources, configuration } satisfies ResourceCatalog<typeof resources>;
   return {
     database,
     model,
@@ -1780,7 +1784,7 @@ async function catalogFixture() {
 
 it('catalog extensions execute distinct resources with configured billing policies', async () => {
   const f = await catalogFixture();
-  let application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  let application = await createBillingApplication({ environment: f.environment, catalog: f.catalog });
   cleanups.push(() => application.close());
   expect(f.created).toEqual(['catalog-answer', 'catalog-extra', 'catalog-report']);
   const billing = await application.organizations.context({ credential: f.first.credential! });
@@ -1967,7 +1971,7 @@ it('catalog extensions execute distinct resources with configured billing polici
   expect(closeOne).toBe(closeTwo);
   await Promise.all([closeOne, closeTwo]);
   expect(f.closed).toEqual(['catalog-report', 'catalog-extra', 'catalog-answer']);
-  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  application = await createBillingApplication({ environment: f.environment, catalog: f.catalog });
   expect((await observer.execute('SELECT * FROM billing_remote_operations ORDER BY execution_id')).rows).toEqual(
     operations,
   );
@@ -1982,7 +1986,7 @@ it('catalog extensions execute distinct resources with configured billing polici
 
 it('invalid catalogs and partial startup fail without external work or leaked lifecycle', async () => {
   const f = await catalogFixture();
-  const [answer, extra, report] = f.catalog.resources;
+  const [answer, extra, report] = f.catalog.definitions;
   const invalid: readonly ResourceDefinition[][] = [
     [answer, answer],
     [{ ...answer, policy: null } as unknown as ResourceDefinition],
@@ -2011,7 +2015,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   ];
   for (const resources of invalid) {
     await expect(
-      createBillingApplication(f.environment, { catalog: { ...f.catalog, resources } }),
+      createBillingApplication({ environment: f.environment, catalog: { ...f.catalog, definitions: resources } }),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
     expect(f.created).toEqual([]);
     expect(f.closed).toEqual([]);
@@ -2019,41 +2023,40 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   }
   // Unsupported provider capabilities fail before factories and before opening provider state.
   await expect(
-    createBillingApplication(
-      { ...f.environment, BILLING_PROVIDER: 'autumn' },
-      {
-        catalog: {
-          ...f.catalog,
-          resources: [
-            {
-              ...answer,
-              policy: {
-                version: 'metered',
-                charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' },
-              },
+    createBillingApplication({
+      environment: { ...f.environment, BILLING_PROVIDER: 'autumn' },
+      catalog: {
+        ...f.catalog,
+        definitions: [
+          {
+            ...answer,
+            policy: {
+              version: 'metered',
+              charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'metered' },
             },
-          ],
-          configuration: {
-            ...f.catalog.configuration,
-            provider: 'autumn',
-            localAccounts: [],
-            mappings: {
-              entitlements: [],
-              subscriptions: [],
-              meters: [{ key: 'tasks', unit: 'tasks', funding: ['metered'] }],
-            },
+          },
+        ],
+        configuration: {
+          ...f.catalog.configuration,
+          provider: 'autumn',
+          localAccounts: [],
+          billingKeys: {
+            entitlements: [],
+            subscriptions: [],
+            meters: [{ key: 'tasks', unit: 'tasks', funding: ['metered'] }],
           },
         },
       },
-    ),
+    }),
   ).rejects.toMatchObject({ code: 'invalid_configuration' });
   expect(f.created).toEqual([]);
   // Factory dependencies cannot resolve before all registrations and persistent snapshots are usable.
   await expect(
-    createBillingApplication(f.environment, {
+    createBillingApplication({
+      environment: f.environment,
       catalog: {
         ...f.catalog,
-        resources: [
+        definitions: [
           answer,
           {
             ...report,
@@ -2069,7 +2072,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   expect(f.closed).toEqual(['catalog-answer']);
   f.created.length = 0;
   f.closed.length = 0;
-  let application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  let application = await createBillingApplication({ environment: f.environment, catalog: f.catalog });
   const billing = await application.organizations.context({ credential: f.first.credential! });
   await application.runtime.billing
     .agent('catalog-extra')
@@ -2084,7 +2087,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   const cleanupFailure = new Error('Controlled disposer failure');
   const badCatalog = {
     ...f.catalog,
-    resources: [
+    definitions: [
       answer,
       {
         ...extra,
@@ -2101,7 +2104,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
       },
     ],
   } as const;
-  await expect(createBillingApplication(f.environment, { catalog: badCatalog })).rejects.toMatchObject({
+  await expect(createBillingApplication({ environment: f.environment, catalog: badCatalog })).rejects.toMatchObject({
     cause: startupFailure,
     errors: [startupFailure, expect.any(AggregateError)],
   });
@@ -2115,7 +2118,8 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   const starts = vi.spyOn(BillingRecovery.prototype, 'start');
   try {
     await expect(
-      createBillingApplication(f.environment, {
+      createBillingApplication({
+        environment: f.environment,
         catalog: f.catalog,
         createMastra: configuration => {
           const mastra = new Mastra(configuration);
@@ -2138,7 +2142,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
     starts.mockRestore();
   }
   expect((await observer.execute('SELECT * FROM billing_remote_operations')).rows).toEqual(before);
-  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  application = await createBillingApplication({ environment: f.environment, catalog: f.catalog });
   const context = await application.organizations.context({ credential: f.first.credential! });
   const suspended = await application.runtime.billing
     .workflow('catalog-report')
@@ -2151,7 +2155,7 @@ it('invalid catalogs and partial startup fail without external work or leaked li
     sql: 'UPDATE billing_workflow_runs SET expires_at = ? WHERE id = ?',
     args: [Date.now() - 1, suspended.executionId],
   });
-  application = await createBillingApplication(f.environment, { catalog: f.catalog });
+  application = await createBillingApplication({ environment: f.environment, catalog: f.catalog });
   cleanups.push(application.close);
   const recoveredContext = await application.organizations.context({ credential: f.first.credential! });
   const recovered = await application.runtime.billing
@@ -2180,10 +2184,11 @@ it('invalid catalogs and partial startup fail without external work or leaked li
   expect(f.model.requests).toHaveLength(1);
   await Promise.all([application.close(), application.close(), application.close()]);
   f.closed.length = 0;
-  const failingCloseApplication = await createBillingApplication(f.environment, {
+  const failingCloseApplication = await createBillingApplication({
+    environment: f.environment,
     catalog: {
       ...f.catalog,
-      resources: [
+      definitions: [
         answer,
         {
           ...extra,

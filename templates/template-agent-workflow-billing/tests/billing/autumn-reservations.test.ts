@@ -1,5 +1,7 @@
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { createImageApplication } from '../../src/mastra/image-billing.js';
 import { fork } from 'node:child_process';
-import { billingPolicySchema } from '../../src/billing/configuration.js';
+import { billingPolicySchema } from '../../src/billing/policy-configuration.js';
 import { weatherDefinitions } from '../support/weather/resources.js';
 import { once } from 'node:events';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -14,8 +16,8 @@ import { BillingRecovery } from '../../src/billing/recovery.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { independentClient } from '../support/billing.js';
 import { TABLE_WORKFLOW_SNAPSHOT } from '@mastra/core/storage';
-import { createBillingApplication } from '../../src/mastra/setup.js';
-import { createBillingApp } from '../../src/server/billing.js';
+import { createBillingApplication } from '../../src/billing/application.js';
+import { createBillingApp } from '../../src/billing/server/routes.js';
 import { billingSocket } from '../support/http.js';
 import { modelBoundary, runtimeFixture, mastraConfiguration, operationBarrier } from '../support/mastra.js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -47,12 +49,12 @@ async function nativeFixture(
     ...base,
     provider: 'autumn',
     localAccounts: [],
-    mappings: {
+    billingKeys: {
       entitlements: [],
       subscriptions: [],
       meters: [{ key: 'credits', unit: 'credits' as const, funding: ['prepaid' as const] }],
     },
-    resources: base.resources.map(resource => ({
+    resourcePolicies: base.resourcePolicies.map(resource => ({
       ...resource,
       policy: {
         ...resource.policy,
@@ -207,8 +209,8 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     const invalid = await fixture();
     const configuration = {
       ...invalid.configuration,
-      resources: [
-        { ...invalid.configuration.resources[0], id: 'weather-agent' },
+      resourcePolicies: [
+        { ...invalid.configuration.resourcePolicies[0], id: 'weather-agent' },
         {
           id: 'weather-report',
           kind: 'workflow',
@@ -222,8 +224,8 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       ],
     };
     await expect(
-      createBillingApplication(
-        {
+      createImageApplication({
+        environment: {
           BILLING_PROVIDER: 'autumn',
           BILLING_MODE: 'production',
           BILLING_JWT_CONFIGURATION: JSON.stringify(invalid.jwtConfiguration),
@@ -232,8 +234,8 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
           BILLING_CONFIGURATION: JSON.stringify(configuration),
           OPENAI_API_KEY: 'controlled',
         },
-        { autumn: invalid.options },
-      ).then(app => app.close()),
+        billingProvider: await AutumnBillingProvider.open({ url: invalid.database.url }, invalid.options),
+      }).then(app => app.close()),
     ).rejects.toMatchObject({ code: 'invalid_configuration' });
     expect(invalid.requests).toEqual([]);
 
@@ -257,7 +259,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     async scenario => {
       const f = await fixture();
       const budget = { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 3000 };
-      Object.assign(f.configuration.resources[0].policy, { reservationBudget: budget });
+      Object.assign(f.configuration.resourcePolicies[0].policy, { reservationBudget: budget });
       vi.useFakeTimers({ toFake: ['Date'] });
       try {
         if (scenario === 'exhausted')
@@ -1194,7 +1196,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
     const delayed = await fixture();
     const budget = { executionMs: 300, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 4000 };
     for (const fixture of [late, delayed]) {
-      Object.assign(fixture.configuration.resources[0].policy, { reservationBudget: budget });
+      Object.assign(fixture.configuration.resourcePolicies[0].policy, { reservationBudget: budget });
     }
 
     // Advance application time at causal boundaries while keeping SDK and socket timers real.
@@ -1602,7 +1604,7 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
           { key: 'unbound-offer', version: 'v1', allowances: [], entitlements: [], subscriptions: [] },
         ],
       },
-      resources: [
+      resourcePolicies: [
         {
           id: 'weather-agent',
           kind: 'agent',
@@ -1628,19 +1630,28 @@ describe('Autumn reservation lifecycle over the actual SDK and SQL', () => {
       OPENAI_API_KEY: 'controlled',
     };
     const serve = async (bindings = f.options.bindings) => {
-      const { resources: policies, ...billingConfiguration } = configuration;
+      const { resourcePolicies: policies, ...billingConfiguration } = configuration;
       const resources = weatherDefinitions(environment).map(definition => ({
         ...definition,
         measurements: [],
         policy: billingPolicySchema.parse(policies.find(policy => policy.id === definition.id)!.policy),
       }));
-      const application = await createBillingApplication(environment, {
-        autumn: { ...f.options, bindings },
-        catalog: { resources, configuration: billingConfiguration },
+      const application = await createBillingApplication({
+        environment: {
+          ...environment,
+          AUTUMN_SECRET_KEY: f.options.secretKey,
+          AUTUMN_BINDINGS: JSON.stringify(bindings),
+          AUTUMN_SERVER_URL: f.options.serverURL,
+        },
+        catalog: { definitions: resources, configuration: billingConfiguration },
       });
       cleanups.push(application.close);
       const server = await billingSocket(
-        createBillingApp(application.organizations, application.execution, application.runtime.commercial),
+        createBillingApp({
+          organizations: application.organizations,
+          execution: application.execution,
+          commercial: application.runtime.commercial,
+        }),
       );
       cleanups.push(server.close);
       return server.url;

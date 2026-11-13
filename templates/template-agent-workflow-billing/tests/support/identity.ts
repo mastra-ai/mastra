@@ -1,5 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { billingConfigurationSchema } from '../../src/billing/configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
 import type { JwtIdentityOptions } from '../../src/billing/identity.js';
 import { JwtIdentityAdapter } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
@@ -36,7 +36,7 @@ export async function identityFixture() {
   const observer = await independentClient(database.url);
   const configuration = billingConfigurationSchema.parse({
     provider: 'local',
-    resources: [
+    resourcePolicies: [
       {
         id: 'assistant',
         kind: 'agent',
@@ -44,7 +44,7 @@ export async function identityFixture() {
         policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
       },
     ],
-    mappings: {
+    billingKeys: {
       entitlements: ['access'],
       subscriptions: ['subscription'],
       meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }],

@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { ReservationProtocol } from './reservations.js';
 
 export const identifierSchema = z
   .string()
@@ -85,40 +84,68 @@ export const usageEventSchema = z.strictObject({
 export type UsageEvent = z.input<typeof usageEventSchema>;
 
 export interface ProviderCapabilities {
+  /** Whether the driver can enforce named feature entitlements. */
   readonly entitlements: boolean;
+  /** Whether the driver can enforce subscription access. */
   readonly subscriptions: boolean;
+  /** Whether the driver can reserve and settle prepaid credit. */
   readonly prepaid: boolean;
+  /** Whether the driver can deliver postpaid consumption. */
   readonly metered: boolean;
+  /** Whether repeated delivery of the same usage event is safe. */
   readonly replaySafeUsage: boolean;
+  /** How positive evidence of delivered usage can be obtained. */
   readonly reconciliation: 'reflected-events' | 'unverified';
+  /** Marks provider reservations as the authority for prepaid settlement. */
   readonly prepaidAuthority?: 'provider-reservations';
+  /** Whether hosted checkout is supported. */
   readonly checkout: boolean;
+  /** Whether a hosted billing portal is supported. */
   readonly portal: boolean;
+  /** Whether signed provider notifications can be verified. */
   readonly webhooks: boolean;
 }
 
 export interface CommercialGrant {
+  /** Stable logical commercial key referenced by billing policies. */
   readonly key: string;
+  /** Inclusive start of grant validity as an ISO timestamp. */
   readonly validFrom: string;
+  /** Exclusive expiry timestamp, or null when no expiry is known. */
   readonly validUntil: string | null;
 }
 
 export interface CommercialSnapshot {
+  /** Stable provider account associated with the authenticated workspace. */
   readonly account: ProviderAccount;
+  /** ISO timestamp when the authoritative state was read. */
   readonly observedAt: string;
+  /** Exclusive expiry timestamp, or null when no expiry is known. */
   readonly validUntil: string | null;
+  /** Named feature grants with their current validity windows. */
   readonly entitlements: readonly CommercialGrant[];
+  /** Active subscription grants with their current validity windows. */
   readonly subscriptions: readonly CommercialGrant[];
+  /** Authoritative balance and consumption observations per logical meter. */
   readonly meters: readonly {
+    /** Stable logical commercial key referenced by billing policies. */
     key: string;
+    /** Selects prepaid reservations or metered postpaid usage. */
     funding: 'prepaid' | 'metered';
+    /** Available prepaid balance, or null for metered usage. */
     confirmedBalance: number | null;
+    /** Confirmed consumption, or null when the provider cannot report it separately. */
     consumedUnits: number | null;
+    /** Provider usage observation that may include active holds; never confirmed consumption. */
     providerUsageIncludingHolds?: number;
+    /** Inclusive billing period start, or null for nonperiodic credit. */
     periodStart: string | null;
+    /** Exclusive billing period end, or null for nonperiodic credit. */
     periodEnd: string | null;
   }[];
+  /** Opaque provider evidence used to reconcile financial state. */
   readonly evidence: { readonly version: string } | null;
+  /** Marks provider reservations as the authority for prepaid settlement. */
   readonly prepaidAuthority?: 'provider-reservations';
 }
 
@@ -127,7 +154,9 @@ export type UsageDelivery =
   | { readonly status: 'accepted' | 'duplicate'; readonly eventId: string }
   | { readonly status: 'retryable_failure' | 'permanent_failure' | 'uncertain'; readonly code: string };
 export interface ReconciliationRequest {
+  /** Stable provider account associated with the authenticated workspace. */
   readonly account: ProviderAccount;
+  /** Immutable usage IDs whose acceptance must be checked. */
   readonly eventIds: readonly string[];
 }
 export type ReconciliationResult =
@@ -138,12 +167,17 @@ export type ReconciliationResult =
     }
   | { readonly status: 'unverified'; readonly snapshot: CommercialSnapshot | null };
 export interface CheckoutRequest {
+  /** Stable provider account associated with the authenticated workspace. */
   readonly account: ProviderAccount;
+  /** Logical catalog offer key, resolved by the selected driver. */
   readonly product: string;
+  /** Explicitly allowlisted redirect URL for the hosted session. */
   readonly returnUrl: string;
 }
 export interface PortalRequest {
+  /** Stable provider account associated with the authenticated workspace. */
   readonly account: ProviderAccount;
+  /** Explicitly allowlisted redirect URL for the hosted session. */
   readonly returnUrl: string;
 }
 export type HostedSession = Unsupported | { readonly status: 'created'; readonly url: string };
@@ -156,7 +190,9 @@ export type PreparedHostedSession =
       readonly dispatch: () => Promise<HostedSession>;
     };
 export interface RawWebhookRequest {
+  /** Unmodified HTTP request bytes used for signature verification. */
   readonly body: Uint8Array;
+  /** HTTP headers required by the provider signature protocol. */
   readonly headers: Readonly<Record<string, string>>;
 }
 export type ProviderNotification =
@@ -181,23 +217,3 @@ export const usageBindingSchema = z
   })
   .refine(binding => Buffer.byteLength(JSON.stringify(binding)) <= 16384);
 export type UsageBinding = Readonly<z.infer<typeof usageBindingSchema>>;
-
-export interface BillingProvider {
-  readonly reservations?: ReservationProtocol;
-  readonly id: string;
-  readonly capabilities: ProviderCapabilities;
-  ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount>;
-  getState(account: ProviderAccount): Promise<CommercialSnapshot>;
-  bindUsage(meter: string): UsageBinding;
-  // Outbox delivery must honor the persisted admission binding. Direct trusted
-  // calls without an outbox may use the driver's current configuration.
-  reportUsage(event: UsageEvent): Promise<UsageDelivery>;
-  reconcile(request: ReconciliationRequest): Promise<ReconciliationResult>;
-  // Providers with a configured payer/plan mapping bind hosted replay to that target.
-  hostedBinding?(request: CheckoutRequest | PortalRequest): string;
-  prepareCheckout(request: CheckoutRequest): Promise<PreparedHostedSession>;
-  preparePortalSession(request: PortalRequest): Promise<PreparedHostedSession>;
-  createCheckout(request: CheckoutRequest): Promise<HostedSession>;
-  createPortalSession(request: PortalRequest): Promise<HostedSession>;
-  verifyWebhook(request: RawWebhookRequest, provider?: string): Promise<ProviderNotification>;
-}

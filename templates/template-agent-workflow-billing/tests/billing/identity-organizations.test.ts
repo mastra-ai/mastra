@@ -3,11 +3,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { JwtIdentityAdapter, LocalIdentityAdapter, hashSecret } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
-import { localAccountSeedSchema } from '../../src/billing/configuration.js';
+import { localAccountSeedSchema } from '../../src/billing/policy-configuration.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
-import { configuredOrganizations } from '../../src/mastra/setup.js';
-import { createBillingApp } from '../../src/server/billing.js';
+import { configuredOrganizations } from '../../src/billing/environment.js';
+import { createBillingApp } from '../../src/billing/server/routes.js';
 import { independentClient, temporaryDatabase, usage } from '../support/billing.js';
 import { httpServer, mastraServer, organizationWriter, request } from '../support/organizations.js';
 
@@ -293,7 +293,7 @@ describe('trusted identity and shared workspace journeys', () => {
     const sign = (payload: Record<string, unknown>, key = privateKey, algorithm = 'ES256') =>
       new SignJWT(payload).setProtectedHeader({ alg: algorithm, kid: 'trusted' }).sign(key);
     const valid = await sign(claims);
-    const server = await httpServer(createBillingApp(jwtService));
+    const server = await httpServer(createBillingApp({ organizations: jwtService }));
     cleanups.push(server.close);
     expect((await request(server.url, valid, '/billing/context')).body).toMatchObject({
       actorId: alice.identity.id,
@@ -375,7 +375,7 @@ describe('trusted identity and shared workspace journeys', () => {
       sql: "UPDATE invitations SET expires_at = '2020-01-01T00:00:00Z' WHERE id = ?",
       args: [expired.invitationId],
     });
-    const server = await httpServer(createBillingApp(service));
+    const server = await httpServer(createBillingApp({ organizations: service }));
     cleanups.push(server.close);
     expect(
       (
@@ -529,7 +529,7 @@ describe('trusted identity and shared workspace journeys', () => {
       workspaceId: owner.workspaceId,
       result: { text: 'member-private-result' },
     });
-    const server = await httpServer(createBillingApp(service));
+    const server = await httpServer(createBillingApp({ organizations: service }));
     cleanups.push(server.close);
     const base = `/billing/workspaces/${owner.workspaceId}`;
     const call = (credential: string, path: string, options = {}) =>

@@ -54,7 +54,9 @@ The Studio demo runs through **Tools → Playground**. These tools call the imag
 ## Customization
 
 - Open the project in your coding agent and ask: “Add a product illustration use case, keeping shared workspace billing and charging only for successful work. Explore the code and propose a plan before making changes.”
-- Adjust policies in [src/images/resources.ts](src/images/resources.ts), the typed catalog in [src/resources.ts](src/resources.ts), and provider setup in [src/billing/setup.ts](src/billing/setup.ts). Use the [billing facade snippets](docs/billing.md#invoke-billed-resources) to keep execution on the billed path.
+- Adjust policies in [src/mastra/image-definitions.ts](src/mastra/image-definitions.ts), the typed catalog in [src/mastra/image-billing.ts](src/mastra/image-billing.ts), and provider setup in [src/billing/setup.ts](src/billing/setup.ts). Use the [billing facade snippets](docs/billing.md#invoke-billed-resources) to keep execution on the billed path.
+
+Configure billing and plans in `src/mastra/index.ts` and `src/mastra/image-plans.ts`. Native agents and workflows live under `src/mastra/agents` and `src/mastra/workflows`. Optional `OPENAI_IMAGE_MODEL`, `OPENAI_IMAGE_QUALITY` and `OPENAI_IMAGE_SIZE` override the default image profile; see the [image guide](docs/images.md#configure-the-image-profile).
 
 ## About Mastra templates
 

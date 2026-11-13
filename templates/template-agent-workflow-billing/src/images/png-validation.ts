@@ -9,7 +9,7 @@ export function crc32(bytes: Uint8Array) {
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
-export function validatePng(bytes: Buffer) {
+export function validatePng(bytes: Buffer, expected?: { width: number; height: number }) {
   const invalid = () => {
     throw new BillingError('state_unavailable');
   };
@@ -44,7 +44,15 @@ export function validatePng(bytes: Buffer) {
       width = data.readUInt32BE(0);
       height = data.readUInt32BE(4);
       channels = ({ 0: 1, 2: 3, 4: 2, 6: 4 } as Record<number, number>)[data[9]] ?? 0;
-      if (width !== 1024 || height !== 1024 || data[8] !== 8 || !channels || data[10] || data[11] || data[12])
+      if (
+        !([1024, 1536].includes(width) && [1024, 1536].includes(height) && (width === 1024 || height === 1024)) ||
+        (expected && (width !== expected.width || height !== expected.height)) ||
+        data[8] !== 8 ||
+        !channels ||
+        data[10] ||
+        data[11] ||
+        data[12]
+      )
         invalid();
     } else if (kind === 'IDAT') {
       if (dataEnded) invalid();
@@ -71,5 +79,5 @@ export function validatePng(bytes: Buffer) {
   } catch {
     invalid();
   }
-  return { width: 1024 as const, height: 1024 as const };
+  return { width, height };
 }

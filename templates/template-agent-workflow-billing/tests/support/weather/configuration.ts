@@ -1,5 +1,5 @@
 import { weatherDefinitions } from './resources.js';
-import { billingConfigurationSchema } from '../../../src/billing/configuration.js';
+import { billingConfigurationSchema } from '../../../src/billing/policy-configuration.js';
 
 export function weatherConfiguration(
   workspaceIds?: string | readonly string[],
@@ -7,14 +7,14 @@ export function weatherConfiguration(
 ) {
   return billingConfigurationSchema.parse({
     provider: 'local',
-    resources: weatherDefinitions({}, workflowPolicy).map(({ id, kind, operations, measurements, policy }) => ({
+    resourcePolicies: weatherDefinitions({}, workflowPolicy).map(({ id, kind, operations, measurements, policy }) => ({
       id,
       kind,
       operations,
       measurements,
       policy,
     })),
-    mappings: {
+    billingKeys: {
       subscriptions: ['weather-access'],
       meters: [
         { key: 'weather-credits', unit: 'credits', funding: ['prepaid'] },

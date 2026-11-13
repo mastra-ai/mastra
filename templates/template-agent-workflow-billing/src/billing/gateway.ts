@@ -2,8 +2,9 @@ import { prepaid } from './reservations.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { BillingProvider, CommercialSnapshot } from './contracts.js';
-import { parseBillingConfiguration } from './configuration.js';
+import type { BillingProvider } from './providers/contracts.js';
+import type { CommercialSnapshot } from './contracts.js';
+import { parseBillingConfiguration } from './policy-configuration.js';
 import {
   eligible,
   executionRequestSchema,
@@ -36,7 +37,7 @@ export class BillingGateway {
     this.configuration = parseBillingConfiguration(configuration, provider.capabilities);
     if (this.configuration.provider !== provider.id) throw new BillingError('invalid_configuration');
     for (const executor of executors) {
-      const resource = this.configuration.resources.find(resource => resource.id === executor.resourceId);
+      const resource = this.configuration.resourcePolicies.find(resource => resource.id === executor.resourceId);
       const key = `${executor.resourceId}:${executor.operation}`;
       if (
         ['resume', 'cancel'].includes(executor.operation) ||
@@ -87,7 +88,7 @@ export class BillingGateway {
         }),
       );
     }
-    for (const resource of this.configuration.resources)
+    for (const resource of this.configuration.resourcePolicies)
       for (const operation of resource.operations)
         if (!['resume', 'cancel'].includes(operation) && !this.executors.has(`${resource.id}:${operation}`))
           throw new BillingError('invalid_configuration');
@@ -112,7 +113,8 @@ export class BillingGateway {
     const previous = await this.storage.replay(claim);
     if (previous) return previous;
     const resource =
-      lifecycle?.configuration ?? this.configuration.resources.find(resource => resource.id === request.resourceId);
+      lifecycle?.configuration ??
+      this.configuration.resourcePolicies.find(resource => resource.id === request.resourceId);
     const executor = this.executors.get(`${request.resourceId}:${request.operation}`);
     if (!resource || !executor) throw new BillingError('unsupported');
     if (this.provider.reservations && prepaid(resource.policy)) {
@@ -237,7 +239,7 @@ export class BillingGateway {
     throw new BillingError('state_unavailable');
   }
   resource(resourceId: string) {
-    const resource = this.configuration.resources.find(resource => resource.id === resourceId);
+    const resource = this.configuration.resourcePolicies.find(resource => resource.id === resourceId);
     if (!resource) throw new BillingError('unsupported');
     return resource;
   }

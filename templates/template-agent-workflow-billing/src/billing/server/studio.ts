@@ -3,20 +3,29 @@ import { createTool } from '@mastra/core/tools';
 import type { MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
-import { BillingError, identifierSchema } from '../billing/contracts.js';
-import type { BillingHttpGateway } from '../billing/mastra.js';
-import type { OrganizationService } from '../billing/organizations.js';
-import type { CommercialService } from '../billing/commercial.js';
-import type { ResourceAction } from '../billing/resource-catalog.js';
+import { BillingError, identifierSchema } from '../contracts.js';
+import type { BillingHttpGateway } from '../mastra.js';
+import type { OrganizationService } from '../organizations.js';
+import type { CommercialService } from '../commercial.js';
+import type { ResourceAction } from '../resource-catalog.js';
 
 const selectionSchema = z.strictObject({ workspaceId: identifierSchema });
 
-export function createBillingStudio(
-  organizations: OrganizationService,
-  execution: BillingHttpGateway,
-  commercial: CommercialService,
-  actions: readonly ResourceAction[],
-) {
+export function createBillingStudio({
+  organizations,
+  execution,
+  commercial,
+  actions,
+}: {
+  /** Trusted identity and membership service. */
+  organizations: OrganizationService;
+  /** Billing facade shared with the authenticated HTTP routes. */
+  execution: BillingHttpGateway;
+  /** Owner-authorized commercial operations. */
+  commercial: CommercialService;
+  /** Validated resource actions exposed as Studio tools. */
+  actions: readonly ResourceAction[];
+}) {
   // Never accept credentials or actor IDs from Studio's editable request context.
   const request = new AsyncLocalStorage<string>();
   const selected = (workspaceId: string) => {

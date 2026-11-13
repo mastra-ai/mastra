@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { BillingError, parseInput, usageEventSchema } from '../contracts.js';
-import type { BillingProvider, UsageDelivery } from '../contracts.js';
+import type { BillingProvider } from '../providers/contracts.js';
+import type { UsageDelivery } from '../contracts.js';
 import { BillingDatabase } from './database.js';
 import { finishUnstartedReservation } from './accounting.js';
 

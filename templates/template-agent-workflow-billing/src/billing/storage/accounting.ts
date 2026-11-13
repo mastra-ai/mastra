@@ -8,7 +8,8 @@ import type { ReservationProtocol } from '../reservations.js';
 import { randomUUID } from 'node:crypto';
 import type { Row, Transaction } from '@libsql/client/node';
 import { BillingError, accountSchema, parseInput, usageBindingSchema, usageEventSchema } from '../contracts.js';
-import type { BillingProvider, CommercialSnapshot, UsageBinding } from '../contracts.js';
+import type { BillingProvider } from '../providers/contracts.js';
+import type { CommercialSnapshot, UsageBinding } from '../contracts.js';
 import { boundedJson, eligible, needsCommercialState, receiptSchema, reservation } from '../accounting.js';
 import type {
   AdmissionIdentity,

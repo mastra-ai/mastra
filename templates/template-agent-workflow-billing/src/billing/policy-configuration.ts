@@ -82,7 +82,7 @@ export const localAccountSeedSchema = z
   });
 export type LocalAccountSeed = z.infer<typeof localAccountSeedSchema>;
 
-export const canonicalConfigurationSchema = z
+export const billingConfigurationSchema = z
   .strictObject({
     provider: identifierSchema,
     hosted: z
@@ -105,7 +105,7 @@ export const canonicalConfigurationSchema = z
       })
       .default({ returnUrls: [] }),
     catalog: commercialCatalogSchema.default({ allowances: [], offers: [] }),
-    resources: z
+    resourcePolicies: z
       .array(
         z
           .strictObject({
@@ -137,7 +137,7 @@ export const canonicalConfigurationSchema = z
           ),
       )
       .max(100),
-    mappings: z.strictObject({
+    billingKeys: z.strictObject({
       entitlements: z.array(identifierSchema).max(100).default([]),
       subscriptions: z.array(identifierSchema).max(100).default([]),
       meters: z
@@ -153,19 +153,19 @@ export const canonicalConfigurationSchema = z
     const issue = (message: string) => ctx.addIssue({ code: 'custom', message });
     const unique = (keys: string[]) => new Set(keys).size === keys.length;
     if (
-      !unique(config.resources.map(resource => resource.id)) ||
+      !unique(config.resourcePolicies.map(resource => resource.id)) ||
       !unique(config.localAccounts.map(seed => seed.workspaceId))
     )
       issue('Duplicate resource or workspace.');
     if (
-      !unique(config.mappings.entitlements) ||
-      !unique(config.mappings.subscriptions) ||
-      !unique(config.mappings.meters.map(meter => meter.key))
+      !unique(config.billingKeys.entitlements) ||
+      !unique(config.billingKeys.subscriptions) ||
+      !unique(config.billingKeys.meters.map(meter => meter.key))
     )
       issue('Duplicate mapping.');
-    for (const meter of config.mappings.meters) if (!unique(meter.funding)) issue('Duplicate funding mode.');
-    const meters = new Map(config.mappings.meters.map(meter => [meter.key, meter]));
-    for (const resource of config.resources) {
+    for (const meter of config.billingKeys.meters) if (!unique(meter.funding)) issue('Duplicate funding mode.');
+    const meters = new Map(config.billingKeys.meters.map(meter => [meter.key, meter]));
+    for (const resource of config.resourcePolicies) {
       if (
         !unique(resource.operations) ||
         resource.operations.some(operation =>
@@ -185,9 +185,9 @@ export const canonicalConfigurationSchema = z
           budget.lifetimeMs
       )
         issue('Suspension, execution, finalization and expiry margin must fit the reservation lifetime.');
-      if (access?.entitlement && !config.mappings.entitlements.includes(access.entitlement))
+      if (access?.entitlement && !config.billingKeys.entitlements.includes(access.entitlement))
         issue('Unknown entitlement.');
-      if (access?.subscription && !config.mappings.subscriptions.includes(access.subscription))
+      if (access?.subscription && !config.billingKeys.subscriptions.includes(access.subscription))
         issue('Unknown subscription.');
       if (charge.type === 'none') continue;
       const meter = meters.get(charge.meter);
@@ -208,16 +208,16 @@ export const canonicalConfigurationSchema = z
       if (!meters.get(allowance.meter)?.funding.includes('prepaid')) issue('Unknown allowance meter or funding.');
     for (const offer of config.catalog.offers) {
       if (
-        offer.entitlements.some(key => !config.mappings.entitlements.includes(key)) ||
-        offer.subscriptions.some(key => !config.mappings.subscriptions.includes(key))
+        offer.entitlements.some(key => !config.billingKeys.entitlements.includes(key)) ||
+        offer.subscriptions.some(key => !config.billingKeys.subscriptions.includes(key))
       )
         issue('Unknown offer access key.');
     }
     if (config.provider !== 'local' && config.localAccounts.length > 0) issue('Local seeds require local mode.');
     for (const seed of config.localAccounts) {
       if (
-        seed.entitlements.some(grant => !config.mappings.entitlements.includes(grant.key)) ||
-        seed.subscriptions.some(grant => !config.mappings.subscriptions.includes(grant.key))
+        seed.entitlements.some(grant => !config.billingKeys.entitlements.includes(grant.key)) ||
+        seed.subscriptions.some(grant => !config.billingKeys.subscriptions.includes(grant.key))
       )
         issue('Unknown commercial grant.');
       for (const meter of seed.meters)
@@ -230,7 +230,7 @@ type DeepReadonly<T> = T extends readonly (infer Item)[]
   : T extends object
     ? { readonly [Key in keyof T]: DeepReadonly<T[Key]> }
     : T;
-export type CanonicalBillingConfiguration = DeepReadonly<z.infer<typeof canonicalConfigurationSchema>>;
+export type BillingConfiguration = DeepReadonly<z.infer<typeof billingConfigurationSchema>>;
 
 export function freezeConfiguration<T>(value: T): DeepReadonly<T> {
   if (value !== null && typeof value === 'object') {
@@ -240,12 +240,9 @@ export function freezeConfiguration<T>(value: T): DeepReadonly<T> {
   return value as DeepReadonly<T>;
 }
 
-export function validateConfiguration(
-  input: unknown,
-  capabilities: ProviderCapabilities,
-): CanonicalBillingConfiguration {
-  const schema = canonicalConfigurationSchema.superRefine((configuration, ctx) => {
-    for (const resource of configuration.resources) {
+export function parseBillingConfiguration(input: unknown, capabilities: ProviderCapabilities): BillingConfiguration {
+  const schema = billingConfigurationSchema.superRefine((configuration, ctx) => {
+    for (const resource of configuration.resourcePolicies) {
       const { access, charge } = resource.policy;
 
       if ((access?.entitlement && !capabilities.entitlements) || (access?.subscription && !capabilities.subscriptions))

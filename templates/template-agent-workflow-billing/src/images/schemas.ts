@@ -1,31 +1,26 @@
 import { z } from 'zod';
 import { identifierSchema } from '../billing/contracts.js';
 export const briefSchema = z.string().trim().min(1).max(2000);
-export const imageProfile = Object.freeze({
-  model: 'gpt-image-2.5-flare',
-  n: 1,
-  size: '1024x1024',
-  quality: 'low',
-  output_format: 'png',
-} as const);
-export const artifactSchema = z.strictObject({
-  id: z.uuid(),
-  executionId: identifierSchema,
-  accountId: identifierSchema,
-  workspaceId: identifierSchema,
-  creatorId: identifierSchema,
-  filename: z.string().regex(/^image-[1-3]\.png$/),
-  title: z.string().min(1).max(120),
-  mime: z.literal('image/png'),
-  width: z.literal(1024),
-  height: z.literal(1024),
-  bytes: z
-    .number()
-    .int()
-    .min(1)
-    .max(8 * 1024 * 1024),
-  sha256: z.string().regex(/^[a-f0-9]{64}$/),
-});
+export const artifactSchema = z
+  .strictObject({
+    id: z.uuid(),
+    executionId: identifierSchema,
+    accountId: identifierSchema,
+    workspaceId: identifierSchema,
+    creatorId: identifierSchema,
+    filename: z.string().regex(/^image-[1-3]\.png$/),
+    title: z.string().min(1).max(120),
+    mime: z.literal('image/png'),
+    width: z.union([z.literal(1024), z.literal(1536)]),
+    height: z.union([z.literal(1024), z.literal(1536)]),
+    bytes: z
+      .number()
+      .int()
+      .min(1)
+      .max(8 * 1024 * 1024),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .refine(value => value.width === 1024 || value.height === 1024);
 export type Artifact = z.infer<typeof artifactSchema>;
 export const imageOutputSchema = z.strictObject({ artifacts: z.tuple([artifactSchema]) });
 export const kitInputSchema = z.strictObject({ brief: briefSchema.max(1800) });

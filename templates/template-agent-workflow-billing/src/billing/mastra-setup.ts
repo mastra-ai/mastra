@@ -1,4 +1,4 @@
-import type { AutumnProviderOptions } from './providers/autumn.js';
+import type { BillingProvider } from './providers/contracts.js';
 import { Lifecycle } from './lifecycle.js';
 import { BillingRecovery } from './recovery.js';
 import { RecoveryStorage } from './storage/recovery.js';
@@ -43,7 +43,10 @@ export async function initializeMastraBilling<
   workflows: Workflows;
   databaseUrl: string;
   workflowDatabaseUrl?: string;
-  autumn?: AutumnProviderOptions;
+  /** Driver implementation; otherwise resolved from BILLING_PROVIDER and driver environment variables. */
+  billingProvider?: BillingProvider;
+  /** Server-owned environment passed to the selected driver. */
+  environment?: NodeJS.ProcessEnv;
 }) {
   const files = parseInput(z.strictObject({ databaseUrl: localFile, workflowDatabaseUrl: localFile.optional() }), {
     databaseUrl: options.databaseUrl,
@@ -55,24 +58,19 @@ export async function initializeMastraBilling<
   const commercial = await initializeBilling({
     storage: { url: files.databaseUrl },
     configuration: options.configuration,
-    autumn: options.autumn,
+    billingProvider: options.billingProvider,
+    environment: options.environment,
   });
   const lifecycle = new Lifecycle();
   lifecycle.own(commercial.close);
-  let commercialStorage: CommercialStorage | undefined;
-  let accounting: AccountingStorage | undefined;
-  let workflowStorage: WorkflowStorage | undefined;
-  let snapshots: LibSQLStore | undefined;
-  let recoveryStorage: RecoveryStorage | undefined;
-  let recovery: BillingRecovery | undefined;
   try {
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
-    accounting = await AccountingStorage.open({ url: files.databaseUrl }, options.organizations.storage);
-    lifecycle.own(() => accounting!.close());
-    workflowStorage = await WorkflowStorage.open({ url: files.databaseUrl }, options.organizations.storage);
-    lifecycle.own(() => workflowStorage!.close());
-    snapshots = new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
-    lifecycle.own(() => snapshots!.close());
+    const accounting = await AccountingStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => accounting.close());
+    const workflowStorage = await WorkflowStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => workflowStorage.close());
+    const snapshots = new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
+    lifecycle.own(() => snapshots.close());
     await snapshots.init();
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
     const billing = new MastraBilling({
@@ -84,34 +82,30 @@ export async function initializeMastraBilling<
       agents: options.agents,
       workflows: options.workflows,
     });
-    commercialStorage = await CommercialStorage.open({ url: files.databaseUrl }, options.organizations.storage);
-    lifecycle.own(() => commercialStorage!.close());
-    const sessions = commercialStorage;
+    const commercialStorage = await CommercialStorage.open({ url: files.databaseUrl }, options.organizations.storage);
+    lifecycle.own(() => commercialStorage.close());
     const commercialService = new CommercialService(
       options.organizations,
-      sessions,
+      commercialStorage,
       commercial.provider,
       commercial.configuration,
     );
-    const storage = snapshots;
-    const ledger = accounting;
 
-    recoveryStorage = await RecoveryStorage.open({ url: files.databaseUrl });
-    lifecycle.own(() => recoveryStorage!.close());
-    recovery = new BillingRecovery(recoveryStorage, commercial.provider, async () => {
+    const recoveryStorage = await RecoveryStorage.open({ url: files.databaseUrl });
+    lifecycle.own(() => recoveryStorage.close());
+    const recovery = new BillingRecovery(recoveryStorage, commercial.provider, async () => {
       await billing.expireSuspensions();
-      await ledger.recoverFinancial();
+      await accounting.recoverFinancial();
     });
-    lifecycle.own(() => recovery!.stop());
-    const worker = recovery;
+    lifecycle.own(() => recovery.stop());
 
     return {
       billing,
-      recovery: worker,
+      recovery,
       // Call after attaching agents/workflows and persistent storage to Mastra.
-      startRecovery: () => worker.start(),
+      startRecovery: () => recovery.start(),
       commercial: commercialService,
-      storage,
+      storage: snapshots,
       configuration: commercial.configuration,
       close: () => lifecycle.close(),
     };

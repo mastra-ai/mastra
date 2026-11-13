@@ -5,14 +5,14 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@libsql/client/node';
-import { crc32 } from '../../src/images/png.js';
+import { crc32 } from '../../src/images/png-validation.js';
 import { setupLocal } from '../../scripts/setup.js';
-import { createBillingApplication } from '../../src/mastra/setup.js';
-import { applicationCatalog } from '../../src/resources.js';
-import { createBillingApp } from '../../src/server/billing.js';
+import { createBillingApplication } from '../../src/billing/application.js';
+import { imageBillingCatalog } from '../../src/mastra/image-billing.js';
+import { createBillingApp } from '../../src/billing/server/routes.js';
 import { billingSocket } from './http.js';
 
-export function pngFixture() {
+export function pngFixture(width = 1024, height = 1024) {
   const chunk = (kind: string, data: Buffer) => {
     const bytes = Buffer.alloc(data.length + 12);
     bytes.writeUInt32BE(data.length);
@@ -22,14 +22,14 @@ export function pngFixture() {
     return bytes;
   };
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(1024);
-  header.writeUInt32BE(1024, 4);
+  header.writeUInt32BE(width);
+  header.writeUInt32BE(height, 4);
   header[8] = 8;
   header[9] = 2;
   return Buffer.concat([
     Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
     chunk('IHDR', header),
-    chunk('IDAT', deflateSync(Buffer.alloc((1024 * 3 + 1) * 1024))),
+    chunk('IDAT', deflateSync(Buffer.alloc((width * 3 + 1) * height))),
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -70,10 +70,15 @@ export async function imageBoundary() {
         return;
       }
       response.writeHead(200, { 'content-type': 'application/json' });
+      const [width, height] = String(body.size).split('x').map(Number);
+      const generatedPng = pngFixture(width, height);
       response.end(
         JSON.stringify({
           data: [
-            { b64_json: mode === 'malformed' ? Buffer.from('not a png').toString('base64') : png.toString('base64') },
+            {
+              b64_json:
+                mode === 'malformed' ? Buffer.from('not a png').toString('base64') : generatedPng.toString('base64'),
+            },
           ],
         }),
       );
@@ -144,7 +149,9 @@ export async function imageBoundary() {
     },
   };
 }
-export async function imageFixture(options: { ttl?: number; executionMs?: number } = {}) {
+export async function imageFixture(
+  options: { ttl?: number; executionMs?: number; environment?: NodeJS.ProcessEnv } = {},
+) {
   const root = await mkdtemp(join(tmpdir(), 'billed-images-'));
   const boundary = await imageBoundary();
   const environment = {
@@ -154,15 +161,16 @@ export async function imageFixture(options: { ttl?: number; executionMs?: number
     BILLING_PROVIDER: 'local',
     OPENAI_API_KEY: 'controlled',
     OPENAI_BASE_URL: boundary.url,
+    ...options.environment,
   };
   const manifest = await setupLocal(environment);
-  const catalog = applicationCatalog(
+  const catalog = imageBillingCatalog(
     environment,
     Object.values(manifest.profiles).map(profile => profile!.workspaceId),
   );
-  if (options.ttl) Object.assign(catalog.resources[1].policy, { suspendedReservationTtlMs: options.ttl });
+  if (options.ttl) Object.assign(catalog.definitions[1].policy, { suspendedReservationTtlMs: options.ttl });
   if (options.executionMs)
-    for (const resource of catalog.resources)
+    for (const resource of catalog.definitions)
       Object.assign(resource.policy, {
         reservationBudget: {
           lifetimeMs: 3600000,
@@ -171,14 +179,14 @@ export async function imageFixture(options: { ttl?: number; executionMs?: number
           expiryMarginMs: 1000,
         },
       });
-  let application = await createBillingApplication(environment, { catalog });
+  let application = await createBillingApplication({ environment, catalog });
   let socket = await billingSocket(
-    createBillingApp(
-      application.organizations,
-      application.execution,
-      application.runtime.commercial,
-      application.artifacts,
-    ),
+    createBillingApp({
+      organizations: application.organizations,
+      execution: application.execution,
+      commercial: application.runtime.commercial,
+      artifacts: application.artifacts,
+    }),
   );
   const database = createClient({ url: manifest.databaseUrl, intMode: 'bigint' });
   const owner = manifest.profiles.owner!,
@@ -229,14 +237,14 @@ export async function imageFixture(options: { ttl?: number; executionMs?: number
     restart: async () => {
       await socket.close();
       await application.close();
-      application = await createBillingApplication(environment, { catalog });
+      application = await createBillingApplication({ environment, catalog });
       socket = await billingSocket(
-        createBillingApp(
-          application.organizations,
-          application.execution,
-          application.runtime.commercial,
-          application.artifacts,
-        ),
+        createBillingApp({
+          organizations: application.organizations,
+          execution: application.execution,
+          commercial: application.runtime.commercial,
+          artifacts: application.artifacts,
+        }),
       );
     },
     close: async () => {

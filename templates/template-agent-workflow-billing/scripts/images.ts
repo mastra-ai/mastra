@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { z } from 'zod';
 import { BillingError, identifierSchema, parseInput } from '../src/billing/contracts.js';
-import { localPaths, readLocalProfiles } from '../src/local/profiles.js';
+import { localPaths, readLocalProfiles } from '../src/billing/local-profiles.js';
 import { briefSchema, kitInputSchema, approvalSchema } from '../src/images/schemas.js';
 
 const { values, positionals } = parseArgs({

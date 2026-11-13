@@ -1,11 +1,12 @@
+import { privateDirectory } from '../src/billing/storage/private-files.js';
 import { constants } from 'node:fs';
 import { open, unlink } from 'node:fs/promises';
-import { configuredOrganizations, applicationMode, billingDatabaseUrl } from '../src/mastra/environment.js';
+import { configuredOrganizations, applicationMode, billingDatabaseUrl } from '../src/billing/environment.js';
 import { BillingError } from '../src/billing/contracts.js';
 import { initializeBilling } from '../src/billing/setup.js';
-import { imageConfiguration } from '../src/images/configuration.js';
-import { localPaths, privateDirectory, readLocalProfiles, writeLocalProfiles } from '../src/local/profiles.js';
-import type { LocalProfiles } from '../src/local/profiles.js';
+import { imageConfiguration } from '../src/mastra/image-plans.js';
+import { localPaths, readLocalProfiles, writeLocalProfiles } from '../src/billing/local-profiles.js';
+import type { LocalProfiles } from '../src/billing/local-profiles.js';
 
 export async function setupLocal(environment: NodeJS.ProcessEnv) {
   const root = environment.MASTRA_PROJECT_ROOT!;

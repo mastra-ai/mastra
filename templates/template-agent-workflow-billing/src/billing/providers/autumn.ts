@@ -1,19 +1,11 @@
-import type { Transaction } from '@libsql/client/node';
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 // autumn-js 1.5.72 imports fzstd without declaring it. The pinned MIT fzstd
 // dependency supplies that intrinsic SDK runtime dependency on clean installs.
 import { Autumn, HTTPClient } from 'autumn-js';
 import { z } from 'zod';
-import {
-  BillingError,
-  accountSchema,
-  identifierSchema,
-  organizationProfileSchema,
-  parseInput,
-  quantitySchema,
-} from '../contracts.js';
+import { BillingError, identifierSchema, parseInput, quantitySchema } from '../contracts.js';
+import type { BillingProvider } from './contracts.js';
 import type {
-  BillingProvider,
   ProviderAccount,
   CommercialSnapshot,
   CheckoutRequest,
@@ -25,7 +17,7 @@ import type {
 import { reservationRequestSchema, finalizationRequestSchema } from '../reservations.js';
 import type { ReservationProtocol } from '../reservations.js';
 import { BillingDatabase } from '../storage/database.js';
-import { accountFromRow } from '../storage/accounts.js';
+import { AutumnAccountStorage } from '../storage/autumn-accounts.js';
 
 const bindingSchema = z
   .strictObject({
@@ -81,10 +73,14 @@ const bindingSchema = z
     }
   });
 export interface AutumnProviderOptions {
+  /** Server-only Autumn credential; never persisted in billing configuration snapshots. */
   secretKey: string;
+  /** Trusted workspace/customer, meter/feature, credit pool and hosted plan associations. */
   bindings: z.input<typeof bindingSchema>;
   // A loopback socket is supported for deterministic provider integration tests.
+  /** Optional loopback endpoint for deterministic provider integration tests. */
   serverURL?: string;
+  /** Maximum duration of an Autumn HTTP request in milliseconds. */
   timeoutMs?: number;
 }
 const reservePayloadSchema = z.strictObject({
@@ -129,6 +125,7 @@ export class AutumnBillingProvider implements BillingProvider {
   readonly id = 'autumn';
   readonly capabilities = autumnCapabilities;
   readonly reservations: ReservationProtocol;
+  private readonly accounts: AutumnAccountStorage;
   private readonly client: Autumn;
   private readonly bindings;
   private constructor(
@@ -136,6 +133,11 @@ export class AutumnBillingProvider implements BillingProvider {
     options: AutumnProviderOptions,
   ) {
     this.bindings = parseInput(bindingSchema, options.bindings);
+    this.accounts = new AutumnAccountStorage(
+      database,
+      account => this.customer(account),
+      workspaceId => this.bindings.customers.find(value => value.workspaceId === workspaceId),
+    );
     if (!options.secretKey.trim()) throw new BillingError('invalid_configuration');
     if (options.serverURL) {
       const url = new URL(options.serverURL);
@@ -355,80 +357,12 @@ export class AutumnBillingProvider implements BillingProvider {
       value,
     );
   }
-  private async bindCustomer(tx: Transaction, account: ProviderAccount, customerId: string) {
-    const links = (
-      await tx.execute({
-        sql: 'SELECT * FROM billing_provider_links WHERE provider = ? AND (account_id = ? OR customer_id = ?)',
-        args: [this.id, account.id, customerId],
-      })
-    ).rows;
-    if (
-      links.some(
-        link =>
-          link.account_id !== account.id ||
-          link.customer_id !== customerId ||
-          link.external_reference !== account.externalReference,
-      )
-    )
-      throw new BillingError('conflict');
-    if (links.length) return;
-
-    // Existing reserve intents also prove a target if this database predates
-    // persisted Autumn links. Never associate their customer with a new payer.
-    const historical = (
-      await tx.execute({
-        sql: "SELECT e.account_id, json_extract(r.payload, '$.customerId') AS customer_id FROM billing_remote_operations r JOIN billing_executions e ON e.id = r.execution_id WHERE json_extract(r.request, '$.account.provider') = 'autumn' AND (e.account_id = ? OR json_extract(r.payload, '$.customerId') = ?)",
-        args: [account.id, customerId],
-      })
-    ).rows;
-    if (historical.some(intent => intent.account_id !== account.id || intent.customer_id !== customerId))
-      throw new BillingError('conflict');
-    await tx.execute({
-      sql: 'INSERT INTO billing_provider_links (account_id, provider, customer_id, organization_id, external_reference) VALUES (?, ?, ?, ?, ?)',
-      args: [account.id, this.id, customerId, this.id, account.externalReference],
-    });
+  private verifiedCustomer(account: ProviderAccount) {
+    return this.accounts.verifiedCustomer(account);
   }
-
-  private async verifiedCustomer(account: ProviderAccount) {
-    const binding = this.customer(account);
-    await this.database.write(async tx => {
-      const stored = (await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE id = ?', args: [account.id] }))
-        .rows[0];
-      if (!stored || canonical(accountFromRow(stored)) !== canonical(account)) throw new BillingError('conflict');
-      await this.bindCustomer(tx, account, binding.customerId);
-    });
-    return binding;
-  }
-
   async ensureAccount(input: { workspaceId: string }): Promise<ProviderAccount> {
-    const profile = parseInput(organizationProfileSchema, input);
-    const binding = this.bindings.customers.find(value => value.workspaceId === profile.workspaceId);
-    if (!binding) throw new BillingError('forbidden');
-    // Establish exclusive local ownership before get-or-create. Concurrent
-    // deployments with incompatible bindings cannot both reach the provider.
-    const account = await this.database.write(async tx => {
-      const row = (
-        await tx.execute({ sql: 'SELECT * FROM billing_accounts WHERE workspace_id = ?', args: [profile.workspaceId] })
-      ).rows[0];
-      const account = row
-        ? accountFromRow(row)
-        : accountSchema.parse({
-            id: randomUUID(),
-            workspaceId: profile.workspaceId,
-            provider: this.id,
-            externalReference: `workspace:${profile.workspaceId}`,
-          });
-      this.customer(account);
-      if (!row) {
-        await tx.execute({
-          sql: "INSERT INTO billing_accounts (id, workspace_id, provider, external_reference) VALUES (?, ?, 'autumn', ?)",
-          args: [account.id, account.workspaceId, account.externalReference],
-        });
-        await tx.execute({ sql: 'INSERT INTO commercial_state VALUES (?, 0)', args: [account.id] });
-      }
-      await this.bindCustomer(tx, account, binding.customerId);
-      return account;
-    });
+    const account = await this.accounts.ensureAccount(input);
+    const binding = this.customer(account);
     const remote = await this.client.customers.getOrCreate({
       customerId: binding.customerId,
       ...(binding.name ? { name: binding.name } : {}),
@@ -579,5 +513,36 @@ export class AutumnBillingProvider implements BillingProvider {
   }
   async verifyWebhook(): Promise<never> {
     throw new BillingError('unsupported');
+  }
+}
+
+/** Resolve only Autumn-owned secrets and bindings; no fallback to local billing. */
+export async function openAutumnProvider(options: {
+  storage: { url: string };
+  configuration: import('../policy-configuration.js').BillingConfiguration;
+  environment: NodeJS.ProcessEnv;
+}): Promise<BillingProvider> {
+  let bindings: unknown;
+  try {
+    bindings = JSON.parse(options.environment.AUTUMN_BINDINGS ?? 'null');
+  } catch {
+    throw new BillingError('invalid_configuration');
+  }
+  if (!options.environment.AUTUMN_SECRET_KEY?.trim()) throw new BillingError('invalid_configuration');
+  const parsed = bindingSchema.safeParse(bindings);
+  if (!parsed.success) throw new BillingError('invalid_configuration');
+  const provider = await AutumnBillingProvider.open(options.storage, {
+    secretKey: options.environment.AUTUMN_SECRET_KEY,
+    bindings: parsed.data,
+    serverURL: options.environment.AUTUMN_SERVER_URL,
+    timeoutMs:
+      options.environment.AUTUMN_TIMEOUT_MS === undefined ? undefined : Number(options.environment.AUTUMN_TIMEOUT_MS),
+  });
+  try {
+    for (const meter of options.configuration.billingKeys.meters) provider.bindUsage(meter.key);
+    return provider;
+  } catch (error) {
+    provider.close();
+    throw error;
   }
 }

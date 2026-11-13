@@ -1,6 +1,6 @@
 import { commercialCatalogSchema, catalogReferenceSchema, resolveAllowance } from '../../src/billing/catalog.js';
 import { describe, expect, it } from 'vitest';
-import { parseBillingConfiguration } from '../../src/billing/configuration.js';
+import { parseBillingConfiguration } from '../../src/billing/policy-configuration.js';
 import { localCapabilities } from '../../src/billing/providers/local.js';
 import { configuration } from '../support/billing.js';
 
@@ -14,11 +14,11 @@ describe('billing policy configuration', () => {
     { type: 'usage', meter: 'tokens', measure: 'token-count', maxUnits: 100, funding: 'metered' },
   ])('accepts success-only agent charge $type with $funding funding', charge => {
     const input = configuration();
-    Object.assign(input.resources[0].policy, {
+    Object.assign(input.resourcePolicies[0].policy, {
       charge,
       access: { entitlement: 'access', subscription: 'subscription' },
     });
-    expect(parseBillingConfiguration(input, localCapabilities).resources[0].policy).toEqual({
+    expect(parseBillingConfiguration(input, localCapabilities).resourcePolicies[0].policy).toEqual({
       version: 'v1',
       charge,
       access: { entitlement: 'access', subscription: 'subscription' },
@@ -27,16 +27,20 @@ describe('billing policy configuration', () => {
 
   it('supports free and subscription-only access without a consumption charge', () => {
     const input = configuration();
-    input.resources[0].policy = { version: 'v1', charge: { type: 'none' } };
-    input.resources[1].policy = { version: 'v1', access: { subscription: 'subscription' }, charge: { type: 'none' } };
+    input.resourcePolicies[0].policy = { version: 'v1', charge: { type: 'none' } };
+    input.resourcePolicies[1].policy = {
+      version: 'v1',
+      access: { subscription: 'subscription' },
+      charge: { type: 'none' },
+    };
     expect(
-      parseBillingConfiguration(input, localCapabilities).resources.map(resource => resource.policy.charge),
+      parseBillingConfiguration(input, localCapabilities).resourcePolicies.map(resource => resource.policy.charge),
     ).toEqual([{ type: 'none' }, { type: 'none' }]);
   });
 
   it.each([0, -1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1])('rejects unsafe fixed charge %s', units => {
     const input = configuration();
-    Object.assign(input.resources[0].policy.charge, { units });
+    Object.assign(input.resourcePolicies[0].policy.charge, { units });
     expect(() => parseBillingConfiguration(input, localCapabilities)).toThrow(
       expect.objectContaining({ code: 'invalid_configuration' }),
     );
@@ -45,27 +49,30 @@ describe('billing policy configuration', () => {
   it.each([
     [
       'empty access guard',
-      (input: ReturnType<typeof configuration>) => Object.assign(input.resources[0].policy, { access: {} }),
+      (input: ReturnType<typeof configuration>) => Object.assign(input.resourcePolicies[0].policy, { access: {} }),
     ],
     [
       'unknown entitlement',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, { access: { entitlement: 'missing' } }),
+        Object.assign(input.resourcePolicies[0].policy, { access: { entitlement: 'missing' } }),
     ],
     [
       'unknown subscription',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, { access: { subscription: 'missing' } }),
+        Object.assign(input.resourcePolicies[0].policy, { access: { subscription: 'missing' } }),
     ],
     [
       'unknown meter',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy.charge, { meter: 'missing' }),
+        Object.assign(input.resourcePolicies[0].policy.charge, { meter: 'missing' }),
     ],
-    ['duplicate resource', (input: ReturnType<typeof configuration>) => input.resources.push(input.resources[0])],
+    [
+      'duplicate resource',
+      (input: ReturnType<typeof configuration>) => input.resourcePolicies.push(input.resourcePolicies[0]),
+    ],
     [
       'duplicate mapping',
-      (input: ReturnType<typeof configuration>) => input.mappings.meters.push(input.mappings.meters[0]),
+      (input: ReturnType<typeof configuration>) => input.billingKeys.meters.push(input.billingKeys.meters[0]),
     ],
     [
       'unknown resource mapping',
@@ -73,55 +80,57 @@ describe('billing policy configuration', () => {
     ],
     [
       'duplicate operation',
-      (input: ReturnType<typeof configuration>) => input.resources[0].operations.push('generate'),
+      (input: ReturnType<typeof configuration>) => input.resourcePolicies[0].operations.push('generate'),
     ],
     [
       'unsupported operation',
-      (input: ReturnType<typeof configuration>) => input.resources[0].operations.push('resume'),
+      (input: ReturnType<typeof configuration>) => input.resourcePolicies[0].operations.push('resume'),
     ],
     [
       'unsupported execution mode',
-      (input: ReturnType<typeof configuration>) => Object.assign(input.resources[0], { mode: 'stream' }),
+      (input: ReturnType<typeof configuration>) => Object.assign(input.resourcePolicies[0], { mode: 'stream' }),
     ],
     [
       'failed-charge override',
-      (input: ReturnType<typeof configuration>) => Object.assign(input.resources[0].policy, { chargeOn: 'failure' }),
+      (input: ReturnType<typeof configuration>) =>
+        Object.assign(input.resourcePolicies[0].policy, { chargeOn: 'failure' }),
     ],
     [
       'fractional expiry',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, { suspendedReservationTtlMs: 0.5 }),
+        Object.assign(input.resourcePolicies[0].policy, { suspendedReservationTtlMs: 0.5 }),
     ],
     [
       'wrong task unit',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, {
+        Object.assign(input.resourcePolicies[0].policy, {
           charge: { type: 'per-task', meter: 'credits', units: 1, funding: 'prepaid' },
         }),
     ],
     [
       'wrong credit unit',
-      (input: ReturnType<typeof configuration>) => Object.assign(input.resources[0].policy.charge, { meter: 'tokens' }),
+      (input: ReturnType<typeof configuration>) =>
+        Object.assign(input.resourcePolicies[0].policy.charge, { meter: 'tokens' }),
     ],
     [
       'unsupported funding',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, {
+        Object.assign(input.resourcePolicies[0].policy, {
           charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'debt' },
         }),
     ],
     [
       'unknown measurement',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, {
+        Object.assign(input.resourcePolicies[0].policy, {
           charge: { type: 'usage', meter: 'tokens', measure: 'missing', maxUnits: 100, funding: 'metered' },
         }),
     ],
     [
       'unbounded prepaid measurement',
       (input: ReturnType<typeof configuration>) => {
-        input.resources[0].measurements[0].enforceableBound = false;
-        Object.assign(input.resources[0].policy, {
+        input.resourcePolicies[0].measurements[0].enforceableBound = false;
+        Object.assign(input.resourcePolicies[0].policy, {
           charge: { type: 'usage', meter: 'tokens', measure: 'token-count', maxUnits: 100, funding: 'prepaid' },
         });
       },
@@ -129,7 +138,7 @@ describe('billing policy configuration', () => {
     [
       'zero usage bound',
       (input: ReturnType<typeof configuration>) =>
-        Object.assign(input.resources[0].policy, {
+        Object.assign(input.resourcePolicies[0].policy, {
           charge: { type: 'usage', meter: 'tokens', measure: 'token-count', maxUnits: 0, funding: 'metered' },
         }),
     ],
@@ -163,7 +172,7 @@ describe('billing policy configuration', () => {
     'rejects missing provider capability %s',
     capability => {
       const input = configuration();
-      input.resources[0].policy.access = { entitlement: 'access', subscription: 'subscription' };
+      input.resourcePolicies[0].policy.access = { entitlement: 'access', subscription: 'subscription' };
       expect(() => parseBillingConfiguration(input, { ...localCapabilities, [capability]: false })).toThrow(
         expect.objectContaining({ code: 'invalid_configuration' }),
       );
@@ -182,9 +191,11 @@ describe('billing policy configuration', () => {
 
   it('accepts remote prepaid reservations without replayable usage and rejects postpaid without it', () => {
     const capabilities = { ...localCapabilities, replaySafeUsage: false, reconciliation: 'unverified' as const };
-    expect(parseBillingConfiguration(configuration(), capabilities).resources[0].policy.charge.type).toBe('credits');
+    expect(parseBillingConfiguration(configuration(), capabilities).resourcePolicies[0].policy.charge.type).toBe(
+      'credits',
+    );
     const input = configuration();
-    input.resources[0].policy.charge = {
+    input.resourcePolicies[0].policy.charge = {
       type: 'usage',
       meter: 'tokens',
       measure: 'token-count',
@@ -202,7 +213,7 @@ describe('billing policy configuration', () => {
     { executionMs: 1000, finalizationMs: 1000, expiryMarginMs: 1000, lifetimeMs: 86400001 },
   ])('rejects impossible finite reservation budgets', reservationBudget => {
     const input = configuration();
-    input.resources[0].policy.reservationBudget = reservationBudget;
+    input.resourcePolicies[0].policy.reservationBudget = reservationBudget;
     expect(() => parseBillingConfiguration(input, localCapabilities)).toThrow(
       expect.objectContaining({ code: 'invalid_configuration' }),
     );
@@ -212,21 +223,21 @@ describe('billing policy configuration', () => {
     'preserves a 24-hour suspension policy without a prepaid hold for $type',
     charge => {
       const input = configuration();
-      Object.assign(input.resources[1].policy, { charge, suspendedReservationTtlMs: 86_400_000 });
-      expect(parseBillingConfiguration(input, localCapabilities).resources[1].policy.suspendedReservationTtlMs).toBe(
-        86_400_000,
-      );
+      Object.assign(input.resourcePolicies[1].policy, { charge, suspendedReservationTtlMs: 86_400_000 });
+      expect(
+        parseBillingConfiguration(input, localCapabilities).resourcePolicies[1].policy.suspendedReservationTtlMs,
+      ).toBe(86_400_000);
     },
   );
 
   it('keeps parsed policy and seed configuration immutable and detached from caller input', () => {
     const input = configuration();
     const parsed = parseBillingConfiguration(input, localCapabilities);
-    input.resources[0].policy.version = 'changed';
-    expect(parsed.resources[0].policy.version).toBe('v1');
-    expect(() => Object.assign(parsed.resources[0].policy.charge, { units: 999 })).toThrow(TypeError);
+    input.resourcePolicies[0].policy.version = 'changed';
+    expect(parsed.resourcePolicies[0].policy.version).toBe('v1');
+    expect(() => Object.assign(parsed.resourcePolicies[0].policy.charge, { units: 999 })).toThrow(TypeError);
     expect(() => Object.assign(parsed.localAccounts[0].meters[0], { balance: 999 })).toThrow(TypeError);
-    expect(() => (parsed.mappings.meters as unknown[]).push({})).toThrow(TypeError);
+    expect(() => (parsed.billingKeys.meters as unknown[]).push({})).toThrow(TypeError);
   });
 });
 

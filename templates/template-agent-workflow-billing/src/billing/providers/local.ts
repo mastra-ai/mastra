@@ -1,6 +1,8 @@
+import { BillingDatabase } from '../storage/database.js';
+import { retainCatalog } from '../storage/catalog.js';
 import { reservationRequestSchema, finalizationRequestSchema } from '../reservations.js';
+import type { BillingProvider } from './contracts.js';
 import type {
-  BillingProvider,
   CheckoutRequest,
   CommercialSnapshot,
   HostedSession,
@@ -18,8 +20,8 @@ import type {
   UsageBinding,
 } from '../contracts.js';
 import { organizationProfileSchema, parseInput } from '../contracts.js';
-import { localAccountSeedSchema } from '../configuration.js';
-import type { BillingConfiguration, LocalAccountSeed } from '../configuration.js';
+import { localAccountSeedSchema } from '../policy-configuration.js';
+import type { BillingConfiguration, LocalAccountSeed } from '../policy-configuration.js';
 import { LocalBillingStorage } from '../storage/libsql.js';
 
 export const localCapabilities: ProviderCapabilities = Object.freeze({
@@ -55,6 +57,10 @@ export class LocalBillingProvider implements BillingProvider {
     this.seeds = new Map(
       configuration.localAccounts.map(seed => [seed.workspaceId, localAccountSeedSchema.parse(seed)]),
     );
+  }
+
+  close() {
+    this.storage.close();
   }
 
   ensureAccount(profile: OrganizationBillingProfile): Promise<ProviderAccount> {
@@ -97,4 +103,20 @@ export class LocalBillingProvider implements BillingProvider {
   async verifyWebhook(_request: RawWebhookRequest): Promise<ProviderNotification> {
     return { status: 'unsupported', reason: 'local_mode' };
   }
+}
+
+/** Local simulation needs no payment credentials or remote service. */
+export async function openLocalProvider(options: {
+  storage: { url: string };
+  configuration: BillingConfiguration;
+  environment: NodeJS.ProcessEnv;
+}): Promise<BillingProvider> {
+  const database = await BillingDatabase.open(options.storage);
+  try {
+    await retainCatalog(database, options.configuration.catalog);
+  } finally {
+    database.close();
+  }
+  const storage = await LocalBillingStorage.open(options.storage);
+  return new LocalBillingProvider(storage, options.configuration);
 }

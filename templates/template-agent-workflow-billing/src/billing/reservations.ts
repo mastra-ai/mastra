@@ -40,11 +40,17 @@ export type FinalizationResult = {
 // Preparation is deterministic and has no external effects. The gateway commits
 // these opaque bytes before dispatch. Neither mutation is assumed replay safe.
 export interface ReservationProtocol {
+  /** Serialize a deterministic reserve intent without making any external call. */
   prepareReservation(request: ReservationRequest): string;
+  /** Reject a persisted intent whose provider binding no longer matches this driver. */
   validateBinding?(payload: string): void;
+  /** Dispatch the persisted reserve intent; a missing acknowledgement remains uncertain. */
   reserve(payload: string): Promise<ReserveResult>;
+  /** Serialize confirmation or release against the original immutable reservation. */
   prepareFinalization(request: FinalizationRequest, reservationPayload: string): string;
+  /** Dispatch the terminal intent without assuming financial mutations are replay safe. */
   finalize(payload: string): Promise<FinalizationResult>;
+  /** Look for positive matching evidence; absence of logs never proves release. */
   reconcileFinalization(payload: string): Promise<FinalizationResult>;
 }
 export function prepaid(policy: { charge: { type: string; funding?: string } }) {

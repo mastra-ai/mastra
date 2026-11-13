@@ -1,3 +1,4 @@
+import type { BillingProvider } from './providers/contracts.js';
 import { z } from 'zod';
 import type { ExecutionScope } from './execution-scope.js';
 import type { AgentProjection } from './mastra-resources.js';
@@ -9,23 +10,31 @@ import type { BillingHttpGateway, MastraBilling } from './mastra.js';
 import { AgentResource, workflowResource } from './mastra-resources.js';
 import type { AnyAgent, AgentOutput, WorkflowResource } from './mastra-resources.js';
 import { BillingError, identifierSchema } from './contracts.js';
-import { billingConfigurationSchema, billingPolicySchema } from './configuration.js';
-import type { BillingConfiguration } from './configuration.js';
+import { billingConfigurationSchema, billingPolicySchema } from './policy-configuration.js';
+import type { BillingConfiguration } from './policy-configuration.js';
 import { validateProviderConfiguration } from './setup.js';
 import { Lifecycle } from './lifecycle.js';
 
 export interface ResourceDependencies {
+  /** Resolve only a declared nested agent, executing within the parent reservation. */
   nestedAgent(id: string): { generate(prompt: string, slot?: number): Promise<FullOutput<unknown>> };
 }
 export interface ActionContext {
+  /** Billing facade that admits work, reserves credit and settles its outcome. */
   execution: BillingHttpGateway;
+  /** Authenticate the caller and select a currently authorized workspace. */
   selected(workspaceId: string): Promise<BillingContext>;
 }
 export interface ResourceAction<S extends z.ZodType = z.ZodType<any, any>> {
+  /** Unique registration key used by Mastra, billing policies and routes. */
   readonly id: string;
+  /** Human-readable purpose shown to Studio and model callers. */
   readonly description: string;
+  /** Deterministic input validation, including transformations and cross-field constraints. */
   readonly inputSchema: S;
+  /** Validate and execute an action through the billing facade. */
   readonly execute: (input: unknown, context: ActionContext) => Promise<unknown>;
+  /** Execute input already parsed by the SDK, without applying transformations twice. */
   readonly executeValidated: (input: z.output<S>, context: ActionContext) => Promise<unknown>;
 }
 export function resourceAction<S extends z.ZodType>(options: {
@@ -40,47 +49,77 @@ export function resourceAction<S extends z.ZodType>(options: {
     executeValidated: options.execute,
   };
 }
-type ResourceConfiguration = BillingConfiguration['resources'][number];
+type ResourceConfiguration = BillingConfiguration['resourcePolicies'][number];
 interface DefinitionBase {
+  /** Unique registration key used by Mastra, billing policies and routes. */
   readonly id: string;
+  /** Versioned access, reservation and charging policy applied before execution. */
   readonly policy: ResourceConfiguration['policy'];
+  /** Allowed public execution operations for this resource kind. */
   readonly operations: ResourceConfiguration['operations'];
+  /** Trusted usage observations that the adapter can capture. */
   readonly measurements: ResourceConfiguration['measurements'];
+  /** Optional authenticated Studio actions for this resource. */
   readonly actions?: readonly ResourceAction[];
+  /** Explicit nested agents permitted within the parent execution budget. */
   readonly agentDependencies?: readonly string[];
 }
 export interface AgentDefinition<A extends AnyAgent = AnyAgent, Output = AgentOutput<A>> extends DefinitionBase {
+  /** Discriminant selecting the agent or workflow adapter. */
   readonly kind: 'agent';
+  /** Construct the native Mastra resource using only declared dependencies. */
   readonly create: (dependencies: ResourceDependencies) => A;
+  /** Execution limits, durable output projection and compatible adapter version. */
   readonly adapter: {
+    /** Stable execution contract version; change when executable behavior or schemas change. */
     readonly version: string;
+    /** Maximum model steps allowed in one admitted agent call. */
     readonly maxSteps?: number;
+    /** Maximum output tokens requested from the model. */
     readonly maxOutputTokens?: number;
+    /** Schema for the validated, persistable output projection. */
     readonly outputSchema?: z.ZodType<Output, Output>;
+    /** Schema for the trusted prompt supplied to the admitted agent. */
     readonly promptSchema?: z.ZodType<string, string>;
+    /** Maximum durable artifact slots available within this billed execution. */
     readonly artifactSlots?: number;
+    /** Certify the durable result before billing confirms successful execution. */
     readonly completion?: (scope: ExecutionScope) => Promise<AgentProjection<Output>>;
   };
+  /** Release resources created by this factory during shutdown or partial startup failure. */
   readonly dispose?: (native: A) => void | Promise<void>;
 }
 export interface WorkflowDefinition<W extends AnyWorkflow = AnyWorkflow> extends DefinitionBase {
+  /** Discriminant selecting the agent or workflow adapter. */
   readonly kind: 'workflow';
+  /** Construct the native Mastra resource using only declared dependencies. */
   readonly create: (dependencies: ResourceDependencies) => W;
+  /** Execution limits, durable output projection and compatible adapter version. */
   readonly adapter: {
+    /** Stable execution contract version; change when executable behavior or schemas change. */
     readonly version: string;
+    /** Maximum durable artifact slots available within this billed execution. */
     readonly artifactSlots?: number;
+    /** Certify the durable result before billing confirms successful execution. */
     readonly completion?: (scope: ExecutionScope, output: unknown) => Promise<unknown>;
+    /** Choose whether nested calls are measured by the billing facade. */
     readonly measurement?: 'facade-calls' | 'none';
+    /** Required nested agent calls per workflow segment, including the segment before suspension. */
     readonly expectedCalls?: readonly number[];
+    /** Explicit compatible historical dependency versions for paused runs. */
     readonly legacyAgentDefinitions?: readonly Readonly<Record<string, string>>[];
   };
+  /** Release resources created by this factory during shutdown or partial startup failure. */
   readonly dispose?: (native: W) => void | Promise<void>;
 }
 export type ResourceDefinition = AgentDefinition<any, any> | WorkflowDefinition<any>;
 export interface ResourceCatalog<D extends readonly ResourceDefinition[] = readonly ResourceDefinition[]> {
-  readonly resources: D;
+  /** Typed native factories paired with their billing policies and Studio actions. */
+  readonly definitions: D;
+  /** Optional authenticated reader for private execution artifacts. */
   readonly artifacts?: ArtifactReader;
-  readonly configuration: Omit<BillingConfiguration, 'resources'>;
+  /** Commercial plans, logical billing keys and provider selection shared by the definitions. */
+  readonly configuration: Omit<BillingConfiguration, 'resourcePolicies'>;
 }
 export type CatalogAgents<D extends readonly ResourceDefinition[]> = {
   [R in D[number] as R extends { kind: 'agent' } ? R['id'] : never]: R extends AgentDefinition<infer A, any>
@@ -205,26 +244,27 @@ const adapterPolicySchema = z.array(z.custom<ResourceDefinition>()).superRefine(
 export function validateResourceCatalog<D extends readonly ResourceDefinition[]>(
   catalog: ResourceCatalog<D>,
   override?: unknown,
+  billingProvider?: BillingProvider,
 ) {
   if (
-    !graphSchema.safeParse(catalog.resources).success ||
-    catalog.resources.some(resource => !adapterSchema.safeParse(resource).success)
+    !graphSchema.safeParse(catalog.definitions).success ||
+    catalog.definitions.some(resource => !adapterSchema.safeParse(resource).success)
   )
     throw new BillingError('invalid_configuration');
-  const resources = catalog.resources.map(({ id, kind, operations, measurements, policy }) => ({
+  const resourcePolicies = catalog.definitions.map(({ id, kind, operations, measurements, policy }) => ({
     id,
     kind,
     operations,
     measurements,
     policy,
   }));
-  const configuration = validateProviderConfiguration({ ...catalog.configuration, resources });
-  if (!adapterPolicySchema.safeParse(catalog.resources).success) throw new BillingError('invalid_configuration');
+  const configuration = validateProviderConfiguration({ ...catalog.configuration, resourcePolicies }, billingProvider);
+  if (!adapterPolicySchema.safeParse(catalog.definitions).success) throw new BillingError('invalid_configuration');
   // Full environment overrides may change commercial/provider bindings, never create a second resource/policy source.
   if (override !== undefined) {
-    const selected = validateProviderConfiguration(override);
-    const canonical = billingConfigurationSchema.parse({ ...selected, resources });
-    if (JSON.stringify(canonical.resources) !== JSON.stringify(selected.resources))
+    const selected = validateProviderConfiguration(override, billingProvider);
+    const canonical = billingConfigurationSchema.parse({ ...selected, resourcePolicies });
+    if (JSON.stringify(canonical.resourcePolicies) !== JSON.stringify(selected.resourcePolicies))
       throw new BillingError('invalid_configuration');
     return selected;
   }

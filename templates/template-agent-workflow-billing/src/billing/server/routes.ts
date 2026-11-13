@@ -1,22 +1,14 @@
+import type { BillingServerOptions } from './contracts.js';
 import { Hono } from 'hono';
-import type { ArtifactReader } from '../billing/artifacts.js';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
-import { BillingError, parseInput } from '../billing/contracts.js';
-import type { OrganizationService } from '../billing/organizations.js';
-import type { CommercialService } from '../billing/commercial.js';
-import type { BillingHttpGateway } from '../billing/mastra.js';
-import { boundedJsonSchema } from '../billing/accounting.js';
-import { identifierSchema } from '../billing/contracts.js';
+import { BillingError, parseInput } from '../contracts.js';
+import { boundedJsonSchema } from '../accounting.js';
+import { identifierSchema } from '../contracts.js';
 
-export function createBillingApp(
-  organizations: OrganizationService,
-  execution?: BillingHttpGateway,
-  commercial?: CommercialService,
-  artifacts?: ArtifactReader,
-) {
+export function createBillingApp({ organizations, execution, commercial, artifacts }: BillingServerOptions) {
   const app = new Hono<{ Variables: { credential: string } }>();
   app.onError((error, context) => {
     const safe = error instanceof BillingError ? error : new BillingError('storage_unavailable');
@@ -260,13 +252,8 @@ export function createBillingApp(
   return app;
 }
 
-export function billingApiRoutes(
-  organizations: OrganizationService,
-  execution?: BillingHttpGateway,
-  commercial?: CommercialService,
-  artifacts?: ArtifactReader,
-): ApiRoute[] {
-  const app = createBillingApp(organizations, execution, commercial, artifacts);
+export function billingApiRoutes(options: BillingServerOptions): ApiRoute[] {
+  const app = createBillingApp(options);
   // Mastra's custom Hono route passes through this application's own auth middleware.
   return [
     registerApiRoute('/billing/*', {

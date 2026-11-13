@@ -20,8 +20,8 @@ import type {
   UsageDelivery,
   UsageEvent,
 } from '../contracts.js';
-import { localAccountSeedSchema } from '../configuration.js';
-import type { LocalAccountSeed } from '../configuration.js';
+import { localAccountSeedSchema } from '../policy-configuration.js';
+import type { LocalAccountSeed } from '../policy-configuration.js';
 import { BillingDatabase } from './database.js';
 import { requireProvider } from './accounts.js';
 

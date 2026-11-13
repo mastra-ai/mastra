@@ -1,3 +1,4 @@
+import { createImageApplication } from '../src/mastra/image-billing.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -7,10 +8,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createClient } from '@libsql/client';
 import { setupLocal } from './setup.js';
-import { createBillingApplication } from '../src/mastra/setup.js';
-import { createBillingApp } from '../src/server/billing.js';
-import { imageProfile } from '../src/images/schemas.js';
-import { validatePng } from '../src/images/png.js';
+import { createBillingApp } from '../src/billing/server/routes.js';
+import { readImageProfile } from '../src/images/profile.js';
+import { validatePng } from '../src/images/png-validation.js';
 
 const proof = 'OpenAI image generation succeeds through the billed facade and private artifact store';
 const directory = await mkdtemp(join(tmpdir(), 'image-openai-'));
@@ -18,24 +18,27 @@ const deadline = setTimeout(() => {
   console.error('OpenAI smoke exceeded its time limit; unverified.');
   process.exit(1);
 }, 180000);
-let application: Awaited<ReturnType<typeof createBillingApplication>> | undefined;
+let application: Awaited<ReturnType<typeof createImageApplication>> | undefined;
 let server: ReturnType<typeof createServer> | undefined;
 try {
-  // Select only the requested model key. No payment credentials or existing databases are inherited.
+  // Select only image credentials and profile overrides; payment state is not inherited.
   const environment = {
     MASTRA_PROJECT_ROOT: directory,
     BILLING_MODE: 'local',
     BILLING_PROVIDER: 'local',
     OPENAI_API_KEY: process.env.OPENAI_API_KEY!,
+    OPENAI_IMAGE_MODEL: process.env.OPENAI_IMAGE_MODEL,
+    OPENAI_IMAGE_SIZE: process.env.OPENAI_IMAGE_SIZE,
+    OPENAI_IMAGE_QUALITY: process.env.OPENAI_IMAGE_QUALITY,
   };
   const manifest = await setupLocal(environment);
-  application = await createBillingApplication(environment);
-  const app = createBillingApp(
-    application.organizations,
-    application.execution,
-    application.runtime.commercial,
-    application.artifacts,
-  );
+  application = await createImageApplication({ environment });
+  const app = createBillingApp({
+    organizations: application.organizations,
+    execution: application.execution,
+    commercial: application.runtime.commercial,
+    artifacts: application.artifacts,
+  });
   server = createServer(async (request, response) => {
     try {
       const chunks: Buffer[] = [];
@@ -151,7 +154,7 @@ try {
       JSON.stringify({
         proof,
         status: 'passed',
-        imageProfile,
+        imageProfile: readImageProfile(environment),
         textModel: 'openai/gpt-6-luna',
         textCallBound: 2,
         textOutputTokenBound: 400,

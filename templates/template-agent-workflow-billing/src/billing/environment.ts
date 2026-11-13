@@ -2,11 +2,11 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from '../billing/contracts.js';
-import { JwtIdentityAdapter } from '../billing/identity.js';
-import type { JwtIdentityOptions } from '../billing/identity.js';
-import { OrganizationService } from '../billing/organizations.js';
-import { OrganizationStorage } from '../billing/storage/organizations.js';
+import { BillingError, identifierSchema, parseInput } from './contracts.js';
+import { JwtIdentityAdapter } from './identity.js';
+import type { JwtIdentityOptions } from './identity.js';
+import { OrganizationService } from './organizations.js';
+import { OrganizationStorage } from './storage/organizations.js';
 
 export function applicationMode(environment: NodeJS.ProcessEnv) {
   const explicit = parseInput(z.enum(['local', 'production']).optional(), environment.BILLING_MODE);
@@ -41,5 +41,15 @@ export async function configuredOrganizations(environment: NodeJS.ProcessEnv = p
   } catch (error) {
     storage.close();
     throw error;
+  }
+}
+
+/** Parse the complete optional policy override without exposing malformed JSON or secrets. */
+export function readBillingConfiguration(environment: NodeJS.ProcessEnv): unknown {
+  if (!environment.BILLING_CONFIGURATION) return undefined;
+  try {
+    return JSON.parse(environment.BILLING_CONFIGURATION);
+  } catch {
+    throw new BillingError('invalid_configuration');
   }
 }

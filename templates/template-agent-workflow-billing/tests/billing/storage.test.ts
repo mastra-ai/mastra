@@ -1,3 +1,4 @@
+import { createImageApplication } from '../../src/mastra/image-billing.js';
 import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
@@ -5,11 +6,10 @@ import { syncBuiltinESMExports } from 'node:module';
 import { privateWorkflowFiles } from '../../src/billing/storage/private-files.js';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
-import { createBillingApplication } from '../../src/mastra/setup.js';
-import { readLocalProfiles } from '../../src/local/profiles.js';
+import { readLocalProfiles } from '../../src/billing/local-profiles.js';
 import { imageBoundary } from '../support/images.js';
 import { billingSocket } from '../support/http.js';
-import { createBillingApp } from '../../src/server/billing.js';
+import { createBillingApp } from '../../src/billing/server/routes.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { initializeBilling } from '../../src/billing/setup.js';
@@ -362,10 +362,14 @@ async function developmentFixture() {
   const manifest = await setupLocal(environment);
   const observer = await independentClient(manifest.databaseUrl);
   cleanups.push(() => observer.close());
-  let application = await createBillingApplication(environment);
+  let application = await createImageApplication({ environment });
   cleanups.push(() => application.close());
   let server = await billingSocket(
-    createBillingApp(application.organizations, application.execution, application.runtime.commercial),
+    createBillingApp({
+      organizations: application.organizations,
+      execution: application.execution,
+      commercial: application.runtime.commercial,
+    }),
   );
   cleanups.push(() => server.close());
   const owner = manifest.profiles.owner!;
@@ -393,9 +397,13 @@ async function developmentFixture() {
     restart: async () => {
       await server.close();
       await application.close();
-      application = await createBillingApplication(environment);
+      application = await createImageApplication({ environment });
       server = await billingSocket(
-        createBillingApp(application.organizations, application.execution, application.runtime.commercial),
+        createBillingApp({
+          organizations: application.organizations,
+          execution: application.execution,
+          commercial: application.runtime.commercial,
+        }),
       );
     },
     stop: async () => {

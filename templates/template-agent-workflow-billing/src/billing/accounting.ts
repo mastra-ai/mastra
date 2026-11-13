@@ -2,9 +2,9 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { BillingError, accountSchema, identifierSchema, quantitySchema, timestampSchema } from './contracts.js';
 import type { CommercialSnapshot } from './contracts.js';
-import type { BillingConfiguration } from './configuration.js';
+import type { BillingConfiguration } from './policy-configuration.js';
 
-export type ResourceConfiguration = BillingConfiguration['resources'][number];
+export type ResourceConfiguration = BillingConfiguration['resourcePolicies'][number];
 export type BillingPolicy = ResourceConfiguration['policy'];
 export type Json = null | boolean | number | string | Json[] | { [key: string]: Json };
 
