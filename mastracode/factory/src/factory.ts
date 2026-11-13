@@ -52,6 +52,7 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { publishBoardChange, subscribeBoardChanges } from './board-changes.js';
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
@@ -85,10 +86,12 @@ import {
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
+import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
+import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
 import { resolveDeploymentModelProviders } from './routes/config.js';
@@ -426,6 +429,7 @@ export type { FactorySandboxStart } from './workspace.js';
  * limit shared across deployments.
  */
 export interface MastraFactoryDispatcherConfig {
+  /** Automated agent runs one server process holds at once. Defaults to 10; runs past it wait in the run queue. */
   maxInFlight?: number;
 }
 
@@ -581,7 +585,10 @@ export class MastraFactory {
   /** Names this replica on the dispatch-wake topic so it can skip its own echoes. */
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeBoardChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #keptCards: KeptCards | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -861,7 +868,6 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onBoardChanged(scope => touchFeed(eventBus, scope));
     // The dispatcher sleeps while idle. It wakes itself on this replica's writes
     // that leave claimable work; the bus carries those wakes to other replicas.
     workItemsStorage.onClaimableWork(() => publishDispatchWake(eventBus, this.#dispatchWakeOrigin));
@@ -897,8 +903,41 @@ export class MastraFactory {
     // default persistence surface for integrations without a bespoke domain.
     const integrationStorage = storage.registerDomain(new IntegrationStorage(secretEncryption));
     const factoryProjectsStorage = storage.registerDomain(new FactoryProjectsStorage());
+    // Background sweeps read their cards from memory until a board changes;
+    // the bus carries this replica's changes to the others.
+    const keptCards = new KeptCards({ projects: factoryProjectsStorage, workItems: workItemsStorage });
+    this.#keptCards = keptCards;
+    const boardChangeOrigin = globalThis.crypto.randomUUID();
+    workItemsStorage.onBoardChanged(scope => {
+      touchFeed(eventBus, scope);
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    // Deleting a project leaves its cards behind, so the sweeps hear of it separately.
+    factoryProjectsStorage.onDeleted(project => {
+      const scope = { orgId: project.orgId, factoryProjectId: project.id };
+      keptCards.changed(scope);
+      publishBoardChange(eventBus, boardChangeOrigin, scope);
+    });
+    this.#unsubscribeBoardChanges = subscribeBoardChanges(eventBus, boardChangeOrigin, scope =>
+      keptCards.changed(scope),
+    ).then(
+      unsubscribe => {
+        keptCards.trustAnnouncements();
+        return unsubscribe;
+      },
+      error => {
+        console.warn(
+          `[factory] subscribing to board changes failed; background sweeps read every board from the database: ${error instanceof Error ? error.message : error}`,
+        );
+        return undefined;
+      },
+    );
     const filesystemStorage = storage.registerDomain(new FilesystemStorage());
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
+    // Event polling keeps its repository list in memory; the bus tells the
+    // polling replica about links made on another one.
+    this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -2136,6 +2175,7 @@ export class MastraFactory {
               ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
               : {}),
             factoryTransitionService: transitionService,
+            runSlots: () => this.#dispatcher?.runSlots(),
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
               this.#dispatcher ??= new FactoryDecisionDispatcher({
@@ -2341,6 +2381,7 @@ export class MastraFactory {
               threadId: session.thread.getId(),
               ...request,
             }),
+          answersItself: toolCallId => this.#dispatcher?.autoApproves(toolCallId) ?? false,
         },
       );
       observeSessionThreadStamp(session);
@@ -2450,6 +2491,7 @@ export class MastraFactory {
               integrations: integrationRegistrations,
               configVersion,
               boardRegistry: this.#projectBoards ?? this.#boards,
+              ...(this.#keptCards ? { keptCards: this.#keptCards } : {}),
               factoryReady,
               domains,
               // The Platform GitHub lane only receives pushes through its polling worker.
@@ -2512,7 +2554,13 @@ export class MastraFactory {
       this.#unsubscribeDispatchWakes = undefined;
       const unsubscribeSandboxEnvChanges = this.#unsubscribeSandboxEnvChanges;
       this.#unsubscribeSandboxEnvChanges = undefined;
+      const unsubscribeBoardChanges = this.#unsubscribeBoardChanges;
+      this.#unsubscribeBoardChanges = undefined;
+      await unsubscribeBoardChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
+      const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
+      this.#unsubscribeLinkedRepositoryChanges = undefined;
+      await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

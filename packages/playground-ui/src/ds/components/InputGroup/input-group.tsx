@@ -4,6 +4,7 @@ import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
 import { Button } from '@/ds/components/Button';
+import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlIconState } from '@/ds/primitives/control-icon';
@@ -125,8 +126,11 @@ const inputGroupAddonVariants = cva(
         flush: '',
       },
       align: {
-        'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
-        'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
+        // Inset like a Button's icon (the group's `--control-px`, less the ink inset of a
+        // 24px glyph) and spaced from the text by `--control-gap`, so a leading icon in a field
+        // lines up with the icons of the pills beside it.
+        'inline-start': 'order-first pr-(--control-gap) pl-[calc(var(--control-px)-2px)] has-[>button]:pl-[3px]',
+        'inline-end': 'order-last pr-[calc(var(--control-px)-2px)] pl-(--control-gap) has-[>button]:pr-[3px]',
         'block-start': 'order-first w-full justify-start border-b border-border px-3 pt-2 pb-1',
         'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
@@ -277,8 +281,31 @@ export type InputGroupButtonProps = Omit<React.ComponentProps<typeof Button>, 's
   variant?: ButtonProps['variant'];
 };
 
-function InputGroupButton({ size = 'icon-sm', variant = 'ghost', type = 'button', ...props }: InputGroupButtonProps) {
-  return <Button type={type} size={size} variant={variant} {...props} />;
+// An icon button inside a field is a chip inset in it: 8px shorter than the field, so a 3px
+// ring of field (plus the 1px border) shows evenly around it, with the addon's end padding
+// matching that ring.
+const inputGroupIconButtonBySize = cn(
+  'group-data-[size=sm]/input-group:size-[calc(var(--spacing-control-sm)-8px)]',
+  'group-data-[size=md]/input-group:size-[calc(var(--spacing-control-md)-8px)]',
+  'group-data-[size=lg]/input-group:size-[calc(var(--spacing-control-lg)-8px)]',
+);
+
+function InputGroupButton({
+  size = 'icon-sm',
+  variant = 'ghost',
+  type = 'button',
+  className,
+  ...props
+}: InputGroupButtonProps) {
+  return (
+    <Button
+      type={type}
+      size={size}
+      variant={variant}
+      className={cn(isIconButtonSize(size) && inputGroupIconButtonBySize, className)}
+      {...props}
+    />
+  );
 }
 
 export { InputGroup, InputGroupAddon, InputGroupInput, InputGroupTextarea, InputGroupText, InputGroupButton };

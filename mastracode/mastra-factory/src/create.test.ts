@@ -90,7 +90,6 @@ beforeEach(() => {
     { id: 'org_123', name: 'Acme', role: 'admin', isCurrent: true },
     { id: 'org_456', name: 'Beta', role: 'member', isCurrent: false },
   ]);
-  clack.select.mockResolvedValue('eu');
   platform.createServerProject.mockResolvedValue({ id: 'proj_abc', slug: 'my-factory', name: 'my-factory' });
   platform.mintOrgApiKey.mockResolvedValue('sk_live_test');
   platform.ensureProductionEnvironment.mockResolvedValue('env_production');
@@ -296,7 +295,7 @@ describe('create (platform provisioning)', () => {
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
-      region: 'eu',
+      region: 'us',
     });
 
     // Other .env.example placeholders untouched.
@@ -306,19 +305,13 @@ describe('create (platform provisioning)', () => {
     // Platform pipeline hit in order.
     expect(cliAuth.getToken).toHaveBeenCalledTimes(1);
     expect(cliAuth.resolveCurrentOrg).toHaveBeenCalledWith('wos-token', { forcePrompt: true });
-    expect(clack.select).toHaveBeenCalledWith({
-      message: 'Where should your Factory project run?',
-      options: [
-        { value: 'us', label: '🇺🇸 us' },
-        { value: 'eu', label: '🇪🇺 eu' },
-      ],
-      initialValue: 'us',
-    });
+    // Region defaults to us without prompting.
+    expect(clack.select).not.toHaveBeenCalled();
     expect(platform.createServerProject).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       name: 'my-factory',
-      region: 'eu',
+      region: 'us',
     });
     expect(platform.mintOrgApiKey).toHaveBeenCalledWith({
       token: 'wos-token',
@@ -330,7 +323,7 @@ describe('create (platform provisioning)', () => {
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-eu-central-1',
+      regionId: 'aws-us-west-2',
     });
 
     // Success outro summarizes the provisioned infra so the user isn't
@@ -396,22 +389,23 @@ describe('create (platform provisioning)', () => {
     expect(note).toContain('still provisioning');
   });
 
-  it('passes --region to project creation and skips the region picker', async () => {
+  it('passes --region eu to project creation and the database region', async () => {
     await create({
       projectName: 'my-factory',
       template: PLATFORM_TEMPLATE_REPO,
-      region: 'us',
+      region: 'eu',
       analytics,
     });
 
     expect(clack.select).not.toHaveBeenCalled();
-    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'us' }));
+    expect(platform.createServerProject).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
+    expect(platform.ensureProductionEnvironment).toHaveBeenCalledWith(expect.objectContaining({ region: 'eu' }));
     expect(platform.attachNeonDatabase).toHaveBeenCalledWith({
       token: 'wos-token',
       orgId: 'org_123',
       projectId: 'proj_abc',
       name: 'my-factory',
-      regionId: 'aws-us-west-2',
+      regionId: 'aws-eu-central-1',
     });
   });
 

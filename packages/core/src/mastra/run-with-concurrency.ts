@@ -24,3 +24,38 @@ export async function runWithConcurrency<T>(
   };
   await Promise.all(Array.from({ length: Math.min(normalizeConcurrency(limit), items.length) }, worker));
 }
+
+/** A concurrency limit shared by tasks that arrive over time, such as every recovery pass's restarts on one instance. */
+export interface ConcurrencyLimiter {
+  /** Queues `task` until a slot is free, in arrival order, and settles as it does. */
+  run<T>(task: () => Promise<T>): Promise<T>;
+}
+
+/** Creates a {@link ConcurrencyLimiter} with at most `limit` tasks running. */
+export function createConcurrencyLimiter(limit: number | undefined): ConcurrencyLimiter {
+  const max = normalizeConcurrency(limit);
+  let running = 0;
+  const waiting: (() => void)[] = [];
+
+  return {
+    async run(task) {
+      if (running < max) {
+        running++;
+      } else {
+        await new Promise<void>(resolve => waiting.push(resolve));
+      }
+
+      try {
+        return await task();
+      } finally {
+        // A finished task hands its slot straight to the next one, so `running` only drops when none waits.
+        const next = waiting.shift();
+        if (next) {
+          next();
+        } else {
+          running--;
+        }
+      }
+    },
+  };
+}
