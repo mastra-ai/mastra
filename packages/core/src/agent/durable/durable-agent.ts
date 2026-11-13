@@ -18,6 +18,7 @@ import {
   isMastraTimeoutError,
   settledOrElapsed,
 } from '../../loop/timeout';
+import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
@@ -1970,7 +1971,7 @@ export class DurableAgent<
 
     const defaultOptions = await this.getDefaultOptions({ requestContext: options?.requestContext });
     const resolvedOptions = deepMerge(
-      (defaultOptions ?? {}) as Record<string, unknown>,
+      withDefaultToolCallConcurrencyLimit(defaultOptions ?? {}, options) as Record<string, unknown>,
       (options ?? {}) as Record<string, unknown>,
     ) as DurableAgentStreamOptions<TOutput>;
     // Actor is a per-call trust signal, so an explicit value replaces the
