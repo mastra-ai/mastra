@@ -153,7 +153,13 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
+import {
+  isMastraTool,
+  isProviderTool,
+  isApprovalExempt,
+  markAgentWorkflowTool,
+  markApprovalExempt,
+} from '../tools/toolchecks';
 import type {
   CoreTool,
   MastraToolInvocationOptions,
@@ -7471,13 +7477,10 @@ export class Agent<
           agentBackgroundConfig: this.#backgroundTasks,
         };
 
-        convertedWorkflowTools[`workflow-${workflowName}`] = makeCoreTool(
-          toolObj,
-          options,
-          undefined,
-          autoResumeSuspendedTools,
-          backgroundTaskEnabled,
-        );
+        const workflowTool = makeCoreTool(toolObj, options, undefined, autoResumeSuspendedTools, backgroundTaskEnabled);
+        // Its results are marked `mastra.workflowTool` so tracing can show them (#30219).
+        markAgentWorkflowTool(workflowTool);
+        convertedWorkflowTools[`workflow-${workflowName}`] = workflowTool;
       }
     }
 
