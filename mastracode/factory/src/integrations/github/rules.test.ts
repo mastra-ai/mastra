@@ -3898,6 +3898,59 @@ describe('GithubRules', () => {
     );
   });
 
+  it("runs the merge on the pull request's cards on other boards when provenance binds it to its work item", async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await createLinkedIssue(workItems, project.id);
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        parentWorkItemId: work.id,
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    const release = await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: card.item.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createTriageWorkRegistry(createTestBoard()),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(pullRequest('closed', 'delivery-merged-release', true));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.workItemId)).toEqual(
+      expect.arrayContaining([work.id, card.item.id, release!.id]),
+    );
+  });
+
   it('evaluates the same delivery independently for every tenant project mapped to the repository', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     const second = await projects.create({
