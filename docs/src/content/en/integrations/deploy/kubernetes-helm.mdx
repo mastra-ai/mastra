@@ -335,7 +335,7 @@ Before enabling workers:
 
 - **A pull-capable PubSub backend** configured in your Mastra application: Redis Streams, Valkey Streams, or Google Cloud Pub/Sub. Workers pull events from the broker, so request/response-only backends won't work. Put its connection string (for example `REDIS_URL`) in the same Secret the Server uses.
 - **A storage backend that supports the `schedules` domain**, if you enable the scheduler: PostgreSQL, LibSQL, MySQL, MongoDB, Spanner, or Convex. Redis and ClickHouse don't support it, and the scheduler won't find due schedules on them.
-- **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process and every worker runs twice, double-firing every cron schedule. The chart refuses to render if you enable workers without it.
+- **`mastra-server.workers.splitDeployment: true`.** Without it the API keeps running workers in-process, so every worker also runs in the API pods alongside the worker Deployments. The chart refuses to render if you enable workers without it.
 
 :::warning Redis eviction policy
 Set `maxmemory-policy` to `noeviction` on Redis or Valkey. Every evicting policy deletes live Mastra state under memory pressure: `allkeys-*` policies evict unacknowledged workflow events, and `volatile-*` policies evict lease keys and streams, which carry a TTL by default. Runs then stall without a run error. `RedisStreamsPubSub` and `ValkeyStreamsPubSub` log a one-time warning after they first connect when the policy can evict. On managed Redis this is a parameter-group setting, and Amazon ElastiCache defaults to `volatile-lru`.
@@ -421,7 +421,7 @@ Worker pods mount the **Server's** ConfigMap and Secret rather than defining the
 | Role | Scales | Notes |
 | - | - | - |
 | `orchestration` | Yes | Consumes the `workflows` topic and calls back into the API to execute steps. The consumer group distributes work across replicas. |
-| `scheduler` | **No — always 1** | Polls storage for due cron schedules. The chart pins it to one replica and uses the `Recreate` strategy, because a rolling update would briefly run two schedulers and fire every schedule twice. |
+| `scheduler` | **No — always 1** | Polls storage for due cron schedules. The chart pins it to one replica and uses the `Recreate` strategy. Extra schedulers are safe but add polling load without adding throughput. |
 | `backgroundTasks` | Yes | Executes agent tool calls marked `background: { enabled: true }` off the request path. |
 
 The two scalable roles support autoscaling. Utilization targets need matching resource requests, and the chart fails the render if you enable autoscaling without them:
@@ -506,7 +506,6 @@ Your database and object store are unaffected, because the chart never manages s
 - **Pods crash-loop with a license error.** Production mode requires a valid `MASTRA_EE_LICENSE` in your secret when enterprise features are configured.
 - **Studio shows the server API instead of the UI.** The image was built without Studio assets. Rebuild with `mastra build --studio`.
 - **Worker pods crash-loop with `Cannot find module '/app/.mastra/worker/index.mjs'`.** The image was built without the worker artifact. Run `mastra worker build --output-dir .mastra/worker` and copy it into the image, or override `mastra-workers.command` to match your layout.
-- **Scheduled workflows fire twice.** The API is still running workers in-process alongside the worker Deployments. Set `mastra-server.workers.splitDeployment: true`.
 - **Workflows stall with no error.** The orchestration worker can't reach the API, or Redis evicted unacknowledged events. Check `mastra-workers.server.port` against `mastra-server.service.port`, confirm any restrictive NetworkPolicy admits worker pods, and verify `maxmemory-policy` is `noeviction`.
 - **Worker pods stay in `CreateContainerConfigError`.** They mount the Server's ConfigMap and Secret, so `mastra-workers.server.existingSecret` must match `mastra-server.existingSecret`, and `mastra-workers` can't be installed as a standalone release.
 - **Ingress has no address.** Confirm an ingress controller is running, or set `ingressController.install=true`.
