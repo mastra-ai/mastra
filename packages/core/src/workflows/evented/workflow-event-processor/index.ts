@@ -2260,7 +2260,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } catch (error) {
       // A store that probes its backend rejects until a probe succeeds. Running the step is what
       // this delivery did before the check existed; the next delivery asks again.
-      this.mastra.getLogger()?.debug('Running a step without the finished-step check: run fencing probe failed', {
+      this.mastra.getLogger()?.warn('Running a step without the finished-step check: run fencing probe failed', {
         workflowId: workflow.id,
         error,
       });
