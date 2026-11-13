@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
+import { Fragment } from 'react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -8,7 +9,6 @@ import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
@@ -27,6 +27,15 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   return 'available';
 }
 
+// Untitled: until every status loads, the sources can't be sorted into connected, unavailable or available.
+function IntakeSkeleton() {
+  return (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
+    </SettingsContainer>
+  );
+}
+
 export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   useIntakeBindingsQuery();
@@ -37,14 +46,16 @@ export function IntakeSection() {
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
 
-  if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
+  if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
     return (
-      <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void configQuery.refetch()}>
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
@@ -56,7 +67,7 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
+    return <IntakeSkeleton />;
   }
 
   const props = { config: configQuery.data };
@@ -140,25 +151,26 @@ export function IntakeSection() {
   ].filter(row => row !== null);
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       {connectedSources.length > 0 && (
         <SettingsSubsection
           scope="org"
           title="Connected sources"
           description="Choose which services bring work into your organization's boards."
         >
-          <div className="flex flex-col gap-6">
+          {/* Each source is its own card: its summary row, then its sources and routing. */}
+          <div className="flex flex-col gap-3">
             {connectedSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
       )}
       {unavailableSources.length > 0 && (
         <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
             {unavailableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
@@ -167,12 +179,12 @@ export function IntakeSection() {
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
             {availableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
             {anotherAccountRows}
           </SettingsContainer>
         </SettingsSubsection>
       )}
-    </div>
+    </>
   );
 }

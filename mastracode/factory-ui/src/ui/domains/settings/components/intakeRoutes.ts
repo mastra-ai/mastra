@@ -1,8 +1,10 @@
-import type { RuleCondition, RuleGroup } from '@mastra/factory/rules/rule-group';
+import { STATUS_EVENTS } from '@mastra/factory/boards/board-events';
+import type { RuleGroup } from '@mastra/factory/rules/rule-group';
+import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteInput, IntakeRoutePatch } from '../../../../api/types';
 
-export type IntakeRouteWrite =
+type IntakeRouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch };
 
@@ -31,52 +33,62 @@ export function describeTarget(route: IntakeRouteInfo, boards: readonly Installe
   const board = boards.find(candidate => candidate.id === route.target.boardKey);
   if (!board) return `${route.target.boardKey} (not installed)`;
   const phase = phaseName(board, route.target.phaseKey) ?? route.target.phaseKey ?? board.initialPhase;
-  const join = route.target.joinClosedIssue ? 'Joins the closed issue’s card, then ' : '';
-  return `${join}${boardName(board)} › ${phase}`;
+  return `${boardName(board)} › ${phase}`;
 }
 
-const OPERATOR_TEXT: Record<string, string> = {
-  equals: 'is',
-  not_equals: 'is not',
-  contains: 'contains',
-  not_contains: 'does not contain',
-  in: 'is one of',
-  not_in: 'is not one of',
-  exists: 'is set',
-  not_exists: 'is not set',
-  greater_than: '>',
-  less_than: '<',
-  greater_than_or_equal: '≥',
-  less_than_or_equal: '≤',
+/** A board's phases as condition values, so a phase rule names them. */
+export function phaseOptions(board: InstalledBoardInfo | undefined): Record<string, FilterBarOption[]> {
+  if (!board) return {};
+  return {
+    'closedIssue.phase': board.phases.map(phase => ({ value: phase.id, label: phase.name ?? phase.title })),
+  };
+}
+
+const TRIGGER_TEXT: Record<string, string> = {
+  'work_item.created': 'a new card arrives',
+  'work_item.closed': 'a card is closed',
+  'work_item.reopened': 'a card is reopened',
+  'pull_request.opened': 'a pull request opens',
+  'pull_request.synchronized': 'a pull request gets new commits',
+  'pull_request.review_requested': 'a review is requested',
+  'pull_request.merged': 'a pull request is merged',
+  'pull_request.closed': 'a pull request closes unmerged',
 };
 
-function describeMember(member: RuleCondition | RuleGroup): string {
-  if ('conditions' in member) return `(${describeWhen(member)})`;
-  const operator = OPERATOR_TEXT[member.operator] ?? member.operator;
-  if (member.value === undefined) return `${member.field} ${operator}`;
-  const value = Array.isArray(member.value) ? member.value.join(', ') : String(member.value);
-  return `${member.field} ${operator} ${value}`;
+/** The events that move a card already on a board, in the order a card meets them. */
+export const MOVE_EVENTS = STATUS_EVENTS.filter(event => event !== 'work_item.created');
+
+/** Events as a choice in a list: "A card is closed", or "A card is closed or a card is reopened". */
+export function triggerLabel(events: readonly string[]): string {
+  const text = events.map(event => TRIGGER_TEXT[event] ?? event).join(' or ');
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
-/** A route's condition in words; `null` matches every card. */
-export function describeWhen(when: RuleGroup | null): string {
-  if (!when) return 'Every card';
-  return when.conditions.map(describeMember).join(when.operator === 'AND' ? ' and ' : ' or ');
+/**
+ * Whether a route places new cards. Every other route only moves cards already on its own board, so it
+ * belongs to that board's settings, not the factory's.
+ */
+export function placesNewCards(route: Pick<IntakeRouteInfo, 'on'>): boolean {
+  return route.on.includes('work_item.created');
 }
 
-const EVENT_TEXT: Record<string, string> = {
-  'work_item.created': 'New cards',
-  'work_item.closed': 'Closed',
-  'work_item.reopened': 'Reopened',
-  'pull_request.opened': 'PR opened',
-  'pull_request.synchronized': 'PR updated',
-  'pull_request.review_requested': 'Review requested',
-  'pull_request.merged': 'PR merged',
-  'pull_request.closed': 'PR closed',
-};
-
-export function describeEvents(on: readonly string[]): string {
-  return on.map(event => EVENT_TEXT[event] ?? event).join(', ');
+/**
+ * The whole project's route order after moving the `shown` route at `from` to `to` among them. Routes not
+ * shown keep their slots: the shown ones only trade places with each other.
+ */
+export function reorderWithin(
+  routes: readonly Pick<IntakeRouteInfo, 'id'>[],
+  shown: readonly string[],
+  from: number,
+  to: number,
+): string[] {
+  const order = [...shown];
+  const [moved] = order.splice(from, 1);
+  if (moved === undefined) return routes.map(route => route.id);
+  order.splice(to, 0, moved);
+  const shownIds = new Set(shown);
+  let next = 0;
+  return routes.map(route => (shownIds.has(route.id) ? (order[next++] ?? route.id) : route.id));
 }
 
 /** The phase of `to` that plays the part `phaseKey` plays on `from`, if `to` has one. */

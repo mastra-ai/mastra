@@ -2,6 +2,7 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import type { ReactNode } from 'react';
 import { useLocation } from 'react-router';
 
+import { useAnswerParkedApproval } from '../hooks/useAnswerParkedApproval';
 import { updatePinnedSessions } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
 import { useSessionVisibility } from '../hooks/useSessionVisibility';
@@ -9,12 +10,13 @@ import { STATUS_MARKER_BY_ACTIVITY, pinnedSessionsAfter } from '../services/sess
 import type { SessionListRow } from '../services/sessionRows';
 import type { UserSessionVisibility } from '../services/user-sessions';
 import { SessionNavRow } from './SessionNavRow';
+import type { LivePullRequestStatus } from '../../../../hooks/useWorkspacePullRequestStatuses';
 
 export function SessionListItem({
   factoryId,
   row,
   disabled,
-  merged,
+  liveStatus,
   level,
   compact,
   onDelete,
@@ -27,7 +29,8 @@ export function SessionListItem({
   /** Single-line row; otherwise a second line shows when it last moved and its change request. */
   compact: boolean;
   disabled: boolean;
-  merged: boolean | undefined;
+  /** The change request's state from the live check, which can be ahead of the work item. */
+  liveStatus: LivePullRequestStatus | undefined;
   onDelete: (row: SessionListRow) => void;
   /** The card's child sessions, nested under its row. */
   subItems?: ReactNode;
@@ -35,6 +38,7 @@ export function SessionListItem({
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
   const { changeVisibility, changing } = useSessionVisibility(factoryId, row.session.sessionId);
+  const { answer, answering } = useAnswerParkedApproval(factoryId, row.waitingSessionId);
   const ownUserSession = row.origin === 'user' && row.ownedByViewer;
 
   async function handleVisibilityChange(visibility: UserSessionVisibility) {
@@ -50,6 +54,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       label={row.phaseLabel}
+      runByFactory={row.runByFactory}
       level={level}
       url={row.openPath}
       externalLinks={row.externalLinks}
@@ -57,7 +62,7 @@ export function SessionListItem({
       source={row.source}
       active={row.active}
       disabled={disabled}
-      merged={merged}
+      liveStatus={liveStatus}
       changeRequestProvider={row.pullRequest?.provider}
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
@@ -66,6 +71,8 @@ export function SessionListItem({
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}
       regeneratingTitle={regenerating}
+      onAnswerApproval={answer}
+      answeringApproval={answering}
       visibility={row.origin === 'user' ? row.session.visibility : undefined}
       // Slack threads keep the visibility they were created with; the server refuses a change.
       onVisibilityChange={

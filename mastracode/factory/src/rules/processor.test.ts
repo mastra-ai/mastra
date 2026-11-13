@@ -1746,6 +1746,50 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(versionChanged?.cacheKey).not.toBe(first?.cacheKey);
   });
 
+  // Each model step used to read every card on the board to find these, and any card change on a
+  // busy board refetched them all for every bound session.
+  it("names the card's parent and children, newest first, without reading the rest of the board", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const card = (title: string, externalId: string, parentWorkItemId?: string) =>
+      storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId },
+          ...(parentWorkItemId ? { parentWorkItemId } : {}),
+          title,
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+    const epic = await card('Settings epic', 'github-issue:10');
+    const prepared = await prepare(storage);
+    await storage.update({
+      orgId: 'org-1',
+      id: prepared.item.id,
+      userId: 'user-1',
+      patch: { parentWorkItemId: epic.item.id },
+    });
+    await card('Unrelated work', 'github-issue:11');
+    await card('Older child', 'github-issue:12', prepared.item.id);
+    await card('Newer child', 'github-issue:13', prepared.item.id);
+    const listShared = vi.spyOn(storage, 'listShared');
+
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createTriageWorkRegistry(),
+      storage,
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+
+    expect(String(signal?.contents)).toContain(
+      'Linked items: github-issue Newer child; github-issue Older child; github-issue Settings epic',
+    );
+    expect(listShared).not.toHaveBeenCalled();
+  });
+
   it('revisits the inclusive cursor when a suspended invocation later resumes with a result', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
@@ -1782,6 +1826,65 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(reader.listMessages).toHaveBeenLastCalledWith(
       expect.objectContaining({ filter: { dateRange: { start: createdAt } } }),
     );
+  });
+
+  it('waits for a background pass before reading a binding’s trailing results and cursor', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const onResult = vi.fn(() => undefined);
+    const first = toolMessage({ id: 'assistant-first', toolCallId: 'first-call' });
+    const trailing = toolMessage({
+      id: 'assistant-trailing',
+      toolCallId: 'trailing-call',
+      createdAt: new Date('2026-07-18T10:01:00Z'),
+    });
+    let unblockFirst!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      unblockFirst = resolve;
+    });
+    let firstReadStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      firstReadStarted = resolve;
+    });
+    let readsInFlight = 0;
+    let maxReadsInFlight = 0;
+    const reader = {
+      listMessages: vi.fn(async () => {
+        readsInFlight += 1;
+        maxReadsInFlight = Math.max(readsInFlight, maxReadsInFlight);
+        const read = reader.listMessages.mock.calls.length;
+        if (read === 1) {
+          firstReadStarted();
+          await blocked;
+        }
+        readsInFlight -= 1;
+        return { messages: read === 1 ? [first] : [first, trailing], hasMore: false };
+      }),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: reader as never,
+    });
+
+    const background = processor.reconcileAllBoundThreads();
+    await started;
+    const final = processor.reconcileBinding(prepared.binding);
+    await Promise.resolve();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+    unblockFirst();
+    await Promise.all([background, final]);
+
+    expect(maxReadsInFlight).toBe(1);
+    expect(reader.listMessages).toHaveBeenCalledTimes(2);
+    expect(reader.listMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filter: { dateRange: { start: first.createdAt } } }),
+    );
+    expect(onResult).toHaveBeenCalledTimes(2);
+    await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
+      lastMessageId: trailing.id,
+    });
   });
 
   it('reconciles paginated terminal results from a durable cursor across restart retries', async () => {

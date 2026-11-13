@@ -1,6 +1,6 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import type { InstalledBoardInfo } from '../../../../api/types';
-import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
+import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import {
   cardContextSessions,
   cardThreadSession,
@@ -13,7 +13,12 @@ import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
-import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
+import {
+  getFactorySessionSource,
+  getSessionOwnerDetails,
+  getUserSessionLabel,
+  isFactoryOwnedSession,
+} from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
@@ -90,6 +95,10 @@ export interface SessionListRow {
   cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
+  /** Listed under a person's session, but the Factory owns and runs it. */
+  runByFactory?: boolean;
+  /** A followed card's phase session that waits on a person, answerable from this row. */
+  waitingSessionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -265,6 +274,50 @@ function orderCardRows(
     .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
 }
 
+/**
+ * Ties each session to the phase sessions of the cards it follows. Those sessions stay the
+ * card's: the row links to them and lists them under itself when child sessions are revealed.
+ * While one is parked the row reads "waiting on you", but only for a viewer who can answer:
+ * the row is their session, or a session of theirs follows the same card.
+ */
+export function linkFollowedCards(
+  rows: readonly SessionListRow[],
+  cardRows: readonly SessionListRow[],
+  parkedSessions: ReadonlySet<string>,
+  { revealChildSessions = false }: OneRowPerCardOptions = {},
+): SessionListRow[] {
+  const viewerFollows = new Set(
+    rows.flatMap(row => (row.ownedByViewer ? (row.session.followedWorkItemIds ?? []) : [])),
+  );
+  const waitsOnViewer = (cardRow: SessionListRow) =>
+    parkedSessions.has(cardRow.session.sessionId) && cardRow.itemId !== undefined && viewerFollows.has(cardRow.itemId);
+  return rows.map(row => {
+    const followed = new Set(row.session.followedWorkItemIds);
+    if (followed.size === 0) return row;
+    const linked = cardRows.filter(
+      cardRow =>
+        cardRow.itemId !== undefined &&
+        followed.has(cardRow.itemId) &&
+        cardRow.session.sessionId !== row.session.sessionId,
+    );
+    if (linked.length === 0) return row;
+    const waiting = linked.find(waitsOnViewer);
+    return {
+      ...row,
+      ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
+      ...(revealChildSessions
+        ? {
+            childRows: linked.map(cardRow => ({
+              ...cardRow,
+              ...(waitsOnViewer(cardRow) ? { waitingSessionId: cardRow.session.sessionId } : {}),
+              ...(isFactoryOwnedSession(cardRow.session) ? { runByFactory: true } : {}),
+            })),
+          }
+        : {}),
+    };
+  });
+}
+
 export interface OneRowPerCardOptions {
   /** List the card's other sessions under its row instead of folding them into it. */
   revealChildSessions?: boolean;
@@ -292,19 +345,15 @@ export function oneRowPerCard(
     if (!cardRows || cardRows.length === 1) return [row];
     const [shown, ...others] = orderCardRows(cardRows, boards);
     if (shown !== row) return [];
-    const shared = {
-      pinned: cardRows.some(candidate => candidate.pinned),
-      cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
-    };
     const carried = CARRIED_STATUSES.find(status => cardRows.some(candidate => candidate.status === status));
     // Listed, each session shows its own state and the open one highlights.
-    if (revealChildSessions) {
-      return [{ ...shown, ...shared, cardStatus: carried ?? shown.status, childRows: others }];
-    }
+    // Each listed session keeps its own pin; only a folded card carries its sessions' pins.
+    if (revealChildSessions) return [{ ...shown, cardStatus: carried ?? shown.status, childRows: others }];
     return [
       {
         ...shown,
-        ...shared,
+        pinned: cardRows.some(candidate => candidate.pinned),
+        cardSessionIds: cardRows.map(candidate => candidate.session.sessionId),
         status: carried ?? shown.status,
         active: cardRows.some(candidate => candidate.active),
       },
@@ -334,6 +383,8 @@ export interface UserSessionRowInput {
   pullRequest?: WorkItem;
   factoryId: string;
   pathname: string;
+  /** The `:sessionId` of a `/workspaces/:sessionId/threads/:threadId` route, which Slack links use for user sessions too. */
+  routeSessionId: string | undefined;
   running: boolean;
   pinned: boolean;
   viewer: SessionViewerProfile | undefined;
@@ -345,6 +396,7 @@ export function buildUserSessionRow({
   pullRequest,
   factoryId,
   pathname,
+  routeSessionId,
   running,
   pinned,
   viewer,
@@ -361,7 +413,7 @@ export function buildUserSessionRow({
     url,
     openPath: url,
     externalLinks: sessionExternalLinks(item, pullRequest),
-    active: pathname === url,
+    active: pathname === url || session.sessionId === routeSessionId,
     status: sessionActivityStatus({
       initializing: !session.materializedAt,
       running,

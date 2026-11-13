@@ -21,7 +21,7 @@ import type {
 import { matchesView, receiptScope } from './attention-providers.js';
 
 interface ParkedSession {
-  item: Card;
+  item: Pick<Card, 'id' | 'title'>;
   role: string;
   sessionId: string;
   threadId: string;
@@ -86,7 +86,7 @@ export class ParkedRunAttentionProvider implements AttentionProvider {
       this.#liveSessions.parkedIn(scope.factoryProjectId).map(({ sessionId, run }) => [sessionId, run]),
     );
     if (runBySession.size === 0) return [];
-    const items = await this.#workItems.list({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
+    const items = await this.#workItems.listShared({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
     const bySession = new Map<string, ParkedSession>();
     for (const item of items) {
       for (const [role, ref] of Object.entries(item.sessions)) {

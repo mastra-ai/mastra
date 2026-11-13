@@ -197,6 +197,7 @@ import { resourceidDriftPromptDeclineScenario } from './resourceid-drift-prompt-
 import { resumeLockedThreadScenario } from './resume-locked-thread.js';
 import { resumeMissingThreadScenario } from './resume-missing-thread.js';
 import { schedulesCommandScenario } from './schedules-command.js';
+import { schedulesMultilinePromptScenario } from './schedules-multiline-prompt.js';
 import { settingsApiKeysNavigationScenario } from './settings-api-keys-navigation.js';
 import { settingsStartupModelRestoreScenario } from './settings-startup-model-restore.js';
 import { setupCompletionPersistenceScenario } from './setup-completion-persistence.js';
@@ -332,6 +333,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'first-run-onboarding': firstRunOnboardingScenario,
   'github-signals-command': githubSignalsCommandScenario,
   'schedules-command': schedulesCommandScenario,
+  'schedules-multiline-prompt': schedulesMultilinePromptScenario,
   'github-signals-multi-subscribe': githubSignalsMultiSubscribeScenario,
   'github-signals-legacy-upgrade': githubSignalsLegacyUpgradeScenario,
   'github-signals-tool-multi-subscribe': githubSignalsToolMultiSubscribeScenario,

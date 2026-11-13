@@ -24,7 +24,8 @@ jobs:
     name: Analyze (${{ matrix.language }})
     if: github.repository == 'mastra-ai/mastra'
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # The javascript-typescript scan of main took 55 min to upload its results (run 42954503565).
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +52,10 @@ jobs:
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
           category: /language:${{ matrix.language }}
+          # Uploading the database is only for running variant-analysis queries against this
+          # repository; it plays no part in alerts. Zipping the ~9 GB javascript database ran
+          # past the job timeout after the results were already uploaded.
+          upload-database: false
 
   notify:
     name: Notify Slack of CodeQL results
@@ -64,6 +69,12 @@ jobs:
       contents: read
       security-events: read
     steps:
+      # Marks this run as one that reports an unfinished scan, so later scans can tell it from
+      # runs of the earlier version of this workflow, which skipped cancelled scans silently.
+      - name: Note that the scan did not finish
+        if: needs.analyze.result == 'cancelled'
+        run: echo "The scan was cancelled or timed out; reporting it as a failure."
+
       - name: Compare with the previous scan of main
         id: state
         env:
@@ -72,28 +83,36 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           ALERTS_URL: ${{ github.server_url }}/${{ github.repository }}/security/code-scanning?query=is%3Aopen+branch%3Amain+tool%3ACodeQL
         run: |
-          # A cancelled scan was stopped by hand; leave the alert state unchanged.
-          if [ "$RESULT" = "cancelled" ] || [ "$RESULT" = "skipped" ]; then
+          # A scan that hit timeout-minutes ends cancelled, so cancelled is reported as a failure.
+          # No newer run cancels a started scan: the concurrency group has no cancel-in-progress,
+          # and a queued run replaced by a newer one never starts, so this job does not run for it.
+          if [ "$RESULT" = "skipped" ]; then
             echo "Scan was $RESULT; not alerting."
             exit 0
           fi
 
           # Prints "<analyze> <notified> <checked_from>" for a run or attempt: analyze is failure,
-          # success, ignored when it was cancelled, or unreadable when its jobs could not be read;
+          # success, ignored when it has no Analyze jobs or was cancelled without its notify job
+          # noting it (an earlier version of this workflow skipped those silently), or unreadable
+          # when its jobs could not be read;
           # notified is yes when its notify job passed, which means it read the alerts it was due
           # to report; checked_from is when that notify job started, before it read the alerts
           # (- when unknown).
           run_state() {
             local jobs conclusions analyze=ignored notified=no checked_from
             if ! jobs=$(gh api --paginate "$1/jobs?per_page=100" \
-              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")"' 2>/dev/null); then
+              --jq '.jobs[] | "\(.name)\t\(.conclusion)\t\(.started_at // "-")\t\([.steps[]? | select(.name == "Note that the scan did not finish" and .conclusion == "success")] | length)"' 2>/dev/null); then
               echo "unreadable no -"
               return 0
             fi
             conclusions=$(awk -F'\t' '$1 ~ /^Analyze/ {print $2}' <<< "$jobs")
             if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
               analyze=failure
-            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+            elif grep -qx cancelled <<< "$conclusions"; then
+              if awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $4 > 0 {f=1} END {exit !f}' <<< "$jobs"; then
+                analyze=failure
+              fi
+            elif [ -n "$conclusions" ]; then
               analyze=success
             fi
             checked_from=$(awk -F'\t' '$1 == "Notify Slack of CodeQL results" && $2 == "success" {print $3; exit}' <<< "$jobs")
@@ -167,7 +186,7 @@ jobs:
           fi
           if [ "$RESULT" != "success" ]; then
             if [ "$previous" != "failure" ]; then
-              lines+=(":rotating_light: The CodeQL scan of main failed. <$RUN_URL|View the run>.")
+              lines+=(":rotating_light: The CodeQL scan of main failed or did not finish. <$RUN_URL|View the run>.")
             fi
           else
             if [ "$previous" = "failure" ]; then

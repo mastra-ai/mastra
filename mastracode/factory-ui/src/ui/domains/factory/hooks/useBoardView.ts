@@ -13,16 +13,16 @@ import {
 import type { BoardFilterState } from '../boardFilters';
 import { boardLayoutFromParams, boardLayoutParams } from '../boardLayout';
 import type { BoardLayout } from '../boardLayout';
-import type { BoardSort } from '../boardOrder';
 import { withPeopleFolded, withPeopleUnfolded } from '../boardPeople';
 import type { PersonIdentity } from '../boardPeople';
 import { BOARD_VIEW_QUERY, boardViewSettingsSchema, savedBoardViewsStorageKey } from '../boardSavedViews';
 import type { BoardViewSettings } from '../boardSavedViews';
 import { boardSortFromParams, boardSortParams, DEFAULT_BOARD_SORT } from '../boardSort';
+import type { BoardSort } from '../boardSort';
 import type { BoardKind } from '../boardStages';
 import { saveBoardView } from '../services/boardViews';
 
-const BOARD_SEARCH_QUERY = 'search';
+export const BOARD_SEARCH_QUERY = 'search';
 
 export interface BoardView {
   searchParams: URLSearchParams;

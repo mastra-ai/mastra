@@ -1,14 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Sidebar, useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { ArrowUpDown, CircleDashed, Clock, Plus, UserRound } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestMerges } from '../../../../hooks/useWorkspacePullRequestMerges';
+import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
@@ -30,6 +29,7 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
+import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import {
@@ -53,8 +53,10 @@ export function SessionsSection() {
     changeGroupOrder,
     resetView,
   } = useSessionListView();
+  const sidebarState = useMaybeSidebarState()?.state;
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId, {
-    revealChildSessions: view.revealChildSessions,
+    // Collapsed to icons, nested rows are hidden, so the card folds back and carries the open session.
+    revealChildSessions: view.revealChildSessions && sidebarState !== 'collapsed',
   });
   const catalog = useBoardCatalog(factoryId);
   const viewerUserId = useFactoryAuth().data?.user?.userId;
@@ -68,7 +70,7 @@ export function SessionsSection() {
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const mergedBySessionId = useWorkspacePullRequestMerges({
+  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
     baseUrl,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
@@ -177,7 +179,10 @@ export function SessionsSection() {
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}
-                  merged={mergedBySessionId[entry.session.sessionId] ?? entry.pullRequest?.knownMerged}
+                  liveStatus={
+                    liveStatusBySessionId[entry.session.sessionId] ??
+                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
+                  }
                   onDelete={deletion.requestDeletion}
                   subItems={subItems}
                 />
@@ -195,20 +200,12 @@ export function SessionsSection() {
       </div>
 
       {loadFailed && (
-        <div className="flex items-center gap-2 px-2 py-1">
-          <Txt as="p" variant="meta" className="text-destructive-foreground m-0">
-            Couldn’t load sessions
-          </Txt>
-          <Button variant="ghost" size="sm" onClick={retry}>
-            Retry
-          </Button>
-        </div>
+        // Sessions has always reported a failed load without an alert; sharing the row doesn't change that.
+        <SidebarLoadError onRetry={retry} announce={false}>
+          Couldn’t load sessions
+        </SidebarLoadError>
       )}
-      {loaded && emptyMessage !== undefined && (
-        <Txt as="p" variant="meta" tone="muted" role="status" className="m-0 px-2 py-1">
-          {emptyMessage}
-        </Txt>
-      )}
+      {loaded && emptyMessage !== undefined && <SidebarEmptyNote>{emptyMessage}</SidebarEmptyNote>}
 
       {deletion.pendingConfirmation && (
         <DeleteSessionDialog

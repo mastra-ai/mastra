@@ -15,6 +15,16 @@ export { createMultipartTestSuite, type MultipartTestSuiteConfig } from './multi
 export { createHttpLoggingTestSuite, type HttpLoggingTestSuiteConfig } from './http-logging-test-suite';
 export { createBodyLimitTestSuite, type BodyLimitTestSuiteConfig } from './body-limit-test-suite';
 export { createCustomRouteFGATestSuite, type CustomRouteFGATestSuiteConfig } from './custom-route-fga-test-suite';
+export {
+  createRouteDispatchParityTestSuite,
+  type RouteDispatchParityTestSuiteConfig,
+} from './route-dispatch-parity-test-suite';
+export { createBuiltinMCPOAuthTestSuite, type BuiltinMCPOAuthTestSuiteConfig } from './builtin-mcp-oauth-test-suite';
+export { createBuiltinMCPParityTestSuite, type BuiltinMCPParityTestSuiteConfig } from './builtin-mcp-parity-test-suite';
+export {
+  createBuiltinMCPToolsetsTestSuite,
+  type BuiltinMCPToolsetsTestSuiteConfig,
+} from './builtin-mcp-toolsets-test-suite';
 
 export {
   createDefaultTestContext,
@@ -29,3 +39,7 @@ export {
   createObservabilitySignalWriteTestSuite,
   type ObservabilitySignalWriteTestConfig,
 } from './observability-signal-write-test-suite';
+export {
+  createCustomRouteDisconnectTestSuite,
+  type CustomRouteDisconnectTestSuiteConfig,
+} from './custom-route-disconnect-test-suite';

@@ -298,6 +298,15 @@ describe('SettingsComponent mouse submenu', () => {
     return { config, callbacks, item, done, select: mocks.selectLists.at(-1) };
   }
 
+  it('shows Off for mouse preferences missing from older settings', () => {
+    const config = createConfig({ mouse: {} as SettingsConfig['mouse'] });
+    new SettingsComponent(config, createCallbacks());
+    const item = mocks.lastSettingsList.items.find((setting: { id: string }) => setting.id === 'mouse');
+    expect(item.currentValue).toBe('Off');
+    item.submenu('', vi.fn());
+    expect(mocks.selectLists.at(-1).items[mocks.selectLists.at(-1).selectedIndex].value).toBe('off');
+  });
+
   it.each(choices)('shows "$label" for the saved preferences and highlights it', ({ value, label, mouse }) => {
     const { item, select } = openMouseSubmenu(mouse);
     expect(item.currentValue).toBe(label);

@@ -1,6 +1,13 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { AUTO_TRIAGED_LABEL } from '@mastra/factory/rules/types';
+import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import { useQueries, useQueryClient } from '@tanstack/react-query';
+import type { UseQueryResult } from '@tanstack/react-query';
+import { useApiConfig } from '../../../../api/config';
+import { queryKeys } from '../../../../api/keys';
 import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../../../../hooks/useFactoryData';
+import { filedFromQueryOptions } from '../../../../hooks/useWorkItems';
+import type { FiledFromAnswer } from '../../../../hooks/useWorkItems';
 import {
   useGitLabIssuesQuery,
   useGitLabMergeRequestsQuery,
@@ -23,8 +30,8 @@ import {
 } from '../boardCandidates';
 import type { BoardCandidate, IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardFilterState } from '../boardFilters';
-import { isPersistedCandidate } from '../boardItems';
-import { pickedBoardSources, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
+import { isPersistedCandidate, persistedSourceKeys } from '../boardItems';
+import { itemBoard } from '../boardStages';
 import type { IntakeSourceBinding } from '../services/intake';
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { BoardStageId } from '../stages';
@@ -38,7 +45,6 @@ import type { BoardStageId } from '../stages';
  * yet: GitHub issues from the selected repositories, the linked repositories'
  * pull requests, and the issues of provider sources bound to the project.
  */
-const EMPTY_KEYS: ReadonlySet<string> = new Set();
 const NO_REPOSITORIES: readonly string[] = [];
 
 const INTAKE_CARD_SOURCES: Record<IntakeSource, BoardCandidate['source']> = {
@@ -100,23 +106,70 @@ function combineIntakeFeeds(feeds: readonly (IntakeFeed & { isPending: boolean }
   };
 }
 
+/** The most feed items one filed lookup covers: each is asked by its source id and by its URL, a hundred values at most. */
+const CANDIDATES_PER_LOOKUP = 50;
+
+/**
+ * What each filed lookup asks about: every feed in runs of items, so a page added to one feed
+ * leaves the lookups of the others, and of its own earlier runs, as they were.
+ */
+function filedLookupSources(feeds: readonly (readonly BoardCandidate[])[]): string[][] {
+  const lookups: string[][] = [];
+  for (const feed of feeds) {
+    for (let start = 0; start < feed.length; start += CANDIDATES_PER_LOOKUP) {
+      lookups.push(
+        feed
+          .slice(start, start + CANDIDATES_PER_LOOKUP)
+          .flatMap(candidate => [candidate.sourceKey, candidate.url])
+          .filter(Boolean),
+      );
+    }
+  }
+  return lookups;
+}
+
+/**
+ * A feed as its column shows it. Its items are held back until the server says which are already
+ * filed, so a page counts as loaded only then: otherwise the end of the column is in view over the
+ * items held back, and asks for the next page. A lookup that failed fails the feed, or the column
+ * would read as an empty backlog.
+ */
+function feedOnceItemsAreLookedUp(
+  feed: IntakeFeed & { isPending: boolean },
+  lookups: readonly UseQueryResult<FiledFromAnswer>[],
+): IntakeFeed & { isPending: boolean } {
+  const failed = lookups.find(lookup => lookup.isError);
+  if (failed && !feed.error) {
+    return {
+      ...feed,
+      isPending: false,
+      error: failed.error,
+      isFetchNextPageError: false,
+      refetch: () => Promise.all(lookups.filter(lookup => lookup.isError).map(lookup => lookup.refetch())),
+    };
+  }
+  // A lookup showing what was answered for a shorter run still waits for the items added to it.
+  const awaited = lookups.some(lookup => lookup.isFetching && (lookup.isPending || lookup.isPlaceholderData));
+  if (!awaited) return feed;
+  // Nothing answered yet: the column has no item to show, as while the first page loads.
+  if (lookups.every(lookup => !lookup.data)) return { ...feed, isPending: true, hasNextPage: false };
+  return { ...feed, isFetchingNextPage: true };
+}
+
 export function useBoardIntake({
   factoryProjectId,
   repositories,
   definition,
-  knownSourceKeys,
-  elsewhereSourceKeys = EMPTY_KEYS,
   sourceFilters,
 }: {
   factoryProjectId: string;
   /** Every linked repository; the first decides between GitHub and GitLab review feeds. */
   repositories: readonly LinkedRepositoryPayload[];
   definition: InstalledBoardInfo;
-  knownSourceKeys: ReadonlySet<string>;
-  /** Subset of `knownSourceKeys` whose card lives on another board. */
-  elsewhereSourceKeys?: ReadonlySet<string>;
   sourceFilters?: Pick<BoardFilterState, 'source' | 'linearProject'>;
 }) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
   const kind = definition.id;
   const defaultBoard = kind === DEFAULT_BOARD_ID;
   const browsesPullRequests = defaultBoard;
@@ -133,7 +186,7 @@ export function useBoardIntake({
 
   const config = configQuery.data;
   const gitlabStatusQuery = useGitLabStatusQuery(true);
-  const githubEnabled = config?.github.enabled ?? true;
+  const githubEnabled = config?.github.enabled ?? false;
   // Every linked GitHub repository feeds intake, not just the first one. Pull requests come from
   // all of them; issues only from the repositories selected as issue sources.
   const reviewRepositoryIds = repositories
@@ -220,6 +273,8 @@ export function useBoardIntake({
       !route.target.joinClosedIssue &&
       route.target.boardKey === kind,
   );
+  // Sources are connected and the routes loaded, but none places new cards on this board.
+  const unrouted = readsIntakeRoutes && intakeRoutesQuery.isSuccess && !routePlacesCardsHere;
   // Whether anything files onto this board: a feed it browses, or a connected source routed here.
   // While routes load the column stays pending, and a failed load reports the error with a retry.
   const fed =
@@ -297,10 +352,37 @@ export function useBoardIntake({
     if (source !== 'github' || !triageColumn) return initialCandidates;
     return [...initialCandidates, ...(triageIssues.data ?? []).map(issueCandidate)];
   });
-  // A source materializes once per Factory, so items that already have a card
-  // are held back. Only those carded on another board get counted: a card on
-  // this board is visible in a column, so it needs no explanation.
-  const candidates = browsedCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate));
+  // A source materializes once per Factory, so items that already have a card are held back. The
+  // server says which ones do, for the feed items alone: the board lists only the first cards of
+  // each column. An item waits for that answer, or it would flash as new before leaving. A source
+  // the view hides shows no item, so nothing is asked for it and its answer holds no feed back.
+  const initialFeedLookups = filedLookupSources(
+    browsedSources.map(source =>
+      participantCandidates.filter(candidate => candidate.source === INTAKE_CARD_SOURCES[source]),
+    ),
+  );
+  const triageFeedLookups = filedLookupSources([(triageIssues.data ?? []).map(issueCandidate)]);
+  const filedLookups = useQueries({
+    queries: [...initialFeedLookups, ...triageFeedLookups].map(sources => ({
+      ...filedFromQueryOptions(baseUrl, factoryProjectId, sources),
+      // A feed page added to a run asks again: what was answered for the shorter run holds meanwhile.
+      placeholderData: () =>
+        queryClient
+          .getQueriesData<FiledFromAnswer>({ queryKey: queryKeys.workItemsFiledFromAny(factoryProjectId) })
+          .flatMap(([, answer]) => (answer ? [answer] : []))
+          .find(answer => answer.sources.every(source => sources.includes(source))),
+    })),
+  });
+  const filedAnswers = filedLookups.flatMap(lookup => (lookup.data ? [lookup.data] : []));
+  const lookedUpSources = new Set(filedAnswers.flatMap(answer => answer.sources));
+  const filedCards = filedAnswers.flatMap(answer => answer.workItems);
+  const knownSourceKeys = persistedSourceKeys(filedCards);
+  // Only those carded on another board get counted: a card on this board is visible in a column,
+  // so it needs no explanation.
+  const elsewhereSourceKeys = persistedSourceKeys(filedCards.filter(card => itemBoard(card) !== kind));
+  const candidates = browsedCandidates.filter(
+    candidate => lookedUpSources.has(candidate.sourceKey) && !isPersistedCandidate(knownSourceKeys, candidate),
+  );
   const alreadyMaterialized = browsedCandidates.filter(candidate =>
     isPersistedCandidate(elsewhereSourceKeys, candidate),
   ).length;
@@ -319,7 +401,7 @@ export function useBoardIntake({
     incidentio: incidentioFeed,
   };
   const failedSource = browsedSources.find(source => browsed[source].error);
-  const feed = intakeRoutesFailed
+  const browsedFeed = intakeRoutesFailed
     ? {
         error: intakeRoutesQuery.error,
         isPending: false,
@@ -327,10 +409,12 @@ export function useBoardIntake({
         refetch: () => intakeRoutesQuery.refetch(),
       }
     : combineIntakeFeeds(browsedSources.map(source => browsed[source]));
+  const feed = browsedFeed && feedOnceItemsAreLookedUp(browsedFeed, filedLookups.slice(0, initialFeedLookups.length));
   // Triage is fed by its own labelled query, so it fails (and retries) on its own.
+  const triageFeed = feedOnceItemsAreLookedUp(triageIssues, filedLookups.slice(initialFeedLookups.length));
   const feedByColumn: Partial<Record<BoardStageId, IntakeFeed>> = {
     [initialPhase]: feed,
-    ...(triageColumn && browsesGithub ? { triage: triageIssues } : {}),
+    ...(triageColumn && browsesGithub ? { triage: triageFeed } : {}),
   };
 
   // Keep an unresolved board pending while discovering its routed sources.
@@ -348,11 +432,14 @@ export function useBoardIntake({
     active: failedSource ?? browsedSources[0],
     available,
     fed,
+    unrouted,
     candidates,
     alreadyMaterialized,
     participantCandidates,
+    /** The sources of the browsed feeds' items already filed as a card, on this board or another. */
+    knownSourceKeys,
     feedByColumn,
     isPending,
-    isTriagePending: triageColumn && browsesGithub && triageIssues.isPending,
+    isTriagePending: triageColumn && browsesGithub && triageFeed.isPending,
   };
 }

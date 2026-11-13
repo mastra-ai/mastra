@@ -79,7 +79,7 @@ export interface PlatformLinearEventWorkerConfig {
    * First-observation of a Linear issue happens in the reconcile sweep's
    * intake discovery, which only lists sources an org bound to its project.
    */
-  workItems: Pick<WorkItemsStorage, 'list' | 'copyLegacyCards'>;
+  workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
   ingestFactoryIssue?: (input: LinearRulesIngress) => Promise<unknown>;
   reconcileFactoryState?: IssueReconciler;
@@ -120,7 +120,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
   readonly #linear: PlatformLinearEventDispatchIntegration;
   readonly #storage: PlatformLinearEventStorage;
   readonly #projects: Pick<FactoryProjectsStorage, 'listAll'>;
-  readonly #workItems: Pick<WorkItemsStorage, 'list' | 'copyLegacyCards'>;
+  readonly #workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   readonly #ingestFactoryIssue: ((input: LinearRulesIngress) => Promise<unknown>) | undefined;
   readonly #reconcileFactoryState: IssueReconciler | undefined;
   readonly #pollEventsEnabled: boolean;
@@ -419,7 +419,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
           factoryProjectId: project.id,
           sources: [{ integrationId: 'linear', type: 'issue', externalId: sourceKey }],
         });
-        items = await this.#workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
+        items = await this.#workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id });
       } catch (error) {
         this.deps?.logger.error('Platform Linear work-item lookup failed', {
           linearWorkspaceId,

@@ -16,3 +16,13 @@
  * cannot drift between engines (#17893 parity port).
  */
 export const TERMINAL_FINISH_REASONS = ['stop', 'error', 'length', 'content-filter'];
+
+/**
+ * Finish reasons that end the loop even when the response carries tool calls, including calls
+ * that failed (an unknown tool, or arguments cut off mid-JSON). `stop` is not one of them: some
+ * models report `stop` alongside tool calls, and the loop must process those.
+ *
+ * A tool error after one of these reasons is recorded, but it must not send another request:
+ * that request repeats the failure, truncation, or refusal (#29518).
+ */
+export const TOOL_CALL_TERMINAL_FINISH_REASONS: ReadonlySet<string> = new Set(['error', 'length', 'content-filter']);

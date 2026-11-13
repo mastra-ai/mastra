@@ -29,6 +29,7 @@ import type {
   PullRequestComment,
   PublishCommitCheckInput,
   PullRequestRef,
+  RepositoriesAccess,
   RepositoryAccess,
   Review,
   ReviewComment,
@@ -59,8 +60,13 @@ import type {
 } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
 import { reconcileInterval, reconciliationEnabled } from '../../github/reconciliation-config.js';
-import { buildGithubRoutes } from '../../github/routes.js';
-import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
+import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from '../../github/routes.js';
+import {
+  attachGithubPullRequestDiscovery,
+  attachGithubReconciler,
+  attachGithubRules,
+  openPullRequestLister,
+} from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
 import type { GitIdentity } from '../../github/sandbox.js';
 import {
@@ -82,6 +88,21 @@ import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
+
+/** Why Platform withheld a personal-account installation from this org's credentials. */
+type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
+
+/**
+ * Status reason for a settled installation list. A personal install Platform withholds would otherwise
+ * read as "nothing installed", so say so; any usable installation still means ready.
+ */
+function githubStatusReason(
+  hasUsableInstallation: boolean,
+  hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason,
+): 'ready' | 'personal_install_hidden' | 'not_connected' {
+  if (hasUsableInstallation) return 'ready';
+  return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
+}
 
 type PlatformGithubInstallation = {
   installationId: number;
@@ -179,10 +200,11 @@ const PLATFORM_GITHUB_APP_SLUG = 'mastra-platform';
 const INSTALLATION_REPOS_CACHE_TTL_MS = 30_000;
 /**
  * How long a minted repository-scoped token may be reused. GitHub
- * installation tokens live ~60 minutes; 5 minutes keeps a wide validity
- * margin while collapsing the per-session-materialization mint round trip.
+ * installation tokens live ~60 minutes. A session re-mints the token it
+ * installed after `GITHUB_TOKEN_REFRESH_AFTER_MS` (30 minutes), so a token
+ * served from this cache is at most 50 minutes old when it is replaced.
  */
-const REPOSITORY_ACCESS_CACHE_TTL_MS = 5 * 60_000;
+const REPOSITORY_ACCESS_CACHE_TTL_MS = 20 * 60_000;
 /**
  * How long a collaborator permission lookup may be reused. The reconcile
  * sweep re-stamps every open card's author and the event tail gates every
@@ -254,12 +276,31 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly #issueReconcileEnabled: boolean;
   readonly #pullRequestReconcileIntervalMs: number | undefined;
   readonly #issueReconcileIntervalMs: number | undefined;
+  readonly #pullRequestDiscoveryIntervalMs: number | undefined;
   #storage: SourceControlStorageHandle | undefined;
   #integrationStorage: GithubSubscriptionStorage | undefined;
+  #ingestFactoryEvent: ReturnType<typeof attachGithubRules>;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
   /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
   readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  /**
+   * In-flight mints by the same key as `#repositoryAccessCache`. Sessions that
+   * boot together all miss the cache at once; without this each one minted its
+   * own token and drained the Platform's per-installation mint budget.
+   */
+  readonly #repositoryAccessInFlight = new Map<string, Promise<RepositoryAccess | undefined>>();
+
+  #mintOnce<T extends RepositoryAccess | undefined>(cacheKey: string, mint: () => Promise<T>): Promise<T> {
+    const cached = this.#repositoryAccessCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.access as T);
+    this.#repositoryAccessCache.delete(cacheKey);
+    const inFlight = this.#repositoryAccessInFlight.get(cacheKey);
+    if (inFlight) return inFlight as Promise<T>;
+    const pending = mint().finally(() => this.#repositoryAccessInFlight.delete(cacheKey));
+    this.#repositoryAccessInFlight.set(cacheKey, pending);
+    return pending;
+  }
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
     string,
@@ -358,6 +399,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 sourceId,
                 title: pullRequest.title,
                 status: pullRequest.state,
+                labels: pullRequest.labels,
                 createdAt: pullRequest.createdAt,
                 updatedAt: pullRequest.updatedAt,
                 metadata: {
@@ -433,10 +475,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // instead of re-minting through the Platform each time. The TTL keeps
       // a wide margin under GitHub's ~60min installation-token lifetime.
       const cacheKey = `${orgId}:${repositoryId}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
-
+      return this.#mintOnce(cacheKey, async () => {
       const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
       if (!repository) throw new Error('Version-control repository not found.');
       const cloneUrl = `https://github.com/${repository.slug}.git`;
@@ -511,15 +550,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }
         throw err;
       }
+      });
     },
     getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
       const ids = [...new Set(repositoryIds)];
       if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
       const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
-      const cached = this.#repositoryAccessCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) return cached.access;
-      this.#repositoryAccessCache.delete(cacheKey);
-
+      return this.#mintOnce(cacheKey, async () => {
       const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
       if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
       const found = repositories as NonNullable<(typeof repositories)[number]>[];
@@ -540,15 +577,24 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           permissions: REPOSITORY_TOKEN_PERMISSIONS,
         },
       );
-      const access: RepositoryAccess = {
+      const authorization = { scheme: 'bearer' as const, token: token.token };
+      const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
+      // Each repository's access under the shared token, handed only to the
+      // caller that asked for the set. It is never cached under a single
+      // repository's key, where it would widen that repository's own token.
+      const access: RepositoriesAccess = {
         cloneUrl: `https://github.com/${found[0]!.slug}.git`,
-        authorization: { scheme: 'bearer', token: token.token },
+        authorization,
+        repositories: Object.fromEntries(
+          found.map(repository => [
+            repository.id,
+            { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
+          ]),
+        ),
       };
-      setBounded(this.#repositoryAccessCache, cacheKey, {
-        access,
-        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-      });
+      setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
       return access;
+      });
     },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
@@ -617,6 +663,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+    this.#pullRequestDiscoveryIntervalMs = reconcileInterval(
+      process.env.MASTRACODE_PLATFORM_GITHUB_PR_DISCOVERY_INTERVAL_MS,
+    );
   }
 
   /** Commit authorship follows the Platform App's authoritative writer identity. */
@@ -684,6 +733,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   routes(ctx: IntegrationContext): ApiRoute[] {
     const ingestFactoryEvent = attachGithubRules(this, ctx);
+    this.#ingestFactoryEvent = ingestFactoryEvent;
     return [
       this.#statusRoute(ctx),
       this.#connectRoute(ctx),
@@ -710,6 +760,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     ];
   }
 
+  /**
+   * Import a newly linked repository's open issues and pull requests onto
+   * the board. No-op until routes are mounted with rules configured.
+   */
+  async ingestLinkedRepositoryBacklog(args: { orgId: string; projectRepositoryId: string }): Promise<void> {
+    await ingestLinkedRepositoryBacklog({
+      github: this as unknown as GithubIntegration,
+      ...args,
+      ingestFactoryEvent: this.#ingestFactoryEvent,
+    });
+  }
+
   #statusRoute(ctx: IntegrationContext): ApiRoute {
     return registerApiRoute('/web/github/status', {
       method: 'GET',
@@ -732,7 +794,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           });
         }
 
-        const [installations, userConnection] = await Promise.all([
+        const [{ installations, hiddenPersonalInstallReason }, userConnection] = await Promise.all([
           this.#syncInstallations(tenant.orgId, tenant.userId),
           this.#fetchUserConnection(tenant.userId),
         ]);
@@ -747,7 +809,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           })),
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason: githubStatusReason(installations.length > 0, hiddenPersonalInstallReason),
           diagnostics: this.diagnostics(),
         });
       },
@@ -836,15 +898,22 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
-    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-      'GET',
-      `${API_PREFIX}/github-app/installations`,
-    );
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+  ): Promise<{
+    installations: SourceControlInstallation[];
+    hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
+  }> {
+    const result = await this.#client.request<{
+      installations: PlatformGithubInstallation[];
+      /** Platform sends null when it withholds nothing. */
+      hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
+    }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
+    const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
@@ -857,6 +926,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
+    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
@@ -874,6 +944,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         reconcileFactoryState: this.#pullRequestReconcileEnabled
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
+        discoverPullRequests: this.#pullRequestReconcileEnabled
+          ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
+          : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
               this,
@@ -886,6 +959,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         intervalMs: this.#pollingIntervalMs,
         pullRequestReconcileIntervalMs: this.#pullRequestReconcileIntervalMs,
         issueReconcileIntervalMs: this.#issueReconcileIntervalMs,
+        pullRequestDiscoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs,
         // Resolved lazily: workers are constructed before versionControl
         // storage is initialized, and the worker only reads these slices once
         // it is running.
@@ -1108,6 +1182,9 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ...(this.#pullRequestReconcileIntervalMs === undefined
             ? {}
             : { intervalMs: this.#pullRequestReconcileIntervalMs }),
+          ...(this.#pullRequestDiscoveryIntervalMs === undefined
+            ? {}
+            : { discoveryIntervalMs: this.#pullRequestDiscoveryIntervalMs }),
         },
         issues: {
           enabled: this.#issueReconcileEnabled,

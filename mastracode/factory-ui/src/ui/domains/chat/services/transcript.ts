@@ -71,6 +71,8 @@ export interface NotificationEntry {
   notifKind?: string;
   priority?: string;
   metadata?: Record<string, unknown>;
+  /** What the sender said about the notification, e.g. which session sent it and what it waits on. */
+  attributes?: Record<string, unknown>;
 }
 
 export interface NotificationSummaryEntry {
@@ -316,12 +318,16 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
         : withTool(state, event.toolCallId, t => ({ ...t, exit: commandExit(event) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
-    case 'tool_end':
-      return withTool(state, event.toolCallId, t => ({
+    case 'tool_end': {
+      // A prompt answered in another window never gets a local resolvePrompt;
+      // the call finishing is the only signal this window receives.
+      const settled = withTool(state, event.toolCallId, t => ({
         ...t,
         status: event.isError ? 'error' : 'done',
         result: event.result,
       }));
+      return { ...settled, entries: settled.entries.filter(e => !isPromptFor(e, new Set([event.toolCallId]))) };
+    }
 
     case 'tool_approval_required':
       return pushPrompt(state, {
@@ -458,7 +464,27 @@ export function createInitialTranscript({
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
+  const settled = terminalToolCallIds(messages);
+  return messages.flatMap(message => [
+    toMessageEntry(message, { streaming: false }),
+    ...persistedPrompts(message).filter(prompt => !settled.has(prompt.toolCallId)),
+  ]);
+}
+
+function terminalToolCallIds(messages: MastraDBMessage[]): Set<string> {
+  const ids = new Set<string>();
+  for (const message of messages) {
+    for (const part of message.content.parts) {
+      if (part.type === 'tool-invocation' && isTerminalInvocationState(part.toolInvocation.state)) {
+        ids.add(part.toolInvocation.toolCallId);
+      }
+    }
+  }
+  return ids;
+}
+
+function isPromptFor(entry: TimelineEntry, toolCallIds: { has(id: string): boolean }): boolean {
+  return (entry.kind === 'approval' || entry.kind === 'suspension') && toolCallIds.has(entry.toolCallId);
 }
 
 const sandboxExitSchema = z.object({
@@ -591,9 +617,9 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
 
   const onScreenIndex = claimOnScreenEntries(state.entries, messages);
   const confirmed = confirmPendingUserMessages(state, onScreenIndex);
-  const reconciled = reconcileToolResults(adoptCoveringWindowCopies(confirmed, onScreenIndex), messages);
+  const anchored = adoptCoveringWindowCopies(confirmed, onScreenIndex);
 
-  if (messages.every(message => onScreenIndex.has(message))) return reconciled;
+  if (messages.every(message => onScreenIndex.has(message))) return reconcileToolResults(anchored, messages);
 
   const entries: TimelineEntry[] = [];
   let cursor = 0;
@@ -607,13 +633,13 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
     }
 
     if (anchorIndex < cursor) continue;
-    entries.push(...reconciled.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
+    entries.push(...anchored.entries.slice(cursor, anchorIndex), ...messagesToEntries(missing));
     missing = [];
     cursor = anchorIndex;
   }
-  entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
+  entries.push(...anchored.entries.slice(cursor), ...messagesToEntries(missing));
 
-  return { ...reconciled, entries };
+  return reconcileToolResults({ ...anchored, entries }, messages);
 }
 
 function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
@@ -842,25 +868,29 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
   }
   if (serverTerminalParts.size === 0) return state;
 
-  let changed = false;
-  const entries = state.entries.map(entry => {
-    if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
-    let entryChanged = false;
-    const parts = entry.message.content.parts.map(part => {
-      if (part.type !== 'tool-invocation') return part;
-      const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
-      if (!serverPart) return part;
-      const settled =
-        isTerminalInvocationState(part.toolInvocation.state) &&
-        part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
-      if (settled) return part;
-      entryChanged = true;
-      return serverPart;
+  // A prompt answered elsewhere whose tool_end this window missed (SSE gap).
+  const answered = state.entries.filter(entry => isPromptFor(entry, serverTerminalParts));
+  let changed = answered.length > 0;
+  const entries = state.entries
+    .filter(entry => !answered.includes(entry))
+    .map(entry => {
+      if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
+      let entryChanged = false;
+      const parts = entry.message.content.parts.map(part => {
+        if (part.type !== 'tool-invocation') return part;
+        const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
+        if (!serverPart) return part;
+        const settled =
+          isTerminalInvocationState(part.toolInvocation.state) &&
+          part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
+        if (settled) return part;
+        entryChanged = true;
+        return serverPart;
+      });
+      if (!entryChanged) return entry;
+      changed = true;
+      return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
     });
-    if (!entryChanged) return entry;
-    changed = true;
-    return { ...entry, message: { ...entry.message, content: { ...entry.message.content, parts } } };
-  });
 
   return changed ? { ...state, entries } : state;
 }

@@ -287,7 +287,7 @@ export function createAgentStreamPublisher({
         case 'tool-output':
         case 'workflow-step-output': {
           // A delegated agent's chunks arrive wrapped here, with their own prompts and steps.
-          const published = slimNestedAgentChunks(chunk);
+          const published = keepProducedAt(chunk, slimNestedAgentChunks(chunk));
           void enqueue(() => emitChunkEvent(pubsub, runId, published));
           return;
         }
@@ -308,10 +308,7 @@ export function createAgentStreamPublisher({
         }
         case 'error': {
           lastError = chunk.payload.error;
-          const serialized = {
-            ...chunk,
-            payload: { ...chunk.payload, error: serializeIfError(chunk.payload.error) },
-          } as ChunkType<any>;
+          const serialized = withPayload(chunk, { ...chunk.payload, error: serializeIfError(chunk.payload.error) });
           void enqueue(() => emitChunkEvent(pubsub, runId, serialized));
           return;
         }
@@ -331,9 +328,13 @@ export function createAgentStreamPublisher({
 
 /** A copy of `chunk` with another payload, keeping when the chunk was produced. */
 function withPayload(chunk: ChunkType<any>, payload: unknown): ChunkType<any> {
-  const copy = { ...chunk, payload } as ChunkType<any>;
+  return keepProducedAt(chunk, { ...chunk, payload } as ChunkType<any>);
+}
+
+/** `copy`, stamped with when `chunk` was produced; publishing would otherwise stamp the copy when it's sent. */
+function keepProducedAt(chunk: ChunkType<any>, copy: ChunkType<any>): ChunkType<any> {
   const producedAt = getChunkProducedAt(chunk);
-  if (producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
+  if (copy !== chunk && producedAt !== undefined) stampChunkProducedAt(copy, producedAt);
   return copy;
 }
 
