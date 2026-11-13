@@ -192,7 +192,7 @@ Groups matching records by one or more dimensions and aggregates each group. The
 | `aggregation` | `AggregationType` | Yes | Aggregation for each group |
 | `distinctColumn` | `MetricDistinctColumn` | For `count_distinct` | Column whose distinct values are counted |
 | `filters` | `MetricsFilter` | No | Shared metric filters |
-| `limit` | `number` | No | Positive integer up to 1,000. Keeps only the top groups after sorting by `orderDirection`. When omitted, all groups are returned. Set it for high-cardinality groupings such as `threadId` to bound the response, and leave it out when you need complete totals. |
+| `limit` | `number` | No | Positive integer up to 1,000. Keeps only the top groups after sorting by `orderDirection`. When omitted, all groups are returned. Set it for high-cardinality groupings such as `threadId` to bound the response. When grouping by a label key, some stores, such as PostgreSQL, exclude rows where the label is missing or empty, so the groups might not add up to the overall total even without a `limit`. Use `getMetricAggregate()` for that total. |
 | `orderDirection` | `'ASC' \| 'DESC'` | No | Sort direction for the aggregated value. Storage implementations default to `DESC`. |
 
 #### Returns
