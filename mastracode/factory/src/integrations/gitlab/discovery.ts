@@ -10,11 +10,18 @@ import {
   routedGitLabSourceIds,
 } from './routes.js';
 import { attachGitLabRules } from './rules.js';
+import type { ParsedGitLabWebhook } from './webhook.js';
 
 /**
  * First observation of the merge requests and issues GitLab sent no event
  * for. It runs inside the leased reconcile sweep, so a card appears whether or
  * not anyone has the board open, and the list routes stay pure reads.
+ *
+ * A listed delivery every Factory has settled would only replay, after paying
+ * for its rule evaluation and GitLab member lookups. The sweep remembers those
+ * per project and skips them, so an unchanged GitLab costs listings only. The
+ * memory holds what the last sweep listed and nothing older; a restart or a
+ * lease moving to another replica costs one pass that replays.
  */
 export function attachGitLabDiscovery(
   gitlab: Pick<
@@ -32,8 +39,10 @@ export function attachGitLabDiscovery(
   const ingest = attachGitLabRules(gitlab, context);
   if (!ingest) return undefined;
   const { projects, sourceControl, intake } = context.storage;
+  let settled = new Set<string>();
 
   return async () => {
+    const listed = new Set<string>();
     const summary: IssueReconcileSummary = {
       projects: 0,
       checked: 0,
@@ -49,6 +58,18 @@ export function attachGitLabDiscovery(
       const failed = (error: unknown) => {
         summary.failed += 1;
         summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+      };
+      const key = (event: ParsedGitLabWebhook) => `${project.id}\u0000${event.deliveryId}`;
+      const unsettled = (events: Array<ParsedGitLabWebhook | null>) =>
+        events.filter((event): event is ParsedGitLabWebhook => {
+          if (!event || !settled.has(key(event))) return event !== null;
+          listed.add(key(event));
+          return false;
+        });
+      const remembered = async (event: ParsedGitLabWebhook) => {
+        const result = await ingest(event);
+        if (result.settled) listed.add(key(event));
+        return result;
       };
       // One unreachable repository or source must not hide the others.
       const each = async <T>(list: () => Promise<T[]>, discover: (entry: T) => Promise<void>) => {
@@ -74,7 +95,7 @@ export function attachGitLabDiscovery(
             const events = result.pullRequests.flatMap(pr =>
               listedMergeRequestEvents({ host: linked.host, projectId, projectPath: linked.repository.slug }, pr),
             );
-            (await ingestListedEvents(events, ingest)).forEach(failed);
+            (await ingestListedEvents(unsettled(events), remembered)).forEach(failed);
             if (result.nextCursor === null) break;
           }
         },
@@ -91,13 +112,14 @@ export function attachGitLabDiscovery(
               sourceIds: [sourceId],
               cursor,
             });
-            (await ingestListedEvents(result.issues.map(listedIssueEvent), ingest)).forEach(failed);
+            (await ingestListedEvents(unsettled(result.issues.map(listedIssueEvent)), remembered)).forEach(failed);
             if (result.nextCursor === null) break;
             cursor = result.nextCursor;
           }
         },
       );
     }
+    settled = listed;
     return summary;
   };
 }
