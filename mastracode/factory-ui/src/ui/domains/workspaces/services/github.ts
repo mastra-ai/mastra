@@ -93,6 +93,8 @@ export interface GithubRepo {
   installationStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
+  /** When the repository last received a push, if the server reports it. */
+  pushedAt?: string | null;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
@@ -218,10 +220,11 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
 export async function listGithubRepos(
   baseUrl: string,
   query?: string,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; limit?: number },
 ): Promise<GithubRepo[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
+  if (options?.limit) params.set('limit', String(options.limit));
   if (options?.refresh) params.set('refresh', '1');
   const search = params.toString();
   const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;

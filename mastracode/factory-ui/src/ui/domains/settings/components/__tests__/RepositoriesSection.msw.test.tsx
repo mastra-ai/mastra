@@ -219,6 +219,49 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
   });
 
+  it('asks for a search instead of claiming nothing is left when the recent repositories are all added', async () => {
+    const user = userEvent.setup();
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      id: 100 + index,
+      fullName: `acme/recent-${index}`,
+      name: `recent-${index}`,
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: true,
+      installationId: 1,
+      installationStorageId: 'inst-1',
+      sandboxProvider: 'custom',
+      sandboxWorkdir: `~/recent-${index}`,
+    }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () => HttpResponse.json({ repos: recent })),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => HttpResponse.json({ projects: [] })),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: FACTORY_ID,
+              name: 'factory-gitlab-primary',
+              repositories: [
+                primaryRepository,
+                ...recent.map(repo => listedRepository(`linked-${repo.id}`, repo.fullName)),
+              ],
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+
+    expect(await screen.findByText(/most recent repositories are already added/)).toBeInTheDocument();
+    expect(screen.queryByText(/No more repositories available/)).not.toBeInTheDocument();
+  });
+
   it('does not mistake an unsettled GitHub search or a failed request for an empty result', async () => {
     const user = userEvent.setup();
     let releaseSearch!: () => void;

@@ -4,7 +4,7 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 import { fakeRouteAuth } from '../../routes/test-utils.js';
 import { createStateSigner } from '../../state-signing.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { GithubIntegration, normalizePrivateKey } from './integration.js';
+import { GithubIntegration, narrowRepos, normalizePrivateKey } from './integration.js';
 import { openPullRequestLister } from './rules.js';
 
 // Real RSA key so we can prove Node's PEM decoder accepts the normalized
@@ -75,6 +75,37 @@ describe('normalizePrivateKey', () => {
 
   it('leaves non-PEM values untouched', () => {
     expect(normalizePrivateKey('not-a-key')).toBe('not-a-key');
+  });
+});
+
+describe('narrowRepos', () => {
+  const repo = (fullName: string, pushedAt: string | null) => ({
+    id: fullName.length,
+    fullName,
+    name: fullName.split('/')[1]!,
+    owner: fullName.split('/')[0]!,
+    defaultBranch: 'main',
+    private: false,
+    installationId: 1,
+    pushedAt,
+  });
+  const repos = [
+    repo('acme/old-agent', '2026-01-01T00:00:00Z'),
+    repo('acme/web', '2026-11-01T00:00:00Z'),
+    repo('acme/never-pushed-agent', null),
+    repo('acme/Agent-New', '2026-10-01T00:00:00Z'),
+  ];
+
+  it('keeps names containing the query case-insensitively, most recently pushed first', () => {
+    expect(narrowRepos(repos, ' AGENT ').map(r => r.fullName)).toEqual([
+      'acme/Agent-New',
+      'acme/old-agent',
+      'acme/never-pushed-agent',
+    ]);
+  });
+
+  it('returns only the most recent repositories up to the limit', () => {
+    expect(narrowRepos(repos, '', 2).map(r => r.fullName)).toEqual(['acme/web', 'acme/Agent-New']);
   });
 });
 

@@ -1225,6 +1225,29 @@ describe('repos route', () => {
     expect(tables.installations).toHaveLength(1);
   });
 
+  it('passes a search and limit to each installation and keeps the most recently pushed overall', async () => {
+    install(7, 'octo');
+    install(8, 'other');
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) =>
+      installationId === 7
+        ? [
+            { ...(await defaultImpl(7))[0]!, id: 1, fullName: 'octo/agent-old', pushedAt: '2026-01-01T00:00:00Z' },
+            { ...(await defaultImpl(7))[0]!, id: 2, fullName: 'octo/agent-new', pushedAt: '2026-11-13T00:00:00Z' },
+          ]
+        : [{ ...(await defaultImpl(8))[0]!, id: 3, fullName: 'other/agent-mid', pushedAt: '2026-06-01T00:00:00Z' }],
+    );
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos?q=Agent&limit=2');
+
+    expect(res.status).toBe(200);
+    expect(listInstallationRepos).toHaveBeenCalledWith(7, { fresh: false, query: 'agent', limit: 2 });
+    const json = await res.json();
+    expect(json.repos.map((repo: { fullName: string }) => repo.fullName)).toEqual([
+      'octo/agent-new',
+      'other/agent-mid',
+    ]);
+  });
+
   it('lists multiple installations concurrently', async () => {
     install(7, 'octo');
     install(8, 'other');
@@ -2485,8 +2508,11 @@ describe('Factory session routes', () => {
 
   it('explains that a session with no conversation cannot be named', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(async () => []), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(async () => []),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const app = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(app, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;
@@ -2500,8 +2526,11 @@ describe('Factory session routes', () => {
 
   it('does not name a session belonging to another user', async () => {
     seedMaterializedProject();
-    const controller = { queryThreadById: vi.fn(async () => null),
-      queryThreads: vi.fn(), generateThreadTitle: vi.fn() } as any;
+    const controller = {
+      queryThreadById: vi.fn(async () => null),
+      queryThreads: vi.fn(),
+      generateThreadTitle: vi.fn(),
+    } as any;
     const ownerApp = buildApp({ workosId: 'u1' }, { controller });
     const created = await postJson(ownerApp, '/web/github/projects/p1/sessions', { branch: 'feat/x' });
     const sessionId = (await created.json()).session.sessionId;

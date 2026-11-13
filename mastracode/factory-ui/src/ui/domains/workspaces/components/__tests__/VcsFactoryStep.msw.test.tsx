@@ -124,6 +124,36 @@ describe('VCS Factory step', () => {
     expect(queries).toEqual(['jal']);
   });
 
+  it('opens on a few recently pushed repositories and searches the server for the rest once typing starts', async () => {
+    const requests: Array<{ q: string | null; limit: string | null }> = [];
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...repo,
+      id: index + 1,
+      name: `recent-${index}`,
+      fullName: `acme/recent-${index}`,
+    }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push({ q: params.get('q'), limit: params.get('limit') });
+        return HttpResponse.json({
+          repos: params.get('q') ? [{ ...repo, id: 99, name: 'old-tool', fullName: 'acme/old-tool' }] : recent,
+        });
+      }),
+    );
+
+    const { client } = renderStep();
+
+    expect(await screen.findByText('acme/recent-0')).toBeInTheDocument();
+    expect(requests).toEqual([{ q: null, limit: '8' }]);
+
+    await userEvent.type(screen.getByLabelText('Search repositories'), 'old');
+    expect(await screen.findByText('acme/old-tool', {}, { timeout: 2000 })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(requests.at(-1)).toEqual({ q: 'old', limit: '50' });
+  });
+
   it('offers Retry when the repository list fails to load', async () => {
     let calls = 0;
     server.use(
@@ -726,6 +756,65 @@ describe('VCS Factory step', () => {
     expect(refreshes).toHaveLength(1);
     expect(statusCalls).toBe(before + 1);
     expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
+  it('clears an approval request when a refresh finds a new repository among a full recent list', async () => {
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...repo,
+      id: index + 1,
+      fullName: `octo/recent-${index}`,
+    }));
+    let refreshed = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('refresh')) refreshed = true;
+        // The granted repository was pushed most recently, so it displaces the oldest of the eight.
+        return HttpResponse.json({
+          repos: refreshed ? [{ ...repo, id: 100, fullName: 'octo/granted' }, ...recent.slice(0, 7)] : recent,
+        });
+      }),
+    );
+    const onDismissGithubCallback = vi.fn();
+    const { client } = renderStep({ githubCallback: { kind: 'requested' }, onDismissGithubCallback });
+
+    expect(await screen.findByRole('radio', { name: 'octo/recent-7' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh GitHub repositories' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/granted' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(onDismissGithubCallback).toHaveBeenCalledOnce();
+  });
+
+  it('keeps an approval request up when a refresh only shows a repository pushed since the list loaded', async () => {
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...repo,
+      id: index + 1,
+      fullName: `octo/recent-${index}`,
+    }));
+    let refreshed = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        if (new URL(request.url).searchParams.get('refresh')) refreshed = true;
+        const pushed = {
+          ...repo,
+          id: 100,
+          fullName: 'octo/just-pushed',
+          pushedAt: new Date(Date.now() + 1000).toISOString(),
+        };
+        return HttpResponse.json({ repos: refreshed ? [pushed, ...recent.slice(0, 7)] : recent });
+      }),
+    );
+    const onDismissGithubCallback = vi.fn();
+    const { client } = renderStep({ githubCallback: { kind: 'requested' }, onDismissGithubCallback });
+
+    expect(await screen.findByRole('radio', { name: 'octo/recent-7' })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Refresh GitHub repositories' }));
+
+    expect(await screen.findByRole('radio', { name: 'octo/just-pushed' })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(onDismissGithubCallback).not.toHaveBeenCalled();
   });
 
   it('keeps a pending approval request up while other repositories are already listed', async () => {
