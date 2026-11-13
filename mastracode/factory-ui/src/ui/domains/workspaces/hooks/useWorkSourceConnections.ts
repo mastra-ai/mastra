@@ -12,8 +12,6 @@ export const WORK_SOURCES: readonly WorkSource[] = ['linear', 'jira', 'incident-
  */
 export type CodeHostSource = 'github' | 'gitlab';
 
-export const CODE_HOST_SOURCES: readonly CodeHostSource[] = ['github', 'gitlab'];
-
 /** Everything the Work step can preview or list as an issue source. */
 export type BoardSource = WorkSource | CodeHostSource;
 
