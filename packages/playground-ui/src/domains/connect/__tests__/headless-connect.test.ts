@@ -180,7 +180,7 @@ describe('startHeadlessAuth', () => {
     nangoMocks.create.mockClear();
   });
 
-  it('submits OAuth client credentials without opening a popup', async () => {
+  it('passes OAuth client credentials to nango.auth', async () => {
     await startHeadlessAuth({
       sessionToken: 'session-token',
       integrationId: 'some-cc-api',

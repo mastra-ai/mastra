@@ -449,5 +449,49 @@ describe('ConnectionsPage', () => {
       fireEvent.change(within(dialog).getByLabelText(/API key/), { target: { value: 'pat-test-123' } });
       expect(submit.disabled).toBe(false);
     });
+
+    it('hides fields whose visibleWhen condition is not met and does not require them', async () => {
+      server.use(
+        http.get(`${BASE_URL}/connect/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              {
+                id: 'regional',
+                displayName: 'Regional',
+                logoUrl: null,
+                authType: 'API_KEY',
+                authFields: [
+                  { name: 'region', target: 'params', label: 'Region', required: true, order: 0 },
+                  {
+                    name: 'apiKey',
+                    target: 'credentials',
+                    label: 'API key',
+                    secret: true,
+                    required: true,
+                    order: 1,
+                    visibleWhen: { field: 'region', equals: 'eu' },
+                  },
+                ],
+              },
+            ],
+          }),
+        ),
+        http.get(`${BASE_URL}/connect/connections`, () => HttpResponse.json(mixedConnectionsResponse)),
+      );
+
+      renderPage();
+
+      const dialog = await pickProvider('Regional');
+      const submit = (await within(dialog).findByRole('button', { name: 'Connect' })) as HTMLButtonElement;
+      expect(within(dialog).queryByLabelText('API key')).toBeNull();
+
+      fireEvent.change(within(dialog).getByLabelText('Region'), { target: { value: 'us' } });
+      expect(within(dialog).queryByLabelText('API key')).toBeNull();
+      expect(submit.disabled).toBe(false);
+
+      fireEvent.change(within(dialog).getByLabelText('Region'), { target: { value: 'eu' } });
+      expect(within(dialog).getByLabelText('API key')).not.toBeNull();
+      expect(submit.disabled).toBe(true);
+    });
   });
 });
