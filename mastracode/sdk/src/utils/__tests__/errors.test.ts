@@ -109,4 +109,14 @@ describe('parseError', () => {
     expect(parsed.detail).toContain('rejected as a result of our safety system');
     expect(parsed.requestUrl).toBe('https://api.anthropic.com/v1/messages');
   });
+
+  it("keeps the provider's safety wording when the rejection has a generic cause", () => {
+    const providerMessage = 'Your request was rejected as a result of our safety system.';
+    const error = new Error(providerMessage, { cause: new Error('Bad Request') });
+
+    const parsed = parseError(error);
+
+    expect(parsed.type).toBe('content_filter');
+    expect(parsed.detail).toBe(providerMessage);
+  });
 });

@@ -253,7 +253,7 @@ export function parseError(error: unknown): ParsedError {
       return {
         message:
           "The provider's safety system blocked this request. This is often a false positive on code, security, or credential-like text.",
-        detail,
+        detail: err.message.trim() ? err.message : detail,
         requestUrl,
         type,
         retryable: false,

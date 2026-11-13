@@ -93,7 +93,7 @@ describe('showFormattedError', () => {
     const text = renderedText(state);
     expect(text).toContain('safety system blocked this request');
     expect(text).toContain('rejected as a result of our safety system');
-    expect(text).toContain('Hint: Often a false positive');
+    expect(text).toContain('Hint: Retry, rephrase, or use /model to switch models');
   });
 });
 
