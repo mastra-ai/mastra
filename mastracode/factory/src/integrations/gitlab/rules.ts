@@ -49,6 +49,26 @@ const RULE_TIMEOUT_MS = 5_000;
 
 type IngressStatus = 'ignored' | 'committed' | 'replayed' | 'missing';
 
+export interface GitLabIngressResult {
+  status: IngressStatus;
+  /**
+   * Every Factory this delivery reaches has handled it for good: ingesting the same
+   * delivery again would only replay. Sweeps use it to skip what they already listed.
+   */
+  settled?: boolean;
+}
+
+function settled(result: GitLabIngressResult): boolean {
+  return result.settled ?? (result.status === 'committed' || result.status === 'replayed');
+}
+
+function combined(results: GitLabIngressResult[]): GitLabIngressResult {
+  const all = results.length > 0 && results.every(settled);
+  if (results.some(result => result.status === 'committed')) return { status: 'committed', settled: all };
+  if (results.some(result => result.status === 'replayed')) return { status: 'replayed', settled: all };
+  return { status: results[0]?.status ?? 'ignored', settled: all };
+}
+
 function object(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : undefined;
 }
@@ -273,7 +293,7 @@ export class GitLabRules {
     return toBoardSource(this.options.boards).forProject(scope);
   }
 
-  async ingest(parsed: ParsedGitLabWebhook): Promise<{ status: IngressStatus }> {
+  async ingest(parsed: ParsedGitLabWebhook): Promise<GitLabIngressResult> {
     const event = eventName(parsed);
     const project = object(parsed.payload.project);
     const projectId = number(project?.id);
@@ -284,14 +304,12 @@ export class GitLabRules {
 
     const targets = await this.#targets(String(projectId), host);
     if (targets.length === 0) return { status: 'ignored' };
-    const results: Array<{ status: IngressStatus }> = [];
+    const results: GitLabIngressResult[] = [];
     for (const target of targets) {
       await this.loadBoards(target.target);
       results.push(await this.#ingestProject(parsed, event, projectId, projectPath, host, username, target));
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    return combined(results);
   }
 
   async #targets(repositoryExternalId: string, host: string): Promise<ProjectTarget[]> {
@@ -333,7 +351,7 @@ export class GitLabRules {
     host: string,
     username: string,
     target: ProjectTarget,
-  ): Promise<{ status: IngressStatus }> {
+  ): Promise<GitLabIngressResult> {
     const factoryProject = await this.options.projects.get({
       orgId: target.target.orgId,
       id: target.target.factoryProjectId,
@@ -545,7 +563,7 @@ export class GitLabRules {
         headAt,
         ownedPullRequestNumber: mergeRequestIid,
       });
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
@@ -568,7 +586,7 @@ export class GitLabRules {
         });
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
-      if (unchangedListedHead) return { status: 'ignored' };
+      if (unchangedListedHead) return { status: 'ignored', settled: true };
     }
     const ownItem = reviewItem ?? attachedItem;
     const openedItem = (home?.reason === 'authored' ? home.card : undefined) ?? authoringItem;
@@ -666,9 +684,7 @@ export class GitLabRules {
         ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     }
-    if (results.some(result => result.status === 'committed')) return { status: 'committed' };
-    if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
-    return results[0] ?? { status: 'ignored' };
+    return combined(results);
   }
 
   /**
@@ -976,7 +992,7 @@ export class GitLabRules {
 export function attachGitLabRules(
   gitlab: GitLabRulesIntegration,
   context: IntegrationContext,
-): ((event: ParsedGitLabWebhook) => Promise<unknown>) | undefined {
+): ((event: ParsedGitLabWebhook) => Promise<GitLabIngressResult>) | undefined {
   if (!context.runtime) return undefined;
   const rules = new GitLabRules({
     gitlab,
