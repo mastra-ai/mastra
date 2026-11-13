@@ -239,6 +239,36 @@ describe('ModalSandbox lifecycle', () => {
       expect.objectContaining({ timeoutMs: 120_000 }),
     );
   });
+
+  it('passes idleTimeoutMs to sandboxes.create()', async () => {
+    const sandbox = new ModalSandbox({ idleTimeoutMs: 900_000 });
+    await sandbox._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ idleTimeoutMs: 900_000 }),
+    );
+  });
+
+  it('omits idleTimeoutMs param when unset', async () => {
+    const sandbox = new ModalSandbox({});
+    await sandbox._start();
+
+    const [, , params] = mockSandboxes.create.mock.calls[0]!;
+    expect(params.idleTimeoutMs).toBeUndefined();
+  });
+
+  it('lifts the default lifetime to cover a longer idle window', async () => {
+    const sandbox = new ModalSandbox({ idleTimeoutMs: 900_000 });
+    await sandbox._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ timeoutMs: 900_000, idleTimeoutMs: 900_000 }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -352,6 +382,20 @@ describe('ModalSandbox stop-and-resume', () => {
     expect(mockSandboxes.create).toHaveBeenCalledTimes(2);
     expect(second.status).toBe('running');
   });
+
+  it('passes idleTimeoutMs when rebooting from a snapshot', async () => {
+    const sandbox = new ModalSandbox({ id: 'snap-idle', idleTimeoutMs: 600_000 });
+    await sandbox._start();
+    await sandbox._stop();
+    mockSandboxes.create.mockClear();
+    await sandbox._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      { imageId: 'snap-123' },
+      expect.objectContaining({ timeoutMs: 600_000, idleTimeoutMs: 600_000 }),
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -370,6 +414,16 @@ describe('ModalSandbox metadata', () => {
     expect(info.status).toBe('running');
     expect(info.metadata?.image).toBe('python:3.12-slim');
     expect(info.metadata?.appName).toBe('my-app');
+  });
+
+  it('getInfo() reports idleTimeoutMs when set', async () => {
+    mockSandboxes.fromName.mockResolvedValue(mockSandbox);
+    const sandbox = new ModalSandbox({ id: 'test-sb', idleTimeoutMs: 600_000 });
+    await sandbox._start();
+
+    const info = await sandbox.getInfo();
+    expect(info.metadata?.timeoutMs).toBe(600_000);
+    expect(info.metadata?.idleTimeoutMs).toBe(600_000);
   });
 
   it('getInstructions() returns default instructions containing image name', () => {
@@ -718,12 +772,33 @@ describe('ModalSandbox.clone', () => {
     });
   });
 
-  it('maps idleTimeoutMinutes to timeoutMs', () => {
+  it('maps idleTimeoutMinutes to idleTimeoutMs and lifts the inherited lifetime', () => {
     const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 120_000 });
 
     const child = template.clone({ idleTimeoutMinutes: 15 });
 
-    expect(child['_constructorOptions']).toMatchObject({ timeoutMs: 900_000 });
+    expect(child['_constructorOptions']).toMatchObject({ idleTimeoutMs: 900_000, timeoutMs: 900_000 });
+  });
+
+  it('keeps an inherited lifetime that is longer than the requested idle window', () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 3_600_000 });
+
+    const child = template.clone({ idleTimeoutMinutes: 5 });
+
+    expect(child['_constructorOptions']).toMatchObject({ idleTimeoutMs: 300_000, timeoutMs: 3_600_000 });
+  });
+
+  it('does not set a short wall-clock lifetime for a short idle window', async () => {
+    const template = new ModalSandbox({ tokenId: 'tid', tokenSecret: 'tsec', timeoutMs: 3_600_000 });
+
+    const child = template.clone({ id: 'clone-1', idleTimeoutMinutes: 1 });
+    await child._start();
+
+    expect(mockSandboxes.create).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ timeoutMs: 3_600_000, idleTimeoutMs: 60_000 }),
+    );
   });
 
   it('applies workingDirectory override', () => {

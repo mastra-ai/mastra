@@ -38,9 +38,20 @@ export interface ModalSandboxOptions extends Omit<MastraSandboxOptions, 'process
    * Wall-clock max lifetime in milliseconds. The sandbox is terminated when this expires,
    * regardless of activity. Modal's maximum is 24 hours (86_400_000).
    *
-   * @default 300_000 // 5 minutes
+   * @default max(300_000, idleTimeoutMs) // 5 minutes unless a longer idle window is set
    */
   timeoutMs?: number;
+  /**
+   * Idle teardown window in milliseconds. The sandbox is terminated after this long
+   * without activity (no open exec or filesystem connection) instead of running to
+   * `timeoutMs`. Unset by default, which leaves Modal's own default in place.
+   *
+   * `timeoutMs` remains the hard wall-clock cap: whichever limit is reached first
+   * terminates the sandbox. When `timeoutMs` is not set it defaults to the larger of
+   * 5 minutes and `idleTimeoutMs`, so an idle window longer than 5 minutes is
+   * actually reachable.
+   */
+  idleTimeoutMs?: number;
   /** Environment variables baked into the sandbox at create time. */
   env?: Record<string, string>;
   /** Default working directory inside the sandbox.
@@ -108,6 +119,7 @@ export class ModalSandbox extends MastraSandbox {
   private readonly appName: string;
   private readonly baseImage: string;
   private readonly timeoutMs: number;
+  private readonly idleTimeoutMs?: number;
   private readonly env: Record<string, string>;
   private readonly tokenId?: string;
   private readonly tokenSecret?: string;
@@ -125,7 +137,8 @@ export class ModalSandbox extends MastraSandbox {
     this.id = options.id ?? this._generateId();
     this.appName = options.appName ?? 'mastra';
     this.baseImage = options.baseImage ?? 'ubuntu:22.04';
-    this.timeoutMs = options.timeoutMs ?? 300_000;
+    this.timeoutMs = options.timeoutMs ?? Math.max(300_000, options.idleTimeoutMs ?? 0);
+    this.idleTimeoutMs = options.idleTimeoutMs;
     this.env = options.env ?? {};
     if (options.workingDirectory === undefined && options.workdir !== undefined) {
       this.setWorkingDirectory(options.workdir);
@@ -148,18 +161,23 @@ export class ModalSandbox extends MastraSandbox {
    * Use it when one configured sandbox acts as the template for a fleet of
    * independent sandboxes (e.g. one per project).
    *
-   * `options.idleTimeoutMinutes` maps to Modal's `timeoutMs` (wall-clock
-   * lifetime); `options.sandboxId` is ignored because Modal reconnects by
-   * logical `id`.
+   * `options.idleTimeoutMinutes` maps to Modal's `idleTimeoutMs` (idle teardown
+   * window), not to the wall-clock `timeoutMs`. The clone's lifetime is raised
+   * to at least that window so the idle timeout can actually be reached;
+   * `options.sandboxId` is ignored because Modal reconnects by logical `id`.
    */
   clone(options: SandboxCloneOptions = {}): ModalSandbox {
     const { id: _id, ...base } = this._constructorOptions;
+    const idleTimeoutMs = options.idleTimeoutMinutes !== undefined ? options.idleTimeoutMinutes * 60_000 : undefined;
     return new ModalSandbox({
       ...base,
       ...(options.id !== undefined && { id: options.id }),
       ...(options.env !== undefined && { env: options.env }),
       ...(options.workingDirectory !== undefined && { workingDirectory: options.workingDirectory }),
-      ...(options.idleTimeoutMinutes !== undefined && { timeoutMs: options.idleTimeoutMinutes * 60_000 }),
+      ...(idleTimeoutMs !== undefined && {
+        idleTimeoutMs,
+        timeoutMs: Math.max(this.timeoutMs, idleTimeoutMs),
+      }),
     });
   }
 
@@ -205,6 +223,7 @@ export class ModalSandbox extends MastraSandbox {
       this._sb = await client.sandboxes.create(app, this._imageSnapshot, {
         name: this.id,
         timeoutMs: this.timeoutMs,
+        idleTimeoutMs: this.idleTimeoutMs,
         env: Object.keys(this.env).length > 0 ? this.env : undefined,
         workdir: this.workingDirectory,
         volumes: this.volumes,
@@ -219,6 +238,7 @@ export class ModalSandbox extends MastraSandbox {
     this._sb = await client.sandboxes.create(app, image, {
       name: this.id,
       timeoutMs: this.timeoutMs,
+      idleTimeoutMs: this.idleTimeoutMs,
       env: Object.keys(this.env).length > 0 ? this.env : undefined,
       workdir: this.workingDirectory,
       volumes: this.volumes,
@@ -306,6 +326,7 @@ export class ModalSandbox extends MastraSandbox {
         appName: this.appName,
         image: this._imageSnapshot?.imageId ?? this.baseImage,
         timeoutMs: this.timeoutMs,
+        ...(this.idleTimeoutMs !== undefined && { idleTimeoutMs: this.idleTimeoutMs }),
       },
     };
   }
