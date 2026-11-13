@@ -186,6 +186,28 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     return platform;
   }
 
+  it('counts a link only once the project listing shows it, and does not re-run anything otherwise', async () => {
+    const platform = await orgPlatform();
+    platform.linkReplies.set('conn-unlinked', { status: 204 });
+    const jira = binding(platform);
+    const listener = vi.fn();
+    jira.onConnectionsLinked(listener);
+
+    const result = await jira.linkOrgConnections();
+
+    expect(result.linked).toEqual(['conn-reauth']);
+    expect(result.needsLinking).toEqual([
+      { connectionId: 'conn-unlinked', reason: expect.stringContaining('not in the Factory project yet') },
+    ]);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    platform.linkReplies.set('conn-reauth', { status: 204 });
+    platform.linked.delete('conn-reauth');
+    listener.mockClear();
+    expect((await jira.linkOrgConnections()).linked).toEqual([]);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('links only the connection a pinned deployment accepts', async () => {
     const platform = await orgPlatform();
     const jira = binding(platform, { filter: connection => connection.id === 'conn-unlinked' });
@@ -282,7 +304,8 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     const listed = await jira.listConnections();
 
     expect(listed.map(connection => connection.id)).toEqual(['conn-linked', 'conn-unlinked', 'conn-reauth']);
-    expect(platform.count('GET', LISTING)).toBe(2);
+    // Linking reads the listing before and after; the caller's read comes last.
+    expect(platform.count('GET', LISTING)).toBe(3);
   });
 
   it('settles boot linking when the platform refuses, keeping the refusal in needsLinking', async () => {
