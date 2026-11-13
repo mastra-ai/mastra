@@ -95,10 +95,10 @@ Install AI SDK UI along with the Mastra adapter:
 npm install @mastra/ai-sdk@latest @ai-sdk/react ai
 ```
 
-Next, initialize AI Elements. When prompted to select a component library, choose **Radix UI**, then accept the defaults for the remaining prompts:
+Next, add the AI Elements components the chat page uses. When prompted to select a component library, choose **Radix UI**, then accept the defaults for the remaining prompts:
 
 ```bash npm2yarn
-npx ai-elements@latest
+npx ai-elements@latest add prompt-input conversation message tool
 ```
 
 :::note
@@ -107,7 +107,7 @@ The `ai-elements` command runs `shadcn add` against the AI Elements registry, wh
 The component library prompt only appears when your project has no `components.json`. If you already have one, check that its `style` is a Radix option, such as `new-york` or a `radix-*` style, and not a `base-*` style, before running the command.
 :::
 
-This downloads the entire AI Elements UI component library into a `@/components/ai-elements` folder.
+This downloads those components and their dependencies into a `@/components/ai-elements` folder. Install only the components you use: some other components in the full library don't type-check against the current AI SDK major version, and `next build` fails on TypeScript errors in any file in your project.
 
 ### Create a chat route
 
