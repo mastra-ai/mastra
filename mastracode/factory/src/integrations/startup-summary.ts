@@ -18,24 +18,22 @@ function displayName(id: string): string {
  * project doesn't read as if every provider were in use.
  */
 export async function describeIntegrations(integrations: readonly FactoryIntegration[]): Promise<string | undefined> {
-  const checked = integrations.filter(integration => integration.hasActiveConnections);
-  if (checked.length === 0) return undefined;
-  const results = await Promise.all(
-    checked.map(async integration => {
-      try {
-        return { name: displayName(integration.id), connected: await integration.hasActiveConnections!() };
-      } catch {
-        return { name: displayName(integration.id), connected: undefined };
-      }
-    }),
+  const statuses = await Promise.all(
+    integrations.map(integration =>
+      integration.hasActiveConnections?.().then(
+        connected => (connected ? 'connected' : 'available'),
+        () => 'status unknown' as const,
+      ),
+    ),
   );
-  const connected = results.filter(result => result.connected === true).map(result => result.name);
-  const available = results.filter(result => result.connected === false).map(result => result.name);
-  const unknown = results.filter(result => result.connected === undefined).map(result => result.name);
+  const groups = { connected: [] as string[], available: [] as string[], 'status unknown': [] as string[] };
+  statuses.forEach((status, i) => status && groups[status].push(displayName(integrations[i]!.id)));
 
-  const parts = [connected.length > 0 ? `${connected.join(', ')} connected` : 'none connected'];
-  if (available.length > 0) parts.push(`${available.join(', ')} available`);
-  if (unknown.length > 0) parts.push(`${unknown.join(', ')} status unknown`);
+  const parts = Object.entries(groups)
+    .filter(([, names]) => names.length > 0)
+    .map(([status, names]) => `${names.join(', ')} ${status}`);
+  if (parts.length === 0) return undefined;
+  if (groups.connected.length === 0 && groups['status unknown'].length === 0) parts.unshift('none connected');
   return `Intake: ${parts.join(' · ')}`;
 }
 

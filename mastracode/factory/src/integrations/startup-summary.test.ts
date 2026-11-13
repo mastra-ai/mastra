@@ -3,13 +3,16 @@ import type { FactoryIntegration } from './base.js';
 import { describeIntegrations } from './startup-summary.js';
 
 function integration(id: string, connected?: boolean | Error): FactoryIntegration {
-  if (connected === undefined) return { id };
   return {
     id,
-    hasActiveConnections: async () => {
-      if (connected instanceof Error) throw connected;
-      return connected;
-    },
+    routes: () => [],
+    diagnostics: () => ({}),
+    ...(connected !== undefined && {
+      async hasActiveConnections() {
+        if (connected instanceof Error) throw connected;
+        return connected;
+      },
+    }),
   };
 }
 
@@ -35,6 +38,12 @@ describe('describeIntegrations', () => {
     await expect(
       describeIntegrations([integration('github', true), integration('linear', new Error('timeout'))]),
     ).resolves.toBe('Intake: GitHub connected · Linear status unknown');
+  });
+
+  it('does not claim none are connected when a check failed', async () => {
+    await expect(
+      describeIntegrations([integration('github', new Error('timeout')), integration('jira', false)]),
+    ).resolves.toBe('Intake: Jira available · GitHub status unknown');
   });
 
   it('prints nothing when no integration can report connections', async () => {
