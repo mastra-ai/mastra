@@ -14,15 +14,22 @@ interface IntakePage<TIssue> {
   nextCursor: string | null;
 }
 
+type IntakePager<TIssue> = (cursor: string | undefined) => Promise<IntakePage<TIssue>>;
+
 export interface IntakeDiscoveryOptions<TIssue> {
   integrationId: string;
   intake: Pick<IntakeStorage, 'ensureReady' | 'getConfig'>;
   projects: Pick<FactoryProjectsStorage, 'listAll'>;
-  /** The pager over what the project's board lists, or null when no selected source feeds the project. */
-  open(
-    project: FactoryProject,
-    selectedIds: string[],
-  ): Promise<((cursor: string | undefined) => Promise<IntakePage<TIssue>>) | null>;
+  /**
+   * One pager per source bound to the project, so a busy source cannot spend
+   * the pages of the others. Empty when no selected source feeds the project.
+   */
+  open(project: FactoryProject, selectedIds: string[]): Promise<Array<IntakePager<TIssue>>>;
+  /**
+   * Pages read from each source per sweep. Five suits a provider that lists its
+   * most recently updated issues first; one that cannot sort must read them all.
+   */
+  maxPages?: number;
   ingest(input: { orgId: string; userId: string; factoryProjectId: string; issues: TIssue[] }): Promise<unknown>;
 }
 
@@ -48,23 +55,22 @@ export function withIntakeDiscovery<TIssue>(
         });
         const selection = config[options.integrationId];
         if (!selection?.enabled) continue;
-        const listPage = await options.open(project, selection.sourceIds ?? []);
-        if (!listPage) continue;
-
-        let cursor: string | undefined;
-        for (let page = 0; page < INTAKE_DISCOVERY_MAX_PAGES; page += 1) {
-          const { issues, nextCursor } = await listPage(cursor);
-          if (issues.length > 0) {
-            await options.ingest({
-              orgId: project.orgId,
-              userId: 'factory-rule-dispatcher',
-              factoryProjectId: project.id,
-              issues,
-            });
-            summary.observed += issues.length;
+        for (const listPage of await options.open(project, selection.sourceIds ?? [])) {
+          let cursor: string | undefined;
+          for (let page = 0; page < (options.maxPages ?? INTAKE_DISCOVERY_MAX_PAGES); page += 1) {
+            const { issues, nextCursor } = await listPage(cursor);
+            if (issues.length > 0) {
+              await options.ingest({
+                orgId: project.orgId,
+                userId: 'factory-rule-dispatcher',
+                factoryProjectId: project.id,
+                issues,
+              });
+              summary.observed += issues.length;
+            }
+            if (!nextCursor) break;
+            cursor = nextCursor;
           }
-          if (!nextCursor) break;
-          cursor = nextCursor;
         }
       } catch (error) {
         summary.failed += 1;
