@@ -39,6 +39,17 @@ export async function resolveCurrentOrg(
   token: string,
   opts: ResolveCurrentOrgOptions = {},
 ): Promise<{ orgId: string; orgName: string }> {
+  // A configured org is authoritative even when API tokens cannot list organizations.
+  const envOrgId = process.env.MASTRA_ORG_ID;
+  if (envOrgId) {
+    try {
+      const orgs = await fetchOrgs(token);
+      return { orgId: envOrgId, orgName: orgs.find(org => org.id === envOrgId)?.name ?? envOrgId };
+    } catch {
+      return { orgId: envOrgId, orgName: envOrgId };
+    }
+  }
+
   const orgs = await fetchOrgs(token);
 
   if (orgs.length === 0) {
@@ -47,13 +58,6 @@ export async function resolveCurrentOrg(
 
   if (orgs.length === 1) {
     return { orgId: orgs[0]!.id, orgName: orgs[0]!.name };
-  }
-
-  // MASTRA_ORG_ID always wins; never prompt in headless/CI mode.
-  const envOrgId = process.env.MASTRA_ORG_ID;
-  if (envOrgId) {
-    const match = orgs.find(o => o.id === envOrgId);
-    if (match) return { orgId: match.id, orgName: match.name };
   }
 
   const currentOrgId = await getCurrentOrgId();

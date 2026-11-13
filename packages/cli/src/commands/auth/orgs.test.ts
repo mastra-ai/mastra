@@ -29,6 +29,7 @@ describe('resolveCurrentOrg', () => {
     setCurrentOrgIdMock.mockReset();
     selectMock.mockReset();
     delete process.env.MASTRA_ORG_ID;
+    delete process.env.MASTRA_API_TOKEN;
     delete process.env.CI;
     Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true });
     Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
@@ -142,6 +143,44 @@ describe('resolveCurrentOrg', () => {
       resolveCurrentOrg('tok', { forcePrompt: true, exitOnCancel: false, signal: controller.signal }),
     ).rejects.toBeInstanceOf(OrgSelectionCancelledError);
     expect(selectMock).toHaveBeenCalledWith(expect.objectContaining({ signal: controller.signal }));
+  });
+
+  test('uses the configured org with an API token when the org listing is empty (#29943)', async () => {
+    process.env.MASTRA_API_TOKEN = 'api-token';
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    process.env.CI = '1';
+    Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true });
+    fetchOrgsMock.mockResolvedValue([]);
+
+    await expect(resolveCurrentOrg('api-token')).resolves.toEqual({
+      orgId: 'org_from_env',
+      orgName: 'org_from_env',
+    });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(getCurrentOrgIdMock).not.toHaveBeenCalled();
+  });
+
+  test('uses the configured org when the API token cannot list organizations (#29943)', async () => {
+    process.env.MASTRA_API_TOKEN = 'api-token';
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    process.env.CI = '1';
+    fetchOrgsMock.mockRejectedValue(new Error('Organization listing unavailable'));
+
+    await expect(resolveCurrentOrg('api-token')).resolves.toEqual({
+      orgId: 'org_from_env',
+      orgName: 'org_from_env',
+    });
+    expect(selectMock).not.toHaveBeenCalled();
+    expect(getCurrentOrgIdMock).not.toHaveBeenCalled();
+  });
+
+  test('MASTRA_ORG_ID wins even when the org listing contains only a different org', async () => {
+    process.env.MASTRA_ORG_ID = 'org_from_env';
+    fetchOrgsMock.mockResolvedValue([ORG_A]);
+
+    await expect(resolveCurrentOrg('tok')).resolves.toEqual({ orgId: 'org_from_env', orgName: 'org_from_env' });
+    expect(selectMock).not.toHaveBeenCalled();
   });
 
   test('throws when no orgs exist', async () => {
