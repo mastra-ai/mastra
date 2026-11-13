@@ -60,6 +60,7 @@ import type {
   StepResult,
   StepTripwireInfo,
   TimeTravelExecutionParams,
+  WorkflowResumeLabel,
   WorkflowRunStatus,
   WorkflowStateTracingContext,
 } from './types';
@@ -883,6 +884,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       stepExecutionPath?: string[];
       label?: string;
       forEachIndex?: number;
+      resumeLabels?: Record<string, WorkflowResumeLabel>;
     };
     pubsub: PubSub;
     retryConfig?: {
@@ -1002,6 +1004,12 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         resume?.stepResults || { input };
       let stepExecutionPath: string[] =
         timeTravel?.stepExecutionPath || restart?.stepExecutionPath || resume?.stepExecutionPath || [];
+      // Labels of other steps that are still suspended stay on the run. The resumed step's own
+      // labels are dropped: it registers them again if it suspends again (foreach and nested
+      // workflow steps restore their other parked iterations/steps the same way).
+      const carriedResumeLabels: Record<string, WorkflowResumeLabel> = Object.fromEntries(
+        Object.entries(resume?.resumeLabels ?? {}).filter(([, value]) => value.stepId !== resume?.steps[0]),
+      );
       let lastOutput: any;
       let lastState: Record<string, any> = timeTravel?.state ?? restart?.state ?? initialState ?? {};
       let lastExecutionContext: ExecutionContext | undefined;
@@ -1176,7 +1184,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepExecutionPath,
           activeStepsPath: {},
           suspendedPaths: {},
-          resumeLabels: {},
+          resumeLabels: { ...carriedResumeLabels },
           retryConfig: { attempts, delay },
           format: params.format,
           state: lastState ?? initialState,
@@ -1320,6 +1328,13 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         // if step result is not success, stop and return
         if (lastOutput.result.status !== 'success') {
+          // A carried label only stays while its step is still suspended.
+          for (const [label, value] of Object.entries(carriedResumeLabels)) {
+            if (!executionContext.suspendedPaths[value.stepId] && executionContext.resumeLabels[label] === value) {
+              delete executionContext.resumeLabels[label];
+            }
+          }
+
           if (lastOutput.result.status === 'bailed') {
             if (journal) {
               // Replace rather than mutate: the bailed result is also this entry's stepResults
@@ -1444,7 +1459,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
             ...result,
             runId,
             ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
-              ? { resumeLabels: lastOutput.mutableContext.resumeLabels }
+              ? { resumeLabels: executionContext.resumeLabels }
               : {}),
             ...(params.outputOptions?.includeState ? { state: lastState } : {}),
           };
@@ -1489,6 +1504,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       }
 
       // after all steps are successful, return result
+      for (const label of Object.keys(carriedResumeLabels)) {
+        delete lastExecutionContext?.resumeLabels[label];
+      }
       let result = (await this.#fmtResult(
         journal,
         params.pubsub,
