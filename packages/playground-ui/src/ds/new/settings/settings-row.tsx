@@ -48,7 +48,7 @@ export function SettingsControlGroup({ className, ...props }: SettingsControlGro
     <div
       data-slot="settings-control-group"
       className={cn(
-        'flex w-full min-w-0 items-center gap-2 [--field-width:100%] *:min-w-0 sm:w-(--field-max-width)',
+        'flex w-(--field-max-width) max-w-full min-w-0 items-center gap-2 [--field-width:100%] *:min-w-0',
         className,
       )}
       {...props}
