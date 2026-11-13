@@ -8,7 +8,6 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, vi } from 'vitest';
 import { LibSQLStore } from '../..';
 import { describeRecoveryExitCases } from '../../../../../../packages/core/src/mastra/test-utils/recovery-exit-cases';
-import { describeRecoveryReadCases } from '../../../../../../packages/core/src/mastra/test-utils/recovery-read-cases';
 
 // A local database file shared by every instance, as pods share one database (#28712).
 describe('LibSQL workflow recovery passes', () => {
@@ -38,5 +37,4 @@ describe('LibSQL workflow recovery passes', () => {
     connect,
     cases: [{ pubsub: 'in-process', exit: 'shuts down' }],
   });
-  describeRecoveryReadCases({ getStorage: () => storage, connect });
 });
