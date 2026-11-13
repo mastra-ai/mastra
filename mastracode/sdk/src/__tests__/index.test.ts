@@ -2438,6 +2438,42 @@ describe('createMastraCode', () => {
     expect(built.controller).toBeDefined();
   });
 
+  it('reports plugin signal provider errors through the plugin manager', async () => {
+    const { SignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+
+    class BrokenProvider extends SignalProvider<string> {
+      readonly id = 'acme-broken-signals';
+      async start() {
+        throw new Error('provider warm-up broke');
+      }
+    }
+    const reportPluginError = vi.fn();
+    const pluginManager = {
+      reload: vi.fn(async () => [{ id: 'acme.plugin', status: 'active', toolNames: [] }]),
+      getPluginTools: vi.fn(() => ({})),
+      setRuntime: vi.fn(),
+      onReload: vi.fn(),
+      getPluginSignalProviders: vi.fn(() => [
+        { pluginId: 'acme.plugin', versionStamp: 'v1', value: new BrokenProvider() },
+      ]),
+      getPluginProcessors: vi.fn(() => ({ input: [], output: [] })),
+      reportPluginError,
+    };
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    await vi.waitFor(() =>
+      expect(reportPluginError).toHaveBeenCalledWith({
+        pluginId: 'acme.plugin',
+        message: 'Plugin "acme.plugin" signal provider "acme-broken-signals" failed to start: provider warm-up broke',
+      }),
+    );
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
   it('stops plugin signal providers and stops listening for reloads on teardown', async () => {
     const { SignalProvider } = await import('@mastra/core/signals');
     const { createMastraCode } = await import('../index.js');

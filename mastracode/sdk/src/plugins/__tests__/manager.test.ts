@@ -296,6 +296,107 @@ describe('PluginManager', () => {
     expect(manager.getPluginSignalProviders().map(entry => entry.value.id)).toEqual(['contributor-signals']);
   });
 
+  describe('when a reload of an active plugin fails', () => {
+    // A working plugin that reloads into a throwing `signalProviders` resolver —
+    // the shape of a bad update to an installed plugin.
+    const writeReloadablePlugin = (dir: string, description: string, broken = false) => {
+      fs.mkdirSync(path.join(dir, 'src'), { recursive: true });
+      fs.writeFileSync(
+        path.join(dir, 'src/index.ts'),
+        `import { SignalProvider } from '@mastra/core/signals';
+        export default {
+          id: 'acme.reload',
+          name: 'Acme Reload',
+          tools: { reload_tool: { tool: { id: 'reload_tool', description: '${description}' } } },
+          signalProviders: () => {
+            ${broken ? `throw new Error('signal provider resolver broke');` : ''}
+            return [new (class extends SignalProvider { id = 'reload-signals'; })()];
+          },
+        };`,
+      );
+    };
+
+    const setUp = async () => {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+      const pluginDir = makeResolvableDir('reload-failure');
+      writeReloadablePlugin(pluginDir, 'first');
+      const manager = new PluginManager({
+        projectRoot: path.join(tempDir, 'project'),
+        homeDir: path.join(tempDir, 'home'),
+      });
+      await manager.installLocal(pluginDir, 'project');
+      return { manager, pluginDir };
+    };
+
+    it('keeps its last good tools, signal providers and version stamp', async () => {
+      const { manager, pluginDir } = await setUp();
+      const pluginTools = manager.getPluginTools();
+      const [goodProvider] = manager.getPluginSignalProviders();
+      expect(pluginTools.reload_tool?.description).toBe('first');
+      expect(goodProvider?.value.id).toBe('reload-signals');
+
+      writeReloadablePlugin(pluginDir, 'second', true);
+      await manager.reload();
+
+      expect(await manager.listPlugins()).toMatchObject([
+        { id: 'acme.reload', status: 'active', reloadError: 'signal provider resolver broke' },
+      ]);
+      expect(Object.keys(pluginTools)).toEqual(['reload_tool']);
+      expect(pluginTools.reload_tool?.description).toBe('first');
+      // The same instance under the same stamp: the signal lane keeps a provider
+      // it already runs only while both hold still.
+      expect(manager.getPluginSignalProviders()).toEqual([goodProvider]);
+
+      writeReloadablePlugin(pluginDir, 'third');
+      await manager.reload();
+
+      const [recovered] = await manager.listPlugins();
+      expect(recovered).toMatchObject({ status: 'active', toolNames: ['reload_tool'] });
+      expect(recovered).not.toHaveProperty('reloadError');
+      expect(pluginTools.reload_tool?.description).toBe('third');
+      expect(manager.getPluginSignalProviders()[0]?.versionStamp).not.toBe(goodProvider?.versionStamp);
+    });
+
+    it('still removes everything when the failing plugin is disabled or uninstalled', async () => {
+      const { manager, pluginDir } = await setUp();
+      writeReloadablePlugin(pluginDir, 'second', true);
+      await manager.reload();
+      expect(Object.keys(manager.getPluginTools())).toEqual(['reload_tool']);
+
+      await manager.setEnabled('acme.reload', 'project', false);
+      expect(Object.keys(manager.getPluginTools())).toEqual([]);
+      expect(manager.getPluginSignalProviders()).toEqual([]);
+
+      // Re-enabling a plugin that cannot load has no good load to fall back on.
+      await manager.setEnabled('acme.reload', 'project', true);
+      expect(await manager.listPlugins()).toMatchObject([{ status: 'load failed' }]);
+      expect(Object.keys(manager.getPluginTools())).toEqual([]);
+
+      await manager.uninstall('acme.reload', 'project');
+      expect(await manager.listPlugins()).toEqual([]);
+    });
+
+    it('tells plugin error listeners once per distinct failure', async () => {
+      const { manager, pluginDir } = await setUp();
+      const errors: unknown[] = [];
+      manager.onPluginError(event => {
+        errors.push(event);
+      });
+
+      writeReloadablePlugin(pluginDir, 'second', true);
+      await manager.reload();
+      await manager.reload();
+
+      expect(errors).toEqual([
+        {
+          pluginId: 'acme.reload',
+          message:
+            'Plugin "Acme Reload" failed to reload: signal provider resolver broke. Still running the previous version.',
+        },
+      ]);
+    });
+  });
+
   it('does not expose tools for plugins blocked by project config', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

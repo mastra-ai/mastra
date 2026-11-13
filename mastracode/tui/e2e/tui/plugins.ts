@@ -185,6 +185,40 @@ export default defineMastraCodePlugin({
   );
 }
 
+function writeReloadFailurePluginSource(pluginDir: string, broken: boolean): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  // The broken edit throws from a field resolver, so the module still imports
+  // but the plugin record fails to load: a bad update to a working plugin.
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E reload failure tests.',
+  tools: {
+    ${TOOL_NAME}: {
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return the reload failure plugin result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async input => ({ result: '${broken ? 'version-two' : 'version-one'}-' + input.query }),
+      }),
+    },
+  },
+  signalProviders: () => {
+    ${broken ? `throw new Error('e2e plugin reload broke');` : ''}
+    return [];
+  },
+});
+`,
+  );
+}
+
 function writeGithubInstallInvalidPackageManagerPluginSource(pluginDir: string): void {
   const pluginSrcDir = join(pluginDir, 'src');
   mkdirSync(pluginSrcDir, { recursive: true });
@@ -713,6 +747,56 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
     }
     // The run() screen assertions wait for version-one and version-two, while the second AIMock follow-up response
     // deliberately avoids version-two. That ensures the visible updated version comes from the plugin tool result.
+  },
+};
+
+export const pluginsLocalReloadFailureScenario: McE2eScenario = {
+  name: 'plugins-local-reload-failure',
+  description: 'Keeps a working local plugin and shows an error when an edit makes its reload fail.',
+  testName: 'keeps a plugin tool and shows an error when its reload fails',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-local-reload-failure.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    hotReloadPluginDir = join(projectDir, 'fixtures', 'plugins', 'reload-failure-plugin');
+    writeReloadFailurePluginSource(hotReloadPluginDir, false);
+    writePluginRegistry(projectDir, hotReloadPluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    terminal.submit('Call the reload failure plugin before the broken edit.');
+    await runtime.waitForScreenText(/version-one-before/i, terminal, 10_000);
+
+    if (!hotReloadPluginDir) throw new Error('Reload failure plugin directory was not prepared');
+    writeReloadFailurePluginSource(hotReloadPluginDir, true);
+
+    // The local entry watcher reloads the plugin on its own; the failure must reach the screen.
+    await runtime.waitForScreenText(/failed to reload: e2e plugin reload broke/i, terminal, 10_000);
+
+    terminal.submit('Call the reload failure plugin after the broken edit.');
+    await runtime.waitForScreenText(/version-one-after/i, terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const lastRequest = requests.at(-1);
+    const names = getToolNames(lastRequest ? [lastRequest] : []);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected the request after the failed reload to still expose ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
+    // The follow-up responses never mention version-one, so the visible version-one-after comes from the kept tool.
   },
 };
 
