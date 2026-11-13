@@ -15,7 +15,7 @@ import {
   CLOSES_ISSUE_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
-  MAX_INTAKE_ROUTES,
+  MAX_INTAKE_ROUTES_PER_BOARD,
   PULL_REQUEST_CLOSED_ISSUE_ROUTE,
   PULL_REQUEST_CLOSED_ROUTE,
   PULL_REQUEST_INTAKE_ROUTE,
@@ -512,13 +512,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(await boards.listIntakeRoutes(scope)).toEqual([full, bare]);
   });
 
-  it('refuses a route past the most a project may have', async () => {
+  it('refuses a route past the most a board may have, and counts each board on its own', async () => {
     const { boards, scope } = await setup();
-    for (let i = 0; i < MAX_INTAKE_ROUTES; i += 1) await boards.createIntakeRoute(scope, route(`r${i}`), 'admin');
+    for (let i = 0; i < MAX_INTAKE_ROUTES_PER_BOARD; i += 1) {
+      await boards.createIntakeRoute(scope, route(`r${i}`), 'admin');
+    }
     await expect(boards.createIntakeRoute(scope, route('one more'), 'admin')).rejects.toMatchObject({
       code: 'intake_route_limit',
     });
-    expect(await boards.listIntakeRoutes(scope)).toHaveLength(MAX_INTAKE_ROUTES);
+    // Another board has a list of its own, so the project holds more than one board's limit.
+    await boards.createIntakeRoute(scope, route('ship', { target: { boardKey: 'ship' } }), 'admin');
+    expect(await boards.listIntakeRoutes(scope)).toHaveLength(MAX_INTAKE_ROUTES_PER_BOARD + 1);
+    expect(await boards.listIntakeRoutes(scope, { boardKey: 'ship' })).toHaveLength(1);
   });
 
   it('keeps a board-only target without a phase', async () => {

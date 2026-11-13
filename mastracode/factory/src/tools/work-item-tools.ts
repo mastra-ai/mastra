@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -20,6 +21,7 @@ import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemNumber } from '../work-items/card-number.js';
@@ -41,6 +43,10 @@ export interface FactoryWorkItemToolDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a filed card. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a filed card; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
+  /** Starts the project's one-time intake order measure in the background. */
+  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -167,6 +173,8 @@ export function createFactoryWorkItemTools(
           boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
           intakeRoutes: deps.intakeRoutes,
+          intakeEvaluator: deps.intakeEvaluator,
+          intakeOrderMeasure: deps.intakeOrderMeasure,
           audit,
           ...project,
           userId: scope.userId,

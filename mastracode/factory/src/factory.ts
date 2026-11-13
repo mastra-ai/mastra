@@ -64,6 +64,8 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { IntakeOrderMeasure } from './boards/intake-order-migration.js';
+import { intakeEvaluatorFrom } from './boards/intake-routing.js';
 import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
 import { publishDispatchWake, subscribeDispatchWakes } from './dispatch-wake.js';
@@ -170,7 +172,12 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from './storage/domains/boards/base.js';
-import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope } from './storage/domains/boards/base.js';
+import type {
+  IntakeEvaluator,
+  StoredBoardInput,
+  StoredBoardRecord,
+  StoredBoardScope,
+} from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
@@ -330,6 +337,16 @@ export interface MastraFactoryConfig {
   tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
+  /** How intake places a new item. */
+  intake?: {
+    /**
+     * `route-list` (default) runs the project's intake rules as one list and files an item no rule
+     * takes on Work, else the first board. `intake-order` asks each board in the project's intake
+     * order and records an item no board takes as Not routed instead. Overrides
+     * `FACTORY_INTAKE_EVALUATOR`.
+     */
+    evaluator?: IntakeEvaluator;
+  };
   /**
    * Deployment-stable secret for signing integration OAuth `state` values.
    * Omitted → a per-process random secret, which is fine for single-process
@@ -576,6 +593,10 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
+  /** Which evaluator places new items; see `MastraFactoryConfig.intake`. */
+  readonly #intakeEvaluator: IntakeEvaluator;
+  /** Each project's one-time intake order measure; undefined until `prepare()` or when the boards domain is down. */
+  #intakeOrderMeasure: IntakeOrderMeasure | undefined;
   /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
   #boardStore:
     | { writes: BoardWrites; boards: ProjectBoardCache; projects: FactoryProjectsStorage; audit: AuditDomain }
@@ -623,6 +644,7 @@ export class MastraFactory {
       );
     }
     this.#skills = assertFactorySkills(config.skills);
+    this.#intakeEvaluator = intakeEvaluatorFrom(config.intake?.evaluator, process.env);
     for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
       console.warn(`[factory] ${problem}`);
     }
@@ -1045,6 +1067,25 @@ export class MastraFactory {
           : {}),
       });
       this.#projectBoards = projectBoards;
+      this.#intakeOrderMeasure = new IntakeOrderMeasure({
+        storage: storedBoardsStorage,
+        cards: scope => workItemsStorage.list(scope),
+        boards: scope => projectBoards.load(scope),
+        audit: async (scope, migration) => {
+          await auditDomain.record({
+            idempotencyKey: `intake-order-migrated:${scope.orgId}:${scope.factoryProjectId}`,
+            orgId: scope.orgId,
+            factoryProjectId: scope.factoryProjectId,
+            actorId: 'factory',
+            actorType: 'system',
+            action: 'factory.intake_order.migrated',
+            targets: [{ type: 'factory_project', id: scope.factoryProjectId }],
+            metadata: { ...migration },
+          });
+        },
+        warn: (message, error) =>
+          console.warn(`[factory] ${message}: ${error instanceof Error ? error.message : error}`),
+      });
       this.#boardStore = {
         writes: new BoardWrites({ storage: storedBoardsStorage, boards: projectBoards, workItems: workItemsStorage }),
         boards: projectBoards,
@@ -1429,7 +1470,13 @@ export class MastraFactory {
       workItems: workItemsStorage,
       audit: auditStorage,
       boards: boards,
-      ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
+      ...(this.#projectBoards
+        ? {
+            intakeRoutes: storedBoardsStorage,
+            intakeEvaluator: this.#intakeEvaluator,
+            ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
+          }
+        : {}),
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -2180,7 +2227,14 @@ export class MastraFactory {
             configVersion,
             boardRegistry: boards,
             ...(this.#projectBoards
-              ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
+              ? {
+                  storedBoards: {
+                    storage: storedBoardsStorage,
+                    cache: this.#projectBoards,
+                    intakeEvaluator: this.#intakeEvaluator,
+                    ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
+                  },
+                }
               : {}),
             factoryTransitionService: transitionService,
             runSlots: () => this.#dispatcher?.runSlots(),
@@ -2192,7 +2246,13 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: boards,
-                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
+                ...(this.#projectBoards
+                  ? {
+                      intakeRoutes: storedBoardsStorage,
+                      intakeEvaluator: this.#intakeEvaluator,
+                      ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
+                    }
+                  : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

@@ -13,7 +13,6 @@ import {
   cardBoardFlow,
   cardRuleFacts,
   hasPullRequest,
-  intakeTarget,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
@@ -22,13 +21,14 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import {
   closedIssueRuleFacts,
   INTAKE_ROUTE_METADATA_KEY,
   landingPhase,
   placedByIntakeRoute,
   resolveEventRoute,
-  resolveIntakePlacement,
+  resolveIntake,
   resolveIntakeRoute,
   routesHandleEvent,
 } from '../boards/intake-routing.js';
@@ -49,6 +49,7 @@ import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvo
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -497,6 +498,10 @@ export interface FactoryDecisionDispatcherOptions {
   boards?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places arrivals; the old `route-list` until every replica runs `intake-order`. */
+  intakeEvaluator?: IntakeEvaluator;
+  /** Starts each project's one-time intake order measure in the background on its first arrival. */
+  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
   reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
@@ -710,6 +715,8 @@ export class FactoryDecisionDispatcher {
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: ProjectBoardSource;
   readonly #intakeRoutes?: IntakeRoutesReader;
+  readonly #intakeEvaluator: IntakeEvaluator;
+  readonly #intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #autoApproving = new Set<string>();
@@ -769,6 +776,8 @@ export class FactoryDecisionDispatcher {
     this.#transitionService = options.transitionService;
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
+    this.#intakeEvaluator = options.intakeEvaluator ?? 'route-list';
+    this.#intakeOrderMeasure = options.intakeOrderMeasure;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -1874,6 +1883,8 @@ export class FactoryDecisionDispatcher {
       : materializedHere
         ? await this.#resumeRoutedCard(record, current, requested, boards)
         : this.#keepRoutedCard(current, requested, boards);
+    // No board took it: logged Not routed, and filed only once a rule takes it (Route again).
+    if (!decision) return;
     if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
@@ -1924,6 +1935,13 @@ export class FactoryDecisionDispatcher {
           },
           reuseMode: 'preserve',
         });
+    if (result.created && this.#intakeRoutes) {
+      await this.#intakeRoutes.resolveNotRouted(
+        { orgId: record.orgId, factoryProjectId: record.factoryProjectId },
+        decision.sourceKey,
+        'factory-rule-dispatcher',
+      );
+    }
     const itemBoard = boardForWorkItem(result.item);
     // A pull request's own card already on another board that reviews pull requests (the retired
     // Review board, for a project still using it) stays there: filing its pull request again acts
@@ -2157,23 +2175,27 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Places an arrival where the project's intake routes say: the first enabled route matching it,
-   * else the default board's first phase. The board and phase an integration's rule named don't
-   * count; only a decision placing the card outright (`skipRules`) keeps its own.
+   * Places an arrival where intake says (see `resolveIntake`). The board and phase an
+   * integration's rule named don't count; only a decision placing the card outright (`skipRules`)
+   * keeps its own. Undefined when no board takes it: it is logged Not routed and no card is filed.
+   * Every decision is logged, keyed by the arrival's decision so a redelivery replaces its row.
    */
   async #routeArrival(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
-  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> | undefined> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
     // A card another card's rule files (a board's child card) goes where that
     // board put it; routes place only what arrives from outside.
     if (record.workItemId !== null) return decision;
-    const routes = await this.#intakeRoutes.listIntakeRoutes({
-      orgId: record.orgId,
-      factoryProjectId: record.factoryProjectId,
-    });
+    const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
+    // The project's one-time intake order measure runs beside the arrival, never ahead of it.
+    this.#intakeOrderMeasure?.start(scope);
+    const [routes, order] = await Promise.all([
+      this.#intakeRoutes.listIntakeRoutes(scope),
+      this.#intakeEvaluator === 'intake-order' ? this.#intakeRoutes.readIntakeOrder(scope) : undefined,
+    ]);
     // A route can also test the issue a pull request closes, as it is now.
     const closedIssue = decision.closesIssue
       ? await this.#storage.get({ orgId: record.orgId, id: decision.closesIssue.workItemId })
@@ -2194,16 +2216,42 @@ export class FactoryDecisionDispatcher {
           )
         : {}),
     };
-    const placement = resolveIntakePlacement(routes, facts, boards);
-    if (!placement) {
-      const fallback = intakeTarget(boards);
-      return fallback ? { ...decision, board: fallback.board, stage: fallback.initialPhase } : decision;
+    const resolution = resolveIntake({
+      evaluator: this.#intakeEvaluator,
+      routes,
+      order: order?.boardKeys ?? [],
+      facts,
+      registry: boards,
+    });
+    const logged = {
+      idempotencyKey: record.idempotencyKey,
+      evaluator: this.#intakeEvaluator,
+      sourceKey: decision.sourceKey,
+      title: decision.title,
+      url: decision.url,
+    };
+    if (resolution.outcome === 'not_routed') {
+      await this.#intakeRoutes.recordIntakeDecision(scope, {
+        ...logged,
+        outcome: 'not_routed',
+        reason: resolution.reason,
+        arrival: { ...decision },
+      });
+      return undefined;
     }
+    await this.#intakeRoutes.recordIntakeDecision(scope, {
+      ...logged,
+      outcome: 'placed',
+      boardKey: resolution.board,
+      routeId: resolution.routeId,
+    });
     return {
       ...decision,
-      board: placement.board,
-      stage: placement.phase,
-      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+      board: resolution.board,
+      stage: resolution.phase,
+      ...(resolution.routeId !== null && {
+        metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: resolution.routeId },
+      }),
     };
   }
 

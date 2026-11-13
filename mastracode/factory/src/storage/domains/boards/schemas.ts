@@ -103,8 +103,49 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // Keys of the default routes Factory added to the project (`DEFAULT_INTAKE_ROUTES`), so each is
     // added once. Null on rows written before the list: those projects got `outside-authors`.
     seeded_defaults: { type: 'json', nullable: true },
+    // Board keys in the order intake checks them, separate from the sidebar's `position`. Null
+    // until first derived from the route list (`deriveIntakeOrder`).
+    intake_order: { type: 'json', nullable: true },
+    // The one-time intake order migration: when the order was derived, and how the old and new
+    // evaluators compared over the project's recent cards. Null until it ran.
+    intake_order_migration: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
+};
+
+/**
+ * One row per arrival intake decided on, keyed by the arrival's decision, so a redelivery updates
+ * it instead of adding another. A `not_routed` row is an item no board took; it holds the arrival
+ * so Route again can file it, and is resolved once a card is filed for its source.
+ */
+export const FACTORY_INTAKE_DECISIONS_SCHEMA: CollectionSchema = {
+  name: 'factory_intake_decisions',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    idempotency_key: { type: 'text' },
+    outcome: { type: 'text' },
+    evaluator: { type: 'text' },
+    board_key: { type: 'text', nullable: true },
+    route_id: { type: 'text', nullable: true },
+    reason: { type: 'text', nullable: true },
+    source_key: { type: 'text', nullable: true },
+    title: { type: 'text' },
+    url: { type: 'text', nullable: true },
+    // The `upsertLinkedWorkItem` decision as it arrived; Route again files it.
+    arrival: { type: 'json', nullable: true },
+    decided_at: { type: 'timestamp' },
+    resolved_at: { type: 'timestamp', nullable: true },
+    resolved_by: { type: 'text', nullable: true },
+  },
+  uniqueIndexes: [
+    { name: 'factory_intake_decisions_key', columns: ['org_id', 'factory_project_id', 'idempotency_key'] },
+  ],
+  indexes: [
+    { name: 'factory_intake_decisions_project', columns: ['org_id', 'factory_project_id', 'outcome', 'decided_at'] },
+    { name: 'factory_intake_decisions_source', columns: ['org_id', 'factory_project_id', 'source_key'] },
+  ],
 };
 
 /**

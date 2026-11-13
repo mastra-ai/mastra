@@ -16,6 +16,7 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
+import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -44,7 +45,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -162,7 +163,13 @@ export interface FactoryApiRoutesDeps {
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Stored boards and their cache; mounts the board management routes when present. */
-  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
+  storedBoards?: {
+    storage: StoredBoardsStorage;
+    cache: ProjectBoardCache;
+    /** Which evaluator places new items; the old `route-list` by default. */
+    intakeEvaluator?: IntakeEvaluator;
+    intakeOrderMeasure?: IntakeOrderMeasure;
+  };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -1032,6 +1039,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
+          intakeEvaluator: deps.storedBoards?.intakeEvaluator,
+          intakeOrderMeasure: deps.storedBoards?.intakeOrderMeasure,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
@@ -1057,6 +1066,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeEvaluator: deps.storedBoards.intakeEvaluator,
+          configVersion: deps.configVersion,
         }).routes()
       : []),
     ...(deps.factoryReady

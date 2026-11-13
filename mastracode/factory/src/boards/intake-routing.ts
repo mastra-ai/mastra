@@ -1,13 +1,17 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts } from '../rules/rule-group.js';
-import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { BoardEventFacts } from './board-events.js';
+import { deriveIntakeOrder, reconcileIntakeOrder } from './intake-order.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.js';
+import { boardFlow, boardForWorkItem, hasPullRequest, intakeTarget } from './semantics.js';
 
-/** Reads a project's intake routes, in order. */
-export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
+/** Reads a project's intake routes and intake order, and logs how intake decided each arrival. */
+export type IntakeRoutesReader = Pick<
+  StoredBoardsStorage,
+  'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted'
+>;
 
 type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
 
@@ -171,6 +175,85 @@ export function resolveIntakePlacement(
   return resolution?.type === 'place'
     ? { board: resolution.board, phase: resolution.phase, routeId: resolution.routeId }
     : undefined;
+}
+
+/** Where intake sends an arrival: placed on a board, or Not routed with the reason. */
+export type IntakeResolution =
+  | { outcome: 'placed'; board: string; phase: string; routeId: string | null }
+  | { outcome: 'not_routed'; reason: string };
+
+export interface IntakeQuery {
+  evaluator: IntakeEvaluator;
+  routes: readonly IntakeRoute[];
+  /** Board keys in intake order; only the `intake-order` evaluator reads it. */
+  order: readonly string[];
+  facts: RuleFacts;
+  registry: BoardRegistry;
+}
+
+/** The env var naming the evaluator when the Factory's `intake.evaluator` option doesn't. */
+export const INTAKE_EVALUATOR_ENV = 'FACTORY_INTAKE_EVALUATOR';
+
+/**
+ * The evaluator this process uses: the configured one, else `FACTORY_INTAKE_EVALUATOR`, else the
+ * old `route-list`. Every replica must run one that knows `intake-order` before it is switched on.
+ */
+export function intakeEvaluatorFrom(
+  configured: IntakeEvaluator | undefined,
+  env: Record<string, string | undefined> = process.env,
+): IntakeEvaluator {
+  if (configured) return configured;
+  return env[INTAKE_EVALUATOR_ENV] === 'intake-order' ? 'intake-order' : 'route-list';
+}
+
+/** Where intake sends an arrival, by the evaluator `query` names. Join routes never place here. */
+export function resolveIntake(query: IntakeQuery): IntakeResolution {
+  return query.evaluator === 'intake-order' ? resolveByIntakeOrder(query) : resolveByRouteList(query);
+}
+
+/**
+ * Boards in intake order, and inside each board its own rules top to bottom: the first enabled
+ * placing rule that matches and whose phase can take the card decides. Nothing names a board to
+ * fall back to; an arrival no board takes is Not routed.
+ */
+function resolveByIntakeOrder({ routes, order, facts, registry }: IntakeQuery): IntakeResolution {
+  const checked: string[] = [];
+  // A code board isn't stored, so the stored order can lack it; it slots in as a new board does.
+  const boardKeys = [...registry.keys()];
+  const stored = order.length > 0 ? order : deriveIntakeOrder(routes, boardKeys);
+  for (const boardKey of reconcileIntakeOrder(stored, boardKeys, routes)) {
+    const board = registry.get(boardKey);
+    if (!board) continue;
+    checked.push(board.name);
+    for (const route of routes) {
+      if (route.target.boardKey !== boardKey || route.target.joinClosedIssue) continue;
+      if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
+      const phase = landingPhase(board, route.target.phaseKey);
+      if (!placementTakesCard(board, phase, facts)) continue;
+      return { outcome: 'placed', board: board.id, phase, routeId: route.id };
+    }
+  }
+  return {
+    outcome: 'not_routed',
+    reason:
+      checked.length > 0
+        ? `No board's intake rules match it (checked ${checked.join(', ')}).`
+        : 'The project has no board to take it.',
+  };
+}
+
+/**
+ * The old evaluator, kept behind the flag until every replica runs the new one: the first
+ * matching route of the whole list, else the default board's first phase, else the first board.
+ * The only place intake still names a default board; delete it with the flag.
+ */
+function resolveByRouteList({ routes, facts, registry }: IntakeQuery): IntakeResolution {
+  const placement = resolveIntakePlacement(routes, facts, registry);
+  if (placement) return { outcome: 'placed', ...placement };
+  const fallback = intakeTarget(registry);
+  return fallback
+    ? { outcome: 'placed', board: fallback.board, phase: fallback.initialPhase, routeId: null }
+    : { outcome: 'not_routed', reason: 'The project has no board to take it.' };
 }
 
 /** The phase a route's card lands in: its named phase when new cards can reach it, else the board's first. */

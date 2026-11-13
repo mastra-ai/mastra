@@ -260,9 +260,17 @@ export class BoardWrites {
         cards,
       });
     }
-    await stored(() => this.deps.storage.delete(scope, key, { expectedRevision }));
+    const { intakeRoutes } = await stored(() => this.deps.storage.delete(scope, key, { expectedRevision }));
     this.deps.boards.invalidate(scope);
     await this.#audit(scope, writer, 'deleted', row);
+    for (const route of intakeRoutes) {
+      await writer.audit({
+        action: 'factory.intake_route.deleted',
+        factoryProjectId: scope.factoryProjectId,
+        targets: [{ type: 'intake_route', id: route.id, name: route.name }],
+        metadata: { boardKey: key, cause: 'board_deleted' },
+      });
+    }
   }
 
   /** Rewrites a board Factory stores to Factory's current definition of it, at the next revision. */
