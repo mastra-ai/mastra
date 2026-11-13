@@ -1,6 +1,7 @@
 import type { IMastraLogger } from '../../../logger';
-import { normalizeModelOutput } from '../../../loop/shared/normalize-model-output';
+import { normalizeModelOutput, validationErrorModelOutput } from '../../../loop/shared/normalize-model-output';
 import type { CoreTool } from '../../../tools/types';
+import { isValidationError } from '../../../tools/validation';
 import type { MessageList, MessageListInput } from '../../message-list';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 
@@ -193,7 +194,11 @@ export async function applyClientToolModelOutput({
       if (normalized.isError) continue;
 
       try {
-        const modelOutput = normalizeModelOutput(await tool.toModelOutput(normalized.output));
+        // A client tool that failed validation sends a ValidationError, not its
+        // output: skip the mapper and send the error to the model unchanged.
+        const modelOutput = isValidationError(normalized.output)
+          ? validationErrorModelOutput(normalized.output)
+          : normalizeModelOutput(await tool.toModelOutput(normalized.output));
         const nextMastra: Record<string, unknown> = {
           ...(typeof mastraMetadata === 'object' ? mastraMetadata : undefined),
           modelOutputComputed: true,

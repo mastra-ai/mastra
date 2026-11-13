@@ -2,7 +2,8 @@ import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import type { ProviderMetadata } from '../../../stream/types';
-import { normalizeModelOutput } from '../normalize-model-output';
+import { isValidationError } from '../../../tools/validation';
+import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
 interface MappingSpan {
@@ -20,6 +21,11 @@ export interface ToolMappingParentSpan {
  * Runs the tool's `toModelOutput` mapper under a MAPPING child span, normalizes
  * media parts into the AI SDK's LanguageModelV2ToolResultOutput shape, and
  * merges the mapped output into `providerMetadata.mastra.modelOutput`.
+ *
+ * A validation error (input, request-context or output validation failed) is
+ * not the tool's output, so it skips the mapper: `toModelOutput` is typed to
+ * receive only successful output, and the model must see the error to retry.
+ * The error is stored unchanged as an `error-json` model output instead.
  *
  * A nullish mapping result means "no special mapping needed" — the raw result
  * is already what the model should see. The key is not written in that case,
@@ -48,7 +54,9 @@ export async function computeModelOutputProviderMetadata(deps: {
 }): Promise<Record<string, unknown> | undefined> {
   const { tool, result } = deps;
   let modelOutput: unknown;
-  if (tool?.toModelOutput && result != null) {
+  if (tool?.toModelOutput && result != null && isValidationError(result)) {
+    modelOutput = validationErrorModelOutput(result);
+  } else if (tool?.toModelOutput && result != null) {
     const mappingSpan = deps.parentSpan?.createChildSpan({
       type: SpanType.MAPPING,
       name: `tool output mapping: '${deps.toolName}'`,

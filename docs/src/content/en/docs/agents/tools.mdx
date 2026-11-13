@@ -317,6 +317,8 @@ export const weatherTool = createTool({
 
 `toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result. The model receives the transformed content instead of the raw tool result.
 
+Mastra doesn't call `toModelOutput` when the tool's input, request context, or output fails validation. The model receives the validation error instead, so it can see what went wrong and retry.
+
 ## Tools that run on the client
 
 A tool without an `execute` function is a client tool: the server can't run it. The agent stops at the step where the model called it. The run ends with `finishReason: 'tool-calls'`, and the model doesn't produce more text until the tool has a result. Pick the pattern that matches what the model needs back:

@@ -45,6 +45,22 @@ function normalizeModelOutput(output: unknown): unknown {
 }
 
 /**
+ * Whether a tool result is a validation-error envelope. Mirrors
+ * `isValidationError` in @mastra/core/tools. Importing that entry point at
+ * runtime would pull the whole tools module (tool builder, code mode, stdio
+ * transports) into browser bundles for this one check.
+ */
+function isValidationError(value: unknown): boolean {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error === true &&
+    'validationErrors' in value
+  );
+}
+
+/**
  * Apply a client tool's `toModelOutput` mapping to its execution result.
  *
  * Client tools execute locally, so their `toModelOutput` mapping must also run
@@ -54,12 +70,17 @@ function normalizeModelOutput(output: unknown): unknown {
  * model prompt. The raw result stays in the tool-result `output`/`result`
  * field for storage and application logic, matching server-tool semantics.
  *
+ * A validation error (input, request-context or output validation failed) is
+ * not the tool's output, so the mapping is skipped and the error is returned
+ * unchanged as an `error-json` output, matching server tools.
+ *
  * Returns `undefined` when the tool defines no mapping, the result is null,
  * or the mapping itself returns null/undefined.
  */
 export async function getClientToolModelOutput(clientTool: Tool, result: unknown): Promise<unknown> {
   const toModelOutput = (clientTool as { toModelOutput?: (output: unknown) => unknown }).toModelOutput;
   if (typeof toModelOutput !== 'function' || result == null) return undefined;
+  if (isValidationError(result)) return { type: 'error-json', value: result };
 
   const modelOutput = await toModelOutput(result);
   return modelOutput == null ? undefined : normalizeModelOutput(modelOutput);

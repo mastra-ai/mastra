@@ -2,7 +2,8 @@ import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { normalizeModelOutput } from '../normalize-model-output';
+import { isValidationError } from '../../../tools/validation';
+import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
 /** Completion payload delivered by the background-task manager's onResult hook. */
 export interface BackgroundToolResultParams {
@@ -120,9 +121,12 @@ export async function applyBackgroundToolResult(deps: {
     : { transcriptArgs: deps.args, transcriptResult: result, providerMetadata: deps.baseProviderMetadata };
 
   // Recompute the model-facing output from the *real* result. Mirrors the
-  // synchronous path's toModelOutput mapping.
+  // synchronous path's toModelOutput mapping, including skipping the mapper for
+  // validation errors so the model reads the error, not a mapping of missing fields.
   let modelOutput: unknown = null;
-  if (!failed && deps.toModelOutput && result != null) {
+  if (!failed && deps.toModelOutput && result != null && isValidationError(result)) {
+    modelOutput = validationErrorModelOutput(result);
+  } else if (!failed && deps.toModelOutput && result != null) {
     try {
       modelOutput = normalizeModelOutput(await deps.toModelOutput(result)) ?? null;
     } catch (mappingError) {

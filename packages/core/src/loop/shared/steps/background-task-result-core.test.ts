@@ -211,3 +211,67 @@ describe('applyBackgroundToolResult identity scan', () => {
     expect(flush).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * A background tool whose input, request context or output failed validation
+ * completes with a ValidationError. The mapper is typed to receive only the
+ * tool's output, so it must not run on the error, and the error must reach
+ * the model as-is, tagged as an error result. Runs on every engine's background path, Inngest included,
+ * without per-engine setup. (#30211)
+ */
+describe('applyBackgroundToolResult toModelOutput', () => {
+  function placeholderList() {
+    const messageList = new MessageList();
+    messageList.add(
+      makeAssistantMessage(
+        [
+          makeBackgroundInvocationPart({
+            toolCallId: 'call_0',
+            taskId: 'task-1',
+            status: 'running',
+            result: 'Background task started. Task ID: task-1.',
+          }),
+        ],
+        'msg-1',
+      ),
+      'response',
+    );
+    return messageList;
+  }
+
+  function resultPart(messageList: MessageList) {
+    return messageList.get.all.db()[0]?.content?.parts?.find(p => p.type === 'tool-invocation') as any;
+  }
+
+  it('does not map a validation error, so the model reads the error itself', async () => {
+    const messageList = placeholderList();
+    const validationError = {
+      error: true,
+      message: 'Tool input validation failed for background-work. query: Required',
+      validationErrors: { errors: [], fields: { query: { errors: ['Required'], fields: {} } } },
+    };
+    const toModelOutput = vi.fn((output: any) => ({ type: 'json', value: { answer: output.answer } }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: validationError });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).not.toHaveBeenCalled();
+    const part = resultPart(messageList);
+    expect(part.toolInvocation.result).toEqual(validationError);
+    expect(part.providerMetadata.mastra.modelOutput).toEqual({ type: 'error-json', value: validationError });
+  });
+
+  it('still maps a successful result', async () => {
+    const messageList = placeholderList();
+    const toModelOutput = vi.fn((output: any) => ({ type: 'json', value: { answer: output.answer } }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: { answer: '42', secret: 'internal' } });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).toHaveBeenCalledWith({ answer: '42', secret: 'internal' });
+    expect(resultPart(messageList).providerMetadata.mastra.modelOutput).toEqual({
+      type: 'json',
+      value: { answer: '42' },
+    });
+  });
+});

@@ -46,3 +46,16 @@ export function normalizeModelOutput(output: unknown): unknown {
     }),
   };
 }
+
+/**
+ * Model output for a tool that declares `toModelOutput` but resolved with a
+ * validation error (input, request context or output validation failed).
+ *
+ * The mapper is typed to receive only the tool's output, so it is skipped and
+ * the model receives the error unchanged. Tagging it `error-json` keeps the
+ * provider-level error flag (for example Anthropic's `is_error`) so the model
+ * treats the call as failed and can retry.
+ */
+export function validationErrorModelOutput(error: unknown): { type: 'error-json'; value: unknown } {
+  return { type: 'error-json', value: error };
+}

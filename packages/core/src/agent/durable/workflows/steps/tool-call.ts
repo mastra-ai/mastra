@@ -45,7 +45,7 @@ import {
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
 import { getToolTitle } from '../../../../tools/tool-title';
-import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
+import { isValidationError, resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { defineLazyWriter } from '../../../../workflows/utils';
@@ -2311,7 +2311,18 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput && outcome.status === 'success') {
+        if (toModelOutput && outcome.status === 'success' && isValidationError(outcome.rawResult)) {
+          // Validation errors skip the mapper and reach the model unchanged, as on the main engine.
+          modelOutputComputed = true;
+          providerMetadata = (await computeModelOutputProviderMetadata({
+            tool: mappingTool,
+            toolName,
+            toolCallId,
+            result: outcome.rawResult,
+            existingProviderMetadata: providerMetadata as Record<string, unknown> | undefined,
+            parentSpan: stepSpan,
+          })) as typeof providerMetadata;
+        } else if (toModelOutput && outcome.status === 'success') {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
