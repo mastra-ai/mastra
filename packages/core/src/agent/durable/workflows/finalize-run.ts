@@ -7,6 +7,7 @@ import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
 import { createObservabilityContext } from '../../../observability';
 import type { TracingContext } from '../../../observability';
+import { resolveObservedUsage } from '../../../observability/usage';
 import type { OutputResult } from '../../../processors';
 import { StructuredOutputProcessor } from '../../../processors/processors/structured-output';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -330,7 +331,10 @@ export async function runDurableFinishSideEffects({
         effectiveRequestContext,
         0,
         outputResultWriter,
-        outputResult,
+        outputResult && {
+          ...outputResult,
+          observedUsage: resolveObservedUsage(outputResult.usage, outputResult.steps),
+        },
       );
     } catch (error) {
       if (error instanceof TripWire) {
@@ -714,6 +718,7 @@ export async function runDurableDeadlineOutputPass({
         {
           text: resolveOutputText(messageList),
           usage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined },
+          observedUsage: { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined, incomplete: true },
           finishReason: 'error',
           steps: [],
         },

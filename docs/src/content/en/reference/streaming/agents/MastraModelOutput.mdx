@@ -223,6 +223,25 @@ These properties resolve to final values after the stream completes:
     ],
   },
   {
+    name: 'observedUsage',
+    type: 'Promise<LanguageModelUsage & { incomplete: boolean }>',
+    description:
+      'The sum of the token counts that were reported for this run. Read it when `totalUsage` has unknown counts, for example after a retry recovers a failed call. A count that was never reported stays `undefined`, except `totalTokens`, which is the sum of input and output when both are known. Durable, evented, and Inngest agents hide a failed attempt, so `incomplete` is `false` after a retry on those agents.',
+    properties: [
+      {
+        type: 'Record',
+        parameters: [
+          {
+            name: 'incomplete',
+            type: 'boolean',
+            description:
+              'True when `totalUsage` has an unknown input, output, or total count, so the run may have cost more than this sum. When false, these counts equal `totalUsage`.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'finishReason',
     type: 'Promise<string | undefined>',
     description:
@@ -356,6 +375,12 @@ These properties resolve to final values after the stream completes:
             name: 'usage',
             type: 'Record<string, number>',
             description: 'Token usage statistics',
+          },
+          {
+            name: 'observedUsage',
+            type: 'LanguageModelUsage & { incomplete: boolean }',
+            description:
+              'The sum of the token counts that were reported, with `incomplete` set when `totalUsage` has an unknown count',
           },
           {
             name: 'reasoning',

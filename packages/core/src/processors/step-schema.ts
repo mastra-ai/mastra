@@ -147,6 +147,7 @@ export type ProcessorOutputStreamPhaseType = {
 export type SerializableOutputResult = {
   text: string;
   usage: Record<string, unknown>;
+  observedUsage?: Record<string, unknown>;
   finishReason: string;
   steps: unknown[];
   /**
@@ -604,6 +605,11 @@ export const ProcessorOutputStreamPhaseSchema = z.object({
 const outputResultSchema = z.object({
   text: z.string().describe('The accumulated text from all steps'),
   usage: z.record(z.string(), z.unknown()).describe('Token usage (cumulative across all steps)'),
+  // Optional because a worker on an older version can send a result without it.
+  observedUsage: z
+    .record(z.string(), z.unknown())
+    .optional()
+    .describe('The sum of the token counts that were reported, readable when usage has unknown counts'),
   finishReason: z.string().describe('Why the generation finished'),
   steps: z.array(z.unknown()).describe('All LLM step results'),
   inputAccepted: z

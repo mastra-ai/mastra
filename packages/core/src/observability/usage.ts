@@ -1,4 +1,4 @@
-import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import type { LanguageModelUsage, ObservedUsage, ProviderMetadata } from '../stream/types';
 import type { InputTokenDetails, OutputTokenDetails, UsageStats } from './types';
 
 const usageCountKeys = [
@@ -51,11 +51,20 @@ export function calculateObservedUsage(steps: Array<{ usage?: LanguageModelUsage
     }
   }
 
+  // Both are lower bounds once a step left out a count, and a provider's total can hold more than the two.
   if (usage.inputTokens !== undefined && usage.outputTokens !== undefined) {
-    usage.totalTokens = usage.inputTokens + usage.outputTokens;
+    usage.totalTokens = Math.max(usage.totalTokens ?? 0, usage.inputTokens + usage.outputTokens);
   }
 
   return usage;
+}
+
+export function resolveObservedUsage(
+  usage: LanguageModelUsage,
+  steps: Array<{ usage?: LanguageModelUsage | undefined }>,
+): ObservedUsage {
+  const incomplete = isUsageIncomplete(usage);
+  return { ...(incomplete ? calculateObservedUsage(steps) : usage), incomplete };
 }
 
 /**

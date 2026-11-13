@@ -1572,14 +1572,17 @@ class MastraScorer<
           consumeError = error;
         }
       }
-      const [totalUsageResult, stepsResult, textResult, finishReasonResult, objectResult] = await Promise.allSettled([
-        result.totalUsage,
-        result.steps,
-        result.text,
-        result.finishReason,
-        result.object,
-      ]);
+      const [totalUsageResult, observedUsageResult, stepsResult, textResult, finishReasonResult, objectResult] =
+        await Promise.allSettled([
+          result.totalUsage,
+          result.observedUsage,
+          result.steps,
+          result.text,
+          result.finishReason,
+          result.object,
+        ]);
       const totalUsage = totalUsageResult.status === 'fulfilled' ? totalUsageResult.value : undefined;
+      const observedUsage = observedUsageResult.status === 'fulfilled' ? observedUsageResult.value : undefined;
       const steps = stepsResult.status === 'fulfilled' && Array.isArray(stepsResult.value) ? stepsResult.value : [];
       const rawOutput = textResult.status === 'fulfilled' ? textResult.value : undefined;
       const finishReason = finishReasonResult.status === 'fulfilled' ? finishReasonResult.value : undefined;
@@ -1597,7 +1600,7 @@ class MastraScorer<
       const lastStep = steps.at(-1) as Record<string, unknown> | undefined;
       const modelFinishReason = typeof lastStep?.finishReason === 'string' ? lastStep.finishReason : finishReason;
       const completedUsage = totalUsage ?? pendingStepUsage;
-      const normalizedCompletedUsage = normalizeScorerJudgeUsage(completedUsage);
+      const normalizedCompletedUsage = normalizeScorerJudgeUsage(observedUsage ?? completedUsage);
       const hasReportedUsage = Object.values(normalizedCompletedUsage).some(value => value !== undefined && value > 0);
       const hasRawOutput = typeof rawOutput === 'string' && rawOutput.length > 0;
       const hasCompletedModelEvidence =
@@ -1635,6 +1638,7 @@ class MastraScorer<
           ...(lastStep ?? {}),
           steps,
           totalUsage: completedUsage,
+          observedUsage: observedUsage ?? { ...completedUsage, incomplete: true },
           model: {
             modelId: telemetry.judgeModelId ?? judgeModel,
             provider: telemetry.judgeProvider,
