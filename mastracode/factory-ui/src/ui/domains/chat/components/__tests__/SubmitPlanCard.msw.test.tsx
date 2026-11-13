@@ -11,6 +11,8 @@ import type { FactoryUserSession } from '../../../workspaces/services/user-sessi
 import { SubmitPlanCard } from '../SubmitPlanCard';
 
 const PLAN_PATH = '.artifacts/plans/add-dark-mode.md';
+/** A path an agent can submit from inside a repo checkout: the file route can never serve it. */
+const REPO_PREFIXED_PLAN_PATH = 'mastra/.artifacts/plans/issue-5.md';
 const WORKSPACE = 'sc-session-1';
 const PLAN_MARKDOWN = '# Ship dark mode\n\n## Steps\n\n1. Add the toggle';
 
@@ -233,6 +235,47 @@ describe('SubmitPlanCard', () => {
 
       expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
       expect(requests).toHaveLength(0);
+    });
+
+    it('renders a repo-prefixed path inline, without fetching it, when the host enriched the submission', async () => {
+      stubUserSession();
+      const failedRequests = stubPlanFile({ fail: true });
+      const onRespond = vi.fn();
+      const user = userEvent.setup();
+      renderCard({
+        input: {
+          toolId: 'submit_plan',
+          path: REPO_PREFIXED_PLAN_PATH,
+          title: 'Read the plan at suspend time',
+          plan: 'Read the file when the run suspends.',
+        },
+        onRespond,
+      });
+
+      expect(await screen.findByText('Read the plan at suspend time')).toBeInTheDocument();
+      expect(screen.getByText('Read the file when the run suspends.')).toBeInTheDocument();
+      expect(screen.queryByRole('note')).not.toBeInTheDocument();
+      expect(failedRequests).toHaveLength(0);
+
+      await user.click(screen.getByRole('button', { name: 'Approve the plan and build it' }));
+
+      expect(onRespond).toHaveBeenCalledWith({
+        action: 'approved',
+        path: REPO_PREFIXED_PLAN_PATH,
+        title: 'Read the plan at suspend time',
+        plan: 'Read the file when the run suspends.',
+      });
+    });
+
+    it('still reports an unloadable repo-prefixed path when the submission carried no plan', async () => {
+      stubUserSession();
+      const requests = stubPlanFile();
+      renderCard({ input: { toolId: 'submit_plan', path: REPO_PREFIXED_PLAN_PATH }, onRespond: () => {} });
+
+      expect(await screen.findByRole('note')).toHaveTextContent('The plan could not be loaded');
+      expect(requests).toHaveLength(0);
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Reject the plan' })).toBeEnabled();
     });
   });
 
