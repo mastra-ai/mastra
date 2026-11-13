@@ -186,6 +186,15 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     return platform;
   }
 
+  it('links only the connection a pinned deployment accepts', async () => {
+    const platform = await orgPlatform();
+    const jira = binding(platform, { filter: connection => connection.id === 'conn-unlinked' });
+
+    expect(await jira.linkOrgConnections()).toEqual({ linked: ['conn-unlinked'], needsLinking: [] });
+    expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-reauth')).toBe(0);
+    expect(await jira.unlinkedOrgConnections()).toEqual([]);
+  });
+
   it("links the org's unlinked global connections for its providers, once", async () => {
     const platform = await orgPlatform();
     const jira = binding(platform);
@@ -215,7 +224,7 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     expect(jira.needsLinking).toEqual(result.needsLinking);
   });
 
-  it('retries transient failures on request but not permission refusals', async () => {
+  it('links on retry both a connection that failed transiently and one refused before the permission was granted', async () => {
     const platform = await orgPlatform();
     platform.linkReplies.set('conn-unlinked', problem(403, 'forbidden'));
     platform.nextLinkReplies.set('conn-reauth', [problem(503, 'unavailable', 'store unavailable')]);
@@ -224,12 +233,13 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     const first = await jira.linkOrgConnections();
     expect(first.needsLinking.map(entry => entry.connectionId).sort()).toEqual(['conn-reauth', 'conn-unlinked']);
 
-    const retry = await jira.linkOrgConnections({ retryOnly: 'transient' });
-    expect(retry).toEqual({
-      linked: ['conn-reauth'],
-      needsLinking: [{ connectionId: 'conn-unlinked', reason: expect.stringContaining('integrations:write') }],
-    });
-    expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-unlinked')).toBe(1);
+    // The admin grants integrations:write, then retries.
+    platform.linkReplies.delete('conn-unlinked');
+    const retry = await jira.linkOrgConnections();
+    expect(retry.linked.sort()).toEqual(['conn-reauth', 'conn-unlinked']);
+    expect(retry.needsLinking).toEqual([]);
+    expect(jira.needsLinking).toEqual([]);
+    expect(platform.count('POST', '/v2/projects/proj_factory/connections/conn-unlinked')).toBe(2);
   });
 
   it('clears an entry once the connection shows up linked', async () => {
