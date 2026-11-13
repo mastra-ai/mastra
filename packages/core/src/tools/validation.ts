@@ -93,19 +93,197 @@ export function isValidationError(value: unknown): value is ValidationError {
   );
 }
 
+/**
+ * What the model may see of a validation error when a tool's `toModelOutput` is skipped for it:
+ * the failing field paths and a generic issue kind per field. It never quotes issue messages,
+ * arguments, tool output, request context or suspend data, because `toModelOutput` is where a
+ * tool keeps those out of the prompt.
+ */
+export interface ModelFacingValidationError {
+  error: true;
+  message: string;
+  validationErrors?: FormattedValidationErrors;
+}
+
+// Global so @mastra/client-js can read it without importing this module at runtime.
+const MODEL_FACING_VALIDATION_ERROR: unique symbol = Symbol.for('mastra.tool.modelFacingValidationError');
+
+function markModelFacing<T>(error: ValidationError<T>, modelFacing: ModelFacingValidationError): ValidationError<T> {
+  Object.defineProperty(error, MODEL_FACING_VALIDATION_ERROR, { value: modelFacing, enumerable: false });
+  return error;
+}
+
+function isModelFacingValidationError(value: unknown): value is ModelFacingValidationError {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error === true &&
+    'message' in value &&
+    typeof value.message === 'string'
+  );
+}
+
+/**
+ * Returns the model-facing form of a validation error that Mastra's own validation produced, or
+ * `undefined` for any other value, including one that only has a validation error's fields.
+ *
+ * The marker is a non-enumerable symbol property set where the error is created. JSON, spreads
+ * and structured clones drop it, so tool output, results a client sent over HTTP, and anything
+ * that crossed a serialization boundary never carry it. Read it in the process that ran the tool.
+ */
+export function getModelFacingValidationError(value: unknown): ModelFacingValidationError | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const marked: unknown = Object.getOwnPropertyDescriptor(value, MODEL_FACING_VALIDATION_ERROR)?.value;
+  return isModelFacingValidationError(marked) ? marked : undefined;
+}
+
+/**
+ * Issue kinds that may reach the model: Zod v3/v4 `code`s, Valibot schema and action `type`s and
+ * ArkType `code`s. A fixed list, because issue metadata is not value-free: a custom check can set
+ * `code`, `type` or `expected` to anything, including the rejected value.
+ */
+const MODEL_FACING_ISSUE_KINDS: ReadonlySet<string> = new Set([
+  // Zod v3 and v4
+  'invalid_type',
+  'invalid_literal',
+  'invalid_value',
+  'invalid_enum_value',
+  'invalid_union',
+  'invalid_union_discriminator',
+  'invalid_intersection_types',
+  'invalid_arguments',
+  'invalid_return_type',
+  'invalid_date',
+  'invalid_string',
+  'invalid_format',
+  'invalid_key',
+  'invalid_element',
+  'unrecognized_keys',
+  'too_small',
+  'too_big',
+  'not_multiple_of',
+  'not_finite',
+  'custom',
+  // Valibot action types (schema types are covered by MODEL_FACING_TYPE_NAMES)
+  'email',
+  'url',
+  'uuid',
+  'regex',
+  'check',
+  'length',
+  'min_length',
+  'max_length',
+  'non_empty',
+  'min_value',
+  'max_value',
+  'iso_date',
+  'iso_date_time',
+  'iso_timestamp',
+  // ArkType
+  'domain',
+  'required',
+  'predicate',
+  'pattern',
+  'divisor',
+  'min',
+  'max',
+  'minLength',
+  'maxLength',
+  'exactLength',
+  'unit',
+  'proto',
+  'after',
+  'before',
+]);
+
+/** Plain type names that may reach the model as an issue's expected type (or Valibot's schema `type`). */
+const MODEL_FACING_TYPE_NAMES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'bigint',
+  'boolean',
+  'symbol',
+  'undefined',
+  'null',
+  'object',
+  'array',
+  'tuple',
+  'record',
+  'map',
+  'set',
+  'date',
+  'function',
+  'integer',
+  'int',
+  'nan',
+  'literal',
+  'enum',
+  'picklist',
+  'union',
+  'variant',
+  'never',
+  'nonoptional',
+  'nonnullable',
+  'nonnullish',
+]);
+
+/**
+ * Generic, value-free description of one issue for the model: the schema library's issue kind
+ * (Zod's `code`, Valibot's `type`, ArkType's `code`) and the expected type, each only when it is
+ * on a fixed list, else `invalid`. Issue messages are left out: custom refinements can quote
+ * anything, including values an input transform resolved, and built-in messages can quote the
+ * rejected value.
+ */
+function describeIssueForModel(issue: StandardSchemaIssue): string {
+  const listed = (key: string, allowed: ReadonlySet<string>): string | undefined => {
+    const value: unknown = Reflect.get(issue, key);
+    return typeof value === 'string' && allowed.has(value) ? value : undefined;
+  };
+  const kind =
+    listed('code', MODEL_FACING_ISSUE_KINDS) ??
+    listed('type', MODEL_FACING_ISSUE_KINDS) ??
+    listed('type', MODEL_FACING_TYPE_NAMES) ??
+    'invalid';
+  const expected = listed('expected', MODEL_FACING_TYPE_NAMES);
+  return expected ? `${kind} (expected ${expected})` : kind;
+}
+
+/**
+ * Model-facing form of a validation error, used when a tool's `toModelOutput` is skipped for it:
+ * each failing field path, sanitized like {@link getValidationIssuePaths}, with a generic issue
+ * kind. It never carries issue messages, received values or excerpts of the validated data.
+ */
+function modelFacingError(params: {
+  issues: readonly StandardSchemaIssue[];
+  schema: PublicSchema | undefined;
+  io: 'input' | 'output';
+  heading: string;
+}): ModelFacingValidationError {
+  const sanitizePath = createIssuePathSanitizer(params.schema, params.io);
+  const issues = params.issues.map(issue => ({
+    path: sanitizePath((issue.path ?? []).map(segment => getPathKey(segment))),
+    message: describeIssueForModel(issue),
+  }));
+  const lines = issues.map(issue => `- ${issue.path.join('.') || 'root'}: ${issue.message}`).join('\n');
+  return {
+    error: true,
+    message: `${params.heading}\n${lines}`,
+    validationErrors: buildFormattedErrors(issues),
+  };
+}
+
 type JSONSchemaNode = JSONSchema7Definition | undefined;
 
 /**
- * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
- * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
- * Only property names declared by `schema` and array indexes are kept; any other segment (a record
- * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ * Returns a function that keeps only the path segments `schema` declares: property names and array
+ * indexes. Any other segment (a record key, or anything under a schema that can't be resolved)
+ * came from the validated data and becomes `*`.
  */
-export function getValidationIssuePaths(
-  error: ValidationError,
+function createIssuePathSanitizer(
   schema: PublicSchema | undefined,
-  io: 'input' | 'output' = 'input',
-): string[] {
+  io: 'input' | 'output',
+): (path: readonly string[]) => string[] {
   let root: JSONSchemaNode;
   try {
     root = schema ? standardSchemaToJSONSchema(toStandardSchema(schema), { io }) : undefined;
@@ -147,15 +325,37 @@ export function getValidationIssuePaths(
     };
   };
 
-  const paths: string[] = [];
-  const walk = (node: { errors: string[]; fields: unknown }, path: string[], nodes: JSONSchema7[]) => {
-    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
-    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+  const rootNodes = resolve(root);
+  return path => {
+    let nodes = rootNodes;
+    return path.map(key => {
       const next = child(nodes, key);
-      walk(field, [...path, next.segment], next.nodes);
+      nodes = next.nodes;
+      return next.segment;
+    });
+  };
+}
+
+/**
+ * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
+ * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
+ * Only property names declared by `schema` and array indexes are kept; any other segment (a record
+ * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ */
+export function getValidationIssuePaths(
+  error: ValidationError,
+  schema: PublicSchema | undefined,
+  io: 'input' | 'output' = 'input',
+): string[] {
+  const sanitizePath = createIssuePathSanitizer(schema, io);
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[]) => {
+    if (node.errors.length > 0) paths.push(sanitizePath(path).join('.') || 'root');
+    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      walk(field, [...path, key]);
     }
   };
-  walk(error.validationErrors, [], resolve(root));
+  walk(error.validationErrors, []);
   return [...new Set(paths)];
 }
 
@@ -197,7 +397,9 @@ function createEmptyErrors(): { errors: string[]; fields: Record<string, unknown
  * @param issues Array of validation issues from standard schema validation
  * @returns Formatted errors object with nested structure based on paths
  */
-function buildFormattedErrors<T>(issues: readonly StandardSchemaIssue[]): FormattedValidationErrors<T> {
+function buildFormattedErrors<T>(
+  issues: readonly Pick<StandardSchemaIssue, 'message' | 'path'>[],
+): FormattedValidationErrors<T> {
   const result = createEmptyErrors();
 
   for (const issue of issues) {
@@ -283,7 +485,17 @@ export function validateToolSuspendData<T = unknown>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { error };
+  return {
+    error: markModelFacing(
+      error,
+      modelFacingError({
+        issues: validation.issues,
+        schema,
+        io: 'input',
+        heading: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. The tool suspended with data that does not match its suspend schema:`,
+      }),
+    ),
+  };
 }
 
 /**
@@ -697,13 +909,15 @@ export function validateToolInput<T = unknown>(
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
+  const heading = `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:`;
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    message: `${heading}\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
     validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
-  return { error };
+  // After an input transform, messages and record keys can carry values the model never sent.
+  return { error: markModelFacing(error, modelFacingError({ issues: finalIssues, schema, io: 'input', heading })) };
 }
 
 /**
@@ -743,7 +957,17 @@ export function validateToolOutput<T = unknown>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { error };
+  return {
+    error: markModelFacing(
+      error,
+      modelFacingError({
+        issues: validation.issues,
+        schema,
+        io: 'output',
+        heading: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned output that does not match its output schema:`,
+      }),
+    ),
+  };
 }
 
 /**
@@ -833,5 +1057,11 @@ export function validateRequestContext<T = any>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: contextValues as T, error };
+  const modelFacing = modelFacingError({
+    issues: validation.issues,
+    schema,
+    io: 'input',
+    heading: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. The request context is missing values or has invalid ones:`,
+  });
+  return { data: contextValues as T, error: markModelFacing(error, modelFacing) };
 }

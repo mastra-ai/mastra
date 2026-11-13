@@ -1,3 +1,5 @@
+import type { ModelFacingValidationError } from '../../tools/validation';
+
 /**
  * Normalize modelOutput from toModelOutput() into the lossless V2-authored
  * storage shape kept in `providerMetadata.mastra.modelOutput`.
@@ -45,4 +47,22 @@ export function normalizeModelOutput(output: unknown): unknown {
       return part;
     }),
   };
+}
+
+/**
+ * Model output for a tool that declares `toModelOutput` but resolved with a
+ * validation error that Mastra's own validation produced (input, request
+ * context, suspend data or output validation failed).
+ *
+ * The mapper is typed to receive only the tool's output, so it is skipped and
+ * the model receives the model-facing form of the error, which leaves out the
+ * raw values the full error quotes. Tagging it `error-json` keeps the
+ * provider-level error flag (for example Anthropic's `is_error`) so the model
+ * treats the call as failed and can retry.
+ */
+export function validationErrorModelOutput(error: ModelFacingValidationError): {
+  type: 'error-json';
+  value: ModelFacingValidationError;
+} {
+  return { type: 'error-json', value: error };
 }

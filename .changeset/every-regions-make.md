@@ -1,0 +1,7 @@
+---
+'@mastra/core': patch
+---
+
+Fixed tool validation errors being passed to `toModelOutput`. When a tool that defines `toModelOutput` fails input, request context or output validation, the agent now skips `toModelOutput` and sends the model the validation error, marked as an error result, so the model can see what went wrong and retry. Before, a mapper written for successful output turned the error into an empty result such as `{}`. This matches the `toModelOutput` type, which only receives the tool's output. Fixes #30211.
+
+Because `toModelOutput` is where a tool keeps fields out of the prompt, the error sent in its place names only the fields that failed and the kind of each problem, for example `- query: too_small` or `- count: invalid_type (expected number)`. It never includes the schema's issue messages, which can quote rejected values or values an input transform resolved, nor the arguments, output, request context or suspend data. Field names the schema doesn't declare, such as record keys, appear as `*`. Issue kinds and expected types come from a fixed list of schema library codes and type names; anything else appears as `invalid`. This also applies to approval-required tools whose arguments fail validation before the approval prompt. Only validation errors that Mastra itself produced skip `toModelOutput`; a tool result or client tool result that merely has `error: true` and `validationErrors` fields is mapped as before. The tool result your code receives still holds the full error, and tools without `toModelOutput` are unchanged.

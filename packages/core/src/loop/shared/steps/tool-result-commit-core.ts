@@ -2,7 +2,8 @@ import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import type { ProviderMetadata } from '../../../stream/types';
-import { normalizeModelOutput } from '../normalize-model-output';
+import type { ModelFacingValidationError } from '../../../tools/validation';
+import { normalizeModelOutput, validationErrorModelOutput } from '../normalize-model-output';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
 interface MappingSpan {
@@ -20,6 +21,13 @@ export interface ToolMappingParentSpan {
  * Runs the tool's `toModelOutput` mapper under a MAPPING child span, normalizes
  * media parts into the AI SDK's LanguageModelV2ToolResultOutput shape, and
  * merges the mapped output into `providerMetadata.mastra.modelOutput`.
+ *
+ * A validation error Mastra produced for this call (`validationError`) is not
+ * the tool's output, so it skips the mapper: `toModelOutput` is typed to
+ * receive only successful output, and the model must see the error to retry.
+ * Its model-facing form, without the raw values the full error quotes, is
+ * stored as an `error-json` model output instead. A result that merely has a
+ * validation error's fields is mapped like any other result.
  *
  * A nullish mapping result means "no special mapping needed" — the raw result
  * is already what the model should see. The key is not written in that case,
@@ -41,6 +49,10 @@ export async function computeModelOutputProviderMetadata(deps: {
   toolName: string;
   toolCallId?: string;
   result: unknown;
+  /** Set only when Mastra's own validation rejected this call, read from the
+   * result in the process that ran the tool (`getModelFacingValidationError`).
+   * Never derived from the result's shape. */
+  validationError?: ModelFacingValidationError;
   existingProviderMetadata?: Record<string, unknown>;
   /** Parent for the MAPPING child span (main: current tracing span; durable:
    * the MODEL_STEP span rebuilt from serialized state). */
@@ -48,7 +60,9 @@ export async function computeModelOutputProviderMetadata(deps: {
 }): Promise<Record<string, unknown> | undefined> {
   const { tool, result } = deps;
   let modelOutput: unknown;
-  if (tool?.toModelOutput && result != null) {
+  if (tool?.toModelOutput && deps.validationError) {
+    modelOutput = validationErrorModelOutput(deps.validationError);
+  } else if (tool?.toModelOutput && result != null) {
     const mappingSpan = deps.parentSpan?.createChildSpan({
       type: SpanType.MAPPING,
       name: `tool output mapping: '${deps.toolName}'`,
