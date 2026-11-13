@@ -41,7 +41,7 @@ Artifact references are metadata. A browser image URL does not inherit Studio's 
 
 Repeat the exact input and idempotency key to replay its saved result. The receipt keeps its original `billedUnits` and sets `replayed: true`; it does not represent a new charge. Use a new key for new work. Schema errors are rejected before execution. Tool failures return a safe `error` object; they must not be interpreted as successful work.
 
-The integration uses **Tools**, not native agent chat or native workflow runs. Those execution routes and private memory, traces and run storage remain closed. Adding a new Studio action requires adding its authenticated gateway tool; enabling Studio never opens all native APIs.
+The integration uses **Tools**, not native agent chat or native workflow runs. Those execution routes and private memory, traces and run storage remain closed. Adding a new Studio action requires adding its authenticated gateway tool. Resources registered without a billing wrapper retain their native routes and use the application's ordinary Mastra authentication configuration. Protected resources keep the restricted transport described here.
 
 ## Balances and receipts
 

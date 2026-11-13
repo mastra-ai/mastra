@@ -349,6 +349,18 @@ const imageStatements = [
   `CREATE TRIGGER image_artifact_no_update BEFORE UPDATE ON image_artifacts BEGIN SELECT RAISE(ABORT, 'Artifact metadata is immutable'); END`,
   `CREATE TRIGGER image_artifact_no_delete BEFORE DELETE ON image_artifacts BEGIN SELECT RAISE(ABORT, 'Artifact identities are retained'); END`,
 ];
+const creditStatements = [
+  `CREATE TABLE local_credit_migrations (
+    account_id TEXT PRIMARY KEY REFERENCES billing_accounts(id),
+    source_meter TEXT NOT NULL,
+    target_meter TEXT NOT NULL,
+    balance INTEGER NOT NULL CHECK (balance BETWEEN 0 AND 9007199254740991),
+    consumed INTEGER NOT NULL CHECK (consumed BETWEEN 0 AND 9007199254740991),
+    CHECK (source_meter != target_meter)
+  ) STRICT`,
+  `CREATE TRIGGER local_credit_migration_no_update BEFORE UPDATE ON local_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transitions are immutable'); END`,
+  `CREATE TRIGGER local_credit_migration_no_delete BEFORE DELETE ON local_credit_migrations BEGIN SELECT RAISE(ABORT, 'Local credit transition tombstones are retained'); END`,
+];
 const checksum = (statements: readonly string[]) => createHash('sha256').update(statements.join('\n')).digest('hex');
 const normalizedSql = (sql: string) => sql.replace(/\s+/g, ' ').trim();
 async function validateCatalog(transaction: Transaction, statements: readonly string[]) {
@@ -374,7 +386,7 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       args: [checksum(schemaStatements), new Date().toISOString()],
     });
   } else {
-    if (![1n, 2n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
+    if (![1n, 2n, 3n].includes(version as bigint) || !catalog.rows.some(row => row.name === 'billing_migrations'))
       throw new BillingError('storage_incompatible');
     const history = (await transaction.execute('SELECT version, checksum FROM billing_migrations ORDER BY version'))
       .rows;
@@ -382,13 +394,21 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
       history.length !== Number(version) ||
       history[0].version !== 1n ||
       history[0].checksum !== checksum(schemaStatements) ||
-      (version === 2n && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements)))
+      (Number(version) >= 2 && (history[1].version !== 2n || history[1].checksum !== checksum(imageStatements))) ||
+      (version === 3n && (history[2].version !== 3n || history[2].checksum !== checksum(creditStatements)))
     )
       throw new BillingError('storage_incompatible');
     // Validate the complete recognized old schema before the first migration write.
-    await validateCatalog(transaction, version === 1n ? schemaStatements : [...schemaStatements, ...imageStatements]);
+    await validateCatalog(
+      transaction,
+      version === 1n
+        ? schemaStatements
+        : version === 2n
+          ? [...schemaStatements, ...imageStatements]
+          : [...schemaStatements, ...imageStatements, ...creditStatements],
+    );
   }
-  if (version !== 2n) {
+  if (Number(version) < 2) {
     for (const sql of imageStatements) await transaction.execute(sql);
     await transaction.execute({
       sql: 'INSERT INTO billing_migrations VALUES (2, ?, ?)',
@@ -418,5 +438,13 @@ export async function migrateStorage(transaction: Transaction): Promise<void> {
     }
     await transaction.execute('PRAGMA user_version = 2');
   }
-  await validateCatalog(transaction, [...schemaStatements, ...imageStatements]);
+  if (Number(version) < 3) {
+    for (const sql of creditStatements) await transaction.execute(sql);
+    await transaction.execute({
+      sql: 'INSERT INTO billing_migrations VALUES (3, ?, ?)',
+      args: [checksum(creditStatements), new Date().toISOString()],
+    });
+    await transaction.execute('PRAGMA user_version = 3');
+  }
+  await validateCatalog(transaction, [...schemaStatements, ...imageStatements, ...creditStatements]);
 }

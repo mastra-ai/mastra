@@ -1,5 +1,5 @@
 import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
-import { createImageApplication } from '../../src/mastra/image-billing.js';
+import { createImageApplication } from '../support/image-application.js';
 import { fork } from 'node:child_process';
 import { billingPolicySchema } from '../../src/billing/policy-configuration.js';
 import { weatherDefinitions } from '../support/weather/resources.js';

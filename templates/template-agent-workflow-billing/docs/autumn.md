@@ -12,7 +12,7 @@ Set these server environment variables:
 - `OPENAI_API_KEY` for generation, independently of billing, and optionally `BILLING_STUDIO_ENABLED=true` for Studio Tools.
 - `AUTUMN_SECRET_KEY` from your Autumn environment, never a browser header.
 - `BILLING_JWT_CONFIGURATION` with your trusted issuer, audience, allowed asymmetric algorithms and public JWKS. See [identity provisioning](#identity-provisioning).
-- `BILLING_CONFIGURATION` containing the complete JSON below, matching the bundled definitions in `src/mastra/image-definitions.ts`. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The bundled catalog applies the configured policies, operations and measurements to its existing image definitions; it cannot add factories or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
+- Optional `BILLING_CONFIGURATION` containing the complete JSON below, matching the protected registrations in `src/mastra/index.ts`. Leave it unset to use the entry-point configuration. `localAccounts` must be empty. This is a full configuration override, not a partial patch. The override must agree with the registered policies, operations and measurements; it cannot add native resources or actions. Keep both bundled resource IDs and kinds. When supplying your own typed catalog, its resource definitions and the override must agree. The example below retains the bundled one-credit image and three-credit kit policies.
 
 ```json
 {
@@ -27,7 +27,7 @@ Set these server environment variables:
       "measurements": [],
       "policy": {
         "version": "image-agent-v1",
-        "charge": { "type": "credits", "meter": "image-credits", "units": 1 }
+        "charge": { "type": "credits", "meter": "credits", "units": 1 }
       }
     },
     {
@@ -38,25 +38,25 @@ Set these server environment variables:
       "policy": {
         "version": "image-kit-v2",
         "suspendedReservationTtlMs": 1800000,
-        "charge": { "type": "credits", "meter": "image-credits", "units": 3 }
+        "charge": { "type": "credits", "meter": "credits", "units": 3 }
       }
     }
   ],
   "billingKeys": {
     "entitlements": [],
     "subscriptions": [],
-    "meters": [{ "key": "image-credits", "unit": "credits", "funding": ["prepaid"] }]
+    "meters": [{ "key": "credits", "unit": "credits", "funding": ["prepaid"] }]
   },
   "localAccounts": []
 }
 ```
 
-Set `AUTUMN_BINDINGS` to this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` with the personal workspace returned by trusted provisioning of John below. `johns-org`, `generated_images` and `image_credits` must be the IDs of your existing sandbox resources, not IDs supplied by the browser. The sandbox proof uses the same logical `image-credits` mapping with its isolated `johns-org-sandbox-proof` workspace.
+Set `AUTUMN_BINDINGS` to this server-owned JSON. Replace `TRUSTED_WORKSPACE_ID` with the personal workspace returned by trusted provisioning of John below. `johns-org`, `generated_images` and `image_credits` must be the IDs of your existing sandbox resources, not IDs supplied by the browser. The sandbox proof uses the same logical `credits` mapping with its isolated `johns-org-sandbox-proof` workspace.
 
 ```json
 {
   "customers": [{ "workspaceId": "TRUSTED_WORKSPACE_ID", "customerId": "johns-org", "name": "John's Org" }],
-  "meters": [{ "key": "image-credits", "featureId": "generated_images", "creditPoolId": "image_credits" }],
+  "meters": [{ "key": "credits", "featureId": "generated_images", "creditPoolId": "image_credits" }],
   "subscriptions": [],
   "entitlements": [],
   "plans": [],
@@ -109,7 +109,7 @@ A policy may set `suspendedReservationTtlMs` and `reservationBudget`:
 ```ts
 policy: {
   version: 'image-kit-v2',
-  charge: { type: 'credits', meter: 'image-credits', units: 3 },
+  charge: { type: 'credits', meter: 'credits', units: 3 },
   suspendedReservationTtlMs: 1_800_000,
   reservationBudget: {
     executionMs: 120_000,

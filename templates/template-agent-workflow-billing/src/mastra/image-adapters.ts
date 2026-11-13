@@ -1,13 +1,9 @@
 import type { ExecutionScope } from '../billing/execution-scope.js';
-import { imagePolicies } from './image-plans.js';
 import { z } from 'zod';
 import { resourceAction } from '../billing/resource-catalog.js';
-import type { ResourceDefinition } from '../billing/resource-catalog.js';
 import { identifierSchema } from '../billing/contracts.js';
 import { imageOutputSchema, briefSchema, kitInputSchema, approvalSchema } from '../images/schemas.js';
 import type { ImageService } from '../images/service.js';
-import { createImageAgent } from './agents/image-agent.js';
-import { createImageKit } from './workflows/image-kit.js';
 
 const selection = z.strictObject({ workspaceId: identifierSchema });
 const operation = selection.extend({ idempotencyKey: identifierSchema });
@@ -76,11 +72,9 @@ const actions = [
       ),
   }),
 ];
-export function imageDefinitions(environment: NodeJS.ProcessEnv, images: ImageService) {
+export function imageAdapters(images: ImageService) {
   return [
     {
-      ...imagePolicies[0],
-      create: () => createImageAgent(environment, images),
       adapter: {
         version: 'image-agent-v1',
         maxSteps: 2,
@@ -97,17 +91,15 @@ export function imageDefinitions(environment: NodeJS.ProcessEnv, images: ImageSe
       actions: actions.slice(0, 1),
     },
     {
-      ...imagePolicies[1],
-      create: createImageKit,
       agentDependencies: ['image-agent'],
       adapter: {
         version: 'image-kit-v2',
         measurement: 'facade-calls',
         expectedCalls: [0, 3],
         artifactSlots: 3,
-        completion: (scope, output) => images.completeKit(scope, output),
+        completion: (scope: ExecutionScope, output: unknown) => images.completeKit(scope, output),
       },
       actions: actions.slice(1),
     },
-  ] as const satisfies readonly ResourceDefinition[];
+  ] as const;
 }

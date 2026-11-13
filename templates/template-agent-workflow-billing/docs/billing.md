@@ -1,199 +1,133 @@
 # Billing guide
 
-Use this template to add subscription access, prepaid credits, per-task charges, or measured usage to Mastra agents and workflows. Start with the local example in the [README](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/README.md), then configure policies and connect [Autumn](autumn.md) when you need provider-owned prepaid billing.
+Configure billing independently of your agents and workflows. The template uses `createBilling(...)` to resolve its provider and commercial configuration, optional registration wrappers to select paid resources, and an ordinary `new Mastra({...})` for the application itself.
 
-## How billing works
+## Configure the application
 
-A workspace pays for execution. Each person authenticates separately, and workspace members share the billing allowance while keeping their execution results private.
+`src/mastra/index.ts` contains the provider environment, logical `credits` meter, `starter` offer, resource policies and the Mastra constructor. Example-specific factories stay in `src/mastra/agents` and `src/mastra/workflows`. Nothing in the billing integration imports the image example.
 
-Each request follows the same flow:
-
-1. Verify the caller, workspace membership, and any required subscription or entitlement.
-2. Reserve the units required by the resource's billing policy.
-3. Execute the agent or workflow.
-4. Charge once on success. Confirmed failure or cancellation releases the reservation without charging.
-5. Confirm the same prepaid reservation without a second usage debit. Metered postpaid policies instead deliver immutable usage through the outbox.
-
-An idempotency key identifies one operation. Retrying with the same key and input returns the saved result or status without executing or charging again. Reusing that key with different input returns a conflict.
-
-If execution or measurement cannot be confirmed, the reservation stays held for investigation. Recovery does not automatically rerun uncertain work. A failed usage export does not rerun the agent or undo local consumption.
-
-## Local image example
-
-`npm run setup` creates personal profiles with 30 simulated image credits each, seeded once. The `image-agent` produces one private image for one credit. The `image-kit` saves three prompts for the same subject in Notion-inspired, 3D and vector illustration styles, holds three credits while awaiting approval, then confirms three only after all artifacts persist. Nested calls share the parent reservation.
-
-Use [the image guide](images.md) for CLI inputs, protected downloads, fixed generation settings and failure/replay behavior. Repeating setup preserves identities and spent balances. Recognized legacy local credit balances transition conservatively without resetting history.
-
-## Choose a billing policy
-
-Edit the resource policies in [src/mastra/image-definitions.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/image-definitions.ts). Each resource has an optional access requirement and a charging rule.
-
-| Model               | Policy                                                                                              |
-| ------------------- | --------------------------------------------------------------------------------------------------- |
-| Free access         | `charge: { type: 'none' }` with no access requirement                                               |
-| Subscription access | `access: { subscription: 'subscription-access' }` and `charge: { type: 'none' }`                    |
-| Prepaid credits     | `charge: { type: 'credits', meter: 'image-credits', units: 1 }`                                     |
-| Per-task charge     | `charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'prepaid' }`                        |
-| Measured usage      | `charge: { type: 'usage', meter: 'tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
-
-Access requirements and charges can be combined. A subscription can grant access while each successful execution also consumes credits. Local setup simulates prepaid balances. In Autumn mode the provider owns paid credit and its atomic reservations; the policy determines how executions spend those units.
-
-Meter keys and units must match `billingKeys`. Quantities are integers. `prepaid` spends available units; `metered` records usage for billing without a prepaid balance. Policies also support entitlement requirements and metered per-task charges.
-
-The bundled image resources use fixed credits. Generic task and metered policies remain available for other resource definitions. Prepaid token usage and prepaid workflow usage are not supported by the supplied Mastra adapters.
-
-Policy changes apply to new executions. Existing runs keep the policy and reservation recorded when they started.
-
-## Connect your own agents and workflows
-
-The [application catalog](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/image-billing.ts) selects the definitions in [src/mastra/image-definitions.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/mastra/image-definitions.ts). Each definition owns its ID, native factory, adapter limits/version, billing policy, public actions and declared agent dependencies. Adding a definition derives Mastra, billing and Studio registrations together.
-
-Create an application with a typed catalog and a server-side provider selection:
+A minimal application with an existing `publicAgent`, `paidAgent` and `reportWorkflow` looks like this:
 
 ```ts
-import { imageBillingCatalog } from './src/mastra/image-billing.js';
-import { createBillingApplication } from './src/billing/application.js';
+import { Mastra } from '@mastra/core/mastra';
+import { createBilling } from './src/billing/integration.js';
 
-const catalog = imageBillingCatalog(process.env);
-const application = await createBillingApplication({ environment: process.env, catalog });
-const { runtime, organizations } = application;
+const billing = createBilling({
+  environment: process.env,
+  billingKeys: {
+    meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }],
+  },
+  plans: {
+    allowances: [
+      { key: 'starter-credits', version: 'v1', meter: 'credits', kind: 'order', units: 30, expiry: { type: 'none' } },
+    ],
+    offers: [{ key: 'starter', version: 'v1', allowances: [{ key: 'starter-credits', version: 'v1' }] }],
+  },
+});
+
+const integration = await billing.prepare({
+  agents: {
+    paidAgent: billing.agent(paidAgent, {
+      policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 1 } },
+    }),
+  },
+  workflows: {
+    report: billing.workflow(reportWorkflow, {
+      policy: { version: 'v1', charge: { type: 'credits', meter: 'credits', units: 3 } },
+    }),
+  },
+});
+
+export const mastra = new Mastra({
+  agents: { publicAgent, ...integration.agents },
+  workflows: integration.workflows,
+  tools: integration.tools,
+  storage: integration.storage,
+  logger: false,
+  server: integration.server({ host: '127.0.0.1', port: 4111 }),
+});
+
+await integration.attach(mastra);
 ```
 
-For the bundled local example, call `createImageApplication({ environment: process.env })` from `src/mastra/image-billing.ts`. It loads the prepared local profiles and seeds before calling the generic application factory. Custom applications supply their own catalog, including local account seeds when needed.
+The registration wrappers pair native resources with policies. `prepare` unwraps both paid and ordinary registrations into native Mastra maps and initializes billing. `attach` verifies those registrations and the workflow snapshot domain, installs the transport boundary, then starts recovery. Call `billing.close()` during shutdown and after a failed application construction. The template registers this cleanup with `registerApplicationShutdown`.
 
-`BILLING_PROVIDER=local` selects persistent simulated accounting with no payment credentials. `BILLING_PROVIDER=autumn` selects the Autumn driver, which reads `AUTUMN_SECRET_KEY` and `AUTUMN_BINDINGS` itself. Configure JWT identity for Autumn. The driver registry in `src/billing/setup.ts` selects the implementation; resource factories receive no provider SDK.
+Add unwrapped resources directly to `new Mastra({ agents, workflows })`, or include them in `prepare` if you prefer a single registration map. Resources registered without a wrapper retain native execution routes and use your ordinary Mastra authentication configuration. Protected resources execute through the billing facade and authenticated `/billing` routes. Their native execution routes stay closed, including when unwrapped resources coexist in the same application. A `charge: { type: 'none' }` policy still opts into the billing gateway and its identity/idempotency behavior; omitting the wrapper leaves the resource native.
 
-For example, the included agent definition keeps its charge next to its factory:
+Registration wrappers do not intercept trusted server code that deliberately calls a raw native instance. Use the facade for protected calls. Native Studio chat for protected resources is not implemented by this registration API.
 
-```ts
-{
-  id: 'image-agent',
-  kind: 'agent',
-  create: () => createImageAgent(environment, images),
-  adapter: {
-    promptSchema: briefSchema,
-    version: 'image-agent-v1', maxSteps: 2, maxOutputTokens: 200, artifactSlots: 1,
-    outputSchema: imageOutputSchema,
-    completion: async scope => ({ text: 'Image generated.', finishReason: 'stop', object: { artifacts: [await images.completed(scope)] } }),
-  },
-  operations: ['generate'],
-  measurements: [],
-  policy: {
-    version: 'image-agent-v1',
-    charge: { type: 'credits', meter: 'image-credits', units: 1 },
-  },
-}
-```
+## Keep your Mastra configuration
 
-Keep meter/access mappings and local allowances in the catalog configuration. `BILLING_CONFIGURATION` can configure the bundled resources and commercial/provider bindings; it cannot introduce a factory or action. Invalid IDs, dependencies, cycles, operations, mappings and unsupported policy capabilities reject before factories or provider work. Custom Studio action IDs use letters, digits and hyphens.
+You own `new Mastra({...})`: configure logger, vectors, scorers, observability, tools and other Mastra options there. Merge your tools with `integration.tools` when Studio billing actions are enabled. Pass your Hono routes and middleware to `integration.server({ ... })`; it preserves server settings while adding the protected transport boundary. Explicit public routes retain Mastra's normal `requiresAuth` middleware semantics.
 
-The application attaches persistent snapshots and authenticated HTTP/Studio boundaries before enabling the dependency resolver and recovery. Call `await application.close()` during shutdown; repeat and concurrent calls share cleanup, including when a disposer fails.
+To use your own durable workflow snapshot store, pass it as `storage` to `createBilling`, then use `integration.storage` in the Mastra constructor. Billing initializes but does not close an application-owned store. Snapshot storage must remain shared between Mastra and billing recovery. `billing.db` separately retains financial and execution bookkeeping.
+
+The lower-level `createBillingApplication({ catalog, createMastra })` remains available for catalog-based integrations. Its return value is a service bundle containing `.mastra`, not a replacement Mastra class. Its `createMastra` callback can construct a customized instance. The primary template entry point uses the explicit constructor above.
+
+## Providers, plans and local development
+
+`BILLING_PROVIDER=local` selects persistent simulated accounting. `BILLING_PROVIDER=autumn` selects the driver that reads `AUTUMN_SECRET_KEY` and `AUTUMN_BINDINGS`. An explicit `provider` option must agree with the environment. `billingProvider` optionally supplies an implementation of the common contract in `billing/providers/contracts.ts`.
+
+`billingKeys` describes logical meters and access keys. `plans.allowances` defines versioned quantities and expiry terms; `plans.offers` groups these terms into products. Declaring a plan never creates a remote plan, starts a subscription or grants funds. Autumn resources must exist and be bound separately. See the [Autumn guide](autumn.md).
+
+Local simulation accepts `localAccounts` seeds or an async seed resolver. Seeds initialize new accounts only and never replenish an existing one. The template's optional `localDemoAccounts` helper reads the private identities prepared by `npm run setup` and seeds the generic `credits` meter. Replace or omit that development helper for your own identity provisioning. Agents and workflows never read profiles, memberships or SQL.
+
+`BILLING_CONFIGURATION` remains an optional complete override for canonical configuration (`resourcePolicies`, `billingKeys`, `catalog`, `localAccounts`, `hosted`, `provider`). Its resource policies must agree with the protected registrations. Leave it unset when maintaining configuration in `index.ts`.
+
+## Choose a policy
+
+| Policy                     | Configuration                                                                                       |
+| -------------------------- | --------------------------------------------------------------------------------------------------- |
+| Free but gateway-protected | `charge: { type: 'none' }`                                                                          |
+| Subscription access        | `access: { subscription: 'pro' }`, with an appropriate charge rule                                  |
+| Fixed credits              | `charge: { type: 'credits', meter: 'credits', units: 1 }`                                           |
+| Per task                   | `charge: { type: 'per-task', meter: 'tasks', units: 1, funding: 'prepaid' }`                        |
+| Measured postpaid usage    | `charge: { type: 'usage', meter: 'tokens', measure: 'tokens', maxUnits: 8192, funding: 'metered' }` |
+
+Access keys and meter units must exist in `billingKeys`. Policy quantities are integers. Unsupported provider capabilities fail during preparation. Billing reserves prepaid units before compute, confirms the same reservation on successful completion, and releases it after confirmed failure/cancellation. Uncertain execution or financial outcomes remain held/pending until positive evidence is available. Recovery never automatically repeats uncertain compute or adds a second prepaid usage debit.
+
+Wrappers accept optional `adapter` settings for prompt/output schemas, model step/output limits, durable completion checks and adapter versions. Defaults use the policy version and the standard adapter limits. Supply trusted measurement declarations for usage-based charging. Increase adapter versions when changing executable behavior, models or schemas, and retain compatible definitions for paused runs.
 
 ## Invoke billed resources
 
-From trusted server code, invoke an agent through the billing facade. Use `runtime` and `organizations` from the application above. The `credential`, `workspaceId`, and `prompt` come from your authenticated request:
+Inside a trusted request handler:
 
 ```ts
-const context = await organizations.context({ credential, workspaceId });
-const response = await runtime.billing.agent('image-agent').generate(prompt, {
+const context = await integration.organizations.context({ credential, workspaceId });
+const response = await integration.billing.agent('paidAgent').generate(prompt, {
   billing: context,
-  idempotencyKey: 'image-123',
+  idempotencyKey: messageId,
 });
 
-if (response.kind !== 'nested') console.log(response.billing.billedUnits);
-```
-
-For the image agent, `prompt` is the image brief, limited to 2,000 characters. Its trusted completion hook requires a durable artifact; model text cannot certify success.
-
-Workflow access uses `runtime.billing.workflow(resourceId)`: call `createRun`, then `start`. Later, load the run with `getRun` and call `resume`, `status`, or `cancel` with a freshly authenticated billing context. Each write needs its own idempotency key.
-
-For the bundled workflow, provide a brief of at most 1,800 characters:
-
-```ts
-const run = await runtime.billing.workflow('image-kit').createRun({
+const run = await integration.billing.workflow('report').createRun({
   billing: context,
-  idempotencyKey: 'kit-123',
+  idempotencyKey: 'report-001',
 });
-const draft = await run.start({
+const result = await run.start({
   billing: context,
-  idempotencyKey: 'draft-123',
-  inputData: { brief: 'A coordinated blue bird story' },
+  idempotencyKey: 'report-001-start',
+  inputData,
 });
 ```
 
-For nested agent calls, declare `agentDependencies` and use `dependencies.nestedAgent(resourceId).generate(prompt)` inside the admitted workflow factory. These calls contribute to the parent execution without a separate charge. Measured workflows must declare `measurement: 'facade-calls'` and the expected calls per segment, such as `[0, 3]` for no image calls before approval and three afterward. Direct model calls outside this facade are not measured by the integration.
+Reusing the same operation key and input replays its saved result or status without another charge or model call. A different input with the same key conflicts. Authenticate again before later workflow reads, resume or cancellation.
 
-Declare workflow `steps` to retain native resume types, and set `autoRestartActiveRuns: false`. Increase the resource version when changing executable code, models, tools, or schemas, and retain compatible definitions for paused runs. Token streaming, time travel, and automatic retries of uncertain work are not supported.
+For nested agent work, declare `agentDependencies` on the workflow registration and use `billing.nestedAgent(id).generate(prompt)` inside the native workflow. The billing integration structurally supplies `ResourceDependencies` to workflow factories. Configure `adapter.measurement: 'facade-calls'` and `expectedCalls` per segment when certifying nested calls. Nested execution belongs to the parent's budget and does not receive a second independent charge.
 
-## Identity and HTTP access
+All customer HTTP operations are under `/billing/workspaces/:workspaceId`. Agent generation uses `POST /agents/:resourceId/generate` with `{ "prompt": "..." }`; workflows use `POST /workflows/:resourceId/runs`, then `POST /workflows/:resourceId/runs/:executionId/start` with `{ "inputData": ... }`. Send a bearer credential, JSON content type and an idempotency key for writes. Balances and hosted sessions remain owner-authorized.
 
-Local identities work only with the local provider and a loopback listener. Production and external billing providers require verified JWT identity.
+## Studio and private artifacts
 
-For JWT access:
+The supplied protected actions use [Studio Tools](studio.md). New registrations automatically receive billing HTTP/facade access; optional `actions` expose resource-specific Studio tools. Adding a registration does not enable native chat or native workflow execution for that protected resource. Unwrapped native resources remain outside this gateway.
 
-1. Set `BILLING_MODE=production`.
-2. Set `BILLING_JWT_CONFIGURATION` to JSON containing a trusted `issuer`, `audience`, explicit asymmetric `algorithms`, and public `jwks`.
-3. Provision each identity through trusted server setup using `organizations.provisionJwt({ issuer, subject, displayName })`.
-4. Establish workspace membership before allowing execution.
+Image generation is only an example. `images/service.ts` depends on `ArtifactPersistence`, while `billing/storage/artifacts.ts` owns claims, execution/membership checks and artifact ownership. Completion hooks certify durable files before financial confirmation. Other resources can use ordinary validated outputs without implementing artifact persistence.
 
-The template verifies tokens but does not issue them or provide login flows. Tokens cannot create identities. Keep private signing keys outside the configuration.
+`png-validation.ts` validates OpenAI's returned bytes; the image model generates the PNG. `billing/local-profiles.ts` manages local demo credentials, not billing plans or model profiles.
 
-Owners manage billing and ownership. Admins manage non-owner members. Members can execute permitted resources. Results belong to the initiating actor: being an owner does not grant access to another member's reports.
+## Existing state
 
-All customer operations use `/billing`. Send `Authorization: Bearer <credential>` on requests, plus `Content-Type: application/json` and `Idempotency-Key` on writes. The default example uses the CLI; native agent and workflow endpoints remain blocked.
+SQL schema versions and checksums are validated without automatic resets. Schema v3 adds a retained local meter transition record. For an idle local account, first access using configured `credits` seeds transfers the exact available/consumed quantities from historical `image-credits`, retires the old meter for new spending and preserves all audit identities. It does not create a second spendable balance or refill lost target state.
 
-| Method | Path below `/billing/workspaces/:workspaceId`     | Body                                                                                       |
-| ------ | ------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| POST   | `/agents/:resourceId/generate`                    | `{ "prompt": "..." }`                                                                      |
-| POST   | `/workflows/:resourceId/runs`                     | `{}`                                                                                       |
-| POST   | `/workflows/:resourceId/runs/:executionId/start`  | `{ "inputData": ... }`                                                                     |
-| POST   | `/workflows/:resourceId/runs/:executionId/resume` | `{ "step": "approval", "resumeData": ... }`                                                |
-| POST   | `/workflows/:resourceId/runs/:executionId/cancel` | `{}`                                                                                       |
-| GET    | `/workflows/:resourceId/runs/:executionId`        | No body                                                                                    |
-| GET    | `/usage`                                          | No body; owner only                                                                        |
-| POST   | `/checkout`                                       | `{ "product": "credit-pack", "returnUrl": "https://app.example.com/billing" }`; owner only |
-| POST   | `/portal`                                         | `{ "returnUrl": "https://app.example.com/billing" }`; owner only                           |
+Active reservations, uncertain execution and pending financial operations block the transition until reconciled. Historical reservations can settle under their original bindings. The earlier recognized v1-to-v2 transition from `weather-credits` remains intact. Autonomous startup does not reset unsupported or altered databases.
 
-Bodies are limited to 16 KiB and reject unknown fields. Common responses are `400` for invalid input, `401` for invalid credentials, `403` for denied access, `409` for conflicts, and `503` for unavailable state or storage. Organization and invitation routes are defined in [src/billing/server/routes.ts](https://github.com/mastra-ai/mastra/blob/main/templates/template-agent-workflow-billing/src/billing/server/routes.ts).
-
-## Provider configuration
-
-`initializeBilling` and `initializeMastraBilling` support `local` and `autumn`. Their public configuration contains `resourcePolicies` (serializable agent/workflow policies), `billingKeys` (logical meters, entitlements and subscriptions), and `catalog` (versioned allowances and offers). Driver credentials and customer/feature bindings are read from the server environment. An optional `billingProvider` accepts an implementation of `BillingProvider` from `src/billing/providers/contracts.ts`; it never accepts an Autumn-specific options object. The runtime closes the injected driver after successful initialization. See the [Autumn guide](autumn.md) for a complete configuration, supported policies, checkout/portal mappings, deadlines and explicit sandbox verification.
-
-Local mode supports free, subscription, prepaid fixed/task, and metered task/usage policies. It persists its simulated balances and access grants. Autumn currently supports prepaid reservations and access, plus owner-only checkout/portal; Autumn postpaid is unavailable until its delivery semantics are verified. Do not export usage for a confirmed prepaid lock.
-
-## Persistence and recovery
-
-Billing storage strictly validates schema versions, migration checksums, SQL definitions and foreign keys. The recognized additive v1-to-v2 upgrade preserves identities and financial history, including remaining and consumed local credits. Unresolved obligations block an account's automatic credit transition. Unsupported, altered or unrelated databases fail with `storage_incompatible`, without automatic deletion, reset or reseeding. Autumn and production balances are not migrated. See [existing local state](images.md#existing-local-state) for credit-transition details.
-
-Execution claims, policy snapshots, admitted payer mappings, provider operation payloads, terminal intents, receipts and audit survive restart. Duplicate keys replay the original operation. Recovery reconciles unknown financial outcomes without repeating compute. Passing a deadline or losing an acknowledgement does not prove zero charge. Metered postpaid delivery has separate immutable payloads and persisted retry leases.
-
-Local profile credentials live in the private `data/local-profiles.json`; keep it with the matching database. Missing or corrupt profiles fail safely. Setup does not rotate credentials or refill accounts. Shared workspaces remain available through explicit conversion and invitations; workspace membership does not grant access to another creator's private results.
-
-## Source organization
-
-`src/mastra/index.ts` configures the application with an object containing its environment and billing keys/plans. `src/mastra/image-plans.ts` defines the example's one-credit and three-credit policies, local opening balance and commercial catalog. Add versioned allowances/offers there, or replace them in the entry point; Autumn plan IDs remain in `AUTUMN_BINDINGS`.
-
-| File or directory                   | Responsibility                                                                                                 |
-| ----------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `src/mastra/agents/image-agent.ts`  | Native Mastra agent and its image tool.                                                                        |
-| `src/mastra/workflows/image-kit.ts` | Native approval and image generation workflow.                                                                 |
-| `src/mastra/image-definitions.ts`   | Pair native factories with policies, completion checks and Studio actions.                                     |
-| `src/mastra/image-billing.ts`       | Assemble the image example's typed catalog and local demo setup.                                               |
-| `src/billing/application.ts`        | Generic application composition and the documented `BillingApplicationOptions` contract.                       |
-| `src/billing/environment.ts`        | Billing database location, identity configuration and environment parsing.                                     |
-| `src/billing/setup.ts`              | Driver registry, capability validation and provider initialization.                                            |
-| `src/billing/providers/`            | Common provider contract and Local/Autumn implementations.                                                     |
-| `src/billing/server/`               | HTTP routes, authenticated Studio tools and the native-route boundary; each factory accepts an options object. |
-| `src/billing/storage/`              | SQL, transaction boundaries and persisted financial/execution checks.                                          |
-| `src/images/`                       | OpenAI image requests, file persistence, image schemas and PNG validation.                                     |
-
-The former root `resources.ts` assembled the example catalog, rather than defining a standalone agent. It is now `src/mastra/image-billing.ts`; native agents and workflows have their own conventional directories. `BillingApplicationOptions` belongs with the application factory in `billing/application.ts`, rather than in a Mastra entry point or the provider setup module.
-
-`billing/local-profiles.ts` manages the private local demo manifest: synthetic people, organization IDs and bearer credentials created by `npm run setup`. It is not a billing plan or a model profile. Private-directory checks live in `billing/storage/private-files.ts` so image storage does not import demo profile management.
-
-Image tools depend on the `ArtifactPersistence` contract. Billing checks current membership, reservation, execution deadline and artifact ownership in `billing/storage/artifacts.ts`; image code contains no SQL or knowledge of membership tables. Other agents and workflows only need a typed definition and a billing policy. Invoke them through `runtime.billing.agent(...)` or `runtime.billing.workflow(...)` so billing handles admission and terminal results.
-
-The SQL formerly inside `providers/autumn.ts` maintains local account identity and immutable provider-customer links. It does not implement Autumn's remote balance accounting. That bookkeeping now lives in `storage/autumn-accounts.ts`; the historic `customerId` projection from persisted Autumn reservation payloads is driver-specific and remains isolated there. Existing SQL schemas and checksums are unchanged.
-
-The former `billing/configuration.ts` re-export layer has been removed. Import policy schemas and types directly from `billing/policy-configuration.ts`. For a saved `BILLING_CONFIGURATION`, rename `resources` to `resourcePolicies` and `mappings` to `billingKeys`; update programmatic catalogs from `resources` to `definitions`. Existing per-execution policies, balances, artifact tables and immutable financial identities retain their stored representation.
+Update configured logical meter keys and policy references to `credits`. For Autumn, remote balances are not migrated or recreated: update logical bindings and keep historical meter bindings while old reservations still require them. Customer IDs, remote feature IDs and credit pool IDs continue to identify your existing provider resources.

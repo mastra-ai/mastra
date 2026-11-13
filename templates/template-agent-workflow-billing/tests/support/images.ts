@@ -8,7 +8,7 @@ import { createClient } from '@libsql/client/node';
 import { crc32 } from '../../src/images/png-validation.js';
 import { setupLocal } from '../../scripts/setup.js';
 import { createBillingApplication } from '../../src/billing/application.js';
-import { imageBillingCatalog } from '../../src/mastra/image-billing.js';
+import { imageBillingCatalog } from './image-application.js';
 import { createBillingApp } from '../../src/billing/server/routes.js';
 import { billingSocket } from './http.js';
 

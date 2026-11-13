@@ -33,7 +33,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
   const database = await temporaryDatabase();
   const bindings = {
     customers: [{ workspaceId: 'johns-org-sandbox-proof', customerId, name: "John's Org" }],
-    meters: [{ key: 'image-credits', featureId, creditPoolId }],
+    meters: [{ key: 'credits', featureId, creditPoolId }],
   };
   const provider = await AutumnBillingProvider.open({ url: database.url }, { secretKey, bindings });
   const active: { request: ReservationRequest; payload: string }[] = [];
@@ -42,7 +42,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
   const read = async (label: string) => {
     const snapshot = await provider.getState(account);
     assert.equal(snapshot.prepaidAuthority, 'provider-reservations');
-    assert.equal(snapshot.meters[0].key, 'image-credits');
+    assert.equal(snapshot.meters[0].key, 'credits');
     const remaining = snapshot.meters[0].confirmedBalance!;
     assert.equal(snapshot.meters[0].consumedUnits, null);
     balances.push({ label, remaining });
@@ -53,7 +53,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
     const request: ReservationRequest = {
       id: `johns-org-proof:${randomUUID()}`,
       account,
-      meter: 'image-credits',
+      meter: 'credits',
       units,
       executionCutoff: now + Math.floor(lifetime / 3),
       confirmationCutoff: now + Math.floor((2 * lifetime) / 3),
@@ -120,7 +120,7 @@ async function proveSandbox(scenario: 'lifecycle' | 'recovery') {
         workspaceId: account.workspaceId,
         featureId,
         creditPoolId,
-        meter: 'image-credits',
+        meter: 'credits',
         opening,
         reserved: opening - 3,
         closing: await read('documented personal configuration'),
@@ -238,7 +238,7 @@ it('Autumn sandbox proves the documented personal customer billing configuration
   assert.ok(proof);
   assert.equal(proof.customerId, 'johns-org');
   assert.equal(proof.workspaceId, 'johns-org-sandbox-proof');
-  assert.equal(proof.meter, 'image-credits');
+  assert.equal(proof.meter, 'credits');
   assert.equal(proof.featureId, 'generated_images');
   assert.equal(proof.creditPoolId, process.env.AUTUMN_TEST_CREDIT_POOL_ID ?? 'image_credits');
   assert.equal(proof.reserved, proof.opening - 3);

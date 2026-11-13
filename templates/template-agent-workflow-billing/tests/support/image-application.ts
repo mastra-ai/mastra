@@ -1,19 +1,19 @@
 import { resolve, dirname } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { ExecutionArtifacts } from '../billing/storage/artifacts.js';
-import { billingDatabaseUrl, readBillingConfiguration } from '../billing/environment.js';
-import { readLocalProfiles } from '../billing/local-profiles.js';
-import { createBillingApplication } from '../billing/application.js';
-import type { BillingProvider } from '../billing/providers/contracts.js';
-import type { BillingConfiguration } from '../billing/policy-configuration.js';
+import { ExecutionArtifacts } from '../../src/billing/storage/artifacts.js';
+import { billingDatabaseUrl, readBillingConfiguration } from '../../src/billing/environment.js';
+import { readLocalProfiles } from '../../src/billing/local-profiles.js';
+import { createBillingApplication } from '../../src/billing/application.js';
+import type { BillingProvider } from '../../src/billing/providers/contracts.js';
+import type { BillingConfiguration } from '../../src/billing/policy-configuration.js';
 import { imageDefinitions } from './image-definitions.js';
-import { ImageService } from '../images/service.js';
-import { imageConfiguration } from './image-plans.js';
-import { validateProviderConfiguration } from '../billing/setup.js';
-import { BillingError } from '../billing/contracts.js';
-import type { ResourceDefinition } from '../billing/resource-catalog.js';
-import { validateResourceCatalog } from '../billing/resource-catalog.js';
-import type { ResourceCatalog } from '../billing/resource-catalog.js';
+import { ImageService } from '../../src/images/service.js';
+import { imageConfiguration } from './image-configuration.js';
+import { validateProviderConfiguration } from '../../src/billing/setup.js';
+import { BillingError } from '../../src/billing/contracts.js';
+import type { ResourceDefinition } from '../../src/billing/resource-catalog.js';
+import { validateResourceCatalog } from '../../src/billing/resource-catalog.js';
+import type { ResourceCatalog } from '../../src/billing/resource-catalog.js';
 
 export function imageBillingCatalog(environment: NodeJS.ProcessEnv = process.env, workspaceIds?: readonly string[]) {
   const { resourcePolicies: configuredResources, ...configuration } = environment.BILLING_CONFIGURATION

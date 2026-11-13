@@ -2,9 +2,15 @@ import { Agent } from '@mastra/core/agent';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { imageOutputSchema } from '../../images/schemas.js';
-import type { ImageService } from '../../images/service.js';
+import type { Artifact } from '../../images/schemas.js';
 
-export function createImageAgent(environment: NodeJS.ProcessEnv, images: ImageService) {
+/** Image generation capability supplied by the application. */
+export interface ImageGenerator {
+  /** Generate the image requested by the current application operation. */
+  generate(): Promise<Artifact>;
+}
+
+export function createImageAgent(environment: NodeJS.ProcessEnv, images: ImageGenerator) {
   return new Agent({
     id: 'image-agent',
     name: 'Image Agent',

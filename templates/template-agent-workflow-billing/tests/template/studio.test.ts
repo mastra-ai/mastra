@@ -53,7 +53,7 @@ async function fixture(shared = false) {
 async function account(server: Server, workspaceId: string) {
   const response = await tool(server, 'billing-account', { workspaceId });
   expect(response).toMatchObject({ status: 200, body: { mode: 'local', authority: 'provider-reservations' } });
-  return response.body.meters.find((meter: { key: string }) => meter.key === 'image-credits');
+  return response.body.meters.find((meter: { key: string }) => meter.key === 'credits');
 }
 async function download(server: Server, root: string, artifact: Artifact, png: Buffer) {
   const response = await fetch(`${server.url}/billing/workspaces/${artifact.workspaceId}/artifacts/${artifact.id}`, {
@@ -473,7 +473,7 @@ it('Studio forged identity native routes and private image bypasses are denied',
       await query(
         f.root,
         'SELECT balance, consumed FROM commercial_meters WHERE account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?) AND key = ?',
-        [member!.workspaceId, 'image-credits'],
+        [member!.workspaceId, 'credits'],
       ),
     ).toMatchObject([{ balance: 30, consumed: 0 }]);
   }

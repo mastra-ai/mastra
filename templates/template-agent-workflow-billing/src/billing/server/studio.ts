@@ -16,6 +16,7 @@ export function createBillingStudio({
   execution,
   commercial,
   actions,
+  nativeAccess,
 }: {
   /** Trusted identity and membership service. */
   organizations: OrganizationService;
@@ -25,6 +26,8 @@ export function createBillingStudio({
   commercial: CommercialService;
   /** Validated resource actions exposed as Studio tools. */
   actions: readonly ResourceAction[];
+  /** Native resources explicitly registered without billing protection. */
+  nativeAccess?: (path: string, method?: string) => boolean;
 }) {
   // Never accept credentials or actor IDs from Studio's editable request context.
   const request = new AsyncLocalStorage<string>();
@@ -68,7 +71,7 @@ export function createBillingStudio({
   const middleware: MiddlewareHandler = async (context, next) => {
     const { path, method } = context.req;
     if (path === '/' && method === 'GET') return context.redirect('/tools');
-    if (path.startsWith('/billing/')) return next();
+    if (path.startsWith('/billing/') || nativeAccess?.(path, method)) return next();
     const publicShell =
       method === 'GET' &&
       ([

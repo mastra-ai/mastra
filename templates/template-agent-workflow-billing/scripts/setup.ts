@@ -4,7 +4,7 @@ import { open, unlink } from 'node:fs/promises';
 import { configuredOrganizations, applicationMode, billingDatabaseUrl } from '../src/billing/environment.js';
 import { BillingError } from '../src/billing/contracts.js';
 import { initializeBilling } from '../src/billing/setup.js';
-import { imageConfiguration } from '../src/mastra/image-plans.js';
+import { billingConfigurationSchema } from '../src/billing/policy-configuration.js';
 import { localPaths, readLocalProfiles, writeLocalProfiles } from '../src/billing/local-profiles.js';
 import type { LocalProfiles } from '../src/billing/local-profiles.js';
 
@@ -40,7 +40,7 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         if (!manifest.profiles[name]) {
           if (manifest.ready) throw new BillingError('state_unavailable');
           const provisioned = await organizations.provisionLocal({
-            profileId: `image-${name}`,
+            profileId: `demo-${name}`,
             displayName: people[name],
           });
           if (!provisioned.credential) throw new BillingError('state_unavailable');
@@ -61,7 +61,15 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
         if (context.actorId !== profile.actorId) throw new BillingError('conflict');
       }
       const initialized = await initializeBilling({
-        configuration: imageConfiguration(Object.values(manifest.profiles).map(profile => profile!.workspaceId)),
+        configuration: billingConfigurationSchema.parse({
+          provider: 'local',
+          resourcePolicies: [],
+          billingKeys: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+          localAccounts: Object.values(manifest.profiles).map(profile => ({
+            workspaceId: profile!.workspaceId,
+            meters: [{ key: 'credits', funding: 'prepaid', balance: 30 }],
+          })),
+        }),
         storage: { url: databaseUrl },
       });
       try {

@@ -1,10 +1,10 @@
-import { billingConfigurationSchema } from '../billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
 
 /** Logical billing keys used by the image policies, independent of payment provider IDs. */
 export const imageBillingKeys = {
   entitlements: [],
   subscriptions: [],
-  meters: [{ key: 'image-credits', unit: 'credits', funding: ['prepaid'] }],
+  meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }],
 } as const;
 /** Add versioned allowances and offers here, then bind offer keys to provider plans. */
 export const imagePlans = { allowances: [], offers: [] } as const;
@@ -14,7 +14,7 @@ export const imagePolicies = [
     kind: 'agent',
     operations: ['generate'],
     measurements: [],
-    policy: { version: 'image-agent-v1', charge: { type: 'credits', meter: 'image-credits', units: 1 } },
+    policy: { version: 'image-agent-v1', charge: { type: 'credits', meter: 'credits', units: 1 } },
   },
   {
     id: 'image-kit',
@@ -24,7 +24,7 @@ export const imagePolicies = [
     policy: {
       version: 'image-kit-v2',
       suspendedReservationTtlMs: 1800000,
-      charge: { type: 'credits', meter: 'image-credits', units: 3 },
+      charge: { type: 'credits', meter: 'credits', units: 3 },
     },
   },
 ] as const;
@@ -37,7 +37,7 @@ export function imageConfiguration(workspaceIds?: string | readonly string[]) {
     catalog: imagePlans,
     localAccounts: (typeof workspaceIds === 'string' ? [workspaceIds] : (workspaceIds ?? [])).map(workspaceId => ({
       workspaceId,
-      meters: [{ key: 'image-credits', funding: 'prepaid', balance: 30 }],
+      meters: [{ key: 'credits', funding: 'prepaid', balance: 30 }],
     })),
   });
 }

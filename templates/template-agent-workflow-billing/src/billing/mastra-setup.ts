@@ -1,3 +1,4 @@
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { BillingProvider } from './providers/contracts.js';
 import { Lifecycle } from './lifecycle.js';
 import { BillingRecovery } from './recovery.js';
@@ -43,6 +44,8 @@ export async function initializeMastraBilling<
   workflows: Workflows;
   databaseUrl: string;
   workflowDatabaseUrl?: string;
+  /** Application-owned workflow snapshot storage; omitted to use the private local store. */
+  storage?: MastraCompositeStore;
   /** Driver implementation; otherwise resolved from BILLING_PROVIDER and driver environment variables. */
   billingProvider?: BillingProvider;
   /** Server-owned environment passed to the selected driver. */
@@ -69,8 +72,8 @@ export async function initializeMastraBilling<
     lifecycle.own(() => accounting.close());
     const workflowStorage = await WorkflowStorage.open({ url: files.databaseUrl }, options.organizations.storage);
     lifecycle.own(() => workflowStorage.close());
-    const snapshots = new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
-    lifecycle.own(() => snapshots.close());
+    const snapshots = options.storage ?? new LibSQLStore({ id: 'billing-workflow-snapshots', url: workflowUrl });
+    if (!options.storage) lifecycle.own(() => snapshots.close());
     await snapshots.init();
     await privateWorkflowFiles(fileURLToPath(workflowUrl));
     const billing = new MastraBilling({

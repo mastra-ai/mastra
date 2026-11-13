@@ -13,4 +13,8 @@ export interface BillingServerOptions {
   readonly commercial?: CommercialService;
   /** Authorize and retrieve private artifacts after positive settlement. */
   readonly artifacts?: ArtifactReader;
+  /** Explicit native resources or custom application routes outside billing protection. */
+  readonly nativeAccess?: (path: string, method?: string) => boolean;
+  /** Whether unwrapped resources require native routes alongside the billing gateway. */
+  readonly allowNative?: boolean;
 }

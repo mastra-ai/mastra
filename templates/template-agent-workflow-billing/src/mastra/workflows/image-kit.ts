@@ -1,6 +1,4 @@
 import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { BillingError } from '../../billing/contracts.js';
-import type { ResourceDependencies } from '../../billing/resource-catalog.js';
 import {
   kitInputSchema,
   kitStateSchema,
@@ -9,7 +7,15 @@ import {
   imageOutputSchema,
 } from '../../images/schemas.js';
 
-export function createImageKit(dependencies: ResourceDependencies) {
+/** Execution dependency supplied by the application, independent of billing and storage. */
+export interface ImageKitDependencies {
+  /** Resolve the image agent and generate a result for one style in the kit. */
+  nestedAgent(id: string): {
+    generate(prompt: string, slot?: number): Promise<{ object?: unknown }>;
+  };
+}
+
+export function createImageKit(dependencies: ImageKitDependencies) {
   const prepare = createStep({
     id: 'prepare',
     inputSchema: kitInputSchema,
@@ -31,7 +37,7 @@ export function createImageKit(dependencies: ResourceDependencies) {
     suspendSchema: kitStateSchema,
     execute: async ({ inputData, resumeData, suspend }) => {
       if (!resumeData) return suspend(inputData);
-      if (!resumeData.approved) throw new BillingError('conflict');
+      if (!resumeData.approved) throw new Error('Image kit approval was declined.');
       return inputData;
     },
   });

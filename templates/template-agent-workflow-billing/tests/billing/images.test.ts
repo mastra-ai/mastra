@@ -4,14 +4,14 @@ import { readFile, writeFile, unlink, symlink, link, stat } from 'node:fs/promis
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 import { LocalBillingProvider } from '../../src/billing/providers/local.js';
-import { imageConfiguration } from '../../src/mastra/image-plans.js';
+import { imageConfiguration } from '../support/image-configuration.js';
 import { weatherConfiguration } from '../support/weather/configuration.js';
 import { usage, temporaryDatabase, independentClient } from '../support/billing.js';
 import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
 import { imageFixture, imageBoundary, pngFixture } from '../support/images.js';
 import { autumnFixture } from '../support/autumn.js';
 import { createBillingApplication } from '../../src/billing/application.js';
-import { imageBillingCatalog } from '../../src/mastra/image-billing.js';
+import { imageBillingCatalog } from '../support/image-application.js';
 import type { Artifact } from '../../src/images/schemas.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -299,9 +299,9 @@ it('recognized v1 image migration preserves financial workflow and request ident
     Promise.all(tables.map(async table => (await f.database.execute(`SELECT * FROM ${table} ORDER BY rowid`)).rows));
   const before = await snapshot();
   // Removing only the empty additive tables reconstructs the exact recognized v1 catalog.
-  for (const table of ['image_artifacts', 'image_slots', 'local_image_credit_migrations'])
+  for (const table of ['local_credit_migrations', 'image_artifacts', 'image_slots', 'local_image_credit_migrations'])
     await f.database.execute(`DROP TABLE ${table}`);
-  await f.database.execute('DELETE FROM billing_migrations WHERE version = 2');
+  await f.database.execute('DELETE FROM billing_migrations WHERE version >= 2');
   await f.database.execute('PRAGMA user_version = 1');
   await f.database.execute('CREATE TABLE unexpected_data (value TEXT) STRICT');
   await f.database.execute("INSERT INTO unexpected_data VALUES ('retain me')");
@@ -313,7 +313,7 @@ it('recognized v1 image migration preserves financial workflow and request ident
   expect(await snapshot()).toEqual(before);
   await f.database.execute('DROP TABLE unexpected_data');
   await f.restart();
-  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(2n);
+  expect((await f.database.execute('PRAGMA user_version')).rows[0].user_version).toBe(3n);
   expect(await snapshot()).toEqual(before);
   expect((await f.call(`${f.base}/workflows/image-kit/runs`, {}, 'pre-migration-kit')).body.executionId).toBe(id);
   expect(f.boundary.images).toHaveLength(0);
@@ -396,7 +396,7 @@ it('a lost financial confirmation reconciles the saved artifact after restart wi
       ...autumn.options,
       bindings: {
         ...autumn.options.bindings,
-        meters: autumn.options.bindings.meters.map(meter => ({ ...meter, key: 'image-credits' })),
+        meters: autumn.options.bindings.meters.map(meter => ({ ...meter, key: 'credits' })),
       },
     },
   };
@@ -478,9 +478,9 @@ it('local legacy credit transition preserves spent balances once and never seeds
   const observer = await independentClient(database.url);
   cleanups.push(async () => observer.close());
   await observer.execute({ sql: "UPDATE billing_accounts SET provider = 'autumn' WHERE id = ?", args: [remote.id] });
-  for (const table of ['image_artifacts', 'image_slots', 'local_image_credit_migrations'])
+  for (const table of ['local_credit_migrations', 'image_artifacts', 'image_slots', 'local_image_credit_migrations'])
     await observer.execute(`DROP TABLE ${table}`);
-  await observer.execute('DELETE FROM billing_migrations WHERE version = 2');
+  await observer.execute('DELETE FROM billing_migrations WHERE version >= 2');
   await observer.execute('PRAGMA user_version = 1');
   const history = (await observer.execute('SELECT * FROM immutable_usage')).rows;
   storage = await LocalBillingStorage.open({ url: database.url });
@@ -490,17 +490,19 @@ it('local legacy credit transition preserves spent balances once and never seeds
     (
       await observer.execute({
         sql: 'SELECT key, balance, consumed FROM commercial_meters WHERE account_id = ? AND key IN (?, ?) ORDER BY key',
-        args: [spent.id, 'image-credits', 'weather-credits'],
+        args: [spent.id, 'credits', 'weather-credits'],
       })
     ).rows,
   ).toEqual([
-    { key: 'image-credits', balance: 24n, consumed: 6n },
+    { key: 'credits', balance: 24n, consumed: 6n },
     { key: 'weather-credits', balance: 24n, consumed: 6n },
   ]);
   expect((await observer.execute('SELECT * FROM immutable_usage')).rows).toEqual(history);
   expect(
-    (await current.getState(spent)).meters.filter(meter => meter.key.endsWith('-credits')).map(meter => meter.key),
-  ).toEqual(['image-credits']);
+    (await current.getState(spent)).meters
+      .filter(meter => meter.key === 'credits' || meter.key.endsWith('-credits'))
+      .map(meter => meter.key),
+  ).toEqual(['credits']);
   const fresh = Date.now();
   expect(
     await current.reservations.reserve(
@@ -524,25 +526,25 @@ it('local legacy credit transition preserves spent balances once and never seeds
   expect(
     (await observer.execute('SELECT account_id, balance, consumed FROM local_image_credit_migrations')).rows,
   ).toEqual([{ account_id: spent.id, balance: 24n, consumed: 6n }]);
-  expect((await current.getState(unresolved)).meters.some(meter => meter.key === 'image-credits')).toBe(false);
+  expect((await current.getState(unresolved)).meters.some(meter => meter.key === 'credits')).toBe(false);
   expect(
     (
       await observer.execute({
-        sql: "SELECT key FROM commercial_meters WHERE account_id = ? AND key = 'image-credits'",
+        sql: "SELECT key FROM commercial_meters WHERE account_id = ? AND key = 'credits'",
         args: [remote.id],
       })
     ).rows,
   ).toEqual([]);
   await expect(observer.execute('DELETE FROM local_image_credit_migrations')).rejects.toBeDefined();
   await observer.execute({
-    sql: "DELETE FROM commercial_meters WHERE account_id = ? AND key = 'image-credits'",
+    sql: "DELETE FROM commercial_meters WHERE account_id = ? AND key = 'credits'",
     args: [spent.id],
   });
   storage.close();
   storage = await LocalBillingStorage.open({ url: database.url });
   const reopened = new LocalBillingProvider(storage, imageConfiguration(['spent']));
   await reopened.ensureAccount({ workspaceId: 'spent' });
-  expect((await reopened.getState(spent)).meters.some(meter => meter.key === 'image-credits')).toBe(false);
+  expect((await reopened.getState(spent)).meters.some(meter => meter.key === 'credits')).toBe(false);
   expect((await observer.execute('SELECT account_id FROM local_image_credit_migrations')).rows).toEqual([
     { account_id: spent.id },
   ]);

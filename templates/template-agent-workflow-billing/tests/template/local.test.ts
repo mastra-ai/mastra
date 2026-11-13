@@ -103,7 +103,7 @@ it('personal image quickstart is repeatable and shared billing remains isolated'
             await query(
               copy.root,
               'SELECT balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
-              ['image-credits', manifest.profiles.owner!.workspaceId],
+              ['credits', manifest.profiles.owner!.workspaceId],
             )
           )[0].balance,
         ),
@@ -137,7 +137,7 @@ it('personal image quickstart is repeatable and shared billing remains isolated'
     await query(
       copy.root,
       'SELECT key, balance FROM commercial_meters WHERE key = ? AND account_id = (SELECT id FROM billing_accounts WHERE workspace_id = ?)',
-      ['image-credits', manifest.profiles.owner!.workspaceId],
+      ['credits', manifest.profiles.owner!.workspaceId],
     ),
   ).toMatchObject([{ balance: opening - 1 }]);
   expect(await query(copy.root, 'SELECT COUNT(*) AS count FROM billing_accounts')).toMatchObject([{ count: 3 }]);
@@ -157,7 +157,7 @@ it('personal image quickstart is repeatable and shared billing remains isolated'
   expect(model.models).toHaveLength(2);
   await assertNativeClosed(restarted);
   const cli = await command(copy.root, ['run', 'images', '--', 'account', '--url', restarted.url], env);
-  expect(cli.output).toContain('image-credits');
+  expect(cli.output).toContain('credits');
   for (const profile of Object.values(manifest.profiles)) expect(cli.output.includes(profile!.credential)).toBe(false);
   expect(cli.output).not.toMatch(/externalReference|providerAccount|workspace:/);
   await restarted.close();
@@ -211,7 +211,7 @@ it('personal demo image and kit receipts match observed one and three credit cha
   const account = async () => {
     const response = await server.call(`${base}/usage`);
     expect(response).toMatchObject({ status: 200, body: { mode: 'local', authority: 'provider-reservations' } });
-    return response.body.meters.find((meter: { key: string }) => meter.key === 'image-credits');
+    return response.body.meters.find((meter: { key: string }) => meter.key === 'credits');
   };
   const download = async (artifact: any) => {
     const url = `${server.url}${base}/artifacts/${artifact.id}`;
@@ -300,7 +300,7 @@ it('personal demo image and kit receipts match observed one and three credit cha
   const completedCalls = { images: boundary.images.length, models: boundary.models.length };
   const ledger = await query(copy.root, 'SELECT execution_id, meter, units FROM billing_ledger ORDER BY units');
   expect(ledger.map(row => Number(row.units))).toEqual([1, 3]);
-  expect(ledger[1]).toMatchObject({ execution_id: id, meter: 'image-credits', units: 3 });
+  expect(ledger[1]).toMatchObject({ execution_id: id, meter: 'credits', units: 3 });
   expect(
     await query(copy.root, 'SELECT units, active FROM billing_reservations WHERE execution_id = ?', [id]),
   ).toMatchObject([{ units: 3, active: 0 }]);

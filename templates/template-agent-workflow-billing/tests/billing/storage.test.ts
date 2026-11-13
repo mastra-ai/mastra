@@ -1,4 +1,5 @@
-import { createImageApplication } from '../../src/mastra/image-billing.js';
+import { LocalBillingProvider } from '../../src/billing/providers/local.js';
+import { createImageApplication } from '../support/image-application.js';
 import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
 import filesystem from 'node:fs/promises';
@@ -247,9 +248,9 @@ describe('local billing storage', () => {
     cleanups.push(() => reopened.close());
     const history = await observer.execute('SELECT version, checksum FROM billing_migrations');
     expect(history.rows).toEqual(
-      [1n, 2n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
+      [1n, 2n, 3n].map(version => ({ version, checksum: expect.stringMatching(/^[a-f0-9]{64}$/) })),
     );
-    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(2n);
+    expect((await observer.execute('PRAGMA user_version')).rows[0].user_version).toBe(3n);
     const foreignDatabase = await temporaryDatabase();
     cleanups.push(foreignDatabase.cleanup);
     const foreignClient = await independentClient(foreignDatabase.url);
@@ -438,7 +439,7 @@ it('fresh development state starts without Polar and setup preserves spent credi
   expect((await f.observer.execute('SELECT * FROM billing_ledger')).rows).toEqual(history);
   const balances = (
     await f.observer.execute(
-      "SELECT a.workspace_id, m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'image-credits'",
+      "SELECT a.workspace_id, m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'credits'",
     )
   ).rows;
   expect(balances.find(row => row.workspace_id === f.manifest.profiles.owner!.workspaceId)?.balance).toBe(29n);
@@ -511,4 +512,68 @@ it('unsupported databases remain untouched and supported operation identities su
   expect(await retained()).toEqual(history);
   expect(f.model.images).toHaveLength(1);
   expect((await f.observer.execute('PRAGMA foreign_key_check')).rows).toEqual([]);
+});
+
+it('v2 local credit names transition without refilling spent or unresolved accounts', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const legacy = configuration();
+  legacy.billingKeys.meters[0].key = 'image-credits';
+  legacy.resourcePolicies[0].policy.charge = { type: 'credits', meter: 'image-credits', units: 3 };
+  legacy.localAccounts = ['spent', 'held'].map(workspaceId => ({
+    ...legacy.localAccounts[0],
+    workspaceId,
+    meters: [{ key: 'image-credits', funding: 'prepaid', balance: 100, periodStart: null, periodEnd: null }],
+  }));
+  let storage = await LocalBillingStorage.open({ url: database.url });
+  const old = new LocalBillingProvider(storage, legacy);
+  const spent = await old.ensureAccount({ workspaceId: 'spent' });
+  const held = await old.ensureAccount({ workspaceId: 'held' });
+  await old.reportUsage(usage(spent, { meter: 'image-credits', units: 7 }));
+  const now = Date.now();
+  const reserve = old.reservations.prepareReservation({
+    id: 'legacy-hold',
+    account: held,
+    meter: 'image-credits',
+    units: 2,
+    executionCutoff: now + 10_000,
+    confirmationCutoff: now + 20_000,
+    expiresAt: now + 30_000,
+  });
+  expect(await old.reservations.reserve(reserve)).toMatchObject({ status: 'reserved' });
+  storage.close();
+  const observer = await independentClient(database.url);
+  cleanups.push(() => observer.close());
+  await observer.execute('DROP TABLE local_credit_migrations');
+  await observer.execute('DELETE FROM billing_migrations WHERE version = 3');
+  await observer.execute('PRAGMA user_version = 2');
+  const history = (await observer.execute('SELECT * FROM immutable_usage')).rows;
+  storage = await LocalBillingStorage.open({ url: database.url });
+  cleanups.push(() => storage.close());
+  const current = configuration();
+  current.localAccounts = ['spent', 'held'].map(workspaceId => ({ ...current.localAccounts[0], workspaceId }));
+  const provider = new LocalBillingProvider(storage, current);
+  await provider.ensureAccount({ workspaceId: 'spent' });
+  await provider.ensureAccount({ workspaceId: 'held' });
+  expect((await provider.getState(spent)).meters).toMatchObject([
+    { key: 'credits', confirmedBalance: 93, consumedUnits: 7 },
+  ]);
+  expect((await provider.getState(held)).meters.some(meter => meter.key === 'credits')).toBe(false);
+  expect((await observer.execute('SELECT * FROM immutable_usage')).rows).toEqual(history);
+  const release = old.reservations.prepareFinalization(
+    { reservation: JSON.parse(reserve), action: 'release', units: 0 },
+    reserve,
+  );
+  expect(await storage.finalize(release)).toMatchObject({ status: 'released' });
+  await provider.ensureAccount({ workspaceId: 'held' });
+  expect((await provider.getState(held)).meters).toMatchObject([
+    { key: 'credits', confirmedBalance: 100, consumedUnits: 0 },
+  ]);
+  await observer.execute({
+    sql: "DELETE FROM commercial_meters WHERE account_id = ? AND key = 'credits'",
+    args: [spent.id],
+  });
+  await provider.ensureAccount({ workspaceId: 'spent' });
+  expect((await provider.getState(spent)).meters.some(meter => meter.key === 'credits')).toBe(false);
+  expect((await observer.execute('SELECT COUNT(*) AS count FROM local_credit_migrations')).rows[0].count).toBe(2n);
 });

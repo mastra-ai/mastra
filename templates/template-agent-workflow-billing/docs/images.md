@@ -78,9 +78,7 @@ Private files are stored in `private-images` beside the configured billing datab
 
 ## Existing local state
 
-The recognized schema-v1 migration preserves identities, request keys, workflows, reservations and financial history. For a local account with `weather-credits` and no image meter, it copies the exact remaining and consumed credit quantities once to `image-credits`, preserving the historical meter for audit. The old credit meter is omitted from current allowance views and rejects new reservations or usage, so the two keys cannot spend the same credit twice. A retained immutable transition record prevents reseeding if the new content is lost. Startup and repeated setup never replenish a spent balance.
-
-Any unresolved execution, reservation or financial operation blocks that account's automatic credit transition, including expired reservations without positive terminal evidence. The account remains unchanged and needs operator reconciliation before switching its use case. Autumn accounts and remote balances are never migrated or seeded by this local transition. Unknown schemas or altered migration history fail without resetting data.
+The generic `credits` meter funds both example resources. Local schema upgrades preserve historical financial data. Idle legacy `image-credits` balances transition once to `credits` with their exact remaining/consumed quantities. Unresolved reservations and financial operations block that transition until reconciled. Old source meters cannot spend copied credit again, and repeated setup never refills lost or spent target balances. See [existing state](billing.md#existing-state) for the full transition rules. Autumn remote balances are not migrated or seeded by this local transition.
 
 ## Verification
 

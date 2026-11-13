@@ -1,3 +1,4 @@
+import { transitionCredits } from './credit-transitions.js';
 import { randomUUID } from 'node:crypto';
 import { finalizationRequestSchema, reservationRequestSchema } from '../reservations.js';
 import type { Transaction } from '@libsql/client/node';
@@ -55,7 +56,11 @@ export class LocalBillingStorage {
         sql: 'SELECT * FROM billing_accounts WHERE workspace_id = ?',
         args: [workspaceId],
       });
-      if (existing.rows.length > 0) return requireProvider(existing.rows[0], 'local');
+      if (existing.rows.length > 0) {
+        const account = requireProvider(existing.rows[0], 'local');
+        if (seed.meters.some(meter => meter.key === 'credits')) await transitionCredits(transaction, account.id);
+        return account;
+      }
       const account: ProviderAccount = {
         id: randomUUID(),
         workspaceId,
@@ -128,7 +133,7 @@ export class LocalBillingStorage {
           validUntil: row.valid_until === null ? null : String(row.valid_until),
         }));
     const meters = await transaction.execute({
-      sql: 'SELECT * FROM commercial_meters m WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM local_image_credit_migrations t WHERE t.account_id = m.account_id AND t.source_meter = m.key) ORDER BY key',
+      sql: 'SELECT * FROM commercial_meters m WHERE account_id = ? AND NOT EXISTS (SELECT 1 FROM local_image_credit_migrations t WHERE t.account_id = m.account_id AND t.source_meter = m.key) AND NOT EXISTS (SELECT 1 FROM local_credit_migrations t WHERE t.account_id = m.account_id AND t.source_meter = m.key) ORDER BY key',
       args: [account.id],
     });
     const holds = (
@@ -179,7 +184,7 @@ export class LocalBillingStorage {
       const retired =
         (
           await tx.execute({
-            sql: 'SELECT 1 FROM local_image_credit_migrations WHERE account_id = ? AND source_meter = ?',
+            sql: 'SELECT 1 FROM (SELECT account_id, source_meter FROM local_image_credit_migrations UNION ALL SELECT account_id, source_meter FROM local_credit_migrations) WHERE account_id = ? AND source_meter = ?',
             args: [request.account.id, request.meter],
           })
         ).rows.length > 0;
@@ -273,7 +278,7 @@ export class LocalBillingStorage {
       if (
         (
           await transaction.execute({
-            sql: 'SELECT 1 FROM local_image_credit_migrations WHERE account_id = ? AND source_meter = ?',
+            sql: 'SELECT 1 FROM (SELECT account_id, source_meter FROM local_image_credit_migrations UNION ALL SELECT account_id, source_meter FROM local_credit_migrations) WHERE account_id = ? AND source_meter = ?',
             args: [event.account.id, event.meter],
           })
         ).rows.length

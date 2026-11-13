@@ -1,4 +1,9 @@
-import { createImageApplication } from '../src/mastra/image-billing.js';
+import { createBillingApplication } from '../src/billing/application.js';
+import { createImageAgent } from '../src/mastra/agents/image-agent.js';
+import { imageAdapters } from '../src/mastra/image-adapters.js';
+import { ImageService } from '../src/images/service.js';
+import { ExecutionArtifacts } from '../src/billing/storage/artifacts.js';
+import { billingConfigurationSchema } from '../src/billing/policy-configuration.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
@@ -18,7 +23,7 @@ const deadline = setTimeout(() => {
   console.error('OpenAI smoke exceeded its time limit; unverified.');
   process.exit(1);
 }, 180000);
-let application: Awaited<ReturnType<typeof createImageApplication>> | undefined;
+let application: Awaited<ReturnType<typeof createBillingApplication>> | undefined;
 let server: ReturnType<typeof createServer> | undefined;
 try {
   // Select only image credentials and profile overrides; payment state is not inherited.
@@ -32,7 +37,31 @@ try {
     OPENAI_IMAGE_QUALITY: process.env.OPENAI_IMAGE_QUALITY,
   };
   const manifest = await setupLocal(environment);
-  application = await createImageApplication({ environment });
+  const images = new ImageService(environment, new ExecutionArtifacts(manifest.databaseUrl));
+  const [adapter] = imageAdapters(images);
+  const { resourcePolicies: _, ...configuration } = billingConfigurationSchema.parse({
+    provider: 'local',
+    resourcePolicies: [],
+    billingKeys: { meters: [{ key: 'credits', unit: 'credits', funding: ['prepaid'] }] },
+  });
+  application = await createBillingApplication({
+    environment,
+    catalog: {
+      configuration,
+      artifacts: images,
+      definitions: [
+        {
+          id: 'image-agent',
+          kind: 'agent',
+          create: () => createImageAgent(environment, images),
+          ...adapter,
+          operations: ['generate'],
+          measurements: [],
+          policy: { version: 'image-agent-v1', charge: { type: 'credits', meter: 'credits', units: 1 } },
+        },
+      ],
+    },
+  });
   const app = createBillingApp({
     organizations: application.organizations,
     execution: application.execution,
@@ -140,7 +169,7 @@ try {
     );
     const balance = (
       await database.execute({
-        sql: "SELECT m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'image-credits' AND a.workspace_id = ?",
+        sql: "SELECT m.balance FROM commercial_meters m JOIN billing_accounts a ON a.id = m.account_id WHERE m.key = 'credits' AND a.workspace_id = ?",
         args: [owner.workspaceId],
       })
     ).rows;

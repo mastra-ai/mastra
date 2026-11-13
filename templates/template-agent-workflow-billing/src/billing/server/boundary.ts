@@ -10,6 +10,8 @@ export function createBillingServer({
   commercial,
   studio,
   artifacts,
+  nativeAccess,
+  allowNative,
 }: BillingServerOptions & {
   /** Optional authenticated Studio tool middleware. */
   studio?: { middleware: MiddlewareHandler };
@@ -22,7 +24,8 @@ export function createBillingServer({
         handler:
           studio?.middleware ??
           (async (context, next) => {
-            if (context.req.path.startsWith('/billing/')) return next();
+            if (context.req.path.startsWith('/billing/') || nativeAccess?.(context.req.path, context.req.method))
+              return next();
             return context.json({ error: 'billing_gateway_required' }, 403);
           }),
       },
@@ -36,7 +39,7 @@ export function createBillingServer({
       }),
       // Public native auth handlers skip user middleware. The constrained Hono
       // path excludes capabilities so Studio can still discover authentication.
-      ...(studio
+      ...(studio || allowNative
         ? [
             registerApiRoute('/:api{api}/auth/:action{(?!capabilities$).+}', {
               method: 'ALL',
@@ -46,9 +49,12 @@ export function createBillingServer({
         : []),
       // Discovery remains closed in both modes. With Studio disabled, also
       // cover framework-public routes that deliberately skip user middleware.
-      registerApiRoute(studio ? '/.well-known/*' : '/*', {
+      registerApiRoute(studio || allowNative ? '/.well-known/*' : '/*', {
         method: 'ALL',
-        handler: context => context.json({ error: 'billing_gateway_required' }, 403),
+        handler: (context, next) =>
+          nativeAccess?.(context.req.path, context.req.method)
+            ? next()
+            : context.json({ error: 'billing_gateway_required' }, 403),
       }),
     ],
   };

@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
 import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { setTimeout } from 'node:timers/promises';
@@ -20,7 +22,12 @@ async function command(args: string[], environment: NodeJS.ProcessEnv) {
   const [code] = await once(child, 'exit');
   if (code !== 0) throw new Error(`Fixture command failed (${code}): ${output}`);
 }
-async function served(mode: 'development' | 'built', environment: NodeJS.ProcessEnv, credential: string) {
+async function served(
+  mode: 'development' | 'built',
+  environment: NodeJS.ProcessEnv,
+  credential: string,
+  fixture = 'billing-server',
+) {
   const listener = createServer();
   listener.listen(0, '127.0.0.1');
   await once(listener, 'listening');
@@ -29,11 +36,11 @@ async function served(mode: 'development' | 'built', environment: NodeJS.Process
   await new Promise<void>(resolve => listener.close(() => resolve()));
   const env = { ...environment, BILLING_PORT: String(address.port), MASTRA_TELEMETRY_DISABLED: 'true' };
   if (mode === 'built')
-    await command(['node_modules/mastra/dist/index.js', 'build', '--dir', 'tests/fixtures/billing-server'], env);
+    await command(['node_modules/mastra/dist/index.js', 'build', '--dir', `tests/fixtures/${fixture}`], env);
   const args =
     mode === 'built'
       ? ['.mastra/output/index.mjs']
-      : ['node_modules/mastra/dist/index.js', 'dev', '--dir', 'tests/fixtures/billing-server'];
+      : ['node_modules/mastra/dist/index.js', 'dev', '--dir', `tests/fixtures/${fixture}`];
   const child = spawn(process.execPath, args, { cwd: root, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let output = '';
   child.stdout.on('data', chunk => (output = (output + chunk).slice(-64000)));
@@ -179,3 +186,125 @@ describe('billing HTTP boundary', () => {
     }
   }, 180000);
 });
+
+it('native free resources coexist with billed resources and custom Mastra server configuration', async () => {
+  const database = await temporaryDatabase();
+  cleanups.push(database.cleanup);
+  const model = await modelBoundary();
+  cleanups.push(model.close);
+  const runtime = await runtimeFixture({
+    databaseUrl: database.url,
+    directory: database.directory,
+    modelUrl: model.url,
+  });
+  cleanups.push(runtime.close);
+  const configuration = {
+    databaseUrl: database.url,
+    directory: database.directory,
+    modelUrl: model.url,
+    workspaceId: runtime.billingContext.workspaceId,
+  };
+  for (const mode of ['development', 'built'] as const) {
+    const server = await served(
+      mode,
+      { ...process.env, BILLING_TEST_CONFIGURATION: JSON.stringify(configuration) },
+      runtime.credential,
+      'mixed-server',
+    );
+    const headers = { authorization: `Bearer ${runtime.credential}`, 'content-type': 'application/json' };
+    const custom = await fetch(`${server.url}/status/ready`);
+    expect(await custom.json()).toEqual({ name: 'ready' });
+    const before = model.requests.length;
+    const free = await fetch(`${server.url}/api/agents/public/generate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: '[success] public answer' }] }),
+    });
+    expect(free.status).toBe(200);
+    expect(free.headers.get('x-application')).toBe('custom');
+    expect(free.headers.get('x-middleware-calls')).toBe('1');
+    expect(await free.json()).toMatchObject({ text: 'ok' });
+    expect(model.requests).toHaveLength(before + 1);
+    const denied = await fetch(`${server.url}/api/agents/paid/generate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ messages: [{ role: 'user', content: '[success] bypass' }] }),
+    });
+    expect(denied.status).toBe(403);
+    expect(
+      (
+        await fetch(`${server.url}/api/agents/paid-alias/generate`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ messages: [{ role: 'user', content: 'bypass' }] }),
+        })
+      ).status,
+    ).toBe(403);
+    expect(model.requests).toHaveLength(before + 1);
+    const base = `${server.url}/billing/workspaces/${configuration.workspaceId}`;
+    const paid = await fetch(`${base}/agents/paid/generate`, {
+      method: 'POST',
+      headers: { ...headers, 'idempotency-key': 'paid-once' },
+      body: JSON.stringify({ prompt: '[success] paid answer' }),
+    });
+    expect(await paid.json()).toMatchObject({
+      result: { text: 'ok' },
+      billing: { billedUnits: 1, replayed: mode === 'built' },
+    });
+    const created = await fetch(`${base}/workflows/paid-flow/runs`, {
+      method: 'POST',
+      headers: { ...headers, 'idempotency-key': 'flow-once' },
+      body: '{}',
+    });
+    const { executionId } = (await created.json()) as { executionId: string };
+    const report = await fetch(`${base}/workflows/paid-flow/runs/${executionId}/start`, {
+      method: 'POST',
+      headers: { ...headers, 'idempotency-key': 'flow-start' },
+      body: JSON.stringify({ inputData: { text: 'paid report' } }),
+    });
+    expect(await report.json()).toMatchObject({
+      result: { status: 'completed', output: { text: 'paid report' } },
+      billing: { billedUnits: 3 },
+    });
+    expect(
+      (
+        await fetch(`${server.url}/api/workflows/paid-flow/start-async`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ inputData: { text: 'bypass' } }),
+        })
+      ).status,
+    ).toBe(403);
+    const publicRun = await fetch(`${server.url}/api/workflows/public-flow/create-run`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    expect(publicRun.status).toBe(200);
+    const { runId } = (await publicRun.json()) as { runId: string };
+    const publicReport = await fetch(`${server.url}/api/workflows/public-flow/start-async?runId=${runId}`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ inputData: { text: 'public report' } }),
+    });
+    expect(publicReport.status).toBe(200);
+    expect(await publicReport.json()).toMatchObject({ status: 'success', result: { text: 'public report' } });
+    const crossWorkflow = await fetch(`${server.url}/api/workflows/public-flow/runs/${executionId}`, { headers });
+    expect(await crossWorkflow.text()).not.toContain('paid report');
+    for (const path of [
+      '/api/auth/login',
+      '/.well-known/agent.json',
+      '/api/memory/threads',
+      '/__restart-active-workflow-runs',
+    ]) {
+      const blocked = await fetch(`${server.url}${path}`, { method: path.startsWith('/__') ? 'POST' : 'GET', headers });
+      expect(blocked.status, path).toBe(403);
+    }
+    const usage = await fetch(`${base}/usage`, { headers });
+    expect(await usage.json()).toMatchObject({
+      meters: [expect.objectContaining({ key: 'credits', confirmedBalance: 6, consumedUnits: 4 })],
+    });
+    expect((await stat(join(database.directory, 'custom-workflows.db'))).size).toBeGreaterThan(0);
+    await server.close();
+  }
+}, 180000);
