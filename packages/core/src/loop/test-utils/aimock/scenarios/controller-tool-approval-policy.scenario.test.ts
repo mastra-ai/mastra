@@ -136,13 +136,18 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     }
   });
 
-  it("keeps the agent's numeric toolCallConcurrency limit, also after an approval resume", async () => {
+  // With yolo on, durable engines run allowed calls in parallel, so only the limit keeps them apart.
+  it.each([
+    { label: 'after an approval resume', yolo: false, cards: ['call-write'] },
+    { label: 'with yolo on', yolo: true, cards: [] },
+  ])("keeps the agent's numeric toolCallConcurrency limit $label", async ({ yolo, cards }) => {
     const calls: string[] = [];
     const probe = overlapProbe(calls);
     const env = await setup({
       tools: { read_value: probe.tool, write_value: recordingTool('write_value', calls) },
       defaultOptions: { toolCallConcurrency: 1 },
     });
+    if (yolo) await env.session.state.set({ yolo: true } as never);
     env.session.subscribe(event => {
       if (event.type === 'tool_approval_required') {
         queueMicrotask(() => env.session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
@@ -163,7 +168,7 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
       await env.send('Write a, then read a and b.');
       await vi.waitFor(() => expect(calls).toHaveLength(3), { timeout: 15_000 });
 
-      expect(env.approvalCards()).toEqual(['call-write']);
+      expect(env.approvalCards()).toEqual(cards);
       expect(probe.overlapped()).toBe(false);
     } finally {
       await env.controller.destroy();
