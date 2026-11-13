@@ -140,8 +140,15 @@ export async function autumnFixture() {
         req.socket.destroy();
         return;
       }
-    } else if (path === '/v1/logs.search') output = { list: behavior.visibleLogs ? logs : [] };
-    else {
+    } else if (path === '/v1/logs.search') {
+      const start = body.range?.start_date ? Date.parse(body.range.start_date) : Date.now() - 30 * 60_000;
+      const end = body.range?.end_date ? Date.parse(body.range.end_date) : Date.now();
+      output = {
+        list: behavior.visibleLogs
+          ? logs.filter(log => Date.parse(String(log.timestamp)) >= start && Date.parse(String(log.timestamp)) <= end)
+          : [],
+      };
+    } else {
       status = 404;
       output = {};
     }

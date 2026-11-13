@@ -249,6 +249,12 @@ export class AutumnBillingProvider implements BillingProvider {
             return { status: 'uncertain' };
           const logs = await this.client.logs.search({
             query: `where customer_id == '${value.customerId}' and request_body.lock_id == '${value.lockId}'`,
+            // Reservation lifetimes are bounded to 24 hours. This persisted
+            // anchor includes every possible dispatch, even after a long outage.
+            range: {
+              startDate: new Date(Math.max(0, value.request.reservation.expiresAt - 86_400_000)).toISOString(),
+              endDate: new Date().toISOString(),
+            },
             limit: 100,
           });
           const wire = {

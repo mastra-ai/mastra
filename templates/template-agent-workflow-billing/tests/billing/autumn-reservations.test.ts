@@ -93,6 +93,27 @@ async function nativeFixture(
   return { ...f, model, runtime, open };
 }
 
+it('lost finalization acknowledgements recover after the default log window has passed', async () => {
+  const f = await fixture();
+  f.behavior.dropFinalize = true;
+  const result = await f.execute('old-confirmation');
+  expect(result.billing).toMatchObject({ settlementStatus: 'pending', billedUnits: null });
+  vi.useFakeTimers({ toFake: ['Date'] });
+  try {
+    vi.setSystemTime(Date.now() + 31 * 60_000);
+    await f.restart();
+    await f.storage().recoverFinancial();
+    expect((await f.read(result.billing.executionId)).billing).toMatchObject({
+      settlementStatus: 'settled',
+      billedUnits: 3,
+    });
+    expect(f.requests.filter(request => request.path === '/v1/balances.finalize')).toHaveLength(1);
+    expect(f.computes()).toBe(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 it('a missing Autumn balance returns zero funds and a definite reservation denial', async () => {
   const f = await fixture();
   f.behavior.missingBalance = true;
