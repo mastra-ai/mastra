@@ -162,6 +162,8 @@ function getErrorHint(errorType: string): string | null {
       return 'Use /model to select a different model';
     case 'context_length':
       return 'Use /new to start a fresh conversation';
+    case 'content_filter':
+      return 'Often a false positive; retry, rephrase, or use /model to switch models';
     case 'rate_limit':
       return 'Wait a moment and try again';
     case 'quota':
