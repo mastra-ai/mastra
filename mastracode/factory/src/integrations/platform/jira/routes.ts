@@ -23,7 +23,6 @@ import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.
 import { JiraApiError } from '../../jira/api.js';
 import { scopeJiraSourcesToProject } from '../../jira/binding-scope.js';
 import { unfilteredJiraScopes } from '../../jira/intake-jql.js';
-import type { JiraRulesIngress } from '../../jira/rules.js';
 import type { PlatformJiraIntegration } from './integration.js';
 
 type RouteContext = Context;
@@ -56,12 +55,6 @@ export interface MountJiraRoutesOptions {
   intake?: IntakeStorage;
   /** Whether the host configured the application database backing intake state. */
   appDbConfigured: boolean;
-  /**
-   * Factory rules ingress for observed issues. When present, a board-scoped
-   * issue listing also materializes new cards through the Jira event rules —
-   * the same automatic intake Linear has.
-   */
-  ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
   /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
   workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
@@ -281,14 +274,6 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && projectScope && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload.map(issue => ({ ...issue, site: issue.site ?? null })),
-            });
-          }
           return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return jiraFetchError(loose(c), err);

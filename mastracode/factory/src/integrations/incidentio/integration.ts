@@ -15,7 +15,6 @@ import { createIncidentioIntake } from './intake.js';
 import { attachIncidentioIssueReconciler } from './issue-reconciler.js';
 import { incidentioReconciliationEnabled, incidentioReconciliationInterval } from './reconciliation-config.js';
 import { buildIncidentioRoutes } from './routes.js';
-import { attachIncidentioRules } from './rules.js';
 
 export interface IncidentioIntegrationConfig {
   apiKey?: string;
@@ -163,7 +162,7 @@ export class IncidentioIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: `/web/incidentio/*` Mastra `apiRoutes`
    * (status + follow-up listing/detail for Intake). Handlers operate on this
-   * instance; a board-scoped listing also feeds the incident.io event rules.
+   * instance.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildIncidentioRoutes({
@@ -171,7 +170,6 @@ export class IncidentioIntegration implements FactoryIntegration {
       mode: 'api-key',
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachIncidentioRules(this, ctx),
     });
   }
 

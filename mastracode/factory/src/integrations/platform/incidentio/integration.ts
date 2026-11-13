@@ -37,7 +37,6 @@ import {
   incidentioReconciliationInterval,
 } from '../../incidentio/reconciliation-config.js';
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
-import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
 import type { PlatformApiClientConfig } from '../api-client.js';
@@ -508,8 +507,7 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   /**
    * The integration's HTTP surface: `/web/incidentio/*` Mastra `apiRoutes`
    * (status + follow-up listing/detail for Intake), aggregated across every
-   * discovered Platform connection. A board-scoped listing also feeds the
-   * incident.io event rules.
+   * discovered Platform connection.
    */
   routes(ctx: IntegrationContext): ApiRoute[] {
     return buildIncidentioRoutes({
@@ -517,7 +515,6 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
       mode: 'platform',
       auth: ctx.auth,
       intake: ctx.storage.intake,
-      ingestFactoryIssues: attachIncidentioRules(this, ctx),
     });
   }
 

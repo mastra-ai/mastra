@@ -2,9 +2,11 @@ import { workItemPhaseSemantics } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { Intake, IntakeIssue } from '../../capabilities/intake.js';
 import type { IntegrationContext } from '../base.js';
+import { withIntakeDiscovery } from '../intake-discovery.js';
 import { createIssueReconciler } from '../issue-reconciler.js';
 import type { IssueReconciler } from '../issue-reconciler.js';
 import type { IncidentioEventRules } from './default-rules.js';
+import { followUpIssues, scopeSourceIdsToProject } from './routes.js';
 import { IncidentioRules } from './rules.js';
 import type { IncidentioIssueIngress } from './rules.js';
 
@@ -28,6 +30,12 @@ function issueToIngress(itemRef: string, issue: IntakeIssue): IncidentioIssueIng
   };
 }
 
+/**
+ * One incident.io sweep: refresh carded items (metadata, closes), then list
+ * what every project's board shows so follow-ups nobody has carded yet get
+ * their card. incident.io sends Factory no events, so this is the only
+ * first-sight path.
+ */
 export function attachIncidentioIssueReconciler(
   incidentio: { intake: Intake; rules: IncidentioEventRules },
   context: IntegrationContext,
@@ -43,7 +51,7 @@ export function attachIncidentioIssueReconciler(
     incidentioRules: incidentio.rules,
   });
 
-  return createIssueReconciler({
+  const reconcile = createIssueReconciler({
     integrationId: 'incidentio',
     intake: incidentio.intake,
     projects: context.storage.projects,
@@ -80,5 +88,30 @@ export function attachIncidentioIssueReconciler(
         issues: [issueToIngress(item.externalSource?.externalId ?? issue.id, issue)],
       });
     },
+  });
+
+  return withIntakeDiscovery(reconcile, {
+    integrationId: 'incidentio',
+    intake: context.storage.intake,
+    projects: context.storage.projects,
+    open: async (project, selectedIds) => {
+      const sourceIds = await scopeSourceIdsToProject({
+        intake: context.storage.intake,
+        orgId: project.orgId,
+        factoryProjectId: project.id,
+        selectedIds,
+      });
+      if (sourceIds.length === 0) return null;
+      return async cursor => {
+        const page = await incidentio.intake.listItems({
+          orgId: project.orgId,
+          userId: 'factory-rule-dispatcher',
+          sourceIds,
+          ...(cursor ? { cursor } : {}),
+        });
+        return { issues: followUpIssues(page.items), nextCursor: page.nextCursor };
+      };
+    },
+    ingest: input => rules.ingest(input),
   });
 }

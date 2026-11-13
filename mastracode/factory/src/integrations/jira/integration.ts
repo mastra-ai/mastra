@@ -50,7 +50,6 @@ import type { JiraIntakeScope } from './intake-jql.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
-import { attachJiraRules } from './rules.js';
 
 /** Deployment-global Jira Cloud credentials. All credential fields are required. */
 export interface JiraIntegrationConfig {
@@ -448,14 +447,14 @@ export class JiraIntegration implements FactoryIntegration {
       auth: ctx.auth,
       intake: ctx.storage.intake,
       workItems: ctx.runtime?.workItems,
-      ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
 
   /**
    * Background reconciliation, matching the Platform integration: keeps filed
-   * Jira cards' metadata fresh and replays close events through the rules
-   * ingress. Registered only when reconciliation is enabled.
+   * Jira cards' metadata fresh, replays close events through the rules
+   * ingress, and files the issues nobody has carded yet. Registered only when
+   * reconciliation is enabled.
    */
   workers(ctx: IntegrationContext): MastraWorker[] {
     if (!jiraReconciliationEnabled()) return [];
