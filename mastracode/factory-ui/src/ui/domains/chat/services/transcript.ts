@@ -71,6 +71,8 @@ export interface NotificationEntry {
   notifKind?: string;
   priority?: string;
   metadata?: Record<string, unknown>;
+  /** What the sender said about the notification, e.g. which session sent it and what it waits on. */
+  attributes?: Record<string, unknown>;
 }
 
 export interface NotificationSummaryEntry {

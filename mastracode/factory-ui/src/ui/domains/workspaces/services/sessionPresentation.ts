@@ -18,13 +18,20 @@ export interface SessionViewerProfile {
   avatarUrl?: string;
 }
 
+/** A session the Factory itself owns: automatic work no person started. */
+export function isFactoryOwnedSession(session: Pick<FactoryUserSession, 'userId'>): boolean {
+  return session.userId.startsWith('factory-project:');
+}
+
 export function getSessionOwnerDetails(
   session: FactoryUserSession,
   viewer: SessionViewerProfile | undefined,
 ): SessionOwnerDetails {
   const isViewer = Boolean(viewer?.userId) && session.userId === viewer?.userId;
   const name =
-    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) || session.owner?.name?.trim() || session.userId;
+    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) ||
+    session.owner?.name?.trim() ||
+    (isFactoryOwnedSession(session) ? 'Factory' : session.userId);
   const avatarUrl = (isViewer && viewer?.avatarUrl?.trim()) || session.owner?.avatarUrl?.trim();
   return {
     name,

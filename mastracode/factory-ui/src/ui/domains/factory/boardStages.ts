@@ -7,10 +7,6 @@ import type { BoardStage, BoardStageId } from './stages';
 
 export type BoardKind = string;
 
-export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
-  return itemBoard(item) === kind;
-}
-
 /** Whether `item` shows in the `stage` column; a card in no known column shows in the first one, where cards start. */
 export function itemAppearsInStage(
   item: WorkItem,

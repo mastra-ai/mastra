@@ -91,12 +91,12 @@ const storedBoardResponseSchema = z.object({
   canEdit: z.boolean().optional(),
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
-const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
+const boardIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
 const intakeRouteTargetSchema = z
   .object({
-    boardKey: intakeRouteIdentifierSchema,
+    boardKey: boardIdentifierSchema,
     /** Unset lands the card in the board's first phase. */
-    phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+    phaseKey: boardIdentifierSchema.nullable().optional(),
     /**
      * File a pull request on the card of the issue it closes (on `boardKey`) instead of a new card;
      * that card moves to `phaseKey` when its board allows it. Matches no other arrival.
@@ -177,6 +177,11 @@ const intakeRouteListResponseSchema = z.object({
   /** Whether the caller may add, edit, reorder, or delete routes. */
   canEdit: z.boolean(),
 });
+const intakeRerouteResponseSchema = z.object({
+  total: z.number().int(),
+  moves: z.array(z.object({ fromBoard: z.string(), toBoard: z.string(), count: z.number().int() })),
+});
+const intakeRerouteApplyResponseSchema = z.object({ moved: z.number().int(), skipped: z.number().int() });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -480,7 +485,10 @@ const workItemListQuerySchema = z
     limit: boundedLimitSchema(20, 50),
     /** Repeatable. Narrows the list to the cards filed from these sources, each named by its id or its URL. */
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
-    /** Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing. */
+    /**
+     * Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing.
+     * Each card comes with the `version` the phases read names it by.
+     */
     workItemId: z.array(uuidSchema).min(1).max(100).optional(),
     /**
      * The `cursor` of the whole board this reader holds: the answer is then what moved since. One
@@ -543,6 +551,139 @@ export const workItemActivityResponseSchema = z.object({
   createdAt: z.array(z.string()),
   doneAt: z.array(z.string()),
 });
+
+export const BOARD_PHASES_SORTS = ['recent', 'recent-mine', 'created-newest', 'created-oldest'] as const;
+
+/** Repeatable. The values picked for one filter: a card matches on any of them, and none picks every card. */
+const pickedValuesSchema = z
+  .array(z.string().min(1).max(512))
+  .max(100)
+  .default([])
+  .transform(values => new Set(values));
+
+/** `<phase>:<count>`: how many cards of one phase to list. */
+const phaseWindowSchema = z
+  .string()
+  .transform((entry): [phase: string, count: string] => {
+    const colon = entry.lastIndexOf(':');
+    return [entry.slice(0, Math.max(colon, 0)), entry.slice(colon + 1)];
+  })
+  .pipe(
+    z.tuple([
+      boardIdentifierSchema,
+      z
+        .string()
+        .regex(/^[1-9]\d{0,5}$/)
+        .transform(Number),
+    ]),
+  );
+
+/** One view of a board: its order, its search and filters, and how deep each phase is listed. */
+export const boardPhasesQuerySchema = z.object({
+  /** `recent-mine` puts the cards the signed-in user last moved into the phase before the others. */
+  sort: z.enum(BOARD_PHASES_SORTS).default('recent'),
+  /** Words that must all be in the card's title, key, number or source id. */
+  q: z.string().max(200).optional(),
+  /** A provider (`github`, `linear`, `manual`…), or `pull-request` for every card that has one. */
+  source: pickedValuesSchema,
+  /** Linear project ids. Picked without `source`, they keep Linear cards only. */
+  linearProject: pickedValuesSchema,
+  /** A card matches when it carries every one of them. */
+  label: pickedValuesSchema,
+  /** Participant ids (`github:octocat`, `factory:<user id>`) related to the card in any way. */
+  teammate: pickedValuesSchema,
+  author: pickedValuesSchema,
+  assignee: pickedValuesSchema,
+  reviewer: pickedValuesSchema,
+  /** Factory users who created the card, moved it or started a session on it. */
+  worked: pickedValuesSchema,
+  /** How many cards each phase lists. */
+  limit: boundedLimitSchema(50, 200),
+  /**
+   * Repeatable `<phase>:<count>`: lists that phase's first `count` cards instead of `limit`.
+   * One for a phase the board does not have is ignored.
+   */
+  window: z
+    .array(phaseWindowSchema)
+    .max(64)
+    .default([])
+    .refine(windows => new Set(windows.map(([phase]) => phase)).size === windows.length, {
+      message: 'Send one window per phase',
+    })
+    .transform(windows => new Map(windows)),
+  /**
+   * A card to answer for wherever it lies: the answer names it with its place in each phase, and
+   * `cards=true` sends its body. No phase is listed deeper for it.
+   */
+  item: uuidSchema.optional(),
+  /** `true` also sends the body of every card the answer names. */
+  cards: z.enum(['true']).optional(),
+});
+
+/**
+ * Names a card and the body the answer was read from. `version` is another value whenever any of
+ * the body is, so a reader that holds the card at this version holds this body.
+ */
+const cardStampSchema = z.object({ id: z.string(), version: z.string() });
+
+export const boardPhasesResponseSchema = z.object({
+  /** The board's phases in declaration order. */
+  phases: z.array(
+    z.object({
+      phase: z.string(),
+      /** Cards of this phase that match the view. */
+      total: countSchema,
+      /** The first of them in the view's order: what the reader shows. */
+      cards: z.array(cardStampSchema),
+    }),
+  ),
+  /** With `item`: the asked card, when the board holds it. */
+  item: cardStampSchema
+    .extend({
+      /**
+       * Each phase the view lists the card under, and how many cards it lists before it there.
+       * Empty when the search or filters leave the card out.
+       */
+      places: z.array(z.object({ phase: z.string(), position: countSchema })),
+    })
+    .optional(),
+  /**
+   * Cards related to a listed card or to the asked one that no phase lists: the first `limit` of
+   * each card's, in the board's order.
+   */
+  related: z.array(cardStampSchema),
+  /** How many such cards there are, named in `related` or not. */
+  relatedTotal: countSchema,
+  /** Cards of the board, whatever the search and filters. */
+  boardTotal: countSchema,
+  /** Cards of the board that match the view, each counted once: a card in two phases is one. */
+  matchingTotal: countSchema,
+  /** With `cards=true`: the body of every card named in `phases`, `item` and `related`, each with its `version`. */
+  workItems: z.array(cardSchema.extend({ version: z.string() })).optional(),
+  /** Among the named cards. */
+  runningSessionIds: z.array(z.string()),
+  parkedSessionIds: z.array(z.string()),
+});
+
+/** What the board's filter menus offer, read over every card of the project. */
+export const workItemFilterOptionsResponseSchema = z.object({
+  /** Every label on a card, sorted. */
+  labels: z.array(z.string()),
+  /** The people the cards' sources name, sorted by name. `id` is what a people filter sends. */
+  people: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      source: z.enum(['github', 'gitlab', 'linear', 'jira', 'incidentio']),
+    }),
+  ),
+  /** The Factory users who created a card, moved one or started a session on one, sorted. */
+  actorIds: z.array(z.string()),
+});
+
+export type BoardPhasesQuery = z.output<typeof boardPhasesQuerySchema>;
+export type BoardPhasesResponse = z.infer<typeof boardPhasesResponseSchema>;
+export type WorkItemFilterOptionsResponse = z.infer<typeof workItemFilterOptionsResponseSchema>;
 
 const sessionsSchema = z.record(z.string().min(1).max(64), sessionSchema);
 const metadataSchema = z
@@ -1000,6 +1141,14 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: boardPathSchema,
     responseSchema: storedBoardResponseSchema,
   },
+  boardPhases: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/:boardKey/phases',
+    description: 'List the cards under each phase of a board view, in order, with how many match',
+    pathSchema: boardPathSchema,
+    querySchema: boardPhasesQuerySchema,
+    responseSchema: boardPhasesResponseSchema,
+  },
   boardCreate: {
     method: 'POST',
     path: '/web/factory/projects/:id/boards',
@@ -1071,6 +1220,20 @@ export const FACTORY_ROUTE_CONTRACTS = {
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
   },
+  intakeRouteReroutePreview: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Untouched cards the project's intake routes would now file on a different board",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteResponseSchema,
+  },
+  intakeRouteRerouteApply: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reroute',
+    description: "Move untouched cards to the start of the board the project's intake routes now file them on",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRerouteApplyResponseSchema,
+  },
   intakeRouteReorder: {
     method: 'POST',
     path: '/web/factory/projects/:id/intake-routes/reorder',
@@ -1114,6 +1277,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemActivityQuerySchema,
     responseSchema: workItemActivityResponseSchema,
+  },
+  workItemFilterOptions: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/filter-options',
+    description: 'List the labels and people the cards of a project can be filtered by',
+    pathSchema: projectPathSchema,
+    responseSchema: workItemFilterOptionsResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

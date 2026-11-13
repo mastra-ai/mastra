@@ -159,7 +159,7 @@ explainAccess(
 ): Promise<KnowledgeAccessExplanation>
 ```
 
-Explains why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or a page path such as `org:acme#policies/refund`.
+Explains why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are canonical addresses, including `resource:` and `thread:` (`resource:slack%3AU123` for Memory resource `slack:U123`). `target.page` takes a page ID or a page path such as `org:acme#policies/refund`.
 
 ```typescript
 await knowledge.explainAccess(['org:acme'], { page: 'team:acme:support#refunds' })

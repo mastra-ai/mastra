@@ -28,17 +28,20 @@ import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { workItemSource } from '../rules/types.js';
+import type { FactoryRuleActor } from '../rules/types.js';
 import { secretKeyMismatchHint, secretKeyProblem } from '../secret-encryption.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
   FactorySourceSessionResolutionError,
   resolveFactorySourceControl,
+  requireOrganizationModelKey,
 } from '../session/factory-session.js';
-import type { EnsuredFactorySourceSession } from '../session/factory-session.js';
+import type { EnsuredFactorySourceSession, OrganizationModelSources } from '../session/factory-session.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
+import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
@@ -49,8 +52,8 @@ import type { IntakeStorage } from '../storage/domains/intake/base.js';
 import type { IntegrationStorage } from '../storage/domains/integrations/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
-import { effectiveModelScope } from '../storage/domains/projects/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { effectiveModelScope, factoryPrincipalId, isFactoryPrincipalId } from '../storage/domains/projects/base.js';
+import type { FactoryProject, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
@@ -60,7 +63,6 @@ import {
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
-import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import {
   legacyGithubWorkItemBranch,
@@ -321,6 +323,62 @@ function restingExitLane(board: InstalledBoard | undefined, role: string, hasPul
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
+/** What the autonomous start reads to decide who a phase session runs as. */
+export interface PhaseSessionOwnerSources extends OrganizationModelSources {
+  workItems?: Pick<WorkItemsStorage, 'findRunBindingById'>;
+}
+
+/**
+ * Who a newly minted phase session runs as. Wherever runs use the Factory's credentials
+ * that is the Factory itself, whoever moved the card: the mover is the actor on the move,
+ * not the owner of the run. A Factory whose runs use personal credentials has no keys of
+ * its own, so there a person owns the run: whoever moved or approved the card, or the user
+ * of the session whose agent moved it, else whoever created the Factory. `undefined`
+ * leaves the last resort to the caller: whoever connected the repository.
+ */
+async function phaseSessionOwner(args: {
+  sourceControl: SourceControlStorageHandle;
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined;
+  project: FactoryProject;
+  approver: string | undefined;
+}): Promise<string | undefined> {
+  const { sourceControl, workItems, project, approver } = args;
+  if (effectiveModelScope(project.modelScope, 'run') === 'factory') return factoryPrincipalId(project.id);
+  if (approver?.startsWith('agent:')) {
+    // `agent:session:<sessionId>` is a person's own session; `agent:<bindingId>` a phase run.
+    const ref = approver.slice('agent:'.length);
+    const sessionId = ref.startsWith('session:')
+      ? ref.slice('session:'.length)
+      : (await workItems?.findRunBindingById({ orgId: project.orgId, factoryProjectId: project.id, id: ref }))
+          ?.sessionId;
+    const session = sessionId ? await sourceControl.sessions.getBySessionId(sessionId) : null;
+    if (session && session.orgId === project.orgId && isHumanActorId(session.userId)) return session.userId;
+  } else if (isHumanActorId(approver)) {
+    return approver;
+  }
+  return isHumanActorId(project.createdBy) ? project.createdBy : undefined;
+}
+
+/**
+ * Who started the work, as the move that starts the run records them. An agent stays an
+ * agent: recorded as a person, its move would count as a person accepting the work.
+ */
+async function starterOf(
+  workItems: Pick<WorkItemsStorage, 'findRunBindingById'> | undefined,
+  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  approver: string,
+): Promise<FactoryRuleActor> {
+  if (!approver.startsWith('agent:')) return { type: 'human', id: approver };
+  const bindingId = approver.slice('agent:'.length);
+  if (bindingId.startsWith('session:')) return { type: 'agent', bindingId, role: 'session' };
+  const binding = await workItems?.findRunBindingById({
+    orgId: project.orgId,
+    factoryProjectId: project.id,
+    id: bindingId,
+  });
+  return { type: 'agent', bindingId, role: binding?.role ?? 'agent' };
+}
+
 /**
  * Start a factory run for a rule binding: ensure the source-control session the
  * coordinator requires, then hand it to `prepare` along with the factory's
@@ -335,6 +393,7 @@ export async function prepareFactoryRuleBinding(
   boards: BoardRegistry | ProjectBoardSource,
   input: FactoryBindingPreparationInput,
   intake?: Pick<IntakeStorage, 'getConfig'>,
+  owner?: PhaseSessionOwnerSources,
 ): Promise<void> {
   try {
     const sourceControl =
@@ -426,18 +485,21 @@ export async function prepareFactoryRuleBinding(
     // The session is filed under the card's repository: the sandbox holds
     // every environment repository, but the coordinator, the PR tools and the
     // subscriptions follow the session's link, and the card names which one.
+    const existingSession =
+      boundSession ?? (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId));
+    const ownerUserId =
+      existingSession?.userId ??
+      (await phaseSessionOwner({ sourceControl, workItems: owner?.workItems, project, approver }));
+    if (isFactoryPrincipalId(ownerUserId)) await requireOrganizationModelKey(owner, project);
     const preparedSession =
-      boundSession ??
-      (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId)) ??
+      existingSession ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,
         factoryProjectId: input.record.factoryProjectId,
         projectRepositoryId: repository.projectRepositoryId,
         branch,
-        // A person who approved the run is its interactive user: attribute it to
-        // them, not the repo connector. An agent's pre-approval names no person.
-        attributeToUserId: isAgentActor(approver) ? undefined : approver,
+        attributeToUserId: ownerUserId,
       }).catch(error => {
         if (error instanceof FactorySourceSessionResolutionError && error.reason === 'repository') {
           // The card resolved to a linked repository the sandbox will not check out.
@@ -466,6 +528,7 @@ export async function prepareFactoryRuleBinding(
     await coordinator.prepare({
       orgId: input.record.orgId,
       userId: preparedSession.userId,
+      ...(approver ? { startedBy: await starterOf(owner?.workItems, project, approver) } : {}),
       factoryProjectId: input.record.factoryProjectId,
       sessionId: preparedSession.sessionId,
       modelScope,
@@ -857,6 +920,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
                 deps.boardRegistry,
                 input,
                 deps.domains.intake,
+                {
+                  workItems: deps.domains.workItems,
+                  modelCredentials: deps.domains.modelCredentials,
+                  customProviders: deps.domains.customProviders,
+                  deploymentModelProviders: deps.deploymentModelProviders,
+                },
               );
             },
           }
@@ -931,9 +1000,10 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           intake: deps.domains.intake,
           projects: deps.domains.projects,
-          integrations: (deps.integrations ?? []).flatMap(({ integration }) =>
-            integration.intake ? [{ id: integration.id, intake: integration.intake }] : [],
-          ),
+          integrations: (deps.integrations ?? []).flatMap(({ integration }) => [
+            ...(integration.intake ? [{ id: integration.id, intake: integration.intake }] : []),
+            ...(integration.additionalIntakes ?? []),
+          ]),
         }).routes()
       : []),
     ...(deps.factoryReady && deps.knowledgeEnabled
@@ -973,6 +1043,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           auth: deps.auth,
           audit: deps.audit,
           projects: deps.domains.projects,
+          workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()

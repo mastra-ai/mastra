@@ -7,11 +7,37 @@ import type { FactoryRunOutcome } from './reports.js';
 
 type RunEndReason = Extract<AgentControllerEvent, { type: 'agent_end' }>['reason'];
 
+/**
+ * Whether a bare yes or no is all a paused tool needs to carry on: its resume data is an
+ * object whose `action` is `approved` or `rejected`, and nothing else is required. A
+ * question to the person (free text, a choice, a decision plus a required detail) does
+ * not fit, and is answered in the session itself.
+ */
+export function resumesOnDecision(resumeSchema: string | undefined): boolean {
+  if (!resumeSchema) return false;
+  try {
+    const schema = JSON.parse(resumeSchema) as { properties?: { action?: { enum?: unknown } }; required?: unknown };
+    const actions = schema.properties?.action?.enum;
+    const required = Array.isArray(schema.required) ? schema.required : [];
+    return (
+      Array.isArray(actions) &&
+      actions.includes('approved') &&
+      actions.includes('rejected') &&
+      required.every(field => field === 'action')
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** What a run stopped on: a tool waiting for an answer, or one waiting for approval. */
 export interface ParkedTool {
   toolName: string;
   toolCallId: string;
+  /** The call has not run yet, and waits for a person to allow it. */
   approval: boolean;
+  /** The tool paused itself, and a bare yes or no is all it needs to carry on. */
+  decision?: boolean;
 }
 
 export interface RunReportSession {
@@ -37,7 +63,14 @@ const ERROR_MESSAGE_LENGTH = 400;
 export function observeSessionRunReports(
   session: RunReportSession,
   report: SessionRunEndReport,
-  { onApprovalRequested }: { onApprovalRequested?: SessionApprovalReport } = {},
+  {
+    onApprovalRequested,
+    answersItself,
+  }: {
+    onApprovalRequested?: SessionApprovalReport;
+    /** Whether the Factory answers this paused call without a person, so its run carries on and nobody needs telling. */
+    answersItself?: (toolCallId: string) => boolean;
+  } = {},
 ): () => void {
   let parked: ParkedTool | undefined;
   let lastError: string | undefined;
@@ -52,6 +85,7 @@ export function observeSessionRunReports(
         toolName: event.toolName,
         toolCallId: event.toolCallId,
         approval: event.type === 'tool_approval_required',
+        ...(event.type === 'tool_suspended' && resumesOnDecision(event.resumeSchema) ? { decision: true } : {}),
       };
       // An approval gate holds the run open, so it is announced now, not at the run's end.
       if (event.type === 'tool_approval_required' && onApprovalRequested) {
@@ -72,6 +106,8 @@ export function observeSessionRunReports(
     parked = undefined;
     lastError = undefined;
     if (!outcome) return;
+    // Not an end: the Factory answers the call and the same run carries on in its window.
+    if (outcome.status === 'blocked' && outcome.toolCallId && answersItself?.(outcome.toolCallId)) return;
     // Move the window now, so a run that starts before this report settles is judged on its own;
     // reports made up to the end, including its last millisecond, belong to the run that ended.
     const runSince = since;
@@ -114,7 +150,7 @@ export function heartbeatOpenRunUntilEnd(
 /** `null` for an aborted run: someone stopped or steered it, which is not an outcome. */
 export function runOutcome(
   reason: RunEndReason,
-  parked: Pick<ParkedTool, 'toolName' | 'toolCallId' | 'approval'> | undefined,
+  parked: ParkedTool | undefined,
   errorMessage?: string,
 ): FactoryRunOutcome | null {
   switch (reason) {
@@ -137,6 +173,7 @@ export function runOutcome(
               toolName: parked.toolName,
               toolCallId: parked.toolCallId,
               ...(parked.approval ? { approval: true } : {}),
+              ...(parked.decision ? { decision: true } : {}),
             }
           : {}),
       };
