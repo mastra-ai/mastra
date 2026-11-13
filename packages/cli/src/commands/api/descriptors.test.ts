@@ -155,6 +155,8 @@ describe('api command descriptors', () => {
       'factoryIntake-routeUpdate': ['intakeRouteUpdate', ['id', 'routeId'], true, true, false],
       'factoryIntake-routeDelete': ['intakeRouteDelete', ['id', 'routeId'], true, true, false],
       'factoryIntake-routeReorder': ['intakeRouteReorder', ['id'], true, true, false],
+      'factoryIntake-routeReroute-preview': ['intakeRouteReroutePreview', ['id'], false, false, false],
+      'factoryIntake-routeReroute': ['intakeRouteRerouteApply', ['id'], false, false, false],
       factoryMetrics: ['metricsGet', ['id'], true, false, false],
       factoryHealthThresholds: ['healthThresholdsGet', ['id'], false, false, false],
       factoryDecisionList: ['decisionList', ['id'], true, false, false],
