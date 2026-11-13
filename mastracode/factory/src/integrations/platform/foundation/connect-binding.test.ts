@@ -186,7 +186,7 @@ describe('PlatformConnectBinding.linkOrgConnections', () => {
     return platform;
   }
 
-  it('counts a link only once the project listing shows it, and does not re-run anything otherwise', async () => {
+  it('counts a link, and tells listeners, only once the project listing shows it', async () => {
     const platform = await orgPlatform();
     platform.linkReplies.set('conn-unlinked', { status: 204 });
     const jira = binding(platform);
