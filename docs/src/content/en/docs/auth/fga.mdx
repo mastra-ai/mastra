@@ -222,6 +222,7 @@ When an FGA provider is configured, Mastra automatically checks authorization at
 | Agent tool execution | `tools:execute` | `tool` | `${agentId}:${toolName}` |
 | MCP tool execution | `tools:execute` | `tool` by default, or the server-level `fga.resourceMapping` override | `JSON.stringify([serverName, toolName])` by default, or the server-level derived ID |
 | Thread and memory access | `memory:read`, `memory:write`, `memory:delete` | `thread` | `threadId` |
+| Resource working memory (`GET /memory/working-memory`) | `memory:read` | `resource` | The caller's mapped `resourceId`, or the requested `resourceId` |
 | Stored resource routes | Stored resource permission for the route action | Stored resource type | Route record ID, or the stored-resource scope for collection routes |
 | HTTP resource routes | Configured per route | Configured per route | Configured per route |
 
