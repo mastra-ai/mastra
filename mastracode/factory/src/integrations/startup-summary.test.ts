@@ -22,19 +22,19 @@ describe('describeIntegrations', () => {
         integration('linear', false),
         integration('incidentio', false),
       ]),
-    ).resolves.toBe('Integrations: GitHub connected · Jira, Linear, incident.io available');
+    ).resolves.toBe('Intake: GitHub connected · Jira, Linear, incident.io available');
   });
 
   it('says none are connected on a fresh project', async () => {
     await expect(describeIntegrations([integration('github', false), integration('gitlab', false)])).resolves.toBe(
-      'Integrations: none connected · GitHub, GitLab available',
+      'Intake: none connected · GitHub, GitLab available',
     );
   });
 
   it('reports a failed check as unknown instead of failing', async () => {
     await expect(
       describeIntegrations([integration('github', true), integration('linear', new Error('timeout'))]),
-    ).resolves.toBe('Integrations: GitHub connected · Linear status unknown');
+    ).resolves.toBe('Intake: GitHub connected · Linear status unknown');
   });
 
   it('prints nothing when no integration can report connections', async () => {

@@ -36,7 +36,7 @@ export async function describeIntegrations(integrations: readonly FactoryIntegra
   const parts = [connected.length > 0 ? `${connected.join(', ')} connected` : 'none connected'];
   if (available.length > 0) parts.push(`${available.join(', ')} available`);
   if (unknown.length > 0) parts.push(`${unknown.join(', ')} status unknown`);
-  return `Integrations: ${parts.join(' · ')}`;
+  return `Intake: ${parts.join(' · ')}`;
 }
 
 export async function logIntegrationSummary(integrations: readonly FactoryIntegration[]): Promise<void> {
