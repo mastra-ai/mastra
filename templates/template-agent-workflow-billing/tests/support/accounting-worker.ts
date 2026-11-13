@@ -14,28 +14,27 @@ const organizations = new OrganizationService(directory, { mode: 'local', provid
 const commercial = await LocalBillingStorage.open({ url });
 const provider = new LocalBillingProvider(commercial, configuration);
 const storage = await AccountingStorage.open({ url }, directory);
-let hang = false;
-let round = 0;
-const gateway = new BillingGateway(organizations, storage, provider, configuration, [
-  {
-    resourceId: 'assistant',
-    operation: 'generate',
-    measurements: [{ key: 'token-count', maxUnits: 10 }],
-    execute: async () => {
-      if (hang) {
-        process.send?.({ type: 'executing', round });
-        await new Promise(() => {});
-      }
-      return { status: 'succeeded', result: { text: 'worker result' }, measurementComplete: true, measurements: [] };
+const createGateway = (hang: boolean, round: number) =>
+  new BillingGateway(organizations, storage, provider, configuration, [
+    {
+      resourceId: 'assistant',
+      operation: 'generate',
+      measurements: [{ key: 'token-count', maxUnits: 10 }],
+      execute: async () => {
+        if (hang) {
+          process.send?.({ type: 'executing', round });
+          await new Promise(() => {});
+        }
+        return { status: 'succeeded', result: { text: 'worker result' }, measurementComplete: true, measurements: [] };
+      },
     },
-  },
-]);
+  ]);
 const context = await organizations.context({ credential, workspaceId });
 process.send?.({ type: 'ready' });
 process.on('message', async (message: { type: string; round: number; key: string }) => {
   try {
-    hang = message.type === 'hang';
-    round = message.round;
+    const round = message.round;
+    const gateway = createGateway(message.type === 'hang', round);
     const probe = createClient({ url, intMode: 'bigint', concurrency: 1, timeout: 0 });
     let contended = false;
     try {
