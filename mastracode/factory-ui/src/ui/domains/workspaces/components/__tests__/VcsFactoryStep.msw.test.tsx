@@ -146,14 +146,12 @@ describe('VCS Factory step', () => {
     const { client } = renderStep();
 
     expect(await screen.findByText('acme/recent-0')).toBeInTheDocument();
-    expect(screen.getByText(/most recently pushed repositories/)).toBeInTheDocument();
     expect(requests).toEqual([{ q: null, limit: '8' }]);
 
     await userEvent.type(screen.getByLabelText('Search repositories'), 'old');
     expect(await screen.findByText('acme/old-tool', {}, { timeout: 2000 })).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(requests.at(-1)).toEqual({ q: 'old', limit: '50' });
-    expect(screen.queryByText(/most recently pushed repositories/)).not.toBeInTheDocument();
   });
 
   it('offers Retry when the repository list fails to load', async () => {

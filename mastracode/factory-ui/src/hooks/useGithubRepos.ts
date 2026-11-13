@@ -5,7 +5,7 @@ import { queryKeys } from '../api/keys';
 import { listGithubRepos } from '../ui/domains/workspaces/services/github';
 
 /** Repositories a picker shows before anything is typed: the most recently pushed ones. */
-export const RECENT_REPOSITORY_LIMIT = 8;
+const RECENT_REPOSITORY_LIMIT = 8;
 const SEARCH_REPOSITORY_LIMIT = 50;
 
 /**
