@@ -60,6 +60,7 @@ import type {
   GithubRepositoryPermission,
   GithubTriageCommentUpsertInput,
   GithubTriageCommentUpsertResult,
+  RepoListOptions,
   RepoSummary,
 } from '../../github/integration.js';
 import { attachGithubIssueReconciler } from '../../github/issue-reconciler.js';
@@ -107,6 +108,8 @@ function githubStatusReason(
   if (hasUsableInstallation) return 'ready';
   return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
 }
+
+type PlatformRepository = Omit<RepoSummary, 'installationId'>;
 
 type PlatformGithubInstallation = {
   installationId: number;
@@ -1293,7 +1296,20 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return settleOrAbort(lookup, signal, undefined);
   }
 
-  async listInstallationRepos(installationId: number, options?: { fresh?: boolean }): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, options?: RepoListOptions): Promise<RepoSummary[]> {
+    // A narrowed listing (the repo picker) asks the Platform to search or
+    // trim, so accounts with hundreds of repositories never page them all.
+    if (options?.query || options?.limit) {
+      const params = new URLSearchParams();
+      if (options.query) params.set('q', options.query.slice(0, 100));
+      if (options.limit) params.set('limit', String(options.limit));
+      const result = await this.#client.request<{ repositories: PlatformRepository[] }>(
+        'GET',
+        `${API_PREFIX}/github-app/installations/${installationId}/repositories?${params}`,
+      );
+      return result.repositories.map(repository => ({ ...repository, installationId }));
+    }
+
     // Hot in two places — the repos route and token minting (which re-lists
     // only to validate the 1–10 repo rule). A short TTL collapses repeat
     // Platform round trips within one UI interaction; `fresh` skips it so an
@@ -1302,16 +1318,10 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
-    const result = await this.#client.request<{
-      repositories: Array<{
-        id: number;
-        owner: string;
-        name: string;
-        fullName: string;
-        private: boolean;
-        defaultBranch: string;
-      }>;
-    }>('GET', `${API_PREFIX}/github-app/installations/${installationId}/repositories`);
+    const result = await this.#client.request<{ repositories: PlatformRepository[] }>(
+      'GET',
+      `${API_PREFIX}/github-app/installations/${installationId}/repositories`,
+    );
     const repos = result.repositories.map(repository => ({ ...repository, installationId }));
     setBounded(this.#installationReposCache, installationId, {
       repos,
@@ -1321,11 +1331,19 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * The Platform has no single-repository endpoint, so read the (cached)
-   * installation listing. The repo picker's search warms that cache.
+   * The Platform has no single-repository endpoint, so use a cached full
+   * listing when one is warm and otherwise search the installation by name,
+   * which stays fast on accounts with hundreds of repositories.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
-    const repositories = await this.listInstallationRepos(installationId);
+    const cached = this.#installationReposCache.get(installationId);
+    const repositories =
+      cached && cached.expiresAt > Date.now()
+        ? cached.repos
+        : await this.listInstallationRepos(installationId, {
+            query: repoFullName.split('/').pop() ?? repoFullName,
+            limit: 100,
+          });
     return repositories.find(repository => repository.fullName === repoFullName) ?? null;
   }
 

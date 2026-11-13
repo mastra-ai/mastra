@@ -4,11 +4,23 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { listGithubRepos } from '../ui/domains/workspaces/services/github';
 
+/** Repositories a picker shows before anything is typed: the most recently pushed ones. */
+export const RECENT_REPOSITORY_LIMIT = 8;
+const SEARCH_REPOSITORY_LIMIT = 50;
+
+/**
+ * Listing every repository is slow for accounts with hundreds of them, so pickers ask for the few most recently
+ * pushed ones until the user types, then search by name on the server.
+ */
+function repositoryLimit(query: string | undefined) {
+  return query ? SEARCH_REPOSITORY_LIMIT : RECENT_REPOSITORY_LIMIT;
+}
+
 export function useGithubReposQuery(query: string | undefined, enabled: boolean) {
   const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.githubRepos(query),
-    queryFn: () => listGithubRepos(baseUrl, query),
+    queryFn: () => listGithubRepos(baseUrl, query, { limit: repositoryLimit(query) }),
     enabled,
     // Typing keeps the previous matches on screen instead of flashing skeletons per keystroke.
     placeholderData: keepPreviousData,
@@ -28,7 +40,7 @@ export function useRefreshGithubReposMutation(query: string | undefined) {
     mutationFn: async () => {
       // Status re-syncs the org's installations (new GitHub accounts) before repos list them.
       await queryClient.refetchQueries({ queryKey: queryKeys.githubStatus() });
-      return listGithubRepos(baseUrl, query, { refresh: true });
+      return listGithubRepos(baseUrl, query, { refresh: true, limit: repositoryLimit(query) });
     },
     onSuccess: repos => {
       queryClient.setQueryData(queryKeys.githubRepos(query), repos);

@@ -218,10 +218,11 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
 export async function listGithubRepos(
   baseUrl: string,
   query?: string,
-  options?: { refresh?: boolean },
+  options?: { refresh?: boolean; limit?: number },
 ): Promise<GithubRepo[]> {
   const params = new URLSearchParams();
   if (query) params.set('q', query);
+  if (options?.limit) params.set('limit', String(options.limit));
   if (options?.refresh) params.set('refresh', '1');
   const search = params.toString();
   const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;

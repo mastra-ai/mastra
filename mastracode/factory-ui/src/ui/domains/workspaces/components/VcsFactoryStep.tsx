@@ -1,13 +1,18 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
+import {
+  RECENT_REPOSITORY_LIMIT,
+  useGithubReposQuery,
+  useRefreshGithubReposMutation,
+} from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
@@ -260,6 +265,11 @@ export function VcsFactoryStep({
                 onSelectRepository={chooseRepository}
                 onPreviewRepository={onPreviewRepository}
               />
+              {host === 'github' && !search && (repos.data?.length ?? 0) >= RECENT_REPOSITORY_LIMIT && (
+                <Txt tone="muted" as="p" variant="caption" className="m-0 px-3 pt-2">
+                  Showing your most recently pushed repositories. Type to search the rest.
+                </Txt>
+              )}
             </div>
           )}
         </OnboardingSearchInset>

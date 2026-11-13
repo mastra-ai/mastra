@@ -64,6 +64,10 @@ const sessionOperationLocks = new Map<string, Promise<unknown>>();
 const USER_SESSION_BRANCH_PREFIX = 'user/session-';
 // lowercase only (crypto.randomUUID output), so casing cannot fork one logical ID into two sessions
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+
+/** Most repositories one `/web/github/repos` request returns when the caller limits it. */
+const MAX_REPO_LIST_LIMIT = 100;
+
 /**
  * Serialize same-session mutations within one Factory process. Factory sessions
  * normally issue these operations sequentially, so this lock is probably not
@@ -665,15 +669,27 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const orgId = resolved.tenant.orgId;
         const installs = await github.sourceControlStorage.installations.list({ orgId });
 
-        const query = (c.req.query('q') ?? '').toLowerCase();
+        const query = (c.req.query('q') ?? '').trim().toLowerCase();
         const fresh = c.req.query('refresh') === '1';
+        // `limit` asks each installation for only its most recently pushed
+        // matches, so the picker opens fast on accounts with many repositories.
+        const limitParam = Number(c.req.query('limit'));
+        const limit =
+          Number.isInteger(limitParam) && limitParam > 0 ? Math.min(limitParam, MAX_REPO_LIST_LIMIT) : undefined;
         // List every installation's repositories in parallel — installations
         // are independent upstream calls, and serial listing multiplied
         // worst-case latency by installation count.
         const listed = await Promise.all(
           installs.map(async inst => {
             try {
-              return { inst, list: await github.listInstallationRepos(Number(inst.externalId), { fresh }) };
+              return {
+                inst,
+                list: await github.listInstallationRepos(Number(inst.externalId), {
+                  fresh,
+                  ...(query && { query }),
+                  ...(limit && { limit }),
+                }),
+              };
             } catch (err) {
               // 403 means this credential may not use the installation (e.g. the
               // Platform refuses personal-account installations to org API
@@ -708,6 +724,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             seenRepositoryIds.add(repo.id);
             matches.push({ inst, repo });
           }
+        }
+
+        // A limited listing merges installations by last push and keeps the
+        // overall most recent.
+        if (limit) {
+          matches.sort((a, b) => (b.repo.pushedAt ?? '').localeCompare(a.repo.pushedAt ?? ''));
+          matches.length = Math.min(matches.length, limit);
         }
 
         const repos = matches.map(({ inst, repo }) => ({

@@ -1051,10 +1051,57 @@ describe('PlatformGithubIntegration', () => {
       }),
     );
     const integration = createIntegration(fetchImpl);
+    await integration.listInstallationRepos(7);
 
     await expect(integration.getInstallationRepo(7, 'acme/app')).resolves.toMatchObject({ id: 101 });
     await expect(integration.getInstallationRepo(7, 'acme/other')).resolves.toBeNull();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
+  it('searches the installation by name for a repository when no listing is cached', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+      json({
+        repositories: [
+          { id: 102, owner: 'acme', name: 'app-two', fullName: 'acme/app-two', private: true, defaultBranch: 'main' },
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getInstallationRepo(7, 'acme/app')).resolves.toMatchObject({ id: 101 });
+    const url = new URL(String(fetchImpl.mock.calls[0]![0]));
+    expect(url.pathname).toMatch(/\/github-app\/installations\/7\/repositories$/);
+    expect(url.searchParams.get('q')).toBe('app');
+    expect(url.searchParams.get('limit')).toBe('100');
+  });
+
+  it('asks the Platform for a narrowed listing without caching it as the full grant', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+      json({
+        repositories: [
+          {
+            id: 101,
+            owner: 'acme',
+            name: 'app',
+            fullName: 'acme/app',
+            private: true,
+            defaultBranch: 'main',
+            pushedAt: '2026-11-13T00:00:00Z',
+          },
+        ],
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    const recent = await integration.listInstallationRepos(7, { limit: 8 });
+
+    expect(recent).toEqual([
+      expect.objectContaining({ fullName: 'acme/app', installationId: 7, pushedAt: '2026-11-13T00:00:00Z' }),
+    ]);
+    expect(new URL(String(fetchImpl.mock.calls[0]![0])).searchParams.get('limit')).toBe('8');
+    await integration.listInstallationRepos(7);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 
   it('evicts the oldest installation listing once the cache bound is reached', async () => {

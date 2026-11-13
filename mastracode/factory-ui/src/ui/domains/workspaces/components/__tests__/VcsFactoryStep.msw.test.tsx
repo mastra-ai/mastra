@@ -124,6 +124,38 @@ describe('VCS Factory step', () => {
     expect(queries).toEqual(['jal']);
   });
 
+  it('opens on a few recently pushed repositories and searches the server for the rest once typing starts', async () => {
+    const requests: Array<{ q: string | null; limit: string | null }> = [];
+    const recent = Array.from({ length: 8 }, (_, index) => ({
+      ...repo,
+      id: index + 1,
+      name: `recent-${index}`,
+      fullName: `acme/recent-${index}`,
+    }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(connectedGithub)),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, ({ request }) => {
+        const params = new URL(request.url).searchParams;
+        requests.push({ q: params.get('q'), limit: params.get('limit') });
+        return HttpResponse.json({
+          repos: params.get('q') ? [{ ...repo, id: 99, name: 'old-tool', fullName: 'acme/old-tool' }] : recent,
+        });
+      }),
+    );
+
+    const { client } = renderStep();
+
+    expect(await screen.findByText('acme/recent-0')).toBeInTheDocument();
+    expect(screen.getByText(/most recently pushed repositories/)).toBeInTheDocument();
+    expect(requests).toEqual([{ q: null, limit: '8' }]);
+
+    await userEvent.type(screen.getByLabelText('Search repositories'), 'old');
+    expect(await screen.findByText('acme/old-tool', {}, { timeout: 2000 })).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(requests.at(-1)).toEqual({ q: 'old', limit: '50' });
+    expect(screen.queryByText(/most recently pushed repositories/)).not.toBeInTheDocument();
+  });
+
   it('offers Retry when the repository list fails to load', async () => {
     let calls = 0;
     server.use(

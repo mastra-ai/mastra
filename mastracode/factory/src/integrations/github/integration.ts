@@ -107,6 +107,27 @@ export interface RepoSummary {
   defaultBranch: string;
   private: boolean;
   installationId: number;
+  /** When the repository last received a push, for "most recent first" ordering. */
+  pushedAt?: string | null;
+}
+
+/**
+ * Narrows a repository listing: `query` keeps names containing it, `limit`
+ * returns only that many, most recently pushed first.
+ */
+export interface RepoListOptions {
+  fresh?: boolean;
+  query?: string;
+  limit?: number;
+}
+
+/** Repositories whose full name contains `query`, most recently pushed first, at most `limit`. */
+export function narrowRepos(repos: RepoSummary[], query = '', limit?: number): RepoSummary[] {
+  const needle = query.trim().toLowerCase();
+  return repos
+    .filter(repo => repo.fullName.toLowerCase().includes(needle))
+    .sort((a, b) => (b.pushedAt ?? '').localeCompare(a.pushedAt ?? ''))
+    .slice(0, limit);
 }
 
 export interface GithubTriageCommentUpsertInput {
@@ -575,15 +596,16 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * List repos accessible to an installation (paginated). Always reads
-   * GitHub directly, so `fresh` has nothing to bypass here.
+   * List repos accessible to an installation (paginated), narrowed by
+   * `query`/`limit`. Always reads GitHub directly, so `fresh` has nothing to
+   * bypass here.
    */
-  async listInstallationRepos(installationId: number, _options?: { fresh?: boolean }): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, options?: RepoListOptions): Promise<RepoSummary[]> {
     const octokit = this.getInstallationOctokit(installationId);
     const repos = await octokit.paginate(octokit.apps.listReposAccessibleToInstallation, {
       per_page: 100,
     });
-    return repos.map(repo => ({
+    const summaries: RepoSummary[] = repos.map(repo => ({
       id: repo.id,
       fullName: repo.full_name,
       name: repo.name,
@@ -591,7 +613,9 @@ export class GithubIntegration implements FactoryIntegration {
       defaultBranch: repo.default_branch,
       private: repo.private,
       installationId,
+      pushedAt: repo.pushed_at ?? null,
     }));
+    return options?.query || options?.limit ? narrowRepos(summaries, options.query, options.limit) : summaries;
   }
 
   /**
