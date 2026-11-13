@@ -2,8 +2,7 @@ import { expect, it } from 'vitest';
 import { createObservabilityDraftSchemas } from '../dashboards';
 import type { ObservabilityWidgetDraft } from '../dashboards';
 
-// The widgets Mastra Cloud's chat writes and its widget editor opens with nothing locked
-// (platform `widget-editor/chat-parity.test.ts`).
+// Widgets a chat writes and a form editor opens with nothing locked.
 const INPUT = 'mastra_model_total_input_tokens';
 const OUTPUT = 'mastra_model_total_output_tokens';
 const AGENT_DURATION = 'mastra_agent_duration_ms';
@@ -15,8 +14,6 @@ const compared = (name: string[]) => ({
   compare: 'previousWindow' as const,
 });
 
-// Widgets as the chat writes them (services/observability-mcp/src/widget-tool.ts `PRESETS`, plus
-// the shapes its free-form tool accepts), stored through the chat's own converter.
 const DRAFTS = {
   overview: {
     id: 'overview',
@@ -359,7 +356,7 @@ it('rejects formulas the editor has no preset for', () => {
   const issues = issuesOf(chart([three, nested, constant, max, coalesce, share].map(value => line(value))));
   expect(issues).toHaveLength(6);
   issues.forEach((issue, i) =>
-    expect(issue).toMatch(new RegExp(`^timeseries\\.series\\.${i}\\.value: The widget editor edits`)),
+    expect(issue).toMatch(new RegExp(`^timeseries\\.series\\.${i}\\.value: The editor edits`)),
   );
 });
 
@@ -460,10 +457,10 @@ it('leaves out the chart settings the editor does not hold', () => {
   );
   expect(free.safeParse(draft).success).toBe(true);
   expect(issuesOf(draft)).toEqual([
-    'timeseries.series.0: Unrecognized key: "rangeTotal"',
-    'timeseries.total.value: Invalid option: expected one of "total"|"peak"',
-    'timeseries.total: Unrecognized key: "format"',
-    'timeseries: Unrecognized key: "emptyWhenZero"',
+    'timeseries.emptyWhenZero: Leave `emptyWhenZero` out: the editor shows a chart empty when every plotted value is zero.',
+    "timeseries.total.format: Leave `format` out: the total takes the chart's format.",
+    'timeseries.total.value: Set the total to `total` or `peak`: the editor offers no other.',
+    "timeseries.series.0.rangeTotal: Leave `rangeTotal` out: use the chart's `total` instead.",
   ]);
 });
 
@@ -513,7 +510,6 @@ it('keeps a table to its name, value and change columns', () => {
   expect(issuesOf(table([{ name: {} }, { value: { format: 'usd', ...cost } }], { groupBy: ['status'] }))).toEqual([
     expect.stringMatching(/^table\.groupBy: The rows group by one of/),
   ]);
-  // Dimension columns and `unpricedWhen` aren't in the editable schema at all.
   const byProvider = { groupBy: ['provider', 'model'] };
   const dimension = table(
     [{ name: {} }, { dimension: { dimension: 'provider' } }, { value: { format: 'usd', ...cost } }],
@@ -521,7 +517,7 @@ it('keeps a table to its name, value and change columns', () => {
   );
   expect(free.safeParse(dimension).success).toBe(true);
   expect(issuesOf(dimension)).toEqual([
-    'table.columns.1: A column takes exactly one of `name`, `value`, `change`, not `dimension`',
+    'table.columns.1.dimension: Name rows with the `name` column only: the editor has no `dimension` column.',
   ]);
   const unpriced = table([
     { name: {} },
@@ -530,8 +526,45 @@ it('keeps a table to its name, value and change columns', () => {
   ]);
   expect(free.safeParse(unpriced).success).toBe(true);
   expect(issuesOf(unpriced)).toEqual([
-    'table.columns.1: Unrecognized key: "id"',
-    'table.columns.2.value: Unrecognized key: "unpricedWhen"',
+    'table.columns.1.id: Leave `id` out: the editor names its columns itself.',
+    'table.columns.2.value.unpricedWhen: Leave `unpricedWhen` out: the editor has no such setting.',
+  ]);
+});
+
+it('accepts every trace measure, as the editor lists each one', () => {
+  const measures = ['duration.p90', 'timeToFirstToken.p99', 'tokens.cached.avg', 'countDistinct.threadId'];
+  const kpis = {
+    kpis: {
+      items: measures.map(measure => ({ label: measure, format: 'count', value: { traceAggregate: { measure } } })),
+    },
+  };
+  expect(issuesOf(kpis)).toEqual([]);
+});
+
+it('keeps percentile reads off KPIs', () => {
+  const kpis = {
+    kpis: {
+      items: [
+        {
+          label: 'P95',
+          format: 'duration',
+          value: { metricPercentiles: { name: AGENT_DURATION, percentile: 0.95 } },
+        },
+      ],
+    },
+  };
+  expect(free.safeParse(kpis).success).toBe(false);
+  expect(issuesOf(kpis)).toEqual([expect.stringMatching(/^kpis\.items\.0\.value: /)]);
+});
+
+it('accepts table rows grouped under a row label, which the editor keeps', () => {
+  const cost = { metricBreakdown: { name: [INPUT, OUTPUT], aggregation: 'sum', field: 'estimatedCost' } };
+  const table = (groupBy: string[]) => ({
+    table: { groupBy, columns: [{ name: {} }, { value: { format: 'usd', ...cost } }] },
+  });
+  expect(issuesOf(table(['projectId', 'model']))).toEqual([]);
+  expect(issuesOf(table(['model', 'projectId']))).toEqual([
+    expect.stringMatching(/^table\.groupBy: The rows group by one of/),
   ]);
 });
 

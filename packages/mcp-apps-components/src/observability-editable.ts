@@ -1,5 +1,5 @@
 /**
- * What keeps a draft to the shapes Mastra Cloud's widget editor reads back and saves unchanged, for
+ * What keeps a draft to the shapes a form editor reads back and saves unchanged, for
  * `createObservabilityDraftSchemas(catalog, { editable: true })`. The editor offers a fixed set of
  * figures, formulas, filters and splits; a draft written outside them opens with the parts it
  * can't hold locked, or loses them on save. Checked on the draft, so each issue points at what the
@@ -172,10 +172,7 @@ class View {
       return [rate];
     }
     if (!refs.length) {
-      this.add(
-        path,
-        `The widget editor edits ${FORMULAS}${errorRate ? `, or ${ERROR_RATE}` : ''}. Write one of those.`,
-      );
+      this.add(path, `The editor edits ${FORMULAS}${errorRate ? `, or ${ERROR_RATE}` : ''}. Write one of those.`);
       return [];
     }
     for (const r of refs) this.ref(r);
@@ -276,8 +273,23 @@ function kpisIssues(draft: Json) {
 
 function timeseriesIssues(draft: Json) {
   const view = new View();
+  if (draft.emptyWhenZero !== undefined)
+    view.add(
+      ['emptyWhenZero'],
+      'Leave `emptyWhenZero` out: the editor shows a chart empty when every plotted value is zero.',
+    );
+  if (isObject(draft.total)) {
+    if (draft.total.format !== undefined)
+      view.add(['total', 'format'], "Leave `format` out: the total takes the chart's format.");
+    if (draft.total.value !== 'total' && draft.total.value !== 'peak')
+      view.add(['total', 'value'], 'Set the total to `total` or `peak`: the editor offers no other.');
+  }
   const series = draft.series as Json[];
-  const valueRefs = series.map((item, i) => view.value(item.value, ['series', i, 'value'], true));
+  const valueRefs = series.map((item, i) => {
+    if (item.rangeTotal !== undefined)
+      view.add(['series', i, 'rangeTotal'], "Leave `rangeTotal` out: use the chart's `total` instead.");
+    return view.value(item.value, ['series', i, 'value'], true);
+  });
   view.noTraceGroupBy();
   for (const { args, path } of view.refs) {
     if (args.compare !== undefined) view.add([...path, 'compare'], "A chart doesn't compare with the window before.");
@@ -352,7 +364,9 @@ function tableIssues(draft: Json) {
   const view = new View();
   const columns = draft.columns as Json[];
   const groupBy = draft.groupBy as string[];
-  const types = columns.map(column => ['name', 'value', 'change'].find(type => column[type] !== undefined));
+  const types = columns.map(column =>
+    ['name', 'dimension', 'value', 'change'].find(type => column[type] !== undefined),
+  );
   if (types[0] !== 'name' || types.lastIndexOf('name') !== 0)
     view.add(['columns'], 'Start with one `name` column, then the value columns, then at most one `change` column.');
   const change = types.indexOf('change');
@@ -360,10 +374,18 @@ function tableIssues(draft: Json) {
     view.add(['columns', change], 'One `change` column comes last.');
   columns.forEach((column, i) => {
     const type = types[i];
+    if (type === 'dimension')
+      view.add(
+        ['columns', i, 'dimension'],
+        'Name rows with the `name` column only: the editor has no `dimension` column.',
+      );
+    if (column.id !== undefined) view.add(['columns', i, 'id'], 'Leave `id` out: the editor names its columns itself.');
     if (column.sort !== undefined && type !== 'value')
       view.add(['columns', i, 'sort'], 'Only a value column sorts the table.');
     if (type !== 'value') return;
     const body = column.value as Json;
+    if (body.unpricedWhen !== undefined)
+      view.add(['columns', i, 'value', 'unpricedWhen'], 'Leave `unpricedWhen` out: the editor has no such setting.');
     const [key] = Object.keys(body).filter(
       k => READ_KEYS.includes(k) || ['const', 'sum', 'minus', 'ratio', 'max', 'coalesce'].includes(k),
     );
