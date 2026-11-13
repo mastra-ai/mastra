@@ -77,12 +77,33 @@ function openLargeBoard(count: number, stageOf: (index: number) => string = () =
   return { project, asked, refresh, dropLink, show };
 }
 
+/**
+ * The setup file's observer never notifies. This one reports the end of a phase in view as soon as
+ * it is observed, and keeps it there, like a browser holding a scroll anchored at the bottom.
+ */
+function keepPhaseEndsInView() {
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(private readonly notify: (entries: Array<{ isIntersecting: boolean }>) => void) {}
+      observe() {
+        this.notify([{ isIntersecting: true }]);
+      }
+      unobserve() {}
+      disconnect() {}
+    },
+  );
+}
+
 const cardIds = (from: number, to: number) =>
   Array.from({ length: to - from + 1 }, (_, offset) => largeCardId(from + offset));
 
 describe('The board of a large project', () => {
   beforeEach(mockBoardRowLayout);
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it('opens on the count of every card of a phase and its first cards only, in one read', async () => {
     const { asked } = openLargeBoard(250);
@@ -111,6 +132,39 @@ describe('The board of a large project', () => {
     fireEvent.scroll(boardViewport(), { target: { scrollTop: 60 * 48 } });
     expect(await screen.findByRole('article', { name: 'Large task 189' })).toBeInTheDocument();
     expect(asked.wholeBoards).toBe(0);
+  });
+
+  it('keeps listing a phase deeper while its end stays in view, until it lists every card', async () => {
+    keepPhaseEndsInView();
+    const { asked } = openLargeBoard(250);
+
+    expect(await screen.findByRole('button', { name: 'Triage, 250' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(asked.listings.map(listing => listing.getAll('window'))).toEqual([
+        [],
+        ['triage:100'],
+        ['triage:200'],
+        ['triage:400'],
+      ]),
+    );
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more cards' })).not.toBeInTheDocument());
+    expect(screen.queryByRole('status', { name: 'Loading more cards' })).not.toBeInTheDocument();
+  });
+
+  it('asks once for a deeper list that fails, and does not ask again on its own', async () => {
+    keepPhaseEndsInView();
+    const { asked } = openLargeBoard(250);
+    server.use(
+      http.get(`${TEST_BASE_URL}${PHASES_PATH}`, ({ request }) =>
+        new URL(request.url).searchParams.has('window')
+          ? HttpResponse.json({ error: 'down' }, { status: 500 })
+          : undefined,
+      ),
+    );
+
+    expect(await screen.findByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(asked.listings.filter(listing => listing.has('window'))).toHaveLength(1);
   });
 
   it('lists a second phase deeper while the first one is still being read', async () => {

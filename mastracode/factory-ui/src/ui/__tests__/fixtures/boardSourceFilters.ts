@@ -1,4 +1,3 @@
-import type { GithubIssue } from '../../domains/factory/services/factory';
 import type { LinearProject } from '../../domains/factory/services/linear';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 
@@ -47,17 +46,6 @@ export const sourceCards: WorkItem[] = [
   card('50', 'GitHub: update dependencies', 'github-issue', 'planning'),
   card('manual', 'Manual follow-up', 'manual', 'intake'),
 ];
-
-export const githubIssue: GithubIssue = {
-  number: 42,
-  title: 'GitHub: improve error messages',
-  url: 'https://github.com/acme/app/issues/42',
-  author: 'alice',
-  labels: ['feature'],
-  comments: 0,
-  createdAt: now,
-  updatedAt: now,
-};
 
 function wireSourceCard({ githubProjectId, source, sourceKey, url, ...item }: WorkItem) {
   const base = { ...item, factoryProjectId: githubProjectId };

@@ -82,12 +82,6 @@ function serialWrite<TCache, TVariables>(
   };
 }
 
-// Only the GitLab issue feed is listed under intake config and bindings: GitHub's reads neither,
-// and the other providers' issues reach the board as cards the server files.
-function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
-  if (integrationId === 'gitlab') void queryClient.invalidateQueries({ queryKey: queryKeys.gitlabIssuesAll(baseUrl) });
-}
-
 export function useSaveIntakeSelectionMutation(
   integrationId: string,
   callbacks?: IntakeWriteCallbacks<IntakeSelection>,
@@ -107,7 +101,6 @@ export function useSaveIntakeSelectionMutation(
     onMutate: write.optimistic,
     onSuccess: (saved, selection) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, integrationId);
       callbacks?.onSaved?.(selection);
     },
     onError: (error, selection, context) => {
@@ -137,7 +130,6 @@ export function useSaveIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<In
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -163,7 +155,6 @@ export function useDeleteIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<
     onMutate: write.optimistic,
     onSuccess: (saved, binding) => {
       write.settle(saved);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding, context) => {
@@ -189,7 +180,6 @@ export function useAddIntakeBindingMutation(callbacks?: IntakeWriteCallbacks<Int
     mutationFn: (binding: IntakeBindingWrite) => saveIntakeBinding(baseUrl, binding),
     onSuccess: (saved, binding) => {
       write.confirm(saved, binding);
-      invalidateIssueFeed(queryClient, baseUrl, binding.integrationId);
       callbacks?.onSaved?.(binding);
     },
     onError: (error, binding) => {

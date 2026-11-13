@@ -62,24 +62,16 @@ export const queryKeys = {
   githubStatus: () => ['github', 'status'] as const,
   githubPat: () => ['github', 'pat'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (projectRepositoryIds: readonly string[], label?: string) =>
-    ['github', 'issues', projectRepositoryIds, label ?? null] as const,
   githubIssue: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'issue', githubProjectId ?? null, number ?? null] as const,
-  githubPulls: (projectRepositoryIds: readonly string[]) => ['github', 'prs', projectRepositoryIds] as const,
   githubPull: (githubProjectId: string | undefined, number: number | undefined) =>
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
-  gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
-  gitlabIssues: (baseUrl: string, factoryProjectId: string | undefined) =>
-    [...queryKeys.gitlabIssuesAll(baseUrl), factoryProjectId ?? null] as const,
   gitlabIssue: (baseUrl: string, factoryProjectId: string | undefined, issueId: string | undefined) =>
     ['gitlab', 'issue', baseUrl, factoryProjectId ?? null, issueId ?? null] as const,
-  gitlabPulls: (baseUrl: string, factoryProjectId: string | undefined, projectRepositoryId: string | undefined) =>
-    ['gitlab', 'prs', baseUrl, factoryProjectId ?? null, projectRepositoryId ?? null] as const,
   gitlabPull: (
     baseUrl: string,
     factoryProjectId: string | undefined,
@@ -113,10 +105,6 @@ export const queryKeys = {
     [...queryKeys.workItems(factoryProjectId), 'sessions'] as const,
   unstartedWorkItems: (factoryProjectId: string | undefined, search: string) =>
     [...queryKeys.workItems(factoryProjectId), 'unstarted', search] as const,
-  workItemsFiledFromAny: (factoryProjectId: string | undefined) =>
-    [...queryKeys.workItems(factoryProjectId), 'sources'] as const,
-  workItemsFiledFrom: (factoryProjectId: string | undefined, sources: readonly string[]) =>
-    [...queryKeys.workItemsFiledFromAny(factoryProjectId), sources] as const,
   /** Every view of one board the tab holds. */
   boardPhases: (factoryProjectId: string | undefined, board: string) =>
     [...queryKeys.workItems(factoryProjectId), 'phases', board] as const,

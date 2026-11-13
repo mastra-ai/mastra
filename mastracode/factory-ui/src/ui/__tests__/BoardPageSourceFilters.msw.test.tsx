@@ -14,7 +14,7 @@ import {
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import type { IntakeConfig, IntakeSourceBinding } from '../domains/factory/services/intake';
-import { githubIssue, linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
+import { linearProjects, wireSourceCards } from './fixtures/boardSourceFilters';
 import {
   docsWatchId,
   hostedCards,
@@ -54,12 +54,6 @@ function stubSources() {
       HttpResponse.json({ enabled: true, connected: true, workspace: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/linear/projects`, () => HttpResponse.json({ projects: linearProjects })),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-      HttpResponse.json({
-        issues: new URL(request.url).searchParams.has('label') ? [] : [githubIssue],
-        nextPage: null,
-      }),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: wireSourceCards }),
     ),
@@ -211,8 +205,6 @@ describe('Board source and Linear project filters', () => {
     expect(await intake.findByText('Portal: add account switcher')).toBeInTheDocument();
     expect(intake.getByText('Jira: rotate signing keys')).toBeInTheDocument();
     expect(intake.getByText('incident.io: add failover alert')).toBeInTheDocument();
-    // GitHub is still listed: its issue has no card yet.
-    expect(await intake.findByText('GitHub: improve error messages')).toBeInTheDocument();
     await waitForMutationsIdle(view.client);
     expect(listRequests).toEqual([]);
   });
@@ -301,34 +293,6 @@ describe('Board source and Linear project filters', () => {
     await expectPortalView();
   });
 
-  it('hides a repository-scoped candidate already filed with a legacy key when source filters combine feeds', async () => {
-    stubSources();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label') ? [] : [{ ...githubIssue, repositoryId: 987 }],
-          nextPage: null,
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({
-          workItems: wireSourceCards.map(item => {
-            if (item.id !== '50' || !item.externalSource) return item;
-            return {
-              ...item,
-              externalSource: { ...item.externalSource, externalId: 'github-issue:42', url: githubIssue.url },
-            };
-          }),
-        }),
-      ),
-    );
-    const view = renderBoard('?source=github&source=linear');
-    await waitForMutationsIdle(view.client);
-    await screen.findByText('Portal: add account switcher');
-    expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
-    expect(screen.queryByText('GitHub: improve error messages')).not.toBeInTheDocument();
-  });
-
   it('restores a project-only URL and combines it with an existing label filter', async () => {
     stubSources();
     const view = renderBoard('?linearProject=project-a&label=feature');
@@ -350,7 +314,6 @@ describe('Board source and Linear project filters', () => {
     await waitForMutationsIdle(view.client);
     await selectMany('Intake source', ['GitHub', 'Linear']);
     await screen.findByText('Portal: add account switcher');
-    expect(screen.getByText('GitHub: improve error messages')).toBeInTheDocument();
     expect(screen.getByText('GitHub: update dependencies')).toBeInTheDocument();
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
     await selectMany('Intake source', ['GitHub', 'Linear']);
@@ -377,13 +340,8 @@ describe('Board source and Linear project filters', () => {
     expect(screen.queryByText('Manual follow-up')).not.toBeInTheDocument();
   });
 
-  it('explains that filters excluded Intake candidates instead of suggesting an integration setup', async () => {
+  it('explains that filters excluded Intake cards instead of suggesting an integration setup', async () => {
     stubSources();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [] }),
-      ),
-    );
     const view = renderBoard('?source=jira');
     await waitForMutationsIdle(view.client);
     await within(screen.getByTestId('board-column-intake')).findByText('No work items match filters');

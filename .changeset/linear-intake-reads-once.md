@@ -2,4 +2,4 @@
 'mastra': patch
 ---
 
-Reduced provider requests from the Factory board. The board no longer asks Linear, Jira or incident.io for their issue lists, and reads the GitHub and GitLab lists when it opens or its tab regains focus instead of every 30 seconds. Linear, Jira and incident.io issues now reach the board only as cards the server files, so an open issue with no card no longer appears in Intake until it next changes at the provider.
+Reduced provider requests from the Factory board and search. The board and ⌘K search now show only cards, read from Factory, and never ask GitHub, GitLab, Linear, Jira or incident.io for their issue or pull request lists. New issues and pull requests reach the board as cards the server files. An open issue or pull request with no card no longer appears in Intake or search until the server files it as a card.

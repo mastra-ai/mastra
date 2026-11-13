@@ -298,81 +298,6 @@ async function expectTooltipParts(parts: string[]) {
 }
 
 describe('Board card pending states', () => {
-  it('shows a GitHub candidate alongside persisted and manual issues in Work intake', async () => {
-    const githubIssue: GithubIssue = {
-      number: 42,
-      title: 'Investigate GitHub intake failure',
-      url: 'https://github.com/acme/app/issues/42',
-      author: 'octocat',
-      labels: ['status: auto-triaged'],
-      comments: 0,
-      createdAt: '2026-08-01T00:00:00Z',
-      updatedAt: '2026-08-01T00:00:00Z',
-    };
-    const githubWorkItem = {
-      ...manualWorkItem,
-      id: 'github-intake-item',
-      externalSource: {
-        integrationId: 'github',
-        type: 'issue',
-        externalId: 'github-issue:99',
-        url: 'https://github.com/acme/app/issues/99',
-      },
-      title: 'Persisted GitHub intake item',
-    };
-    const linearWorkItem = {
-      ...manualWorkItem,
-      id: 'linear-intake-item',
-      externalSource: {
-        integrationId: 'linear',
-        type: 'issue',
-        externalId: 'linear-issue:ENG-99',
-        url: 'https://linear.app/acme/issue/ENG-99',
-      },
-      title: 'Persisted Linear intake item',
-    };
-
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-        HttpResponse.json({ workItems: [githubWorkItem, linearWorkItem, manualWorkItem] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            linear: { enabled: true, sourceIds: ['linear-project-1'] },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
-        HttpResponse.json({
-          bindings: [
-            { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: FACTORY_ID, board: 'work' },
-          ],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
-        HttpResponse.json({ enabled: true, connected: true, workspace: { name: 'Acme', urlKey: 'acme' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label') ? [githubIssue] : [],
-          nextPage: null,
-        }),
-      ),
-    );
-
-    const { client } = renderWorkBoard();
-
-    await waitForMutationsIdle(client);
-    expect(await screen.findByText('Investigate GitHub intake failure')).toBeVisible();
-    expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
-    expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
-    expect(screen.getByText('Plan onboarding')).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
-  });
-
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
     const { transitionGate } = stubBoardEndpoints();
     const user = userEvent.setup();
@@ -999,38 +924,6 @@ describe('Board card pending states', () => {
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   });
 
-  it('offers "Open in GitHub" on unfiled Intake candidates', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) =>
-        HttpResponse.json({
-          issues: new URL(request.url).searchParams.has('label')
-            ? []
-            : [
-                {
-                  number: 43,
-                  title: 'Unfiled GitHub intake issue',
-                  url: 'https://github.com/acme/app/issues/43',
-                  author: 'octocat',
-                  labels: [],
-                  comments: 0,
-                  createdAt: '2026-07-28T00:00:00.000Z',
-                  updatedAt: '2026-07-28T00:00:00.000Z',
-                },
-              ],
-          nextPage: null,
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    await user.click(await screen.findByRole('button', { name: 'Actions for Unfiled GitHub intake issue' }));
-    const githubLink = await screen.findByRole('menuitem', { name: 'Open in GitHub' });
-    expect(githubLink).toHaveAttribute('href', 'https://github.com/acme/app/issues/43');
-    expect(githubLink).toHaveAttribute('target', '_blank');
-  });
-
   it('identifies Slack-created work items as Slack instead of Manual', async () => {
     stubBoardEndpoints();
     server.use(
@@ -1314,34 +1207,6 @@ describe('Board card pending states', () => {
     );
     expect(await within(planningColumn).findByText('Plan onboarding')).toBeInTheDocument();
     await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
-  });
-
-  it('offers Intake card creation while the external intake feed is still loading', async () => {
-    stubBoardEndpoints();
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
-        HttpResponse.json({
-          config: {
-            github: { enabled: true, sourceIds: ['acme/app'] },
-            linear: { enabled: false, sourceIds: null },
-          },
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async () => {
-        await delay('infinite');
-        return HttpResponse.json({ issues: [], nextPage: null });
-      }),
-    );
-    const user = userEvent.setup();
-    renderWorkBoard();
-
-    const intakeColumn = await screen.findByTestId('board-column-intake');
-    expect(await within(intakeColumn).findByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
-
-    await user.click(await screen.findByRole('button', { name: 'Create work item in Intake' }));
-    const composer = await within(intakeColumn).findByRole('form', { name: 'New work item in Intake' });
-    expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
-    expect(within(intakeColumn).getByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
   });
 
   it('keeps transition errors inline and retries the same manual work item', async () => {

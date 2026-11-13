@@ -1,4 +1,4 @@
-import { queryOptions, skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -7,8 +7,6 @@ import {
   fetchGitLabStatus,
   getGitLabMergeRequest,
   getGitLabIssue,
-  listGitLabMergeRequests,
-  listGitLabIssues,
 } from '../ui/domains/factory/services/gitlab';
 import { DETAIL_STALE_MS } from './useFactoryData';
 
@@ -30,21 +28,6 @@ export function useGitLabProjectsQuery(enabled: boolean) {
   });
 }
 
-export function useGitLabIssuesQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useInfiniteQuery({
-    queryKey: queryKeys.gitlabIssues(baseUrl, factoryProjectId),
-    queryFn: factoryProjectId
-      ? ({ pageParam }) => listGitLabIssues(baseUrl, factoryProjectId, pageParam || undefined)
-      : skipToken,
-    initialPageParam: '',
-    getNextPageParam: lastPage => lastPage.nextCursor,
-    enabled: factoryProjectId !== undefined,
-    select: data => data.pages.flatMap(page => page.issues),
-    refetchOnWindowFocus: true,
-  });
-}
-
 export function useGitLabIssueDetail(factoryProjectId: string | undefined, issueId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
@@ -54,25 +37,6 @@ export function useGitLabIssueDetail(factoryProjectId: string | undefined, issue
         ? () => getGitLabIssue(baseUrl, factoryProjectId, issueId)
         : skipToken,
     staleTime: DETAIL_STALE_MS,
-  });
-}
-
-export function useGitLabMergeRequestsQuery(
-  factoryProjectId: string | undefined,
-  projectRepositoryId: string | undefined,
-) {
-  const { baseUrl } = useApiConfig();
-  return useInfiniteQuery({
-    queryKey: queryKeys.gitlabPulls(baseUrl, factoryProjectId, projectRepositoryId),
-    queryFn:
-      factoryProjectId && projectRepositoryId
-        ? ({ pageParam }) => listGitLabMergeRequests(baseUrl, factoryProjectId, projectRepositoryId, pageParam)
-        : skipToken,
-    initialPageParam: 1,
-    getNextPageParam: lastPage => lastPage.nextPage,
-    enabled: Boolean(factoryProjectId && projectRepositoryId),
-    select: data => data.pages.flatMap(page => page.pullRequests),
-    refetchOnWindowFocus: true,
   });
 }
 
