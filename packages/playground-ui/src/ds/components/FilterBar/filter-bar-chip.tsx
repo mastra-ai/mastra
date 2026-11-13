@@ -455,14 +455,10 @@ function FieldEditor() {
   const [query, setQuery] = useState('');
 
   const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
-  const fields = useMemo(
-    () =>
-      ctx.fields.filter(field => {
-        if (field.rootOnly && !isRoot) return false;
-        return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
-      }),
-    [ctx.fields, ctx.items, chip.item.id, isRoot],
-  );
+  const fields = ctx.fields.filter(field => {
+    if (field.rootOnly && !isRoot) return false;
+    return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
+  });
 
   const onSelect = useCallback(
     (field: FilterBarField) => {
