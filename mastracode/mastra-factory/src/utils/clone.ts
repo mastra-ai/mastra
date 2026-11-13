@@ -1,3 +1,4 @@
+import { readdirSync, statSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { x } from 'tinyexec';
@@ -19,14 +20,19 @@ export function toPackageName(name: string): string {
   return cleaned || 'mastra-factory';
 }
 
-async function pathExists(filePath: string): Promise<boolean> {
+/**
+ * True when the template can be scaffolded at `targetPath`: the path doesn't
+ * exist yet, or it is an empty directory (e.g. the current directory).
+ */
+export function canScaffoldInto(targetPath: string): boolean {
+  let stat;
   try {
-    await fs.access(filePath);
-    return true;
+    stat = statSync(targetPath);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return true;
     throw error;
   }
+  return stat.isDirectory() && readdirSync(targetPath).every(entry => entry === '.DS_Store');
 }
 
 async function directoryExists(dirPath: string): Promise<boolean> {
@@ -38,8 +44,8 @@ async function directoryExists(dirPath: string): Promise<boolean> {
 }
 
 export async function cloneTemplate(repoUrl: string, targetPath: string): Promise<void> {
-  if (await pathExists(targetPath)) {
-    throw new Error(`Directory ${path.basename(targetPath)} already exists`);
+  if (!canScaffoldInto(targetPath)) {
+    throw new Error(`Directory ${path.basename(targetPath)} already exists and isn't empty`);
   }
 
   const tempRoot = await fs.mkdtemp(path.join(path.dirname(targetPath), `.${path.basename(targetPath)}-`));
@@ -76,10 +82,18 @@ export async function cloneTemplate(repoUrl: string, targetPath: string): Promis
       }
     }
 
-    if (await pathExists(targetPath)) {
-      throw new Error(`Directory ${path.basename(targetPath)} already exists`);
+    if (!canScaffoldInto(targetPath)) {
+      throw new Error(`Directory ${path.basename(targetPath)} already exists and isn't empty`);
     }
-    await fs.rename(tempTarget, targetPath);
+    if (await directoryExists(targetPath)) {
+      // Move the files in rather than replacing the directory, which may be the
+      // user's current working directory.
+      for (const entry of await fs.readdir(tempTarget)) {
+        await fs.rename(path.join(tempTarget, entry), path.join(targetPath, entry));
+      }
+    } else {
+      await fs.rename(tempTarget, targetPath);
+    }
   } finally {
     await fs.rm(tempRoot, { recursive: true, force: true });
   }
