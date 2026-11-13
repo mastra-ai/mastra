@@ -393,7 +393,7 @@ export function commandInCwd(command: string, cwd: string | undefined, workingDi
   const candidates = [target];
   if (base && cwd.startsWith('/') && !target.startsWith(`${base}/`)) candidates.push(posixPath.join(base, target));
   const branches = candidates.map(
-    (dir, i) => `${i === 0 ? 'if' : 'elif'} [ -d ${shellQuote(dir)} ]; then cd -- ${shellQuote(dir)}`,
+    (dir, i) => `${i === 0 ? 'if' : 'elif'} [ -d ${shellQuote(dir)} ]; then cd -- ${shellQuote(dir)} || exit 1`,
   );
   const tried = candidates.length > 1 ? ` (also tried ${candidates[1]})` : '';
   const notFound = shellQuote(`Working directory not found: ${target}${tried}`);

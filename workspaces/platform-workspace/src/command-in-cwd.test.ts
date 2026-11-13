@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { commandInCwd } from './sandbox.js';
 
@@ -18,11 +18,15 @@ function run(script: string, from: string): { status: number; stdout: string; st
 describe('commandInCwd', () => {
   let root: string;
   let workdir: string;
+  // Unique absolute names, so no directory on the host can shadow the fallback.
+  let name: string;
 
   beforeEach(() => {
     root = realpathSync(mkdtempSync(join(tmpdir(), 'cwd-')));
     workdir = join(root, 'workspace');
+    name = basename(root);
     mkdirSync(join(workdir, 'repo', 'src'), { recursive: true });
+    mkdirSync(join(workdir, name));
     mkdirSync(join(root, 'outside'));
   });
 
@@ -50,9 +54,9 @@ describe('commandInCwd', () => {
   });
 
   it('maps a missing absolute cwd under the working directory, like the file tools do', () => {
-    expect(run(commandInCwd('pwd', '/repo', workdir), workdir)).toMatchObject({
+    expect(run(commandInCwd('pwd', `/${name}`, workdir), workdir)).toMatchObject({
       status: 0,
-      stdout: join(workdir, 'repo'),
+      stdout: join(workdir, name),
     });
   });
 
@@ -60,10 +64,23 @@ describe('commandInCwd', () => {
     const result = run(commandInCwd('echo ran', 'nope', workdir), workdir);
     expect(result).toEqual({ status: 1, stdout: '', stderr: `Working directory not found: ${join(workdir, 'nope')}` });
 
-    const absolute = run(commandInCwd('echo ran', '/nope', workdir), workdir);
+    const missing = `${name}-nope`;
+    const absolute = run(commandInCwd('echo ran', `/${missing}`, workdir), workdir);
     expect(absolute.status).toBe(1);
     expect(absolute.stdout).toBe('');
-    expect(absolute.stderr).toBe(`Working directory not found: /nope (also tried ${join(workdir, 'nope')})`);
+    expect(absolute.stderr).toBe(`Working directory not found: /${missing} (also tried ${join(workdir, missing)})`);
+  });
+
+  it('does not run the command when the directory exists but cannot be entered', () => {
+    const locked = join(workdir, 'locked');
+    mkdirSync(locked, { mode: 0o000 });
+    try {
+      const result = run(commandInCwd('echo ran', 'locked', workdir), workdir);
+      expect(result.status).toBe(1);
+      expect(result.stdout).toBe('');
+    } finally {
+      chmodSync(locked, 0o755);
+    }
   });
 
   it('quotes directories with spaces and quotes', () => {

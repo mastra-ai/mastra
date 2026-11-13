@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 
 import { CommandsApiProcessManager } from '@internal/workspace';
 import type { CommandsApi, CommandsApiHandle } from '@internal/workspace';
@@ -201,15 +201,17 @@ describe('PlatformSandbox.processes', () => {
 
   it('runs a background process from a cwd relative to the working directory, and fails cleanly when it is missing', async () => {
     const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'workdir-')));
-    mkdirSync(join(workdir, 'repo'));
+    // Named after the unique temp dir, so no host directory can shadow the fallback.
+    const repo = basename(workdir);
+    mkdirSync(join(workdir, repo));
     try {
       const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease());
       const { sandbox } = makeSandbox(fetchMock, undefined, { workingDirectory: workdir });
 
-      const inRepo = await sandbox.processes!.spawn('pwd', { cwd: '/repo' });
+      const inRepo = await sandbox.processes!.spawn('pwd', { cwd: `/${repo}` });
       await inRepo.wait();
       expect(inRepo.exitCode).toBe(0);
-      expect(inRepo.stdout.trim()).toBe(join(workdir, 'repo'));
+      expect(inRepo.stdout.trim()).toBe(join(workdir, repo));
 
       const missing = await sandbox.processes!.spawn('echo ran', { cwd: 'nope' });
       await missing.wait();
