@@ -151,14 +151,24 @@ function errorCode(errors: GraphqlErrorEntry[] | undefined): string | undefined 
 
 /** A transport that POSTs straight to Linear with an OAuth access token. */
 export function linearHttpTransport(accessToken: string): LinearGraphqlTransport {
+  return linearFetchTransport({ url: LINEAR_GRAPHQL_URL, headers: { authorization: `Bearer ${accessToken}` } });
+}
+
+/**
+ * A transport that POSTs to a Linear GraphQL endpoint with `fetch`: Linear
+ * itself, or a proxy that passes Linear's responses through unchanged.
+ */
+export function linearFetchTransport(options: {
+  url: string;
+  fetch?: typeof globalThis.fetch;
+  headers?: Record<string, string>;
+}): LinearGraphqlTransport {
   return async (query, variables) => {
-    const res = await fetch(LINEAR_GRAPHQL_URL, {
+    const send = options.fetch ?? fetch;
+    const res = await send(options.url, {
       method: 'POST',
       signal: AbortSignal.timeout(15_000),
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${accessToken}`,
-      },
+      headers: { 'content-type': 'application/json', ...options.headers },
       body: JSON.stringify({ query, variables }),
     });
     if (!res.ok) {

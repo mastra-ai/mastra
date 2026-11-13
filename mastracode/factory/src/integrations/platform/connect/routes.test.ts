@@ -56,7 +56,13 @@ function buildApp(
     fetch: fetchImpl,
   });
   const providers = ['jira', 'incident-io', 'gitlab', 'vanta'].map(integrationId => {
-    const binding = new PlatformConnectBinding({ integrationId, providerKeys: [integrationId], connect: client });
+    // As in production: these providers link the org's existing connections.
+    const binding = new PlatformConnectBinding({
+      integrationId,
+      providerKeys: [integrationId],
+      connect: client,
+      linkOrgConnectionsAtBoot: true,
+    });
     if (options.linkStore) void binding.ensureBootLinked(options.linkStore);
     return { provider: integrationId, integrationId, connectionIntegrationIds: [integrationId], binding };
   });
