@@ -7,11 +7,11 @@ description: "How Gateway bills requests, records usage, applies spend caps and 
 
 ## Pricing
 
-Gateway uses prepaid credit. Each model's price is published in the catalog, and a model is listed in [`/v1/models`](/docs/gateway/api/models) only when it has a price.
+Gateway uses prepaid credit. Each model's price is published in the catalog, and a model is listed in [`/v1/models`](/docs/mastra-platform/gateway/api/models) only when it has a price.
 
 - You pay for the attempt that served you. Failed attempts on routes Gateway moved away from aren't charged.
 - Web search calls and generated images are priced separately. Images are charged only when delivered.
-- Requests over a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key) are billed by your provider, not from Mastra credit.
+- Requests over a [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key) are billed by your provider, not from Mastra credit.
 
 When credit runs out, requests return `402` with `insufficient_credit`. Add credits or turn on auto top-up in **Billing** at [projects.mastra.ai](https://projects.mastra.ai).
 
@@ -44,13 +44,13 @@ A rate-limited request returns `429` with these headers:
 | `x-gateway-rate-limit-scope` | `key`, `organization`, or `upstream_provider`. |
 | `x-gateway-rate-limit-dimension` | The limit that was hit. |
 
-`upstream_provider` means every eligible provider route is rate limiting. See [cooldowns](/docs/gateway/models-and-routing#failover).
+`upstream_provider` means every eligible provider route is rate limiting. See [cooldowns](/docs/mastra-platform/gateway/models-and-routing#failover).
 
 Request bodies can be up to 16 MiB.
 
 ## Errors
 
-Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/gateway/api/messages) uses the Anthropic shape.
+Errors use the OpenAI shape, `{ "error": { "type", "code", "message" } }`. [`/v1/messages`](/docs/mastra-platform/gateway/api/messages) uses the Anthropic shape.
 
 | Status | Common codes | Meaning |
 | - | - | - |

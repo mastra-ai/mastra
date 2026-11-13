@@ -10,7 +10,7 @@ POST https://gateway-api.mastra.ai/v1/images/generations
 POST https://gateway-api.mastra.ai/v1/images/edits
 ```
 
-Compatible with the OpenAI Images API. Replace `openai/YOUR_IMAGE_MODEL` with an image model from [`/v1/models`](/docs/gateway/api/models). The API has these limits:
+Compatible with the OpenAI Images API. Replace `openai/YOUR_IMAGE_MODEL` with an image model from [`/v1/models`](/docs/mastra-platform/gateway/api/models). The API has these limits:
 
 - Requests and responses are JSON. Multipart uploads aren't supported.
 - Each request returns one image as base64 (`b64_json`). `n` must be `1` if set.

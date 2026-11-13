@@ -39,12 +39,6 @@ const docsTabs = [
     href: '/docs/mastra-platform/overview',
     basePath: '/docs/mastra-platform',
   },
-  {
-    id: 'Gateway',
-    label: 'Gateway',
-    href: '/docs/gateway/overview',
-    basePath: '/docs/gateway',
-  },
 ]
 
 const matchesBasePath = (pathname: string, basePath: string) =>

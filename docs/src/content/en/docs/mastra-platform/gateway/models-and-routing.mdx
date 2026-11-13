@@ -7,7 +7,7 @@ description: "How Gateway names models, chooses a provider route, and fails over
 
 ## Model IDs
 
-Models use `provider/model` IDs, for example `__GATEWAY_OPENAI_MODEL__` or `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. [`GET /v1/models`](/docs/gateway/api/models) lists every ID available to your key. A model is listed in the catalog only when Gateway has a published price for it.
+Models use `provider/model` IDs, for example `__GATEWAY_OPENAI_MODEL__` or `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. [`GET /v1/models`](/docs/mastra-platform/gateway/api/models) lists every ID available to your key. A model is listed in the catalog only when Gateway has a published price for it.
 
 From a Mastra agent, add the `mastra/` prefix: `mastra/__GATEWAY_OPENAI_MODEL__`.
 
@@ -34,8 +34,8 @@ When a route fails with an eligible error, such as a timeout, a provider outage,
 
 These requests stay on one route and don't fail over:
 
-- Requests with a key that has failover turned off. See [Keys and BYOK](/docs/gateway/keys-and-byok#restrict-a-key).
-- Requests that use a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key).
-- [Responses](/docs/gateway/api/responses) continuations, which return to the provider that stored the response.
+- Requests with a key that has failover turned off. See [Keys and BYOK](/docs/mastra-platform/gateway/keys-and-byok#restrict-a-key).
+- Requests that use a [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key).
+- [Responses](/docs/mastra-platform/gateway/api/responses) continuations, which return to the provider that stored the response.
 
-You're charged only for the attempt that served you. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits).
+You're charged only for the attempt that served you. See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits).

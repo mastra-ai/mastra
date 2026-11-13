@@ -7,15 +7,15 @@ description: "Answers to common Gateway questions and fixes for common errors."
 
 ## How do I get started?
 
-Add credits in **Billing** at [projects.mastra.ai](https://projects.mastra.ai), create a key, and follow the [Quickstart](/docs/gateway/quickstart).
+Add credits in **Billing** at [projects.mastra.ai](https://projects.mastra.ai), create a key, and follow the [Quickstart](/docs/mastra-platform/gateway/quickstart).
 
 ## Why do I get `402`?
 
-Your organization is out of credit (`insufficient_credit`) or reached its Gateway spend cap (`spend_limit_reached`). Add credits, turn on auto top-up, or raise the cap. See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#pricing).
+Your organization is out of credit (`insufficient_credit`) or reached its Gateway spend cap (`spend_limit_reached`). Add credits, turn on auto top-up, or raise the cap. See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#pricing).
 
 ## Why do I get `401` with a key that starts with `msk_`?
 
-`msk_` keys belong to the previous Memory Gateway. Create a new `msk-gateway-` key. See [Migrate](/docs/gateway/migrate#from-mastra-memory-gateway).
+`msk_` keys belong to the previous Memory Gateway. Create a new `msk-gateway-` key. See [Migrate](/docs/mastra-platform/gateway/migrate#from-mastra-memory-gateway).
 
 ## Does Gateway store my prompts or conversations?
 
@@ -27,11 +27,11 @@ Check the `x-gateway-provider` response header, or find the request by `x-reques
 
 ## Am I charged for failed attempts?
 
-No. You pay for the attempt that served the request. See [Failover](/docs/gateway/models-and-routing#failover).
+No. You pay for the attempt that served the request. See [Failover](/docs/mastra-platform/gateway/models-and-routing#failover).
 
 ## Can I use my own provider account?
 
-Yes, with a [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key). The provider bills you directly, and those requests don't fail over.
+Yes, with a [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key). The provider bills you directly, and those requests don't fail over.
 
 ## Why isn't a model in `/v1/models`?
 

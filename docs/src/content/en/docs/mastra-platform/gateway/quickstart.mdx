@@ -83,7 +83,7 @@ MASTRA_GATEWAY_API_KEY="msk-gateway-..."
   </TabItem>
 </Tabs>
 
-Change the `model` value to call another provider, for example `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. List every available model with [`GET /v1/models`](/docs/gateway/api/models).
+Change the `model` value to call another provider, for example `__GATEWAY_ANTHROPIC_MODEL_SONNET__`. List every available model with [`GET /v1/models`](/docs/mastra-platform/gateway/api/models).
 
 The response includes an `x-request-id` header. Use it to find the request in your usage logs.
 
@@ -104,6 +104,6 @@ export const assistant = new Agent({
 
 ## Next steps
 
-- [Integrations](/docs/gateway/integrations): AI SDK, Anthropic SDK, LangGraph, Pydantic AI, and more
-- [Keys and BYOK](/docs/gateway/keys-and-byok): Restrict keys and use your own provider accounts
-- [Models and routing](/docs/gateway/models-and-routing): How Gateway picks a provider
+- [Integrations](/docs/mastra-platform/gateway/integrations): AI SDK, Anthropic SDK, LangGraph, Pydantic AI, and more
+- [Keys and BYOK](/docs/mastra-platform/gateway/keys-and-byok): Restrict keys and use your own provider accounts
+- [Models and routing](/docs/mastra-platform/gateway/models-and-routing): How Gateway picks a provider

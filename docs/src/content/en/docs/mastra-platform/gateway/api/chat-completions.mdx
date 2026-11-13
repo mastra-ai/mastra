@@ -31,10 +31,10 @@ Common fields:
 
 | Field | Description |
 | - | - |
-| `model` | Required. A `provider/model` ID from [`/v1/models`](/docs/gateway/api/models). |
+| `model` | Required. A `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models). |
 | `messages` | Required. System, developer, user, assistant, and tool messages. |
 | `stream` | Stream server-sent events. Set `stream_options.include_usage` to receive a final usage chunk. |
-| `tools`, `tool_choice` | Function tools, plus Gateway tools such as [web search](/docs/gateway/web-search). |
+| `tools`, `tool_choice` | Function tools, plus Gateway tools such as [web search](/docs/mastra-platform/gateway/web-search). |
 | `response_format` | Text, JSON object, or JSON schema output. |
 | `max_tokens`, `max_completion_tokens`, `temperature`, `top_p`, `stop`, `seed` | Standard sampling controls. |
 | `web_search_options` | Search context size and approximate user location for web search. |
@@ -56,7 +56,7 @@ for await (const chunk of stream) {
 }
 ```
 
-Gateway fails over only before the first chunk is sent. After streaming starts, an upstream error ends the stream. See [Models and routing](/docs/gateway/models-and-routing#failover).
+Gateway fails over only before the first chunk is sent. After streaming starts, an upstream error ends the stream. See [Models and routing](/docs/mastra-platform/gateway/models-and-routing#failover).
 
 ## Response headers
 
@@ -66,4 +66,4 @@ Gateway fails over only before the first chunk is sent. After streaming starts, 
 | `x-gateway-provider` | The provider that served the request. |
 | `x-gateway-project` | The project the key belongs to. Sent for project keys only. |
 
-See [Usage, pricing, and limits](/docs/gateway/usage-and-limits#errors) for error codes.
+See [Usage, pricing, and limits](/docs/mastra-platform/gateway/usage-and-limits#errors) for error codes.

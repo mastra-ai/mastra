@@ -17,8 +17,6 @@ export interface SectionConfig {
   contentDir: string
   sidebarPath: string
   sidebarKey: string
-  /** Additional sidebars in the same file whose pages count as linked */
-  extraSidebarKeys?: string[]
 }
 
 export const SECTIONS: SectionConfig[] = [
@@ -27,7 +25,6 @@ export const SECTIONS: SectionConfig[] = [
     contentDir: 'src/content/en/docs',
     sidebarPath: 'src/content/en/docs/sidebars.js',
     sidebarKey: 'docsSidebar',
-    extraSidebarKeys: ['gatewaySidebar'],
   },
   {
     name: 'integrations',
@@ -96,13 +93,6 @@ export async function validateSection(section: SectionConfig, rootDir: string): 
   }
 
   const sidebarIds = extractSidebarDocIds(items)
-  for (const key of section.extraSidebarKeys ?? []) {
-    const extra: SidebarItem[] | undefined = sidebars[key]
-    if (!extra || !Array.isArray(extra)) {
-      throw new Error(`${key} not found in ${section.sidebarPath}`)
-    }
-    for (const id of extractSidebarDocIds(extra)) sidebarIds.add(id)
-  }
   const mdxFiles = await collectMdxFiles(contentFullDir)
 
   const ghostPages: string[] = []

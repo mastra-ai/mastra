@@ -22,7 +22,7 @@ Point the client at Gateway and prefix model IDs with `openai/`:
 +  model: '__GATEWAY_OPENAI_MODEL_BASE__',
 ```
 
-To keep billing on your OpenAI account, add an OpenAI [BYOK connection](/docs/gateway/keys-and-byok#bring-your-own-key).
+To keep billing on your OpenAI account, add an OpenAI [BYOK connection](/docs/mastra-platform/gateway/keys-and-byok#bring-your-own-key).
 
 ## From Anthropic
 
@@ -41,9 +41,9 @@ The Anthropic SDK appends `/v1/messages` to its base URL, so set the base URL wi
 
 ## From OpenRouter or Vercel AI Gateway
 
-Both use `provider/model` IDs, so most model IDs carry over. Change the base URL to `https://gateway-api.mastra.ai/v1` and use a Gateway key. Check each model ID against [`GET /v1/models`](/docs/gateway/api/models), because provider naming can differ.
+Both use `provider/model` IDs, so most model IDs carry over. Change the base URL to `https://gateway-api.mastra.ai/v1` and use a Gateway key. Check each model ID against [`GET /v1/models`](/docs/mastra-platform/gateway/api/models), because provider naming can differ.
 
-Gateway accepts OpenRouter's `openrouter:web_search` tool without options. See [Web search](/docs/gateway/web-search).
+Gateway accepts OpenRouter's `openrouter:web_search` tool without options. See [Web search](/docs/mastra-platform/gateway/web-search).
 
 ## From Mastra Memory Gateway
 

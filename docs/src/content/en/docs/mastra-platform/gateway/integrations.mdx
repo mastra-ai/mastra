@@ -5,7 +5,7 @@ description: "Use Gateway with the Mastra framework, AI SDK, OpenAI and Anthropi
 
 # Integrations
 
-Any client that supports a custom OpenAI or Anthropic base URL works with Gateway. Set the base URL and your `msk-gateway-` key, then use a `provider/model` ID from [`/v1/models`](/docs/gateway/api/models). Each example reads the key from `MASTRA_GATEWAY_API_KEY`.
+Any client that supports a custom OpenAI or Anthropic base URL works with Gateway. Set the base URL and your `msk-gateway-` key, then use a `provider/model` ID from [`/v1/models`](/docs/mastra-platform/gateway/api/models). Each example reads the key from `MASTRA_GATEWAY_API_KEY`.
 
 ## Mastra framework
 
@@ -66,7 +66,7 @@ const completion = await client.chat.completions.create({
 })
 ```
 
-The same client works for [Responses](/docs/gateway/api/responses), [Embeddings](/docs/gateway/api/embeddings), and [Images](/docs/gateway/api/images).
+The same client works for [Responses](/docs/mastra-platform/gateway/api/responses), [Embeddings](/docs/mastra-platform/gateway/api/embeddings), and [Images](/docs/mastra-platform/gateway/api/images).
 
 ## OpenAI Python SDK
 
