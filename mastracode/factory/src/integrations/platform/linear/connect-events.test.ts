@@ -136,6 +136,32 @@ describe('handleLinearConnectEvent', () => {
     expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-a:project-a']);
   });
 
+  it("never updates another workspace's card that shares the issue's identifier", async () => {
+    // Org B's ENG-42 lives in a different Linear workspace: its card knows a different issue id.
+    const { deps, ingested } = stubDeps({ 'org-a:project-a': ['linear:ENG-42'] });
+    deps.workItems.listShared.mockImplementation(async ({ orgId }) =>
+      orgId === 'org-b'
+        ? [
+            {
+              id: 'card-b',
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+              workItem: { metadata: { linearIssueId: 'issue-in-workspace-2' } },
+            },
+          ]
+        : [
+            {
+              id: 'card-a',
+              externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+              workItem: { metadata: { linearIssueId: 'issue-1' } },
+            },
+          ],
+    );
+
+    await handleLinearConnectEvent(delivery(issueWebhook()), deps);
+
+    expect(ingested.map(input => `${input.orgId}:${input.factoryProjectId}`)).toEqual(['org-a:project-a']);
+  });
+
   it('dispatches nothing when no project tracks the issue', async () => {
     const { deps, ingested } = stubDeps({});
 

@@ -103,12 +103,13 @@ export async function handleLinearConnectEvent(
         sources: [{ integrationId: 'linear', type: 'issue', externalId: sourceKey }],
       });
       const items = await deps.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id });
-      const tracked = items.some(
-        item =>
-          item.externalSource?.integrationId === 'linear' &&
-          item.externalSource.type === 'issue' &&
-          (item.externalSource.externalId === sourceKey || item.workItem.metadata?.linearIssueId === issue.id),
-      );
+      const tracked = items.some(item => {
+        if (item.externalSource?.integrationId !== 'linear' || item.externalSource.type !== 'issue') return false;
+        // Identifiers like ENG-42 repeat across workspaces: a card that knows its issue's id must match it.
+        const issueId = item.workItem.metadata?.linearIssueId;
+        if (typeof issueId === 'string' && issueId.length > 0) return issueId === issue.id;
+        return item.externalSource.externalId === sourceKey;
+      });
       if (!tracked) continue;
       await deps.ingest({
         orgId: project.orgId,

@@ -582,6 +582,8 @@ describe('PlatformLinearIntegration', () => {
         unusable: [
           { connectionId: revoked, accountLabel: 'Acme', linearWorkspaceId: null, requiresFreshConnect: true },
         ],
+        // A provider 409 is a failed lookup, retried later, not a fresh connect.
+        unidentified: [{ connectionId: 'conn-workspace-2', error: expect.any(String) }],
       });
     });
 
@@ -711,6 +713,36 @@ describe('PlatformLinearIntegration', () => {
       status: 401,
       message: expect.stringContaining('fresh connect'),
     });
+  });
+
+  it('refuses to report an unscoped issue as gone while a connection fails to identify its workspace', async () => {
+    fake.connect(linearWorkspace());
+    fake.connect(linearWorkspace('workspace-2', { issues: [linearIssue({ id: 'issue-2', identifier: 'OPS-1' })] }));
+    fake.override('workspace-2', 'Viewer', () => ({ status: 503 }));
+    const integration = createIntegration();
+    await integration.migration.refreshStatus();
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-2' })).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining("didn't answer"),
+    });
+    fake.overrides.delete('workspace-2:Viewer');
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-2' })).resolves.toMatchObject({
+      id: 'issue-2',
+    });
+  });
+
+  it('stops counting a stale connection that needs a fresh connect once a newer one serves its workspace', async () => {
+    const stale = fake.connect(linearWorkspace(), {
+      connectionId: 'conn-stale',
+      connectedAt: '2026-10-01T00:00:00.000Z',
+    });
+    const integration = createIntegration();
+    await integration.migration.refreshStatus();
+    await integration.listWorkspaces(); // Factory has seen the stale connection serve workspace-1.
+    fake.setStatus(stale, 'needs_reauth');
+    fake.connect(linearWorkspace(), { connectionId: 'conn-fresh', connectedAt: '2026-11-01T00:00:00.000Z' });
+    integration.invalidateConnections();
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).resolves.toBeNull();
   });
 
   it('keeps a pre-migration reconcile from marking a card missing, so the post-migration reconcile refreshes it', async () => {

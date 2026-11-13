@@ -87,6 +87,8 @@ export interface LinearConnectionInventory {
   workspaces: LinearWorkspace[];
   duplicates: LinearDuplicateConnection[];
   unusable: LinearUnusableConnection[];
+  /** Active connections whose workspace lookup failed this time (5xx, rate limit, timeout); retried on the next read. */
+  unidentified: Array<{ connectionId: string; error: string }>;
 }
 
 type ProjectSource = { workspace: LinearWorkspace; project: LinearGraphqlProject };
@@ -152,6 +154,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     for (const key of this.#identities.keys()) if (!keys.has(key)) this.#identities.delete(key);
 
     const unusable: LinearUnusableConnection[] = [];
+    const unidentified: LinearConnectionInventory['unidentified'] = [];
     const identified: Array<{ connection: PlatformConnection; identity: LinearIdentity }> = [];
     await Promise.all(
       connections.map(async connection => {
@@ -161,10 +164,12 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
             return;
           } catch (error) {
             if (!(error instanceof PlatformConnectionNotConnectedError)) {
+              const message = error instanceof Error ? error.message : String(error);
               logPlatformWarn('Platform Linear could not identify a connection; it is skipped until it answers.', {
                 connectionId: connection.id,
-                error: error instanceof Error ? error.message : String(error),
+                error: message,
               });
+              unidentified.push({ connectionId: connection.id, error: message });
               return;
             }
           }
@@ -204,7 +209,8 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       }
     }
     unusable.sort((a, b) => a.connectionId.localeCompare(b.connectionId));
-    return { workspaces, duplicates, unusable };
+    unidentified.sort((a, b) => a.connectionId.localeCompare(b.connectionId));
+    return { workspaces, duplicates, unusable, unidentified };
   }
 
   /** The workspace an active project connection serves, or null when the project lists no such connection. */
@@ -635,9 +641,19 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
    * issue may live in one Factory can't see yet, and callers close cards on `null`.
    */
   async #assertEveryWorkspaceReachable(issueId: string): Promise<void> {
-    const pending = this.#unreachableWorkspaces();
-    const unusable = (await this.inventory()).unusable.length;
-    const reason = pending ?? (unusable > 0 ? `${unusable} Linear connection(s) need a fresh connect` : null);
+    const inventory = await this.inventory();
+    const served = new Set(inventory.workspaces.map(workspace => workspace.linearWorkspaceId));
+    // A connection needing a fresh connect hides nothing once another connection serves its workspace.
+    const unusable = inventory.unusable.filter(
+      connection => connection.linearWorkspaceId === null || !served.has(connection.linearWorkspaceId),
+    ).length;
+    const reason =
+      this.#unreachableWorkspaces() ??
+      (inventory.unidentified.length > 0
+        ? `${inventory.unidentified.length} Linear connection(s) didn't answer`
+        : unusable > 0
+          ? `${unusable} Linear connection(s) need a fresh connect`
+          : null);
     if (!reason) return;
     throw Object.assign(new Error(`Linear issue ${issueId} was not found in a reachable workspace: ${reason}.`), {
       status: 401,
