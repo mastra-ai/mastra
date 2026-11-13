@@ -236,7 +236,11 @@ export function parseError(error: unknown): ParsedError {
     };
   }
 
-  // Check for content filter errors
+  // Check for content filter / provider safety rejections. Anthropic rejects the
+  // whole request with a 400 ("Your request was rejected as a result of our
+  // safety system") rather than a refusal finish reason, so it lands here as a
+  // plain API error. Keep the provider's own wording in `detail` — otherwise the
+  // user only sees this generic line and has no idea what tripped the classifier.
   if (
     message.includes('content filter') ||
     message.includes('content_filter') ||
@@ -245,7 +249,10 @@ export function parseError(error: unknown): ParsedError {
     message.includes('prohibited')
   ) {
     return {
-      message: "Content was filtered by the model's safety system.",
+      message:
+        "The provider's safety system blocked this request. This is often a false positive on code, security, or credential-like text.",
+      detail: detail ?? extractErrorDetail(err),
+      requestUrl,
       type: 'content_filter',
       retryable: false,
       originalError: err,
