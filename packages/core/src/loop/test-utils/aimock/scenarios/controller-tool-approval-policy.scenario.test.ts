@@ -27,12 +27,14 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
   async function setup({
     tools,
     toolCategoryResolver = name => (name.startsWith('read') ? 'read' : name.startsWith('write') ? 'edit' : null),
+    defaultOptions,
   }: {
     tools: Record<string, ReturnType<typeof createTool>>;
     toolCategoryResolver?: AgentControllerConfig['toolCategoryResolver'];
+    defaultOptions?: Parameters<typeof createSharedAgent>[1]['defaultOptions'];
   }) {
     const llm = getMock();
-    const { agent } = await createSharedAgent(llm, { engine, tools });
+    const { agent } = await createSharedAgent(llm, { engine, tools, defaultOptions });
     const { controller, session } = await createTestSession({ agent, toolCategoryResolver });
     await session.thread.create();
     await session.permissions.setForCategory({ category: 'read', policy: 'allow' });
@@ -92,20 +94,25 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     });
   }
 
-  it('runs allowed calls without pausing, and two in one step at the same time', async () => {
-    const calls: string[] = [];
+  /** A `read_value` tool whose call `a` waits for call `b` to start, and gives up when they run one at a time. */
+  function overlapProbe(calls: string[]) {
     let releaseB!: () => void;
     const bStarted = new Promise<void>(resolve => (releaseB = resolve));
     let overlapped = false;
-    const readTool = recordingTool('read_value', calls, async name => {
+    const tool = recordingTool('read_value', calls, async name => {
       if (name === 'b') return releaseB();
-      // Call a waits for call b to start; it gives up after a while when the calls run one at a time.
       overlapped = await Promise.race([
         bStarted.then(() => true),
         new Promise<boolean>(resolve => setTimeout(() => resolve(false), 1_500)),
       ]);
     });
-    const env = await setup({ tools: { read_value: readTool } });
+    return { tool, overlapped: () => overlapped };
+  }
+
+  it('runs allowed calls without pausing, and two in one step at the same time', async () => {
+    const calls: string[] = [];
+    const probe = overlapProbe(calls);
+    const env = await setup({ tools: { read_value: probe.tool } });
     env.script([
       {
         toolCalls: [
@@ -123,11 +130,94 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
       expect(calls.sort()).toEqual(['read_value:a', 'read_value:b']);
       expect(env.approvalCards()).toEqual([]);
       expect(env.approvalRoundTrips).not.toHaveBeenCalled();
-      expect(overlapped).toBe(runsInParallel);
+      expect(probe.overlapped()).toBe(runsInParallel);
     } finally {
       await env.controller.destroy();
     }
   });
+
+  it("keeps the agent's numeric toolCallConcurrency limit, also after an approval resume", async () => {
+    const calls: string[] = [];
+    const probe = overlapProbe(calls);
+    const env = await setup({
+      tools: { read_value: probe.tool, write_value: recordingTool('write_value', calls) },
+      defaultOptions: { toolCallConcurrency: 1 },
+    });
+    env.session.subscribe(event => {
+      if (event.type === 'tool_approval_required') {
+        queueMicrotask(() => env.session.respondToToolApproval({ decision: 'approve', toolCallId: event.toolCallId }));
+      }
+    });
+    env.script([
+      { toolCalls: [{ id: 'call-write', name: 'write_value', arguments: { name: 'a' } }] },
+      {
+        toolCalls: [
+          { id: 'call-a', name: 'read_value', arguments: { name: 'a' } },
+          { id: 'call-b', name: 'read_value', arguments: { name: 'b' } },
+        ],
+      },
+      { content: 'done' },
+    ]);
+
+    try {
+      await env.send('Write a, then read a and b.');
+      await vi.waitFor(() => expect(calls).toHaveLength(3), { timeout: 15_000 });
+
+      expect(env.approvalCards()).toEqual(['call-write']);
+      expect(probe.overlapped()).toBe(false);
+    } finally {
+      await env.controller.destroy();
+    }
+  });
+
+  it.each([
+    { policy: 'ask' as const, cards: ['call-b'] },
+    { policy: 'deny' as const, cards: [] },
+  ])(
+    'judges a later call in a sequential step by a rule an earlier call changed to $policy',
+    async ({ policy, cards }) => {
+      const calls: string[] = [];
+      let env!: Awaited<ReturnType<typeof setup>>;
+      const readTool = recordingTool('read_value', calls, async name => {
+        if (name === 'a') await env.session.permissions.setForTool({ toolName: 'read_value', policy });
+      });
+      env = await setup({
+        tools: { read_value: readTool, write_value: recordingTool('write_value', calls) },
+      });
+      env.session.subscribe(event => {
+        if (event.type === 'tool_approval_required') {
+          queueMicrotask(() =>
+            env.session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId }),
+          );
+        }
+      });
+      // The write needs approval, so the step runs its calls one at a time.
+      env.script([
+        {
+          toolCalls: [
+            { id: 'call-a', name: 'read_value', arguments: { name: 'a' } },
+            { id: 'call-b', name: 'read_value', arguments: { name: 'b' } },
+            { id: 'call-write', name: 'write_value', arguments: { name: 'c' } },
+          ],
+        },
+        { content: 'done' },
+      ]);
+
+      try {
+        await env.send('Read a and b, then write c.');
+        await vi.waitFor(
+          () =>
+            expect(env.events).toContainEqual(expect.objectContaining({ type: 'tool_end', toolCallId: 'call-write' })),
+          { timeout: 15_000 },
+        );
+
+        expect(calls).toEqual(['read_value:a']);
+        expect(env.approvalCards()).toEqual([...cards, 'call-write']);
+      } finally {
+        await env.controller.destroy();
+      }
+    },
+  );
 
   it('asks only for the call the rules do not allow, and declining it adds no pause for allowed calls', async () => {
     const calls: string[] = [];

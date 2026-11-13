@@ -9,7 +9,7 @@ Fixed AgentController sessions pausing every tool call for approval and running 
 - Answering `ask_user` no longer turns off approval for the rest of the run.
 - On durable and evented agents, answering a suspended tool call from another thread now returns once the resumed run ends. It used to never return. Fixes #30150.
 - Runs on a thread the session no longer has open use that thread's permission rules. `session.resolveToolApproval(toolName, scope)` accepts a run's `RequestContext` as `scope` for this.
-- When a run resumes after an approval, a function `requireToolApproval` is evaluated again for the step's calls that had not run yet, so a rule changed while the run waited applies to them.
-- Controller runs set `toolCallConcurrency: { strategy: 'called' }`. A numeric `toolCallConcurrency` in the agent's `defaultOptions` is replaced by it; use `{ limit }` to keep your limit.
+- When a step runs its calls one at a time, a function `requireToolApproval` is evaluated for each call when it starts, so a rule changed by an earlier call or while the run waited for approval applies to the calls after it.
+- A numeric `toolCallConcurrency` in an agent's `defaultOptions` is kept as the limit when a call passes `toolCallConcurrency` as an object, such as the `{ strategy: 'called' }` controller runs now use.
 
 Allowed tools no longer emit `tool-call-approval` and `tool-call-resumed` chunks or store an approval on the tool part. Runs with `yolo` on already behaved this way.

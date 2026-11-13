@@ -385,7 +385,16 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          // A parallel batch must run on the verdicts it was scheduled with. Calls in a sequential
+          // batch start after earlier calls finish, so they are judged again when they start and
+          // a policy changed by then applies.
+          const keepVerdicts = toolCallForeachOptions.concurrency > 1 || toolCalls.length <= 1;
+          writeScoped(
+            scopeCtx,
+            TOOL_APPROVAL_VERDICTS_KEY,
+            'toolApprovalVerdicts',
+            keepVerdicts ? approvalVerdicts : undefined,
+          );
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           writeScoped(
             scopeCtx,
