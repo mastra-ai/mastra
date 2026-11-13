@@ -131,6 +131,28 @@ describe('useLinearIssuesQuery', () => {
     expect(requestedCursors).toEqual([null, 'cursor-2']);
   });
 
+  it('given the board stays open, when minutes pass, then Linear is asked once', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const hit = vi.fn();
+      server.use(
+        http.get(ISSUES_URL, () => {
+          hit();
+          return HttpResponse.json({ issues: [issue], nextCursor: null });
+        }),
+      );
+
+      const { result } = renderHookWithProviders(() => useLinearIssuesQuery('github-project-1'));
+      await waitFor(() => expect(result.current.data).toEqual([issue]));
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+      expect(hit).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('given the hook is disabled, when it mounts, then no request is made', async () => {
     const hit = vi.fn();
     server.use(

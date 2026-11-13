@@ -10,7 +10,7 @@ import {
   listLinearTeams,
 } from '../ui/domains/factory/services/linear';
 import { RequestError } from '../ui/domains/factory/services/request';
-import { DETAIL_STALE_MS, INTAKE_POLL_MS } from './useFactoryData';
+import { DETAIL_STALE_MS } from './useFactoryData';
 
 /**
  * Linear feature/connection status through the shared React Query cache. The
@@ -42,9 +42,8 @@ export function useLinearIssuesQuery(githubProjectId: string | undefined) {
     getNextPageParam: lastPage => lastPage.nextCursor,
     enabled: githubProjectId !== undefined,
     select: data => data.pages.flatMap(page => page.issues),
-    // New intake must show up on the board without a reload; the endpoint
-    // proxies the Linear API, so poll on the gentle intake cadence.
-    refetchInterval: INTAKE_POLL_MS,
+    // Read when the board opens and when its tab is looked at again. The server
+    // files new issues itself, and their cards reach the board over its stream.
     refetchOnWindowFocus: true,
   });
 }
