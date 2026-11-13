@@ -71,17 +71,20 @@ describe('commandInCwd', () => {
     expect(absolute.stderr).toBe(`Working directory not found: /${missing} (also tried ${join(workdir, missing)})`);
   });
 
-  it('does not run the command when the directory exists but cannot be entered', () => {
-    const locked = join(workdir, 'locked');
-    mkdirSync(locked, { mode: 0o000 });
-    try {
-      const result = run(commandInCwd('echo ran', 'locked', workdir), workdir);
-      expect(result.status).toBe(1);
-      expect(result.stdout).toBe('');
-    } finally {
-      chmodSync(locked, 0o755);
-    }
-  });
+  it.skipIf(process.getuid?.() === 0)(
+    'does not run the command when the directory exists but cannot be entered',
+    () => {
+      const locked = join(workdir, 'locked');
+      mkdirSync(locked, { mode: 0o000 });
+      try {
+        const result = run(commandInCwd('echo ran', 'locked', workdir), workdir);
+        expect(result.status).toBe(1);
+        expect(result.stdout).toBe('');
+      } finally {
+        chmodSync(locked, 0o755);
+      }
+    },
+  );
 
   it('quotes directories with spaces and quotes', () => {
     const dir = join(workdir, "it's a dir");
