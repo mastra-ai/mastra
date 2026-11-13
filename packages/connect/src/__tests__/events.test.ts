@@ -485,12 +485,26 @@ describe('EventsClient.subscribe', () => {
     expect(s.requests).toHaveLength(1);
   });
 
-  it('removes its abort listener from the caller signal when it ends', async () => {
+  it('holds an abort listener on the caller signal only while iterating', async () => {
+    const s = await server([
+      (_req, res) => {
+        startStream(res);
+        res.write(ready('10'));
+        res.write(event('11', {}));
+      },
+    ]);
     const controller = new AbortController();
+    const add = vi.spyOn(controller.signal, 'addEventListener');
     const remove = vi.spyOn(controller.signal, 'removeEventListener');
-    const subscription = client('http://127.0.0.1:1').subscribe('connect', { signal: controller.signal });
-    subscription.close();
-    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+
+    const idle = client(s.url).subscribe('connect', { signal: controller.signal });
+    idle.close();
+    expect(add).not.toHaveBeenCalled();
+
+    await take(client(s.url).subscribe('connect', { signal: controller.signal }), 1);
+    expect(add).toHaveBeenCalledTimes(1);
+    const listener = add.mock.calls[0]![1];
+    expect(remove).toHaveBeenCalledWith('abort', listener);
   });
 
   it('rejects invalid timing options and events URLs at construction', () => {
@@ -499,11 +513,17 @@ describe('EventsClient.subscribe', () => {
       { reconnectDelayMs: -1 },
       { maxReconnectDelayMs: Number.NaN },
       { idleTimeoutMs: 0 },
+      { idleTimeoutMs: Number.MAX_SAFE_INTEGER },
     ]) {
       expect(() => client('http://127.0.0.1:1', options)).toThrow(MastraConnectError);
     }
-    for (const eventsUrl of ['not a url', 'ftp://events.test']) {
+    for (const eventsUrl of ['not a url', 'ftp://user:secret@events.test']) {
       expect(() => client(eventsUrl)).toThrow(/Invalid events service URL/);
+      expect(() => client(eventsUrl)).not.toThrow(/secret/);
+      expect(
+        () => new ConnectClient({ accessToken: 'tok', projectId: 'proj_1', eventsUrl }),
+        'ConnectClient validates the events URL at construction',
+      ).toThrow(/Invalid events service URL/);
     }
   });
 });
@@ -658,5 +678,11 @@ describe('parseServerSentEvents', () => {
       { event: 'message', data: '', retry: 2000 },
       { event: 'message', data: payload },
     ]);
+  });
+
+  it('rejects a line longer than 32 MiB', async () => {
+    const mebibyte = 'x'.repeat(1024 * 1024);
+    const error = await failure(parse(['data: ', ...Array.from({ length: 33 }, () => mebibyte)]));
+    expect(error.code).toBe('invalid_response');
   });
 });
