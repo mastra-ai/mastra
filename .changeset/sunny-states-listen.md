@@ -1,6 +1,5 @@
 ---
 '@mastra/factory': minor
-'@mastra/connect': patch
 ---
 
 Platform integrations now talk to the Mastra platform through `ConnectClient` from `@mastra/connect`, so every integration shares one client.
