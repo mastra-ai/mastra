@@ -11,6 +11,11 @@ export type MastraConnectErrorCode =
   | 'platform_error'
   // A `ConnectClient` call exceeded its `timeoutMs`.
   | 'timeout'
+  // The events service rejected the resume cursor (expired or out of range).
+  // Restart the subscription without a cursor and reconcile.
+  | 'invalid_cursor'
+  // A response did not match the documented contract.
+  | 'invalid_response'
   // Raised at tool-execute time when the caller supplies a connection_name
   // that does not match any active connection for the provider. Recovery is
   // to call `<provider>__list_connections` and retry with a valid name.
