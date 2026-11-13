@@ -276,21 +276,8 @@ function kpisIssues(draft: Json) {
 
 function timeseriesIssues(draft: Json) {
   const view = new View();
-  if (draft.emptyWhenZero !== undefined)
-    view.add(
-      ['emptyWhenZero'],
-      'The editor leaves `emptyWhenZero` out: a chart is empty when every plotted value is zero.',
-    );
-  if (isObject(draft.total)) {
-    if (draft.total.format !== undefined) view.add(['total', 'format'], "The total takes the chart's format.");
-    if (draft.total.value !== 'total' && draft.total.value !== 'peak')
-      view.add(['total', 'value'], 'The editor shows the total as `total` or `peak`.');
-  }
   const series = draft.series as Json[];
-  const valueRefs = series.map((item, i) => {
-    if (item.rangeTotal !== undefined) view.add(['series', i, 'rangeTotal'], 'The editor leaves `rangeTotal` out.');
-    return view.value(item.value, ['series', i, 'value'], true);
-  });
+  const valueRefs = series.map((item, i) => view.value(item.value, ['series', i, 'value'], true));
   view.noTraceGroupBy();
   for (const { args, path } of view.refs) {
     if (args.compare !== undefined) view.add([...path, 'compare'], "A chart doesn't compare with the window before.");
@@ -310,8 +297,8 @@ function timeseriesIssues(draft: Json) {
     } else if (canonical(groupBy) === canonical(['status'])) {
       if (split) view.add(at('groupBy'), "A split chart can't also count runs by `status`.");
       if (aggregation !== 'count') view.add(at('aggregation'), 'Runs by `status` take `count`.');
-      const failed = canonical(groups) === canonical(FAILED) && notGroups === undefined;
-      const ok = canonical(notGroups) === canonical(FAILED) && groups === undefined;
+      const failed = Array.isArray(groups) && sameSet(groups, FAILED) && notGroups === undefined;
+      const ok = Array.isArray(notGroups) && sameSet(notGroups, FAILED) && groups === undefined;
       if (!failed && !ok)
         view.add(
           at('groups'),
@@ -365,9 +352,7 @@ function tableIssues(draft: Json) {
   const view = new View();
   const columns = draft.columns as Json[];
   const groupBy = draft.groupBy as string[];
-  const types = columns.map(column =>
-    ['name', 'dimension', 'value', 'change'].find(type => column[type] !== undefined),
-  );
+  const types = columns.map(column => ['name', 'value', 'change'].find(type => column[type] !== undefined));
   if (types[0] !== 'name' || types.lastIndexOf('name') !== 0)
     view.add(['columns'], 'Start with one `name` column, then the value columns, then at most one `change` column.');
   const change = types.indexOf('change');
@@ -375,14 +360,10 @@ function tableIssues(draft: Json) {
     view.add(['columns', change], 'One `change` column comes last.');
   columns.forEach((column, i) => {
     const type = types[i];
-    if (type === 'dimension')
-      view.add(['columns', i, 'dimension'], 'The editor names rows with the `name` column only.');
     if (column.sort !== undefined && type !== 'value')
       view.add(['columns', i, 'sort'], 'Only a value column sorts the table.');
     if (type !== 'value') return;
     const body = column.value as Json;
-    if (body.unpricedWhen !== undefined)
-      view.add(['columns', i, 'value', 'unpricedWhen'], 'The editor leaves `unpricedWhen` out.');
     const [key] = Object.keys(body).filter(
       k => READ_KEYS.includes(k) || ['const', 'sum', 'minus', 'ratio', 'max', 'coalesce'].includes(k),
     );

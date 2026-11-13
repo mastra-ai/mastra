@@ -700,11 +700,13 @@ export function createObservabilityDraftSchemas(
         )
         .min(1),
       total: (editable
-        ? z.strictObject({
-            value: totalValue.describe(
-              '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is).',
-            ),
-          })
+        ? z
+            .strictObject({
+              value: totalValue.describe(
+                '`total`: every series summed over the range; `peak`: the highest bucket of the emphasized series (the first, when none is).',
+              ),
+            })
+            .describe("The card's total, beside its title.")
         : z
             .strictObject({
               value: z

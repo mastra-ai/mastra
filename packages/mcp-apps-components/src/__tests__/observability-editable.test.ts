@@ -419,6 +419,12 @@ it('rejects a trace `where` that is more than dimension filters', () => {
   expect(issuesOf(chart([line({ spanAggregate: { measure: 'count', where: spans } })]))).toHaveLength(1);
 });
 
+it('accepts the failed statuses in any order, as the editor does', () => {
+  const status = (args: object) => ({ metricTimeSeries: { ...runs, groupBy: ['status'], ...args } });
+  const reversed = [...FAILED].reverse();
+  expect(issuesOf(chart([line(status({ notGroups: reversed })), line(status({ groups: reversed }))]))).toEqual([]);
+});
+
 it('rejects status and split groupings the editor cannot draw', () => {
   const status = (args: object) => ({ metricTimeSeries: { ...runs, groupBy: ['status'], ...args } });
   expect(
@@ -453,13 +459,12 @@ it('leaves out the chart settings the editor does not hold', () => {
     },
   );
   expect(free.safeParse(draft).success).toBe(true);
-  expect(issuesOf(draft)).toEqual(
-    expect.arrayContaining([
-      expect.stringMatching(/rangeTotal/),
-      expect.stringMatching(/^timeseries\.total/),
-      expect.stringMatching(/emptyWhenZero/),
-    ]),
-  );
+  expect(issuesOf(draft)).toEqual([
+    'timeseries.series.0: Unrecognized key: "rangeTotal"',
+    'timeseries.total.value: Invalid option: expected one of "total"|"peak"',
+    'timeseries.total: Unrecognized key: "format"',
+    'timeseries: Unrecognized key: "emptyWhenZero"',
+  ]);
 });
 
 it('rejects a chart that compares with the window before', () => {
@@ -515,14 +520,19 @@ it('keeps a table to its name, value and change columns', () => {
     byProvider,
   );
   expect(free.safeParse(dimension).success).toBe(true);
-  expect(issuesOf(dimension)).not.toEqual([]);
+  expect(issuesOf(dimension)).toEqual([
+    'table.columns.1: A column takes exactly one of `name`, `value`, `change`, not `dimension`',
+  ]);
   const unpriced = table([
     { name: {} },
     { id: 'tokens', value: { format: 'count', metricBreakdown: { name: [INPUT, OUTPUT], aggregation: 'sum' } } },
     { value: { format: 'usd', unpricedWhen: 'tokens', ...cost } },
   ]);
   expect(free.safeParse(unpriced).success).toBe(true);
-  expect(issuesOf(unpriced)).not.toEqual([]);
+  expect(issuesOf(unpriced)).toEqual([
+    'table.columns.1: Unrecognized key: "id"',
+    'table.columns.2.value: Unrecognized key: "unpricedWhen"',
+  ]);
 });
 
 it('reads a scorer by its id only', () => {
