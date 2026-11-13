@@ -249,6 +249,28 @@ describe('Linear intake discovery', () => {
     );
   });
 
+  it("files new issues when another project's cards cannot be read", async () => {
+    const { seed, connect, project, filed, sweep } = await setup();
+    await connect('org-1');
+    const broken = await seed.projects.create({ orgId: 'org-2', userId: 'u2', input: { name: 'org-2/repo' } });
+    const board = await project('org-1', ['proj-1']);
+    stubLinear([[{ id: 'issue-1', identifier: 'ENG-1', projectId: 'proj-1' }]]);
+    const listShared = seed.workItems.listShared.bind(seed.workItems);
+    vi.spyOn(seed.workItems, 'listShared').mockImplementation(async input => {
+      if (input.factoryProjectId === broken.id) throw new Error('cards unreadable');
+      return listShared(input);
+    });
+
+    const summary = await sweep();
+
+    expect(summary).toMatchObject({
+      observed: 1,
+      failed: 1,
+      errors: [{ projectId: broken.id, error: 'cards unreadable' }],
+    });
+    expect(await filed('org-1', board.id)).toEqual([{ type: 'upsertLinkedWorkItem', sourceKey: 'linear:ENG-1' }]);
+  });
+
   it('keeps filing for other orgs when one org must reconnect Linear', async () => {
     const { connect, project, filed, sweep } = await setup();
     // Expired with no refresh token: the org has to go through OAuth again.

@@ -4,7 +4,11 @@ import type { FactoryProjectsStorage } from '../../storage/domains/projects/base
 import type { LinearIntegration } from './integration.js';
 import type { LinearIssueIngress, LinearRules } from './rules.js';
 
-/** Pages of 30 walked per project each run: the 150 most recently updated active issues. */
+/**
+ * Listing calls made per project each run. A call answers up to 30 of the most
+ * recently updated active issues per stream: one stream for the bound Linear
+ * projects and one for the bound teams, or one per bound source on Platform.
+ */
 export const LINEAR_INTAKE_DISCOVERY_MAX_PAGES = 5;
 
 export interface LinearIntakeDiscoverySummary {

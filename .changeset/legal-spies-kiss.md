@@ -2,4 +2,8 @@
 '@mastra/factory': patch
 ---
 
-Fixed slow Linear boards in Factory. Opening a board no longer creates cards while the page loads; new Linear issues in sources bound to a project now get their card from the background Linear sweep, so they are filed even when nobody has the board open.
+Fixed slow Linear boards in Factory. Opening a board no longer creates cards while the page loads.
+
+New Linear issues in sources bound to a project now get their card from the background Linear sweep, within its interval (5 minutes by default), even when nobody has the board open.
+
+Setting `MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED=false` now also stops new Linear issues from getting cards, because the sweep is what files them.
