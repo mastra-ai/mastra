@@ -60,6 +60,10 @@ export class PlatformLinearMigration {
   #state: LinearMigrationState = { required: false, pending: [], skipped: [], lastRunAt: null, lastError: null };
   #failures = 0;
   #statusKnown = false;
+  /** Migrated connections, by id, as the platform last reported them. */
+  #migratedConnections = new Map<string, string>();
+  /** Migrated workspaces whose connection the platform reported gone; only a fresh connect brings them back. */
+  readonly #inactive = new Set<string>();
   #retryTimer: ReturnType<typeof setTimeout> | undefined;
   #inFlight: Promise<LinearMigrationRunResult> | undefined;
 
@@ -82,6 +86,11 @@ export class PlatformLinearMigration {
   /** True once the platform has confirmed no workspace is left on legacy tokens or unlinked. */
   get settled(): boolean {
     return this.#statusKnown && !this.#state.required;
+  }
+
+  /** The workspace a migrated connection serves, or null when it isn't one. */
+  workspaceOfConnection(connectionId: string): string | null {
+    return this.#migratedConnections.get(connectionId) ?? null;
   }
 
   /** Reads the platform's migration status and updates {@link state}. */
@@ -137,6 +146,8 @@ export class PlatformLinearMigration {
 
   async #run(trigger: LinearMigrationTrigger): Promise<LinearMigrationRunResult> {
     const at = new Date().toISOString();
+    // An admin retry asks the platform again about connections it reported gone.
+    if (trigger === 'admin') this.#inactive.clear();
     try {
       const { pending } = await this.#needed();
       if (pending.length === 0) {
@@ -145,6 +156,9 @@ export class PlatformLinearMigration {
       }
       logPlatformInfo('Migrating Platform Linear workspaces to Mastra Connect', { trigger, workspaces: pending });
       const response = await this.#migrate(pending);
+      for (const skipped of response.skipped) {
+        if (skipped.reason === 'connection_inactive') this.#inactive.add(skipped.linearWorkspaceId);
+      }
       if (response.connections.length > 0 || response.alreadyMigrated) this.#onMigrated();
       // Read back what is left rather than trusting the response alone.
       const { pending: remaining } = await this.#needed();
@@ -180,8 +194,18 @@ export class PlatformLinearMigration {
       // A workspace connected through Connect directly needs no import; importing would duplicate it.
       if (!covered.has(workspace.linearWorkspaceId)) pending.add(workspace.linearWorkspaceId);
     }
+    this.#migratedConnections = new Map(
+      status.migrated.map(workspace => [workspace.connectionId, workspace.linearWorkspaceId]),
+    );
     for (const workspace of status.migrated) {
-      if (!workspace.linkedToProject) pending.add(workspace.linearWorkspaceId);
+      // Linking again only helps while the migrated connection still exists and nothing else serves the workspace.
+      if (
+        !workspace.linkedToProject &&
+        !covered.has(workspace.linearWorkspaceId) &&
+        !this.#inactive.has(workspace.linearWorkspaceId)
+      ) {
+        pending.add(workspace.linearWorkspaceId);
+      }
     }
     return { pending: [...pending].sort() };
   }

@@ -64,6 +64,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
   readonly intake = new PlatformLinearIntake(this, {
     unreachableWorkspaces: () =>
       this.#migration.settled ? null : 'the move of legacy Linear workspaces to Mastra Connect has not finished',
+    knownWorkspace: connectionId => this.#migration.workspaceOfConnection(connectionId),
   });
   readonly #rules: LinearEventRules;
   readonly #endpointHost: string;
@@ -325,6 +326,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
       endpointHost: this.#endpointHost,
       migration: { required, pending, skipped, ...(lastError ? { lastError } : {}) },
       ...(this.#unverifiedEventsDropped > 0 ? { unverifiedEventsDropped: this.#unverifiedEventsDropped } : {}),
+      ...(this.intake.lastUnidentified.length > 0 ? { unidentifiedConnections: this.intake.lastUnidentified } : {}),
     };
   }
 
@@ -369,6 +371,7 @@ export class PlatformLinearIntegration extends PlatformConnectIntegration {
         migration: { required, pending, skipped, ...(lastError ? { lastError } : {}) },
         ...(inventory.unusable.length > 0 ? { requiresFreshConnect: inventory.unusable } : {}),
         ...(inventory.duplicates.length > 0 ? { duplicates: inventory.duplicates } : {}),
+        ...(inventory.unidentified.length > 0 ? { unidentified: inventory.unidentified } : {}),
       },
     };
   }

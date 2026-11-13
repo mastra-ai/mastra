@@ -119,17 +119,27 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
   readonly #workflowStatesByTeam = new Map<string, LinearGraphqlWorkflowState[]>();
 
   readonly #unreachableWorkspaces: () => string | null;
+  readonly #knownWorkspace: (connectionId: string) => string | null;
+  #lastUnidentified: LinearConnectionInventory['unidentified'] = [];
 
   constructor(
     integration: PlatformConnectIntegration,
     options: {
       /** Why the org may have Linear workspaces Factory can't reach yet (e.g. a migration in progress), or null. */
       unreachableWorkspaces?: () => string | null;
+      /** The workspace a connection serves when the platform already knows it (a migrated connection), or null. */
+      knownWorkspace?: (connectionId: string) => string | null;
     } = {},
   ) {
     super(integration, 'linear-connection:');
     this.#integration = integration;
     this.#unreachableWorkspaces = options.unreachableWorkspaces ?? (() => null);
+    this.#knownWorkspace = options.knownWorkspace ?? (() => null);
+  }
+
+  /** Connections whose workspace lookup failed in the latest inventory. */
+  get lastUnidentified(): LinearConnectionInventory['unidentified'] {
+    return this.#lastUnidentified;
   }
 
   protected notConnectedError(workspaceId: string): Error {
@@ -177,7 +187,8 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
         unusable.push({
           connectionId: connection.id,
           accountLabel: connection.accountLabel,
-          linearWorkspaceId: (await this.#cachedIdentity(connection))?.linearWorkspaceId ?? null,
+          linearWorkspaceId:
+            (await this.#cachedIdentity(connection))?.linearWorkspaceId ?? this.#knownWorkspace(connection.id),
           requiresFreshConnect: true,
         });
       }),
@@ -210,6 +221,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     }
     unusable.sort((a, b) => a.connectionId.localeCompare(b.connectionId));
     unidentified.sort((a, b) => a.connectionId.localeCompare(b.connectionId));
+    this.#lastUnidentified = unidentified;
     return { workspaces, duplicates, unusable, unidentified };
   }
 
@@ -608,7 +620,9 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     const scopedSourceIds = sourceIds ?? (sourceId ? [sourceId] : undefined);
     const scopedSources = scopedSourceIds?.map(sourceKey => ({ sourceKey, source: parseSourceId(sourceKey) }));
     const routedSourceSet = routedSourceIds ? new Set(routedSourceIds) : undefined;
-    const workspaces = await this.listWorkspaces();
+    // An unscoped "gone" is judged against the snapshot that was searched, not a later one.
+    const inventory = await this.inventory();
+    const workspaces = inventory.workspaces;
     const workspaceIds = routedSourceIds
       ? [...new Set(routedSourceIds.map(sourceKey => parseSourceId(sourceKey).workspaceId))]
       : scopedSources
@@ -631,7 +645,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       }
       return { workspace, issue };
     }
-    if (!scopedSources) await this.#assertEveryWorkspaceReachable(issueId);
+    if (!scopedSources) this.#assertEveryWorkspaceReachable(issueId, inventory);
     return null;
   }
 
@@ -640,8 +654,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
    * issue means it is gone only if no workspace is out of reach; otherwise the
    * issue may live in one Factory can't see yet, and callers close cards on `null`.
    */
-  async #assertEveryWorkspaceReachable(issueId: string): Promise<void> {
-    const inventory = await this.inventory();
+  #assertEveryWorkspaceReachable(issueId: string, inventory: LinearConnectionInventory): void {
     const served = new Set(inventory.workspaces.map(workspace => workspace.linearWorkspaceId));
     // A connection needing a fresh connect hides nothing once another connection serves its workspace.
     const unusable = inventory.unusable.filter(
@@ -665,7 +678,8 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
     sourceId: string | undefined,
     issueId: string,
   ): Promise<{ workspace: LinearWorkspace; issueId: string } | null> {
-    const workspaces = await this.listWorkspaces();
+    const inventory = await this.inventory();
+    const workspaces = inventory.workspaces;
     let candidates = workspaces;
     if (sourceId) {
       const workspaceId = parseSourceId(sourceId).workspaceId;
@@ -677,7 +691,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       const resolved = await resolveIssueId(this.#transport(workspace), issueId);
       if (resolved) return { workspace, issueId: resolved };
     }
-    if (!sourceId) await this.#assertEveryWorkspaceReachable(issueId);
+    if (!sourceId) this.#assertEveryWorkspaceReachable(issueId, inventory);
     return null;
   }
 

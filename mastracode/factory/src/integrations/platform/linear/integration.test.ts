@@ -731,6 +731,68 @@ describe('PlatformLinearIntegration', () => {
     });
   });
 
+  it('refuses to report an unscoped issue as gone when a connection fails to identify itself just once', async () => {
+    fake.connect(linearWorkspace());
+    fake.connect(linearWorkspace('workspace-2', { issues: [linearIssue({ id: 'issue-2', identifier: 'OPS-1' })] }));
+    let failures = 0;
+    fake.override('workspace-2', 'Viewer', () => (failures-- > 0 ? { status: 503 } : undefined));
+    const integration = createIntegration();
+    await integration.migration.refreshStatus();
+    integration.intake.clearCaches();
+    failures = 1;
+    // The lookup searched a snapshot without workspace-2; a later snapshot that has it must not turn that into "gone".
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-2' })).rejects.toMatchObject({
+      status: 401,
+    });
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-2' })).resolves.toMatchObject({
+      id: 'issue-2',
+    });
+  });
+
+  it('knows which workspace a migrated connection served after a restart, so its fresh replacement unblocks "gone"', async () => {
+    fake.addLegacy(linearWorkspace());
+    const first = createIntegration();
+    await first.migration.run('admin');
+    const migrated = 'conn-migrated-workspace-1';
+    fake.setStatus(migrated, 'needs_reauth');
+    fake.connect(linearWorkspace(), { connectionId: 'conn-fresh', connectedAt: '2026-12-01T00:00:00.000Z' });
+    // A new process has no identity cache; only the platform's migration status says what the stale connection served.
+    const restarted = createIntegration();
+    await restarted.migration.refreshStatus();
+    await expect(restarted.intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).resolves.toBeNull();
+    await expect(restarted.intake.inventory()).resolves.toMatchObject({
+      unusable: [{ connectionId: migrated, linearWorkspaceId: 'workspace-1' }],
+    });
+  });
+
+  it('settles once a migrated workspace whose connection was deleted is served by a fresh connect', async () => {
+    fake.addLegacy(linearWorkspace());
+    const integration = createIntegration();
+    await integration.migration.run('admin');
+    fake.dropConnection('conn-migrated-workspace-1');
+    fake.connect(linearWorkspace(), { connectionId: 'conn-fresh', connectedAt: '2026-12-01T00:00:00.000Z' });
+    integration.invalidateConnections();
+    await integration.migration.run('schedule');
+    expect(integration.migration.settled).toBe(true);
+    expect(fake.migrateRequests).toHaveLength(1);
+  });
+
+  it('settles when a migrated workspace lost its connection and nothing serves it, and an admin retry asks again', async () => {
+    fake.addLegacy(linearWorkspace());
+    const integration = createIntegration();
+    await integration.migration.run('admin');
+    fake.dropConnection('conn-migrated-workspace-1');
+    integration.invalidateConnections();
+    await expect(integration.migration.run('schedule')).resolves.toMatchObject({
+      skipped: [{ linearWorkspaceId: 'workspace-1', reason: 'connection_inactive' }],
+    });
+    expect(integration.migration.settled).toBe(true);
+    await integration.migration.run('schedule');
+    expect(fake.migrateRequests).toHaveLength(2);
+    await integration.migration.run('admin');
+    expect(fake.migrateRequests).toHaveLength(3);
+  });
+
   it('stops counting a stale connection that needs a fresh connect once a newer one serves its workspace', async () => {
     const stale = fake.connect(linearWorkspace(), {
       connectionId: 'conn-stale',
