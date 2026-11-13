@@ -1,9 +1,11 @@
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useGatewayAudioModels } from '@mastra/playground-ui/hooks/use-gateway-audio-models';
 import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router';
 
 import { useVoiceSettings } from '../../../../../hooks/use-voice-settings';
+import { useApiConfig } from '../../../../../api/config';
 import { VOICE_INPUT_ANCHOR } from '../../settingsSections';
 import { SpeechToTextKeys, SpeechToTextKeysSkeleton } from './SpeechToTextKeys';
 import { VoiceInputLayout } from './VoiceInputLayout';
@@ -18,6 +20,9 @@ function SectionSkeleton() {
 }
 
 export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
+  const { baseUrl } = useApiConfig();
+  const { data: gatewayAudio } = useGatewayAudioModels(baseUrl, Boolean(window.MASTRA_PLATFORM_PROJECT_ID));
+  const gatewayAvailable = Boolean(gatewayAudio?.transcription.length);
   const settingsQuery = useVoiceSettings(factoryId);
   const settings = settingsQuery.data;
   const { hash, key } = useLocation();
@@ -57,7 +62,20 @@ export function VoiceInputSettings({ factoryId }: { factoryId: string }) {
     <VoiceInputLayout
       anchorRef={anchorRef}
       scope={settings.scope}
-      models={<VoiceModelSettings factoryId={factoryId} settings={settings} />}
+      models={
+        <>
+          {gatewayAvailable && (
+            <SettingsContainer>
+              <SettingsRow label="Mastra Gateway" description="Preferred speech-to-text connection for this deployment">
+                <Txt as="span" variant="caption">
+                  Connected. Choose a Gateway model beside the composer microphone.
+                </Txt>
+              </SettingsRow>
+            </SettingsContainer>
+          )}
+          <VoiceModelSettings factoryId={factoryId} settings={settings} gatewayAvailable={gatewayAvailable} />
+        </>
+      }
       keys={<SpeechToTextKeys keys={settings.keys} scope={settings.scope} />}
     />
   );

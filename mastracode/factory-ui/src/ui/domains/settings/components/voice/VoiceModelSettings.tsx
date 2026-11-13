@@ -36,19 +36,29 @@ function voiceModelLabel(models: VoiceModel[], choice: VoiceChoice | null): stri
   return models.find(m => voiceOptionValue(m) === voiceOptionValue(choice))?.label;
 }
 
-function modelHint(settings: VoiceSettingsResponse, needsKey: boolean): string {
+function modelHint(settings: VoiceSettingsResponse, needsKey: boolean, gatewayAvailable: boolean): string {
   if (!settings.canEdit) return READ_ONLY_HINT;
+  if (needsKey && gatewayAvailable) return 'Gateway is ready. Add another provider key to use a different source.';
   return needsKey ? MODEL_ROW[settings.scope].noKey : AUTO_HINT;
 }
 
-function inUseLabel(settings: VoiceSettingsResponse): string {
+function inUseLabel(settings: VoiceSettingsResponse, gatewayAvailable: boolean): string {
+  if (gatewayAvailable) return 'Mastra Gateway by default in the composer';
   const effective = voiceModelLabel(settings.models, settings.effective);
   if (effective) return effective;
   if (settings.selected !== null) return `Needs a ${providerDisplayName(settings.selected.provider)} key`;
   return 'No speech-to-text key yet';
 }
 
-export function VoiceModelSettings({ factoryId, settings }: { factoryId: string; settings: VoiceSettingsResponse }) {
+export function VoiceModelSettings({
+  factoryId,
+  settings,
+  gatewayAvailable = false,
+}: {
+  factoryId: string;
+  settings: VoiceSettingsResponse;
+  gatewayAvailable?: boolean;
+}) {
   const update = useUpdateVoiceSettings(factoryId);
   const { selected, models } = settings;
   const keyed = new Set(settings.keys.filter(k => k.saved).map(k => k.provider));
@@ -68,7 +78,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
 
   return (
     <SettingsContainer>
-      <SettingsRow label={row.label} description={modelHint(settings, needsKey)}>
+      <SettingsRow label={row.label} description={modelHint(settings, needsKey, gatewayAvailable)}>
         <Select value={selectedValue} disabled={!settings.canEdit || needsKey || update.isPending} onValueChange={pick}>
           <SelectTrigger size="sm" aria-label={row.picker}>
             {voiceModelLabel(models, selected) ?? AUTO_LABEL}
@@ -85,7 +95,7 @@ export function VoiceModelSettings({ factoryId, settings }: { factoryId: string;
       </SettingsRow>
       <SettingsRow label="In use for you" description="What the mic uses right now">
         <Txt as="span" variant="caption">
-          {inUseLabel(settings)}
+          {inUseLabel(settings, gatewayAvailable)}
         </Txt>
       </SettingsRow>
     </SettingsContainer>

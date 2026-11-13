@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
@@ -88,6 +88,25 @@ function renderVoiceSettings() {
 }
 
 describe('VoiceInputSettings', () => {
+  afterEach(() => {
+    delete window.MASTRA_PLATFORM_PROJECT_ID;
+  });
+
+  it('presents connected Mastra Gateway as the preferred speech path', async () => {
+    window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    stubSettings(settings({ effective: null, keys: keys([]) }));
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
+        HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
+      ),
+    );
+    renderVoiceSettings();
+
+    expect(await screen.findByText('Preferred speech-to-text connection for this deployment')).toBeInTheDocument();
+    expect(screen.getByText('Connected. Choose a Gateway model beside the composer microphone.')).toBeInTheDocument();
+    expect(screen.getByText('Mastra Gateway by default in the composer')).toBeInTheDocument();
+  });
+
   it('lets an admin of a factory-scoped Factory pick the Factory model from models with an organization key', async () => {
     const { requested, saved } = stubSettings(factorySettings(), () =>
       factorySettings({ selected: { provider: 'openai', model: 'whisper-1' } }),
