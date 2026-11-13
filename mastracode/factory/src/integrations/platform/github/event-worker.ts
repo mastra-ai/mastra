@@ -5,6 +5,7 @@ import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
+import type { ExternalRepositoryProjectTarget } from '../../../storage/domains/source-control/base.js';
 import { DEFAULT_DEPENDABOT_SYNC_INTERVAL_MS } from '../../dependabot/sync.js';
 import type { DependabotSync } from '../../dependabot/sync.js';
 import type { GithubRepositoryPermission } from '../../github/integration.js';
@@ -77,7 +78,12 @@ type EventLogEntry = {
   payload: unknown;
 };
 
-type Repository = { id: number; fullName?: string; installationId: number };
+type Repository = {
+  id: number;
+  fullName?: string;
+  installationId: number;
+  projects: ExternalRepositoryProjectTarget[];
+};
 
 export type PlatformGithubEventDispatchIntegration = GithubWebhookDispatchIntegration;
 
@@ -445,7 +451,11 @@ export class PlatformGithubEventWorker extends MastraWorker {
     if (discoverPullRequests && this.#discoverPullRequests && this.#hasLease) {
       const startedAt = Date.now();
       try {
-        const { errors, ...counts } = await this.#discoverPullRequests(targets);
+        // With the projects it already read, so discovery doesn't read the links again.
+        const linked = new Map(repositories.map(repository => [repository.id, repository.projects]));
+        const { errors, ...counts } = await this.#discoverPullRequests(
+          targets.map(target => ({ ...target, projects: linked.get(target.id) ?? [] })),
+        );
         const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
         if (counts.failed > 0) {
           this.deps?.logger.warn('Platform GitHub pull request discovery completed with failures', {
@@ -566,6 +576,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
         id: repositoryId,
         installationId,
         fullName: repository?.slug,
+        projects,
       });
     }
     return [...repositories.values()];
