@@ -22,7 +22,7 @@ importers:
         version: link:../../memory
       hono:
         specifier: ^4.13.11
-        version: 4.13.17
+        version: 4.13.18
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -75,8 +75,8 @@ packages:
   '@types/node@22.20.5':
     resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
 
-  hono@4.13.17:
-    resolution: {integrity: sha512-vZIcbkvjOR5hHRWERbGkr8fGfF0GGM1ooYkuH448iO3b2AdVEr3AXZSw4Z3Kn+1L5z0CVoVeyV29VGYmFh05kQ==}
+  hono@4.13.18:
+    resolution: {integrity: sha512-H9q/E1XizaWstJxUW881dmLxEj+t/TrGGnyxINkm4+sK0qUwsMtFdo2BWI9Vs3cIS19MU6b6iCijoUoEf4f3DA==}
     engines: {node: '>=16.9.0'}
 
   turbo@2.11.10:
@@ -118,7 +118,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  hono@4.13.17: {}
+  hono@4.13.18: {}
 
   turbo@2.11.10:
     optionalDependencies:
