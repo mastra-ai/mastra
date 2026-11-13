@@ -2369,11 +2369,6 @@
       "source": "/docs/mastra-platform/observability",
       "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
-    },
-    {
-      "source": "/docs/mastra-platform/trace-intelligence",
-      "destination": "/docs/mastra-platform/observability/trace-intelligence",
-      "permanent": true
     }
   ]
 }

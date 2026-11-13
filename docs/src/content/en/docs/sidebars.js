@@ -834,17 +834,17 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'mastra-platform/observability/trace-intelligence',
+          id: 'mastra-platform/trace-intelligence',
           label: 'Trace Intelligence',
         },
         {
           type: 'doc',
-          id: 'mastra-platform/observability/dashboards',
+          id: 'mastra-platform/dashboards',
           label: 'Dashboards',
         },
         {
           type: 'doc',
-          id: 'mastra-platform/observability/alerts',
+          id: 'mastra-platform/observability-alerts',
           label: 'Observability Alerts',
         },
       ],
