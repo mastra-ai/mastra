@@ -9,11 +9,13 @@ import type {
   ScoreEvent,
   FeedbackEvent,
   FeedbackReplacementEvent,
+  FeedbackReviewStatusEvent,
 } from '@mastra/core/observability';
 import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { KeyedQueue } from './keyed-queue';
 import { PlatformByteBatcher, resolveByteBatchingConfig } from './platform-byte-batcher';
 import type { PlatformByteBatchingConfig, PlatformByteBatchingStats } from './platform-byte-batcher';
 import { publishResolvedRecord } from './platform-resolved-record';
@@ -286,6 +288,7 @@ export class MastraPlatformExporter extends BaseExporter {
   private flushTimer: NodeJS.Timeout | null = null;
   private inFlightFlushes = new Set<Promise<void>>();
   private pendingRecords = new Set<Promise<void>>();
+  private readonly feedbackUpdates = new KeyedQueue();
   private quotaPaused = false;
   private quotaProbeTimer: NodeJS.Timeout | null = null;
   private quotaProbeIntervalSeconds = DEFAULT_QUOTA_PROBE_INTERVAL_SECONDS;
@@ -478,6 +481,20 @@ export class MastraPlatformExporter extends BaseExporter {
     this.enqueueResolvedRecord('feedback', event.feedback, event.feedback.feedbackId);
   }
 
+  onFeedbackReviewStatusEvent(event: FeedbackReviewStatusEvent): void {
+    if (this.isDisabled || this.shuttingDown) return;
+    const { feedbackId, reviewStatus } = event.feedback;
+    if (!feedbackId?.trim() || !['needs-review', 'reviewed'].includes(reviewStatus)) {
+      this.logger.warn('Dropping feedback review update: feedbackId and reviewStatus are required');
+      return;
+    }
+    const url = new URL(
+      `/api/observability/feedback/${encodeURIComponent(feedbackId)}/review-status`,
+      this.platformConfig.feedbackEndpoint,
+    );
+    this.enqueueInteractiveWrite('feedback', url, JSON.stringify({ reviewStatus }), 'PATCH', feedbackId);
+  }
+
   private enqueueResolvedRecord(
     kind: 'score' | 'feedback',
     record: MastraPlatformScoreRecord | MastraPlatformFeedbackRecord,
@@ -500,6 +517,18 @@ export class MastraPlatformExporter extends BaseExporter {
       kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     const url = new URL(`/api/observability/${kind === 'score' ? 'scores' : 'feedback'}`, collectorEndpoint);
     if (replacementId !== undefined) url.pathname += `/${encodeURIComponent(replacementId)}`;
+    this.enqueueInteractiveWrite(kind, url, body, replacementId !== undefined ? 'PUT' : 'POST', replacementId);
+  }
+
+  private enqueueInteractiveWrite(
+    kind: 'score' | 'feedback',
+    url: URL,
+    body: string,
+    method: 'POST' | 'PUT' | 'PATCH',
+    feedbackId?: string,
+  ): void {
+    const collectorEndpoint =
+      kind === 'score' ? this.platformConfig.scoresEndpoint : this.platformConfig.feedbackEndpoint;
     // Full endpoint overrides take precedence over projectId for collector batches too.
     const projectId =
       new URL(collectorEndpoint).pathname.match(/\/projects\/([^/]+)\/ai\//)?.[1] ?? this.platformConfig.projectId;
@@ -512,7 +541,11 @@ export class MastraPlatformExporter extends BaseExporter {
     // Send buffered traces promptly, without making this request wait for collector
     // uploads or recursively waiting for itself through public flush().
     void this.flushBatches().catch(error => this.logger.warn('Failed to flush buffered telemetry', { error }));
-    const pending = publishResolvedRecord(url, body, headers, replacementId !== undefined ? 'PUT' : 'POST')
+    const send = () => publishResolvedRecord(url, body, headers, method);
+    // PUT and PATCH have different paths but update the same feedback. Keep their
+    // retries ahead of later edits for that ID; unrelated records remain independent.
+    const delivery = feedbackId !== undefined ? this.feedbackUpdates.enqueue(feedbackId, send) : send();
+    const pending = delivery
       .catch(error => this.logger.warn(`Dropping ${kind} after Platform delivery failed`, { error }))
       .finally(() => this.pendingRecords.delete(pending));
     this.pendingRecords.add(pending);

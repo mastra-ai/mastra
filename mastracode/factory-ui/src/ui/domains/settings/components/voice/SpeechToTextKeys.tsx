@@ -1,4 +1,13 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import {
+  SettingsContainer,
+  SettingsEmptyRow,
+  SettingsListHeader,
+  SettingsNoticeRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 
 import type { ProviderInfo, VoiceSettingsResponse } from '../../../../../api/types';
@@ -7,7 +16,6 @@ import type { VoiceKeyStatus } from '../../../../../hooks/use-voice-settings';
 import { AddApiKeyDialog } from '../AddApiKeyDialog';
 import { ConnectedProviderRow } from '../models/providers/ConnectedProviderRow';
 import type { ProviderConnection } from '../models/providers/ConnectedProviderRow';
-import { ProviderRows, ProviderRowsSkeleton } from '../models/providers/ProviderRows';
 import { CREDENTIAL_STATUS, sharedSourceStatus, useCredentialAccess } from '../provider-credential';
 import { AddSpeechToTextKeyDrawer } from './AddSpeechToTextKeyDrawer';
 
@@ -37,7 +45,7 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
   const [addOpen, setAddOpen] = useState(false);
   const [keyDialogProvider, setKeyDialogProvider] = useState<ProviderInfo>();
 
-  if (providersQuery.isPending) return <ProviderRowsSkeleton />;
+  if (providersQuery.isPending) return <SpeechToTextKeysSkeleton />;
 
   const options = keys.map(status => {
     const provider = speechProviderInfo(status, providersQuery.data);
@@ -49,28 +57,41 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
     setKeyDialogProvider(provider);
   };
 
+  const connected = options.flatMap(({ connection }) => (connection ? [connection] : []));
+  const addProvider = (
+    <Button size="sm" icon={<IconPlusLarge />} disabled={actionsDisabled} onClick={() => setAddOpen(true)}>
+      Add provider
+    </Button>
+  );
+
   return (
-    <div className="flex flex-col gap-2">
-      <ProviderRows addDisabled={actionsDisabled} onAdd={() => setAddOpen(true)}>
-        {options.flatMap(({ connection }) =>
-          connection ? (
-            <ConnectedProviderRow
-              key={connection.provider.provider}
-              connection={connection}
-              requestScope={requestScope}
-              disabled={actionsDisabled}
-              onUpdateKey={() => setKeyDialogProvider(connection.provider)}
-            />
-          ) : (
-            []
-          ),
+    <>
+      <SettingsContainer>
+        {connected.length === 0 ? (
+          <SettingsEmptyRow action={addProvider}>No speech-to-text keys</SettingsEmptyRow>
+        ) : (
+          <SettingsListHeader action={addProvider}>
+            {connected.length === 1 ? '1 provider' : `${connected.length} providers`}
+          </SettingsListHeader>
         )}
-      </ProviderRows>
-      {memberReason && (
-        <Txt as="p" variant="caption" tone="muted">
-          {memberReason}
-        </Txt>
-      )}
+        {connected.map(connection => (
+          <ConnectedProviderRow
+            key={connection.provider.provider}
+            variant="settings"
+            connection={connection}
+            requestScope={requestScope}
+            disabled={actionsDisabled}
+            onUpdateKey={() => setKeyDialogProvider(connection.provider)}
+          />
+        ))}
+        {memberReason && (
+          <SettingsNoticeRow>
+            <Txt as="p" variant="caption" tone="muted">
+              {memberReason}
+            </Txt>
+          </SettingsNoticeRow>
+        )}
+      </SettingsContainer>
       <AddSpeechToTextKeyDrawer
         open={addOpen}
         options={options.map(({ provider, connection }) => ({ provider, connectedAs: connection?.status.label }))}
@@ -85,6 +106,14 @@ export function SpeechToTextKeys({ keys, scope }: { keys: VoiceKeyStatus[]; scop
           onClose={() => setKeyDialogProvider(undefined)}
         />
       )}
-    </div>
+    </>
+  );
+}
+
+export function SpeechToTextKeysSkeleton() {
+  return (
+    <SettingsContainer>
+      <SettingsSkeleton variant="item" label="Loading providers" rows={2} />
+    </SettingsContainer>
   );
 }

@@ -15,58 +15,64 @@ export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orient
   viewOnly?: boolean;
   required?: boolean;
   errorMsg?: ReactNode;
+  /**
+   * `side` (default): the control sits on the right. Text fields take one shared width (13.75rem), selects hug
+   * their value up to that width, and switches and buttons keep their own size; all end at the right edge.
+   * `below`: the control goes under the label at full width, for forms with several controls.
+   */
+  controlPlacement?: 'side' | 'below';
 };
 
-type SettingsRowLayoutProps = SettingsRowProps & {
-  layout: 'factory' | 'section';
-};
+/** Label left, control right; stacked below `sm`. The card around the row gives it its spacing. */
+const rowClassName = 'min-w-0 gap-3';
+/** Side by side: label left, control pushed right. A control below its label fills the row instead. */
+const sideRowClassName = 'sm:justify-between sm:gap-6';
+const headingClassName = 'flex min-w-0 flex-col gap-px';
+/**
+ * The control column on the right. Inputs fill it (at least 13.75rem); selects and other field triggers hug
+ * their value (`--field-width: auto`, see `fieldTriggerWidthStyle`) up to that same width.
+ */
+const sideControlClassName =
+  'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
 
-const factoryRowClassName = 'gap-2 px-4 py-3 sm:justify-between sm:gap-4';
-const factoryRowSideControlWidthClassName = 'sm:[--field-shrink:0] sm:[--field-width:16rem]';
-const factoryRowHeadingClassName = 'flex min-w-0 flex-col gap-0.5';
-
-export function SettingsRowLayout({
-  label,
-  description,
-  htmlFor,
-  children,
-  className,
-  layout,
-  tone = 'default',
-  viewOnly = false,
-  required = false,
-  errorMsg,
-  disabled,
-  ...props
-}: SettingsRowLayoutProps) {
-  const isSectionLayout = layout === 'section';
-  const control = viewOnly ? (
+export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
+  if (!viewOnly) return children;
+  return (
     <>
       <IconLock className="size-4 shrink-0" aria-hidden />
       <span className="sr-only">View only: </span>
       {children}
     </>
-  ) : (
-    children
   );
+}
+
+/** One setting: a label, an optional one-line description, and its control. Goes in a `SettingsContainer`. */
+export function SettingsRow({
+  label,
+  description,
+  htmlFor,
+  children,
+  className,
+  tone = 'default',
+  viewOnly = false,
+  required = false,
+  errorMsg,
+  disabled,
+  controlPlacement = 'side',
+  ...props
+}: SettingsRowProps) {
+  const controlBelow = controlPlacement === 'below';
 
   return (
     <Field
-      orientation="responsive"
+      orientation={controlBelow ? 'vertical' : 'responsive'}
       invalid={Boolean(errorMsg)}
       disabled={disabled || viewOnly}
-      data-slot={isSectionLayout ? 'section-row' : 'settings-row'}
-      className={cn(
-        isSectionLayout
-          ? 'grid min-w-0 gap-3 group-data-[variant=factory]/section:px-3 group-data-[variant=factory]/section:py-2 group-data-[variant=flat]/section:p-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:group-data-[variant=default]/section:gap-4 sm:group-data-[variant=factory]/section:gap-4 sm:group-data-[variant=flat]/section:gap-6'
-          : 'min-w-0',
-        layout === 'factory' && factoryRowClassName,
-        layout === 'factory' && factoryRowSideControlWidthClassName,
-        className,
-      )}
+      data-slot="settings-row"
+      className={cn(rowClassName, !controlBelow && sideRowClassName, className)}
       {...props}
     >
-      <div className={isSectionLayout ? 'min-w-0' : factoryRowHeadingClassName}>
+      <div className={headingClassName}>
         <FieldLabel
           {...(htmlFor ? { htmlFor } : {})}
           required={required}
@@ -75,63 +81,73 @@ export function SettingsRowLayout({
           {label}
         </FieldLabel>
         {description != null && (
-          <FieldDescription
-            render={isSectionLayout ? undefined : <div />}
-            className={cn('mt-0', isSectionLayout ? 'mt-1 max-w-[62ch] text-pretty' : 'flex flex-col gap-0.5')}
-          >
+          <FieldDescription render={<div />} className="mt-0 flex flex-col gap-0.5 text-pretty">
             {description}
           </FieldDescription>
         )}
-        <FieldError className={cn('mt-0', isSectionLayout && 'mt-1')}>{errorMsg}</FieldError>
+        <FieldError className="mt-0">{errorMsg}</FieldError>
       </div>
-      {children != null &&
-        (isSectionLayout || viewOnly ? (
-          <div
-            data-slot={isSectionLayout ? 'section-control' : undefined}
-            className={cn(
-              'min-w-0',
-              isSectionLayout && 'sm:justify-self-end',
-              viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
-            )}
-          >
-            {control}
-          </div>
-        ) : (
-          control
-        ))}
+      {children != null && (
+        <div
+          data-slot="settings-row-control"
+          className={cn(
+            'min-w-0',
+            !controlBelow && sideControlClassName,
+            viewOnly && 'flex items-center gap-2 text-body-sm text-muted-foreground',
+          )}
+        >
+          <SettingsRowControl viewOnly={viewOnly}>{children}</SettingsRowControl>
+        </div>
+      )}
     </Field>
   );
-}
-
-export function SettingsRow(props: SettingsRowProps) {
-  return <SettingsRowLayout {...props} layout="factory" />;
 }
 
 export type SettingsFieldsetRowProps = Omit<FieldsetProps, 'children'> & {
   label: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
+  /** Same as `SettingsRow`'s: `below` puts the controls under the label at full width. */
+  controlPlacement?: 'side' | 'below';
 };
 
-export function SettingsFieldsetRow({ label, description, children, className, ...props }: SettingsFieldsetRowProps) {
+/** A `SettingsRow` for a group of controls (radios, several switches), labelled by a legend. */
+export function SettingsFieldsetRow({
+  label,
+  description,
+  children,
+  className,
+  controlPlacement = 'side',
+  ...props
+}: SettingsFieldsetRowProps) {
   const descriptionId = useId();
+  const controlBelow = controlPlacement === 'below';
 
   return (
     <Fieldset
       data-slot="settings-row"
       aria-describedby={description == null ? undefined : descriptionId}
-      className={cn('flex flex-col sm:flex-row sm:items-center', factoryRowClassName, className)}
+      className={cn(
+        'flex flex-col',
+        rowClassName,
+        !controlBelow && ['sm:flex-row sm:items-center', sideRowClassName],
+        className,
+      )}
       {...props}
     >
-      <div className={factoryRowHeadingClassName}>
+      <div className={headingClassName}>
         <FieldsetLegend>{label}</FieldsetLegend>
         {description != null && (
-          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-muted-foreground">
+          <div id={descriptionId} className="flex flex-col gap-0.5 text-caption text-pretty text-muted-foreground">
             {description}
           </div>
         )}
       </div>
-      {children}
+      {children != null && (
+        <div data-slot="settings-row-control" className={cn('min-w-0', !controlBelow && sideControlClassName)}>
+          {children}
+        </div>
+      )}
     </Fieldset>
   );
 }

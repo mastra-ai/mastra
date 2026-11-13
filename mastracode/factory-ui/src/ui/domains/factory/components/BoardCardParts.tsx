@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -14,7 +15,6 @@ import {
   HIDDEN_CARD_LABELS,
   SOURCE_LABELS,
   metadataLabelColors,
-  metadataLabels,
   pullRequestStatusForItem,
   pullRequestStatusForSource,
   workItemKey,

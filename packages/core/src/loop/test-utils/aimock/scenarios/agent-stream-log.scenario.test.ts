@@ -324,46 +324,38 @@ describeForAllEngines('AIMock loop scenario: what a run keeps on its stream log'
 
   // Technical: a delegated agent's chunks are forwarded inside `tool-output` chunks, and its own
   // step-start / step-finish / finish carried its prompt like the parent's did.
-  // Durable engines still publish them as-is: their callers read their own run back from the
-  // topic, so slimming there would change what the caller sees. Not yet fixed for them.
-  // Tracked in #29035; this flips to `it` once durable engines slim delegated chunks.
-  const itOnPlainAgents = isDurableEngineVariant(engine) ? it.fails : it;
-  itOnPlainAgents(
-    "keeps a delegated agent's prompt off the log",
-    async () => {
-      const llm = getMock();
-      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
-      const writer = new Agent({
-        id: 'writer',
-        name: 'Writer',
-        description: 'Drafts written content',
-        instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
-        model: openai(SCENARIO_MODEL_ID),
-      });
-      llm.on(
-        { endpoint: 'chat', hasToolResult: false },
-        { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
-      );
-      llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
-      llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
-      const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
-      const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
-      try {
-        const output = run.output ?? run;
-        await output.consumeStream();
-        expect(await output.text).toBe('Brewed fresh.');
+  it("keeps a delegated agent's prompt off the log", async () => {
+    const llm = getMock();
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+    const writer = new Agent({
+      id: 'writer',
+      name: 'Writer',
+      description: 'Drafts written content',
+      instructions: `${WRITER_MARKER} You are a skilled writer subagent.`,
+      model: openai(SCENARIO_MODEL_ID),
+    });
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_writer', name: 'agent-writer', arguments: { prompt: 'Draft a coffee tagline.' } }] },
+    );
+    llm.onMessage(/coffee tagline/i, { content: 'Brewed fresh, served warm.' });
+    llm.on({ endpoint: 'chat', toolCallId: 'call_writer', hasToolResult: true }, { content: 'Brewed fresh.' });
+    const { agent, mastra } = await createSharedAgent(llm, { engine, agents: { writer } });
+    const run: any = await agent.stream('Ask the writer for a tagline.', { maxSteps: 5 });
+    try {
+      const output = run.output ?? run;
+      await output.consumeStream();
+      expect(await output.text).toBe('Brewed fresh.');
 
-        const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
-        // The delegated run did stream through the parent.
-        expect(log).toContain('Brewed fresh, served warm.');
-        expect(occurrences(log, WRITER_MARKER)).toBe(0);
-      } finally {
-        run.cleanup?.();
-        if (engine !== 'inngest') await mastra.shutdown();
-      }
-    },
-    30_000,
-  );
+      const log = JSON.stringify(await waitForTerminal(runBus(agent), run.runId));
+      // The delegated run did stream through the parent.
+      expect(log).toContain('Brewed fresh, served warm.');
+      expect(occurrences(log, WRITER_MARKER)).toBe(0);
+    } finally {
+      run.cleanup?.();
+      if (engine !== 'inngest') await mastra.shutdown();
+    }
+  }, 30_000);
 
   // Technical: plain step-finish events had no `_durableStepContent`, so an observer built each
   // step's content from its own (empty) message list and replayed `content: []`. The finish

@@ -139,7 +139,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     if (options) this.applyOutcome(options);
     if (this.outcome === null) this.outcome = 'unknown';
     const endTime = (options as EndSpanOptionsWithTime<TType> | undefined)?.endTime;
-    this.endTime = endTime instanceof Date && endTime >= this.startTime ? endTime : new Date();
+    const candidate = endTime instanceof Date ? endTime : new Date();
+    // Preserve completion events even if the wall clock moved backward.
+    this.endTime = candidate < this.startTime ? this.startTime : candidate;
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
     if (options?.metadata) {
@@ -170,6 +172,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     const { error, endSpan = true, endTree, attributes, metadata } = options;
+    this.recordError(error, { origin: options.origin });
     this.applyOutcome(options);
 
     if (metadata) {
@@ -181,6 +184,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 
     if (!this.isExcluded) {
       const apiDetails = apiCallErrorDetails(error);
+      const stackError =
+        error instanceof MastraError && error.cause instanceof Error && error.cause.stack ? error.cause : error;
+      this.errorStackMessage = stackError.message;
       this.errorInfo = deepClean(
         error instanceof MastraError
           ? {
@@ -193,7 +199,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
               // Prefer the original cause's stack when available. MastraError wraps
               // thrown errors, so its own stack points to the wrapping site rather
               // than where the underlying error was thrown.
-              stack: (error.cause instanceof Error && error.cause.stack) || error.stack,
+              stack: stackError.stack,
             }
           : {
               message: error.message,

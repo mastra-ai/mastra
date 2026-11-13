@@ -117,7 +117,7 @@ overrides:
   path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.12.2
+  e2b>undici8: npm:undici@8.12.4
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -288,7 +288,7 @@ overrides:
   which-collection: npm:@socketregistry/which-collection@^1.0.8
   which-typed-array: npm:@socketregistry/which-typed-array@^1.0.9
   yocto-spinner: npm:@socketregistry/yocto-spinner@^1.0.25
-  undici@<8.12.2: 8.12.2
+  undici@<8.12.4: 8.12.4
   '@qdrant/js-client-rest>undici': 6.29.1
   yargs@<18.1.0: 18.2.0
   raw-body@<4.0.0: 4.0.0
@@ -1176,8 +1176,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1226,8 +1226,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -1251,8 +1251,8 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
       undici:
-        specifier: ^8.12.3
-        version: 8.12.3
+        specifier: ^8.12.4
+        version: 8.12.4
       vitest:
         specifier: ^5.1.0
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
@@ -2491,6 +2491,9 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -3314,7 +3317,7 @@ importers:
         version: link:../mastra
       langsmith:
         specifier: ^0.11.0
-        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
+        version: 0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0))
     devDependencies:
       '@ai-sdk/openai':
         specifier: ^2.0.139
@@ -4408,6 +4411,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 5.1.0(vitest@5.1.0)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5170,6 +5176,9 @@ importers:
         specifier: workspace:*
         version: link:../schema-compat
     devDependencies:
+      '@copilotkit/aimock':
+        specifier: ^1.46.0
+        version: 1.47.0(vitest@5.1.0)
       '@hono/node-server':
         specifier: ^2.1.3
         version: 2.1.6(hono@4.13.16)
@@ -6444,6 +6453,9 @@ importers:
       ajv:
         specifier: ^8.20.0
         version: 8.20.0
+      ajv-formats:
+        specifier: ^3.0.1
+        version: 3.0.1(ajv@8.20.0)
       arktype:
         specifier: ^2.2.9
         version: 2.2.9
@@ -6508,6 +6520,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/mcp':
+        specifier: workspace:^
+        version: link:../mcp
       '@mastra/schema-compat':
         specifier: workspace:*
         version: link:../schema-compat
@@ -6673,8 +6688,8 @@ importers:
   pubsub/valkey-streams:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.139
@@ -7001,9 +7016,15 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/duckdb':
+        specifier: workspace:*
+        version: link:../../stores/duckdb
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/mcp':
+        specifier: workspace:*
+        version: link:../../packages/mcp
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7256,6 +7277,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@mastra/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -7271,6 +7295,9 @@ importers:
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.15
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -7293,6 +7320,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/server
     devDependencies:
+      '@hono/node-server':
+        specifier: ^2.1.3
+        version: 2.1.6(hono@4.13.16)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -7302,6 +7332,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@mastra/server-adapters-test-suite':
+        specifier: workspace:*
+        version: link:../server-adapters-test-suite
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -8639,8 +8672,8 @@ importers:
   stores/valkey:
     dependencies:
       '@valkey/valkey-glide':
-        specifier: 2.5.1
-        version: 2.5.1
+        specifier: 2.5.2
+        version: 2.5.2
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -21914,42 +21947,42 @@ packages:
     peerDependencies:
       valibot: ^1.5.0
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
-    resolution: {integrity: sha512-DC6T0oYkyFnVIMABnmdtB2ZViJXMNMT8VtPQi4dniLBMbQJVS0BFO735bzDLkONZqnOf4lSRQMk+UYhUSE2n8Q==}
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
+    resolution: {integrity: sha512-6kmFsyBrMj8kRF72ZiKpLsT0WZrRQdM3P2p9vJskRaXbRiMGmLVoqj8vv1tYcu/xRr7bI6aEONOlwKbHojRLkQ==}
     cpu: [arm64]
     os: [darwin]
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
-    resolution: {integrity: sha512-3XNRg2gwHpDGfpLm7og4cBCR9vvldd3z1OgqK4EBB75XSkx9gFXgcmIR8JYHiz9pnjv4FkeTCU6/WIPDCW7iTw==}
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
+    resolution: {integrity: sha512-2RgllAJlYvoKirMKDIseYfX7LNFOF06UohqRB4LM2U3Y9mjE/ssNrPy+netFYdqz0aWcgYajzCMr2jXeckmoEg==}
     cpu: [x64]
     os: [darwin]
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
-    resolution: {integrity: sha512-D3AnYqMefXaaZJLPa4Q5A506On0/zg2ikI+YKWQsVXSgegf+YRXMrjfYqXa+LQD8s8jMMlZB/FAmSr4g+iv3CQ==}
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
+    resolution: {integrity: sha512-EVWT7VT9porB670AxjQ+b/g/Dx5Nm/GaMy9irCzdDdnnTOwPyHvK1kPFzMATNuyDgXd5L504i99u8iHL1GpDEw==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
-    resolution: {integrity: sha512-LIzxQhWhoPPIbYAy86moO1RA+SyFkNTxDPfR67MnGIZ7eaiFG9dfPfSdLC/LUN53D+/tbtaQYeyFxK3mNr3lcQ==}
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
+    resolution: {integrity: sha512-CFTrYPWIrh+k66eqH3/FvUlMZ4S7p328iFTK+qsHxyYH3CnhAmKMaOHcptFKz5n7ypT8L/XuOBl+NIQgUrJGQA==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
-    resolution: {integrity: sha512-VUXP852lmBp09WSG1/Yd9SFoATUW+MRRVaXhFabQkRlHm/7sm/0X9K2xyU5j41OeoHYK6Zne7YyGIyE1zgkV4Q==}
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
+    resolution: {integrity: sha512-osWsmJ+cg2iZjjNZ5IHQUMg/Xb/TQVyBvDxKA11vpLuEFMulQYfUfw+LWo0PwnG2mGJGKHhDnZ8KZAJpd03LWQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
-    resolution: {integrity: sha512-KVRvCMBEFiyOkxgOy6KDC3M4QmpSOnRZa39mkOx/nZwP/9fFzuJ3g0RTGVcLQ75RqRSexqitE4MuG8IpUKjn5w==}
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
+    resolution: {integrity: sha512-gJCma4s3j3AUQk3k2Kcxe3ImWpla4e9jr41f1w9VwZd6CkWuZQdk1PsLpdROvtaBxUiRiq+RZvvLKvGf0md1Kg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@valkey/valkey-glide@2.5.1':
-    resolution: {integrity: sha512-vtYyMJ2L42RH5CgBNtG2ffupNxu8c6KTzWvhXsUI2zChIFJQwUcuHuEdqXeOjTJZ9XfWs1E4w1TMiwnZSqGlkw==}
+  '@valkey/valkey-glide@2.5.2':
+    resolution: {integrity: sha512-8d3m2NyveQ2Ws4OUd7Zz3zsPP835Nqi4Rm3ZMoLdUjTfnEJejIMPJGR8b09foiPEG4GXV9j+QWyDRuM9VHOuVw==}
     engines: {node: '>=16'}
 
   '@vercel/analytics@1.6.1':
@@ -28127,7 +28160,7 @@ packages:
       '@smithy/hash-node': '>=4.3.0 <5'
       '@smithy/signature-v4': '>=5.4.0 <6'
       google-auth-library: '>=9.15.1 <12'
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0
       zod: 4.6.7
     peerDependenciesMeta:
@@ -31394,12 +31427,8 @@ packages:
     resolution: {integrity: sha512-EvRlUt/QqAEvXdQeRMYUfwOQsfzpDztykrG2owGEE/rBOBoYv9uF39ZzsNDh4lTFHhTr2XOZjKkYgueD12ZmGA==}
     engines: {node: '>=18.17'}
 
-  undici@8.12.2:
-    resolution: {integrity: sha512-XtuDWVdqTLr3NAxm2ly9/hU6kUsJOgGh1RASzMBbsw6aWCOaQzHdW+QQDfdERjfJ2V5vL5pRPa4RetO9UfivDg==}
-    engines: {node: '>=22.19.0'}
-
-  undici@8.12.3:
-    resolution: {integrity: sha512-+fdndUTwBP86cVjihTp21hZHo7d6oj1c/47XPA3lL8mM0XHs+C4EkcjmgRsFnFk2f/UONGDy9ItBItmXsLOQHw==}
+  undici@8.12.4:
+    resolution: {integrity: sha512-8Mx+uNKKER2bA4AdtedkqRbwUCIJFr2nJckXRe5yrDqzePqwLP7VNcctN8/XdmDSbF7mS+jJKIszlL+vbam1VA==}
     engines: {node: '>=22.19.0'}
 
   unenv@2.0.0-rc.24:
@@ -32748,7 +32777,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@3.0.44(zod@4.6.7)':
@@ -32756,7 +32785,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@3.0.45(zod@4.6.7)':
@@ -32764,7 +32793,7 @@ snapshots:
       '@ai-sdk/provider': 2.0.5
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
     optional: true
 
@@ -32773,7 +32802,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@4.0.64(zod@4.6.7)':
@@ -32781,7 +32810,7 @@ snapshots:
       '@ai-sdk/provider': 3.0.19
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@5.0.72(zod@4.6.7)':
@@ -32790,7 +32819,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider-utils@5.0.74(zod@4.6.7)':
@@ -32799,7 +32828,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.1.1
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
 
   '@ai-sdk/provider@1.1.3':
@@ -35591,11 +35620,11 @@ snapshots:
       '@composio/json-schema-to-zod': 0.3.2(zod@4.6.7)
       '@types/json-schema': 7.0.15
       is-fs-case-sensitive: 2.0.0
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       picocolors: 1.1.1
       pusher-js: 8.6.0
       semver: 7.8.6
-      undici: 8.12.2
+      undici: 8.12.4
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     transitivePeerDependencies:
@@ -36211,7 +36240,7 @@ snapshots:
       discord-api-types: 0.38.57
       magic-bytes.js: 1.13.1
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
 
   '@discordjs/util@1.2.0':
     dependencies:
@@ -36247,7 +36276,7 @@ snapshots:
       jose: 6.2.12
       openapi-fetch: 0.17.0
       p-retry: 7.1.0
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bufferutil
@@ -37483,7 +37512,7 @@ snapshots:
       ms: 2.1.3
       secure-json-parse: 3.0.2
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - supports-color
 
@@ -39851,7 +39880,7 @@ snapshots:
       eventsource-parser: 3.1.1
       express: 5.3.0(supports-color@10.2.2)
       jose: 6.2.12
-      undici: 8.12.2
+      undici: 8.12.4
       yaml: 2.9.1
       zod: 4.6.7
     transitivePeerDependencies:
@@ -43961,7 +43990,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.6
       tslib: 2.8.1
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@supabase/auth-js@2.118.0':
     dependencies:
@@ -44641,7 +44670,7 @@ snapshots:
   '@turbopuffer/turbopuffer@0.10.18':
     dependencies:
       pako: 2.2.0
-      undici: 8.12.2
+      undici: 8.12.4
 
   '@tursodatabase/database-common@0.4.4': {}
 
@@ -45488,35 +45517,35 @@ snapshots:
       valibot: 1.5.0(typescript@7.0.2)
     optional: true
 
-  '@valkey/valkey-glide-darwin-arm64@2.5.1':
+  '@valkey/valkey-glide-darwin-arm64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-darwin-x64@2.5.1':
+  '@valkey/valkey-glide-darwin-x64@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-arm64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-arm64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-gnu@2.5.1':
+  '@valkey/valkey-glide-linux-x64-gnu@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide-linux-x64-musl@2.5.1':
+  '@valkey/valkey-glide-linux-x64-musl@2.5.2':
     optional: true
 
-  '@valkey/valkey-glide@2.5.1':
+  '@valkey/valkey-glide@2.5.2':
     dependencies:
       long: 5.3.2
       protobufjs: 8.8.0
     optionalDependencies:
-      '@valkey/valkey-glide-darwin-arm64': 2.5.1
-      '@valkey/valkey-glide-darwin-x64': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-arm64-musl': 2.5.1
-      '@valkey/valkey-glide-linux-x64-gnu': 2.5.1
-      '@valkey/valkey-glide-linux-x64-musl': 2.5.1
+      '@valkey/valkey-glide-darwin-arm64': 2.5.2
+      '@valkey/valkey-glide-darwin-x64': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-arm64-musl': 2.5.2
+      '@valkey/valkey-glide-linux-x64-gnu': 2.5.2
+      '@valkey/valkey-glide-linux-x64-musl': 2.5.2
 
   '@vercel/analytics@1.6.1(react@19.3.1)':
     optionalDependencies:
@@ -45544,7 +45573,7 @@ snapshots:
       ms: 2.1.3
       picocolors: 1.1.1
       tar-stream: 3.1.7
-      undici: 8.12.2
+      undici: 8.12.4
       xdg-app-paths: 5.1.0
       zod: 4.6.7
     transitivePeerDependencies:
@@ -45744,7 +45773,7 @@ snapshots:
       obug: 3.0.0
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@5.9.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -45822,7 +45851,7 @@ snapshots:
       pathe: 2.0.3
       sirv: 3.0.2
       tinyrainbow: 3.2.0
-      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@22.19.15)(@vitest/coverage-v8@5.1.0)(@vitest/ui@5.1.0)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@5.9.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -47109,7 +47138,7 @@ snapshots:
       parse5: 7.3.0
       parse5-htmlparser2-tree-adapter: 7.1.0
       parse5-parser-stream: 7.1.2
-      undici: 8.12.2
+      undici: 8.12.4
       whatwg-mimetype: 4.0.0
 
   chokidar@3.6.0:
@@ -48341,7 +48370,7 @@ snapshots:
       lodash.snakecase: 4.1.1
       magic-bytes.js: 1.13.1
       tslib: 2.9.1
-      undici: 8.12.2
+      undici: 8.12.4
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -48483,7 +48512,7 @@ snapshots:
       openapi-fetch: 0.17.0
       platform: 1.3.6
       tar: 7.5.22
-      undici: 8.12.3
+      undici: 8.12.4
 
   eastasianwidth@0.2.0: {}
 
@@ -50862,7 +50891,7 @@ snapshots:
       parse5: 8.1.0
       saxes: 6.0.0
       tough-cookie: 6.0.2
-      undici: 8.12.2
+      undici: 8.12.4
       w3c-xmlserializer: 6.0.0
       webidl-conversions: 8.0.1
       whatwg-mimetype: 5.0.0
@@ -51106,14 +51135,14 @@ snapshots:
 
   kysely@0.29.8: {}
 
-  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
+  langsmith@0.11.7(@opentelemetry/api@1.10.0)(@opentelemetry/exporter-trace-otlp-proto@0.300.0(@opentelemetry/api@1.10.0))(@opentelemetry/sdk-trace-base@2.12.0(@opentelemetry/api@1.10.0))(openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7))(ws@8.22.0(bufferutil@4.1.0)):
     dependencies:
       p-queue: 6.6.2
     optionalDependencies:
       '@opentelemetry/api': 1.10.0
       '@opentelemetry/exporter-trace-otlp-proto': 0.300.0(@opentelemetry/api@1.10.0)
       '@opentelemetry/sdk-trace-base': 2.12.0(@opentelemetry/api@1.10.0)
-      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
+      openai: 7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7)
       ws: 8.22.0(bufferutil@4.1.0)
 
   latest-version@7.0.0:
@@ -52217,7 +52246,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.12.2
+      undici: 8.12.4
       workerd: 1.20261023.1
       ws: 8.22.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -52230,7 +52259,7 @@ snapshots:
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.35.5(@types/node@22.19.15)
-      undici: 8.12.2
+      undici: 8.12.4
       workerd: 1.20261103.1
       ws: 8.22.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
@@ -52895,12 +52924,12 @@ snapshots:
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
 
-  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.2)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
+  openai@7.47.0(@aws-sdk/credential-provider-node@3.972.92)(@smithy/signature-v4@5.7.5)(google-auth-library@11.3.2(supports-color@10.2.2))(undici@8.12.4)(ws@8.22.0(bufferutil@4.1.0))(zod@4.6.7):
     optionalDependencies:
       '@aws-sdk/credential-provider-node': 3.972.92
       '@smithy/signature-v4': 5.7.5
       google-auth-library: 11.3.2(supports-color@10.2.2)
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
       zod: 4.6.7
 
@@ -57078,9 +57107,7 @@ snapshots:
 
   undici@6.29.1: {}
 
-  undici@8.12.2: {}
-
-  undici@8.12.3: {}
+  undici@8.12.4: {}
 
   unenv@2.0.0-rc.24:
     dependencies:
@@ -57845,7 +57872,7 @@ snapshots:
       '@wdio/utils': 9.33.1(supports-color@10.2.2)
       deepmerge-ts: 8.0.2
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
-      undici: 8.12.2
+      undici: 8.12.4
       ws: 8.22.0(bufferutil@4.1.0)
     transitivePeerDependencies:
       - bare-abort-controller

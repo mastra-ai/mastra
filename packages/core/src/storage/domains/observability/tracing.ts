@@ -177,7 +177,7 @@ export const spanRecordSchema = z
       .number()
       .nullish()
       .describe('Milliseconds from the model call to the first token received; null when unknown'),
-    errorCount: z.number().int().nullish().describe('Errors in this span and all nested spans; null when unknown'),
+    errorCount: z.number().int().nullish().describe('Failures originating directly on this span; null when unknown'),
 
     // Database timestamps
     ...dbTimestamps,

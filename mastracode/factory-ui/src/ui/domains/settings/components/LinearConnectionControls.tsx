@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
-import { IntegrationLabel } from './IntegrationLabel';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IntegrationItem } from './IntegrationItem';
 
 export function LinearConnectButton({
   action = 'Connect',
@@ -22,8 +22,8 @@ export function LinearConnectButton({
 
 export function AddLinearWorkspaceRow() {
   return (
-    <SettingsRow label={<IntegrationLabel provider="linear" name="Linear" />} description="Another workspace">
+    <IntegrationItem provider="linear" name="Linear" description="Another workspace">
       <LinearConnectButton label="Connect another Linear workspace" />
-    </SettingsRow>
+    </IntegrationItem>
   );
 }

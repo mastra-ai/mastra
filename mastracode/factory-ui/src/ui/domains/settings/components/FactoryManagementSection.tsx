@@ -4,9 +4,13 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { useParams } from 'react-router';
 
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import {
+  SettingsContainer,
+  SettingsNoticeRow,
+  SettingsRow,
+  SettingsSkeleton,
+} from '@mastra/playground-ui/new/settings';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
@@ -23,10 +27,18 @@ export function FactoryManagementSection() {
   if (factoryQuery.isError && !factory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
-  if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;
+  if (!factory) {
+    return (
+      <SettingsSubsection scope="factory" title="Environment">
+        <SettingsContainer>
+          <SettingsSkeleton label="Loading Factory settings" rows={3} />
+        </SettingsContainer>
+      </SettingsSubsection>
+    );
+  }
 
   return (
-    <div className="flex min-w-0 flex-col gap-8">
+    <>
       <EnvironmentSection factoryId={factory.id} />
       <SettingsSubsection scope="factory" title="Danger zone">
         <SettingsContainer>
@@ -60,14 +72,14 @@ export function FactoryManagementSection() {
             </AlertDialog>
           </SettingsRow>
           {deleteMutation.isError && (
-            <div className="p-4">
+            <SettingsNoticeRow>
               <Notice variant="destructive">
                 {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
               </Notice>
-            </div>
+            </SettingsNoticeRow>
           )}
         </SettingsContainer>
       </SettingsSubsection>
-    </div>
+    </>
   );
 }

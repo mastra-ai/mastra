@@ -35,7 +35,7 @@ const DemoButton = ({ onClick, children }: { onClick: () => void; children: Reac
   <button
     type="button"
     onClick={onClick}
-    className="state-layer w-fit cursor-pointer rounded-md border border-border bg-card px-2.5 py-1 text-label text-foreground"
+    className="w-fit cursor-pointer rounded-md border border-border bg-card state-layer px-2.5 py-1 text-label text-foreground"
   >
     {children}
   </button>
@@ -83,7 +83,7 @@ const stateSpecimens: UtilitySpecimen[] = [
     tokens: ['state-layer'],
     note: 'Hover: the rung lands on top of the fill, never in it',
     demo: (
-      <div className="state-layer flex h-24 items-center justify-center rounded-lg bg-card shadow-raised">
+      <div className="flex h-24 items-center justify-center rounded-lg bg-card state-layer shadow-raised">
         <Txt variant="label">Reach for this one</Txt>
       </div>
     ),

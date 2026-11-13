@@ -41,7 +41,7 @@ export const WorkflowEdgeDataButton = ({
         className={cn(
           raisedSurfaceStyle,
           surfaceStateLayerStyle,
-          'h-7 rounded-lg px-2 text-foreground aria-pressed:before:bg-fill',
+          'h-7 rounded-lg px-2 text-foreground aria-pressed:bg-[linear-gradient(var(--fill),var(--fill))]',
         )}
         icon={<IconServer1 className="text-muted-foreground" />}
       >

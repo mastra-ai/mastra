@@ -70,7 +70,7 @@ export default function Resources() {
               key={resource.href}
               href={resource.href}
               {...(resource.external ? { target: '_blank', rel: 'noreferrer' } : {})}
-              className="group state-layer flex flex-col gap-3 rounded-lg border border-border bg-background p-5 hover:border-border-strong"
+              className="group flex flex-col gap-3 rounded-lg border border-border bg-background state-layer p-5 hover:border-border-strong"
             >
               <div className="flex items-center gap-2.5">
                 <resource.icon

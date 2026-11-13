@@ -2,12 +2,13 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import type { FilterBarField, FilterBarOperator, FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 import { UserRoundSearch } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { factoryParticipantId } from '@mastra/factory/work-items/card-people';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 
 import { boardFilterFieldIds } from '../boardFilters';
 import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
-import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
-import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
+import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
 import { BoardSourceIcon } from './BoardSourceIcon';
 import { IconElectrocardiogram } from '@mastra/playground-ui/icons/central/IconElectrocardiogram';

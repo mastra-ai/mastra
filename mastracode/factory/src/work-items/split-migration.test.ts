@@ -320,6 +320,7 @@ async function seedLegacy(storage: FactoryStorage) {
   for (const card of cards) {
     delete card.work_item;
     delete card.work_item_sources;
+    delete card.changed_at;
     await storage.ops.upsertOne('work_items', ['id'], card);
   }
   await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
@@ -528,6 +529,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     const createdRow = await new Cards(storage.ops).findOne({ id: created.item.id });
     delete createdRow!.work_item;
     delete createdRow!.work_item_sources;
+    delete createdRow!.changed_at;
     await storage.ops.insertOne('work_items', createdRow!);
     const createdBoard = (await readSplit(storage)).boardItems.get(created.item.id)!;
     await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: created.item.id });

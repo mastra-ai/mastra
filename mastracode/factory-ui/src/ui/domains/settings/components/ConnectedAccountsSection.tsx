@@ -1,18 +1,17 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 import { Link, useParams } from 'react-router';
 
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
-import { IntegrationLabel } from './IntegrationLabel';
-import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IntegrationItem } from './IntegrationItem';
+import { RetryRow } from './common/ConnectionStateRows';
 
-const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
+const slack = { provider: 'slack', name: 'Slack' } as const;
 
 // Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
@@ -24,7 +23,7 @@ export function SlackNotConfigured() {
 }
 
 function SlackUnavailableRow() {
-  return <SettingsRow label={slackLabel} description="Slack is not set up for this factory." />;
+  return <IntegrationItem {...slack} description="Slack is not set up for this factory." />;
 }
 
 export function ConnectedAccountsSection() {
@@ -39,21 +38,19 @@ export function ConnectedAccountsSection() {
   };
 
   if (accountsQuery.isPending) {
-    return <SettingsRowsSkeleton label="Loading connected accounts" rows={1} />;
+    return <SettingsSkeleton variant="item" label="Loading connected accounts" rows={1} />;
   }
 
   if (accountsQuery.error) {
     return (
-      <SettingsRow
-        label={slackLabel}
+      <RetryRow
+        label={slack.name}
+        provider={slack.provider}
         errorMsg={
           accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'
         }
-      >
-        <Button size="sm" icon={<IconArrowRotateCounterClockwise />} onClick={() => void accountsQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+        onRetry={() => void accountsQuery.refetch()}
+      />
     );
   }
 
@@ -63,21 +60,21 @@ export function ConnectedAccountsSection() {
 
   if (slackAccounts.length === 0) {
     return (
-      <SettingsRow
-        label={slackLabel}
+      <IntegrationItem
+        {...slack}
         description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
       >
         <Button size="sm" icon={<IconChainLink1 />} disabled={!canConnect} onClick={connectSlack}>
           Connect Slack
         </Button>
-      </SettingsRow>
+      </IntegrationItem>
     );
   }
 
   return slackAccounts.map((account, index) => (
-    <SettingsRow
+    <IntegrationItem
       key={`${account.externalTeamId}:${account.externalUserId}`}
-      label={slackLabel}
+      {...slack}
       description={
         <Metadata>
           <Metadata.Item>{account.externalUserName || account.externalUserId}</Metadata.Item>
@@ -90,6 +87,6 @@ export function ConnectedAccountsSection() {
           Configure Slack
         </ConnectionManagementButton>
       )}
-    </SettingsRow>
+    </IntegrationItem>
   ));
 }

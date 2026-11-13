@@ -59,11 +59,6 @@ interface PlatformProvisionResult {
   databaseUrl: string;
 }
 
-const PROJECT_REGION_OPTIONS = [
-  { value: 'us', label: '🇺🇸 us' },
-  { value: 'eu', label: '🇪🇺 eu' },
-] as const satisfies ReadonlyArray<{ value: ProjectRegion; label: string }>;
-
 const NEON_REGION_BY_PROJECT_REGION = {
   eu: 'aws-eu-central-1',
   us: 'aws-us-west-2',
@@ -296,17 +291,7 @@ async function runPlatformProvisioning({
     p.log.info(`Using organization ${color.cyan(orgName)}.`);
     envAccumulator.MASTRA_ORGANIZATION_ID = orgId;
 
-    const projectRegion =
-      region ??
-      (await p.select({
-        message: 'Where should your Factory project run?',
-        options: [...PROJECT_REGION_OPTIONS],
-        initialValue: 'us',
-      }));
-    if (p.isCancel(projectRegion)) {
-      p.cancel('Operation cancelled');
-      process.exit(0);
-    }
+    const projectRegion = region ?? 'us';
 
     // 3. Project — session-auth POST /v1/server/projects.
     const projectSpinner = p.spinner();

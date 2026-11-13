@@ -82,7 +82,7 @@ import {
 import { HTTPException } from '../http-exception';
 import { feedbackResponseSchema, listFeedbackResponseSchema } from '../schemas/feedback';
 import { observabilityStorageCapabilitiesSchema } from '../schemas/system';
-import type { InferParams, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
+import type { InferParams, RouteMCPConfig, ServerContext, ServerRouteHandler } from '../server-adapter/routes';
 import { createRoute, pickParams, wrapSchemaForQueryParams } from '../server-adapter/routes/route-builder';
 import { prepareAuthorEnrichment } from './author-enrichment';
 import { getCallerPermissions } from './authorship';
@@ -92,6 +92,8 @@ import { paginationArgsSchema } from './observability-list-query-schemas';
 import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
+  assertObservabilitySpanDurationSortSupported,
+  assertObservabilitySpanModelProviderSortSupported,
   assertObservabilitySpanQueryFieldsSupported,
   assertObservabilitySpanAggregateModelDimensionsSupported,
   assertObservabilityAggregateTimeToFirstMeasuresSupported,
@@ -153,6 +155,7 @@ function createNewRoute<
     responseSchema?: TResponseSchema;
     onValidationError?: ValidationErrorHook;
     maxBodySize?: number;
+    mcp?: RouteMCPConfig;
     preserveHttpExceptions?: boolean;
     isCoreSupported?: () => boolean;
     onUnsupportedCore?: () => never;
@@ -321,6 +324,13 @@ function resolveTraceQueryScope(
 }
 
 export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
+  mcp: {
+    toolset: 'observability',
+    name: 'query_traces',
+    description:
+      'Search traces with a structured query (filters on root span fields, entity, status, duration, time range). Call get_trace_query_fields for the fields you can filter on.',
+    requires: capabilities => capabilities.observability?.traceQuery === true,
+  },
   bodySchema: coreStorage.traceQueryRequestSchema,
   responseSchema: coreStorage.traceQueryResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -501,6 +511,12 @@ const traceAggregateValidationError: ValidationErrorHook = error => ({
 });
 
 export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, {
+  mcp: {
+    toolset: 'observability',
+    name: 'aggregate_traces',
+    description: 'Aggregate traces (counts, durations, error rates), optionally grouped and bucketed over time.',
+    requires: capabilities => capabilities.observability?.traceAggregate === true,
+  },
   bodySchema: coreStorage.traceAggregateRequestSchema,
   responseSchema: coreStorage.traceAggregateResponseSchema,
   onValidationError: traceAggregateValidationError,
@@ -632,6 +648,12 @@ const spanAggregateValidationError: ValidationErrorHook = error => ({
 });
 
 export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
+  mcp: {
+    toolset: 'observability',
+    name: 'aggregate_spans',
+    description: 'Aggregate spans (counts, durations, token usage), optionally grouped and bucketed over time.',
+    requires: capabilities => capabilities.observability?.spanAggregate === true,
+  },
   bodySchema: coreStorage.spanAggregateRequestSchema,
   responseSchema: coreStorage.spanAggregateResponseSchema,
   onValidationError: spanAggregateValidationError,
@@ -754,6 +776,12 @@ const spanQueryValidationError: ValidationErrorHook = error => ({
 });
 
 export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
+  mcp: {
+    toolset: 'observability',
+    name: 'query_spans',
+    description: 'Search individual spans (model calls, tool calls, workflow steps) across traces.',
+    requires: capabilities => capabilities.observability?.spanQuery === true,
+  },
   bodySchema: coreStorage.spanQueryRequestSchema,
   responseSchema: coreStorage.spanQueryResponseSchema,
   onValidationError: spanQueryValidationError,
@@ -770,7 +798,11 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       plan = coreStorage.planSpanQuery(
         { timeRange, where, ...(textSearch === undefined ? {} : { textSearch }), orderBy, page },
-        { scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED') },
+        {
+          scope: resolveTraceQueryScope(requestContext, 'SPAN_QUERY_UNSUPPORTED'),
+          allowSpanDurationOrdering: true,
+          allowSpanModelProviderOrdering: true,
+        },
       );
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -789,6 +821,8 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
+      assertObservabilitySpanDurationSortSupported(observabilityStore, plan.orderBy);
+      assertObservabilitySpanModelProviderSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTextSearchSupported(observabilityStore, plan.textSearch, 'span');
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
       assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
@@ -864,6 +898,12 @@ if (QUERY_SPANS.openapi) {
 }
 
 export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_FIELDS, {
+  mcp: {
+    toolset: 'observability',
+    name: 'get_trace_query_fields',
+    description: 'List the fields query_traces can filter and group on.',
+    requires: capabilities => capabilities.observability?.traceQueryDiscovery === true,
+  },
   bodySchema: coreStorage.getTraceQueryFieldsArgsSchema,
   responseSchema: coreStorage.getTraceQueryFieldsResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -955,6 +995,12 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
 });
 
 export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QUERY_VALUES, {
+  mcp: {
+    toolset: 'observability',
+    name: 'get_trace_query_values',
+    description: 'List values seen for one trace query field, to build query_traces filters.',
+    requires: capabilities => capabilities.observability?.traceQueryDiscovery === true,
+  },
   bodySchema: coreStorage.getTraceQueryValuesArgsSchema,
   responseSchema: coreStorage.getTraceQueryValuesResponseSchema,
   onValidationError: traceQueryValidationError,
@@ -1023,6 +1069,12 @@ for (const route of [GET_TRACE_QUERY_FIELDS, GET_TRACE_QUERY_VALUES]) {
 }
 
 export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
+  mcp: {
+    toolset: 'observability',
+    name: 'query_threads',
+    description: 'Search conversation threads by the traces recorded in them.',
+    requires: capabilities => capabilities.observability?.threadQuery === true,
+  },
   // Preserve legacy schemas/exports for old clients and independently upgraded packages.
   // On old core, recognize new requests only to return a structured capability error.
   bodySchema: z.union([
@@ -1166,6 +1218,12 @@ if (QUERY_THREADS.openapi) {
 // ============================================================================
 
 export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
+  mcp: {
+    toolset: 'observability',
+    name: 'list_logs',
+    description: 'List log records, newest first. Filter by level, trace, entity, or time range.',
+    requires: capabilities => capabilities.observability?.logs === true,
+  },
   queryParamSchema: createObservabilityListQuerySchema(logsFilterSchema, logsOrderBySchema),
   responseSchema: listLogsResponseSchema,
   handler: async ({ mastra, mode, after, limit, ...params }) => {
@@ -1195,6 +1253,12 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
 // ============================================================================
 
 export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'list_scores',
+    description: 'List scorer results, newest first. Filter by scorer, trace, entity, or time range.',
+    requires: capabilities => capabilities.scores.list,
+  },
   queryParamSchema: createObservabilityListQuerySchema(scoresFilterSchema, scoresOrderBySchema),
   responseSchema: obsListScoresResponseSchema,
   handler: async ({ mastra, mode, after, limit, ...params }) => {
@@ -1265,6 +1329,12 @@ export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
 });
 
 export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGREGATE, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_scores',
+    description: 'Aggregate scorer results. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.scores.analyze,
+  },
   bodySchema: getScoreAggregateArgsSchema,
   responseSchema: getScoreAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1275,6 +1345,12 @@ export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGRE
 });
 
 export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAKDOWN, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_scores',
+    description: 'Aggregate scorer results. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.scores.analyze,
+  },
   bodySchema: getScoreBreakdownArgsSchema,
   responseSchema: getScoreBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1285,6 +1361,12 @@ export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAK
 });
 
 export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIME_SERIES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_scores',
+    description: 'Aggregate scorer results. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.scores.analyze,
+  },
   bodySchema: getScoreTimeSeriesArgsSchema,
   responseSchema: getScoreTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1295,6 +1377,12 @@ export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIM
 });
 
 export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PERCENTILES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_scores',
+    description: 'Aggregate scorer results. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.scores.analyze,
+  },
   bodySchema: getScorePercentilesArgsSchema,
   responseSchema: getScorePercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1332,6 +1420,12 @@ export const GET_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK, {
 });
 
 export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'list_feedback',
+    description: 'List user feedback, newest first. Filter by trace, entity, or time range.',
+    requires: capabilities => capabilities.observability?.feedback === true,
+  },
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
   handler: async ({ mastra, requestContext, request, mode, after, limit, ...params }) => {
@@ -1522,13 +1616,40 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
-  handler: async ({ mastra, feedbackId, reviewStatus }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    if (
+      typeof observabilityStore.getFeedbackById !== 'function' ||
+      typeof observabilityStore.updateFeedbackReviewStatus !== 'function'
+    ) {
+      throw new HTTPException(501, {
+        message: 'Feedback review updates require a supported storage adapter and @mastra/core version',
+      });
+    }
+    const existing = await observabilityStore.getFeedbackById(feedbackId);
+    // In OSS, organizationId is correlation metadata, not an authorization scope.
+    // Its presence in request context must not restrict this review update.
+    const resourceId = requestContext.get(MASTRA_RESOURCE_ID_KEY);
+    if (!existing || (typeof resourceId === 'string' && resourceId && existing.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Feedback not found' });
+    }
+    const updated = await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
+    await exportPersistedEvent(mastra, {
+      type: 'feedback_review_status',
+      feedback: { feedbackId, reviewStatus },
+    });
+    return updated;
   },
 });
 
 export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_AGGREGATE, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_feedback',
+    description: 'Aggregate user feedback. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.observability?.feedback === true,
+  },
   bodySchema: getFeedbackAggregateArgsSchema,
   responseSchema: getFeedbackAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1539,6 +1660,12 @@ export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
 });
 
 export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_BREAKDOWN, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_feedback',
+    description: 'Aggregate user feedback. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.observability?.feedback === true,
+  },
   bodySchema: getFeedbackBreakdownArgsSchema,
   responseSchema: getFeedbackBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1549,6 +1676,12 @@ export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
 });
 
 export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_TIME_SERIES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_feedback',
+    description: 'Aggregate user feedback. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.observability?.feedback === true,
+  },
   bodySchema: getFeedbackTimeSeriesArgsSchema,
   responseSchema: getFeedbackTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1559,6 +1692,12 @@ export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
 });
 
 export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK_PERCENTILES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_feedback',
+    description: 'Aggregate user feedback. op: aggregate, breakdown, timeseries, percentiles.',
+    requires: capabilities => capabilities.observability?.feedback === true,
+  },
   bodySchema: getFeedbackPercentilesArgsSchema,
   responseSchema: getFeedbackPercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1598,6 +1737,13 @@ export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
 });
 
 export const GET_METRIC_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_AGGREGATE, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_metrics',
+    description:
+      'Aggregate metrics (tokens, cost, latency, counts). op: aggregate (one value), breakdown (grouped by labels), timeseries (bucketed over time), percentiles.',
+    requires: capabilities => capabilities.observability?.metrics === true,
+  },
   bodySchema: getMetricAggregateArgsSchema,
   responseSchema: getMetricAggregateResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1608,6 +1754,13 @@ export const GET_METRIC_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_AGG
 });
 
 export const GET_METRIC_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_BREAKDOWN, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_metrics',
+    description:
+      'Aggregate metrics (tokens, cost, latency, counts). op: aggregate (one value), breakdown (grouped by labels), timeseries (bucketed over time), percentiles.',
+    requires: capabilities => capabilities.observability?.metrics === true,
+  },
   bodySchema: getMetricBreakdownArgsSchema,
   responseSchema: getMetricBreakdownResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1618,6 +1771,13 @@ export const GET_METRIC_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_BRE
 });
 
 export const GET_METRIC_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_TIME_SERIES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_metrics',
+    description:
+      'Aggregate metrics (tokens, cost, latency, counts). op: aggregate (one value), breakdown (grouped by labels), timeseries (bucketed over time), percentiles.',
+    requires: capabilities => capabilities.observability?.metrics === true,
+  },
   bodySchema: getMetricTimeSeriesArgsSchema,
   responseSchema: getMetricTimeSeriesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1628,6 +1788,13 @@ export const GET_METRIC_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_T
 });
 
 export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_PERCENTILES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'analyze_metrics',
+    description:
+      'Aggregate metrics (tokens, cost, latency, counts). op: aggregate (one value), breakdown (grouped by labels), timeseries (bucketed over time), percentiles.',
+    requires: capabilities => capabilities.observability?.metrics === true,
+  },
   bodySchema: getMetricPercentilesArgsSchema,
   responseSchema: getMetricPercentilesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1642,6 +1809,13 @@ export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_P
 // ============================================================================
 
 export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'list_metric_names',
+    description:
+      "List metric names; with metricName, its label keys; with metricName and labelKey, that label's values.",
+    requires: capabilities => capabilities.observability?.discovery.metrics === true,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getMetricNamesArgsSchema.partial()),
   responseSchema: getMetricNamesResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1652,6 +1826,13 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
 });
 
 export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_KEYS, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'list_metric_names',
+    description:
+      "List metric names; with metricName, its label keys; with metricName and labelKey, that label's values.",
+    requires: capabilities => capabilities.observability?.discovery.metrics === true,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelKeysArgsSchema),
   responseSchema: getMetricLabelKeysResponseSchema,
   handler: async ({ mastra, ...params }) => {
@@ -1662,6 +1843,13 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
 });
 
 export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LABEL_VALUES, {
+  mcp: {
+    toolset: 'observability_analytics',
+    name: 'list_metric_names',
+    description:
+      "List metric names; with metricName, its label keys; with metricName and labelKey, that label's values.",
+    requires: capabilities => capabilities.observability?.discovery.metrics === true,
+  },
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelValuesArgsSchema),
   responseSchema: getMetricLabelValuesResponseSchema,
   handler: async ({ mastra, ...params }) => {

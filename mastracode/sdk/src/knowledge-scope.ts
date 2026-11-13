@@ -1,3 +1,5 @@
+import { encodeKnowledgeScopeId } from '@mastra/core/knowledge';
+
 import type { MastraCodeState } from './schema.js';
 
 /**
@@ -18,10 +20,11 @@ function isIdentityTag(tag: string): boolean {
  * Every Knowledge reader and writer in a session (the code agent, the /knowledge inspector) uses
  * this, so what the agent writes is what the inspector reads.
  *
- * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, so projects stay
- *   isolated. A host tag of the same type with another value is refused. A Factory session with
- *   no org resolves to nothing (fail closed): a session owner is a user id, never an org.
- * - Local sessions act with the host's scopes as given.
+ * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, with each id
+ *   encoded into one canonical segment, so projects stay isolated. A host tag of the same type with
+ *   another value is refused. A Factory session with no org resolves to nothing (fail closed): a
+ *   session owner is a user id, never an org.
+ * - Local sessions act with the host's scopes as given; they are canonical addresses already.
  */
 export function resolveKnowledgeSessionScopes(
   state: MastraCodeState | undefined,
@@ -33,7 +36,10 @@ export function resolveKnowledgeSessionScopes(
 
   if (factoryOwned) {
     if (!orgId) return { resolved: false, reason: 'This Factory session has no resolved organization.' };
-    const required = [`org:${orgId}`, ...(projectId ? [`project:${projectId}`] : [])];
+    const required = [
+      `org:${encodeKnowledgeScopeId(orgId)}`,
+      ...(projectId ? [`project:${encodeKnowledgeScopeId(projectId)}`] : []),
+    ];
     for (const tag of hostScopes) {
       const type = tag.slice(0, tag.indexOf(':') + 1);
       const conflict = required.find(requiredTag => requiredTag.startsWith(type) && requiredTag !== tag);

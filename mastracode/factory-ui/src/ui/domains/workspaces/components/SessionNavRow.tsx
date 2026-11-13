@@ -40,6 +40,7 @@ import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 export function SessionNavRow({
   name,
   label,
+  runByFactory,
   level,
   title,
   url,
@@ -57,6 +58,8 @@ export function SessionNavRow({
   onPinChange,
   onDelete,
   onRegenerateTitle,
+  onAnswerApproval,
+  answeringApproval,
   regeneratingTitle,
   visibility,
   onVisibilityChange,
@@ -69,6 +72,8 @@ export function SessionNavRow({
   name: string;
   /** Shown instead of the name, which stays in the accessible name: a child session's phase. */
   label?: string;
+  /** The Factory owns this session, though it is listed under a person's. */
+  runByFactory?: boolean;
   /** Indent level: 1 for a card's child sessions. */
   level?: number;
   /** Hover tooltip, typically the branch name. */
@@ -95,6 +100,9 @@ export function SessionNavRow({
   onDelete?: () => void;
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
+  /** Set while a followed card's phase session waits on an approval this viewer may give. */
+  onAnswerApproval?: (decision: 'approve' | 'decline') => void;
+  answeringApproval?: boolean;
   regeneratingTitle?: boolean;
   /** Private rows show a sharing popover; shared rows have no visibility badge. */
   visibility?: 'org' | 'private';
@@ -132,7 +140,7 @@ export function SessionNavRow({
       to={url}
       state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
-      aria-label={label ? `${label}: ${name}` : name}
+      aria-label={[runByFactory ? 'Run by Factory' : undefined, label, name].filter(Boolean).join(': ')}
       aria-describedby={statusLabel ? statusId : undefined}
       aria-disabled={disabled || loading || undefined}
       tabIndex={disabled || loading ? -1 : undefined}
@@ -165,6 +173,7 @@ export function SessionNavRow({
         }
       >
         {label ?? name}
+        {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
         <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
@@ -184,6 +193,8 @@ export function SessionNavRow({
     onDelete,
     onRegenerateTitle,
     regeneratingTitle,
+    onAnswerApproval,
+    answeringApproval,
     visibility,
     onVisibilityChange,
     changingVisibility,

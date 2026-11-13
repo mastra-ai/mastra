@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { shipBoard, workBoardInfo } from '../../../../../../e2e/ui/board-catalog';
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { MemoryRouter } from 'react-router';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -171,7 +172,244 @@ async function addCondition(
   if (value !== undefined) await user.type(within(draft).getByRole('textbox', { name: 'Value' }), `${value}{Enter}`);
 }
 
+/**
+ * Where the project's items live: a GitHub repository and a GitLab project linked to it, a Linear
+ * project in team ENG and a Jira project PLAT bound to it, and a Linear team bound to another project.
+ */
+/** Adds one more condition to `group`, picking its value from the ones the field offers. */
+async function addChoice(user: ReturnType<typeof userEvent.setup>, group: HTMLElement, field: string, value: string) {
+  await user.click(within(group).getByRole('button', { name: 'Add condition' }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: field }));
+  // A yes-or-no fact is answered in place; any other offers its values in a list.
+  if (value === 'Yes' || value === 'No') return user.click(within(group).getByRole('radio', { name: value }));
+  await user.click(within(group).getAllByRole('combobox', { name: 'Value' }).at(-1)!);
+  await user.click(await screen.findByRole('option', { name: value }));
+}
+
+const JOIN_SWITCH = 'Join the issue’s card instead';
+
+function serveProjectSources() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: 'fp-1',
+            name: 'Factory',
+            repositories: [
+              listedRepository('repo-1', 'acme/app'),
+              listedRepository('repo-2', 'acme/platform/api', { integrationId: 'gitlab' }),
+            ],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+      HttpResponse.json({
+        bindings: [
+          { integrationId: 'linear', sourceId: 'linear-project-1', factoryProjectId: 'fp-1' },
+          { integrationId: 'jira', sourceId: 'jira-10', factoryProjectId: 'fp-1' },
+          { integrationId: 'linear', sourceId: 'linear-team:team-ops', factoryProjectId: 'fp-2' },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/projects`, () =>
+      HttpResponse.json({
+        projects: [
+          {
+            id: 'linear-project-1',
+            name: 'Billing',
+            state: 'started',
+            teams: [{ id: 'team-eng', key: 'ENG', name: 'Engineering' }],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/teams`, () =>
+      HttpResponse.json({
+        teams: [
+          { id: 'team-eng', key: 'ENG', name: 'Engineering' },
+          { id: 'team-ops', key: 'OPS', name: 'Operations' },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/jira/projects`, () =>
+      HttpResponse.json({ projects: [{ id: 'jira-10', key: 'PLAT', name: 'Platform' }] }),
+    ),
+  );
+}
+
+/** The values offered in the open value list. */
+const offered = async () => (await screen.findAllByRole('option')).map(option => option.textContent?.trim());
+
 describe('IntakeRoutesSection', () => {
+  it('suggests the repositories, team and project keys the project has, and saves the one picked', async () => {
+    const state = serveRoutes();
+    serveProjectSources();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'acme/app goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await waitFor(async () => expect(await offered()).toEqual(['acme/app', 'acme/platform/api', 'ENG', 'PLAT']));
+    await user.click(screen.getByRole('option', { name: 'acme/app' }));
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'source.repository', operator: 'equals', value: 'acme/app' }] },
+    });
+  });
+
+  it('saves a repository the project does not list yet, typed in, and several picked for "is any of"', async () => {
+    const state = serveRoutes();
+    serveProjectSources();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Elsewhere goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'acme/next');
+    await user.click(await screen.findByRole('option', { name: 'Use “acme/next”' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add condition' }));
+    const fields = within(draft).getAllByRole('combobox', { name: 'Field' });
+    await user.click(fields.at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository, team or project' }));
+    await user.click(within(draft).getAllByRole('combobox', { name: 'Operator' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'is any of' }));
+    await user.click(within(draft).getByRole('combobox', { name: 'Values' }));
+    await user.click(await screen.findByRole('option', { name: 'ENG' }));
+    await user.click(screen.getByRole('option', { name: 'PLAT' }));
+    await user.keyboard('{Escape}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: {
+        operator: 'AND',
+        conditions: [
+          { field: 'source.repository', operator: 'equals', value: 'acme/next' },
+          { field: 'source.repository', operator: 'in', value: ['ENG', 'PLAT'] },
+        ],
+      },
+    });
+  });
+
+  it("keeps a repository being typed when the project's repositories arrive mid-way, the control staying put", async () => {
+    const state = serveRoutes();
+    let release!: () => void;
+    const arrived = new Promise<void>(resolve => (release = resolve));
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await arrived;
+        return HttpResponse.json({
+          projects: [{ id: 'fp-1', name: 'Factory', repositories: [listedRepository('repo-1', 'acme/app')] }],
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'acme/next goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    const search = await screen.findByPlaceholderText('owner/repo, ENG, PLAT');
+    await user.type(search, 'acme/ne');
+    release();
+    await waitFor(async () => expect(await offered()).toContain('Use “acme/ne”'));
+    await user.type(search, 'xt{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: { operator: 'AND', conditions: [{ field: 'source.repository', operator: 'equals', value: 'acme/next' }] },
+    });
+  });
+
+  it('lists the repositories a typed name matches before using the name as typed, so Enter picks the repository', async () => {
+    const state = serveRoutes();
+    serveProjectSources();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({
+          projects: [
+            {
+              id: 'fp-1',
+              name: 'Factory',
+              repositories: [listedRepository('repo-1', 'mastra-ai/mastra'), listedRepository('repo-2', 'acme/app')],
+            },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Mastra goes to Ship');
+    await addCondition(user, draft, 'Repository, team or project');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'mastra');
+    await waitFor(async () => expect(await offered()).toEqual(['mastra-ai/mastra', 'Use “mastra”']));
+    await user.keyboard('{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
+    await user.click(await screen.findByRole('option', { name: 'Ship' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]?.body).toMatchObject({
+      when: {
+        operator: 'AND',
+        conditions: [{ field: 'source.repository', operator: 'equals', value: 'mastra-ai/mastra' }],
+      },
+    });
+  });
+
+  it('suggests only the provider a condition beside it limits cards to', async () => {
+    serveRoutes();
+    serveProjectSources();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'GitLab goes to Ship');
+    await addCondition(user, draft, 'Provider');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.click(await screen.findByRole('option', { name: 'GitLab' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add condition' }));
+    await user.click(within(draft).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository, team or project' }));
+    await user.click(within(draft).getAllByRole('combobox', { name: 'Value' }).at(-1)!);
+    await waitFor(async () => expect(await offered()).toEqual(['acme/platform/api']));
+  });
+
+  it('warns when a repository typed for GitHub has no owner, which never matches', async () => {
+    serveRoutes();
+    serveProjectSources();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Mastra goes to Ship');
+    await addCondition(user, draft, 'Integration');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.click(await screen.findByRole('option', { name: 'GitHub' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add condition' }));
+    await user.click(within(draft).getAllByRole('combobox', { name: 'Field' }).at(-1)!);
+    await user.click(await screen.findByRole('option', { name: 'Repository, team or project' }));
+    await user.click(within(draft).getAllByRole('combobox', { name: 'Value' }).at(-1)!);
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'mastra');
+    await user.click(await screen.findByRole('option', { name: 'Use “mastra”' }));
+    expect(await within(draft).findByText(/GitHub repositories are owner\/repo/)).toBeInTheDocument();
+  });
+
   it('lists the routes that place new cards in the order they are tried, ending with the catch-all to Work › Intake', async () => {
     serveRoutes();
     renderSection();
@@ -300,6 +538,102 @@ describe('IntakeRoutesSection', () => {
     expect(phases).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
   });
 
+  it("adds a route that joins a pull request to its issue's card, in any unfinished phase", async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Fixes join their issue');
+    await addChoice(user, draft, 'Source kind', 'Pull request');
+    await addChoice(user, draft, 'Pull request closes an issue', 'Yes');
+    expect(within(draft).getByText('Send to')).toBeInTheDocument();
+    await user.click(within(draft).getByRole('switch', { name: JOIN_SWITCH }));
+    expect(within(draft).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+    expect(within(draft).queryByText('Send to')).not.toBeInTheDocument();
+
+    await user.click(within(draft).getByRole('combobox', { name: 'Phase' }));
+    const phases = (await screen.findAllByRole('option')).map(option => option.textContent);
+    expect(phases).toEqual(workBoardInfo.phases.filter(phase => phase.kind !== 'terminal').map(phase => phase.name));
+    await user.click(screen.getByRole('option', { name: 'Building' }));
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+
+    await waitFor(() => expect(routeNames()).toContain('Fixes join their issue'));
+    expect(state.requests).toEqual([
+      {
+        method: 'POST',
+        path: '',
+        body: {
+          name: 'Fixes join their issue',
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'source.kind', operator: 'equals', value: 'pull_request' },
+              { field: 'pullRequest.closesIssue', operator: 'equals', value: true },
+            ],
+          },
+          target: { boardKey: 'work', phaseKey: 'execute', joinClosedIssue: true },
+        },
+      },
+    ]);
+  });
+
+  it('offers joining only to a route for pull requests that close an issue', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    const draft = await startRoute(user, 'Pull requests');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    await addChoice(user, draft, 'Source kind', 'Pull request');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    await addChoice(user, draft, 'Pull request closes an issue', 'No');
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+
+    // Turned on while it could join, then narrowed to pull requests with no issue to join.
+    await user.click(within(draft).getByRole('radio', { name: 'Yes' }));
+    await user.click(within(draft).getByRole('switch', { name: JOIN_SWITCH }));
+    expect(within(draft).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+    await user.click(within(draft).getByRole('radio', { name: 'No' }));
+    expect(within(draft).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+    expect(within(draft).getByText('Send to')).toBeInTheDocument();
+
+    await user.click(within(draft).getByRole('button', { name: 'Add route' }));
+    await waitFor(() => expect(routeNames()).toContain('Pull requests'));
+    expect(state.requests[0]?.body).toMatchObject({ target: { boardKey: 'work', phaseKey: 'intake' } });
+    expect(state.requests[0]?.body).not.toHaveProperty('target.joinClosedIssue');
+    // Saved, it still has nothing to join.
+    expect(within(routeRow('Pull requests')).queryByRole('switch', { name: JOIN_SWITCH })).not.toBeInTheDocument();
+  });
+
+  it('turns joining off and on for a saved route, keeping a phase the cards can be in', async () => {
+    const state = serveRoutes();
+    const user = userEvent.setup();
+    renderSection();
+
+    await screen.findByRole('list', { name: 'Intake routes' });
+    const name = 'Pull requests that close a waiting issue join its card';
+    const id = state.routes.find(route => route.name === name)!.id;
+    expect(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH })).toBeChecked();
+
+    await user.click(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH }));
+    await waitFor(() => expect(state.requests).toHaveLength(1));
+    expect(state.requests[0]).toMatchObject({
+      method: 'PATCH',
+      path: id,
+      body: { target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false }, expectedRevision: 1 },
+    });
+    expect(within(routeRow(name)).getByText('Send to')).toBeInTheDocument();
+
+    await user.click(within(routeRow(name)).getByRole('switch', { name: JOIN_SWITCH }));
+    await waitFor(() => expect(state.requests).toHaveLength(2));
+    expect(state.requests[1]).toMatchObject({
+      method: 'PATCH',
+      path: id,
+      body: { target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true }, expectedRevision: 2 },
+    });
+    expect(within(routeRow(name)).getByText('Join the issue’s card, move to')).toBeInTheDocument();
+  });
+
   it('adds a route once however fast Add is pressed, and takes it back from the toast', async () => {
     const state = serveRoutes();
     const user = userEvent.setup();
@@ -351,7 +685,8 @@ describe('IntakeRoutesSection', () => {
     expect(screen.queryByRole('option', { name: 'Close reason' })).toBeNull();
     await user.click(screen.getByRole('option', { name: 'Repository, team or project' }));
     expect(within(draft).getByRole('combobox', { name: 'Operator' })).toHaveTextContent('is');
-    await user.type(within(draft).getByRole('textbox', { name: 'Value' }), 'acme/app{Enter}');
+    await user.click(within(draft).getByRole('combobox', { name: 'Value' }));
+    await user.type(await screen.findByPlaceholderText('owner/repo, ENG, PLAT'), 'acme/app{Enter}');
     await user.click(within(draft).getByRole('combobox', { name: 'Board' }));
     await user.click(await screen.findByRole('option', { name: 'Ship' }));
     await user.click(within(draft).getByRole('button', { name: 'Add route' }));

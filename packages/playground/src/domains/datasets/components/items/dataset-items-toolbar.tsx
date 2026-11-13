@@ -3,7 +3,7 @@
 import { Button, CreateButton } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
 import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
@@ -88,11 +88,12 @@ export function DatasetItemsToolbar({
 
   const searchField = showItemActions && (
     <div className="max-w-120 flex-1">
-      <ListSearch
+      <SearchInput
+        {...listSearchProps}
         label="Search items"
         placeholder="Search items"
         value={searchQuery ?? ''}
-        onSearch={query => onSearchChange?.(query)}
+        onValueChange={query => onSearchChange?.(query)}
       />
     </div>
   );

@@ -2,9 +2,9 @@ import type { ListStoredAgentsParams } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
@@ -127,7 +127,12 @@ export default function AgentBuilderAgentsPage() {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or description" />
+                <SearchInput
+                  {...listSearchProps}
+                  onValueChange={setSearch}
+                  label="Search agents"
+                  placeholder="Search by name or description"
+                />
               </div>
             </ActionRow.Start>
           </ActionRow>

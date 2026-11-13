@@ -4,8 +4,8 @@ import type { LucideIcon } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 import { boardFiltersActive, withBoardFilterValues } from '../boardFilters';
-import type { BoardSort } from '../boardOrder';
 import { BOARD_SORT_LABELS, boardSortOptions, DEFAULT_BOARD_SORT } from '../boardSort';
+import type { BoardSort } from '../boardSort';
 import type { BoardView } from '../hooks/useBoardView';
 import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';

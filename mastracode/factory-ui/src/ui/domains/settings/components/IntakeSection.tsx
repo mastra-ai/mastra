@@ -1,5 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { Fragment } from 'react';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
@@ -7,7 +9,6 @@ import { useIntakeBindingsQuery, useIntakeConfigQuery } from '../../../../hooks/
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { isPlatformConnectUnavailableError } from '../../factory/services/platformConnect';
 import { GithubIntakeSection } from './GithubIntakeSection';
 import { GitLabIntakeSection } from './GitLabIntakeSection';
@@ -17,7 +18,7 @@ import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
-import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -25,6 +26,15 @@ function sourceListing(connected: boolean, unavailable: boolean): SourceListing 
   if (connected) return 'connected';
   if (unavailable) return 'unavailable';
   return 'available';
+}
+
+// Untitled: until every status loads, the sources can't be sorted into connected, unavailable or available.
+function IntakeSkeleton() {
+  return (
+    <SettingsContainer>
+      <SettingsSkeleton label="Loading intake sources" variant="item" rows={4} />
+    </SettingsContainer>
+  );
 }
 
 export function IntakeSection() {
@@ -36,20 +46,24 @@ export function IntakeSection() {
   const jira = useJiraStatusQuery();
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
+  const vanta = useVantaStatusQuery();
+  const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
 
-  if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={4} />;
+  if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
     return (
-      <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
-        <Button
-          size="sm"
-          variant="ghost"
-          icon={<IconArrowRotateCounterClockwise />}
-          onClick={() => void configQuery.refetch()}
-        >
-          Retry
-        </Button>
-      </SettingsRow>
+      <SettingsContainer>
+        <SettingsRow label="Intake configuration is unavailable" description="Your sources could not be loaded.">
+          <Button
+            size="sm"
+            variant="ghost"
+            icon={<IconArrowRotateCounterClockwise />}
+            onClick={() => void configQuery.refetch()}
+          >
+            Retry
+          </Button>
+        </SettingsRow>
+      </SettingsContainer>
     );
   }
 
@@ -61,7 +75,7 @@ export function IntakeSection() {
     incidentio.isPending ||
     incidentioConnections.isPending
   ) {
-    return <SkeletonRows label="Loading intake sources" rows={4} />;
+    return <IntakeSkeleton />;
   }
 
   const props = { config: configQuery.data };
@@ -92,6 +106,10 @@ export function IntakeSection() {
           incidentioDirect || Boolean(incidentioConnections.data?.length),
           incidentio.isError || incidentioConnections.isError,
         );
+  const vantaListing = sourceListing(
+    Boolean(vantaConnections.data?.length),
+    vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
+  );
   // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
   const sources = [
     {
@@ -126,6 +144,22 @@ export function IntakeSection() {
         />
       ),
     },
+    ...(vanta.data
+      ? [
+          {
+            id: 'vanta',
+            listing: vantaListing,
+            content: (
+              <VantaIntakeSection
+                {...props}
+                listed={vantaListing !== 'available'}
+                statusQuery={vanta}
+                connectionsQuery={vantaConnections}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
   const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
   const connectedSources = sourcesListed('connected');
@@ -142,28 +176,30 @@ export function IntakeSection() {
     !incidentioDirect && incidentioConnections.data?.length ? (
       <AddPlatformAccountRow key="incident-io" provider="incident-io" />
     ) : null,
+    vantaConnections.data?.length ? <AddPlatformAccountRow key="vanta" provider="vanta" /> : null,
   ].filter(row => row !== null);
 
   return (
-    <div className="flex flex-col gap-8">
+    <>
       {connectedSources.length > 0 && (
         <SettingsSubsection
           scope="org"
           title="Connected sources"
           description="Choose which services bring work into your organization's boards."
         >
-          <div className="flex flex-col gap-6">
+          {/* Each source is its own card: its summary row, then its sources and routing. */}
+          <div className="flex flex-col gap-3">
             {connectedSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
       )}
       {unavailableSources.length > 0 && (
         <SettingsSubsection title="Unavailable sources">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
             {unavailableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
           </div>
         </SettingsSubsection>
@@ -172,12 +208,12 @@ export function IntakeSection() {
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
             {availableSources.map(source => (
-              <div key={source.id}>{source.content}</div>
+              <Fragment key={source.id}>{source.content}</Fragment>
             ))}
             {anotherAccountRows}
           </SettingsContainer>
         </SettingsSubsection>
       )}
-    </div>
+    </>
   );
 }

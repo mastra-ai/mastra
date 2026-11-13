@@ -17,10 +17,10 @@ import {
 } from '@/ds/components/Drawer/drawer';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Input } from '@/ds/components/Input/input';
-import { ListSearch } from '@/ds/components/ListSearch/list-search';
 import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
 import { PropertyFilterCreator } from '@/ds/components/PropertyFilter/property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+import { SearchInput, listSearchProps } from '@/ds/components/SearchInput';
 import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
 import { Switch } from '@/ds/components/Switch/switch';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -444,7 +444,16 @@ type CreditSearchProps = {
 };
 
 function CreditSearch({ search, onSearch }: CreditSearchProps) {
-  return <ListSearch label="Search credits" placeholder="Search credits" value={search} onSearch={onSearch} />;
+  return (
+    <SearchInput
+      {...listSearchProps}
+      className="max-w-120"
+      label="Search credits"
+      placeholder="Search credits"
+      defaultValue={search}
+      onValueChange={onSearch}
+    />
+  );
 }
 
 export const InsetSearchAndFilter: Story = {
@@ -453,7 +462,7 @@ export const InsetSearchAndFilter: Story = {
     docs: {
       description: {
         story:
-          'ListSearch and a multi-select Combobox in an ActionRow above the table. The caller filters the rows and renders the empty row when nothing matches.',
+          'SearchInput and a multi-select Combobox in an ActionRow above the table. The caller filters the rows and renders the empty row when nothing matches.',
       },
     },
   },
@@ -473,7 +482,7 @@ export const InsetSearchAndFilter: Story = {
           </ActionRow.Start>
           <ActionRow.End>
             <Combobox
-              aria-label="Filter by status"
+              aria-label="Search by status"
               multiple
               options={CREDIT_STATUS_OPTIONS}
               placeholder="Status"
@@ -864,7 +873,14 @@ export const InsetPagination: Story = {
         <CreditHistoryTitle id="credit-history-pagination" withLink={false} />
         <ActionRow>
           <ActionRow.Start>
-            <ListSearch label="Search credits" placeholder="Search credits" value={search} onSearch={changeSearch} />
+            <SearchInput
+              {...listSearchProps}
+              className="max-w-120"
+              label="Search credits"
+              placeholder="Search credits"
+              defaultValue={search}
+              onValueChange={changeSearch}
+            />
           </ActionRow.Start>
           <ActionRow.End>
             <BillingPortalLink />

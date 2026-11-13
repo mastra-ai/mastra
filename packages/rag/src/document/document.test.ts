@@ -4,6 +4,7 @@ import type { EmbeddingModel } from 'ai';
 import { describe, it, expect, vi } from 'vitest';
 
 import { MDocument } from './document';
+import { RecursiveJsonTransformer } from './transformers/json';
 import { Language } from './types';
 
 const sampleMarkdown = `
@@ -2046,6 +2047,31 @@ describe('MDocument', () => {
   });
 
   describe('chunkJson', () => {
+    it.each([0.5, 20, 20.9])('rejects maxSize %s instead of hanging on long JSON strings (#30166)', async maxSize => {
+      const doc = MDocument.fromJSON(JSON.stringify({ text: 'x'.repeat(100) }));
+
+      await expect(doc.chunk({ strategy: 'json', maxSize })).rejects.toThrow(/maxSize.*21/);
+    });
+
+    it.each([0.5, 20, 20.9])('rejects maxSize %s when constructing the JSON transformer (#30166)', maxSize => {
+      expect(() => new RecursiveJsonTransformer({ maxSize })).toThrow(/maxSize.*21/);
+    });
+
+    it('reconstructs long JSON strings at the smallest supported maxSize (#30166)', async () => {
+      const value = 'x'.repeat(100);
+      const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+      await doc.chunk({ strategy: 'json', maxSize: 21 });
+
+      expect(doc.getText().length).toBeGreaterThan(1);
+      expect(
+        doc
+          .getText()
+          .map(text => JSON.parse(text).text)
+          .join(''),
+      ).toBe(value);
+    });
+
     describe('Unicode handling', () => {
       it('should handle Unicode characters correctly', async () => {
         const input = {

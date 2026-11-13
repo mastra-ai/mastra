@@ -23,7 +23,7 @@ function workSourceLabel(personalWork: boolean, local: boolean) {
 }
 
 export function OnboardingAccountsPreview({
-  step,
+  showModels = true,
   modelScope = 'factory',
   local = false,
   model,
@@ -32,10 +32,9 @@ export function OnboardingAccountsPreview({
   personalProviderId,
   personalConnectionMethod,
   personalModel,
-}: OnboardingPreviewProps) {
+}: Omit<OnboardingPreviewProps, 'step'> & { showModels?: boolean }) {
   const shared = modelScope === 'factory';
   const personalWork = modelScope === 'user';
-  const setup = step === 'model-setup';
   const accountLabel = workAccountLabel(personalWork, local);
   const sourceLabel = workSourceLabel(personalWork, local);
   return (
@@ -64,8 +63,8 @@ export function OnboardingAccountsPreview({
           Your sessions
         </Txt>
       </SketchLabel>
-      {!setup && (
-        <div className="onboarding-scene-detail absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
+      {showModels && (
+        <div className="absolute inset-x-7 top-[89%] grid grid-cols-2 gap-6">
           <div role="group" aria-label="Factory work model" className="min-w-0">
             <Txt variant="meta" className="mb-2">
               {accountLabel}

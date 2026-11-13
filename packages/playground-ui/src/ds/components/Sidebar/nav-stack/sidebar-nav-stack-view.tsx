@@ -31,14 +31,17 @@ export function SidebarNavStackView({
 }: SidebarNavStackViewProps) {
   const { state } = useSidebar();
   const { activeValue, closeView } = useSidebarNavStack();
-  const active = state !== 'collapsed' && activeValue === value;
+  const open = activeValue === value;
+  const active = state !== 'collapsed' && open;
   const backRef = React.useRef<HTMLButtonElement>(null);
-  const wasActiveRef = React.useRef(active);
+  const wasOpenRef = React.useRef(open);
 
+  // Opening the view moves focus to its Back button. Expanding the sidebar onto a view that was already open doesn't:
+  // focus stays where it was.
   React.useEffect(() => {
-    if (active && !wasActiveRef.current) backRef.current?.focus();
-    wasActiveRef.current = active;
-  }, [active]);
+    if (active && !wasOpenRef.current) backRef.current?.focus();
+    wasOpenRef.current = open;
+  }, [active, open]);
 
   React.useEffect(() => {
     if (!active || !closeOnEscape) return;

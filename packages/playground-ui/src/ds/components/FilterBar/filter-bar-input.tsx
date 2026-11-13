@@ -92,9 +92,9 @@ function FilterBarInputImpl({
   // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
-    const fields = ctx.fields.filter(f => !f.hidden);
+    const fields = ctx.fields.filter(f => !f.hidden && (!f.rootOnly || groupId === undefined));
     return offerAdvanced ? [...fields, ADVANCED_FIELD] : fields;
-  }, [ctx.fields, offerAdvanced]);
+  }, [ctx.fields, offerAdvanced, groupId]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
   // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
@@ -426,7 +426,7 @@ function FilterBarInputImpl({
               {step === 'value' && !valueStep.hasSuggestions && (
                 <div className="flex items-center justify-between gap-2 py-1 pr-1 pl-[.9em]">
                   <Txt variant="caption" tone="muted">
-                    Type a value
+                    {valueStep.validationMessage ?? 'Type a value'}
                   </Txt>
                   <Button
                     size="sm"

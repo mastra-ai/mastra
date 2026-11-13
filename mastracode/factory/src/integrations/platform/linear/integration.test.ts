@@ -450,7 +450,7 @@ describe('PlatformLinearIntegration', () => {
           });
         });
         const reconcile = attachLinearIssueReconciler(integration, {
-          storage: { projects: seed.projects },
+          storage: { projects: seed.projects, intake: seed.intake },
           runtime: { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() },
         });
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 1, failed: 0 });
@@ -460,6 +460,77 @@ describe('PlatformLinearIntegration', () => {
         await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, updated: 0, failed: 0 });
       },
     );
+  });
+
+  describe('when a Linear issue is new to Factory', () => {
+    async function firstSight() {
+      const seed = await createPlatformStorageForTests();
+      const factoryProject = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+      await seed.intake.saveConfig({
+        orgId: 'org-1',
+        config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
+      });
+      await seed.intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'linear',
+        sourceId: project1SourceId,
+        factoryProjectId: factoryProject.id,
+      });
+      const integration = createIntegration(async input => {
+        const url = new URL(String(input));
+        const pageInfo = { hasNextPage: false, endCursor: null };
+        if (url.pathname.endsWith('/workspaces')) return json({ workspaces: [workspace] });
+        if (url.pathname.endsWith('/workspace-1/projects')) return json({ projects: [project], pageInfo });
+        if (url.pathname.endsWith('/workspace-1/issues')) return json({ issues: [issue], pageInfo });
+        throw new Error(`Unexpected request: ${url}`);
+      });
+      const runtime = { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() };
+      const filed = async () =>
+        (await seed.workItems.listDeferredDecisions('org-1', factoryProject.id)).map(
+          record => (record.decision as { sourceKey?: string }).sourceKey,
+        );
+      return { seed, factoryProject, integration, runtime, filed };
+    }
+
+    it('files it from the reconcile sweep with no board open', async () => {
+      const { seed, integration, runtime, filed } = await firstSight();
+      const reconcile = attachLinearIssueReconciler(integration, {
+        storage: { projects: seed.projects, intake: seed.intake },
+        runtime,
+      });
+
+      await expect(reconcile?.()).resolves.toMatchObject({ observed: 1, failed: 0 });
+      expect(await filed()).toEqual(['linear:ENG-42']);
+    });
+
+    it('does not file it when someone views the board', async () => {
+      const { seed, factoryProject, integration, runtime, filed } = await firstSight();
+      const sourceControl = seed.sourceControl.forIntegration('linear');
+      const context: IntegrationContext = {
+        auth: fakeAuth(),
+        baseUrl: 'https://factory.example',
+        stateSigner: createStateSigner('test-secret'),
+        storage: {
+          generic: seed.integrations.forIntegration('linear'),
+          sourceControl,
+          sourceControls: [sourceControl],
+          projects: seed.projects,
+          intake: seed.intake,
+          memorySettings: seed.memorySettings,
+          modelDefaults: seed.modelDefaults,
+          channelIdentity: seed.channelIdentity,
+        },
+        runtime,
+      };
+      const app = new Hono();
+      mountApiRoutes(app, integration.routes(context));
+
+      const res = await app.request(`/web/linear/issues?factoryProjectId=${factoryProject.id}`);
+
+      expect(res.status).toBe(200);
+      expect((await res.json()).issues).toMatchObject([{ identifier: 'ENG-42' }]);
+      expect(await filed()).toEqual([]);
+    });
   });
 
   it('does not expose the Platform secret through synthetic Linear connections', async () => {
@@ -1316,7 +1387,7 @@ describe('PlatformLinearIntegration', () => {
     expect(JSON.stringify(integration.diagnostics())).not.toContain(config.accessToken);
   });
 
-  it('attaches Linear rules to fetched Platform issues', async () => {
+  it('runs custom Linear rules on Platform issues from the sweep, not from board reads', async () => {
     const seed = await createPlatformStorageForTests();
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
@@ -1348,7 +1419,7 @@ describe('PlatformLinearIntegration', () => {
       orgId: 'org-1',
       config: { linear: { enabled: true, sourceIds: [project1SourceId] } },
     });
-    // Board reads only ingest sources explicitly bound to the project.
+    // The sweep only ingests sources explicitly bound to the project.
     await seed.intake.setBinding({
       orgId: 'org-1',
       userId: 'user-1',
@@ -1385,6 +1456,11 @@ describe('PlatformLinearIntegration', () => {
     const response = await app.request(`/web/linear/issues?factoryProjectId=${projectRecord.id}`);
 
     expect(response.status).toBe(200);
+    expect(onEvent).not.toHaveBeenCalled();
+    await expect(attachLinearIssueReconciler(integration, context)?.()).resolves.toMatchObject({
+      observed: 1,
+      failed: 0,
+    });
     expect(onEvent).toHaveBeenCalledOnce();
     expect(onEvent).toHaveBeenCalledWith(
       expect.objectContaining({

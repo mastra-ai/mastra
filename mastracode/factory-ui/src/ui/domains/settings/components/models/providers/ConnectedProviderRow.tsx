@@ -4,7 +4,11 @@ import { Status } from '@mastra/playground-ui/components/StatusIndicators';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsItem, SettingsItemIcon } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
+import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
+
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import {
   useRemoveProviderKey,
@@ -14,8 +18,6 @@ import {
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { signInRequest } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
-import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
-import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 
 export interface ProviderConnection {
   provider: ProviderInfo;
@@ -57,7 +59,10 @@ export function ConnectedProviderRow({
   disabled,
   onUpdateKey,
   onOAuthStarted,
+  variant = 'list',
 }: {
+  /** `list`: an `li` of a `ProviderRows` list. `settings`: a `SettingsItem` in a settings card. */
+  variant?: 'list' | 'settings';
   connection: ProviderConnection;
   requestScope: CredentialScope | undefined;
   disabled: boolean;
@@ -96,32 +101,53 @@ export function ConnectedProviderRow({
     );
   };
 
+  const brandIcon = (
+    <ProviderBrandIcon provider={provider.provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
+  );
+  const statusText = <Status presentation={pending ?? status} />;
+  const menu = credential ? (
+    <CredentialMenu
+      displayName={displayName}
+      credential={credential}
+      disabled={disabled || pending !== undefined}
+      onSignInAgain={
+        signInExpired && provider.oauth?.supported === true && onOAuthStarted
+          ? () => signInAgain(onOAuthStarted)
+          : undefined
+      }
+      onSignOut={signOut}
+      onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
+      onRemoveKey={removeKey}
+    />
+  ) : undefined;
+
+  if (variant === 'settings') {
+    return (
+      <SettingsItem
+        media={
+          <SettingsItemIcon>
+            {/* The span keeps each brand icon's own optical size. */}
+            <span className="flex">{brandIcon}</span>
+          </SettingsItemIcon>
+        }
+        title={displayName}
+        description={statusText}
+      >
+        {menu}
+      </SettingsItem>
+    );
+  }
+
   return (
     <li className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-      <ProviderBrandIcon provider={provider.provider} fallback={<IconBox className="text-muted-foreground size-4" />} />
+      {brandIcon}
       <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate">
         {displayName}
       </Txt>
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={pending ?? status} />
+        {statusText}
       </Txt>
-      {credential ? (
-        <CredentialMenu
-          displayName={displayName}
-          credential={credential}
-          disabled={disabled || pending !== undefined}
-          onSignInAgain={
-            signInExpired && provider.oauth?.supported === true && onOAuthStarted
-              ? () => signInAgain(onOAuthStarted)
-              : undefined
-          }
-          onSignOut={signOut}
-          onUpdateKey={provider.connectWithMastraAccount ? undefined : onUpdateKey}
-          onRemoveKey={removeKey}
-        />
-      ) : (
-        <span aria-hidden="true" className="size-control-sm shrink-0" />
-      )}
+      {menu ?? <span aria-hidden="true" className="size-control-sm shrink-0" />}
     </li>
   );
 }

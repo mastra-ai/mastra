@@ -242,12 +242,12 @@ type InputShared_Auxiliary_809 = {
   children?: InputShared_Auxiliary_809[] | undefined;
 };
 
-type Shared_Auxiliary_795 = {
+type Shared_Auxiliary_799 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_795[] | undefined;
+  children?: Shared_Auxiliary_799[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -3564,7 +3564,7 @@ type Shared_Type_62 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3703,7 +3703,7 @@ type Shared_Type_64 = {
     | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
-  /** Errors in this span and all nested spans; null when unknown */
+  /** Failures originating directly on this span; null when unknown */
   errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
@@ -3933,6 +3933,10 @@ type Shared_Type_69 = {
   threadQueryRows: boolean;
   /** Span queries (POST /observability/spans/query) */
   spanQuery: boolean;
+  /** Whether completed spans can be sorted by duration */
+  spanQueryDurationSort: boolean;
+  /** Whether spans can be sorted by model and provider */
+  spanQueryModelProviderSort: boolean;
   /** Additional identity, context and parent/root entity predicates in span queries. Treat a missing value as unavailable. */
   spanQueryContextFields: boolean;
   /** `model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable. */
@@ -4508,7 +4512,7 @@ type Shared_Type_88 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_795[] | undefined;
+  files?: Shared_Auxiliary_799[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -4922,7 +4926,9 @@ type Shared_Type_105 = {
   threadId?: string | undefined;
   resourceId?: string | undefined;
   prompt: string;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -4974,7 +4980,9 @@ type Shared_Type_107 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
-  cron: string;
+  cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: number | undefined;
   timezone?: string | undefined;
   status: 'active' | 'paused' | 'completed';
   nextFireAt: number;
@@ -10699,6 +10707,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'WORKFLOW'
           | 'TRAJECTORY'
           | 'STEP'
+          | 'SCORER'
+          | 'PROCESSOR'
           | 'EXTERNAL'
           | 'agent_run'
           | 'scorer_run'
@@ -11133,7 +11143,7 @@ export type PostObservabilitySpansQuery_Body = {
   where?: InputShared_Auxiliary_231 | undefined;
   textSearch?: string | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs' | 'durationMs' | 'model' | 'provider';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -15260,6 +15270,77 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
   request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
   responseType: 'stream';
+}
+
+// ============================================================================
+// Route: ALL /mcp
+// ============================================================================
+export type AllMcp_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface AllMcp_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: AllMcp_Request;
+  response: unknown;
+  responseType: 'mcp-http';
+}
+
+// ============================================================================
+// Route: GET /mcp/builtin
+// ============================================================================
+export type GetMcpBuiltin_Response =
+  | {
+      enabled: false;
+      /** 'config': server.mcp.enabled is false. 'production-without-auth': not under mastra dev and no server.auth */
+      disabledReason: 'config' | 'production-without-auth';
+    }
+  | {
+      enabled: true;
+      /** Endpoint path including the API prefix, e.g. /api/mcp */
+      path: string;
+      /** Whether @mastra/mcp is installed; the endpoint answers 501 without it */
+      mcpPackageInstalled: boolean;
+      /** Configured toolsets this server can serve */
+      toolsets: (
+        | 'agents'
+        | 'workflows'
+        | 'tools'
+        | 'memory'
+        | 'observability'
+        | 'observability_analytics'
+        | 'stored_agents'
+      )[];
+      readOnly: boolean;
+      auth:
+        | {
+            type: 'open';
+            /** Open because of the mastra dev default, not server.mcp.enabled: true */
+            devOnly: boolean;
+          }
+        | {
+            type: 'protected';
+            provider: string | null;
+          };
+    };
+
+export type GetMcpBuiltin_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMcpBuiltin_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetMcpBuiltin_Request;
+  response: GetMcpBuiltin_Response;
+  responseType: 'json';
 }
 
 // ============================================================================
@@ -22078,6 +22159,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  /** Only return results with this review status */
+  status?: ('needs-review' | 'reviewed' | 'complete') | undefined;
   orderBy?:
     | (
         | {
@@ -23459,7 +23542,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       agentId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       prompt: string;
       name?: string | undefined;
@@ -23488,7 +23573,9 @@ export type PostSchedules_Body =
   | {
       id?: string | undefined;
       workflowId: string;
-      cron: string;
+      cron?: string | undefined;
+      runAt?: number | undefined;
+      endAt?: number | undefined;
       timezone?: string | undefined;
       inputData?: unknown | undefined;
       initialState?: unknown | undefined;
@@ -23533,6 +23620,8 @@ export type PatchSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPar
 
 export type PatchSchedulesScheduleId_Body = {
   cron?: string | undefined;
+  runAt?: number | undefined;
+  endAt?: (number | null) | undefined;
   timezone?: string | undefined;
   status?: ('active' | 'paused') | undefined;
   metadata?:
@@ -25689,6 +25778,8 @@ export interface RouteTypes {
   'POST /agents/:agentId/stream-legacy': PostAgentsAgentIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/stream-legacy': PostWorkflowsWorkflowIdStreamLegacy_RouteContract;
   'POST /workflows/:workflowId/observe-stream-legacy': PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract;
+  'ALL /mcp': AllMcp_RouteContract;
+  'GET /mcp/builtin': GetMcpBuiltin_RouteContract;
   'GET /mcp/v0/servers': GetMcpV0Servers_RouteContract;
   'GET /mcp/v0/servers/:id': GetMcpV0ServersId_RouteContract;
   'GET /mcp/:serverId/tools': GetMcpServerIdTools_RouteContract;
@@ -26428,6 +26519,9 @@ export interface Client {
   '/logs/transports': {
     GET: GetLogsTransports_RouteContract;
   };
+  '/mcp': {
+    ALL: AllMcp_RouteContract;
+  };
   '/mcp/:serverId/events': {
     GET: GetMcpServerIdEvents_RouteContract;
   };
@@ -26475,6 +26569,9 @@ export interface Client {
   };
   '/mcp/:serverId/tools/:toolId/execute': {
     POST: PostMcpServerIdToolsToolIdExecute_RouteContract;
+  };
+  '/mcp/builtin': {
+    GET: GetMcpBuiltin_RouteContract;
   };
   '/mcp/v0/servers': {
     GET: GetMcpV0Servers_RouteContract;

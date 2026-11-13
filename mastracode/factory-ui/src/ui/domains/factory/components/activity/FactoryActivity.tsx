@@ -9,7 +9,7 @@ import { traySurface } from '../../../../ui/tray';
 import { usePromptButton } from '../../../chat/hooks/usePromptButton';
 import { SESSION_STATUS_LABELS } from '../../../workspaces/services/sessionRows';
 import { useFactoryActivity } from '../../hooks/useFactoryActivity';
-import { ACTIVITY_PERIOD_LABELS, PERIOD_DAYS } from '../../periodActivity';
+import { ACTIVITY_PERIOD_LABELS, DEFAULT_ACTIVITY_PERIOD, PERIOD_DAYS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
 import { countsLabel } from './activityFormat';
 import { ActivityChart } from './ActivityChart';
@@ -66,7 +66,7 @@ function LiveSessions({ working, waiting }: { working: number; waiting: number }
 }
 
 export function FactoryActivity({ factoryId }: { factoryId: string }) {
-  const [period, setPeriod] = useState<ActivityPeriod>('week');
+  const [period, setPeriod] = useState(DEFAULT_ACTIVITY_PERIOD);
   const [open, setOpen] = useState(false);
   const headingId = useId();
   const chartId = useId();

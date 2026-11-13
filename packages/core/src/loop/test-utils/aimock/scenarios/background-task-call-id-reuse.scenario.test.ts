@@ -1,5 +1,5 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { it, expect } from 'vitest';
+import { afterAll, beforeAll, it, expect, vi } from 'vitest';
 import { z } from 'zod';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
@@ -22,6 +22,14 @@ import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForA
  * each dispatching the background tool as `call_0`, every turn's result
  * recorded in the transcript.
  */
+// Turn ordering here relies on message-history's 10ms pause after each save; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
+
 describeForAllEngines(
   'AIMock loop scenario: background tool with reused provider call ids',
   engine => {

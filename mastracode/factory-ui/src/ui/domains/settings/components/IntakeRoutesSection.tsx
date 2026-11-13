@@ -37,7 +37,14 @@ import { queryKeys } from '../../../../api/keys';
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteListResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
-import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useApiConfig } from '../../../../api/config';
+import {
+  applyReroute,
+  previewReroute,
+  useIntakeRoutesQuery,
+  useIntakeRouteWrites,
+} from '../../../../hooks/useIntakeRoutes';
+import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
@@ -56,6 +63,7 @@ import {
   triggerLabel,
 } from './intakeRoutes';
 import { SettingsSubsection } from './SettingsSubsection';
+import type { SourceOption } from './sourceSuggestions';
 import { useRowDrag } from './useRowDrag';
 import { IconArrowDown } from '@mastra/playground-ui/icons/central/IconArrowDown';
 import { IconArrowUp } from '@mastra/playground-ui/icons/central/IconArrowUp';
@@ -143,9 +151,48 @@ function stepLabel(index: number, catchAllAt: number): string {
   return index === 0 ? 'If' : 'Else if';
 }
 
-function destinationLabelFor(scope: RouteScope, route: IntakeRouteInfo): string {
+function destinationLabelFor(scope: RouteScope, joining: boolean): string {
   if (scope.kind === 'moves') return 'Move to';
-  return route.target.joinClosedIssue ? 'Join the issue’s card, move to' : 'Send to';
+  return joining ? 'Join the issue’s card, move to' : 'Send to';
+}
+
+/**
+ * Whether a route can join a pull request to the card of the issue it closes: it handles arrivals alone, and
+ * every card it matches is a pull request that closes an issue.
+ */
+function canJoinIssueCard(on: IntakeRouteInfo['on'], when: RuleGroup | null): boolean {
+  if (on.length !== 1 || on[0] !== 'work_item.created' || when?.operator !== 'AND') return false;
+  const requires = (field: string, value: unknown) =>
+    when.conditions.some(
+      condition =>
+        !('conditions' in condition) &&
+        condition.field === field &&
+        condition.operator === 'equals' &&
+        condition.value === value,
+    );
+  return requires('source.kind', 'pull_request') && requires('pullRequest.closesIssue', true);
+}
+
+/** The phase a route keeps when what it does with cards changes: its own if cards can still be there. */
+function phaseStillOffered(board: InstalledBoardInfo | undefined, phaseKey: string, joining: boolean): string {
+  if (targetPhases(board, true, joining).some(phase => phase.id === phaseKey)) return phaseKey;
+  return board?.initialPhase ?? phaseKey;
+}
+
+function JoinIssueCard({ checked, onChange }: { checked: boolean; onChange: (joining: boolean) => void }) {
+  return (
+    <div className="flex items-start gap-2 pr-2 pl-4">
+      <Switch aria-label="Join the issue’s card instead" checked={checked} onCheckedChange={onChange} />
+      <div className="flex min-w-0 flex-col">
+        <Txt as="span" variant="caption">
+          Join the issue’s card instead
+        </Txt>
+        <Txt as="span" variant="caption" tone="muted">
+          Only trusted authors’ pull requests join; others get their own card.
+        </Txt>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -154,8 +201,10 @@ function destinationLabelFor(scope: RouteScope, route: IntakeRouteInfo): string 
  */
 function useRouteSaves(factoryId: string) {
   const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
   const writes = useIntakeRouteWrites(factoryId);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const previews = useRef(0);
   const [failures, setFailures] = useState(0);
   const key = queryKeys.intakeRoutes(factoryId);
 
@@ -178,7 +227,47 @@ function useRouteSaves(factoryId: string) {
         },
       );
     queue.current = done.then(() => undefined);
+    void done.then(saved => {
+      if (saved) void warnOfReroute();
+    });
     return done;
+  };
+  /** The routes now file some untouched cards elsewhere: warn, and offer to move them. */
+  const warnOfReroute = async () => {
+    const asked = ++previews.current;
+    const preview = await previewReroute(baseUrl, factoryId).catch(() => undefined);
+    // A later save asked again; only its answer describes the routes as they are now.
+    if (asked !== previews.current || !preview) return;
+    if (preview.total === 0) {
+      toast.dismiss(`reroute-${factoryId}`);
+      return;
+    }
+    const where = preview.moves.map(move => `${move.count} from ${move.fromBoard} to ${move.toBoard}`).join(', ');
+    toast.warning(
+      `${preview.total} untouched card${preview.total === 1 ? '' : 's'} now match${preview.total === 1 ? 'es' : ''} another board (${where}).`,
+      {
+        id: `reroute-${factoryId}`,
+        duration: Infinity,
+        action: {
+          label: 'Move',
+          onClick: () =>
+            void applyReroute(baseUrl, factoryId).then(
+              ({ moved, skipped }) => {
+                const movedText = `Moved ${moved} card${moved === 1 ? '' : 's'} to the start of their new board.`;
+                if (skipped > 0) {
+                  toast.warning(
+                    `${movedText} ${skipped} card${skipped === 1 ? ' was' : 's were'} skipped because ${skipped === 1 ? 'it' : 'they'} changed in the meantime.`,
+                  );
+                } else {
+                  toast.success(movedText);
+                }
+                void queryClient.invalidateQueries();
+              },
+              (error: unknown) => toast.error(saveFailureMessage(error)),
+            ),
+        },
+      },
+    );
   };
   return { latest, show, save, failures };
 }
@@ -353,12 +442,15 @@ function RouteName({ name, onRename }: { name: string; onRename: (name: string) 
 function RouteConditions({
   route,
   board,
+  sources,
   readOnly,
   needsOne,
   onSave,
 }: {
   route: IntakeRouteInfo;
   board: InstalledBoardInfo | undefined;
+  /** The project's repositories, teams and projects, offered for `source.repository`. */
+  sources: SourceOption[];
   readOnly: boolean;
   /** A new-card route with no conditions would take every new card, hiding the routes below it. */
   needsOne: boolean;
@@ -397,7 +489,7 @@ function RouteConditions({
         label={`${route.name} conditions`}
         rule={route.when}
         facts={intakeRouteFacts(route.on)}
-        options={phaseOptions(board)}
+        options={{ ...phaseOptions(board), 'source.repository': sources }}
         emptyHint={needsOne ? 'Add at least one.' : 'Matches every card.'}
         onChange={(when, incomplete) => {
           // An empty new-card route isn't saved, and the empty rows already say why.
@@ -422,6 +514,7 @@ function RouteCard({
   route,
   scope,
   boards,
+  sources,
   readOnly,
   isCatchAll,
   unreachable,
@@ -437,6 +530,7 @@ function RouteCard({
   route: IntakeRouteInfo;
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   readOnly: boolean;
   isCatchAll: boolean;
   unreachable: boolean;
@@ -456,7 +550,11 @@ function RouteCard({
   const setTarget = (target: Partial<IntakeRouteInfo['target']>) =>
     onUpdate({ target: { ...route.target, ...target } });
 
-  const destinationLabel = destinationLabelFor(scope, route);
+  const joining = route.target.joinClosedIssue === true;
+  const destinationLabel = destinationLabelFor(scope, joining);
+  // A route already joining keeps the switch whatever its conditions say now, so it can be turned off.
+  const offersJoin =
+    scope.kind === 'arrivals' && !readOnly && !isCatchAll && (joining || canJoinIssueCard(route.on, route.when));
 
   return (
     <RuleCard inactive={!route.enabled}>
@@ -516,11 +614,18 @@ function RouteCard({
             key={route.on.join()}
             route={route}
             board={board}
+            sources={sources}
             readOnly={readOnly}
             needsOne={scope.kind === 'arrivals'}
             onSave={when => onUpdate({ when })}
           />
         </RuleCardBody>
+      )}
+      {offersJoin && (
+        <JoinIssueCard
+          checked={joining}
+          onChange={next => setTarget({ joinClosedIssue: next, phaseKey: phaseStillOffered(board, phaseKey, next) })}
+        />
       )}
       <RuleCardOutcome label={destinationLabel}>
         {readOnly ? (
@@ -553,7 +658,7 @@ function RouteCard({
                 board={board}
                 value={phaseKey}
                 placesNew={placesNew}
-                joining={route.target.joinClosedIssue === true}
+                joining={joining}
                 label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
                 onChange={next => setTarget({ phaseKey: next })}
               />
@@ -579,12 +684,14 @@ function RouteCard({
 function NewRoute({
   scope,
   boards,
+  sources,
   initialBoard,
   onAdd,
   onCancel,
 }: {
   scope: RouteScope;
   boards: InstalledBoardInfo[];
+  sources: SourceOption[];
   initialBoard: InstalledBoardInfo | undefined;
   /** Resolves to whether the route was added. */
   onAdd: (route: NewRouteValue) => Promise<boolean>;
@@ -603,6 +710,11 @@ function NewRoute({
       ? (scope.board.flow?.completed ?? scope.board.initialPhase)
       : (initialBoard?.initialPhase ?? ''),
   );
+  const [wantsJoin, setWantsJoin] = useState(false);
+  const offersJoin = scope.kind === 'arrivals' && canJoinIssueCard(on, when);
+  const joining = offersJoin && wantsJoin;
+  // Leaving joining can leave a phase new cards can't land in picked.
+  const targetPhase = scope.kind === 'arrivals' ? phaseStillOffered(board, phaseKey, joining) : phaseKey;
   const problem = whenProblem(on, when);
   const needsCondition = scope.kind === 'arrivals' && when === null;
   const [adding, setAdding] = useState(false);
@@ -610,7 +722,7 @@ function NewRoute({
     !adding &&
     name.trim() !== '' &&
     board !== undefined &&
-    phaseKey !== '' &&
+    targetPhase !== '' &&
     !incomplete &&
     !problem &&
     !needsCondition;
@@ -642,7 +754,7 @@ function NewRoute({
           label="New route conditions"
           rule={when}
           facts={intakeRouteFacts(on)}
-          options={phaseOptions(board)}
+          options={{ ...phaseOptions(board), 'source.repository': sources }}
           emptyHint={needsCondition ? 'Add at least one.' : 'Matches every card.'}
           onChange={(next, unfinished) => {
             setWhen(next);
@@ -655,7 +767,8 @@ function NewRoute({
           </Txt>
         )}
       </RuleCardBody>
-      <RuleCardOutcome label={scope.kind === 'moves' ? 'Move to' : 'Send to'}>
+      {offersJoin && <JoinIssueCard checked={wantsJoin} onChange={setWantsJoin} />}
+      <RuleCardOutcome label={destinationLabelFor(scope, joining)}>
         {scope.kind === 'arrivals' && (
           <>
             <BoardPicker
@@ -675,8 +788,9 @@ function NewRoute({
         {board && (
           <PhasePicker
             board={board}
-            value={phaseKey}
+            value={targetPhase}
             placesNew={scope.kind === 'arrivals'}
+            joining={joining}
             label={scope.kind === 'moves' ? 'Move to' : 'Phase'}
             onChange={setPhaseKey}
           />
@@ -695,7 +809,7 @@ function NewRoute({
                 name: name.trim(),
                 on,
                 when,
-                target: { boardKey: board.id, phaseKey, joinClosedIssue: false },
+                target: { boardKey: board.id, phaseKey: targetPhase, joinClosedIssue: joining },
               });
               // An added route closes this form; a failed one leaves it to try again.
               if (!added) setAdding(false);
@@ -726,6 +840,7 @@ function RouteList({
   noun: string;
 }) {
   const query = useIntakeRoutesQuery(factoryId);
+  const sources = useSourceSuggestions(factoryId);
   const { latest, show, save, failures } = useRouteSaves(factoryId);
   const [adding, setAdding] = useState(false);
   const routes = (query.data?.intakeRoutes ?? []).filter(route => inScope(route, scope));
@@ -854,7 +969,11 @@ function RouteList({
             name: route.name,
             when: route.when,
             ...(scope.kind === 'moves' ? { on: route.on } : {}),
-            target: { boardKey: route.target.boardKey, phaseKey: route.target.phaseKey },
+            target: {
+              boardKey: route.target.boardKey,
+              phaseKey: route.target.phaseKey,
+              ...(route.target.joinClosedIssue ? { joinClosedIssue: true } : {}),
+            },
           },
         },
       ]);
@@ -905,6 +1024,7 @@ function RouteList({
                   route={route}
                   scope={scope}
                   boards={boards}
+                  sources={sources}
                   readOnly={readOnly}
                   isCatchAll={index === catchAllAt}
                   unreachable={catchAllAt >= 0 && index > catchAllAt}
@@ -957,6 +1077,7 @@ function RouteList({
             <NewRoute
               scope={scope}
               boards={boards}
+              sources={sources}
               initialBoard={scope.kind === 'moves' ? scope.board : defaultBoard}
               onAdd={add}
               onCancel={() => setAdding(false)}

@@ -1,15 +1,16 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { PULL_REQUEST_SOURCE_FILTER } from '../../factory/boardSourceFilters';
-import { rememberedBoardPath } from '../../factory/services/boardViews';
-import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconChecklist } from '@mastra/playground-ui/icons/central/IconChecklist';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
+
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
+import { rememberedBoardPath } from '../../factory/services/boardViews';
+import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 
 export function GlobalSearchNavigationResults({
   factoryId,

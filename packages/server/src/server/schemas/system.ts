@@ -90,6 +90,8 @@ export const observabilityStorageCapabilitiesSchema = z.object({
       'Full-history thread rows with activity windows, filters and sorting. Treat a missing value as unavailable.',
     ),
   spanQuery: z.boolean().describe('Span queries (POST /observability/spans/query)'),
+  spanQueryDurationSort: z.boolean().default(false).describe('Whether completed spans can be sorted by duration'),
+  spanQueryModelProviderSort: z.boolean().default(false).describe('Whether spans can be sorted by model and provider'),
   spanQueryContextFields: z
     .boolean()
     .default(false)

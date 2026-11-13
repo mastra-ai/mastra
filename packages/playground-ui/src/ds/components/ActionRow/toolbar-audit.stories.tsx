@@ -19,7 +19,6 @@ import {
   FILTER_BAR_TIME_RANGE_ITEM,
 } from '@/ds/components/FilterBar/filter-bar-time-range';
 import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
-import { ListSearch } from '@/ds/components/ListSearch';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
@@ -287,7 +286,14 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={() => {}} label="Filter agents" placeholder="Filter by name or instructions" />
+                <SearchInput
+                  size="sm"
+                  debounceMs={300}
+                  className="max-w-120"
+                  onValueChange={() => {}}
+                  label="Search agents"
+                  placeholder="Search by name or instructions"
+                />
               </div>
             </ActionRow.Start>
             <ActionRow.End>
@@ -306,7 +312,14 @@ export const AllToolbars: StoryObj = {
           <ActionRow>
             <ActionRow.Start>
               <div className="max-w-120 flex-1">
-                <ListSearch onSearch={() => {}} label="Search scorers" placeholder="Filter by scorer name" />
+                <SearchInput
+                  size="sm"
+                  debounceMs={300}
+                  className="max-w-120"
+                  onValueChange={() => {}}
+                  label="Search scorers"
+                  placeholder="Search by scorer name"
+                />
               </div>
               <SourceSelect />
               <ClearFiltersButton onClick={() => {}} />
@@ -363,7 +376,7 @@ export const AllToolbars: StoryObj = {
               />
             </ActionRow.Start>
             <ActionRow.End>
-              <Button size="icon-sm" aria-label="Filter actions">
+              <Button size="icon-sm" aria-label="Search actions">
                 <IconDotGrid1x3Vertical />
               </Button>
             </ActionRow.End>

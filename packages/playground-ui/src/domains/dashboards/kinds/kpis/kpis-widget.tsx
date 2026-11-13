@@ -1,7 +1,6 @@
 import { KpiCard } from '../../../metrics/components/kpi-card';
-import { formatCount, formatUsd } from '../../../metrics/lib/chart-format';
 import { alertAction } from '../../lib/alert-actions';
-import { valueOf } from '../../lib/answers';
+import { FORMATTERS } from '../../lib/format';
 import type { DashboardResult } from '../../lib/requests';
 import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
@@ -17,7 +16,6 @@ import { IconRobot } from '@/ds/icons/central/IconRobot';
 
 const ICONS = { bot: IconRobot, coins: IconCoins, hash: IconHashtag, threads: IconChatBubbles } as const;
 
-const FORMAT = { count: formatCount, usd: formatUsd };
 const change = (pct: number | undefined) => (pct !== undefined && Number.isFinite(pct) ? pct : undefined);
 
 export function KpisWidget({
@@ -33,7 +31,7 @@ export function KpisWidget({
   const [view] = views;
   const figures =
     gate.status === 'ready' ? <KpisView view={view} results={results} comparisonLabel={comparisonLabel} /> : null;
-  // KPIs read metrics and scores aggregates only, which every page filter applies to.
+  // A page filter a trace or span aggregate can't apply gates the widget before this is ready.
   const alertButton =
     gate.status === 'ready'
       ? alertAction(alert, widget, view, {
@@ -68,8 +66,9 @@ function KpisView({
   results: (DashboardResult | undefined)[];
   comparisonLabel: string;
 }) {
-  const byId = answersById(view.queries, results);
-  const answers = new Map([...byId].map(([id, r]) => [id, valueOf(r?.data)]));
+  const byId = answersById(view.queries, results.slice(0, view.queries.length));
+  const previousById = answersById(view.queries, results.slice(view.queries.length));
+  const answers = new Map([...byId].map(([id, r]) => [id, { current: r?.data, previous: previousById.get(id)?.data }]));
   return (
     <MetricsCardGroup>
       {view.options.items.map((item, i) => {
@@ -77,12 +76,12 @@ function KpisView({
           .map(id => byId.get(id))
           .filter((r): r is DashboardResult => r !== undefined);
         const figures = kpiFigures(item.value, answers);
-        const format = FORMAT[item.format];
+        const format = FORMATTERS[item.format].value;
         return (
           <KpiCard
             key={i}
             label={item.label}
-            icon={ICONS[item.icon]}
+            icon={item.icon && ICONS[item.icon]}
             value={figures.value === undefined ? '—' : format(figures.value)}
             change={change(figures.change)}
             lowerIsBetter={item.lowerIsBetter}

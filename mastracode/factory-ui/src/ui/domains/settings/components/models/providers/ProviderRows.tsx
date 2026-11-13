@@ -1,13 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import type { ReactNode } from 'react';
-
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
-import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import { IconBox } from '@mastra/playground-ui/icons/central/IconBox';
 import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import type { ReactNode } from 'react';
+
+import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 
 export function ProviderRows({
   children,
@@ -19,16 +18,10 @@ export function ProviderRows({
   onAdd: () => void;
 }) {
   return (
-    <ul className="border-border divide-border divide-y overflow-hidden rounded-lg border">
+    <ul className="divide-border divide-y">
       {children}
       <li>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-10 w-full justify-start rounded-none pl-3"
-          disabled={addDisabled}
-          onClick={onAdd}
-        >
+        <Button variant="ghost" size="sm" className="h-10 w-full justify-start" disabled={addDisabled} onClick={onAdd}>
           <IconPlusLarge aria-hidden="true" />
           Add provider
         </Button>
@@ -38,20 +31,7 @@ export function ProviderRows({
 }
 
 export function ProviderRowsSkeleton() {
-  return (
-    <div className="border-border overflow-hidden rounded-lg border">
-      <SkeletonRows label="Loading providers" rows={3} className="divide-border gap-0 divide-y">
-        <div aria-hidden className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
-          <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
-          <div className="min-w-0 flex-1">
-            <Skeleton className="h-3 w-28 max-w-full motion-reduce:before:animate-none" />
-          </div>
-          <Skeleton className="h-3 w-20 motion-reduce:before:animate-none" />
-          <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
-        </div>
-      </SkeletonRows>
-    </div>
-  );
+  return <SettingsSkeleton label="Loading providers" variant="item" />;
 }
 
 export function ProviderOptionRow({

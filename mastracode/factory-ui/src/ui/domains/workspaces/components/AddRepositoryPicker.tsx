@@ -12,21 +12,20 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsItem, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useRef, useState } from 'react';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { SettingsIntegrationIcon } from '../../settings/components/brand-icons/SettingsIntegrationIcon';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { IntegrationItemIcon } from '../../settings/components/IntegrationItem';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { isGitLabRepository } from '../services/github';
-import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
-import { IconArrowRotateCounterClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateCounterClockwise';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 export function AddRepositoryPicker({
   factory,
@@ -133,18 +132,14 @@ export function AddRepositoryPicker({
           />
         )}
         {loadingResults ? (
-          <SkeletonRows label="Loading available repositories" rows={3} />
+          <SettingsSkeleton label="Loading available repositories" variant="item" rows={3} />
         ) : canSearch ? (
-          <div>
+          <div className="divide-border flex flex-col divide-y *:py-3">
             {available.map(repo => (
-              <SettingsRow
+              <SettingsItem
                 key={`${isGitLabRepository(repo) ? 'gitlab' : 'github'}:${repo.id}`}
-                label={
-                  <span className="flex min-w-0 items-center gap-3">
-                    <SettingsIntegrationIcon provider={isGitLabRepository(repo) ? 'gitlab' : 'github'} />
-                    <span className="wrap-anywhere">{repo.fullName}</span>
-                  </span>
-                }
+                media={<IntegrationItemIcon provider={isGitLabRepository(repo) ? 'gitlab' : 'github'} />}
+                title={<span title={repo.fullName}>{repo.fullName}</span>}
                 description={
                   <Metadata>
                     {!isGitLabRepository(repo) && <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>}
@@ -161,7 +156,7 @@ export function AddRepositoryPicker({
                 >
                   {addingRepository?.id === repo.id ? 'Adding…' : 'Add'}
                 </Button>
-              </SettingsRow>
+              </SettingsItem>
             ))}
             {available.length === 0 && !error && !statusUnavailable && (
               <Txt as="p" variant="caption" tone="muted">

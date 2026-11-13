@@ -160,7 +160,7 @@ const icons = [
 const IconGrid = ({ size = 'md' }: { size?: IconSize }) => (
   <div className="grid grid-cols-6 gap-4">
     {icons.map(({ name, component: IconComponent }) => (
-      <div key={name} className="state-layer flex flex-col items-center gap-2 rounded-lg bg-card p-3">
+      <div key={name} className="flex flex-col items-center gap-2 rounded-lg bg-card state-layer p-3">
         <Icon size={size} className="text-foreground">
           <IconComponent />
         </Icon>
