@@ -1174,15 +1174,31 @@ export class AgentThreadStreamRuntime {
       threadLeaseOwner(runId, generation, executionId),
     );
     if (!lease.acquired) throw new AgentThreadLeaseConflictError(runId, lease.owner ?? 'another owner');
-    if (this.#getState(pubsub).leaseRenewalTimers.has(runId)) {
-      this.#stopLeaseRenewal(pubsub, runId);
-      this.#startLeaseRenewal(
-        pubsub,
-        this.#threadKey(resourceId, threadId),
-        runId,
-        threadLeaseOwner(runId, generation, executionId),
-      );
-    }
+  }
+
+  /**
+   * @internal Keep renewing the thread lease a caller just claimed, so the lease survives the rest of that run.
+   *
+   * A run that claims before it registers — an evented `generate()` persists its input and lets its workers drive
+   * the run without ever registering a thread run — has no completion watcher to renew or stop renewal for it, so
+   * the lease would lapse a TTL into the run and another process could take the thread and save its own message
+   * beside this run's. Registration adopts this timer when the run registers under the same owner, and the run's
+   * terminal settlement stops it.
+   */
+  holdDurableThreadLease(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId: string | undefined,
+    generation: number | undefined,
+    executionId?: string,
+  ): void {
+    this.#startLeaseRenewal(
+      pubsub,
+      this.#threadKey(resourceId, threadId),
+      runId,
+      threadLeaseOwner(runId, generation, executionId),
+    );
   }
 
   /** @internal Renew only the captured execution's thread lease; never acquire or transfer it. */
@@ -1240,6 +1256,31 @@ export class AgentThreadStreamRuntime {
       this.#threadKey(resourceId, threadId),
       threadLeaseOwner(runId, generation, executionId),
     );
+  }
+
+  /**
+   * @internal Bound how long an unregistered suspended run keeps its thread
+   * lease. The lease itself is not given back: renewal just stops after
+   * {@link AGENT_SUSPENDED_RUN_TTL_MS}, so the lease lapses a TTL later.
+   *
+   * A run that parks without registering — an evented `generate()` that
+   * suspends — keeps renewing the lease it claimed before persisting its input,
+   * and the suspended-run sweep only walks registered records, so nothing else
+   * would ever stop that renewal. The window matches what the sweep gives a
+   * registered suspended run: a resume arriving inside it can still take the
+   * thread, and after it the thread is free instead of claimed for the process
+   * lifetime.
+   *
+   * The stop is skipped when the run registered in the meantime — a resumed run
+   * owns its lease through registration, which the sweep bounds instead.
+   */
+  boundSuspendedRunLeaseRenewal(pubsub: PubSub, runId: string): void {
+    const timer = setTimeout(() => {
+      if (this.#getState(pubsub).threadRunsById.has(runId)) return;
+      this.#stopLeaseRenewal(pubsub, runId);
+    }, AGENT_SUSPENDED_RUN_TTL_MS);
+    // A parked run must never hold the process open.
+    timer.unref?.();
   }
 
   /** @internal Stop this process renewing an abandoned execution's thread lease, then release it. */

@@ -653,7 +653,7 @@ it('retries thread cleanup on a fresh worker after interruption between terminal
     resourceId: 'resource',
   };
   const terminal = { ...event, type: 'workflow.end' };
-  vi.spyOn(agentThreadStreamRuntime, 'releaseDurableThreadLease').mockRejectedValueOnce(new Error('worker stopped'));
+  vi.spyOn(agentThreadStreamRuntime, 'abandonDurableThreadLease').mockRejectedValueOnce(new Error('worker stopped'));
   await expect(settleEventedDurableExecution(mastra, terminal)).rejects.toThrow('worker stopped');
   const freshWorker = new Mastra({ storage: mastra.getStorage(), pubsub, logger: false });
   await expect(retrySettledDurableExecution(freshWorker, terminal)).resolves.toBe(true);

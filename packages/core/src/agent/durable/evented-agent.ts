@@ -8,6 +8,7 @@
  */
 
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
 import { createObservabilityContext } from '../../observability';
 import type { ShouldPersistSnapshotFn } from '../../workflows/types';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -168,17 +169,143 @@ export class EventedAgent<
     return false;
   }
 
-  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    // Captured now: a later resume() replaces the registry's fence before this
-    // segment's background promise settles.
-    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
-    const executionFence = entry?.executionFence;
+  /**
+   * Whether this run executes on a shared transport with storage-backed run
+   * fencing. Shared by the pre-persist lease claim and the terminal handling in
+   * `executeWorkflow` so the flag is derived the same way in both places.
+   */
+  #sharedExecutionState(runId: string): {
+    pubsub: PubSub | undefined;
+    sharedTransport: boolean;
+    sharedExecution: boolean;
+  } {
     const pubsub = this.getMastraInstance()?.pubsub ?? this.getPubSub();
     const sharedTransport =
       this.resolveWorkflowEngine() === 'evented' &&
       pubsub !== undefined &&
       !(pubsub.__rawBus() instanceof EventEmitterPubSub);
+    const executionFence = getRunRegistryEntry(runId, this.getMastraInstance())?.executionFence;
     const sharedExecution = sharedTransport && executionFence?.generation !== undefined;
+    return { pubsub, sharedTransport, sharedExecution };
+  }
+
+  /**
+   * The thread this run claimed before it persisted its input, or undefined when
+   * it did not claim one. Both the pre-persist claim and a failed input write
+   * resolve it the same way, so the lease is given back by the same owner that
+   * took it.
+   */
+  #threadClaimTarget(runId: string, workflowInput: DurableAgenticWorkflowInput) {
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
+    const executionFence = entry?.executionFence;
+    const { pubsub, sharedExecution } = this.#sharedExecutionState(runId);
+    if (!sharedExecution || !pubsub || !entry?.requestContext || !executionFence) return undefined;
+    const memoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
+    if (!threadId) return undefined;
+    return {
+      pubsub,
+      requestContext: entry.requestContext,
+      executionFence,
+      threadId,
+      resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
+    };
+  }
+
+  /**
+   * Give back the thread lease a run claimed before it persisted its input. The
+   * run never reached the engine, so nothing else settles that claim and this
+   * process would keep renewing a lease on a thread no run holds.
+   */
+  async #abandonHeldThreadLease(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+    failure: string,
+  ): Promise<void> {
+    const target = this.#threadClaimTarget(runId, workflowInput);
+    if (!target) return;
+    await agentThreadStreamRuntime
+      .abandonDurableThreadLease(
+        target.pubsub,
+        runId,
+        target.threadId,
+        target.resourceId,
+        target.executionFence.generation,
+        target.executionFence.executionId,
+      )
+      .catch(leaseError => this.logger.warn(failure, { runId, error: leaseError }));
+  }
+
+  /**
+   * Claim the cross-process thread lease before the initial input is persisted,
+   * so a run that loses the race rejects without writing a user message to the
+   * thread (see #30069).
+   *
+   * The claim is also held: this run persists its input before anything
+   * registers a thread run, so its own renewal is what carries the lease across
+   * the TTL until registration adopts it or the run settles.
+   * @internal
+   */
+  protected override async beforePersistInitialInput(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
+    if (entry) entry.eventedExecution = this.#sharedExecutionState(runId).sharedExecution;
+    const target = this.#threadClaimTarget(runId, workflowInput);
+    if (!target) return;
+    await agentThreadStreamRuntime.claimDurableThreadLease(
+      target.pubsub,
+      runId,
+      target.threadId,
+      target.resourceId,
+      target.executionFence.generation,
+      target.executionFence.executionId,
+    );
+    agentThreadStreamRuntime.holdDurableThreadLease(
+      target.pubsub,
+      runId,
+      target.threadId,
+      target.resourceId,
+      target.executionFence.generation,
+      target.executionFence.executionId,
+    );
+    setExecutionClaim(target.requestContext, runId, {
+      ...target.executionFence.claim,
+      threadId: target.threadId,
+      resourceId: target.resourceId,
+    });
+  }
+
+  /**
+   * Give the thread lease back when the input write fails, before the run ever
+   * reaches `executeWorkflow`.
+   * @internal
+   */
+  protected override async persistInitialInput(
+    runId: string,
+    workflowInput: DurableAgenticWorkflowInput,
+  ): Promise<void> {
+    try {
+      await super.persistInitialInput(runId, workflowInput);
+    } catch (error) {
+      await this.#abandonHeldThreadLease(
+        runId,
+        workflowInput,
+        'Failed to release the thread lease of a run that could not save its input',
+      );
+      throw error;
+    }
+  }
+
+  protected override async executeWorkflow(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
+    // Captured now: a later resume() replaces the registry's fence before this
+    // segment's background promise settles.
+    const entry = getRunRegistryEntry(runId, this.getMastraInstance());
+    const executionFence = entry?.executionFence;
+    const { sharedTransport, sharedExecution } = this.#sharedExecutionState(runId);
     if (entry) entry.eventedExecution = sharedExecution;
     try {
       if (sharedTransport && !sharedExecution && !this.#warnedUnfencedSharedExecution) {
@@ -200,22 +327,6 @@ export class EventedAgent<
       const memoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
       )?.memoryInfo;
-      const threadId = workflowInput.state?.threadId ?? memoryInfo?.threadId;
-      if (sharedExecution && entry?.requestContext && executionFence && threadId) {
-        await agentThreadStreamRuntime.claimDurableThreadLease(
-          pubsub,
-          runId,
-          threadId,
-          workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-          executionFence.generation,
-          executionFence.executionId,
-        );
-        setExecutionClaim(entry.requestContext, runId, {
-          ...executionFence.claim,
-          threadId,
-          resourceId: workflowInput.state?.resourceId ?? memoryInfo?.resourceId,
-        });
-      }
       // Note: unlike the default engine, evented `createRun` accepts no
       // `pubsub` — the engine always publishes on `mastra.pubsub` so any
       // worker in a fleet can execute a step. The agent's stream still sees
@@ -254,6 +365,16 @@ export class EventedAgent<
           // re-driven by recoverActiveRuns() (#22209). If the process dies
           // before this fires, the recover path performs the same cleanup.
           result => {
+            // A suspended run keeps its lease so a resume can take the thread
+            // back, but nothing registers a thread run for it here, so this
+            // process keeps renewing it for the rest of its life. The workflow
+            // event processor bounds that too, but in a dedicated-worker
+            // deployment it runs in a worker, which holds no timer to stop —
+            // so bound it here, in the process that owns the timer (#30069).
+            if (result?.status === 'suspended') {
+              const { pubsub } = this.#sharedExecutionState(runId);
+              if (pubsub) agentThreadStreamRuntime.boundSuspendedRunLeaseRenewal(pubsub, runId);
+            }
             if (sharedExecution) {
               executionFence?.detach();
               return;
@@ -292,6 +413,14 @@ export class EventedAgent<
           },
         );
     } catch (error) {
+      // The engine never took ownership of this run, so the thread lease held
+      // since before the input write has no successor: give it back, or this
+      // process keeps renewing a lease on a thread no run holds.
+      await this.#abandonHeldThreadLease(
+        runId,
+        workflowInput,
+        'Failed to release the thread lease of a run that never started',
+      );
       await this.settleExecution(runId, executionFence, {
         error: this.workflowExecutionError(error, 'Workflow execution failed'),
       });

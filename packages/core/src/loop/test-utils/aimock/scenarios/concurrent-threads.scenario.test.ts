@@ -106,25 +106,20 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
       try {
         await entered[0]![0]!.promise;
         second = start(1);
-        // Plain/fs queue a shared thread. Durable engines interleave its runs.
-        const serialized = variant === 'same-thread' && !isDurableEngineVariant(engine);
-        const interleaved = variant === 'same-thread' && isDurableEngineVariant(engine);
+        // Every engine queues a shared thread: the second run waits for the first
+        // one to finish with it, so neither reply can be attributed to the wrong
+        // prompt (#30069).
+        const serialized = variant === 'same-thread';
         if (!serialized) await entered[1]![0]!.promise;
         released[0]![0]!.release();
         await entered[0]![1]!.promise;
         if (variant === 'abort') {
           expect(agent.abortRunStream(runs[0]!.runId)).toBe(true);
           released[0]![1]!.release();
-        } else if (interleaved) {
-          released[1]![0]!.release();
-          await entered[1]![1]!.promise;
-          released[0]![1]!.release();
-          await first;
-          released[1]![1]!.release();
         } else {
           released[0]![1]!.release();
         }
-        if (!serialized && !interleaved) {
+        if (!serialized) {
           released[1]![0]!.release();
           await entered[1]![1]!.promise;
           released[1]![1]!.release();
@@ -137,7 +132,6 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
         expect(b.types).not.toContain('error');
         expect(commits).toHaveLength(variant === 'abort' ? 3 : serialized ? 2 : 4);
         expect(new Set(commits).size).toBe(commits.length);
-        if (interleaved) expect(commits).toEqual(['0:1', '1:1', '0:2', '1:2']);
         // COR-1409: cancellation is clean on every engine (COR-1415 / #26345).
         expect(a.types).not.toContain('error');
         if (variant === 'abort') expect(a.types).toContain('abort');
