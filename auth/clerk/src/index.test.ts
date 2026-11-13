@@ -97,7 +97,16 @@ describe('MastraAuthClerk', () => {
       const result = await auth.authenticateToken('test-token');
 
       expect(verifyJwks).toHaveBeenCalledWith('test-token', mockOptions.jwksUri);
-      expect(result).toEqual(mockUser);
+      // RBAC looks the user up by `id`; a Clerk token only carries `sub`.
+      expect(result).toEqual({ ...mockUser, id: 'user123' });
+    });
+
+    it('keeps an id claim the token already has', async () => {
+      (verifyJwks as any).mockResolvedValue({ sub: 'user123', id: 'custom-id' });
+
+      const result = await new MastraAuthClerk(mockOptions).authenticateToken('test-token');
+
+      expect(result).toEqual({ sub: 'user123', id: 'custom-id' });
     });
 
     it('should return null when token verification fails', async () => {
@@ -818,6 +827,13 @@ describe('MastraAuthClerk', () => {
         publishableKey: 'pk_live_Y2xlcmsuZXhhbXBsZS5jb20k',
       });
       expect(auth.getFapiUrl()).toBe('https://clerk.example.com');
+    });
+  });
+
+  describe('getOAuthMetadata', () => {
+    it('advertises the Clerk Frontend API as the authorization server', () => {
+      const auth = new MastraAuthClerk(mockOptions);
+      expect(auth.getOAuthMetadata()).toEqual({ authorizationServers: ['https://brief-amoeba-71.clerk.accounts.dev'] });
     });
   });
 });

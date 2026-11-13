@@ -211,6 +211,11 @@ export interface FactoryIntegration {
   readonly id: string;
   /** Issue-oriented capability consumed by Intake. */
   readonly intake?: Intake;
+  /**
+   * Further intake settings this integration owns under their own ids (e.g. GitHub's `dependabot`),
+   * so the intake config API and UI accept and list sources for them.
+   */
+  readonly additionalIntakes?: ReadonlyArray<{ id: string; intake: Pick<Intake, 'listSources' | 'listItems'> }>;
   /** Repository, installation, and pull-request capability. */
   readonly versionControl?: VersionControl;
   /**

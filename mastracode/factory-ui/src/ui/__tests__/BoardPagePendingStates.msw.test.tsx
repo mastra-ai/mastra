@@ -634,13 +634,11 @@ describe('Board card pending states', () => {
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
-    let workItemRequests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
-        workItemRequests += 1;
-        // The start refetches before it can decide to open or create; hold that
-        // refetch open so the pre-mutation window is observable.
-        if (workItemRequests > 1) await refreshGate.promise;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        // The start reads the clicked card before it can decide to open or create; hold that
+        // read open so the pre-mutation window is observable.
+        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
@@ -778,12 +776,10 @@ describe('Board card pending states', () => {
   it('starts one session when the details run control is re-triggered before it resolves', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
-    let workItemRequests = 0;
     const runStarts: string[] = [];
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
-        workItemRequests += 1;
-        if (workItemRequests > 1) await refreshGate.promise;
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async ({ request }) => {
+        if (new URL(request.url).searchParams.has('workItemId')) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {

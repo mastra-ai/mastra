@@ -170,6 +170,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     const { error, endSpan = true, endTree, attributes, metadata } = options;
+    this.recordError(error, { origin: options.origin });
     this.applyOutcome(options);
 
     if (metadata) {

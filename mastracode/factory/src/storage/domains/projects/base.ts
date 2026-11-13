@@ -29,6 +29,18 @@ export function factoryProjectSettingsUserId(factoryProjectId: string): string {
   return `factory-project:${factoryProjectId}`;
 }
 
+/**
+ * The Factory as the owner of work nobody started: the `user_id` of a phase session a
+ * webhook, an automatic phase or a rule opened, and the user its runs authenticate as.
+ * It is the settings sentinel, so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export const factoryPrincipalId = factoryProjectSettingsUserId;
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -66,9 +78,12 @@ export interface FactoryProject {
   lastPushBuildAt: Date | null;
   /**
    * A run's build-start lease lapsed, so a build it may have started is not
-   * on record. Cleared once a run reconciles it with a provider that lists builds.
+   * on record. Cleared once a run reconciles it with a provider that lists
+   * builds, or gives up on it after `UNRESOLVED_BUILD_START_TIMEOUT_MS`.
    */
   buildStartUncertain: boolean;
+  /** The latest moment the unrecorded build behind `buildStartUncertain` may have started. */
+  buildStartUncertainSince: Date | null;
   /** Whether a push to an environment repository's default branch starts a build. */
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
@@ -142,6 +157,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     last_build_attempted_at: { type: 'timestamp', nullable: true },
     last_push_build_at: { type: 'timestamp', nullable: true },
     build_start_uncertain: { type: 'boolean', default: false },
+    build_start_uncertain_since: { type: 'timestamp', nullable: true },
     build_start_claim: { type: 'text', nullable: true },
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
@@ -181,6 +197,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   last_build_attempted_at: Date | null;
   last_push_build_at: Date | null;
   build_start_uncertain: boolean | null;
+  build_start_uncertain_since: Date | null;
   build_start_claim: string | null;
   build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
@@ -214,6 +231,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     lastBuildAttemptedAt: row.last_build_attempted_at ?? null,
     lastPushBuildAt: row.last_push_build_at ?? null,
     buildStartUncertain: row.build_start_uncertain ?? false,
+    buildStartUncertainSince: row.build_start_uncertain_since ?? null,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
     createdAt: row.created_at,
@@ -393,7 +411,10 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
    * only expires when its run died or stalled. Taking over an expired lease
    * marks the start uncertain (that run's build may have reached the provider
    * unrecorded), and the mark stays until a release resolves it; `uncertain`
-   * reports it. Only the claim is transactional; provider calls run outside it.
+   * reports it. The mark's `build_start_uncertain_since` is the lapsed lease's
+   * expiry, the latest that run could have started a build; a mark written
+   * before that column existed is dated by the first claim that reads it.
+   * Only the claim is transactional; provider calls run outside it.
    */
   async claimBuildStart({
     id,
@@ -412,11 +433,19 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
         const expiresAt = current.build_start_claim_expires_at;
         if (current.build_start_claim && expiresAt && expiresAt.getTime() > now.getTime()) return null;
         result.claimed = true;
-        result.uncertain = Boolean(current.build_start_claim) || current.build_start_uncertain === true;
+        const lapsedAt = current.build_start_claim ? (expiresAt ?? now) : null;
+        const markedAt = current.build_start_uncertain === true ? (current.build_start_uncertain_since ?? now) : null;
+        result.uncertain = lapsedAt !== null || markedAt !== null;
+        const since =
+          lapsedAt && markedAt
+            ? lapsedAt.getTime() > markedAt.getTime()
+              ? lapsedAt
+              : markedAt
+            : (lapsedAt ?? markedAt);
         return {
           build_start_claim: token,
           build_start_claim_expires_at: new Date(now.getTime() + leaseMs),
-          ...(result.uncertain ? { build_start_uncertain: true } : {}),
+          ...(since ? { build_start_uncertain: true, build_start_uncertain_since: since } : {}),
           updated_at: now,
         };
       }),
@@ -485,7 +514,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.lastBuildAttemptedAt !== undefined
             ? { last_build_attempted_at: changes.lastBuildAttemptedAt }
             : {}),
-          ...(resolved ? { build_start_uncertain: false } : {}),
+          ...(resolved ? { build_start_uncertain: false, build_start_uncertain_since: null } : {}),
           build_start_claim: null,
           build_start_claim_expires_at: null,
           updated_at: now,

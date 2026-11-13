@@ -426,7 +426,7 @@ overrides:
   path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
-  e2b>undici8: npm:undici@8.12.2
+  e2b>undici8: npm:undici@8.12.4
   multer@<2.5.0: 2.5.0
   '@hey-api/openapi-ts@<0.97.3': 0.97.3
   '@opentelemetry/core@>=2.0.0 <2.8.0': 2.12.0
@@ -636,7 +636,8 @@ overrides:
   'yocto-spinner': 'npm:@socketregistry/yocto-spinner@^1.0.25'
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   # Vanta 2026-10-20: raised to 8.12.2 (AIKIDO-2026-159850/393834/846025/559914/609286/634008/740957, fixed in 8.12.2)
-  'undici@<8.12.2': 8.12.2
+  # Vanta 2026-11-12: raised to 8.12.4 (GHSA-mqg3-3v4r-cm32 High, -7xg3-fphp-28hg, -5rm8-gv32-r954, -9v6h-8rgp-m69f, -3g9m-rv3r-w5w2, -r4pc-4jcp-7pqc; all >=8.0.0 <8.12.4)
+  'undici@<8.12.4': 8.12.4
   # @qdrant/js-client-rest builds an undici Agent and hands it to fetch as `dispatcher`.
   # Forcing the 8.x line there pairs an undici 8 dispatcher with the undici that Node
   # bundles for global fetch (7.x), and undici 8 rejects that handler with

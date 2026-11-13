@@ -122,6 +122,13 @@ const listTracesQueryParamSchema = createObservabilityListQuerySchema(tracesList
 export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces',
+  mcp: {
+    toolset: 'observability',
+    name: 'list_traces',
+    description:
+      'List recent traces (agent runs, workflow runs, tool calls), newest first. Filter by entity, status, time range, or ids.',
+    requires: capabilities => capabilities.observability !== null && !capabilities.observability.traceQuery,
+  },
   responseType: 'json',
   queryParamSchema: listTracesQueryParamSchema,
   responseSchema: listTracesResponseSchema,
@@ -305,6 +312,13 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
 export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId/light',
+  mcp: {
+    toolset: 'observability',
+    name: 'get_trace',
+    description:
+      'Get a trace as light span records (ids, parent, name, type, timing, status, entity). Call get_span for a span’s input, output and attributes.',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
   responseSchema: getTraceLightResponseSchema,
@@ -333,6 +347,12 @@ export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
 export const GET_SPAN_ROUTE: ServerRoute = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId/spans/:spanId',
+  mcp: {
+    toolset: 'observability',
+    name: 'get_span',
+    description: 'Get one span of a trace.',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseType: 'json',
   pathParamSchema: getSpanArgsSchema,
   responseSchema: getSpanResponseSchema,
@@ -360,6 +380,12 @@ export const GET_SPAN_ROUTE: ServerRoute = createRoute({
 export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
   method: 'GET',
   path: '/observability/traces/:traceId/trajectory',
+  mcp: {
+    toolset: 'observability',
+    name: 'get_trace_trajectory',
+    description: 'Get the ordered steps of a trace (model calls, tool calls, workflow steps) as a trajectory.',
+    requires: capabilities => capabilities.observability !== null,
+  },
   responseType: 'json',
   pathParamSchema: getTraceArgsSchema,
   responseSchema: z.object({

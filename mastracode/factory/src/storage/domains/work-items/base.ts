@@ -43,6 +43,7 @@ import {
   LEGACY_TRIAGE_PHASE,
   LEGACY_WORK_BOARD,
   readReviewBoardInUse,
+  releaseLegacyReviewCards,
 } from './legacy-review.js';
 import type { ReviewBoardInUse, ReviewBoardScope } from './legacy-review.js';
 import type {
@@ -97,6 +98,8 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'linear-issue' ||
     value === 'jira-issue' ||
     value === 'incidentio-follow-up' ||
+    value === 'github-dependabot-alert' ||
+    value === 'vanta-vulnerability' ||
     value === 'manual'
   );
 }
@@ -242,6 +245,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_configuration_invalid',
   'run_credentials_unavailable',
   'run_user_unauthenticated',
+  'factory_org_key_missing',
   'run_failed',
   'unknown',
 ] as const;
@@ -627,8 +631,8 @@ export const FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
   ],
 };
 
-/** Why a session follows a work item: it filed it, started a role on it, or asked to. */
-export type WorkItemSubscriptionReason = 'created' | 'started' | 'subscribed';
+/** Why a session follows a work item: it filed it, moved it, started a role on it, or asked to. */
+export type WorkItemSubscriptionReason = 'created' | 'moved' | 'started' | 'subscribed';
 
 /** A session following a work item, so it hears what happens to it. */
 export interface WorkItemSubscription {
@@ -1349,8 +1353,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Projects found not to use the Review board; once redundant it stays so, with no card left to reopen on it. */
   readonly #reviewRedundant = new Set<string>();
 
+  #ownReviewBoard: ReviewBoardInUse | undefined;
+
+  /**
+   * Tells cards apart from the retired Review board's: where `owned` answers true the project has
+   * a board of its own under `review`, and the cards stored on it are that board's.
+   */
+  useOwnReviewBoard(owned: ReviewBoardInUse): void {
+    this.#ownReviewBoard = owned;
+  }
+
   /** {@link reviewBoardInUse} through `ops`, so a caller inside a transaction reads within it. */
   readonly #reviewInUse: ReviewBoardInUse = async (ops, scope) => {
+    // Asked every time: a project can make or delete a board of its own under `review` at any moment.
+    if (await this.#ownReviewBoard?.(ops, scope)) return true;
     const key = `${scope.orgId}\0${scope.factoryProjectId}`;
     if (this.#reviewRedundant.has(key)) return false;
     const inUse = await readReviewBoardInUse(ops, scope, {
@@ -1363,12 +1379,33 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   };
 
   /**
-   * Whether the project still uses the retired Review board: it holds a card stored on Review
-   * that isn't Done or Canceled. Such a project keeps the board and its cards stay on it; in any
-   * other project Review is redundant and its cards read as Work.
+   * Whether cards stored on `review` stay there: the project has a board of its own under that
+   * key, or still uses the retired Review board (it holds a card stored on Review that isn't Done
+   * or Canceled) and keeps it. In any other project Review is redundant and its cards read as Work.
    */
   reviewBoardInUse(scope: ReviewBoardScope): Promise<boolean> {
     return this.#reviewInUse(this.#db, scope);
+  }
+
+  /**
+   * Leaves `review` to a board about to take it: stores the Work placement of the cards the
+   * retired Review board left there, through `ops`, so it happens in the board write's
+   * transaction. See {@link releaseLegacyReviewCards} for `open`.
+   */
+  async releaseReviewCards(
+    ops: FactoryStorageOps,
+    scope: ReviewBoardScope,
+    { open }: { open: 'refuse' | 'move' },
+  ): Promise<void> {
+    const rewritten = await releaseLegacyReviewCards(
+      ops,
+      scope,
+      // Legacy cards not copied yet still count.
+      { split: !this.#legacyMode, legacy: this.#legacyMode || this.#split.pending },
+      open,
+    );
+    // An open card that moved was listed on Review until now.
+    if (rewritten > 0) await bumpBoardVersions(ops, [scope]);
   }
 
   constructor() {
@@ -3359,6 +3396,22 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     });
   }
 
+  /** The binding an `agent:<bindingId>` actor names, active or revoked. Identifies; never authorizes. */
+  async findRunBindingById(input: {
+    orgId: string;
+    factoryProjectId: string;
+    id: string;
+  }): Promise<FactoryRunBindingRecord | null> {
+    // Actor ids are free text and the id column is a uuid on Postgres.
+    if (!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(input.id)) return null;
+    const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
+      id: input.id,
+      org_id: input.orgId,
+      factory_project_id: input.factoryProjectId,
+    });
+    return row ? toBinding(row) : null;
+  }
+
   /** Resolve exact active agent authority; partial session matches never authorize. */
   async findActiveRunBinding(address: FactoryRunBindingAddress): Promise<FactoryRunBindingRecord | null> {
     const row = await this.#db.findOne<GovernanceDbRow>('factory_run_bindings', {
@@ -4127,6 +4180,27 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
       { org_id: orgId, work_item_id: workItemId },
+      {
+        orderBy: [
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+      },
+    );
+    return rows.map(toWorkItemSubscription);
+  }
+
+  /** Every follow link in a Factory, earliest first: which session follows which work item. */
+  async listProjectSubscriptions({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<WorkItemSubscription[]> {
+    const rows = await super.ops.findMany<WorkItemSubscriptionDbRow>(
+      FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId },
       {
         orderBy: [
           ['created_at', 'asc'],

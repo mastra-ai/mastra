@@ -89,6 +89,7 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import { readPositiveIntEnv } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
@@ -906,8 +907,10 @@ export class Mastra<
   #classifiers?: TClassifiers;
   #tools?: TTools;
   #processors?: TProcessors;
-  #processorConfigurations: Map<string, Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>> =
-    new Map();
+  #processorConfigurations: Map<
+    string,
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
+  > = new Map();
   #memory?: TMemory;
   #knowledge: TKnowledge;
   #workspace?: Workspace;
@@ -2956,6 +2959,7 @@ export class Mastra<
                 source: 'agent',
                 agentId: durableAgent.id ?? agentKey,
                 agentName: durableAgent.name,
+                agentSource: underlyingAgent.source,
               });
             }
           })
@@ -3051,6 +3055,11 @@ export class Mastra<
       });
     }
 
+    // Set the source first: registering the agent records it on the agent's processor configurations
+    if (options?.source) {
+      mastraAgent.source = options.source;
+    }
+
     // Initialize the agent
     mastraAgent.__setLogger(this.#logger);
     mastraAgent.__registerMastra(this);
@@ -3061,11 +3070,6 @@ export class Mastra<
       tts: this.#tts,
       vectors: this.#vectors,
     });
-
-    // Set the source if provided
-    if (options?.source) {
-      mastraAgent.source = options.source;
-    }
 
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
@@ -3102,6 +3106,7 @@ export class Mastra<
               source: 'agent',
               agentId: mastraAgent.id ?? agentKey,
               agentName: mastraAgent.name,
+              agentSource: mastraAgent.source,
             });
           }
         })
@@ -3511,6 +3516,18 @@ export class Mastra<
     this.setStudio(fsStudio);
   }
 
+  /** Drops an agent's processor configurations; registering the agent again re-adds them. */
+  #removeProcessorConfigurations(agentId: string): void {
+    for (const [processorId, configs] of this.#processorConfigurations) {
+      const remaining = configs.filter(c => c.agentId !== agentId);
+      if (remaining.length === 0) {
+        this.#processorConfigurations.delete(processorId);
+      } else if (remaining.length !== configs.length) {
+        this.#processorConfigurations.set(processorId, remaining);
+      }
+    }
+  }
+
   /**
    * Removes an agent from the Mastra instance by its key or ID.
    * Used when stored agents are updated/deleted to allow fresh data to be loaded.
@@ -3539,6 +3556,7 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
@@ -3553,10 +3571,13 @@ export class Mastra<
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
+        this.#removeProcessorConfigurations(agentId);
       }
       return true;
     }
 
+    // An agent attached to Mastra without being registered (a sub-agent) still registers processor configurations.
+    this.#removeProcessorConfigurations(keyOrId);
     return false;
   }
 
@@ -3841,7 +3862,7 @@ export class Mastra<
   public addWorkspace(
     workspace: AnyWorkspace,
     key?: string,
-    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string },
+    metadata?: { source?: 'mastra' | 'agent'; agentId?: string; agentName?: string; agentSource?: DefinitionSource },
   ): void {
     if (!workspace) {
       throw createUndefinedPrimitiveError('workspace', workspace, key);
@@ -3866,6 +3887,7 @@ export class Mastra<
       source,
       ...(metadata?.agentId ? { agentId: metadata.agentId } : {}),
       ...(metadata?.agentName ? { agentName: metadata.agentName } : {}),
+      ...(source === 'agent' && metadata?.agentSource ? { agentSource: metadata.agentSource } : {}),
     };
   }
 
@@ -5387,8 +5409,15 @@ export class Mastra<
    * @param processor - The processor instance
    * @param agentId - The ID of the agent that uses this processor
    * @param type - Whether this is an input or output processor
+   * @param source - Where the agent is defined. Configurations of stored agents stay marked as stored, so they can
+   *   be told apart from code agents' configurations after the stored agent is gone.
    */
-  public addProcessorConfiguration(processor: Processor, agentId: string, type: 'input' | 'output'): void {
+  public addProcessorConfiguration(
+    processor: Processor,
+    agentId: string,
+    type: 'input' | 'output',
+    source?: DefinitionSource,
+  ): void {
     const processorId = processor.id;
     if (!this.#processorConfigurations.has(processorId)) {
       this.#processorConfigurations.set(processorId, []);
@@ -5396,9 +5425,11 @@ export class Mastra<
     const configs = this.#processorConfigurations.get(processorId)!;
 
     // Check if this exact configuration already exists
-    const exists = configs.some(c => c.agentId === agentId && c.type === type);
-    if (!exists) {
-      configs.push({ processor, agentId, type });
+    const existing = configs.find(c => c.agentId === agentId && c.type === type);
+    if (!existing) {
+      configs.push({ processor, agentId, type, ...(source && { source }) });
+    } else if (source === 'stored') {
+      existing.source = 'stored';
     }
   }
 
@@ -5410,7 +5441,7 @@ export class Mastra<
    */
   public getProcessorConfigurations(
     processorId: string,
-  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }> {
+  ): Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }> {
     return this.#processorConfigurations.get(processorId) || [];
   }
 
@@ -5421,7 +5452,7 @@ export class Mastra<
    */
   public listProcessorConfigurations(): Map<
     string,
-    Array<{ processor: Processor; agentId: string; type: 'input' | 'output' }>
+    Array<{ processor: Processor; agentId: string; type: 'input' | 'output'; source?: DefinitionSource }>
   > {
     return this.#processorConfigurations;
   }
@@ -7594,7 +7625,10 @@ export class Mastra<
    * pubsub is flushed.
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'stopWorkers');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'stopWorkers',
+    );
     // One deadline for the whole call. Each worker's transport drain and the
     // push-event drain below typically wait on the same stuck step, so giving
     // each phase the full budget would multiply the worst-case stop time.
@@ -8035,7 +8069,10 @@ export class Mastra<
    * `drainTimeout`.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'shutdown',
+    );
 
     // `drainTimeout` is a single deadline shared by every drain in this method
     // (evented runs here, then worker transports and push events inside

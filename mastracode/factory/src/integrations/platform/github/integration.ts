@@ -10,6 +10,7 @@ import type {
   Intake,
   IntakeIssue,
   IntakeIssueDetail,
+  ListIntakeSourcesInput,
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type {
@@ -48,6 +49,9 @@ import type {
   SourceControlStorageHandle,
 } from '../../../storage/domains/source-control/base.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationTools } from '../../base.js';
+import { attachDependabotRules } from '../../dependabot/rules.js';
+import { createDependabotSync } from '../../dependabot/sync.js';
+import type { DependabotSync, GithubDependabotAlert } from '../../dependabot/sync.js';
 import { GithubAppIdentity } from '../../github/app-identity.js';
 import type { GithubEventRules, GithubRuleOverrides } from '../../github/default-rules.js';
 import { resolveGithubRules } from '../../github/default-rules.js';
@@ -88,6 +92,21 @@ import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
+
+/** Why Platform withheld a personal-account installation from this org's credentials. */
+type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
+
+/**
+ * Status reason for a settled installation list. A personal install Platform withholds would otherwise
+ * read as "nothing installed", so say so; any usable installation still means ready.
+ */
+function githubStatusReason(
+  hasUsableInstallation: boolean,
+  hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason,
+): 'ready' | 'personal_install_hidden' | 'not_connected' {
+  if (hasUsableInstallation) return 'ready';
+  return hiddenPersonalInstallReason ? 'personal_install_hidden' : 'not_connected';
+}
 
 type PlatformGithubInstallation = {
   installationId: number;
@@ -168,6 +187,8 @@ const PAGE_SIZE = 30;
 // keeps each sweep's API cost flat on repositories with a large backlog.
 const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
+/** Intake config id that opts repositories into Dependabot alert sync. */
+const DEPENDABOT_INTAKE_ID = 'dependabot';
 const CHECK_TITLE_LIMIT = 255;
 const CHECK_TEXT_LIMIT = 65_535;
 /**
@@ -294,6 +315,17 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   /** Same key → lookup already in flight, so overlapping callers share one request. */
   readonly #collaboratorPermissionInFlight = new Map<string, Promise<GithubRepositoryPermission | undefined>>();
 
+  /** Dependabot opt-in: its sources are the same repositories; cards arrive through the alert sync, not intake items. */
+  readonly additionalIntakes = [
+    {
+      id: DEPENDABOT_INTAKE_ID,
+      intake: {
+        listSources: (input: ListIntakeSourcesInput) => this.intake.listSources(input),
+        listItems: async () => ({ items: [], nextCursor: null }),
+      },
+    },
+  ] as const;
+
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
@@ -384,6 +416,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
                 sourceId,
                 title: pullRequest.title,
                 status: pullRequest.state,
+                labels: pullRequest.labels,
                 createdAt: pullRequest.createdAt,
                 updatedAt: pullRequest.updatedAt,
                 metadata: {
@@ -460,68 +493,21 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // a wide margin under GitHub's ~60min installation-token lifetime.
       const cacheKey = `${orgId}:${repositoryId}`;
       return this.#mintOnce(cacheKey, async () => {
-      const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
-      if (!repository) throw new Error('Version-control repository not found.');
-      const cloneUrl = `https://github.com/${repository.slug}.git`;
-      const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
-      if (!installation) throw new Error('Version-control installation not found.');
-      const installationId = parsePositiveInteger(installation.externalId);
-      if (installationId === null) throw new Error('GitHub installation id is invalid.');
-      const repositoryName = splitRepository(repository.slug).repo;
+        const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
+        if (!repository) throw new Error('Version-control repository not found.');
+        const cloneUrl = `https://github.com/${repository.slug}.git`;
+        const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
+        if (!installation) throw new Error('Version-control installation not found.');
+        const installationId = parsePositiveInteger(installation.externalId);
+        if (installationId === null) throw new Error('GitHub installation id is invalid.');
+        const repositoryName = splitRepository(repository.slug).repo;
 
-      try {
-        const token = await this.#client.request<{ token: string }>(
-          'POST',
-          `${API_PREFIX}/github-app/installations/${installationId}/token`,
-          { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-        );
-        const access: RepositoryAccess = {
-          cloneUrl,
-          authorization: { scheme: 'bearer', token: token.token },
-        };
-        setBounded(this.#repositoryAccessCache, cacheKey, {
-          access,
-          expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
-        });
-        return access;
-      } catch (err) {
-        // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
-        // GitHub assigns a new installation ID. Platform creates a new installation row,
-        // and Factory's intake.listSources creates a new local installation row with the
-        // new externalId. Try to find the new installation by accountName.
-        if (!isDeadInstallation(err) || !installation.accountName) throw err;
-        // After several reinstalls the account can have more than one stale row. Try the
-        // newest installations first and only repoint the repository at one that works,
-        // so a dead candidate is never persisted.
-        const candidates = (await this.storage.installations.list({ orgId }))
-          .map((inst, index) => ({ inst, index }))
-          .filter(({ inst }) => inst.accountName === installation.accountName && inst.id !== installation.id)
-          .sort((a, b) => b.inst.createdAt.getTime() - a.inst.createdAt.getTime() || b.index - a.index)
-          .map(({ inst }) => inst);
-
-        for (const candidate of candidates) {
-          const candidateInstallationId = parsePositiveInteger(candidate.externalId);
-          if (candidateInstallationId === null) continue;
-
-          let token: { token: string };
-          try {
-            token = await this.#client.request<{ token: string }>(
-              'POST',
-              `${API_PREFIX}/github-app/installations/${candidateInstallationId}/token`,
-              { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
-            );
-          } catch (candidateErr) {
-            if (isDeadInstallation(candidateErr)) continue;
-            throw candidateErr;
-          }
-
-          // Persist the migration so we don't hit the recovery path on every call.
-          await this.storage.repositories.migrateInstallation({
-            orgId,
-            id: repositoryId,
-            newInstallationId: candidate.id,
-          });
-
+        try {
+          const token = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${installationId}/token`,
+            { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
           const access: RepositoryAccess = {
             cloneUrl,
             authorization: { scheme: 'bearer', token: token.token },
@@ -531,9 +517,56 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
           });
           return access;
+        } catch (err) {
+          // Recover from stale installation: when a GitHub App is uninstalled and reinstalled,
+          // GitHub assigns a new installation ID. Platform creates a new installation row,
+          // and Factory's intake.listSources creates a new local installation row with the
+          // new externalId. Try to find the new installation by accountName.
+          if (!isDeadInstallation(err) || !installation.accountName) throw err;
+          // After several reinstalls the account can have more than one stale row. Try the
+          // newest installations first and only repoint the repository at one that works,
+          // so a dead candidate is never persisted.
+          const candidates = (await this.storage.installations.list({ orgId }))
+            .map((inst, index) => ({ inst, index }))
+            .filter(({ inst }) => inst.accountName === installation.accountName && inst.id !== installation.id)
+            .sort((a, b) => b.inst.createdAt.getTime() - a.inst.createdAt.getTime() || b.index - a.index)
+            .map(({ inst }) => inst);
+
+          for (const candidate of candidates) {
+            const candidateInstallationId = parsePositiveInteger(candidate.externalId);
+            if (candidateInstallationId === null) continue;
+
+            let token: { token: string };
+            try {
+              token = await this.#client.request<{ token: string }>(
+                'POST',
+                `${API_PREFIX}/github-app/installations/${candidateInstallationId}/token`,
+                { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+              );
+            } catch (candidateErr) {
+              if (isDeadInstallation(candidateErr)) continue;
+              throw candidateErr;
+            }
+
+            // Persist the migration so we don't hit the recovery path on every call.
+            await this.storage.repositories.migrateInstallation({
+              orgId,
+              id: repositoryId,
+              newInstallationId: candidate.id,
+            });
+
+            const access: RepositoryAccess = {
+              cloneUrl,
+              authorization: { scheme: 'bearer', token: token.token },
+            };
+            setBounded(this.#repositoryAccessCache, cacheKey, {
+              access,
+              expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+            });
+            return access;
+          }
+          throw err;
         }
-        throw err;
-      }
       });
     },
     getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
@@ -541,43 +574,43 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
       const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
       return this.#mintOnce(cacheKey, async () => {
-      const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
-      if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
-      const found = repositories as NonNullable<(typeof repositories)[number]>[];
-      // One token covers one installation; an environment spanning several
-      // cannot be served by a single credential.
-      const installationIds = new Set(found.map(repository => repository.installationId));
-      if (installationIds.size !== 1) return undefined;
-      const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
-      if (!installation) throw new Error('Version-control installation not found.');
-      const installationId = parsePositiveInteger(installation.externalId);
-      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+        const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
+        if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
+        const found = repositories as NonNullable<(typeof repositories)[number]>[];
+        // One token covers one installation; an environment spanning several
+        // cannot be served by a single credential.
+        const installationIds = new Set(found.map(repository => repository.installationId));
+        if (installationIds.size !== 1) return undefined;
+        const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
+        if (!installation) throw new Error('Version-control installation not found.');
+        const installationId = parsePositiveInteger(installation.externalId);
+        if (installationId === null) throw new Error('GitHub installation id is invalid.');
 
-      const token = await this.#client.request<{ token: string }>(
-        'POST',
-        `${API_PREFIX}/github-app/installations/${installationId}/token`,
-        {
-          repositories: found.map(repository => splitRepository(repository.slug).repo),
-          permissions: REPOSITORY_TOKEN_PERMISSIONS,
-        },
-      );
-      const authorization = { scheme: 'bearer' as const, token: token.token };
-      const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
-      // Each repository's access under the shared token, handed only to the
-      // caller that asked for the set. It is never cached under a single
-      // repository's key, where it would widen that repository's own token.
-      const access: RepositoriesAccess = {
-        cloneUrl: `https://github.com/${found[0]!.slug}.git`,
-        authorization,
-        repositories: Object.fromEntries(
-          found.map(repository => [
-            repository.id,
-            { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
-          ]),
-        ),
-      };
-      setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
-      return access;
+        const token = await this.#client.request<{ token: string }>(
+          'POST',
+          `${API_PREFIX}/github-app/installations/${installationId}/token`,
+          {
+            repositories: found.map(repository => splitRepository(repository.slug).repo),
+            permissions: REPOSITORY_TOKEN_PERMISSIONS,
+          },
+        );
+        const authorization = { scheme: 'bearer' as const, token: token.token };
+        const expiresAt = Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS;
+        // Each repository's access under the shared token, handed only to the
+        // caller that asked for the set. It is never cached under a single
+        // repository's key, where it would widen that repository's own token.
+        const access: RepositoriesAccess = {
+          cloneUrl: `https://github.com/${found[0]!.slug}.git`,
+          authorization,
+          repositories: Object.fromEntries(
+            found.map(repository => [
+              repository.id,
+              { cloneUrl: `https://github.com/${repository.slug}.git`, authorization },
+            ]),
+          ),
+        };
+        setBounded(this.#repositoryAccessCache, cacheKey, { access, expiresAt });
+        return access;
       });
     },
     listPullRequests: input => this.#listPullRequests(input),
@@ -778,7 +811,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           });
         }
 
-        const [installations, userConnection] = await Promise.all([
+        const [{ installations, hiddenPersonalInstallReason }, userConnection] = await Promise.all([
           this.#syncInstallations(tenant.orgId, tenant.userId),
           this.#fetchUserConnection(tenant.userId),
         ]);
@@ -793,7 +826,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           })),
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason: githubStatusReason(installations.length > 0, hiddenPersonalInstallReason),
           diagnostics: this.diagnostics(),
         });
       },
@@ -882,15 +915,22 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
-    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-      'GET',
-      `${API_PREFIX}/github-app/installations`,
-    );
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+  ): Promise<{
+    installations: SourceControlInstallation[];
+    hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason;
+  }> {
+    const result = await this.#client.request<{
+      installations: PlatformGithubInstallation[];
+      /** Platform sends null when it withholds nothing. */
+      hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
+    }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
+    const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
@@ -903,6 +943,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
+    return { installations, hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? undefined };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {
@@ -923,6 +964,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         discoverPullRequests: this.#pullRequestReconcileEnabled
           ? attachGithubPullRequestDiscovery(this, ctx, openPullRequestLister(this.versionControl))
           : undefined,
+        syncDependabotAlerts: this.#issueReconcileEnabled ? this.#dependabotSync(ctx) : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
           ? attachGithubIssueReconciler(
               this,
@@ -950,6 +992,42 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         },
       }),
     ];
+  }
+
+  #dependabotSync(ctx: IntegrationContext): DependabotSync | undefined {
+    const ingest = attachDependabotRules(ctx);
+    if (!ingest) return undefined;
+    return createDependabotSync({
+      listAlerts: input => this.listDependabotAlerts(input),
+      listProjects: args => this.storage.projectRepositories.listByExternalRepository(args),
+      // Opt-in per repo: the org's `dependabot` intake config must be enabled and list the repo.
+      repositoryEnabled: async ({ orgId, repository }) => {
+        const config = (await ctx.storage.intake.getConfig({ orgId, integrationIds: [DEPENDABOT_INTAKE_ID] }))[
+          DEPENDABOT_INTAKE_ID
+        ];
+        return Boolean(config?.enabled && config.sourceIds?.includes(repository));
+      },
+      ingest,
+      userId: 'factory-rule-dispatcher',
+    });
+  }
+
+  /** Lists a repository's Dependabot alerts in one state through the Platform GitHub proxy. */
+  async listDependabotAlerts(input: {
+    installationId: number;
+    repository: string;
+    state: 'open' | 'closed';
+  }): Promise<GithubDependabotAlert[]> {
+    const { owner, repo } = splitRepository(input.repository);
+    // GitHub has no "closed" alert state; closed covers the three terminal states. The 100 most
+    // recently updated are enough to close cards for recently fixed or dismissed alerts.
+    const state = input.state === 'open' ? 'open' : 'fixed,dismissed,auto_dismissed';
+    const query = new URLSearchParams({ state, per_page: '100', sort: 'updated', direction: 'desc' });
+    const result = await this.#client.request<{ alerts: GithubDependabotAlert[] }>(
+      'GET',
+      `${API_PREFIX}/github/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/dependabot/alerts?${query}`,
+    );
+    return result.alerts;
   }
 
   /**
