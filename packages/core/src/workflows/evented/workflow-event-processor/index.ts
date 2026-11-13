@@ -2219,24 +2219,29 @@ export class WorkflowEventProcessor extends EventProcessor {
     // `agent` / `tool` / `mapping` entry, or a `loop` / `foreach` body.
     const leaf = step as Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
 
-    // Only the event-id fence in #handleDelivery keeps two deliveries of this occurrence apart, and
-    // only when they share an event id. Two deliveries with different ids that read the same saved
-    // result can both continue the run from it. A broker's reclaim hands a dead worker's message to
-    // one consumer, so in practice a finished occurrence sees a single late delivery.
+    // Nothing serializes two deliveries of this occurrence except the event-id fence in
+    // #handleDelivery, which keeps same-id deliveries apart and only on a pubsub with a lease
+    // provider (Google Cloud Pub/Sub has none). Deliveries it doesn't fence that read the same saved
+    // result can both continue the run from it: one extra chain per late delivery, which the next
+    // step's own check drops once that step has finished.
     const store = await this.#finishedCheckStore(workflow);
     const finished = store ? await this.#finishedOccurrence(args, leaf, { store, snapshot: control.storedRun }) : 'run';
-    const logger = this.mastra.getLogger();
-    const occurrence = { workflowId, runId, executionPath };
 
     if (finished === 'drop') {
-      logger?.debug('Dropping a delivery of a step occurrence that already finished', occurrence);
+      this.mastra
+        .getLogger()
+        ?.debug('Dropping a delivery of a step occurrence that already finished', { workflowId, runId, executionPath });
       return;
     }
 
     // The step saved its result, but nothing took the run past it: a worker stopped between
     // the save and the next step's message. Continue from the saved result without running it.
     if (finished !== 'run') {
-      logger?.debug('Continuing a workflow run from a step occurrence that already finished', occurrence);
+      this.mastra.getLogger()?.debug('Continuing a workflow run from a step occurrence that already finished', {
+        workflowId,
+        runId,
+        executionPath,
+      });
       return this.processWorkflowStepEnd(finished);
     }
 
@@ -2402,14 +2407,15 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     // The step end that continues the run reads the stored results, state and request context,
-    // the same values the step end its worker never handled would have read.
-    const context = snapshot!.context;
+    // the same values the step end its worker never handled would have read. finishedOccurrence
+    // only returns a saved result it read from a snapshot, so the snapshot is there.
+    const { context, requestContext } = snapshot!;
     return {
       ...args,
       stepResults: { ...args.stepResults, ...context },
       prevResult: outcome.continueFrom,
       state: context.__state ?? resolveCurrentState({ stepResults: args.stepResults, state: args.state }),
-      requestContext: restoreLiveRequestContext(snapshot!.requestContext, args.requestContext),
+      requestContext: restoreLiveRequestContext(requestContext, args.requestContext),
     };
   }
 
@@ -5172,6 +5178,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     return isLeaseProvider(pubsub) ? pubsub : NoopLeaseProvider;
   }
 
+  /**
+   * Dispatches one delivery of `event` within its delivery budget. A delivery
+   * past `MAX_DELIVERY_ATTEMPTS` is not dispatched: it fails the run, unless
+   * the run already ended on a store with step guards, or it is a
+   * `workflow.step.run` of a step that already finished, which is dropped or,
+   * when the run still has to continue from the step's saved result,
+   * dispatched once more to continue it.
+   */
   async #handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Build a stable retry key once per call. If event.id is missing we fall
     // back to a deterministic composite of type/runId/workflowId/executionPath
