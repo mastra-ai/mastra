@@ -291,30 +291,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect([...b.executions].sort()).toEqual(['run-1', 'run-2']);
   }, 10_000);
 
-  it('restarts runs whose rechecks come due together workflowConcurrency at a time', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const b = startBlockingReplica(storage, ['run-1', 'run-2'], { workflowGraceMs: GRACE_MS, workflowConcurrency: 1 });
-    await persistActiveRun(storage, 'run-1');
-    await persistActiveRun(storage, 'run-2');
-    // No recheck jitter: both runs are in their grace period now, and their rechecks fire together.
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const runReads = vi.spyOn(store, 'getWorkflowRunById');
-
-    await b.mastra.restartAllActiveWorkflowRuns();
-    await b.started;
-    await vi.waitFor(() => {
-      const read = runReads.mock.calls.map(([args]) => args.runId);
-      expect(read).toEqual(expect.arrayContaining(['run-1', 'run-2']));
-    });
-    b.release();
-    await vi.waitFor(() => expect(b.steps).toHaveLength(4));
-
-    // A restart outside the limiter would start the second run while the first one still held its slot.
-    const [first, second] = b.executions;
-    expect(b.steps).toEqual([`start:${first}`, `done:${first}`, `start:${second}`, `done:${second}`]);
-  }, 10_000);
-
   it('waits at shutdown for a restart the recovery pass is running', async () => {
     const storage = new InMemoryStore();
     const b = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
@@ -329,26 +305,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect(b.order).toEqual(['step-done', 'shutdown']);
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
-
-  it('checks a run again later when the lease read right before its restart fails', async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const executions: string[] = [];
-    const b = startReplica(storage, 'default', 'B', executions);
-    await persistActiveRun(storage, 'stopped', { updatedAt: new Date(Date.now() - GRACE_MS) });
-    // No recheck jitter, so the recheck comes one grace period after the failed read.
-    vi.spyOn(Math, 'random').mockReturnValue(0);
-    const read = store.getRunOwnerships.bind(store);
-    vi.spyOn(store, 'getRunOwnerships')
-      .mockImplementationOnce(read)
-      .mockRejectedValueOnce(new Error('ownership read failed'))
-      .mockImplementation(read);
-
-    await b.restartAllActiveWorkflowRuns();
-
-    expect(executions).toEqual([]);
-    await vi.waitFor(() => expect(executions).toEqual(['B:work']), { timeout: GRACE_MS * 10 });
-  });
 
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();

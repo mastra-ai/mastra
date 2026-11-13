@@ -393,7 +393,8 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description:
       'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000 }",
+    defaultValue:
+      "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000, workflowScanIntervalMs: 60000 }",
     properties: [
       {
         type: 'object',
@@ -412,7 +413,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: "'auto'",
             description:
-              "Set to `'off'` to skip restarting active workflow runs on server boot. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
+              "Set to `'off'` to skip restarting active workflow runs on server boot and to run no workflow recovery loop. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
           },
           {
             name: 'workflowConcurrency',
@@ -420,7 +421,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '5',
             description:
-              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. A restarted run holds its slot until it finishes. Workflow and durable agent recovery run in parallel.',
+              'Maximum number of workflow runs restarted at the same time by boot recovery and the recovery loop. Use `Infinity` for no limit. A restarted run holds its slot until it finishes. Workflow and durable agent recovery run in parallel.',
           },
           {
             name: 'workflowGraceMs',
@@ -428,7 +429,15 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '2000',
             description:
-              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
+              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before recovery restarts it. A run that stopped more recently is left to the [recovery loop](/docs/workflows/overview#recovery-loop). The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
+          },
+          {
+            name: 'workflowScanIntervalMs',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '60000',
+            description:
+              'How often the [recovery loop](/docs/workflows/overview#recovery-loop) that `startWorkers()` starts looks for default-engine runs whose instance stopped. Each wait is up to a fifth shorter or longer, and shorter when a run the last pass saw comes out of its grace period sooner. Capped at 2^31 - 1 ms. One instance at a time runs the passes. A run whose instance crashed is restarted at the first pass after its lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`, 15 seconds by default) expired and `workflowGraceMs` passed, so within about one interval of that. A lower interval recovers such runs sooner and lists runs more often.',
           },
         ],
       },

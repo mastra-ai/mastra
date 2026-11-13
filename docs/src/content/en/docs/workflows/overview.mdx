@@ -518,7 +518,7 @@ To exclude a workflow from automatic boot-time restarts triggered by `Mastra.res
 
 While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. `workflow.restartAllActiveWorkflowRuns()` skips such a run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
 
-`mastra.restartAllActiveWorkflowRuns()`, which the server calls on boot, restarts a default-engine run only once it stopped: no instance holds its lease, and neither the run nor its lease changed for `recovery.workflowGraceMs` (2 seconds by default). A run that's still running, or stopped more recently, is checked again when that period could end, so a run whose process crashed is still recovered.
+`mastra.restartAllActiveWorkflowRuns()`, which the server calls on boot, restarts a default-engine run only once it stopped: no instance holds its lease, and neither the run nor its lease changed for `recovery.workflowGraceMs` (2 seconds by default). A run that's still running, or stopped more recently, is left to the [recovery loop](#recovery-loop).
 
 Evented runs on a pubsub whose broker redelivers unacknowledged events (Redis Streams, Valkey Streams, Google Cloud Pub/Sub) are left to the broker: when a worker stops mid-step, the broker redelivers the step's event to another worker, and booting instances don't restart the run. Scheduled runs are the exception, because their events stay in the process that fired them, so recovery restarts them. On any other pubsub, including the default in-process one, recovery restarts every active evented run at once. The in-process pubsub delivers events only inside one process, so running several instances on one storage with it isn't supported for evented workflows.
 
@@ -533,6 +533,20 @@ Some steps need part of the key to come from their input:
 - A loop runs the same step on every iteration. Return an iteration number from the step and read it from the input on the next iteration. A repeated or resumed iteration receives the same input, so the number doesn't change.
 
 For tools that agents call, see [make tools safe to repeat](/docs/harness/durable-agents#make-tools-safe-to-repeat).
+
+### Recovery loop
+
+`mastra.startWorkers()` also starts a recovery loop on an instance that runs the orchestration worker. Every `recovery.workflowScanIntervalMs` (60 seconds by default, give or take a fifth), it restarts the default-engine runs that stopped, by the same rule as `restartAllActiveWorkflowRuns()`. A run whose instance crashed is restarted at the first pass after its lease expired (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`, 15 seconds by default) and `recovery.workflowGraceMs` passed. When a pass finds a run in its grace period, the next pass runs once that period ends, but no sooner than a second later.
+
+Instances that share a storage adapter elect one loop leader through a lease row in storage. Only the leader's loop lists runs. The loops of the other instances only try to take its place. The leader keeps the role until its `stopWorkers()` or `shutdown()` hands it back, or until its lease expires after a crash. With `restartAllActiveWorkflowRuns()` at boot, each instance still restarts its own stopped default-engine runs, whichever instance leads. Between boots, the loop recovers only the workflows the leader registers, so instances that register different workflows on one storage get loop recovery for the leader's workflows only and the others' runs at their next boot. A run the loop restarts executes on the leader.
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  recovery: { workflowScanIntervalMs: 30_000 },
+})
+```
+
+The loop never restarts evented runs. A broker that redelivers unacknowledged events recovers them, and on other pubsubs `restartAllActiveWorkflowRuns()` restarts them at boot. The loop also leaves workflows that set `autoRestartActiveRuns: false` alone, and an instance that registers no other default-engine workflow never claims the leader row. It doesn't run when `recovery.workflows` is `'off'`, on an instance started with `workers: false` or a `MASTRA_WORKERS` filter without `orchestration`, or on a storage adapter without run-ownership support. A process that calls `restartAllActiveWorkflowRuns()` but never `startWorkers()` runs no loop.
 
 ### Restarting an active workflow run with `restart()`
 
@@ -559,7 +573,7 @@ if (activeRuns.runs.length > 0) {
 
 :::note
 
-When running the local mastra server, all active workflow runs will be restarted automatically when the server starts.
+When the Mastra server starts, it restarts the active workflow runs no instance is running anymore, and its recovery loop keeps doing so for default-engine runs.
 
 :::
 

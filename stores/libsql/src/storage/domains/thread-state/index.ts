@@ -10,6 +10,7 @@ import type { PruneOptions, PruneResult, RetentionTablesDescriptor, TableRetenti
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client } from '../../db/client';
+import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
 /**
@@ -98,13 +99,15 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
     const now = new Date().toISOString();
     const serialized = JSON.stringify(value ?? null);
     try {
-      await this.#client.execute({
-        sql: `INSERT INTO "${TABLE_THREAD_STATE}" ("threadId", "type", "value", "createdAt", "updatedAt")
+      await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          sql: `INSERT INTO "${TABLE_THREAD_STATE}" ("threadId", "type", "value", "createdAt", "updatedAt")
               VALUES (?, ?, ?, ?, ?)
               ON CONFLICT ("threadId", "type")
               DO UPDATE SET "value" = excluded."value", "updatedAt" = excluded."updatedAt"`,
-        args: [threadId, type, serialized, now, now],
-      });
+          args: [threadId, type, serialized, now, now],
+        }),
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -120,10 +123,12 @@ export class ThreadStateLibSQL extends ThreadStateStorage {
 
   async deleteState({ threadId, type }: { threadId: string; type: string }): Promise<void> {
     try {
-      await this.#client.execute({
-        sql: `DELETE FROM "${TABLE_THREAD_STATE}" WHERE "threadId" = ? AND "type" = ?`,
-        args: [threadId, type],
-      });
+      await withClientWriteLock(this.#client, () =>
+        this.#client.execute({
+          sql: `DELETE FROM "${TABLE_THREAD_STATE}" WHERE "threadId" = ? AND "type" = ?`,
+          args: [threadId, type],
+        }),
+      );
     } catch (error) {
       throw new MastraError(
         {
