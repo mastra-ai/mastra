@@ -830,7 +830,12 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               logger,
             });
             if (rejection) {
-              return { result: rejection.output, ...inputData };
+              // A failed input check here is Mastra's own validation error: carry it so mapping skips the mapper.
+              return {
+                result: rejection.output,
+                ...inputData,
+                validationError: getModelFacingValidationError(rejection.output),
+              };
             }
           }
           if (!approvalDecision) {

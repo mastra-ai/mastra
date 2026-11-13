@@ -317,7 +317,7 @@ export const weatherTool = createTool({
 
 `toModelOutput` also works with client-side tools. For tools passed through `clientTools`, the mapping runs on the client after the tool executes, and the transformed output is sent back to the server alongside the raw result. For tools defined on the server without an `execute` function (the browser runs the tool and sends the result back on the next request), the server definition's `toModelOutput` is applied to the incoming result. The model receives the transformed content instead of the raw tool result.
 
-Mastra doesn't call `toModelOutput` when the tool's input, request context, or output fails validation. Instead, the model receives a validation error that names the fields that failed, which lets it correct its call and retry. The error leaves out the tool's output and the request context, so values your `toModelOutput` would drop don't reach the prompt. With `outputValidation: 'warn'`, a failed output check keeps the tool's real result, so `toModelOutput` still runs on it.
+Mastra doesn't call `toModelOutput` when the tool's input, request context, or output fails validation. Instead, the model receives a validation error that names the fields that failed and the kind of each problem, such as `invalid_type (expected string)`, which lets it correct its call and retry. The error leaves out the schema's issue messages, the arguments, the tool's output, and the request context, so values your `toModelOutput` would drop don't reach the prompt. With `outputValidation: 'warn'`, a failed output check keeps the tool's real result, so `toModelOutput` still runs on it.
 
 ## Tools that run on the client
 

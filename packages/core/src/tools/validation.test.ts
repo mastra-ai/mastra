@@ -2630,43 +2630,80 @@ describe('validateToolInput - combined fallback corrections (GitHub #25825)', ()
 describe('getModelFacingValidationError', () => {
   const EMAIL = 'jane.doe@example.com';
 
-  it("keeps the issues for the model's own arguments, without the argument excerpt", () => {
+  it('names the failing argument fields and issue kinds, without the argument excerpt or issue messages', () => {
     const { error } = validateToolInput(z.object({ query: z.string().min(1) }), { query: '', note: EMAIL }, 'lookup');
 
     expect(error?.message).toContain('Provided arguments');
-    const modelFacing = getModelFacingValidationError(error);
-    expect(modelFacing).toEqual({
+    expect(getModelFacingValidationError(error)).toEqual({
       error: true,
-      message: expect.stringContaining('Tool input validation failed for lookup'),
-      validationErrors: error?.validationErrors,
+      message:
+        'Tool input validation failed for lookup. Please fix the following errors and try again:\n- query: too_small',
+      validationErrors: { errors: [], fields: { query: { errors: ['too_small'], fields: {} } } },
     });
-    expect(modelFacing?.message).toContain('- query:');
+  });
+
+  it('never forwards an input issue message, which can quote a value an input transform resolved', () => {
+    // A transform resolves the model's customer id to a stored email; a custom refinement then
+    // rejects it with a message quoting that email, which the model never sent.
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const schema = z.object({
+      customer: z
+        .string()
+        .transform(id => emails[id] ?? id)
+        .pipe(z.string().refine(() => false, { error: issue => `rejected ${String(issue.input)}` })),
+    });
+    const { error } = validateToolInput(schema, { customer: 'cust-1' }, 'lookup');
+
+    expect(JSON.stringify(error)).toContain(`rejected ${EMAIL}`);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- customer: custom');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+    expect(JSON.stringify(modelFacing)).not.toContain('rejected');
+  });
+
+  it('replaces undeclared input path segments, such as record keys a transform produced, with *', () => {
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const schema = z
+      .object({ contacts: z.record(z.string(), z.string()) })
+      .transform(({ contacts }) => ({
+        contacts: Object.fromEntries(Object.entries(contacts).map(([id, note]) => [emails[id] ?? id, note])),
+      }))
+      .pipe(z.object({ contacts: z.record(z.string(), z.string().min(3)) }));
+    const { error } = validateToolInput(schema, { contacts: { 'cust-1': 'x' } }, 'lookup');
+
+    expect(error?.message).toContain(`contacts.${EMAIL}`);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- contacts.*: too_small');
+    expect(modelFacing?.validationErrors).toEqual({
+      errors: [],
+      fields: { contacts: { errors: [], fields: { '*': { errors: ['too_small'], fields: {} } } } },
+    });
     expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
   });
 
-  it('drops the rejected value schema libraries quote in input issue messages', () => {
-    // A transform resolves the model's customer id to a stored email, so the value Zod v3's enum
-    // message quotes is not one the model sent.
-    const emails: Record<string, string> = { 'cust-1': EMAIL, 'cust-2': `private\n${EMAIL}` };
+  it('describes Zod v3 and Valibot issues by kind and expected type, never by message', () => {
+    const emails: Record<string, string> = { 'cust-1': EMAIL };
     const zod3Schema = z3.object({
       customer: z3
         .string()
         .transform(id => emails[id] ?? id)
         .pipe(z3.enum(['allowed@example.com'])),
+      count: z3.number(),
     });
-    const zod3 = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-1' }, 'lookup').error;
+    const zod3 = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-1', count: 'four' }, 'lookup').error;
     expect(JSON.stringify(zod3)).toContain(EMAIL);
     const zod3ModelFacing = getModelFacingValidationError(zod3);
-    expect(zod3ModelFacing?.message).toContain("- customer: Invalid enum value. Expected 'allowed@example.com'");
+    expect(zod3ModelFacing?.message).toContain('- customer: invalid_enum_value');
+    expect(zod3ModelFacing?.message).toContain('- count: invalid_type (expected number)');
     expect(JSON.stringify(zod3ModelFacing)).not.toContain(EMAIL);
-    // A resolved value with a line break is dropped too.
-    const multiline = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-2' }, 'lookup').error;
-    expect(JSON.stringify(multiline)).toContain(EMAIL);
-    expect(JSON.stringify(getModelFacingValidationError(multiline))).not.toContain(EMAIL);
+    expect(JSON.stringify(zod3ModelFacing)).not.toContain('four');
 
     // Valibot only implements StandardSchemaV1; add the JSON Schema half like the tests above.
     const valibotSchema = v.object({ contact: v.pipe(v.string(), v.email()), count: v.number() });
-    const jsonSchema = () => ({ type: 'object' as const, properties: {} });
+    const jsonSchema = () => ({
+      type: 'object' as const,
+      properties: { contact: { type: 'string' as const }, count: { type: 'number' as const } },
+    });
     const valibot = validateToolInput(
       { '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchema, output: jsonSchema } } } as any,
       { contact: 'not-an-email', count: 'four' },
@@ -2674,8 +2711,8 @@ describe('getModelFacingValidationError', () => {
     ).error;
     expect(JSON.stringify(valibot)).toContain('not-an-email');
     const valibotModelFacing = getModelFacingValidationError(valibot);
-    expect(valibotModelFacing?.message).toContain('- contact: Invalid email');
-    expect(valibotModelFacing?.message).toContain('- count: Invalid type: Expected number');
+    expect(valibotModelFacing?.message).toContain('- contact: email');
+    expect(valibotModelFacing?.message).toContain('- count: number (expected number)');
     expect(JSON.stringify(valibotModelFacing)).not.toContain('not-an-email');
     expect(JSON.stringify(valibotModelFacing)).not.toContain('four');
   });
@@ -2689,12 +2726,12 @@ describe('getModelFacingValidationError', () => {
 
     expect(error?.message).toContain(EMAIL);
     const modelFacing = getModelFacingValidationError(error);
-    expect(modelFacing).toEqual({
-      error: true,
-      message:
-        'Tool output validation failed for lookup. The tool returned output that does not match its output schema. ' +
-        'Fields that failed validation: contact, tags.*.',
-    });
+    expect(modelFacing?.message).toBe(
+      'Tool output validation failed for lookup. The tool returned output that does not match its output schema:\n' +
+        '- contact: custom\n' +
+        '- tags.*: invalid_type (expected number)',
+    );
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
   });
 
   it('names only the failing request-context keys, never the context values', () => {

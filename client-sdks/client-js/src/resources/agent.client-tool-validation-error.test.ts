@@ -131,7 +131,7 @@ describe('client tool toModelOutput and validation errors (#30211)', () => {
 
     expect(mapperCalls).toEqual([]);
     const part = sentToolResult();
-    // The raw result keeps the full error for the app; the model gets the issues without the arguments.
+    // The raw result keeps the full error for the app; the model gets the failing fields and issue kinds only.
     expect(isValidationError(part.result)).toBe(true);
     expect(part.result.message).toContain('Provided arguments');
     expect(part.providerOptions).toEqual({
@@ -141,7 +141,7 @@ describe('client tool toModelOutput and validation errors (#30211)', () => {
           value: {
             error: true,
             message: expect.stringContaining('Tool input validation failed'),
-            validationErrors: part.result.validationErrors,
+            validationErrors: { errors: [], fields: { query: { errors: ['too_small'], fields: {} } } },
           },
         },
       },
@@ -237,7 +237,7 @@ describe('client tool toModelOutput and validation errors (#30211)', () => {
           value: {
             error: true,
             message: expect.stringContaining('Tool input validation failed'),
-            validationErrors: part.output.value.validationErrors,
+            validationErrors: { errors: [], fields: { query: { errors: ['too_small'], fields: {} } } },
           },
         },
       },

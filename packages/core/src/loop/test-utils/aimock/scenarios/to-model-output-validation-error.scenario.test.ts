@@ -117,6 +117,109 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     expect(followUp).toContain('validationErrors');
   });
 
+  async function callTool(tool: ReturnType<typeof createTool>, args: Record<string, unknown>) {
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Look up the answer.',
+      tools: { [tool.id]: tool },
+      stopWhen: stepCountIs(3),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_tool', name: tool.id, arguments: args }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_tool', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+    await output.text;
+    return { requests, toolResults: await output.toolResults };
+  }
+
+  it('the model never sees a custom input issue message quoting a value an input transform resolved', async () => {
+    // The transform resolves the model's customer id to a stored email, which a refinement then
+    // rejects with a message quoting it. The mapper keeps that email from the model.
+    const mapperCalls: unknown[] = [];
+    const contact = createTool({
+      id: 'contact',
+      description: 'Contact a customer',
+      inputSchema: z.object({
+        customer: z
+          .string()
+          .transform(() => EMAIL)
+          .pipe(z.string().refine(() => false, { error: issue => `rejected ${String(issue.input)}` })),
+      }),
+      execute: async () => ({ sent: true }),
+      toModelOutput: output => {
+        mapperCalls.push(output);
+        return { type: 'text', value: 'Sent.' };
+      },
+    });
+
+    const { requests, toolResults } = await callTool(contact, { customer: 'cust-1' });
+
+    expect(mapperCalls).toEqual([]);
+    expect(JSON.stringify(toolResults[0]?.payload?.result)).toContain(`rejected ${EMAIL}`);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool input validation failed');
+    expect(sent.message).toContain('- customer: custom');
+    expect(requests).toHaveLength(2);
+    expect(seenByModel(requests[1])).toContain('Tool input validation failed');
+    expect(seenByModel(requests[1])).not.toContain(EMAIL);
+  });
+
+  it('the model sees * for a record key an input transform produced, not the key', async () => {
+    const mapperCalls: unknown[] = [];
+    const notes = createTool({
+      id: 'notes',
+      description: 'Save notes per customer',
+      inputSchema: z
+        .object({ notes: z.record(z.string(), z.string()) })
+        .transform(({ notes }) => ({ notes: Object.fromEntries(Object.values(notes).map(note => [EMAIL, note])) }))
+        .pipe(z.object({ notes: z.record(z.string(), z.string().min(3)) })),
+      execute: async () => ({ saved: true }),
+      toModelOutput: output => {
+        mapperCalls.push(output);
+        return { type: 'text', value: 'Saved.' };
+      },
+    });
+
+    const { requests, toolResults } = await callTool(notes, { notes: { 'cust-1': 'x' } });
+
+    expect(mapperCalls).toEqual([]);
+    expect(JSON.stringify(toolResults[0]?.payload?.result)).toContain(EMAIL);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool input validation failed');
+    expect(sent.message).toContain('- notes.*: too_small');
+    expect(requests).toHaveLength(2);
+    expect(seenByModel(requests[1])).toContain('notes.*');
+    expect(seenByModel(requests[1])).not.toContain(EMAIL);
+  });
+
+  it('an approval-required tool whose arguments are rejected reports the field-only error, not a mapping of it', async () => {
+    // Input is validated before the approval prompt, so the call fails without suspending.
+    const mapperCalls: unknown[] = [];
+    const lookup = createTool({
+      id: 'lookup',
+      description: 'Look up an answer',
+      requireApproval: true,
+      inputSchema: z.object({ query: z.string().min(1) }),
+      execute: async () => ({ answer: '42', secret: SECRET }),
+      toModelOutput: output => {
+        mapperCalls.push(output);
+        return { type: 'json', value: { answer: output.answer } };
+      },
+    });
+
+    const { requests, toolResults } = await callTool(lookup, { query: '', note: EMAIL });
+
+    expect(mapperCalls).toEqual([]);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool input validation failed');
+    expect(sent.message).toContain('- query: too_small');
+    expect(requests).toHaveLength(2);
+    const followUp = seenByModel(requests[1]);
+    expect(followUp).toContain('Tool input validation failed');
+    expect(followUp).not.toContain(EMAIL);
+  });
+
   it('the model sees an output validation failure instead of an empty mapped result', async () => {
     const { mapperCalls, requests, toolResults } = await callLookup(
       { query: 'meaning of life' },

@@ -1170,6 +1170,24 @@ export function createDurableToolCallStep() {
         });
         if (rejection) {
           const result = rejection.output;
+          // A failed input check here is Mastra's own validation error. Map it now, in this
+          // process: llm-mapping only sees the serialized copy, which lost the marker.
+          const validationError = getModelFacingValidationError(result);
+          const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
+          const validationErrorOutput =
+            validationError && mappingTool.toModelOutput
+              ? {
+                  providerMetadata: (await computeModelOutputProviderMetadata({
+                    tool: mappingTool,
+                    toolName,
+                    toolCallId,
+                    result,
+                    validationError,
+                    existingProviderMetadata: typedInput.providerMetadata as Record<string, unknown> | undefined,
+                  })) as typeof typedInput.providerMetadata,
+                  modelOutputComputed: true,
+                }
+              : undefined;
           if (pubsub) {
             try {
               const resultChunk = await applyToolPayloadTransformToChunk(
@@ -1177,7 +1195,14 @@ export function createDurableToolCallStep() {
                   type: 'tool-result' as const,
                   runId,
                   from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, result, providerExecuted },
+                  payload: {
+                    toolCallId,
+                    toolName,
+                    args,
+                    result,
+                    ...(validationErrorOutput ? { providerMetadata: validationErrorOutput.providerMetadata } : {}),
+                    providerExecuted,
+                  },
                 },
                 {
                   policy: toolPayloadTransform,
@@ -1207,6 +1232,7 @@ export function createDurableToolCallStep() {
           return {
             ...typedInput,
             result,
+            ...(validationErrorOutput ?? {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),
           };
         }

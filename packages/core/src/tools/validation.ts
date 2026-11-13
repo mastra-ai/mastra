@@ -95,9 +95,9 @@ export function isValidationError(value: unknown): value is ValidationError {
 
 /**
  * What the model may see of a validation error when a tool's `toModelOutput` is skipped for it:
- * which fields failed and, for the model's own arguments, why. It never quotes the tool's output,
- * the request context or suspend data, because `toModelOutput` is where a tool keeps those out of
- * the prompt.
+ * the failing field paths and a generic issue kind per field. It never quotes issue messages,
+ * arguments, tool output, request context or suspend data, because `toModelOutput` is where a
+ * tool keeps those out of the prompt.
  */
 export interface ModelFacingValidationError {
   error: true;
@@ -139,44 +139,56 @@ export function getModelFacingValidationError(value: unknown): ModelFacingValida
 }
 
 /**
- * Drops the "received …" clause schema libraries append to an issue message, which can quote the
- * rejected value (Zod v3 enums: `received 'x'`; Valibot: `but received "x"`, `Received "x"`). After
- * an input transform that value may not be what the model sent. The model knows what it sent, so
- * the expected part is enough to retry.
+ * Generic, value-free description of one issue for the model: the schema library's issue kind
+ * (Zod's `code`, Valibot's `type`) and, when it is a plain type name, the expected type. Issue
+ * messages are left out: custom refinements can quote anything, including values an input
+ * transform resolved, and built-in messages can quote the rejected value.
  */
-function withoutReceivedValue(message: string): string {
-  // [\s\S] rather than `.`, so a quoted value with a line break is dropped too.
-  return message.replace(/(?:,|:|\s+but)\s*received\b[\s\S]*$/i, '');
+function describeIssueForModel(issue: StandardSchemaIssue): string {
+  const field = (key: string): string | undefined => {
+    const value: unknown = Reflect.get(issue, key);
+    return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]*$/.test(value) ? value : undefined;
+  };
+  const kind = field('code') ?? field('type') ?? 'invalid';
+  const expected = field('expected');
+  return expected ? `${kind} (expected ${expected})` : kind;
 }
 
 /**
- * Model-facing form of an error about data the model did not write (tool output, request
- * context, suspend data): the failing field paths only. Issue messages can quote the rejected
- * values, and record keys in the paths come from the data, so both are left out.
+ * Model-facing form of a validation error, used when a tool's `toModelOutput` is skipped for it:
+ * each failing field path, sanitized like {@link getValidationIssuePaths}, with a generic issue
+ * kind. It never carries issue messages, received values or excerpts of the validated data.
  */
-function failedPathsOnly(
-  error: ValidationError,
-  schema: PublicSchema | undefined,
-  io: 'input' | 'output',
-  heading: string,
-): ModelFacingValidationError {
-  const paths = getValidationIssuePaths(error, schema, io);
-  return { error: true, message: `${heading} Fields that failed validation: ${paths.join(', ')}.` };
+function modelFacingError(params: {
+  issues: readonly StandardSchemaIssue[];
+  schema: PublicSchema | undefined;
+  io: 'input' | 'output';
+  heading: string;
+}): ModelFacingValidationError {
+  const sanitizePath = createIssuePathSanitizer(params.schema, params.io);
+  const issues = params.issues.map(issue => ({
+    path: sanitizePath((issue.path ?? []).map(segment => getPathKey(segment))),
+    message: describeIssueForModel(issue),
+  }));
+  const lines = issues.map(issue => `- ${issue.path.join('.') || 'root'}: ${issue.message}`).join('\n');
+  return {
+    error: true,
+    message: `${params.heading}\n${lines}`,
+    validationErrors: buildFormattedErrors(issues),
+  };
 }
 
 type JSONSchemaNode = JSONSchema7Definition | undefined;
 
 /**
- * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
- * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
- * Only property names declared by `schema` and array indexes are kept; any other segment (a record
- * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ * Returns a function that keeps only the path segments `schema` declares: property names and array
+ * indexes. Any other segment (a record key, or anything under a schema that can't be resolved)
+ * came from the validated data and becomes `*`.
  */
-export function getValidationIssuePaths(
-  error: ValidationError,
+function createIssuePathSanitizer(
   schema: PublicSchema | undefined,
-  io: 'input' | 'output' = 'input',
-): string[] {
+  io: 'input' | 'output',
+): (path: readonly string[]) => string[] {
   let root: JSONSchemaNode;
   try {
     root = schema ? standardSchemaToJSONSchema(toStandardSchema(schema), { io }) : undefined;
@@ -218,15 +230,37 @@ export function getValidationIssuePaths(
     };
   };
 
-  const paths: string[] = [];
-  const walk = (node: { errors: string[]; fields: unknown }, path: string[], nodes: JSONSchema7[]) => {
-    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
-    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+  const rootNodes = resolve(root);
+  return path => {
+    let nodes = rootNodes;
+    return path.map(key => {
       const next = child(nodes, key);
-      walk(field, [...path, next.segment], next.nodes);
+      nodes = next.nodes;
+      return next.segment;
+    });
+  };
+}
+
+/**
+ * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
+ * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
+ * Only property names declared by `schema` and array indexes are kept; any other segment (a record
+ * key, or anything under a schema that can't be resolved) came from the submitted data and is logged as `*`.
+ */
+export function getValidationIssuePaths(
+  error: ValidationError,
+  schema: PublicSchema | undefined,
+  io: 'input' | 'output' = 'input',
+): string[] {
+  const sanitizePath = createIssuePathSanitizer(schema, io);
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[]) => {
+    if (node.errors.length > 0) paths.push(sanitizePath(path).join('.') || 'root');
+    for (const [key, field] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      walk(field, [...path, key]);
     }
   };
-  walk(error.validationErrors, [], resolve(root));
+  walk(error.validationErrors, []);
   return [...new Set(paths)];
 }
 
@@ -268,7 +302,9 @@ function createEmptyErrors(): { errors: string[]; fields: Record<string, unknown
  * @param issues Array of validation issues from standard schema validation
  * @returns Formatted errors object with nested structure based on paths
  */
-function buildFormattedErrors<T>(issues: readonly StandardSchemaIssue[]): FormattedValidationErrors<T> {
+function buildFormattedErrors<T>(
+  issues: readonly Pick<StandardSchemaIssue, 'message' | 'path'>[],
+): FormattedValidationErrors<T> {
   const result = createEmptyErrors();
 
   for (const issue of issues) {
@@ -357,12 +393,12 @@ export function validateToolSuspendData<T = unknown>(
   return {
     error: markModelFacing(
       error,
-      failedPathsOnly(
-        error,
+      modelFacingError({
+        issues: validation.issues,
         schema,
-        'input',
-        `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. The tool suspended with data that does not match its suspend schema.`,
-      ),
+        io: 'input',
+        heading: `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. The tool suspended with data that does not match its suspend schema:`,
+      }),
     ),
   };
 }
@@ -785,19 +821,8 @@ export function validateToolInput<T = unknown>(
     validationErrors: buildFormattedErrors<T>(finalIssues),
   };
 
-  // The model wrote these arguments, so it gets each issue to fix, but not the excerpt of them
-  // nor the rejected values the issue messages quote.
-  const modelFacingIssues = finalIssues.map(issue => ({ ...issue, message: withoutReceivedValue(issue.message) }));
-  const modelFacingMessages = modelFacingIssues
-    .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
-    .join('\n');
-  return {
-    error: markModelFacing(error, {
-      error: true,
-      message: `${heading}\n${modelFacingMessages}`,
-      validationErrors: buildFormattedErrors(modelFacingIssues),
-    }),
-  };
+  // After an input transform, messages and record keys can carry values the model never sent.
+  return { error: markModelFacing(error, modelFacingError({ issues: finalIssues, schema, io: 'input', heading })) };
 }
 
 /**
@@ -840,12 +865,12 @@ export function validateToolOutput<T = unknown>(
   return {
     error: markModelFacing(
       error,
-      failedPathsOnly(
-        error,
+      modelFacingError({
+        issues: validation.issues,
         schema,
-        'output',
-        `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned output that does not match its output schema.`,
-      ),
+        io: 'output',
+        heading: `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned output that does not match its output schema:`,
+      }),
     ),
   };
 }
@@ -937,11 +962,11 @@ export function validateRequestContext<T = any>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  const modelFacing = failedPathsOnly(
-    error,
+  const modelFacing = modelFacingError({
+    issues: validation.issues,
     schema,
-    'input',
-    `Request context validation failed${identifier ? ` for ${identifier}` : ''}. The request context is missing values or has invalid ones.`,
-  );
+    io: 'input',
+    heading: `Request context validation failed${identifier ? ` for ${identifier}` : ''}. The request context is missing values or has invalid ones:`,
+  });
   return { data: contextValues as T, error: markModelFacing(error, modelFacing) };
 }
