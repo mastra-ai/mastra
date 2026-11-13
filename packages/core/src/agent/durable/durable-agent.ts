@@ -3520,7 +3520,7 @@ export class DurableAgent<
 
     // 4b. Register with the thread-stream runtime so subscribeToThread /
     // sendMessage subscribers receive run-registered events and stream parts.
-    // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
+    // Uses the agent's pubsub (this.getPubSub()) — not the internal
     // CachingPubSub (this.pubsub) which carries durable workflow chunks.
     await agentThreadStreamRuntime.registerRun(
       this as unknown as Agent<any, any, any, any>,
