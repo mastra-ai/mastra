@@ -1,6 +1,6 @@
 import { LockKeyholeIcon } from 'lucide-react';
 import { useId } from 'react';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
 import { cn } from '@/lib/utils';
@@ -34,6 +34,27 @@ const headingClassName = 'flex min-w-0 flex-col gap-px';
  */
 const sideControlClassName =
   'flex min-w-0 items-center justify-end gap-2 [--field-max-width:13.75rem] [--field-width:auto] sm:min-w-55 sm:shrink-0';
+
+export type SettingsControlGroupProps = ComponentProps<'div'>;
+
+/**
+ * Several controls that set one value together (a period select and an amount). The group takes the field
+ * width (13.75rem) so it ends where every other control in the column ends, whatever it holds. Controls inside
+ * share that width: selects fill their share instead of hugging their value; size one with a width class
+ * (`w-32`) and give the other `flex-1`. Use it instead of a `div` with its own width.
+ */
+export function SettingsControlGroup({ className, ...props }: SettingsControlGroupProps) {
+  return (
+    <div
+      data-slot="settings-control-group"
+      className={cn(
+        'flex w-full min-w-0 items-center gap-2 [--field-width:100%] *:min-w-0 sm:w-(--field-max-width)',
+        className,
+      )}
+      {...props}
+    />
+  );
+}
 
 export function SettingsRowControl({ viewOnly = false, children }: { viewOnly?: boolean; children: ReactNode }) {
   if (!viewOnly) return children;

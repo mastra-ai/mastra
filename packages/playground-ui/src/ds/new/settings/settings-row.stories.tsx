@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SettingsContainer, SettingsRow } from './index';
+import { SettingsContainer, SettingsControlGroup, SettingsRow } from './index';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import { Input } from '@/ds/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from '@/ds/components/InputGroup';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
 import { ThemeProvider } from '@/ds/components/ThemeProvider';
@@ -98,6 +99,74 @@ export const CompactOverride: Story = {
         </Button>
       </div>
     </SettingsRow>
+  ),
+};
+
+/**
+ * Several controls that set one value go in a `SettingsControlGroup`, never a `div` with its own width: the group
+ * takes the field width, so it ends on the same edge as the controls above and below it. A lone select fills it.
+ */
+export const ControlGroup: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Deploy key" description="Adds a Gateway API key to each deploy">
+        <Switch aria-label="Deploy key" defaultChecked />
+      </SettingsRow>
+      <SettingsRow label="Models">
+        <Combobox options={models} value="openai/gpt-6-luna" />
+      </SettingsRow>
+      <SettingsRow label="Spend limit">
+        <SettingsControlGroup>
+          <Select defaultValue="monthly">
+            <SelectTrigger aria-label="Period" className="w-32 shrink-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No limit</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+          <InputGroup className="flex-1">
+            <InputGroupAddon>
+              <InputGroupText>$</InputGroupText>
+            </InputGroupAddon>
+            <InputGroupInput aria-label="Limit" defaultValue="50" />
+          </InputGroup>
+        </SettingsControlGroup>
+      </SettingsRow>
+      <SettingsRow label="Spend limit" description="One control left in the group fills it">
+        <SettingsControlGroup>
+          <Select defaultValue="none">
+            <SelectTrigger aria-label="Period">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="none">No limit</SelectItem>
+              <SelectItem value="monthly">Monthly</SelectItem>
+            </SelectContent>
+          </Select>
+        </SettingsControlGroup>
+      </SettingsRow>
+    </>
+  ),
+};
+
+/**
+ * A setting that is on or off is a `Switch` alone: no "Enabled"/"Disabled" text beside it, since the switch already
+ * shows its state. When the viewer can't change it, keep the switch and disable it (`viewOnly` on the row, or
+ * `disabled` on the switch), rather than swapping it for text. Text in the control slot is for a status the user
+ * doesn't set (a `Badge`), not for a toggle.
+ */
+export const Toggle: Story = {
+  render: () => (
+    <>
+      <SettingsRow label="Notifications" description="Notify when a run finishes">
+        <Switch aria-label="Notifications" defaultChecked />
+      </SettingsRow>
+      <SettingsRow label="Observability" description="Only admins can change this" viewOnly>
+        <Switch aria-label="Observability" defaultChecked />
+      </SettingsRow>
+    </>
   ),
 };
 
