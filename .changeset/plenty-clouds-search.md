@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Fixed detached stream detection to use the agent's stream capability rather than its execution type, preserving runs when an HTTP observer disconnects.
+Preserved durable runs when an HTTP observer disconnects, including with older Inngest wrappers that do not explicitly advertise detached streaming.
