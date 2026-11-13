@@ -821,6 +821,61 @@ describe('a background task that has just suspended (#30226)', () => {
     expect(tool.calls).toEqual([undefined, { approved: true }]);
   });
 
+  it('keeps the suspended run of a worker that took over a task shutdown left running', async () => {
+    // A retryable task stays `running` through shutdown so another worker can
+    // recover it. The first worker's delete of its run must not land on the
+    // run the other worker suspended in the meantime.
+    const storage = new InMemoryStore();
+    const tasks = (await storage.getStore('backgroundTasks'))!;
+    const workflows = (await storage.getStore('workflows'))!;
+    // Hold the first delete of the task's stored run until the takeover suspends.
+    let releaseDelete!: () => void;
+    const deleteGate = new Promise<void>(resolve => (releaseDelete = resolve));
+    let heldDelete: Promise<void> | undefined;
+    const deleteRun = workflows.deleteWorkflowRunById.bind(workflows);
+    workflows.deleteWorkflowRunById = args => {
+      if (heldDelete) return deleteRun(args);
+      heldDelete = deleteGate.then(() => deleteRun(args));
+      return heldDelete;
+    };
+
+    // The first worker's tool runs until shutdown aborts it.
+    let running!: () => void;
+    const toolRunning = new Promise<void>(resolve => (running = resolve));
+    const abandoned: Approval = {
+      calls: [],
+      execute: (_args, options) =>
+        new Promise((_resolve, reject) => {
+          running();
+          options.abortSignal?.addEventListener('abort', () => reject(new Error('aborted')), { once: true });
+        }),
+    };
+    const first = start(storage, abandoned);
+    const { task } = await first.backgroundTaskManager!.enqueue({ ...payload('shutdown-takeover'), maxRetries: 1 });
+    await toolRunning;
+    await first.shutdown({ drainTimeout: 300 });
+    expect((await tasks.getTask(task.id))?.status).toBe('running');
+
+    // Recovery on another worker runs the task again, and it suspends.
+    const tool = approvalTool();
+    const second = start(storage, tool).backgroundTaskManager!;
+    await second.restart(task.id);
+    await vi.waitFor(async () => expect((await tasks.getTask(task.id))?.status).toBe('suspended'), {
+      timeout: 5000,
+      interval: 20,
+    });
+
+    // The first worker's late delete, if it made one, lands now.
+    releaseDelete();
+    await heldDelete;
+
+    await second.resume(task.id, { approved: true });
+    const done = await settled(second, task.id);
+    expect(done.status).toBe('completed');
+    expect(done.result).toBe('ran with {"approved":true}');
+    expect(tool.calls.at(-1)).toEqual({ approved: true });
+  });
+
   it('is answered even if its suspend hooks never return', async () => {
     const storage = new InMemoryStore();
     const tool = approvalTool();

@@ -1042,7 +1042,11 @@ describe('BackgroundTaskManager lifecycle', () => {
     const task = makeRunningTask();
     const updateTask = vi.fn(async () => true);
     const start = vi.fn(async () => ({ status: 'success' }));
-    const restart = vi.fn(async () => ({ status: 'success' }));
+    // The run stores the task as completed before it settles.
+    const restart = vi.fn(async () => {
+      task.status = 'completed';
+      return { status: 'success' };
+    });
     const deleteWorkflowRunById = vi.fn(async () => {});
     manager.__registerMastra({
       getStorage: () => ({

@@ -1538,10 +1538,7 @@ export class BackgroundTaskManager {
           .then(
             result => {
               if (result.status === 'suspended') return this.#storeSuspension(workflow, taskId, action, settled);
-              this.#deleteOwnSettledRun(workflow, taskId);
-              if (result.status !== 'success') {
-                return this.failUnsettledTask(taskId, action, workflowRunError(result));
-              }
+              return this.#settleEndedRun(workflow, taskId, action, result);
             },
             err => this.failUnsettledTask(taskId, action, err),
           )
@@ -1672,10 +1669,7 @@ export class BackgroundTaskManager {
         .then(
           result => {
             if (result.status === 'suspended') return this.#storeSuspension(workflow, taskId, 'resume', settled);
-            this.#deleteOwnSettledRun(workflow, taskId);
-            if (result.status !== 'success') {
-              return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
-            }
+            return this.#settleEndedRun(workflow, taskId, 'resume', result);
           },
           err => this.failUnsettledTask(taskId, 'resume', err),
         )
@@ -1777,19 +1771,30 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Deletes a settled run's stored state, unless another worker took the task
-   * over and suspended or is running it: the stored run is then theirs.
+   * Settles a run that ended without suspending: fails the task if the run
+   * left it unsettled, then deletes the stored run once the task has ended.
    */
-  #deleteOwnSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
+  async #settleEndedRun(
+    workflow: { deleteWorkflowRunById(runId: string): Promise<void> },
+    taskId: string,
+    action: 'start' | 'restart' | 'resume',
+    result: Parameters<typeof workflowRunError>[0],
+  ): Promise<void> {
+    if (result.status !== 'success') await this.failUnsettledTask(taskId, action, workflowRunError(result));
+    this.#deleteEndedRun(workflow, taskId);
+  }
+
+  /**
+   * Deletes a run's stored state only once its task has ended or is gone. A
+   * task that has not ended keeps it, even while this worker still holds it:
+   * one left running for recovery can be restarted by another worker, whose
+   * suspended snapshot a late delete from here would remove.
+   */
+  #deleteEndedRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
     this.#trackSettlingRun(
       (async () => {
         const task = await (await this.getStorage()).getTask(taskId);
-        const takenOver =
-          task?.status === 'suspended' ||
-          ((task?.status === 'running' || task?.status === 'pending') &&
-            task.ownerId !== undefined &&
-            task.ownerId !== this.workerId);
-        if (!takenOver) this.#deleteSettledRun(workflow, taskId);
+        if (!task || isTerminalStatus(task.status)) this.#deleteSettledRun(workflow, taskId);
       })(),
     );
   }
