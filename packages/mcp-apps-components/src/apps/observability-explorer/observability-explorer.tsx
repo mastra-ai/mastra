@@ -341,7 +341,7 @@ function Explorer({ app, opened: initial, studioUrl }: { app: App; opened: Opene
       <MastraReactProvider baseUrl="https://mcp-app.mastra.invalid" customFetch={customFetch}>
         <TooltipProvider>
           <AppHost app={app} name="observability explorer" studioUrl={studioUrl}>
-            <AppFrame>
+            <AppFrame fixed>
               <Views app={app} opened={opened} onClearQuery={clearQuery} />
             </AppFrame>
           </AppHost>
@@ -378,16 +378,20 @@ export function ObservabilityExplorer() {
 
   if (error) {
     return (
-      <Txt variant="body-sm" tone="muted" className="p-4">
-        {error.message}
-      </Txt>
+      <AppFrame>
+        <Txt variant="body-sm" tone="muted" className="p-4">
+          {error.message}
+        </Txt>
+      </AppFrame>
     );
   }
   if (!app || !opened) {
     return (
-      <div className="flex min-h-25 items-center justify-center">
-        <Spinner size="sm" aria-label="Loading traces" />
-      </div>
+      <AppFrame>
+        <div className="flex min-h-25 items-center justify-center">
+          <Spinner size="sm" aria-label="Loading traces" />
+        </div>
+      </AppFrame>
     );
   }
   return <Explorer app={app} opened={opened} studioUrl={studioUrl} />;

@@ -31,6 +31,9 @@ async function loadRest(app: App, trace: LightTrace): Promise<LightSpanRecord[]>
   return spans;
 }
 
+/** The app's card already frames the trace, so its panels drop their own edge and rounding inside it. */
+const IN_CARD = 'shadow-none [--studio-frame-radius:0px]';
+
 function SpanPanel({
   app,
   traceId,
@@ -66,7 +69,7 @@ function SpanPanel({
     );
   }
   return (
-    <DataPanel variant="inline" title={`Span ${spanId}`}>
+    <DataPanel variant="inline" title={`Span ${spanId}`} className={IN_CARD}>
       <SpanDataPanelView
         traceId={traceId}
         spanId={spanId}
@@ -146,8 +149,8 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
 
   return (
     <AppState context={context} studioPath={studioPath}>
-      <div className="flex flex-col gap-3 p-3">
-        <DataPanel variant="inline" title={`Trace ${trace.traceId}`}>
+      <div className="flex flex-col">
+        <DataPanel variant="inline" title={`Trace ${trace.traceId}`} className={IN_CARD}>
           <DataPanel.Header>
             <DataPanel.HeaderContent>
               <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
@@ -166,7 +169,7 @@ export function OpenedTrace({ app, trace, spanId }: { app: App; trace: LightTrac
           </DataPanel.Content>
         </DataPanel>
         {selectedSpanId && (
-          <div className="h-[32rem]">
+          <div className="border-surface-rim h-[32rem] border-t">
             <SpanPanel
               app={app}
               traceId={trace.traceId}

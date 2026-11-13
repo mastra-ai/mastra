@@ -1,4 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { frameFillStyle, frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import type { App, McpUiDisplayMode } from '@modelcontextprotocol/ext-apps';
 import { createContext, useCallback, useContext, useEffect, useId, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -125,10 +126,22 @@ export function useDisplayMode(): McpUiDisplayMode | undefined {
   return useHost().displayMode;
 }
 
-/** The app's frame: a fixed height inline, the whole screen in fullscreen. */
-export function AppFrame({ children }: { children: ReactNode }) {
-  const fullscreen = useDisplayMode() === 'fullscreen';
-  return <div className={fullscreen ? 'flex h-screen flex-col' : 'flex h-[44rem] flex-col'}>{children}</div>;
+/**
+ * The card every app sits in: Studio's frame surface, so an app reads the same on any host's background. Inline
+ * it has the frame's edge, rounding, and elevation, with a margin so the host doesn't clip its shadow; `fixed`
+ * gives it a set height for apps that scroll inside. Fullscreen, it fills the screen with neither. It works
+ * outside `<AppHost>` too, so loading and error states sit in the same card.
+ */
+export function AppFrame({ children, fixed = false }: { children: ReactNode; fixed?: boolean }) {
+  const fullscreen = useContext(HostContext)?.displayMode === 'fullscreen';
+  const shape = fullscreen
+    ? `h-screen ${frameFillStyle}`
+    : `m-1 rounded-studio-frame p-px ${fixed ? 'h-[44rem]' : ''} ${frameSurfaceStyle}`;
+  return (
+    <div data-slot="mcp-app-frame" className={`flex flex-col overflow-hidden ${shape}`}>
+      {children}
+    </div>
+  );
 }
 
 /** "Open in Studio" for what's on screen, and a fullscreen toggle, for whichever the host supports. */

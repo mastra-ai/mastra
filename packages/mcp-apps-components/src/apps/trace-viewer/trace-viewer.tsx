@@ -4,7 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApp } from '@modelcontextprotocol/ext-apps/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { AppHost, AppToolbar, readStudioUrl } from '../../shared/host';
+import { AppFrame, AppHost, AppToolbar, readStudioUrl } from '../../shared/host';
 import { applyTheme, readResult } from '../../shared/mcp-app';
 import { isLightTrace, OpenedTrace } from '../../shared/trace-view';
 import type { LightTrace } from '../../shared/trace-view';
@@ -41,26 +41,32 @@ export function TraceViewer() {
   const message = error?.message ?? problem;
   if (message) {
     return (
-      <Txt variant="body-sm" tone="muted" className="p-4">
-        {message}
-      </Txt>
+      <AppFrame>
+        <Txt variant="body-sm" tone="muted" className="p-4">
+          {message}
+        </Txt>
+      </AppFrame>
     );
   }
   if (!app || !trace) {
     return (
-      <div className="flex min-h-25 items-center justify-center">
-        <Spinner size="sm" aria-label="Loading the trace" />
-      </div>
+      <AppFrame>
+        <div className="flex min-h-25 items-center justify-center">
+          <Spinner size="sm" aria-label="Loading the trace" />
+        </div>
+      </AppFrame>
     );
   }
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AppHost app={app} name="trace viewer" studioUrl={studioUrl}>
-          <div className="flex justify-end px-3 pt-2">
-            <AppToolbar />
-          </div>
-          <OpenedTrace app={app} trace={trace} />
+          <AppFrame>
+            <div className="flex justify-end px-3 pt-2">
+              <AppToolbar />
+            </div>
+            <OpenedTrace app={app} trace={trace} />
+          </AppFrame>
         </AppHost>
       </TooltipProvider>
     </QueryClientProvider>
