@@ -43,9 +43,64 @@ export interface EventsClientOptions extends ConnectClientOptions {
   idleTimeoutMs?: number;
 }
 
+/**
+ * Where a subscription resumes. The id is exact; the time is a fallback for
+ * when no id is stored, or the stored id can no longer be resumed from.
+ */
+export interface EventCursor {
+  /** The last event processed, or a stream's start cursor. */
+  eventId?: string;
+  /** Milliseconds since the epoch: the processed event's store timestamp. */
+  timestamp?: number;
+}
+
+/**
+ * Durable storage for one subscription's cursor. The subscription loads it
+ * when iteration starts and saves each event once it is processed: when the
+ * consumer asks for the next event. An event whose handling threw, or that
+ * the consumer broke out on, is not saved, so it is delivered again.
+ */
+export interface EventCursorStore {
+  load(): Promise<EventCursor | null | undefined> | EventCursor | null | undefined;
+  save(cursor: EventCursor): Promise<void> | void;
+}
+
+/** Events the subscription could not deliver. Resync from the source of truth. */
+export interface EventStreamGap {
+  /**
+   * `trimmed`: the events after `after` are no longer stored.
+   * `cursor_rejected`: the events service rejected `after`, so delivery
+   * resumed from the time of the last processed event instead. Events in
+   * that millisecond are delivered again; events trimmed since are missed.
+   */
+  reason: 'trimmed' | 'cursor_rejected';
+  /** The event id delivery was asked to resume after. */
+  after: string;
+  /** Where delivery resumed: the new stream's start cursor. */
+  resumedAfter: string;
+}
+
 export interface SubscribeOptions {
-  /** Resume after this event id (exclusive). Omit to start at the tail. */
+  /** Resume after this event id (exclusive). Takes precedence over `cursorStore`. */
   after?: string;
+  /**
+   * Start strictly after this time (milliseconds since the epoch) when there
+   * is no event id to resume from: no `after`, and no cursor in `cursorStore`.
+   */
+  afterTimestamp?: number;
+  /**
+   * Where to keep the last processed event. Loaded when iteration starts;
+   * an id resumes exactly, a time alone resumes by time, nothing starts at
+   * the tail. Without a store, persist `subscription.cursor` yourself.
+   */
+  cursorStore?: EventCursorStore;
+  /**
+   * Called, and awaited, when events after the cursor can't be delivered.
+   * Without it, delivery continues past a trimmed gap silently, and a rejected
+   * cursor ends the subscription with `invalid_cursor` instead of resuming
+   * by time.
+   */
+  onGap?(gap: EventStreamGap): void | Promise<void>;
   /** Ends the subscription when aborted. */
   signal?: AbortSignal;
   /** Project whose topic to read. Defaults to the client's project. */
@@ -79,6 +134,8 @@ export interface ConnectEvent {
    */
   unverified: boolean;
 }
+
+const gapSchema = z.object({ after: z.string(), resumedAfter: z.string() });
 
 const topicEventSchema = z.object({
   id: z.string().regex(CURSOR_PATTERN),
@@ -121,19 +178,21 @@ function assertPositiveMs(name: string, value: number | undefined): void {
 
 /**
  * Client for the Mastra platform events service: reads a project's topics as
- * server-sent events, reconnecting and resuming without gaps.
+ * server-sent events, reconnecting and resuming from the last event.
  *
- * The caller owns the cursor. Persist `subscription.cursor` (or each event's
- * id) once an event is handled, and pass it back as `after` to resume after a
- * restart. Delivery is at-least-once, so handlers should be idempotent.
+ * Pass a `cursorStore` to keep the last processed event across restarts, and
+ * `onGap` to resync when events after the cursor can no longer be delivered.
+ * Delivery is at-least-once, so handlers should be idempotent.
  *
  * @example
  * ```ts
  * const events = new EventsClient();
- * const subscription = events.connectEvents({ after: savedCursor });
+ * const subscription = events.connectEvents({
+ *   cursorStore: { load: () => db.get('cursor'), save: cursor => db.set('cursor', cursor) },
+ *   onGap: () => resync(),
+ * });
  * for await (const event of subscription) {
  *   await handle(event);
- *   await saveCursor(event.id);
  * }
  * ```
  */
@@ -176,6 +235,15 @@ export class EventsClient {
     if (options.after !== undefined && !CURSOR_PATTERN.test(options.after)) {
       throw new MastraConnectError('invalid_options', `Invalid event cursor '${options.after}'.`);
     }
+    if (options.afterTimestamp !== undefined && !isTimestamp(options.afterTimestamp)) {
+      throw new MastraConnectError(
+        'invalid_options',
+        'Invalid afterTimestamp: expected a non-negative integer number of milliseconds.',
+      );
+    }
+    if (options.after !== undefined && options.afterTimestamp !== undefined) {
+      throw new MastraConnectError('invalid_options', 'Pass at most one of after and afterTimestamp.');
+    }
     const projectId = options.projectId?.trim() || this.#client.headers['x-mastra-project-id'];
     if (!projectId) {
       throw new MastraConnectError(
@@ -189,6 +257,9 @@ export class EventsClient {
       projectId,
       client: this.#client,
       after: options.after,
+      afterTimestamp: options.afterTimestamp,
+      cursorStore: options.cursorStore,
+      onGap: options.onGap,
       signal: options.signal,
       map,
       reconnectDelayMs: this.#options.reconnectDelayMs,
@@ -229,6 +300,9 @@ interface SubscriptionInit<T> {
   projectId: string;
   client: ResolvedClient;
   after?: string;
+  afterTimestamp?: number;
+  cursorStore?: EventCursorStore;
+  onGap?: (gap: EventStreamGap) => void | Promise<void>;
   signal?: AbortSignal;
   map: (event: TopicEvent) => T;
   reconnectDelayMs?: number;
@@ -238,8 +312,10 @@ interface SubscriptionInit<T> {
 
 /**
  * A live subscription to one project topic. Iterate it once; it reconnects on
- * server closes, `error` frames, 5xx responses and network failures, and ends
- * with a `MastraConnectError` on 400, 401, 403 and 404.
+ * server closes, `error` and `reconnect` frames, 5xx responses and network
+ * failures, and ends with a `MastraConnectError` on 401, 403, 404, and on a
+ * 400 it can't recover from by time. Errors thrown by `cursorStore` or
+ * `onGap` end it too, thrown from the loop.
  */
 export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   readonly #init: SubscriptionInit<T>;
@@ -248,12 +324,22 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
   #resolveReady!: (cursor: string) => void;
   #rejectReady!: (error: unknown) => void;
   #cursor: string | undefined;
+  /** Store time of the last processed event (or the stored one): the fallback when `#cursor` is rejected. */
+  #timestamp: number | undefined;
+  /** Start time for a connection without an id cursor. */
+  #afterTimestamp: number | undefined;
+  /** A rejected id, reported as a gap once the stream that replaced it is ready. */
+  #rejectedCursor: string | undefined;
+  /** Resumed by time and no event yet: a second rejection ends the subscription instead of looping. */
+  #fellBack = false;
   #iterating = false;
   readonly #onCallerAbort = () => this.close();
 
   constructor(init: SubscriptionInit<T>) {
     this.#init = init;
     this.#cursor = init.after;
+    this.#afterTimestamp = init.afterTimestamp;
+    this.#timestamp = init.afterTimestamp;
     this.#ready = new Promise<string>((resolve, reject) => {
       this.#resolveReady = resolve;
       this.#rejectReady = reject;
@@ -263,7 +349,10 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     if (init.signal?.aborted) this.close();
   }
 
-  /** The last delivered event id, or the start cursor before any event. */
+  /**
+   * The last delivered event id, or the start cursor before any event.
+   * Undefined while resuming by time, until the new stream is ready.
+   */
   get cursor(): string | undefined {
     return this.#cursor;
   }
@@ -303,6 +392,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     let serverRetryMs: number | undefined;
     let retryAfterMs: number | undefined;
     try {
+      await this.#loadCursor();
       while (!closed.aborted) {
         const connection = new AbortController();
         const abortConnection = () => connection.abort();
@@ -322,11 +412,12 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
           // Transport failures, idle timeouts and retryable statuses all fall
           // through to the backoff below; fatal statuses throw.
           const response = await this.#init.client
-            .fetch(this.#init.url, { headers: this.#headers(), signal: connection.signal })
+            .fetch(this.#url(), { headers: this.#headers(), signal: connection.signal })
             .catch(() => undefined);
           if (closed.aborted) return;
           if (response && (!response.ok || !response.body)) {
             await response.body?.cancel().catch(() => {});
+            if (this.#fallBackToTime(response)) continue;
             this.#throwIfFatal(response);
             retryAfterMs = parseRetryAfterMs(response);
           } else if (response?.body) {
@@ -353,7 +444,12 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
     }
   }
 
-  /** Yields one stream's events until it ends, errors, or sends an `error` frame. */
+  /**
+   * Yields one stream's events until it ends, errors, or sends an `error` or
+   * `reconnect` frame. Each event is saved to the cursor store when the
+   * consumer asks for the next one, so an event whose handling threw or broke
+   * out of the loop is delivered again.
+   */
   async *#readStream(
     body: ReadableStream<Uint8Array>,
     idle: { touch: () => void; pause: () => void },
@@ -365,25 +461,119 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
       for await (const frame of parseServerSentEvents(body, idle.touch)) {
         if (frame.retry !== undefined) onRetry(frame.retry);
         if (frame.event === 'ready') {
-          if (frame.id !== undefined) this.#cursor = frame.id;
+          if (frame.id !== undefined) {
+            this.#cursor = frame.id;
+            this.#afterTimestamp = undefined;
+          }
           onReady();
           this.#resolveReady(this.#cursor ?? '');
+          const rejected = this.#rejectedCursor;
+          if (rejected !== undefined && this.#cursor !== undefined) {
+            this.#rejectedCursor = undefined;
+            await this.#reportGap(idle, { reason: 'cursor_rejected', after: rejected, resumedAfter: this.#cursor });
+          }
+        } else if (frame.event === 'gap') {
+          const gap = parseGap(frame.data);
+          this.#cursor = gap.resumedAfter;
+          await this.#reportGap(idle, { reason: 'trimmed', ...gap });
         } else if (frame.event === 'event') {
           const event = parseTopicEvent(frame.data);
           const mapped = this.#init.map(event);
           this.#cursor = event.id;
+          this.#timestamp = event.timestamp;
+          this.#fellBack = false;
           idle.pause();
           yield mapped;
+          // Saved even when the subscription closed during handling: the consumer finished with the event.
+          await this.#save({ eventId: event.id, timestamp: event.timestamp });
           if (closed.aborted) return;
           idle.touch();
-        } else if (frame.event === 'error') {
+        } else if (frame.event === 'reconnect' || frame.event === 'error') {
+          // A planned close or a store failure: reconnect now rather than wait for the socket to close.
           return;
         }
       }
     } catch (error) {
-      // Contract violations are fatal; a dropped connection reconnects.
+      // Store and gap handler failures and contract violations are fatal; a
+      // dropped connection reconnects.
+      if (error instanceof CallerError) throw error.error;
       if (error instanceof MastraConnectError && !closed.aborted) throw error;
     }
+  }
+
+  /**
+   * Hands a gap to `onGap`. Once it resolves, the gap is resynced, so the
+   * stream's start cursor is saved: a restart resumes there instead of
+   * reporting the same gap again.
+   */
+  async #reportGap(idle: { touch: () => void; pause: () => void }, gap: EventStreamGap): Promise<void> {
+    const onGap = this.#init.onGap;
+    if (!onGap) return;
+    idle.pause();
+    await callCaller(() => onGap(gap));
+    await this.#save({ eventId: gap.resumedAfter, timestamp: this.#timestamp });
+    idle.touch();
+  }
+
+  async #save({ eventId, timestamp }: EventCursor): Promise<void> {
+    const store = this.#init.cursorStore;
+    // Absent fields are omitted, not undefined, so a store that writes them to nullable columns round-trips.
+    const cursor: EventCursor = { eventId, ...(timestamp !== undefined ? { timestamp } : {}) };
+    if (store) await callCaller(() => store.save(cursor));
+  }
+
+  /** Applies the start precedence: `after`, then the stored id, the stored time, `afterTimestamp`. */
+  async #loadCursor(): Promise<void> {
+    const store = this.#init.cursorStore;
+    if (!store || this.#init.after !== undefined) return;
+    const stored = await store.load();
+    if (!stored) return;
+    // A store backed by nullable columns may return null for an absent field.
+    const eventId = stored.eventId ?? undefined;
+    const timestamp = stored.timestamp ?? undefined;
+    if (
+      (eventId !== undefined && !CURSOR_PATTERN.test(eventId)) ||
+      (timestamp !== undefined && !isTimestamp(timestamp))
+    ) {
+      throw new MastraConnectError('invalid_options', 'The cursor store returned an invalid cursor.');
+    }
+    if (eventId !== undefined) {
+      this.#cursor = eventId;
+      this.#afterTimestamp = undefined;
+      this.#timestamp = timestamp;
+    } else if (timestamp !== undefined) {
+      this.#afterTimestamp = timestamp;
+      this.#timestamp = timestamp;
+    }
+  }
+
+  /**
+   * When the service rejects the id cursor, the time of the last processed
+   * event is known, and an `onGap` handler can resync what was missed, the
+   * next connection starts from just before that time. Otherwise the
+   * subscription ends with `invalid_cursor`.
+   */
+  #fallBackToTime(response: Response): boolean {
+    if (
+      response.status !== 400 ||
+      this.#cursor === undefined ||
+      this.#timestamp === undefined ||
+      !this.#init.onGap ||
+      this.#fellBack
+    ) {
+      return false;
+    }
+    this.#rejectedCursor = this.#cursor;
+    this.#cursor = undefined;
+    // One millisecond earlier: events stored in the same millisecond are delivered again, not skipped.
+    this.#afterTimestamp = Math.max(this.#timestamp - 1, 0);
+    this.#fellBack = true;
+    return true;
+  }
+
+  #url(): string {
+    if (this.#cursor !== undefined || this.#afterTimestamp === undefined) return this.#init.url;
+    return `${this.#init.url}?afterTimestamp=${this.#afterTimestamp}`;
   }
 
   #headers(): Record<string, string> {
@@ -403,7 +593,7 @@ export class EventSubscription<T = TopicEvent> implements AsyncIterable<T> {
       if (this.#cursor !== undefined) {
         throw new MastraConnectError(
           'invalid_cursor',
-          `The events service rejected cursor ${this.#cursor}. Restart without a cursor and reconcile.`,
+          `The events service rejected cursor ${this.#cursor}. Clear the stored cursor (or subscribe without after) and reconcile.`,
           { status, source: 'platform' },
         );
       }
@@ -461,6 +651,37 @@ function parseTopicEvent(data: string): TopicEvent {
   const parsed = topicEventSchema.safeParse(json);
   if (!parsed.success) {
     throw new MastraConnectError('invalid_response', 'The events service sent an event with an unexpected shape.');
+  }
+  return parsed.data;
+}
+
+/** A failure in caller code (cursor store, gap handler), kept apart from stream failures. */
+class CallerError {
+  constructor(readonly error: unknown) {}
+}
+
+async function callCaller(fn: () => void | Promise<void>): Promise<void> {
+  try {
+    await fn();
+  } catch (error) {
+    throw new CallerError(error);
+  }
+}
+
+function isTimestamp(value: number): boolean {
+  return Number.isSafeInteger(value) && value >= 0;
+}
+
+function parseGap(data: string): { after: string; resumedAfter: string } {
+  let json: unknown;
+  try {
+    json = JSON.parse(data);
+  } catch {
+    json = undefined;
+  }
+  const parsed = gapSchema.safeParse(json);
+  if (!parsed.success) {
+    throw new MastraConnectError('invalid_response', 'The events service sent a gap frame with an unexpected shape.');
   }
   return parsed.data;
 }

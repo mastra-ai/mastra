@@ -14,12 +14,16 @@ const [jira] = await connect.listConnections({ providerKeys: ['jira'] });
 const issue = await connect.proxy(jira.id, { method: 'GET', path: '/rest/api/3/issue/ENG-1' });
 ```
 
-**EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive, reconnects on its own, and resumes from a cursor you store, so a restart picks up where it stopped.
+**EventsClient** streams a project's topics from the platform events service. `connectEvents()` delivers the webhooks your connections receive and reconnects on its own. Pass a `cursorStore` and it saves each event you finish handling, so a restart picks up where it stopped; `onGap` tells you when events were trimmed and you should resync.
 
 ```typescript
-for await (const event of connect.events.connectEvents({ after: savedCursor })) {
+const events = connect.events.connectEvents({
+  cursorStore: { load: () => db.get('cursor'), save: cursor => db.set('cursor', cursor) },
+  onGap: () => resync(),
+});
+
+for await (const event of events) {
   await handle(event.integrationId, event.eventType, event.payload);
-  await saveCursor(event.id);
 }
 ```
 

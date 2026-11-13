@@ -172,13 +172,19 @@ import { ConnectClient } from '@mastra/connect'
 
 const connect = new ConnectClient()
 
-for await (const event of connect.events.connectEvents({ after: await loadCursor() })) {
+const subscription = connect.events.connectEvents({
+  cursorStore: {
+    load: () => db.get('events-cursor'),
+    save: cursor => db.set('events-cursor', cursor),
+  },
+})
+
+for await (const event of subscription) {
   console.log(event.integrationId, event.eventType)
-  await saveCursor(event.id)
 }
 ```
 
-Store each event's `id` once you've handled it, and pass it back as `after` to resume after a restart. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
+The cursor store saves each event once you've handled it, so a restart resumes after the last one. Events can arrive more than once, so make handlers safe to repeat. Don't act on events marked `unverified`.
 
 ## Security model
 
