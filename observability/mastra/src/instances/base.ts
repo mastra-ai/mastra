@@ -1206,23 +1206,26 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     // Phase 1: Shutdown the ObservabilityBus first (flushes remaining events, clears subscribers)
     await this.observabilityBus.shutdown();
 
-    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed
-    const shutdownPromises: Promise<void>[] = [
-      ...this.exporters.map(e => e.shutdown()),
-      ...this.spanOutputProcessors.map(p => p.shutdown()),
-    ];
-    if (this.config.bridge) {
-      shutdownPromises.push(this.config.bridge.shutdown());
-    }
-    if (shutdownPromises.length > 0) {
-      const results = await Promise.allSettled(shutdownPromises);
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
-        }
-      }
-    }
+    // Phase 2: Shutdown exporters, processors, and bridge after bus has flushed. An exporter can
+    // report drops while it shuts down, so the handlers of those reports get and flush them first.
+    const handlers = [...this.exporters, ...(this.config.bridge ? [this.config.bridge] : [])];
+    const dropHandlers = handlers.filter(h => h.onDroppedEvent);
+    const others = [...handlers.filter(h => !h.onDroppedEvent), ...this.spanOutputProcessors];
+    await this.settleShutdownSteps(others.map(c => c.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
+    await this.settleShutdownSteps(dropHandlers.map(h => h.flush()));
+    await this.settleShutdownSteps(dropHandlers.map(h => h.shutdown()));
+    await this.observabilityBus.drainPendingHandlers();
 
     this.logger.info(`[Observability] Shutdown completed [name=${this.name}]`);
+  }
+
+  private async settleShutdownSteps(steps: Promise<void>[]): Promise<void> {
+    const results = await Promise.allSettled(steps);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        this.logger.error(`[Observability] Component shutdown failed [name=${this.name}]:`, result.reason);
+      }
+    }
   }
 }
