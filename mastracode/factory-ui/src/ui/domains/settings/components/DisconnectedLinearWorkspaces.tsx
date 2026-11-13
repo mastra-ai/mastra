@@ -3,8 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsItem } from '@mastra/playground-ui/new/settings';
 import { Link2, Trash2 } from 'lucide-react';
 
-import { useApiConfig } from '../../../../api/config';
-import { connectLinear } from '../../factory/services/linear';
+import { useLinearConnect } from '../../../../hooks/useLinearConnect';
 import type { DisconnectedLinearWorkspace } from './intakeSourceGroups';
 import { IntegrationItemIcon } from './IntegrationItem';
 
@@ -20,7 +19,7 @@ export function DisconnectedLinearWorkspaces({
   workspaces: DisconnectedLinearWorkspace[];
   onRemove: (sourceIds: string[]) => void;
 }) {
-  const { baseUrl } = useApiConfig();
+  const linear = useLinearConnect();
   return (
     // One cell of the provider's card, so the rows take the card's row spacing themselves.
     <ul aria-label="Disconnected Linear workspaces" className="divide-border flex flex-col divide-y">
@@ -46,7 +45,13 @@ export function DisconnectedLinearWorkspaces({
                 </span>
               }
             >
-              <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectLinear(baseUrl)}>
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Link2 />}
+                disabled={linear.pending}
+                onClick={() => void linear.connect()}
+              >
                 Reconnect
               </Button>
               <Button

@@ -269,6 +269,8 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
         const c = loose(rawContext);
         const provider = providerFromParam(c, providers);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
+        // Providers that link only through their own flow (Linear's migration) never link org connections.
+        if (!provider.binding.linkOrgConnectionsAtBoot) return c.json({ error: 'linking_not_supported' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         if (!(await auth.isOrganizationAdmin(c, resolved.tenant.orgId))) {
