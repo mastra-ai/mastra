@@ -2,14 +2,14 @@
 '@mastra/core': minor
 ---
 
-Workflow steps can now pass only the state keys they change to `setState`. The keys are merged into the workflow state, and the merged state is checked against the step's `stateSchema`. Before, the type required the full state, a partial update could fail validation on the default engine, and a second `setState` call in the same step dropped the keys set by the first.
+Added `updateState` to workflow steps, workflow tools, `.map()` functions, loop and branch conditions, and sleep functions. It merges the top-level keys it's given into the workflow state, validates the merged state against the step's `stateSchema`, and leaves keys it wasn't given alone, including changes parallel steps made. A key set to `undefined` is removed.
+
+`setState` keeps its existing contract: pass the full state, the value is validated on its own, and a second call in the same step replaces the first.
 
 ```ts
-// Before
+// Before: copy the whole state so the other keys survive
 await setState({ ...state, count: state.count + 1 });
 
-// After
-await setState({ count: state.count + 1 });
+// After: pass only the keys that change
+await updateState({ count: state.count + 1 });
 ```
-
-Copying the whole state still works, but in parallel branches it can overwrite another branch's changes, so pass only the keys that changed.

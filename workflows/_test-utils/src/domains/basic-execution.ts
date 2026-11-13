@@ -300,7 +300,7 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
     };
   }
 
-  // Tests: setState with only the keys a step changes
+  // Tests: updateState with only the keys a step changes
   {
     const stateSchema = z.object({ a: z.number(), b: z.number(), c: z.number() });
     const writes = (id: string, updates: Record<string, unknown>[], delayMs = 0) =>
@@ -309,9 +309,9 @@ export function createBasicExecutionWorkflows(ctx: Pick<WorkflowTestContext, 'cr
         inputSchema: z.object({}),
         outputSchema: z.object({}),
         stateSchema,
-        execute: async ({ setState }: any) => {
+        execute: async ({ updateState }: any) => {
           await new Promise(resolve => setTimeout(resolve, delayMs));
-          for (const update of updates) await setState(update);
+          for (const update of updates) await updateState(update);
           return {};
         },
       });
@@ -497,7 +497,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
       });
     });
 
-    it.skipIf(skipTests.state)('should merge setState calls that pass only the keys they change', async () => {
+    it.skipIf(skipTests.state)('should merge updateState calls that pass only the keys they change', async () => {
       const { workflow } = registry['basic-partial-state']!;
       const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });
 
@@ -505,7 +505,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
       expect(result.steps.read).toMatchObject({ status: 'success', output: { a: 1, b: 3, c: 4 } });
     });
 
-    it.skipIf(skipTests.state)('should keep setState keys from each parallel branch', async () => {
+    it.skipIf(skipTests.state)('should keep updateState keys from each parallel branch', async () => {
       const { workflow } = registry['basic-parallel-partial-state']!;
       const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });
 
@@ -514,7 +514,7 @@ export function createBasicExecutionTests(ctx: WorkflowTestContext, registry: Wo
     });
 
     it.skipIf(skipTests.state || skipTests.stateValidation)(
-      'should fail a step whose setState breaks the state schema',
+      'should fail a step whose updateState breaks the state schema',
       async () => {
         const { workflow } = registry['basic-invalid-partial-state']!;
         const result = await execute(workflow, {}, { initialState: { a: 1, b: 2, c: 3 } });

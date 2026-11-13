@@ -3466,7 +3466,7 @@ export class Workflow<
     inputData: TInput;
     resumeData?: unknown;
     state: TState;
-    setState: (state: Partial<TState>) => Promise<void>;
+    setState: (state: TState) => Promise<void>;
     suspend: (suspendPayload: any, suspendOptions?: SuspendOptions) => InnerOutput | Promise<InnerOutput>;
     restart?: boolean;
     timeTravel?: {

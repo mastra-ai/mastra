@@ -161,7 +161,7 @@ export async function validateStepStateData({
   validateInputs,
 }: {
   stateData?: any;
-  step: Step<string, any, any>;
+  step: Partial<Pick<Step<string, any, any>, 'stateSchema'>>;
   validateInputs: boolean;
 }) {
   if (!stateData) {

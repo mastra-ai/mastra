@@ -28,6 +28,8 @@ import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
 import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
 import {
   validateStepInput,
+  validateStepStateData,
+  applyStateDelta,
   createDeprecationProxy,
   omitPriorSuspensionFields,
   runCountDeprecationMessage,
@@ -308,6 +310,27 @@ export class StepExecutor extends MastraBase {
                   // are applied AFTER the step completes, not during execution
                   stateUpdate = { ...(stateUpdate ?? params.state), ...newState };
                   stateDelta = { ...stateDelta, ...newState };
+                },
+                updateState: async (changes: Record<string, any>) => {
+                  // Merge into the state the step sees, validate the merged state, then record only
+                  // the keys it was given so sibling branches keep their own writes.
+                  const merged = { ...(stateUpdate ?? params.state) };
+                  applyStateDelta(merged, changes ?? {});
+                  const { stateData, validationError } = await validateStepStateData({
+                    stateData: merged,
+                    step: schemas,
+                    validateInputs: params.validateInputs ?? true,
+                  });
+                  if (validationError) {
+                    throw validationError;
+                  }
+                  const written: Record<string, any> = {};
+                  for (const [key, value] of Object.entries(changes ?? {})) {
+                    if (value === undefined) written[key] = undefined;
+                    else if (Object.prototype.hasOwnProperty.call(stateData, key)) written[key] = stateData[key];
+                  }
+                  stateUpdate = { ...(stateUpdate ?? params.state), ...written };
+                  stateDelta = { ...stateDelta, ...written };
                 },
                 retryCount,
                 resumeData: params.resumeData,
@@ -709,6 +732,9 @@ export class StepExecutor extends MastraBase {
               setState: async (newState: Record<string, any>) => {
                 Object.assign(currentState, newState);
               },
+              updateState: async (changes: Record<string, any>) => {
+                applyStateDelta(currentState, changes ?? {});
+              },
               retryCount,
               resumeData: params.resumeData,
               getInitData: () => stepResults?.input as any,
@@ -800,6 +826,9 @@ export class StepExecutor extends MastraBase {
               state: currentState,
               setState: async (newState: Record<string, any>) => {
                 Object.assign(currentState, newState);
+              },
+              updateState: async (changes: Record<string, any>) => {
+                applyStateDelta(currentState, changes ?? {});
               },
               retryCount,
               resumeData: params.resumeData,

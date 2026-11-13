@@ -510,7 +510,7 @@ export async function executeStep(
       }
 
       // A nested run hands back its state with the version of this run's state it started from.
-      const handBackState = async (state: any, base?: Record<string, unknown>) => {
+      const setState = async (state: any, base?: Record<string, unknown>) => {
         const { stateData, validationError: stateValidationError } = await validateStepStateData({
           stateData: state,
           step,
@@ -535,12 +535,17 @@ export async function executeStep(
           : executionContext.state;
       };
 
-      // On storage v2, setState merges its top-level keys into the state and validates the result.
-      // Only the keys it was given change: a key the step's stateSchema strips isn't set, as on v1.
-      const mergeState = async (update: Record<string, unknown> | null | undefined) => {
+      const mergeIntoStateView = (update: Record<string, unknown> | null | undefined) => {
         const changes = update ?? {};
         const merged = { ...stateView() };
         applyStateDelta(merged, changes);
+        return { changes, merged };
+      };
+
+      // updateState merges its top-level keys into the state and validates the result.
+      // Only the keys it was given change: a key the step's stateSchema strips isn't set, as on v1.
+      const updateState = async (update: Record<string, unknown> | null | undefined) => {
+        const { changes, merged } = mergeIntoStateView(update);
         const { stateData, validationError: stateValidationError } = await validateStepStateData({
           stateData: merged,
           step,
@@ -558,6 +563,12 @@ export async function executeStep(
         else contextMutations.stateUpdate = delta;
       };
 
+      // A nested run hands back its whole state, so its partial update is merged first.
+      const updateNestedState = async (update: Record<string, unknown> | null | undefined) => {
+        const { merged } = mergeIntoStateView(update);
+        await setState(merged);
+      };
+
       const stepParams = {
         runId: nestedRunId ?? runId,
         resourceId,
@@ -571,7 +582,8 @@ export async function executeStep(
         inputData,
         state: executionContext.state,
         // A nested workflow hands back its state through the internal path, as on v1.
-        setState: (state: any) => (isNestedWorkflow ? handBackState(state) : mergeState(state)),
+        setState: (state: any) => setState(state),
+        updateState: (state: any) => (isNestedWorkflow ? updateNestedState(state) : updateState(state)),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
@@ -650,7 +662,7 @@ export async function executeStep(
           isNestedWorkflow && journal
             ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
             : undefined,
-        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? handBackState : undefined,
+        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,

@@ -96,6 +96,33 @@ export const testWorkflow = createWorkflow({
   .commit()
 ```
 
+## Updating state
+
+Steps write state with `setState` or `updateState`.
+
+`setState` takes the whole state and is validated on its own against the step's `stateSchema`, so it has to contain every field that schema requires. Keys you leave out keep their current value, and a second call in the same step replaces the first:
+
+```typescript
+execute: async ({ getState, setState }) => {
+  const state = await getState()
+  await setState({ ...state, status: 'done' })
+  return {}
+}
+```
+
+`updateState` takes only the keys that change. It merges them into the state the step sees and validates the merged result, so a partial update is fine, and keys other steps changed stay as they are. A key set to `undefined` is removed:
+
+```typescript
+execute: async ({ updateState }) => {
+  await updateState({ status: 'done', count: 1 })
+  return {}
+}
+```
+
+Both return a promise. Await them: the update is applied before the step returns, and a value that fails `stateSchema` fails the step.
+
+On runs stored with `storageVersion: 2`, reading `state` throws. Use `await getState()`, optionally with top-level keys, to read the state including this step's own updates.
+
 ## Setting initial state
 
 Pass `initialState` when starting a workflow run to set the starting values:

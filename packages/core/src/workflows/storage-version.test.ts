@@ -675,7 +675,7 @@ describe('storageVersion per run', () => {
     expect((result as any).error.message).toMatch(/Use `await getState\(\)` instead/);
   });
 
-  it('merges setState into the v2 state, deleting keys set to undefined', async () => {
+  it('merges updateState into the v2 state, deleting keys set to undefined', async () => {
     const storage = new MockStore();
     const workflow = createWorkflow({
       id: 'merge-state',
@@ -688,9 +688,9 @@ describe('storageVersion per run', () => {
           id: 'write',
           inputSchema: z.object({}),
           outputSchema: z.any(),
-          execute: async ({ getState, setState }) => {
-            await setState({ a: 10, b: undefined });
-            await setState({ d: 4 });
+          execute: async ({ getState, updateState }) => {
+            await updateState({ a: 10, b: undefined });
+            await updateState({ d: 4 });
             return { ...(await getState()) };
           },
         }),
@@ -744,8 +744,8 @@ describe('storageVersion per run', () => {
             inputSchema: z.object({}),
             outputSchema: z.any(),
             stateSchema,
-            execute: async ({ setState }) => {
-              await setState(update as any);
+            execute: async ({ updateState }) => {
+              await updateState(update as any);
               return {};
             },
           }),
