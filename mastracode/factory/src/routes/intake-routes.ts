@@ -204,11 +204,21 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
       this.#route(contracts.intakeRouteRerouteApply, async c => {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
+        const moves = await this.#planReroute(scope);
         const result = await applyReroute({
-          moves: await this.#planReroute(scope),
+          moves,
           workItems: this.deps.workItems,
           registry: await this.#registry(scope),
           userId: scope.userId,
+        });
+        await this.deps.audit.emit({
+          context: c,
+          input: {
+            action: 'factory.intake_route.rerouted',
+            factoryProjectId: scope.factoryProjectId,
+            targets: [...new Set(moves.map(move => move.routeId))].map(id => ({ type: 'intake_route', id })),
+            metadata: { ...result, moves: summarizeReroute(moves) },
+          },
         });
         return c.json(result);
       }),

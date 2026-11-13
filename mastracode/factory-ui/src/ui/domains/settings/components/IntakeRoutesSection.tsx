@@ -200,6 +200,7 @@ function useRouteSaves(factoryId: string) {
   const { baseUrl } = useApiConfig();
   const writes = useIntakeRouteWrites(factoryId);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const previews = useRef(0);
   const [failures, setFailures] = useState(0);
   const key = queryKeys.intakeRoutes(factoryId);
 
@@ -229,8 +230,14 @@ function useRouteSaves(factoryId: string) {
   };
   /** The routes now file some untouched cards elsewhere: warn, and offer to move them. */
   const warnOfReroute = async () => {
+    const asked = ++previews.current;
     const preview = await previewReroute(baseUrl, factoryId).catch(() => undefined);
-    if (!preview || preview.total === 0) return;
+    // A later save asked again; only its answer describes the routes as they are now.
+    if (asked !== previews.current || !preview) return;
+    if (preview.total === 0) {
+      toast.dismiss(`reroute-${factoryId}`);
+      return;
+    }
     const where = preview.moves.map(move => `${move.count} from ${move.fromBoard} to ${move.toBoard}`).join(', ');
     toast.warning(
       `${preview.total} untouched card${preview.total === 1 ? '' : 's'} now match${preview.total === 1 ? 'es' : ''} another board (${where}).`,
@@ -241,8 +248,15 @@ function useRouteSaves(factoryId: string) {
           label: 'Move',
           onClick: () =>
             void applyReroute(baseUrl, factoryId).then(
-              ({ moved }) => {
-                toast.success(`Moved ${moved} card${moved === 1 ? '' : 's'} to the start of their new board.`);
+              ({ moved, skipped }) => {
+                const movedText = `Moved ${moved} card${moved === 1 ? '' : 's'} to the start of their new board.`;
+                if (skipped > 0) {
+                  toast.warning(
+                    `${movedText} ${skipped} card${skipped === 1 ? ' was' : 's were'} skipped because ${skipped === 1 ? 'it' : 'they'} changed in the meantime.`,
+                  );
+                } else {
+                  toast.success(movedText);
+                }
                 void queryClient.invalidateQueries();
               },
               (error: unknown) => toast.error(saveFailureMessage(error)),

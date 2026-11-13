@@ -887,6 +887,7 @@ export function registerApiCommand(program: CommanderCommand): void {
   addAction(factoryIntakeRoute, 'reroute', FACTORY_API_ROUTE_CATALOG.intakeRouteRerouteApply, {
     description: 'Move untouched cards to the board the intake routes now file them on',
     routePlacement: 'origin',
+    defaultTimeoutMs: 120_000,
   });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {

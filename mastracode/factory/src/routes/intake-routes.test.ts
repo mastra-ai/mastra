@@ -591,6 +591,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(where(started.id)).toMatchObject({ board: 'work', stages: ['triage'] });
     expect(where(other.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
+
+    const trail = await a.audit.list({ orgId: scope.orgId, actions: auditActionsInNamespaces(['intake_route']) });
+    expect(trail.events.filter(event => event.action === 'factory.intake_route.rerouted')).toMatchObject([
+      { metadata: { moved: 1, skipped: 0, moves: [{ fromBoard: 'work', toBoard: 'docs', count: 1 }] } },
+    ]);
   });
 
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
