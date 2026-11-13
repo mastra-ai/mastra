@@ -117,7 +117,7 @@ Mastra streams the tool call and returns `{ acknowledged: true }` as its result,
     name: 'toModelOutput',
     type: '(output: TSchemaOut) => unknown',
     description:
-      "Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content`-shaped outputs (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code. It isn't called when input, request context, or output validation fails; the model receives the validation error instead.",
+      "Optional function that transforms the tool's `execute` output before it is sent back to the model. Use this to return `text`, `json`, or `content`-shaped outputs (including multimodal parts like images/files) to the model while still keeping the full raw output in your application code. It isn't called when input, request context, or output validation fails; the model receives the validation error instead. With `outputValidation: 'warn'`, a failed output check keeps the real result, so `toModelOutput` still runs on it.",
     isOptional: true,
   },
   {
