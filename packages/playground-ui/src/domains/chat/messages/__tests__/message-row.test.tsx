@@ -965,4 +965,221 @@ describe('MessageRow', () => {
       expect(screen.getByText('current-task-list')).toBeTruthy();
     });
   });
+
+  describe('when the agent composed a json-render interface', () => {
+    const patch = (op: 'add' | 'replace' | 'remove' | 'test', path: string, value?: unknown) =>
+      ({ type: 'data-spec', data: { type: 'patch', patch: { op, path, value } } }) as const;
+
+    // The parts JsonRenderProcessor saves for a ```spec block, one patch per line the model wrote.
+    const launchStatus = (): MastraDBMessage =>
+      baseMessage({
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Here is where the launch stands.' },
+            patch('add', '/root', 'main'),
+            patch('add', '/elements/main', { type: 'Card', props: { title: 'Launch' }, children: ['signups', 'team'] }),
+            patch('add', '/elements/signups', {
+              type: 'Metric',
+              props: { label: 'Signups', value: '1,204', changePct: 12, comparison: 'vs last week' },
+              children: [],
+            }),
+            patch('add', '/state/team', []),
+            patch('add', '/state/team/-', { name: 'Ana' }),
+            patch('add', '/state/team/-', { name: 'Bo' }),
+            patch('add', '/elements/team', {
+              type: 'Stack',
+              props: { direction: 'horizontal' },
+              repeat: { statePath: '/team', key: 'name' },
+              children: ['member'],
+            }),
+            patch('add', '/elements/member', { type: 'Badge', props: { text: { $item: 'name' } }, children: [] }),
+          ],
+        },
+      });
+
+    // Memory saves the spec parts before the reply's text, while the live stream has the text first.
+    it.each([
+      ['while it streams', (parts: MastraDBMessage['content']['parts']) => parts],
+      [
+        'once reloaded from memory',
+        (parts: MastraDBMessage['content']['parts']) => [...parts.slice(1), ...parts.slice(0, 1)],
+      ],
+    ])('shows the prose above the interface %s', (_, order) => {
+      const message = launchStatus();
+      renderRow({ ...message, content: { ...message.content, parts: order(message.content.parts) } });
+
+      const prose = screen.getByText('Here is where the launch stands.');
+      const card = screen.getByText('Launch');
+      expect(prose.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('renders the interface with design-system components, next to the prose', () => {
+      renderRow(launchStatus());
+
+      expect(screen.getByText('Here is where the launch stands.')).toBeTruthy();
+      expect(screen.getByText('Launch')).toBeTruthy();
+      expect(screen.getByText('Signups')).toBeTruthy();
+      expect(screen.getByText('1,204')).toBeTruthy();
+      expect(screen.getByText('Ana')).toBeTruthy();
+      expect(screen.getByText('Bo')).toBeTruthy();
+    });
+
+    it('renders the interface once, however many patches built it', () => {
+      renderRow(launchStatus());
+
+      expect(screen.getAllByText('Launch')).toHaveLength(1);
+    });
+
+    it('keeps a streamed list as the model wrote it once the reply has re-rendered', () => {
+      // Each streamed chunk hands the row a new parts array holding the same part objects.
+      const message = launchStatus();
+      const nextChunk = () => ({ ...message, content: { ...message.content, parts: [...message.content.parts] } });
+      const { rerender, unmount } = render(<MessageRow message={message} />, { wrapper: Providers });
+      rerender(<MessageRow message={nextChunk()} />);
+      rerender(<MessageRow message={nextChunk()} />);
+      // Reopening the thread mounts the row again from the same parts.
+      unmount();
+      render(<MessageRow message={nextChunk()} />, { wrapper: Providers });
+
+      expect(screen.getAllByText('Ana')).toHaveLength(1);
+      expect(screen.getAllByText('Bo')).toHaveLength(1);
+    });
+
+    it('drops the state a later patch removes from an interface already on screen', () => {
+      const message = launchStatus();
+      const { rerender } = render(<MessageRow message={message} />, { wrapper: Providers });
+      expect(screen.getByText('Ana')).toBeTruthy();
+
+      const parts = [...message.content.parts, patch('remove', '/state/team')];
+      rerender(<MessageRow message={{ ...message, content: { ...message.content, parts } }} />);
+
+      expect(screen.queryByText('Ana')).toBeNull();
+      expect(screen.getByText('Launch')).toBeTruthy();
+    });
+
+    it('shows the reply without its interface when a patch cannot be applied', () => {
+      const message = launchStatus();
+      renderRow({
+        ...message,
+        content: { ...message.content, parts: [...message.content.parts, patch('test', '/root', 'other')] },
+      });
+
+      expect(screen.getByText('Here is where the launch stands.')).toBeTruthy();
+      expect(screen.queryByText('Launch')).toBeNull();
+    });
+
+    it('shows nothing for an interface whose patches have not reached the root yet', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Working on it.' },
+              patch('add', '/elements/main', { type: 'Card', props: { title: 'Launch' }, children: [] }),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getByText('Working on it.')).toBeTruthy();
+      expect(screen.queryByText('Launch')).toBeNull();
+    });
+
+    it('shows nothing for an interface built from another catalog, so Studio does not render part of it', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Here is your chart.' },
+              patch('add', '/root', 'main'),
+              patch('add', '/elements/main', { type: 'Card', props: { title: 'Revenue' }, children: ['chart'] }),
+              patch('add', '/elements/chart', { type: 'LineChart', props: { points: [1, 2, 3] }, children: [] }),
+            ],
+          },
+        }),
+      );
+
+      expect(screen.getByText('Here is your chart.')).toBeTruthy();
+      expect(screen.queryByText('Revenue')).toBeNull();
+    });
+
+    it('binds state keys that contain a slash or a tilde to the key itself, as they stream in', () => {
+      const pricing = (...state: MastraDBMessage['content']['parts']) =>
+        baseMessage({
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Pricing.' },
+              patch('add', '/root', 'main'),
+              patch('add', '/elements/main', { type: 'Stack', props: {}, children: ['per', 'about'] }),
+              patch('add', '/elements/per', {
+                type: 'Text',
+                props: { text: { $state: '/price~1seat' } },
+                children: [],
+              }),
+              patch('add', '/elements/about', { type: 'Text', props: { text: { $state: '/~0note' } }, children: [] }),
+              ...state,
+            ],
+          },
+        });
+      const { rerender } = render(<MessageRow message={pricing()} />, { wrapper: Providers });
+
+      rerender(
+        <MessageRow
+          message={pricing(patch('add', '/state/price~1seat', '$12'), patch('add', '/state/~0note', 'Billed yearly'))}
+        />,
+      );
+
+      expect(screen.getByText('$12')).toBeTruthy();
+      expect(screen.getByText('Billed yearly')).toBeTruthy();
+    });
+
+    it.each([
+      {
+        problem: 'an element map a patch replaced with null',
+        parts: [patch('add', '/root', 'main'), patch('add', '/elements', null)],
+      },
+      {
+        problem: 'a component of the same name with props studioCatalog does not have',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Card', props: { heading: 'Revenue' }, children: [] }),
+        ],
+      },
+      {
+        problem: 'an element that contains itself',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Stack', props: {}, children: ['inner'] }),
+          patch('add', '/elements/inner', { type: 'Stack', props: {}, children: ['main'] }),
+        ],
+      },
+      {
+        problem: 'slots, which no studioCatalog component declares',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', {
+            type: 'Card',
+            props: { title: 'Revenue' },
+            children: [],
+            slots: { body: 'text' },
+          }),
+        ],
+      },
+      {
+        problem: 'a child key that is not a string',
+        parts: [
+          patch('add', '/root', 'main'),
+          patch('add', '/elements/main', { type: 'Card', props: { title: 'Revenue' }, children: [42] }),
+        ],
+      },
+    ])('shows the reply without an interface that has $problem', ({ parts }) => {
+      renderRow(baseMessage({ content: { format: 2, parts: [{ type: 'text', text: 'Here you go.' }, ...parts] } }));
+
+      expect(screen.getByText('Here you go.')).toBeTruthy();
+      expect(screen.queryByRole('group', { name: 'Interface' })).toBeNull();
+    });
+  });
 });

@@ -171,7 +171,7 @@
     "build:publish": "pnpm build && yalc push",
     "preview": "vite preview",
     "storybook": "storybook dev -p 6006 --no-open",
-    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk && storybook build"
+    "build-storybook": "pnpm turbo build --filter @mastra/core --filter @mastra/react --filter @mastra/ai-sdk --filter @mastra/json-render && storybook build"
   },
   "keywords": [
     "mastra",
@@ -196,9 +196,12 @@
     "@codemirror/view": "^6.43.15",
     "@dagrejs/dagre": "^1.1.8",
     "@hello-pangea/dnd": "^18.0.1",
+    "@json-render/core": "0.22.0",
+    "@json-render/react": "0.22.0",
     "@lezer/common": "^1.5.4",
     "@lezer/highlight": "^1.2.5",
     "@lukeed/uuid": "^2.0.1",
+    "@mastra/json-render": "workspace:^",
     "@mcp-ui/client": "^7.1.1",
     "@nangohq/frontend": "0.71.9",
     "@pierre/diffs": "1.5.1",
@@ -231,7 +234,7 @@
   "peerDependencies": {
     "@mastra/ai-sdk": "workspace:^",
     "@mastra/client-js": "workspace:^",
-    "@mastra/core": ">=1.81.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.83.0-0 <2.0.0-0",
     "@mastra/memory": ">=1.21.0-0 <2.0.0-0",
     "@mastra/react": "workspace:*",
     "@tanstack/react-query": "^5.90.21",
