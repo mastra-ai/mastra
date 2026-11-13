@@ -6,8 +6,8 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import type { ComboboxProps } from '@/ds/components/Combobox/combobox';
 import { DataList } from '@/ds/components/DataList/data-list';
 import type { DataListFit } from '@/ds/components/DataList/data-list-root';
-import { ListSearch } from '@/ds/components/ListSearch/list-search';
-import type { ListSearchProps } from '@/ds/components/ListSearch/list-search';
+import { SearchInput } from '@/ds/components/SearchInput';
+import type { SearchInputProps } from '@/ds/components/SearchInput';
 import { TabContent } from '@/ds/components/Tabs/tabs-content';
 import { TabsContext } from '@/ds/components/Tabs/tabs-context';
 import { TabList } from '@/ds/components/Tabs/tabs-list';
@@ -19,10 +19,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/c
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
-export type TabbedContainerSearchProps = Pick<
-  ListSearchProps,
-  'debounceMs' | 'label' | 'onSearch' | 'placeholder' | 'value'
->;
+export type TabbedContainerSearchProps = Pick<SearchInputProps, 'debounceMs' | 'label' | 'placeholder'> & {
+  value: string;
+  onSearch: (search: string) => void;
+};
 
 export type TabbedContainerFilterProps = ComboboxProps & { 'aria-label': string };
 
@@ -71,7 +71,16 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
         <div data-slot="tabbed-container-query">
           {search ? (
             <div data-slot="tabbed-container-search">
-              <ListSearch {...search} size="md" shortcutDisabled={!active} />
+              <SearchInput
+                label={search.label}
+                placeholder={search.placeholder}
+                value={search.value}
+                onValueChange={search.onSearch}
+                debounceMs={search.debounceMs ?? 300}
+                size="md"
+                shortcut={active}
+                className="max-w-120"
+              />
             </div>
           ) : null}
           {filter ? (

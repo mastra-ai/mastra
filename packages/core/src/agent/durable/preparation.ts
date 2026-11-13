@@ -8,6 +8,7 @@ import { mergeProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
+import { withDefaultToolCallConcurrencyLimit } from '../../loop/workflows/agentic-execution/tool-call-concurrency';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory/memory';
 import { isObservationalMemoryEnabled } from '../../memory/types';
@@ -382,7 +383,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   let execOptions: AgentExecutionOptions<OUTPUT> = optionsAreResolved
     ? (rawExecOptions ?? ({} as AgentExecutionOptions<OUTPUT>))
     : (deepMerge(
-        (await loadDefaultOptions()) as Record<string, unknown>,
+        withDefaultToolCallConcurrencyLimit(await loadDefaultOptions(), rawExecOptions) as Record<string, unknown>,
         (rawExecOptions ?? {}) as Record<string, unknown>,
       ) as AgentExecutionOptions<OUTPUT>);
 

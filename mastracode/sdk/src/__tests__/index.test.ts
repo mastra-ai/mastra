@@ -124,6 +124,7 @@ const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
 const controllerGetSessionMock = vi.fn();
+const controllerResolveToolApprovalMock = vi.fn((_toolName: string, _scope?: unknown) => 'ask');
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -262,6 +263,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         getWorkspace: () => undefined,
         getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
+        resolveToolApproval: (toolName: string, scope?: unknown) => controllerResolveToolApprovalMock(toolName, scope),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -692,6 +694,8 @@ describe('createMastraCode', () => {
     });
     controllerStateMock = { cavemanObservations: false };
     controllerThreadMetadataMock = undefined;
+    controllerResolveToolApprovalMock.mockReset();
+    controllerResolveToolApprovalMock.mockImplementation(() => 'ask');
     controllerModeMock = 'build';
     controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
@@ -2553,10 +2557,12 @@ describe('createMastraCode', () => {
       modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       yolo: false,
       sandboxAllowedPaths: ['/active-only'],
+      permissionRules: { categories: { edit: 'allow' }, tools: {} },
     };
     controllerThreadMetadataMock = {
       currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
       modelRoute: {
         entries: [
           { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
@@ -2612,9 +2618,18 @@ describe('createMastraCode', () => {
       },
       yolo: false,
       sandboxAllowedPaths: [],
+      // The woken thread's own rules, not the open thread's.
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
     });
     expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
-    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    // Only calls the woken thread's policy does not allow pause for approval.
+    const requireToolApproval = decision.streamOptions.requireToolApproval;
+    expect(requireToolApproval).toBeTypeOf('function');
+    controllerResolveToolApprovalMock.mockImplementation(toolName => (toolName === 'view' ? 'allow' : 'ask'));
+    expect(requireToolApproval({ toolName: 'view' })).toBe(false);
+    expect(requireToolApproval({ toolName: 'write_file' })).toBe(true);
+    expect(controllerResolveToolApprovalMock).toHaveBeenCalledWith('view', decision.streamOptions.requestContext);
+    expect(decision.streamOptions.toolCallConcurrency).toEqual({ strategy: 'called' });
     controllerSetStateMock.mockClear();
 
     const pendingFallback = {

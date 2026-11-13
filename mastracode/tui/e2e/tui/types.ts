@@ -126,6 +126,7 @@ export type ScenarioName =
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'provider-history-rejection-retry'
+  | 'provider-safety-rejection'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
   | 'profile-command'

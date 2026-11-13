@@ -193,12 +193,67 @@ describe('create --no-platform', () => {
 
     await expect(
       create({ projectName: 'existing-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics }),
-    ).rejects.toThrow(/Directory existing-factory already exists/);
+    ).rejects.toThrow(/Directory existing-factory already exists and isn't empty/);
 
     expect(fs.readFileSync(markerPath, 'utf8')).toBe('keep me');
     expect(tinyexec.x).not.toHaveBeenCalled();
     expect(clack.note).not.toHaveBeenCalled();
     expect(clack.outro).not.toHaveBeenCalled();
+  });
+
+  it('scaffolds into an existing empty directory passed as an argument', async () => {
+    fs.mkdirSync(path.join(workDir, 'empty-factory'));
+
+    await create({ projectName: 'empty-factory', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const pkg = JSON.parse(fs.readFileSync(path.join(workDir, 'empty-factory', 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('empty-factory');
+  });
+
+  it('scaffolds into the current directory for a blank name, keeping the directory itself', async () => {
+    const cwd = path.join(workDir, 'my-great-mastra-project');
+    fs.mkdirSync(cwd);
+    process.chdir(cwd);
+    const inode = fs.statSync(cwd).ino;
+
+    await create({ projectName: '', template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    expect(fs.statSync(cwd).ino).toBe(inode);
+    const pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    expect(pkg.name).toBe('my-great-mastra-project');
+    expect(fs.existsSync(path.join(cwd, '.env'))).toBe(true);
+    expect(clack.note).not.toHaveBeenCalledWith(expect.stringMatching(/\bcd\b/), 'Next steps');
+  });
+
+  it('prompts for a name that defaults to an empty current directory', async () => {
+    const cwd = path.join(workDir, 'my-great-mastra-project');
+    fs.mkdirSync(cwd);
+    process.chdir(cwd);
+    let blankAnswerError: string | undefined = 'not validated';
+    clack.text.mockImplementationOnce(async (prompt: { validate: (value: string) => string | undefined }) => {
+      blankAnswerError = prompt.validate('');
+      return '';
+    });
+
+    await create({ template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const prompt = clack.text.mock.calls[0]![0];
+    expect(prompt.placeholder).toBe('my-great-mastra-project');
+    expect(prompt.message).toContain('Press Enter to use the current directory (my-great-mastra-project)');
+    expect(blankAnswerError).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')).name).toBe('my-great-mastra-project');
+  });
+
+  it('requires a name at the prompt when the current directory is not empty', async () => {
+    clack.text.mockResolvedValueOnce('named-factory');
+
+    await create({ template: PLATFORM_TEMPLATE_REPO, noPlatform: true, analytics });
+
+    const prompt = clack.text.mock.calls[0]![0];
+    expect(prompt.placeholder).toBe('my-mastra-factory');
+    expect(prompt.validate('')).toMatch(/current directory isn't empty/);
+    expect(prompt.validate('template-fixture')).toMatch(/already exists and isn't empty/);
+    expect(fs.existsSync(path.join(workDir, 'named-factory', 'package.json'))).toBe(true);
   });
 
   it('fails the run when dependency install fails, without a success outro', async () => {

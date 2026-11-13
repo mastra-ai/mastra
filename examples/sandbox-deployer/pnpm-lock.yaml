@@ -12,8 +12,6 @@ overrides:
   '@mastra/vercel': link:../../workspaces/vercel
   mastra: link:../../packages/cli
 
-packageExtensionsChecksum: sha256-E1uC6ipRR7MoF7R/5oDB8SEpSulsYWlFaGB0bv3k/Mo=
-
 importers:
 
   .:

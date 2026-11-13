@@ -8,7 +8,7 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import type { PlatformApiClient} from '../api-client.js';
+import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
@@ -174,7 +174,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
     this.#running = true;
-    this.deps.logger.info('Platform Linear event polling started', {
+    this.deps.logger.debug('Platform Linear event polling started', {
       intervalMs: this.#intervalMs,
       leaseTtlMs: this.#leaseTtlMs,
     });
