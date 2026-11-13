@@ -54,7 +54,11 @@ export default defineConfig({
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.test.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
+      rules: {
+        'mastra/sentence-case-labels': 'off',
+        'playground-ui/placeholder-text': 'off',
+        'playground-ui/no-transition-all': 'off',
+      },
     },
     {
       files: ['**/*.stories.tsx'],

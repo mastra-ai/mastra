@@ -14,6 +14,7 @@
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
 //   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+//   playground-ui/no-transition-all  transitions name their properties, not transition-all
 //   playground-ui/no-text-separators      metadata uses separate elements and a gap, not · — | • between fields
 //   playground-ui/no-text-layout-spacing  layout comes from a gap, not repeated spaces or NBSPs in copy
 
@@ -141,6 +142,17 @@ const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(
 const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
 const txtTone = selectorRule(() =>
   txtClassStrings(TXT_TONE_PATTERN).map(selector => ({ selector, message: TXT_TONE_MESSAGE })),
+);
+
+// --- no-transition-all ---------------------------------------------------------------------------------
+// `transition-all` animates every property that changes, including layout, so a theme switch or a state
+// change animates more than intended. Name the properties: transition-colors, transition-opacity,
+// transition-transform, transition-shadow or transition-[...].
+const TRANSITION_ALL_PATTERN = '(^|\\s|:)transition-all(?=\\s|$)';
+const TRANSITION_ALL_MESSAGE =
+  'Name the transitioned properties (transition-colors, transition-opacity, transition-transform, transition-[…]) instead of transition-all.';
+const noTransitionAll = selectorRule(() =>
+  classStrings(TRANSITION_ALL_PATTERN).map(selector => ({ selector, message: TRANSITION_ALL_MESSAGE })),
 );
 
 // --- font-mono -----------------------------------------------------------------------------------------
@@ -277,6 +289,7 @@ const plugin = {
     'text-role': { meta: { type: 'suggestion', schema: false }, create: textRole },
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
+    'no-transition-all': { meta: { type: 'suggestion', schema: false }, create: noTransitionAll },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
     'no-text-separators': noTextSeparators,
@@ -303,6 +316,7 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/no-transition-all': 'error',
   ...copyRules,
 };
 

@@ -20,14 +20,10 @@ export const transitions = {
   colors: 'transition-colors duration-normal ease-out-custom',
   // For transform changes (scale, translate, rotate)
   transform: 'transition-transform duration-normal ease-out-custom',
-  // For all property changes
-  all: 'transition-all duration-normal ease-out-custom',
   // For opacity changes
   opacity: 'transition-opacity duration-normal ease-out-custom',
   // For shadow changes
   shadow: 'transition-shadow duration-normal ease-out-custom',
-  // For slower transitions (sidebar collapse, etc.)
-  allSlow: 'transition-all duration-slow ease-out-custom',
 } as const;
 
 // Interactive hover effects
