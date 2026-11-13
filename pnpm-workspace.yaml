@@ -446,7 +446,8 @@ overrides:
   # Vanta 2026-10-21: AIKIDO-2026-930319 (powershell-utils <0.2.1); open 11.0.4 moves to wsl-utils 1 + powershell-utils ^0.2.1
   open@>=11.0.0 <11.0.4: 11.0.4
   # Vanta 2026-10-09: AIKIDO-2026-901222 fixed in 4.13.11
-  hono@<4.13.13: 4.13.16
+  # Vanta 2026-11-13: GHSA hono <4.13.16 advisories (Dependabot); 4.13.18 is the latest 4.x
+  hono@<4.13.18: 4.13.18
   '@hono/node-server@<1.19.15': 1.19.15
   postcss@<8.5.23: 8.5.23
   ip-address@<10.7.1: 10.7.4
@@ -645,7 +646,8 @@ overrides:
   'raw-body@<4.0.0': 4.0.0
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
-  'basic-ftp@<6.2.1': 6.2.4
+  # Vanta 2026-11-13: basic-ftp <=6.2.3 advisories (fixed 6.2.4); 6.2.6 is the latest 6.x
+  'basic-ftp@<6.2.6': 6.2.6
   # Vanta 2026-10-05 (Aikido): in-major floors for transitive deps whose parents pin an exact
   # vulnerable version (just-bash, @opentelemetry/configuration 0.221, @blaxel/core, @react-grab/cli,
   # fast-xml-parser 5.10.1, style-to-object 1.0.11).
