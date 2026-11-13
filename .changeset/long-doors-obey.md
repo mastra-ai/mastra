@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Fixed GitLab boards in Factory creating cards while a list loads. Merge requests and issues that GitLab sent no webhook for now get their card from the background GitLab sweep, so they are filed even when nobody has the board open. Setting `MASTRACODE_GITLAB_RECONCILE_ENABLED=false` now also turns this discovery off.
+GitLab boards in Factory no longer create cards while a list loads. Factory now checks GitLab every five minutes and files new merge requests and issues itself. This works without a webhook and with no board open. Setting `MASTRACODE_GITLAB_RECONCILE_ENABLED=false` also stops these new cards.
