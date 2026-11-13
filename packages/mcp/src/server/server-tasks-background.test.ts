@@ -235,12 +235,14 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     probe = { runs: [] };
   });
 
+  // 30 s: instances close one after another, and each one's shutdown can wait the 5 s background-task drain,
+  // which two instances already make as long as the default 10 s hook timeout.
   afterEach(async () => {
     for (const child of children.splice(0)) child.kill('SIGKILL');
     await Promise.all(clients.splice(0).map(client => client.close()));
     for (const instance of instances.splice(0)) await instance.close();
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   async function instance(
     tasks: MCPServerConfig['tasks'],
