@@ -93,6 +93,66 @@ export function isValidationError(value: unknown): value is ValidationError {
   );
 }
 
+/**
+ * What the model may see of a validation error when a tool's `toModelOutput` is skipped for it:
+ * which fields failed and, for the model's own arguments, why. It never quotes the tool's output,
+ * the request context or suspend data, because `toModelOutput` is where a tool keeps those out of
+ * the prompt.
+ */
+export interface ModelFacingValidationError {
+  error: true;
+  message: string;
+  validationErrors?: FormattedValidationErrors;
+}
+
+// Global so @mastra/client-js can read it without importing this module at runtime.
+const MODEL_FACING_VALIDATION_ERROR: unique symbol = Symbol.for('mastra.tool.modelFacingValidationError');
+
+function markModelFacing<T>(error: ValidationError<T>, modelFacing: ModelFacingValidationError): ValidationError<T> {
+  Object.defineProperty(error, MODEL_FACING_VALIDATION_ERROR, { value: modelFacing, enumerable: false });
+  return error;
+}
+
+function isModelFacingValidationError(value: unknown): value is ModelFacingValidationError {
+  return (
+    value !== null &&
+    typeof value === 'object' &&
+    'error' in value &&
+    value.error === true &&
+    'message' in value &&
+    typeof value.message === 'string'
+  );
+}
+
+/**
+ * Returns the model-facing form of a validation error that Mastra's own validation produced, or
+ * `undefined` for any other value, including one that only has a validation error's fields.
+ *
+ * The marker is a non-enumerable symbol property set where the error is created. JSON, spreads
+ * and structured clones drop it, so tool output, results a client sent over HTTP, and anything
+ * that crossed a serialization boundary never carry it. Read it in the process that ran the tool.
+ */
+export function getModelFacingValidationError(value: unknown): ModelFacingValidationError | undefined {
+  if (value === null || typeof value !== 'object') return undefined;
+  const marked: unknown = Object.getOwnPropertyDescriptor(value, MODEL_FACING_VALIDATION_ERROR)?.value;
+  return isModelFacingValidationError(marked) ? marked : undefined;
+}
+
+/**
+ * Model-facing form of an error about data the model did not write (tool output, request
+ * context, suspend data): the failing field paths only. Issue messages can quote the rejected
+ * values, and record keys in the paths come from the data, so both are left out.
+ */
+function failedPathsOnly(
+  error: ValidationError,
+  schema: PublicSchema | undefined,
+  io: 'input' | 'output',
+  heading: string,
+): ModelFacingValidationError {
+  const paths = getValidationIssuePaths(error, schema, io);
+  return { error: true, message: `${heading} Fields that failed validation: ${paths.join(', ')}.` };
+}
+
 type JSONSchemaNode = JSONSchema7Definition | undefined;
 
 /**
@@ -283,7 +343,17 @@ export function validateToolSuspendData<T = unknown>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { error };
+  return {
+    error: markModelFacing(
+      error,
+      failedPathsOnly(
+        error,
+        schema,
+        'input',
+        `Tool suspension data validation failed${toolId ? ` for ${toolId}` : ''}. The tool suspended with data that does not match its suspend schema.`,
+      ),
+    ),
+  };
 }
 
 /**
@@ -697,13 +767,16 @@ export function validateToolInput<T = unknown>(
     .map(e => `- ${e.path?.map(p => getPathKey(p)).join('.') || 'root'}: ${e.message}`)
     .join('\n');
 
+  const heading = `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}`;
+  const validationErrors = buildFormattedErrors<T>(finalIssues);
   const error: ValidationError<T> = {
     error: true,
-    message: `Tool input validation failed${toolId ? ` for ${toolId}` : ''}. Please fix the following errors and try again:\n${errorMessages}\n\nProvided arguments: ${truncateForLogging(input)}`,
-    validationErrors: buildFormattedErrors<T>(finalIssues),
+    message: `${heading}\n\nProvided arguments: ${truncateForLogging(input)}`,
+    validationErrors,
   };
 
-  return { error };
+  // The model wrote these arguments, so it gets each issue to fix, but not the excerpt of them.
+  return { error: markModelFacing(error, { error: true, message: heading, validationErrors }) };
 }
 
 /**
@@ -743,7 +816,17 @@ export function validateToolOutput<T = unknown>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { error };
+  return {
+    error: markModelFacing(
+      error,
+      failedPathsOnly(
+        error,
+        schema,
+        'output',
+        `Tool output validation failed${toolId ? ` for ${toolId}` : ''}. The tool returned output that does not match its output schema.`,
+      ),
+    ),
+  };
 }
 
 /**
@@ -833,5 +916,11 @@ export function validateRequestContext<T = any>(
     validationErrors: buildFormattedErrors<T>(validation.issues),
   };
 
-  return { data: contextValues as T, error };
+  const modelFacing = failedPathsOnly(
+    error,
+    schema,
+    'input',
+    `Request context validation failed${identifier ? ` for ${identifier}` : ''}. The request context is missing values or has invalid ones.`,
+  );
+  return { data: contextValues as T, error: markModelFacing(error, modelFacing) };
 }

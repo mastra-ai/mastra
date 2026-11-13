@@ -4,7 +4,13 @@ import { z } from 'zod/v4';
 
 import { RequestContext } from '../request-context';
 import { createTool } from './tool';
-import { validateRequestContext, validateToolInput } from './validation';
+import {
+  getModelFacingValidationError,
+  validateRequestContext,
+  validateToolInput,
+  validateToolOutput,
+  validateToolSuspendData,
+} from './validation';
 
 describe('Tool Input Validation Integration Tests', () => {
   describe('createTool validation', () => {
@@ -2610,5 +2616,83 @@ describe('validateToolInput - combined fallback corrections (GitHub #25825)', ()
     const result = validateToolInput(schema, { args: '["a"]', count: 'x' });
     expect(result.error?.message).toContain('- count');
     expect(result.error?.message).not.toContain('- args');
+  });
+});
+
+/**
+ * When a tool's `toModelOutput` is skipped for a validation error, the model gets the error's
+ * model-facing form. `toModelOutput` is where a tool keeps fields out of the prompt, so that form
+ * must not quote the tool's output, the request context or suspend data, and only errors Mastra
+ * created may carry it. (#30211)
+ */
+describe('getModelFacingValidationError', () => {
+  const EMAIL = 'jane.doe@example.com';
+
+  it("keeps the issues for the model's own arguments, without the argument excerpt", () => {
+    const { error } = validateToolInput(z.object({ query: z.string().min(1) }), { query: '', note: EMAIL }, 'lookup');
+
+    expect(error?.message).toContain('Provided arguments');
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing).toEqual({
+      error: true,
+      message: expect.stringContaining('Tool input validation failed for lookup'),
+      validationErrors: error?.validationErrors,
+    });
+    expect(modelFacing?.message).toContain('- query:');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('names only the failing output fields, never the output or values an issue message quotes', () => {
+    const schema = z.object({
+      contact: z.string().refine(() => false, { error: issue => `rejected ${String(issue.input)}` }),
+      tags: z.record(z.string(), z.number()),
+    });
+    const { error } = validateToolOutput(schema, { contact: EMAIL, tags: { [EMAIL]: 'x' } }, 'lookup');
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing).toEqual({
+      error: true,
+      message:
+        'Tool output validation failed for lookup. The tool returned output that does not match its output schema. ' +
+        'Fields that failed validation: contact, tags.*.',
+    });
+  });
+
+  it('names only the failing request-context keys, never the context values', () => {
+    const { error } = validateRequestContext(
+      z.object({ tenantId: z.string() }),
+      new RequestContext([['userEmail', EMAIL]]),
+      'lookup',
+    );
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('tenantId');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it('names only the failing suspend-data fields, never the suspend data', () => {
+    const { error } = validateToolSuspendData(z.object({ reason: z.string() }), { reason: 7, email: EMAIL }, 'lookup');
+
+    expect(error?.message).toContain(EMAIL);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('reason');
+    expect(JSON.stringify(modelFacing)).not.toContain(EMAIL);
+  });
+
+  it("is absent on anything that only has a validation error's fields", () => {
+    const { error } = validateToolInput(z.object({ query: z.string() }), {}, 'lookup');
+
+    expect(getModelFacingValidationError(error)).toBeDefined();
+    // Copies made by tool code, JSON (HTTP, storage, pubsub) or structured clone lose the marker.
+    expect(getModelFacingValidationError({ ...error })).toBeUndefined();
+    expect(getModelFacingValidationError(JSON.parse(JSON.stringify(error)))).toBeUndefined();
+    expect(getModelFacingValidationError(structuredClone(error))).toBeUndefined();
+    expect(
+      getModelFacingValidationError({ error: true, message: 'x', validationErrors: { errors: [], fields: {} } }),
+    ).toBeUndefined();
+    // The marker never shows up in serialized output.
+    expect(JSON.stringify(error)).not.toContain('modelFacing');
   });
 });

@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import type { MastraDBMessage } from '../../../agent/message-list';
 import { MessageList } from '../../../agent/message-list';
+import { validateToolInput } from '../../../tools/validation';
 import { applyBackgroundToolResult } from './background-task-result-core';
 
 /**
@@ -216,8 +218,9 @@ describe('applyBackgroundToolResult identity scan', () => {
  * A background tool whose input, request context or output failed validation
  * completes with a ValidationError. The mapper is typed to receive only the
  * tool's output, so it must not run on the error, and the error must reach
- * the model as-is, tagged as an error result. Runs on every engine's background path, Inngest included,
- * without per-engine setup. (#30211)
+ * the model, without the raw values it quotes, tagged as an error result. A
+ * result that only has a validation error's fields is still mapped. Runs on
+ * every engine's background path, Inngest included, without per-engine setup. (#30211)
  */
 describe('applyBackgroundToolResult toModelOutput', () => {
   function placeholderList() {
@@ -245,11 +248,11 @@ describe('applyBackgroundToolResult toModelOutput', () => {
 
   it('does not map a validation error, so the model reads the error itself', async () => {
     const messageList = placeholderList();
-    const validationError = {
-      error: true,
-      message: 'Tool input validation failed for background-work. query: Required',
-      validationErrors: { errors: [], fields: { query: { errors: ['Required'], fields: {} } } },
-    };
+    const { error: validationError } = validateToolInput(
+      z.object({ query: z.string() }),
+      { note: 'jane.doe@example.com' },
+      'background-work',
+    );
     const toModelOutput = vi.fn((output: any) => ({ type: 'json', value: { answer: output.answer } }));
     const { deps } = makeDeps(messageList, { taskId: 'task-1', result: validationError });
 
@@ -258,7 +261,34 @@ describe('applyBackgroundToolResult toModelOutput', () => {
     expect(toModelOutput).not.toHaveBeenCalled();
     const part = resultPart(messageList);
     expect(part.toolInvocation.result).toEqual(validationError);
-    expect(part.providerMetadata.mastra.modelOutput).toEqual({ type: 'error-json', value: validationError });
+    expect(part.providerMetadata.mastra.modelOutput).toEqual({
+      type: 'error-json',
+      value: {
+        error: true,
+        message: expect.stringContaining('Tool input validation failed for background-work'),
+        validationErrors: validationError?.validationErrors,
+      },
+    });
+    expect(JSON.stringify(part.providerMetadata.mastra.modelOutput)).not.toContain('jane.doe@example.com');
+  });
+
+  it("maps a result that only has a validation error's fields", async () => {
+    const messageList = placeholderList();
+    const lookalike = {
+      error: true,
+      message: 'Upstream rejected jane.doe@example.com',
+      validationErrors: { errors: [], fields: {} },
+    };
+    const toModelOutput = vi.fn(() => ({ type: 'text', value: 'The upstream API rejected the request.' }));
+    const { deps } = makeDeps(messageList, { taskId: 'task-1', result: lookalike });
+
+    await applyBackgroundToolResult({ ...deps, toModelOutput });
+
+    expect(toModelOutput).toHaveBeenCalledWith(lookalike);
+    expect(resultPart(messageList).providerMetadata.mastra.modelOutput).toEqual({
+      type: 'text',
+      value: 'The upstream API rejected the request.',
+    });
   });
 
   it('still maps a successful result', async () => {

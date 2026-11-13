@@ -5,6 +5,7 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { RequestContext } from '../../../../request-context';
 import { createTool, isValidationError } from '../../../../tools';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
@@ -16,14 +17,24 @@ import { SCENARIO_MODEL_ID } from '../types';
  * instead of the tool's output. `toModelOutput` is typed as receiving only the output, so a
  * mapper that picks fields from it turned the error into `{}`. The model never saw why the
  * call failed, could not retry with fixed arguments, and could report the empty result as a
- * success. The loop must skip `toModelOutput` for validation errors and send the error to the
- * model as-is, tagged `error-json` so providers still flag the call as failed, while still
- * applying the mapping to valid results. (#30211)
+ * success. The loop must skip `toModelOutput` for validation errors Mastra produced and send
+ * the model what failed, tagged `error-json` so providers still flag the call as failed, while
+ * still applying the mapping to valid results. `toModelOutput` is where a tool keeps fields out
+ * of the prompt, so the error sent instead carries no excerpt of the output, request context or
+ * arguments, and a result that only looks like a validation error is still mapped. (#30211)
  */
 
 const SECRET = 'internal-only-secret';
+// A value the developer's mapper keeps from the model, under a key no redaction list matches.
+const EMAIL = 'jane.doe@example.com';
+const RAW_EXCERPTS = ['Provided arguments', 'Returned output', 'Provided request context'];
 
-type LookupToolOptions = { output?: unknown; background?: boolean; requireTenant?: boolean };
+type LookupToolOptions = {
+  output?: unknown;
+  background?: boolean;
+  requireTenant?: boolean;
+  requestContext?: RequestContext;
+};
 
 function createLookupTool(opts: LookupToolOptions = {}) {
   const mapperCalls: unknown[] = [];
@@ -44,15 +55,20 @@ function createLookupTool(opts: LookupToolOptions = {}) {
 }
 
 /**
- * The model output the loop recorded for the call: the validation error itself, unchanged,
- * tagged as an error result. MessageList substitutes this into the model prompt.
+ * The model output the loop recorded for the call: the validation error, tagged as an error
+ * result, without the raw values the error message quotes. MessageList substitutes this into
+ * the model prompt. The caller still gets the full error as the tool result.
  */
-function expectErrorSentUnchanged(toolResult: { payload?: { result?: unknown; providerMetadata?: any } } | undefined) {
+function expectErrorSentWithoutValues(
+  toolResult: { payload?: { result?: unknown; providerMetadata?: any } } | undefined,
+  heading: string,
+) {
   expect(isValidationError(toolResult?.payload?.result)).toBe(true);
-  expect(toolResult?.payload?.providerMetadata?.mastra?.modelOutput).toEqual({
-    type: 'error-json',
-    value: toolResult?.payload?.result,
-  });
+  const modelOutput = toolResult?.payload?.providerMetadata?.mastra?.modelOutput;
+  expect(modelOutput?.type).toBe('error-json');
+  expect(modelOutput?.value).toMatchObject({ error: true, message: expect.stringContaining(heading) });
+  for (const excerpt of RAW_EXCERPTS) expect(modelOutput.value.message).not.toContain(excerpt);
+  return modelOutput.value as { error: true; message: string; validationErrors?: unknown };
 }
 
 /** Everything the model received on a request, as one string. */
@@ -71,6 +87,7 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
       prompt: 'Look up the answer.',
       tools: { lookup: tool },
       stopWhen: stepCountIs(3),
+      ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       fixtures: llm => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
@@ -89,8 +106,9 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     // The mapper written for successful output never receives the error.
     expect(mapperCalls).toEqual([]);
 
-    // The caller still gets the raw validation error, and the model gets it unchanged.
-    expectErrorSentUnchanged(toolResults[0]);
+    // The caller still gets the raw validation error; the model gets which field failed and why.
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool input validation failed');
+    expect(sent.message).toContain('- query:');
 
     // The model receives the validation error, so it can retry with fixed arguments.
     expect(requests).toHaveLength(2);
@@ -102,32 +120,36 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
   it('the model sees an output validation failure instead of an empty mapped result', async () => {
     const { mapperCalls, requests, toolResults } = await callLookup(
       { query: 'meaning of life' },
-      { output: { answer: 42, secret: SECRET } },
+      { output: { answer: 42, secret: SECRET, email: EMAIL } },
     );
 
     expect(mapperCalls).toEqual([]);
-    expectErrorSentUnchanged(toolResults[0]);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Tool output validation failed');
+    expect(sent.message).toContain('answer');
 
     expect(requests).toHaveLength(2);
     const followUp = seenByModel(requests[1]);
     expect(followUp).toContain('Tool output validation failed');
-    expect(followUp).toContain('validationErrors');
+    // The mapper keeps the output out of the prompt, so the error must not quote it either.
+    expect(followUp).not.toContain(EMAIL);
+    expect(followUp).not.toContain(SECRET);
   });
 
   it('the model sees a request-context validation failure instead of an empty mapped result', async () => {
-    // The tool needs a tenantId in the request context; the caller sent none.
+    // The tool needs a tenantId in the request context; the caller sent other values only.
     const { mapperCalls, requests, toolResults } = await callLookup(
       { query: 'meaning of life' },
-      { requireTenant: true },
+      { requireTenant: true, requestContext: new RequestContext([['userEmail', EMAIL]]) },
     );
 
     expect(mapperCalls).toEqual([]);
-    expectErrorSentUnchanged(toolResults[0]);
+    const sent = expectErrorSentWithoutValues(toolResults[0], 'Request context validation failed');
+    expect(sent.message).toContain('tenantId');
 
     expect(requests).toHaveLength(2);
     const followUp = seenByModel(requests[1]);
     expect(followUp).toContain('Request context validation failed');
-    expect(followUp).toContain('validationErrors');
+    expect(followUp).not.toContain(EMAIL);
   });
 
   it('an Anthropic model gets the rejected call flagged as an error, with the error text', async () => {
@@ -182,6 +204,48 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     expect(followUp).not.toContain(SECRET);
   });
 
+  it('a successful result that looks like a validation error is still mapped', async () => {
+    // The tool passes an upstream API's response through; that body happens to have the same
+    // fields as a Mastra validation error. Only Mastra's own validation may skip the mapper.
+    const mapperCalls: unknown[] = [];
+    const proxy = createTool({
+      id: 'proxy',
+      description: 'Calls an upstream API',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async () => ({
+        error: true,
+        message: `Upstream rejected the request for ${EMAIL}`,
+        validationErrors: { errors: [], fields: { email: { errors: [EMAIL], fields: {} } } },
+      }),
+      toModelOutput: output => {
+        mapperCalls.push(output);
+        return { type: 'text', value: 'The upstream API rejected the request.' };
+      },
+    });
+
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Call the API.',
+      tools: { proxy },
+      stopWhen: stepCountIs(3),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_proxy', name: 'proxy', arguments: { query: 'x' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_proxy', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+    await output.text;
+
+    expect(mapperCalls).toHaveLength(1);
+    expect(requests).toHaveLength(2);
+    const followUp = seenByModel(requests[1]);
+    expect(followUp).toContain('The upstream API rejected the request.');
+    expect(followUp).not.toContain(EMAIL);
+  });
+
   it('a supervisor sees why its call to a subagent was rejected, not an empty reply', async () => {
     const mock = getMock();
     const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
@@ -216,9 +280,10 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     expect(seenByModel(followUp)).toContain('Tool input validation failed');
   });
 
-  it('a client tool that answers with a validation error reaches the model as that error', async () => {
-    // Server-declared, client-executed tool: the client's own `createTool` validated and
-    // sent back a ValidationError as the result.
+  it('a client tool result that looks like a validation error is still mapped on the server', async () => {
+    // Server-declared, client-executed tool: the server maps whatever the browser sends, because
+    // a browser-sent result can claim any shape. A client tool's own validation errors are
+    // handled by @mastra/client-js, which sends the model output with the result.
     const mapperCalls: unknown[] = [];
     const browserTool = createTool({
       id: 'browserTool',
@@ -227,12 +292,12 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
       outputSchema: z.object({ fileId: z.string() }),
       toModelOutput: output => {
         mapperCalls.push(output);
-        return { type: 'text', value: `Screenshot uploaded as ${output.fileId}` };
+        return { type: 'text', value: 'Screenshot result received.' };
       },
     });
-    const clientError = {
+    const clientResult = {
       error: true,
-      message: 'Tool input validation failed for browserTool. url: Required',
+      message: `Tool input validation failed for browserTool. Provided arguments: ${EMAIL}`,
       validationErrors: { errors: [], fields: { url: { errors: ['Required'], fields: {} } } },
     };
 
@@ -247,7 +312,7 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
         },
         {
           role: 'tool',
-          content: [{ type: 'tool-result', toolCallId: 'call_browser', toolName: 'browserTool', result: clientError }],
+          content: [{ type: 'tool-result', toolCallId: 'call_browser', toolName: 'browserTool', result: clientResult }],
         },
       ],
       tools: { browserTool },
@@ -264,11 +329,11 @@ describeForAllEngines('AIMock scenario: toModelOutput and tool validation errors
     });
     await output.text;
 
-    expect(mapperCalls).toEqual([]);
+    expect(mapperCalls).toEqual([clientResult]);
     expect(requests).toHaveLength(1);
     const seen = seenByModel(requests[0]);
-    expect(seen).toContain('Tool input validation failed for browserTool');
-    expect(seen).not.toContain('Screenshot uploaded as');
+    expect(seen).toContain('Screenshot result received.');
+    expect(seen).not.toContain(EMAIL);
   });
 });
 
@@ -311,6 +376,8 @@ describeForAllEngines(
         .flatMap(request => ((request.body as { messages?: any[] } | undefined)?.messages ?? []) as any[])
         .filter(message => message.role === 'tool' && message.tool_call_id === 'call_bg_lookup');
       expect(toolMessages.some(message => JSON.stringify(message.content).includes('validationErrors'))).toBe(true);
+      // ...without quoting the raw arguments back.
+      expect(toolMessages.some(message => JSON.stringify(message.content).includes('Provided arguments'))).toBe(false);
     });
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.

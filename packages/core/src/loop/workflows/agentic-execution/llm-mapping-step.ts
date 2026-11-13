@@ -8,6 +8,7 @@ import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
+import type { ModelFacingValidationError } from '../../../tools/validation';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -191,6 +192,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         toolName: string;
         toolCallId?: string;
         result?: unknown;
+        validationError?: ModelFacingValidationError;
         providerMetadata?: Record<string, unknown>;
       }) {
         const tool = ((
@@ -205,6 +207,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           toolName: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
           result: toolCall.result,
+          validationError: toolCall.validationError,
           existingProviderMetadata: toolCall.providerMetadata,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
         });

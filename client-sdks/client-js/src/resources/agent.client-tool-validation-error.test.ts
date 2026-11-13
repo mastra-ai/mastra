@@ -14,8 +14,10 @@ import { MastraClient } from '../client';
  * the model prompt. When the tool's own `createTool` validation rejected the
  * model's arguments, `execute` resolves with a ValidationError. Mapping that
  * with a mapper written for successful output turned it into `{}`, so the
- * model never saw why its call failed. The client must send the error itself,
- * unchanged and tagged `error-json`, while valid results keep their mapping.
+ * model never saw why its call failed. The client must send what failed,
+ * tagged `error-json`, without the raw arguments the full error quotes, while
+ * valid results, and results that only look like validation errors, keep
+ * their mapping.
  *
  * A local HTTP server plays the Mastra server: it replays scripted agent
  * responses and records the request bodies the client actually sent.
@@ -25,14 +27,16 @@ const TOOL_CALL_ID = 'call_lookup';
 
 type Scripted = { kind: 'json'; body: unknown } | { kind: 'sse'; chunks: object[] };
 
-function createLookupTool() {
+const EMAIL = 'jane.doe@example.com';
+
+function createLookupTool(output: unknown = { answer: '42', secret: 'internal-only' }) {
   const mapperCalls: unknown[] = [];
   const lookup = createTool({
     id: 'lookup',
     description: 'Look up an answer',
     inputSchema: z.object({ query: z.string().min(1) }),
     outputSchema: z.object({ answer: z.string(), secret: z.string() }),
-    execute: async () => ({ answer: '42', secret: 'internal-only' }),
+    execute: async () => output as { answer: string; secret: string },
     toModelOutput: output => {
       mapperCalls.push(output);
       return { type: 'json', value: { answer: output.answer } };
@@ -119,17 +123,69 @@ describe('client tool toModelOutput and validation errors (#30211)', () => {
     );
   }
 
-  it('generate: sends the validation error itself, not a mapping of it, when the arguments are rejected', async () => {
+  it('generate: sends the validation error, not a mapping of it, when the arguments are rejected', async () => {
     const { lookup, mapperCalls } = createLookupTool();
-    scriptGenerateCalling({ query: '' });
+    scriptGenerateCalling({ query: '', note: EMAIL });
 
     await agent().generate('Look up the answer', { clientTools: { lookup } });
 
     expect(mapperCalls).toEqual([]);
     const part = sentToolResult();
+    // The raw result keeps the full error for the app; the model gets the issues without the arguments.
     expect(isValidationError(part.result)).toBe(true);
-    expect(part.result.message).toContain('Tool input validation failed');
-    expect(part.providerOptions).toEqual({ mastra: { modelOutput: { type: 'error-json', value: part.result } } });
+    expect(part.result.message).toContain('Provided arguments');
+    expect(part.providerOptions).toEqual({
+      mastra: {
+        modelOutput: {
+          type: 'error-json',
+          value: {
+            error: true,
+            message: expect.stringContaining('Tool input validation failed'),
+            validationErrors: part.result.validationErrors,
+          },
+        },
+      },
+    });
+    expect(JSON.stringify(part.providerOptions)).not.toContain(EMAIL);
+  });
+
+  it('generate: sends the failing output fields, not the output, when the output is rejected', async () => {
+    const { lookup, mapperCalls } = createLookupTool({ answer: 42, secret: 'internal-only', email: EMAIL });
+    scriptGenerateCalling({ query: 'meaning of life' });
+
+    await agent().generate('Look up the answer', { clientTools: { lookup } });
+
+    expect(mapperCalls).toEqual([]);
+    const part = sentToolResult();
+    expect(part.result.message).toContain(EMAIL);
+    const modelOutput = part.providerOptions.mastra.modelOutput;
+    expect(modelOutput.type).toBe('error-json');
+    expect(modelOutput.value.message).toContain('Tool output validation failed');
+    expect(modelOutput.value.message).toContain('answer');
+    expect(JSON.stringify(modelOutput)).not.toContain(EMAIL);
+  });
+
+  it('generate: maps a valid result that only looks like a validation error', async () => {
+    const lookalike = { error: true, message: `Upstream rejected ${EMAIL}`, validationErrors: {} };
+    const mapperCalls: unknown[] = [];
+    const proxy = createTool({
+      id: 'lookup',
+      description: 'Calls an upstream API',
+      inputSchema: z.object({ query: z.string() }),
+      execute: async () => lookalike,
+      toModelOutput: output => {
+        mapperCalls.push(output);
+        return { type: 'text', value: 'The upstream API rejected the request.' };
+      },
+    });
+    scriptGenerateCalling({ query: 'x' });
+
+    await agent().generate('Look up the answer', { clientTools: { lookup: proxy } });
+
+    expect(mapperCalls).toEqual([lookalike]);
+    expect(sentToolResult().providerOptions).toEqual({
+      mastra: { modelOutput: { type: 'text', value: 'The upstream API rejected the request.' } },
+    });
   });
 
   it('generate: still maps a valid result, so fields the mapper drops never reach the model', async () => {
@@ -174,6 +230,18 @@ describe('client tool toModelOutput and validation errors (#30211)', () => {
     const part = sentToolResult();
     expect(part.output.type).toBe('json');
     expect(isValidationError(part.output.value)).toBe(true);
-    expect(part.providerOptions).toEqual({ mastra: { modelOutput: { type: 'error-json', value: part.output.value } } });
+    expect(part.providerOptions).toEqual({
+      mastra: {
+        modelOutput: {
+          type: 'error-json',
+          value: {
+            error: true,
+            message: expect.stringContaining('Tool input validation failed'),
+            validationErrors: part.output.value.validationErrors,
+          },
+        },
+      },
+    });
+    expect(part.providerOptions.mastra.modelOutput.value.message).not.toContain('Provided arguments');
   });
 });

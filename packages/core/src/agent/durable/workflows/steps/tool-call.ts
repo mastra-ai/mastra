@@ -45,7 +45,11 @@ import {
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
 import { getToolTitle } from '../../../../tools/tool-title';
-import { isValidationError, resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
+import {
+  getModelFacingValidationError,
+  resolveToolOutputValidationSchema,
+  validateToolOutput,
+} from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { defineLazyWriter } from '../../../../workflows/utils';
@@ -2271,6 +2275,7 @@ export function createDurableToolCallStep() {
                     toolName,
                     toolCallId,
                     result: settled.rawResult,
+                    validationError: getModelFacingValidationError(settled.rawResult),
                     existingProviderMetadata: lateProviderMetadata,
                     parentSpan: stepSpan,
                   });
@@ -2311,14 +2316,18 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput && outcome.status === 'success' && isValidationError(outcome.rawResult)) {
-          // Validation errors skip the mapper and reach the model unchanged, as on the main engine.
+        // Read in the process that ran the tool, before the result is serialized.
+        const validationError =
+          outcome.status === 'success' ? getModelFacingValidationError(outcome.rawResult) : undefined;
+        if (toModelOutput && outcome.status === 'success' && validationError) {
+          // Mastra's own validation errors skip the mapper, as on the main engine.
           modelOutputComputed = true;
           providerMetadata = (await computeModelOutputProviderMetadata({
             tool: mappingTool,
             toolName,
             toolCallId,
             result: outcome.rawResult,
+            validationError,
             existingProviderMetadata: providerMetadata as Record<string, unknown> | undefined,
             parentSpan: stepSpan,
           })) as typeof providerMetadata;

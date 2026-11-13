@@ -335,7 +335,8 @@ export class Tool<
   /**
    * Optional function to transform the tool's raw output before sending it to the model.
    * The raw result is still available for application logic; only the model sees the transformed version.
-   * Not called when input, request context or output validation fails: the model receives the validation error instead.
+   * Not called when input, request context or output validation fails: the model receives the validation error instead,
+   * without the raw output, request context or arguments the full error quotes.
    * With `outputValidation: 'warn'`, a failed output check keeps the real result, so this still runs on it.
    */
   toModelOutput?: (output: TSchemaOut) => unknown;

@@ -18,7 +18,11 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getToolTitle } from '../../../tools/tool-title';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
-import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
+import {
+  getModelFacingValidationError,
+  resolveToolOutputValidationSchema,
+  validateToolOutput,
+} from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -1562,6 +1566,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ...inputData,
               providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),
+              validationError: getModelFacingValidationError(serializedResult),
             };
           }
           if (bgOutcome.status === 'started') {
@@ -1621,7 +1626,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           return { error: serializeToolError(outcome.error), ...inputData };
         }
 
-        return { result: outcome.result, ...inputData, ...(approvalGrant ?? {}) };
+        return {
+          result: outcome.result,
+          ...inputData,
+          ...(approvalGrant ?? {}),
+          // Read here, in the process that ran the tool: the marker does not survive serialization.
+          validationError: getModelFacingValidationError(outcome.result),
+        };
       } catch (error) {
         // Re-throw FGA authorization errors instead of swallowing them
         if (error instanceof Error && error.name === 'FGADeniedError') {
