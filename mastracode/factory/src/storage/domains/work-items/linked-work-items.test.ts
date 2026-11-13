@@ -300,6 +300,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     ]);
   });
 
+  it('deletes a card while its issue syncs, when a card of the same issue is its child', async () => {
+    const { workItems, scope, file, addTo } = await setup();
+    for (let round = 0; round < 12; round++) {
+      const first = await file({ ...issue12, externalId: `${issue12.externalId}:${round}` }, { state: 'open' });
+      const second = await addTo(first.id, 'security');
+      // The child's card sorts before its parent's, so a sync locks it first.
+      const [child, parent] = [first, second].sort((a, b) => a.id.localeCompare(b.id));
+      await workItems.update({ ...scope, id: child!.id, patch: { parentWorkItemId: parent!.id } });
+
+      // Stagger the two so some rounds interleave their locks.
+      const pause = new Promise(resolve => setTimeout(resolve, round % 6));
+      await Promise.all([
+        pause.then(() => workItems.delete({ orgId: scope.orgId, id: parent!.id })),
+        workItems.syncWorkItemSource({
+          orgId: scope.orgId,
+          factoryProjectId: scope.factoryProjectId,
+          provider: 'github',
+          externalId: first.workItem.sources[0]!.externalId,
+          patch: { state: 'closed' },
+        }),
+      ]);
+      expect(await workItems.get({ orgId: scope.orgId, id: child!.id })).toMatchObject({ parentWorkItemId: null });
+    }
+  });
+
   it('reads a sync an older release wrote to the source row only, until a link catches up', async () => {
     const { workItems, scope, file, addTo, storage } = await setup();
     const first = await file(issue12, { state: 'open', labels: ['bug'] });

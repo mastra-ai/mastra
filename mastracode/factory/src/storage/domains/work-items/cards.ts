@@ -659,6 +659,9 @@ export class Cards {
     let deleted = 0;
     for (const board of boards) {
       const scope = { org_id: board.org_id, factory_project_id: board.factory_project_id };
+      // The cards sharing its sources first, in id order, as every write sharing a source takes
+      // them; locking its own row first could deadlock against a sync locking a lower sibling.
+      await lockSourceGroup(this.ops, [board.work_item_id]);
       const guard = await this.ops.updateAtomic(
         FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name,
         { id: board.id },
