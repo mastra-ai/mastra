@@ -38,6 +38,7 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-lease-loss-abort.test.ts', // vi.mock,env
   'src/agent/__tests__/thread-lease-loss-no-abort-run-stream.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-tool-scope.test.ts', // env
+  'src/agent/__tests__/thread-shutdown-lease-release.test.ts', // env
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
@@ -66,8 +67,10 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/resume-claim-loser.test.ts', // env,reset-modules
   'src/agent/durable/__tests__/workflow-restart-shapes.test.ts', // reset-modules
   'src/agent/durable/workflows/__tests__/finalize-run.test.ts', // vi.mock
+  'src/agent/durable/workflows/steps/llm-mapping-background-race.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/llm-mapping-pending-client-tool.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/tool-approval-recall.test.ts', // vi.mock
+  'src/agent/durable/workflows/steps/tool-call-abort-listener.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/tool-call-actor.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/tool-call-approval-context.test.ts', // vi.mock
   'src/agent/durable/workflows/steps/tool-call-bg.test.ts', // vi.mock
@@ -142,6 +145,7 @@ export const isolatedTestFiles = [
   'src/workflows/__tests__/snapshot-write-amplification.test.ts', // vi.mock
   'src/workflows/__tests__/step-output-type-preservation.test.ts', // env
   'src/workflows/create.test.ts', // env
+  'src/workflows/evented/nested-done-restart.test.ts', // reset-modules
   'src/workflows/evented/nested-suspend-loop-redelivery.test.ts', // timers
   'src/workflows/evented/parallel-suspend-redelivery.test.ts', // timers
   'src/workflows/evented/restart-completed-boundary.test.ts', // reset-modules
