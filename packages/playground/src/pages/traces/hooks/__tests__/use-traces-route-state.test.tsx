@@ -42,6 +42,17 @@ function renderRouteState(initialEntry: string) {
 }
 
 describe('useTracesRouteState', () => {
+  describe('when a shared URL contains a text search', () => {
+    it('restores the search and removes it when cleared', () => {
+      const { result, params } = renderRouteState('/traces?textSearch=needle');
+      expect(result.current.route.filters.textSearch).toBe('needle');
+      act(() =>
+        result.current.route.setState(applyFilters({ ...result.current.route.filters, textSearch: undefined })),
+      );
+      expect(params().has('textSearch')).toBe(false);
+    });
+  });
+
   describe('when the URL is empty', () => {
     it('decodes the default selection, filters and sort', () => {
       const { result } = renderRouteState('/traces');

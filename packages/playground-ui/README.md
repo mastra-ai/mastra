@@ -617,3 +617,9 @@ See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/packag
 ## Support
 
 We have an [open community Discord](https://discord.gg/mastra-ai). Come and say hello and let us know if you have any questions or need any help getting things running.
+
+## Observability text search
+
+The span explorer and `TracesExplorer.Search` show text search when the server advertises the corresponding query capability. Search is a case-insensitive literal substring of 3–256 characters. Histograms are hidden while a search is applied.
+
+Hosts with their own trace toolbar can render `<TracesExplorer.Search />` beside their filters. Preserve `TracesFilters.textSearch` in the host's URL codec. Span hosts can use `useObservabilityListFilters` with `withTextSearch`, render `ObservabilityTextSearch` with its `searchValue` and `setTextSearch`, and pass the effective `textSearch` to both the list query and `SpansExplorerHistogram`.

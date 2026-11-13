@@ -46,6 +46,7 @@ import {
   useTraceQueryDiscoveryAvailable,
   useTraceQueryRootDurationAvailable,
 } from '@/domains/capabilities';
+import { effectiveTextSearch } from '@/domains/observability/lib/text-search';
 import { rangeBeforeZoom, rememberZoom } from '@/domains/observability/lib/zoom-memory';
 import type { ZoomMemory } from '@/domains/observability/lib/zoom-memory';
 
@@ -122,17 +123,19 @@ export function TracesExplorerRoot({
     withTimeToFirstToken && (capabilities?.capabilities.traceQueryTimeToFirstTokenSort ?? false);
   const withOutcomeFields = withQueryTrace && (capabilities?.capabilities.traceQueryOutcomeFields ?? false);
 
+  const withTextSearch = withQueryTrace && (capabilities?.capabilities.traceQueryTextSearch ?? false);
+
   // Entries the server can't query are ignored, never written back: the host keeps its raw value.
-  const filters = useMemo(
-    () =>
-      sanitizeTracesFilters(rawFilters, {
-        withRootDuration,
-        withTimeToFirstChunk,
-        withTimeToFirstToken,
-        withOutcomeFields,
-      }),
-    [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields],
-  );
+  const filters = useMemo(() => {
+    const sanitized = sanitizeTracesFilters(rawFilters, {
+      withRootDuration,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+    });
+    if (withTextSearch || sanitized.textSearch === undefined) return sanitized;
+    return { ...sanitized, textSearch: undefined };
+  }, [rawFilters, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, withTextSearch]);
 
   const isScoped = !!scope;
   const scopedFieldIds = isScoped ? SCOPED_FIELD_IDS : NO_FIELD_IDS;
@@ -195,6 +198,7 @@ export function TracesExplorerRoot({
       updateFilters(next);
     };
     const filtersActions: TracesFiltersActions = {
+      setTextSearch: value => updateFilters({ ...latest.current.filters, textSearch: value || undefined }),
       // Re-inject the scope tokens so "Clear filters" (which drops every removable item) and any
       // other edit can never drop the scope.
       setFilterTokens: (tokens, groups) => {
@@ -214,7 +218,12 @@ export function TracesExplorerRoot({
         const base = latest.current.filters;
         const before = rangeBeforeZoom(zoomMemory.current, base);
         zoomMemory.current = undefined;
-        updateFilters({ tokens: base.tokens, groups: base.groups, ...(before ?? { datePreset: defaultPreset }) });
+        updateFilters({
+          textSearch: base.textSearch,
+          tokens: base.tokens,
+          groups: base.groups,
+          ...(before ?? { datePreset: defaultPreset }),
+        });
       },
     };
     const onSortChange = (next: TracesSort) => latest.current.onSortChange(next);
@@ -240,6 +249,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTextSearch,
       withFeedback,
       feedbackOptions: hasFeedbackOptions ? { contextMode, feedbackUserId, allowDelete, allowReview } : undefined,
       withSpanQuery,
@@ -262,6 +272,7 @@ export function TracesExplorerRoot({
       scopedFieldIds,
       hiddenFieldIds,
       withQueryTrace,
+      withTextSearch,
       withFeedback,
       hasFeedbackOptions,
       contextMode,
@@ -284,19 +295,12 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
+  const contentFiltersApplied =
+    !!effectiveTextSearch(filters.textSearch) || filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
-    () => ({
-      ...filtersActions,
-      filters,
-      dateFrom,
-      dateTo,
-      filtersApplied,
-      contentFiltersApplied,
-      runningSelected,
-    }),
+    () => ({ ...filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected }),
     [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 

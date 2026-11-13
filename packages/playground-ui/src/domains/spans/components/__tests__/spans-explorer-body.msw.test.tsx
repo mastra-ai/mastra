@@ -140,6 +140,38 @@ describe('SpansExplorerBody', () => {
     window.localStorage.clear();
   });
 
+  describe('when text search is supported', () => {
+    it('restores search from the URL without requesting an unfiltered histogram', async () => {
+      setHandlers(spanRowsPage, {
+        ...spanAggregateCapabilities,
+        capabilities: { ...spanAggregateCapabilities.capabilities, spanQueryTextSearch: true },
+      });
+      const aggregate = vi.fn();
+      server.use(
+        http.post(SPANS_AGGREGATE_URL, () => {
+          aggregate();
+          return HttpResponse.json({ rows: [], truncated: false });
+        }),
+      );
+      const { queries } = renderBodyAtUrl('textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(queries.at(-1)).toHaveProperty('textSearch', 'needle');
+      expect(screen.getByRole<HTMLInputElement>('searchbox', { name: 'Search spans' }).value).toBe('needle');
+      expect(screen.queryByRole('region', { name: 'Spans over time' })).toBeNull();
+      expect(aggregate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when text search is unavailable', () => {
+    it('ignores a search restored from a shared URL', async () => {
+      setHandlers(spanRowsPage);
+      const { queries } = renderBodyAtUrl('textSearch=needle');
+      await waitFor(() => expect(queries.length).toBeGreaterThan(0));
+      expect(queries.at(-1)).not.toHaveProperty('textSearch');
+      expect(screen.queryByRole('searchbox', { name: 'Search spans' })).toBeNull();
+    });
+  });
+
   describe('when the store records span outcomes', () => {
     const spanQueryBodies = vi.fn<(body: unknown) => void>();
     const setOutcomeHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {

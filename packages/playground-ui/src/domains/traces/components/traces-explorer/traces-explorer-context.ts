@@ -33,6 +33,7 @@ export type TracesConfigContextValue = {
   scopedFieldIds: ReadonlySet<string>;
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
+  withTextSearch: boolean;
   withFeedback: boolean;
   feedbackOptions?: FeedbackOptions;
   /** The span query API is on, so the host can offer a spans view next to the traces list. */
@@ -61,6 +62,7 @@ export type TracesConfigContextValue = {
 };
 
 export type TracesFiltersActions = {
+  setTextSearch: (value: string) => void;
   /** Replaces the filter tokens and groups. The scope tokens are always kept. */
   setFilterTokens: (tokens: TracesFilters['tokens'], groups: TracesFilters['groups']) => void;
   setDatePreset: (preset: TraceDatePreset) => void;

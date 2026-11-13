@@ -11,11 +11,13 @@ import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
 import { TracesExplorerRoot } from './traces-explorer-root';
 import { TracesExplorerSavedViews } from './traces-explorer-saved-views';
+import { TracesExplorerSearch } from './traces-explorer-search';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
   Body: TracesExplorerBody,
   FilterBar: TracesExplorerFilterBar,
+  Search: TracesExplorerSearch,
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,

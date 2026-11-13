@@ -120,6 +120,7 @@ function Harness({
         features={features}
         rootSource={rootSource}
       >
+        <TracesExplorer.Search />
         <TracesExplorer.FilterBar />
         <TracesExplorer.Body chart={<TracesExplorer.Histogram />}>
           <TracesExplorer.List />
@@ -496,6 +497,78 @@ describe('TracesExplorer.Histogram', () => {
 
       expect(screen.getByRole('heading', { name: 'No traces for the last 7 days' })).toBeTruthy();
       expect(chart()).toBeNull();
+    });
+  });
+  describe('when text search is supported', () => {
+    it('filters the list and hides the histogram until search is cleared', async () => {
+      setHandlers({
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
+        },
+      });
+      const result = await renderExplorer();
+      const search = screen.getByRole('searchbox', { name: 'Search traces' });
+      onAggregate.mockClear();
+      fireEvent.change(search, { target: { value: 'needle' } });
+      await waitFor(() =>
+        expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' })),
+      );
+      await settle(result.queryClient);
+      expect(chart()).toBeNull();
+      expect(onAggregate).not.toHaveBeenCalled();
+      fireEvent.change(search, { target: { value: '' } });
+      await waitFor(() => expect(chart()).not.toBeNull());
+      await settle(result.queryClient);
+      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+    });
+  });
+
+  describe('when text search is not supported', () => {
+    it('does not expose a search control', async () => {
+      setHandlers();
+      await renderExplorer();
+      expect(screen.queryByRole('searchbox', { name: 'Search traces' })).toBeNull();
+    });
+  });
+
+  describe('when search is restored on an unsupported backend', () => {
+    it('keeps the ordinary list and histogram available', async () => {
+      setHandlers();
+      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: 'needle' } });
+      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(chart()).not.toBeNull();
+    });
+  });
+
+  describe('when search is too short after normalization', () => {
+    it('explains the minimum without sending an invalid query', async () => {
+      setHandlers({
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
+        },
+      });
+      const result = await renderExplorer();
+      fireEvent.change(screen.getByRole('searchbox', { name: 'Search traces' }), { target: { value: '  ab  ' } });
+      expect(await screen.findByText('Enter between 3 and 256 characters to search')).toBeTruthy();
+      await settle(result.queryClient);
+      expect(onTraceQuery.mock.calls.at(-1)?.[0]).not.toHaveProperty('textSearch');
+      expect(chart()).not.toBeNull();
+    });
+  });
+
+  describe('when an indexed search is restored', () => {
+    it('normalizes the term and suppresses the initial histogram request', async () => {
+      setHandlers({
+        capabilities: {
+          ...traceAggregateCapabilities,
+          capabilities: { ...traceAggregateCapabilities.capabilities, traceQueryTextSearch: true },
+        },
+      });
+      await renderExplorer({ initialFilters: { ...DEFAULT_TRACES_FILTERS, textSearch: '  NEEDLE  ' } });
+      expect(onTraceQuery).toHaveBeenLastCalledWith(expect.objectContaining({ textSearch: 'needle' }));
+      expect(onAggregate).not.toHaveBeenCalled();
     });
   });
 });
