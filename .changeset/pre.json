@@ -196,5 +196,26 @@
     "@mastra/sprites": "0.1.2",
     "@mastra/vercel": "1.6.3"
   },
-  "changesets": []
+  "changesets": [
+    "brave-routes-reroute",
+    "calm-phases-load",
+    "empty-years-fold",
+    "factory-onboarding-check-align",
+    "factory-phase-session-owner",
+    "jolly-geckos-change",
+    "knowledge-scope-values-no-colons",
+    "lazy-suns-dream",
+    "mastracode-knowledge-canonical-scopes",
+    "nice-lands-double",
+    "parked-run-lease-outage",
+    "perky-colts-glow",
+    "plenty-nails-slide",
+    "polite-pianos-show",
+    "quiet-regions-default",
+    "sandbox-github-token-groups",
+    "sunny-walls-push",
+    "thick-spies-wonder",
+    "vanta-2026-11-12-bedrock-template",
+    "vast-masks-stand"
+  ]
 }
