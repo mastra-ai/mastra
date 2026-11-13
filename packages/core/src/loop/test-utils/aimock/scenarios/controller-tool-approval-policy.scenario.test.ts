@@ -175,6 +175,57 @@ describeForAllEngines('Controller runs tools by the session permission rules', e
     }
   });
 
+  it.each(['ask', 'deny'] as const)(
+    'judges a call waiting for a free slot by a rule an earlier call changed to %s',
+    async policy => {
+      const calls: string[] = [];
+      let env!: Awaited<ReturnType<typeof setup>>;
+      let markBStarted!: () => void;
+      const bStarted = new Promise<void>(resolve => (markBStarted = resolve));
+      let markPolicyChanged!: () => void;
+      const policyChanged = new Promise<void>(resolve => (markPolicyChanged = resolve));
+      // With a limit of 2, a and b start together and c waits for a slot. a changes the rule
+      // while b still holds its slot, so c is the only call judged after the change.
+      const readTool = recordingTool('read_value', calls, async name => {
+        if (name === 'b') {
+          markBStarted();
+          await policyChanged;
+        }
+        if (name !== 'a') return;
+        // Durable engines run the calls one at a time, so b never starts before a ends.
+        await Promise.race([bStarted, new Promise(resolve => setTimeout(resolve, 1_500))]);
+        await env.session.permissions.setForTool({ toolName: 'read_value', policy });
+        markPolicyChanged();
+      });
+      env = await setup({ tools: { read_value: readTool }, defaultOptions: { toolCallConcurrency: 2 } });
+      env.session.subscribe(event => {
+        if (event.type === 'tool_approval_required') {
+          queueMicrotask(() =>
+            env.session.respondToToolApproval({ decision: 'decline', toolCallId: event.toolCallId }),
+          );
+        }
+      });
+      env.script([
+        {
+          toolCalls: ['a', 'b', 'c'].map(name => ({ id: `call-${name}`, name: 'read_value', arguments: { name } })),
+        },
+        { content: 'done' },
+      ]);
+
+      try {
+        await env.send('Read a, b and c.');
+        await env.waitForEnd();
+
+        const ranAfterChange = runsInParallel ? ['read_value:b'] : [];
+        const asked = runsInParallel ? ['call-c'] : ['call-b', 'call-c'];
+        expect(calls).toEqual(['read_value:a', ...ranAfterChange]);
+        expect(env.approvalCards()).toEqual(policy === 'ask' ? asked : []);
+      } finally {
+        await env.controller.destroy();
+      }
+    },
+  );
+
   it.each([
     { policy: 'ask' as const, cards: ['call-b'] },
     { policy: 'deny' as const, cards: [] },

@@ -385,10 +385,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
-          // A parallel batch must run on the verdicts it was scheduled with. Calls in a sequential
-          // batch start after earlier calls finish, so they are judged again when they start and
-          // a policy changed by then applies.
-          const keepVerdicts = toolCallForeachOptions.concurrency > 1 || toolCalls.length <= 1;
+          // Calls that all start at once run on the verdicts they were scheduled with. When some
+          // calls wait for a free slot, every call is judged again when it starts, so a policy
+          // changed by an earlier call applies to the calls after it.
+          const keepVerdicts = toolCalls.length <= toolCallForeachOptions.concurrency;
           writeScoped(
             scopeCtx,
             TOOL_APPROVAL_VERDICTS_KEY,
