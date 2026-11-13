@@ -138,7 +138,7 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
     }));
   /** GitLab member lookups, which every rule evaluation of a listed event pays twice. */
   const memberLookups = () => fetchImpl.mock.calls.filter(([input]) => String(input).includes('/members/all')).length;
-  return { sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded, memberLookups };
+  return { gitlab, context, sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded, memberLookups };
 }
 
 const openMergeRequest = {
@@ -158,9 +158,18 @@ const openMergeRequest = {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('GitLab sweep discovery', () => {
+  it('keeps sweeping on a server that still sets the old off switch', async () => {
+    vi.stubEnv('MASTRACODE_GITLAB_RECONCILE_ENABLED', 'false');
+    vi.stubEnv('MASTRACODE_GITLAB_ISSUE_RECONCILE_ENABLED', 'false');
+    const { gitlab, context } = await linkedFactory(() => Response.json([]));
+
+    expect(gitlab.workers(context).map(worker => worker.name)).toEqual(['gitlab-issue-reconcile']);
+  });
+
   describe('when GitLab sent no webhook for a new merge request and a new issue', () => {
     it.each([
       ['a direct token', 'direct'],
