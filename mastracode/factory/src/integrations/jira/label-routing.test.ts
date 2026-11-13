@@ -128,7 +128,7 @@ const paths: JiraPath[] = [
         }),
       );
       const jira = new PlatformJiraIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
       });
       return buildPlatformJiraRoutes({
         jira,
@@ -330,9 +330,9 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     await fileProposedCards(async tenant => {
       if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
       takeover = (async () => {
-        expect(
-          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
-        ).toBe(204);
+        expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(
+          204,
+        );
         const growth = await takeOverWithGrowth();
         expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
         return growth;

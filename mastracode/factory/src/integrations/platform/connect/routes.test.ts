@@ -3,7 +3,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
 
 const SESSION = {
@@ -33,10 +33,10 @@ function buildApp(
     await next();
   });
   const auth = fakeRouteAuth({ enabled: options.authEnabled ?? true });
-  const client = new PlatformApiClient({
+  const client = createPlatformConnectClient({
     baseUrl: 'https://integrations.example.com',
     accessToken: 'platform-secret',
-    fetchImpl,
+    fetch: fetchImpl,
   });
   const projectId = options.connectToolsProjectId;
   mountApiRoutes(app, [
@@ -102,11 +102,13 @@ describe('platform connect routes', () => {
   it('still lists the attached connections on a local Factory without auth when the catalog is down', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input =>
-      String(input).endsWith('/v2/projects/proj_1/connections')
-        ? json({ connections: [connection('conn-linear', 'linear')] })
-        : json({ detail: 'catalog unavailable' }, 503),
-    );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async input =>
+        String(input).endsWith('/v2/projects/proj_1/connections')
+          ? json({ connections: [connection('conn-linear', 'linear')] })
+          : json({ detail: 'catalog unavailable' }, 503),
+      );
     const app = buildApp(null, fetchImpl, { authEnabled: false, connectToolsProjectId: 'proj_1' });
 
     const response = await app.request('/web/integrations/platform/connect-tools');

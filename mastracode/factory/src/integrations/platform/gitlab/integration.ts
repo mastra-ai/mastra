@@ -1,5 +1,7 @@
-import type { MastraWorker } from '@mastra/core/worker';
+import { MastraConnectError } from '@mastra/connect';
 
+import type { ConnectClient } from '@mastra/connect';
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type { IntegrationContext } from '../../base.js';
 import { GitLabApiClient, GitLabApiError } from '../../gitlab/api.js';
@@ -7,8 +9,8 @@ import type { GitLabRuleOverrides } from '../../gitlab/default-rules.js';
 import { gitlabConnection, GitLabIntegrationBase } from '../../gitlab/integration.js';
 import type { GitLabStatusConnection } from '../../gitlab/integration.js';
 import { attachGitLabRules } from '../../gitlab/rules.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
-import type { PlatformApiClientConfig } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 import { PlatformGitLabEventWorker } from './event-worker.js';
 import type { PlatformGitLabEventStorage } from './event-worker.js';
 
@@ -28,15 +30,13 @@ interface PlatformGitLabContext {
   repositoryAccessToken: () => Promise<string>;
 }
 
-type PlatformGitLabCredential =
-  { type: 'oauth2'; accessToken: string; expiresAt: string | null } | { type: 'api_key'; apiKey: string };
-
 /** The Platform's GitLab (OAuth) integration. It is the only GitLab credential flow Factory discovers. */
 const GITLAB_INTEGRATION_ID = 'gitlab';
 
 export interface PlatformGitLabIntegrationConfig {
   rules?: GitLabRuleOverrides;
-  clientConfig?: PlatformApiClientConfig;
+  /** The Connect client, or options to build one; defaults to the platform environment. */
+  connect?: PlatformConnectOption;
   connectionId?: string;
   /**
    * Optional. Only a direct project webhook to `/web/gitlab/webhook` needs it;
@@ -50,7 +50,7 @@ export interface PlatformGitLabIntegrationConfig {
 }
 
 export class PlatformGitLabIntegration extends GitLabIntegrationBase {
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #connectionId: string | undefined;
   readonly #endpointHost: string;
   readonly #webhookSecret: string | undefined;
@@ -60,10 +60,9 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   constructor(config: PlatformGitLabIntegrationConfig = {}) {
     super(config.rules);
     const connectionId = config.connectionId?.trim() || process.env.MASTRA_GITLAB_CONNECTION_ID?.trim() || undefined;
-    const clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
-    this.#client = new PlatformApiClient(clientConfig);
+    this.#client = createPlatformConnectClient(config.connect);
     this.#connectionId = connectionId;
-    this.#endpointHost = new URL(clientConfig.baseUrl).host;
+    this.#endpointHost = new URL(this.#client.baseUrl).host;
     this.#webhookSecret = config.webhookSecret?.trim() || process.env.MASTRA_GITLAB_WEBHOOK_SECRET?.trim() || undefined;
     this.#pollingEnabled =
       config.pollingEnabled ?? process.env.MASTRA_PLATFORM_GITLAB_POLLING_ENABLED?.trim().toLowerCase() !== 'false';
@@ -74,7 +73,8 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
     const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
       'GET',
-      `/v2/connections?providerKey=${encodeURIComponent(GITLAB_INTEGRATION_ID)}`,
+      '/v2/connections',
+      { query: { providerKey: GITLAB_INTEGRATION_ID } },
     );
     // The providerKey filter is applied server side; the exact ID check guards
     // against a server that answers more loosely than asked.
@@ -164,10 +164,10 @@ export class PlatformGitLabIntegration extends GitLabIntegrationBase {
       repositoryAccessToken: async () => {
         // Fetch for each git operation so an expiring OAuth token is refreshed by Platform.
         // Never persist or log the returned credential.
-        const credential = await this.#client.request<PlatformGitLabCredential>(
-          'GET',
-          `/v2/connections/${encodeURIComponent(connection.id)}/credentials`,
-        );
+        const credential = await this.#client.getCredential(connection.id).catch((error: unknown) => {
+          if (error instanceof MastraConnectError && error.code === 'unsupported_credential_type') return null;
+          throw error;
+        });
         const token =
           credential?.type === 'oauth2'
             ? credential.accessToken

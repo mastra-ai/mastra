@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GitLabSignalSubscriptionRow } from '../../gitlab/subscriptions.js';
 import { normalizeGitLabWebhookMetadata } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformGitLabEventWorker } from './event-worker.js';
 import type {
   IntegrationEventEntry,
@@ -109,7 +109,7 @@ function createWorker(input: {
   now?: () => number;
 }) {
   return new PlatformGitLabEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     controller: (input.controller ?? {}) as never,
     gitlab: input.gitlab ?? createGitLab().gitlab,
     storage: input.storage,

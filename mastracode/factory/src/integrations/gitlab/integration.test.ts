@@ -61,7 +61,7 @@ const platformConnections = [
 
 function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {
   return new PlatformGitLabIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     connectionId,
   });
 }
@@ -501,7 +501,7 @@ describe('PlatformGitLabIntegration', () => {
     expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
     expect(
       new PlatformGitLabIntegration({
-        clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
         pollingEnabled: true,
         pollingIntervalMs: 30_000,
       }).diagnostics(),
@@ -659,7 +659,7 @@ describe('PlatformGitLabIntegration', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -683,7 +683,7 @@ describe('PlatformGitLabIntegration', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -738,14 +738,14 @@ describe('PlatformGitLabIntegration', () => {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
     const filtered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     });
     await expect(filtered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }]);
     expect(filtered.diagnostics()).toMatchObject({ connectionFilterConfigured: true });
 
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', '');
     const discovered = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
     });
     await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }, { id: 'a1b_acme' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });

@@ -15,7 +15,7 @@ import { shareLinkedRepositoryChanges } from '../../../linked-repositories-chang
 import { FactoryProjectsStorage } from '../../../storage/domains/projects/base.js';
 import { SourceControlStorage } from '../../../storage/domains/source-control/base.js';
 import type { SourceControlStorageHandle } from '../../../storage/domains/source-control/base.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventStorage } from './event-worker.js';
 
@@ -46,7 +46,11 @@ const databases: Array<{ name: string; skip: boolean; create(): Promise<SharedDa
     name: 'PostgreSQL',
     skip: !postgresUrl,
     async create() {
-      const admin = new PostgresStore({ id: 'linked-repositories-admin', connectionString: postgresUrl!, disableInit: true });
+      const admin = new PostgresStore({
+        id: 'linked-repositories-admin',
+        connectionString: postgresUrl!,
+        disableInit: true,
+      });
       const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
       await admin.pool.query(`CREATE SCHEMA "${schema}"`);
       const url = new URL(postgresUrl!);
@@ -80,7 +84,6 @@ async function share(replica: Replica, pubsub: EventEmitterPubSub): Promise<void
   const stopSharing = await shareLinkedRepositoryChanges(pubsub, replica.domain).catch(() => undefined);
   if (stopSharing) replica.stopSharing = stopSharing;
 }
-
 
 async function linkRepository(replica: Replica, repositoryExternalId: string): Promise<{ unlink(): Promise<boolean> }> {
   const project = await replica.projects.create({
@@ -165,7 +168,6 @@ describe.each(databases)('PlatformGithubEventWorker linked repositories on $name
     await database.drop();
   });
 
-
   async function startWorker(
     sourceControl: SourceControlStorageHandle = polling.github,
     { reconcile = false }: { reconcile?: boolean } = {},
@@ -173,10 +175,10 @@ describe.each(databases)('PlatformGithubEventWorker linked repositories on $name
     // The cursor store is not under test: nothing here returns events, so it is only written on a repository's first poll.
     let settings: unknown = null;
     worker = new PlatformGithubEventWorker({
-      client: new PlatformApiClient({
+      client: createPlatformConnectClient({
         baseUrl: 'https://platform.example.com',
         accessToken: 'platform-token',
-        fetchImpl: async input => {
+        fetch: async input => {
           const installationId = /\/installations\/(\d+)\/repositories$/.exec(String(input))?.[1];
           if (installationId) {
             const repositories = [...platformNames].map(([id, fullName]) => ({ id, fullName }));

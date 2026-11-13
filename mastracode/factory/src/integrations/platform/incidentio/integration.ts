@@ -1,7 +1,8 @@
+import type { ConnectClient } from '@mastra/connect';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type { MastraWorker } from '@mastra/core/worker';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -39,11 +40,12 @@ import {
 import { buildIncidentioRoutes } from '../../incidentio/routes.js';
 import { attachIncidentioRules } from '../../incidentio/rules.js';
 import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
-import type { PlatformApiClientConfig } from '../api-client.js';
+import { CONNECT_PROXY_TOKEN, connectProxyFetch, createPlatformConnectClient } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 
 export interface PlatformIncidentioIntegrationConfig {
-  clientConfig?: PlatformApiClientConfig;
+  /** The Connect client, or options to build one; defaults to the platform environment. */
+  connect?: PlatformConnectOption;
   /** Per-event replacements for the default Factory incident.io rules. */
   rules?: IncidentioRuleOverrides;
 }
@@ -153,8 +155,7 @@ interface IncidentioConnectionContext {
 
 export class PlatformIncidentioIntegration implements FactoryIntegration {
   readonly id = 'incidentio';
-  readonly #clientConfig: PlatformApiClientConfig;
-  readonly #platformClient: PlatformApiClient;
+  readonly #platformClient: ConnectClient;
   readonly #endpointHost: string;
   readonly #intakeByConnectionId = new Map<string, Intake>();
   readonly #rules: IncidentioEventRules;
@@ -166,9 +167,8 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   readonly #orgIdByResourceId = new Map<string, string | null>();
 
   constructor(config: PlatformIncidentioIntegrationConfig = {}) {
-    this.#clientConfig = config.clientConfig ?? platformApiClientConfigFromEnv();
-    this.#platformClient = new PlatformApiClient(this.#clientConfig);
-    this.#endpointHost = new URL(this.#clientConfig.baseUrl).host;
+    this.#platformClient = createPlatformConnectClient(config.connect);
+    this.#endpointHost = new URL(this.#platformClient.baseUrl).host;
     this.#rules = resolveIncidentioRules(config.rules);
   }
 
@@ -249,10 +249,10 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
-    const providerKey = encodeURIComponent(PLATFORM_INCIDENTIO_PROVIDER_CONFIG_KEY);
     const result = await this.#platformClient.request<{ connections: PlatformIntegrationConnection[] }>(
       'GET',
-      `/v2/connections?providerKey=${providerKey}`,
+      '/v2/connections',
+      { query: { providerKey: PLATFORM_INCIDENTIO_PROVIDER_CONFIG_KEY } },
     );
     return result.connections;
   }
@@ -275,15 +275,14 @@ export class PlatformIncidentioIntegration implements FactoryIntegration {
   #connectionIntake(connectionId: string): Intake {
     const cached = this.#intakeByConnectionId.get(connectionId);
     if (cached) return cached;
-    const proxyBaseUrl = `${this.#clientConfig.baseUrl.replace(/\/+$/, '')}/v2/connections/${encodeURIComponent(
-      connectionId,
-    )}/proxy`;
+    const proxyBaseUrl = `${this.#platformClient.baseUrl}/v2/connections/${encodeURIComponent(connectionId)}/proxy`;
     const intake = createIncidentioIntake({
       api: new IncidentioApiClient({
         baseUrl: proxyBaseUrl,
-        accessToken: this.#clientConfig.accessToken,
-        ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
-        ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
+        accessToken: CONNECT_PROXY_TOKEN,
+        // Connect sets the project header; the API client must not add its own.
+        projectId: null,
+        fetchImpl: connectProxyFetch(this.#platformClient),
       }),
       connection: incidentioConnection(connectionId),
     });

@@ -1,12 +1,18 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PlatformVantaIntegration } from './integration.js';
 
-const projects = [{ id: 'project-1', orgId: 'org-1' }, { id: 'project-2', orgId: 'org-2' }];
+const projects = [
+  { id: 'project-1', orgId: 'org-1' },
+  { id: 'project-2', orgId: 'org-2' },
+];
 const vulnerability = { id: 'vuln-1', name: 'CVE-2026-1' };
 
 type Connection = { id: string; status: 'active' | 'needs_reauth'; resourceId: string | null; accountLabel: null };
 
-function createIntegration(connections: Connection[], pageInfo = { hasNextPage: false, endCursor: null as string | null }) {
+function createIntegration(
+  connections: Connection[],
+  pageInfo = { hasNextPage: false, endCursor: null as string | null },
+) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
     if (path === '/v2/connections') return Response.json({ connections });
@@ -16,7 +22,7 @@ function createIntegration(connections: Connection[], pageInfo = { hasNextPage: 
     throw new Error(`Unexpected request ${input}`);
   });
   const integration = new PlatformVantaIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example', accessToken: 'test-token', fetchImpl: fetchImpl as typeof fetch },
+    connect: { baseUrl: 'https://integrations.example', accessToken: 'test-token', fetch: fetchImpl as typeof fetch },
   });
   return { integration, fetchImpl };
 }
@@ -65,18 +71,24 @@ describe('PlatformVantaIntegration reconciliation', () => {
   });
 
   it('rejects a truncated snapshot at the pagination cap', async () => {
-    const { integration, fetchImpl } = createIntegration([
-      { id: 'connection-1', status: 'active', resourceId: 'project-1', accountLabel: null },
-    ], { hasNextPage: true, endCursor: 'next-page' });
-    await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow('Incomplete Vanta vulnerability snapshot');
+    const { integration, fetchImpl } = createIntegration(
+      [{ id: 'connection-1', status: 'active', resourceId: 'project-1', accountLabel: null }],
+      { hasNextPage: true, endCursor: 'next-page' },
+    );
+    await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow(
+      'Incomplete Vanta vulnerability snapshot',
+    );
     expect(fetchImpl).toHaveBeenCalledTimes(51);
   });
 
   it('rejects a page that claims more results without a cursor', async () => {
-    const { integration, fetchImpl } = createIntegration([
-      { id: 'connection-1', status: 'active', resourceId: 'project-1', accountLabel: null },
-    ], { hasNextPage: true, endCursor: null });
-    await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow('Incomplete Vanta vulnerability snapshot');
+    const { integration, fetchImpl } = createIntegration(
+      [{ id: 'connection-1', status: 'active', resourceId: 'project-1', accountLabel: null }],
+      { hasNextPage: true, endCursor: null },
+    );
+    await expect(integration.listVulnerabilitiesForOrg('org-1', projects)).rejects.toThrow(
+      'Incomplete Vanta vulnerability snapshot',
+    );
     expect(fetchImpl).toHaveBeenCalledTimes(2);
   });
 });
@@ -109,7 +121,7 @@ function vantaWith(pages: number, statuses: Status[] = ['active']) {
     });
   });
   return new PlatformVantaIntegration({
-    clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+    connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
   });
 }
 

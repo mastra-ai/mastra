@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubIssueReconciler } from '../../github/issue-reconciler.js';
 import type { GithubPullRequestDiscovery, GithubPullRequestReconciler } from '../../github/rules.js';
 import type { dispatchGithubWebhook } from '../../github/webhook.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { PlatformGithubEventWorker } from './event-worker.js';
 import type { PlatformGithubEventDispatchIntegration, PlatformGithubEventStorage } from './event-worker.js';
 
@@ -112,7 +112,7 @@ function createWorker(input: {
     },
   };
   return new PlatformGithubEventWorker({
-    client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl: input.fetchImpl }),
+    client: createPlatformConnectClient({ baseUrl, accessToken, fetch: input.fetchImpl }),
     controller: {} as never,
     github: input.github ?? createGithub(),
     storage: input.storage,
@@ -687,7 +687,7 @@ describe('PlatformGithubEventWorker', () => {
         })),
       );
       const worker = new PlatformGithubEventWorker({
-        client: new PlatformApiClient({ baseUrl, accessToken, fetchImpl }),
+        client: createPlatformConnectClient({ baseUrl, accessToken, fetch: fetchImpl }),
         controller: {} as never,
         github: createGithub(),
         storage: settings.storage,

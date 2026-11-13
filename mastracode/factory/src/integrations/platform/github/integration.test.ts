@@ -413,7 +413,7 @@ describe('PlatformGithubIntegration', () => {
         connection: { type: 'app-installation', installationId: 7 },
         sourceIds: ['acme/app'],
       }),
-    ).rejects.toMatchObject({ status: 429, retryAfterSeconds: 9 });
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 9000 });
   });
 
   it('maps PR, review, inline-comment, and reviewer writes onto platform routes', async () => {
@@ -578,6 +578,28 @@ describe('PlatformGithubIntegration', () => {
 
     expect((fetchImpl.mock.calls[0]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
     expect((fetchImpl.mock.calls[2]?.[1] as RequestInit).headers).toMatchObject({ 'x-acting-user-id': 'user-42' });
+  });
+
+  it('sends the acting user only on the write that names one', async () => {
+    const comment = {
+      id: 91,
+      body: 'Done',
+      htmlUrl: 'https://github.com/acme/app/issues/12#issuecomment-91',
+      user: actor,
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-03T00:00:00Z',
+    };
+    const fetchImpl = vi.fn<typeof fetch>(async () => json(comment));
+    const integration = createIntegration(fetchImpl);
+    const write = { connection: { type: 'app-installation' as const, installationId: 7 }, sourceId: 'acme/app' };
+
+    await integration.intake.createComment({ ...write, issueId: '12', body: 'Done', actingUserId: 'user-42' });
+    await integration.intake.createComment({ ...write, issueId: '12', body: 'Done again' });
+
+    const headers = fetchImpl.mock.calls.map(call => new Headers((call[1] as RequestInit).headers));
+    expect(headers).toHaveLength(2);
+    expect(headers[0]?.get('x-acting-user-id')).toBe('user-42');
+    expect(headers[1]?.has('x-acting-user-id')).toBe(false);
   });
 
   it('assigns a PR to the verified GitHub account of its opener', async () => {

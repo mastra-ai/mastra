@@ -21,7 +21,10 @@ function buildApp(
     if (user) c.set('factoryAuthUser' as never, user as never);
     await next();
   });
-  mountApiRoutes(app, buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ingestFactoryEvent }));
+  mountApiRoutes(
+    app,
+    buildGitLabRoutes({ gitlab, auth: fakeRouteAuth({ enabled: true }), intake, ingestFactoryEvent }),
+  );
   return app;
 }
 
@@ -73,7 +76,10 @@ describe('GitLab UI routes', () => {
     expect(absent.status).toBe(404);
     expect(list).not.toHaveBeenCalled();
 
-    linked.mockResolvedValue({ repository: { id: 'repo-1', externalId: '10', slug: 'acme/app' }, host: 'gitlab.com' } as never);
+    linked.mockResolvedValue({
+      repository: { id: 'repo-1', externalId: '10', slug: 'acme/app' },
+      host: 'gitlab.com',
+    } as never);
     list.mockResolvedValue({
       pullRequests: [
         {
@@ -105,14 +111,16 @@ describe('GitLab UI routes', () => {
     expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
     expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'Merge Request Hook',
-      instanceHost: 'gitlab.com',
-      payload: expect.objectContaining({
-        project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
-        object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'Merge Request Hook',
+        instanceHost: 'gitlab.com',
+        payload: expect.objectContaining({
+          project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
+          object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
+        }),
       }),
-    }));
+    );
   });
 
   it('reports direct server configuration without exposing credentials', async () => {
@@ -155,7 +163,7 @@ describe('GitLab UI routes', () => {
 
   it('reports platform connections including reauthorization state', async () => {
     const gitlab = new PlatformGitLabIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
       connectionId: 'a1b_old',
     });
     vi.spyOn(gitlab, 'listConnections').mockResolvedValue([
@@ -285,9 +293,7 @@ describe('GitLab UI routes', () => {
       }),
       listBindings: vi
         .fn()
-        .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
-        ]),
+        .mockResolvedValue([{ integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' }]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
         conflicts: [],
@@ -369,13 +375,15 @@ describe('GitLab UI routes', () => {
     expect(response.status).toBe(200);
     expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
     expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'Issue Hook',
-      payload: expect.objectContaining({
-        project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
-        object_attributes: expect.objectContaining({ iid: 42, action: 'open', author: { username: 'grace' } }),
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: 'Issue Hook',
+        payload: expect.objectContaining({
+          project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
+          object_attributes: expect.objectContaining({ iid: 42, action: 'open', author: { username: 'grace' } }),
+        }),
       }),
-    }));
+    );
     expect(ingest.mock.calls[0]?.[0].payload.object_attributes.assignees).toBeUndefined();
     expect(ingest.mock.calls[1]?.[0].payload.object_attributes.author).toBeUndefined();
   });

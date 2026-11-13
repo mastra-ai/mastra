@@ -43,7 +43,7 @@ afterEach(() => {
 describe('PlatformIncidentioIntegration', () => {
   it('registers an incident and follow-up reconciliation worker', () => {
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret' },
     });
     const workers = integration.workers({
       storage: { projects: { listAll: async () => [] } },
@@ -65,7 +65,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     const page = await integration.intake.listItems({
@@ -111,7 +111,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     const sources = await integration.intake.listSources({ orgId: 'org-1', userId: 'user-1' });
@@ -149,7 +149,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
     const sourceIds = [
       encodeScopedSourceId('connection-a', INCIDENTIO_INCIDENTS_SOURCE_ID),
@@ -203,7 +203,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
     const sourceIds = [
       encodeScopedSourceId('connection-a', INCIDENTIO_INCIDENTS_SOURCE_ID),
@@ -246,7 +246,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     const resolved = await integration.intake.resolveIntakeDispatch!({
@@ -286,7 +286,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     const resolved = await integration.intake.resolveIntakeDispatch!({
@@ -313,7 +313,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     const issue = await integration.intake.getIssue({
@@ -336,7 +336,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     // No connection id in the token: the fallback resolves the sole active
@@ -358,7 +358,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     // A correctly prefixed but foreign token must not mint a proxy request
@@ -380,7 +380,7 @@ describe('PlatformIncidentioIntegration', () => {
       },
     ]);
     const integration = new PlatformIncidentioIntegration({
-      clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetchImpl },
+      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
     });
 
     await expect(

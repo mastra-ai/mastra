@@ -1,7 +1,8 @@
+import type { ConnectClient } from '@mastra/connect';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
-import type { MastraWorker } from '@mastra/core/worker';
 
+import type { MastraWorker } from '@mastra/core/worker';
 import type { Intake, IntakeSource } from '../../../capabilities/intake.js';
 import { loose } from '../../../routes/route.js';
 import type { FactoryIntegration, IntegrationContext } from '../../base.js';
@@ -9,11 +10,12 @@ import { IssueReconcileWorker } from '../../issue-reconcile-worker.js';
 import { attachVantaRules } from '../../vanta/rules.js';
 import { createVantaSync, DEFAULT_VANTA_SYNC_INTERVAL_MS, VANTA_VULNERABILITIES_SOURCE_ID } from '../../vanta/sync.js';
 import type { VantaVulnerability } from '../../vanta/sync.js';
-import { PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
-import type { PlatformApiClientConfig } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
+import type { PlatformConnectOption } from '../platform-connect.js';
 
 export interface PlatformVantaIntegrationConfig {
-  clientConfig?: PlatformApiClientConfig;
+  /** The Connect client, or options to build one; defaults to the platform environment. */
+  connect?: PlatformConnectOption;
   syncIntervalMs?: number;
 }
 
@@ -42,7 +44,7 @@ interface VantaVulnerabilityPage {
  */
 export class PlatformVantaIntegration implements FactoryIntegration {
   readonly id = 'vanta';
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #syncIntervalMs: number;
 
   readonly intake: Intake = {
@@ -55,14 +57,15 @@ export class PlatformVantaIntegration implements FactoryIntegration {
   };
 
   constructor(config: PlatformVantaIntegrationConfig = {}) {
-    this.#client = new PlatformApiClient(config.clientConfig ?? platformApiClientConfigFromEnv());
+    this.#client = createPlatformConnectClient(config.connect);
     this.#syncIntervalMs = config.syncIntervalMs ?? DEFAULT_VANTA_SYNC_INTERVAL_MS;
   }
 
   async listConnections(): Promise<PlatformIntegrationConnection[]> {
     const result = await this.#client.request<{ connections: PlatformIntegrationConnection[] }>(
       'GET',
-      `/v2/connections?providerKey=${PLATFORM_VANTA_PROVIDER_KEY}`,
+      '/v2/connections',
+      { query: { providerKey: PLATFORM_VANTA_PROVIDER_KEY } },
     );
     return result.connections;
   }
@@ -93,10 +96,10 @@ export class PlatformVantaIntegration implements FactoryIntegration {
         }
         const query = new URLSearchParams({ isDeactivated: 'false', pageSize: String(PAGE_SIZE) });
         if (cursor) query.set('pageCursor', cursor);
-        const result: VantaVulnerabilityPage = await this.#client.request<VantaVulnerabilityPage>(
-          'GET',
-          `/v2/connections/${encodeURIComponent(connection.id)}/proxy/v1/vulnerabilities?${query}`,
-        );
+        const result = (await this.#client.proxy(connection.id, {
+          method: 'GET',
+          path: `/v1/vulnerabilities?${query}`,
+        })) as VantaVulnerabilityPage;
         for (const vulnerability of result.results.data) byId.set(vulnerability.id, vulnerability);
         if (!result.results.pageInfo.hasNextPage) break;
         if (!result.results.pageInfo.endCursor || page === MAX_PAGES - 1) {
@@ -108,13 +111,20 @@ export class PlatformVantaIntegration implements FactoryIntegration {
     return [...byId.values()];
   }
 
-  async listVulnerabilitiesForOrg(orgId: string, factoryProjects: ReadonlyArray<{ id: string; orgId: string }>): Promise<VantaVulnerability[] | null> {
+  async listVulnerabilitiesForOrg(
+    orgId: string,
+    factoryProjects: ReadonlyArray<{ id: string; orgId: string }>,
+  ): Promise<VantaVulnerability[] | null> {
     const connections = await this.listConnections();
     const ownerByProject = new Map(factoryProjects.map(project => [project.id, project.orgId]));
     // A global or unrecognized connection cannot be attributed safely across organizations.
-    if (connections.some(connection => connection.resourceId && !ownerByProject.has(connection.resourceId))) return null;
-    if (new Set(factoryProjects.map(project => project.orgId)).size > 1 &&
-        connections.some(connection => !connection.resourceId)) return null;
+    if (connections.some(connection => connection.resourceId && !ownerByProject.has(connection.resourceId)))
+      return null;
+    if (
+      new Set(factoryProjects.map(project => project.orgId)).size > 1 &&
+      connections.some(connection => !connection.resourceId)
+    )
+      return null;
     const owned = connections.filter(connection =>
       connection.resourceId ? ownerByProject.get(connection.resourceId) === orgId : true,
     );

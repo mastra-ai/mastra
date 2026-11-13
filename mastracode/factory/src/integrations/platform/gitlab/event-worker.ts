@@ -1,15 +1,15 @@
 import type { MountedMastraCode } from '@mastra/code-sdk';
+import type { ConnectClient } from '@mastra/connect';
 import { isLeaseProvider, NoopLeaseProvider } from '@mastra/core/events';
 import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
-import type { WorkerDeps } from '@mastra/core/worker';
 
+import type { WorkerDeps } from '@mastra/core/worker';
 import type { IntegrationStorageHandle } from '../../../storage/domains/integrations/base.js';
 import type { GitLabWebhookDispatchIntegration } from '../../gitlab/webhook-dispatch.js';
 import { parseGitLabWebhookBody, processGitLabWebhook } from '../../gitlab/webhook.js';
 import type { ParsedGitLabWebhook } from '../../gitlab/webhook.js';
-import type { PlatformApiClient } from '../api-client.js';
-import { PlatformApiError } from '../api-client.js';
+import { platformErrorStatus, platformRetryDelayMs } from '../platform-connect.js';
 
 const DEFAULT_POLL_INTERVAL_MS = 20_000;
 const EVENT_PAGE_SIZE = 500;
@@ -53,7 +53,7 @@ export interface PlatformGitLabEventConnection {
 export type PlatformGitLabEventDispatchIntegration = GitLabWebhookDispatchIntegration;
 
 export interface PlatformGitLabEventWorkerConfig {
-  client: PlatformApiClient;
+  client: ConnectClient;
   controller: MountedMastraCode['controller'];
   gitlab: PlatformGitLabEventDispatchIntegration;
   storage: PlatformGitLabEventStorage;
@@ -80,7 +80,7 @@ export interface PlatformGitLabEventWorkerConfig {
 export class PlatformGitLabEventWorker extends MastraWorker {
   readonly name = 'platform-gitlab-events';
 
-  readonly #client: PlatformApiClient;
+  readonly #client: ConnectClient;
   readonly #controller: MountedMastraCode['controller'];
   readonly #gitlab: PlatformGitLabEventDispatchIntegration;
   readonly #storage: PlatformGitLabEventStorage;
@@ -173,7 +173,7 @@ export class PlatformGitLabEventWorker extends MastraWorker {
       if (!(await this.#ensureLease())) return;
       nextDelay = await this.#poll();
     } catch (error) {
-      nextDelay = retryDelay(error, this.#intervalMs);
+      nextDelay = platformRetryDelayMs(error, this.#intervalMs);
       this.deps?.logger.error('Platform GitLab event polling cycle failed', {
         error: error instanceof Error ? error.message : String(error),
         retryInMs: nextDelay,
@@ -230,24 +230,25 @@ export class PlatformGitLabEventWorker extends MastraWorker {
       try {
         await this.#pollConnection(connection.id);
       } catch (error) {
-        if (error instanceof PlatformApiError && (error.status === 401 || error.status === 404)) {
+        const status = platformErrorStatus(error);
+        if (status === 401 || status === 404) {
           // Platform no longer serves this connection (revoked, expired or
           // deleted). Its status will read needs_reauth on the next listing;
           // nothing to retry here, so the other connections keep flowing.
           this.deps?.logger.warn('Platform GitLab connection needs reauthorization; skipped this cycle', {
             connectionId: connection.id,
-            status: error.status,
+            status,
           });
           continue;
         }
-        const delay = retryDelay(error, this.#intervalMs);
+        const delay = platformRetryDelayMs(error, this.#intervalMs);
         retryInMs = Math.max(retryInMs, delay);
         this.deps?.logger.error('Platform GitLab connection event polling failed', {
           connectionId: connection.id,
           error: error instanceof Error ? error.message : String(error),
           retryInMs: delay,
         });
-        if (error instanceof PlatformApiError && error.status === 429) break;
+        if (platformErrorStatus(error) === 429) break;
       }
     }
     return retryInMs;
@@ -396,11 +397,4 @@ function normalizeSettings(value: PlatformGitLabEventWorkerSettings | null): Pla
     }
   }
   return { version: 1, connections };
-}
-
-function retryDelay(error: unknown, fallbackMs: number): number {
-  if (error instanceof PlatformApiError && error.status === 429 && error.retryAfterSeconds !== null) {
-    return Math.max(fallbackMs, error.retryAfterSeconds * 1_000);
-  }
-  return fallbackMs;
 }
