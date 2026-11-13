@@ -87,7 +87,11 @@ import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
 import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { KeptCards } from './integrations/kept-cards.js';
-import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
+import {
+  buildConnectToolsRoute,
+  buildPlatformConnectRoutes,
+  isPlatformConnectProviderSource,
+} from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
 import { createPlatformConnectClient } from './integrations/platform/platform-connect.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
@@ -2074,7 +2078,13 @@ export class MastraFactory {
               }
             }
             if (integration.agentTools) {
-              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              try {
+                mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              } catch (error) {
+                console.warn(
+                  `[factory] ${integration.id} tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
@@ -2272,7 +2282,9 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: createPlatformConnectClient(),
+                providers: integrations.flatMap(integration =>
+                  isPlatformConnectProviderSource(integration) ? integration.platformConnectProviders() : [],
+                ),
               })
             : []),
           buildConnectToolsRoute(

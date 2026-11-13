@@ -20,46 +20,39 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import { loose } from '../../../routes/route.js';
 import type { RouteAuth } from '../../../routes/route.js';
+import type { PlatformConnectBinding } from '../foundation/connect-binding.js';
 import { platformErrorMessage, platformErrorStatus } from '../platform-connect.js';
 import { offersSessionTools } from './session-tools.js';
 
 type RouteContext = Context;
 
-export interface PlatformConnectProvider {
+/**
+ * One provider the Factory SPA may connect through these routes. Platform
+ * integrations register their own providers, so the route family only serves
+ * providers whose integration is installed.
+ */
+export interface PlatformConnectProviderRegistration {
+  /** SPA-facing provider slug, the `:provider` path segment. */
+  provider: string;
   /** Platform integration id used to mint connect sessions. */
   integrationId: string;
   /** Connection `integrationId` variants that belong to this provider. */
   connectionIntegrationIds: readonly string[];
+  /** The owning integration's Connect plumbing. */
+  binding: PlatformConnectBinding;
 }
 
-/**
- * Providers the Factory SPA may connect through these routes. Keys are the
- * SPA-facing provider slugs; `integrationId` is the Platform catalog id used
- * for new connect sessions. Provider-specific PRs extend this registry when
- * their Factory integrations are available.
- */
-export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider> = {
-  jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
-  'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
-  gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
-  vanta: { integrationId: 'vanta', connectionIntegrationIds: ['vanta'] },
-};
-
-interface PlatformConnectionRow {
-  id: string;
-  integrationId: string;
-  status: 'active' | 'needs_reauth';
-  accountLabel: string | null;
-  displayName?: string | null;
-  connectedAt?: string;
+/** An integration that registers providers with the platform connect routes. */
+export interface PlatformConnectProviderSource {
+  platformConnectProviders(): PlatformConnectProviderRegistration[];
 }
 
-interface PlatformSessionResponse {
-  connectionId: string;
-  integrationId: string;
-  connectUrl: string;
-  sessionToken: string;
-  expiresAt: string;
+export function isPlatformConnectProviderSource(value: unknown): value is PlatformConnectProviderSource {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as Partial<PlatformConnectProviderSource>).platformConnectProviders === 'function'
+  );
 }
 
 interface ProjectConnectionRow {
@@ -77,7 +70,7 @@ interface CatalogEntry {
 
 export interface BuildPlatformConnectRoutesOptions {
   auth: RouteAuth;
-  client: ConnectClient;
+  providers: readonly PlatformConnectProviderRegistration[];
 }
 
 export interface ConnectToolsSource {
@@ -109,9 +102,12 @@ async function resolveOrgTenant(
   return { tenant: { orgId: tenant.orgId, userId: tenant.userId } };
 }
 
-function providerFromParam(c: RouteContext): PlatformConnectProvider | null {
+function providerFromParam(
+  c: RouteContext,
+  providers: ReadonlyMap<string, PlatformConnectProviderRegistration>,
+): PlatformConnectProviderRegistration | null {
   const provider = c.req.param('provider');
-  return provider ? (PLATFORM_CONNECT_PROVIDERS[provider] ?? null) : null;
+  return provider ? (providers.get(provider) ?? null) : null;
 }
 
 function platformError(c: RouteContext, err: unknown) {
@@ -179,11 +175,13 @@ export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSour
 }
 
 /**
- * Build the `/web/integrations/platform/*` routes. Callers only mount these
- * when Platform machine credentials are configured.
+ * Build the `/web/integrations/platform/*` routes for the registered
+ * providers. Callers only mount these when Platform machine credentials are
+ * configured.
  */
 export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOptions): ApiRoute[] {
-  const { auth, client } = options;
+  const { auth } = options;
+  const providers = new Map(options.providers.map(registration => [registration.provider, registration]));
 
   return [
     registerApiRoute('/web/integrations/platform/:provider/connections', {
@@ -191,16 +189,23 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
-        const provider = providerFromParam(c);
+        const provider = providerFromParam(c, providers);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         try {
-          const result = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
-          const connections = result.connections.filter(connection =>
-            provider.connectionIntegrationIds.includes(connection.integrationId),
-          );
-          return c.json({ connections });
+          const listed = await provider.binding.listConnections({ fresh: true });
+          const connections = listed
+            .filter(connection => provider.connectionIntegrationIds.includes(connection.integrationId))
+            .map(connection => ({
+              id: connection.id,
+              integrationId: connection.integrationId,
+              status: connection.status,
+              accountLabel: connection.accountLabel,
+              ...(connection.connectedAt ? { connectedAt: connection.connectedAt } : {}),
+            }));
+          const needsLinking = provider.binding.needsLinking;
+          return c.json({ connections, ...(needsLinking.length > 0 ? { needsLinking } : {}) });
         } catch (err) {
           return platformError(c, err);
         }
@@ -211,16 +216,15 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
-        const provider = providerFromParam(c);
+        const provider = providerFromParam(c, providers);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         try {
-          const session = await client.request<PlatformSessionResponse>(
-            'POST',
-            `/v2/integrations/${encodeURIComponent(provider.integrationId)}/connect-sessions`,
-            { body: {} },
-          );
+          // Through the project route, so the new connection is born linked
+          // to the Factory project and its events are published to it.
+          const session = await provider.binding.connect.createConnectSession(provider.integrationId);
+          provider.binding.invalidateConnections();
           c.header('Cache-Control', 'no-store');
           return c.json(session, 201);
         } catch (err) {
@@ -233,29 +237,52 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
       requiresAuth: false,
       handler: async rawContext => {
         const c = loose(rawContext);
-        const provider = providerFromParam(c);
+        const provider = providerFromParam(c, providers);
         if (!provider) return c.json({ error: 'unknown_provider' }, 404);
         const resolved = await resolveOrgTenant(c, auth);
         if ('response' in resolved) return resolved.response;
         const connectionId = c.req.param('connectionId');
         if (!connectionId) return c.json({ error: 'connection_required' }, 400);
         try {
-          // Confirm the connection belongs to this provider before minting so
-          // one provider's page cannot reconnect a different provider's
-          // connection through this route family.
-          const listed = await client.request<{ connections: PlatformConnectionRow[] }>('GET', '/v2/connections');
-          const connection = listed.connections.find(
+          // Confirm the connection is this project's and belongs to this
+          // provider before minting, so one provider's page cannot reconnect
+          // another provider's (or another project's) connection.
+          const listed = await provider.binding.listConnections({ fresh: true });
+          const connection = listed.find(
             candidate =>
               candidate.id === connectionId && provider.connectionIntegrationIds.includes(candidate.integrationId),
           );
           if (!connection) return c.json({ error: 'connection_not_found' }, 404);
-          const session = await client.request<PlatformSessionResponse>(
-            'POST',
-            `/v2/connections/${encodeURIComponent(connectionId)}/reconnect-session`,
-            { body: {} },
-          );
+          const session = await provider.binding.connect.createReconnectSession(connectionId);
+          provider.binding.invalidateConnections();
           c.header('Cache-Control', 'no-store');
           return c.json(session, 201);
+        } catch (err) {
+          return platformError(c, err);
+        }
+      },
+    }),
+    registerApiRoute('/web/integrations/platform/:provider/link-connections', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async rawContext => {
+        const c = loose(rawContext);
+        const provider = providerFromParam(c, providers);
+        if (!provider) return c.json({ error: 'unknown_provider' }, 404);
+        const resolved = await resolveOrgTenant(c, auth);
+        if ('response' in resolved) return resolved.response;
+        if (!(await auth.isOrganizationAdmin(c, resolved.tenant.orgId))) {
+          return c.json(
+            {
+              error: 'organization_admin_required',
+              message: 'Organization administrator access is required to link connections.',
+            },
+            403,
+          );
+        }
+        try {
+          const result = await provider.binding.linkOrgConnections({ retryOnly: 'transient' });
+          return c.json(result);
         } catch (err) {
           return platformError(c, err);
         }

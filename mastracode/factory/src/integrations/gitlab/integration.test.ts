@@ -61,7 +61,7 @@ const platformConnections = [
 
 function platform(connectionId = 'a1b_mastra'): PlatformGitLabIntegration {
   return new PlatformGitLabIntegration({
-    connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+    connect: { baseUrl: 'https://integrations.example.com', projectId: 'proj_factory', accessToken: 'platform-token' },
     connectionId,
   });
 }
@@ -501,7 +501,11 @@ describe('PlatformGitLabIntegration', () => {
     expect(disabled.workers({ storage: context.storage } as never)).toEqual([]);
     expect(
       new PlatformGitLabIntegration({
-        connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+        connect: {
+          baseUrl: 'https://integrations.example.com',
+          projectId: 'proj_factory',
+          accessToken: 'platform-token',
+        },
         pollingEnabled: true,
         pollingIntervalMs: 30_000,
       }).diagnostics(),
@@ -525,7 +529,7 @@ describe('PlatformGitLabIntegration', () => {
       let credentialStatus = 200;
       const fetchMock = vi.fn<typeof fetch>(async input => {
         const url = String(input);
-        if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+        if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
         if (url.endsWith('/v2/connections/a1b_mastra/credentials')) return json(credentialResponse, credentialStatus);
         throw new Error(`Unexpected request: ${url}`);
       });
@@ -577,7 +581,7 @@ describe('PlatformGitLabIntegration', () => {
   it('lists projects only from the explicitly configured Platform connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([project(10, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -585,7 +589,7 @@ describe('PlatformGitLabIntegration', () => {
 
     const sources = await platform().intake.listSources({ orgId: 'org-1', userId: 'user-1' });
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      'https://integrations.example.com/v2/connections?providerKey=gitlab',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     );
 
     expect(sources.map(source => source.name)).toEqual(['mastra/platform']);
@@ -601,7 +605,7 @@ describe('PlatformGitLabIntegration', () => {
   it('keeps issue references scoped to the configured connection', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_mastra/proxy')) return json([issue(10, 42, 'mastra/platform')]);
       throw new Error(`Unexpected request: ${url}`);
     });
@@ -652,14 +656,18 @@ describe('PlatformGitLabIntegration', () => {
   it('tries another account only when the first account cannot access a canonical project', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Not found' }, 404);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -676,14 +684,18 @@ describe('PlatformGitLabIntegration', () => {
   it('preserves transient project lookup failures instead of masking them as another account miss', async () => {
     const fetchMock = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/v2/connections?providerKey=gitlab')) return json({ connections: platformConnections });
+      if (url.includes('/v2/projects/proj_factory/connections')) return json({ connections: platformConnections });
       if (url.includes('a1b_acme/proxy/api/v4/projects/10')) return json({ message: 'Temporarily unavailable' }, 503);
       if (url.includes('a1b_mastra/proxy/api/v4/projects/10')) return json(project(10, 'mastra/platform'));
       throw new Error(`Unexpected request: ${url}`);
     });
     vi.stubGlobal('fetch', fetchMock);
     const gitlab = new PlatformGitLabIntegration({
-      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     const reference = encodeIssueReference({ host: 'gitlab.com', projectId: '10', issueIid: 42 });
 
@@ -731,28 +743,34 @@ describe('PlatformGitLabIntegration', () => {
     await expect(gitlab.getWorkItemAuthorUsername('direct', '10', 'merge_request', 17)).resolves.toBe('review-author');
   });
   it('uses MASTRA_GITLAB_CONNECTION_ID as an optional filter and otherwise discovers every GitLab connection', async () => {
-    const fetchMock = vi.fn<typeof fetch>(async input => {
-      const providerKey = new URL(String(input)).searchParams.get('providerKey');
-      return json({ connections: platformConnections.filter(connection => connection.integrationId === providerKey) });
-    });
+    // The project listing returns every provider's connections; GitLab keeps only its own.
+    const fetchMock = vi.fn<typeof fetch>(async () => json({ connections: platformConnections }));
     vi.stubGlobal('fetch', fetchMock);
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', 'a1b_mastra');
     const filtered = new PlatformGitLabIntegration({
-      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(filtered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }]);
     expect(filtered.diagnostics()).toMatchObject({ connectionFilterConfigured: true });
 
     vi.stubEnv('MASTRA_GITLAB_CONNECTION_ID', '');
     const discovered = new PlatformGitLabIntegration({
-      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
     });
     await expect(discovered.listConnections()).resolves.toMatchObject([{ id: 'a1b_mastra' }, { id: 'a1b_acme' }]);
     expect(discovered.diagnostics()).toMatchObject({ connectionFilterConfigured: false });
-    // One query per listing: only the Platform's `gitlab` integration is discovered.
-    expect(fetchMock.mock.calls.map(([url]) => new URL(String(url)).searchParams.get('providerKey'))).toEqual([
-      'gitlab',
-      'gitlab',
+    // One project listing per integration; the Jira connection in it is never discovered.
+    expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
+      'https://integrations.example.com/v2/projects/proj_factory/connections',
     ]);
   });
 });

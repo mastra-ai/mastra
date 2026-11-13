@@ -1580,6 +1580,9 @@ describe('MastraFactory.prepare', () => {
 
         expect(Object.keys(tools).filter(name => name.startsWith('linear_'))).toEqual([]);
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('Mastra Connect tools are unavailable for this run'));
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('[factory] incidentio tools are unavailable for this run'),
+        );
       });
 
       it("offers the host's own tools instead of the project's connections", async () => {

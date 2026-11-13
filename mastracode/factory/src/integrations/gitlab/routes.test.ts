@@ -163,7 +163,11 @@ describe('GitLab UI routes', () => {
 
   it('reports platform connections including reauthorization state', async () => {
     const gitlab = new PlatformGitLabIntegration({
-      connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
+      connect: {
+        baseUrl: 'https://integrations.example.com',
+        projectId: 'proj_factory',
+        accessToken: 'platform-token',
+      },
       connectionId: 'a1b_old',
     });
     vi.spyOn(gitlab, 'listConnections').mockResolvedValue([
