@@ -276,7 +276,10 @@ export class PlatformEventsWorker extends MastraWorker {
       this.#leaseRetryTimer.unref?.();
       return;
     }
-    // The previous holder advanced the cursors while this replica waited.
+    // The previous holder advanced the cursors while this replica waited. A
+    // save it started just before losing the lease can still land after this
+    // read, so the cursor can move back; that only replays events, which
+    // handlers already tolerate (delivery is at-least-once).
     try {
       this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
     } catch (error) {
