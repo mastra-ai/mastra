@@ -23,6 +23,7 @@ import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '.
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
 import { MaterializeError } from '../integrations/github/sandbox.js';
+import type { CardSource } from '../integrations/kept-cards.js';
 import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
@@ -589,6 +590,8 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry | ProjectBoardSource;
+    /** Passed for the workers' context only: routes do not sweep. */
+    keptCards?: CardSource;
     factoryReady: boolean;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
@@ -638,7 +641,12 @@ export function buildIntegrationContext(
     ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady
       ? {
-          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+          runtime: {
+            configVersion: deps.configVersion,
+            workItems: deps.domains.workItems,
+            boards: deps.boardRegistry,
+            ...(deps.keptCards ? { keptCards: deps.keptCards } : {}),
+          },
         }
       : {}),
     ...(deps.emitAudit || deps.onRepositoryPush
