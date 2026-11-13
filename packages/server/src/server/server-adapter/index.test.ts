@@ -9,7 +9,9 @@ import { RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod/v4';
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE } from '../handlers/agents';
+import { GET_RESOURCE_WORKING_MEMORY_ROUTE } from '../handlers/memory';
 import { HTTPException } from '../http-exception';
 import { KNOWLEDGE_ROUTES } from './routes';
 import { createRoute } from './routes/route-builder';
@@ -1234,6 +1236,62 @@ describe('Knowledge route FGA metadata', () => {
 
     const routes: string[] = warn.mock.calls[0]?.[1]?.routes ?? [];
     expect(routes.filter(route => route.includes('/knowledge'))).toEqual(['GET /knowledge']);
+  });
+});
+
+describe('resource working-memory route FGA metadata', () => {
+  const contextFor = (contextResourceId?: string) => {
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    if (contextResourceId) requestContext.set(MASTRA_RESOURCE_ID_KEY, contextResourceId);
+    return requestContext;
+  };
+
+  it("checks memory:read on the caller's own resource when route metadata is required, ignoring a spoofed resourceId", async () => {
+    const { checkRouteFGA } = await import('./index');
+    const allowed = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+
+    const result = await checkRouteFGA(
+      { getServer: () => ({ fga: allowed }) },
+      GET_RESOURCE_WORKING_MEMORY_ROUTE as any,
+      contextFor('alice'),
+      { agentId: 'test-agent', resourceId: 'bob' },
+    );
+
+    expect(result).toBeNull();
+    expect(allowed.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({ resource: { type: 'resource', id: 'alice' }, permission: 'memory:read' }),
+    );
+  });
+
+  it('uses the requested resourceId for a caller with no context resource, and refuses a denied caller with 403', async () => {
+    const { checkRouteFGA } = await import('./index');
+    const params = { agentId: 'test-agent', resourceId: 'shared-resource' };
+
+    const allowed = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+    expect(
+      await checkRouteFGA(
+        { getServer: () => ({ fga: allowed }) },
+        GET_RESOURCE_WORKING_MEMORY_ROUTE as any,
+        contextFor(),
+        params,
+      ),
+    ).toBeNull();
+    expect(allowed.check).toHaveBeenCalledWith(
+      { id: 'user-1' },
+      expect.objectContaining({ resource: { type: 'resource', id: 'shared-resource' }, permission: 'memory:read' }),
+    );
+
+    const denied = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+    expect(
+      await checkRouteFGA(
+        { getServer: () => ({ fga: denied }) },
+        GET_RESOURCE_WORKING_MEMORY_ROUTE as any,
+        contextFor(),
+        params,
+      ),
+    ).toMatchObject({ status: 403 });
   });
 });
 

@@ -20,7 +20,7 @@ Integration guides:
 
 ## With Next.js on Vercel
 
-If you've integrated Mastra with Next.js [by following our guide](/integrations/frameworks/next-js) and plan to deploy to Vercel, add `serverExternalPackages: ["@mastra/*"]` to your `next.config.ts`:
+If you've integrated Mastra with Next.js and plan to deploy to Vercel, make sure your `next.config.ts` sets `serverExternalPackages: ["@mastra/*"]`. The [Next.js guide](/integrations/frameworks/next-js) adds it during setup. If your config doesn't have it, add it:
 
 ```typescript {4} title="next.config.ts"
 import type { NextConfig } from 'next'
