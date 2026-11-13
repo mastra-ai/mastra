@@ -5,27 +5,3 @@
     opacity: var(--sidebar-hold-opacity);
   }
 }
-
-/* The logo sits 4px further right expanded (over the rows' icons) than on the rail's centre. Whichever logo appears
- * glides those 4px into place instead of jumping. */
-@keyframes sidebar-logo-from-right {
-  from {
-    translate: 4px 0;
-  }
-}
-
-@keyframes sidebar-logo-from-left {
-  from {
-    translate: -4px 0;
-  }
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .sidebar-layout [data-slot='sidebar-collapsed-logo'] {
-    animation: sidebar-logo-from-right var(--resize-dur) var(--resize-ease);
-  }
-
-  .sidebar-layout [data-slot='sidebar-brand'] > :first-child {
-    animation: sidebar-logo-from-left var(--resize-dur) var(--resize-ease);
-  }
-}

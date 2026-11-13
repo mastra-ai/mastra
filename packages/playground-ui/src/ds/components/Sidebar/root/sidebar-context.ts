@@ -3,6 +3,14 @@ import type { LinkComponent } from '@/ds/types/link-component';
 
 export type SidebarState = 'default' | 'collapsed';
 
+/** Which way the panel is animating between widths, while it does. */
+export type SidebarMotion = 'collapsing' | 'expanding';
+
+export type SidebarSwitchOptions = {
+  /** Animate with the panel's width (the toggle's collapse), instead of switching at once. */
+  animate?: boolean;
+};
+
 type SidebarContextValue = {
   state: SidebarState;
   desktopState: SidebarState;
@@ -18,10 +26,15 @@ type SidebarContextValue = {
   setMobileDrawerPresent: (present: boolean) => void;
   toggleSidebar: () => void;
   setWidth: (width: number) => void;
-  collapse: () => void;
-  expand: () => void;
+  collapse: (options?: SidebarSwitchOptions) => void;
+  expand: (options?: SidebarSwitchOptions) => void;
   commit: () => void;
   setGestureActive: (active: boolean) => void;
+  /** Which way the panel is animating between widths, while it does. */
+  motion?: SidebarMotion;
+  /** The desktop panel registers its element here: its width variable is written on it, not on the provider's
+   * scope, which wraps the whole app (a variable change there restyles every element on the page). */
+  setPanelElement: (el: HTMLDivElement | null) => void;
   LinkComponent?: LinkComponent;
 };
 

@@ -1,0 +1,67 @@
+/* Collapse and expand.
+ * While the panel animates between widths the panel is marked `data-sidebar-motion="collapsing"` or
+ * `"expanding"`. Nothing swaps mid-way: items keep their expanded layout and narrow with the panel, only their
+ * text fades, and the rail takes over when the width settles, with every icon already where it was. Collapsing,
+ * text is gone in the first half; expanding, it fades in over the last 60%. Under reduced motion the provider
+ * sets no marker, so none of this runs. */
+.sidebar-layout[data-sidebar-motion] :is([data-slot='sidebar-nav-label'], [data-slot='sidebar-nav-label'] *) {
+  text-overflow: clip;
+}
+
+.sidebar-layout[data-sidebar-motion='collapsing']
+  :is(
+    [data-slot='sidebar-nav-label'],
+    [data-slot='sidebar-brand'] > :not(:first-child),
+    [data-slot='sidebar-header'] > :not([data-slot='sidebar-brand'], a),
+    nav header,
+    [data-slot='sidebar-footer'] button > :not(:first-child)
+  ) {
+  opacity: 0;
+  transition: opacity calc(var(--resize-dur) * 0.5) ease-out;
+}
+
+.sidebar-layout[data-sidebar-motion='expanding']
+  :is(
+    [data-slot='sidebar-nav-label'],
+    [data-slot='sidebar-brand'] > :not(:first-child),
+    [data-slot='sidebar-header'] > :not([data-slot='sidebar-brand'], a),
+    nav header,
+    [data-slot='sidebar-footer'] button > :not(:first-child)
+  ) {
+  animation: sidebar-text-in var(--resize-dur) ease-out both;
+}
+
+@keyframes sidebar-text-in {
+  from,
+  40% {
+    opacity: 0;
+  }
+}
+
+/* A rail section's separator line fades in as the rail takes over. */
+@keyframes sidebar-rail-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* The logo sits 4px further right expanded (on the rows' icons) than on the rail's centre: it glides those 4px. */
+@media (prefers-reduced-motion: no-preference) {
+  .sidebar-layout [data-slot='sidebar-brand'] > :first-child {
+    transition: translate var(--resize-dur) var(--resize-ease);
+  }
+}
+
+.sidebar-layout[data-sidebar-motion='collapsing'] [data-slot='sidebar-brand'] > :first-child {
+  translate: -4px 0;
+}
+
+.sidebar-layout[data-sidebar-motion='expanding'] [data-slot='sidebar-brand'] > :first-child {
+  animation: sidebar-logo-in var(--resize-dur) var(--resize-ease) both;
+}
+
+@keyframes sidebar-logo-in {
+  from {
+    translate: -4px 0;
+  }
+}

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -39,6 +39,13 @@ const getSidebarScope = () => {
   if (!scope) throw new Error('Sidebar scope was not rendered');
   return scope;
 };
+
+// The provider writes the width and the motion on the panel, not on its app-wide scope.
+function panelOf(scope: HTMLElement): HTMLElement {
+  const panel = scope.querySelector<HTMLElement>('.sidebar-layout');
+  if (!panel) throw new Error('No sidebar panel in this scope');
+  return panel;
+}
 
 describe('Sidebar resize handle gesture', () => {
   const renderCollapsedSidebar = () => {
@@ -191,7 +198,7 @@ describe('Sidebar resize handle keyboard', () => {
     return { scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
 
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
+  const widthOf = (scope: HTMLElement) => panelOf(scope).style.getPropertyValue('--sidebar-width');
 
   it('narrows the sidebar a step at a time', () => {
     const { scope, separator } = renderSidebar();
@@ -358,7 +365,7 @@ describe('Sidebar minimum width raised at runtime', () => {
       </Sidebar>
     </SidebarProvider>
   );
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
+  const widthOf = (scope: HTMLElement) => panelOf(scope).style.getPropertyValue('--sidebar-width');
 
   it('widens a narrower sidebar, then returns it to the width the user chose', () => {
     mockMatchMedia(false);
@@ -424,7 +431,7 @@ describe('Sidebar dragging the resize handle', () => {
     return { ...view, scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
 
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
+  const widthOf = (scope: HTMLElement) => panelOf(scope).style.getPropertyValue('--sidebar-width');
   const press = (separator: HTMLElement, clientX: number, pointerId = 1, button = 0) =>
     fireEvent(separator, pointerEvent('pointerdown', { button, pointerId, clientX }));
   const move = (clientX: number, pointerId = 1) =>
@@ -903,6 +910,32 @@ describe('Sidebar', () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  it('slides between pages on navigation but crossfades them in place when the sidebar collapses or expands', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-stack-instant-test" disableKeyboardShortcut={false}>
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    const stack = () => document.querySelector('[data-slot="sidebar-nav-stack"]');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    expect(stack()?.hasAttribute('data-instant')).toBe(false);
+
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="collapsed"]')).not.toBeNull());
+    expect(stack()?.hasAttribute('data-instant')).toBe(true);
+
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="default"]')).not.toBeNull());
+    expect(stack()?.hasAttribute('data-instant')).toBe(true);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to main navigation: Account settings' }));
+    await waitFor(() => expect(stack()?.getAttribute('data-value')).toBe('root'));
+    expect(stack()?.hasAttribute('data-instant')).toBe(false);
+  });
+
   it('renders only the active takeover page once its exit finishes', async () => {
     mockMatchMedia(false);
     render(
@@ -1006,20 +1039,130 @@ describe('Sidebar', () => {
   });
 });
 
-describe('Sidebar padding', () => {
-  it('insets its content on every side, so the header and footer never touch an edge', () => {
+describe('Sidebar collapse animation', () => {
+  const widthOf = (scope: HTMLElement) => panelOf(scope).style.getPropertyValue('--sidebar-width');
+  const renderSidebar = () => {
     mockMatchMedia(false);
-    render(
+    // The panel's width transition, which the collapse waits for before showing the rail.
+    document.documentElement.style.setProperty('--resize-dur', '200ms');
+    function Toggle() {
+      const { toggleSidebar, expand } = useSidebar();
+      return (
+        <>
+          <button type="button" onClick={toggleSidebar}>
+            Toggle
+          </button>
+          <button type="button" onClick={() => expand()}>
+            Expand
+          </button>
+        </>
+      );
+    }
+    const tree = () => (
       <SidebarProvider>
+        <Toggle />
         <Sidebar>
-          <Sidebar.Nav />
-          <Sidebar.Footer />
+          <Sidebar.Nav>
+            <Sidebar.NavList>
+              <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+            </Sidebar.NavList>
+          </Sidebar.Nav>
         </Sidebar>
-      </SidebarProvider>,
+      </SidebarProvider>
     );
-    const content = document.querySelector('.sidebar-layout > div');
-    expect(content?.className).toMatch(/\bpx-2\b/);
-    expect(content?.className).toMatch(/\bpy-2\.25\b/);
-    expect(document.querySelector('[data-slot=sidebar-footer]')?.className).not.toMatch(/\bpb-/);
+    const view = render(tree());
+    return {
+      scope: getSidebarScope(),
+      toggle: screen.getByRole('button', { name: 'Toggle' }),
+      // A new element, so the provider renders again (an app re-rendering above the sidebar).
+      rerender: () => view.rerender(tree()),
+    };
+  };
+
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => {
+    vi.useRealTimers();
+    document.documentElement.style.removeProperty('--resize-dur');
+  });
+
+  it('keeps the expanded rows while the panel narrows, and shows the rail once it settles', () => {
+    const { scope, toggle } = renderSidebar();
+
+    fireEvent.click(toggle);
+    // The panel heads for the rail's width with the expanded layout: labels fade, nothing swaps yet.
+    expect(panelOf(scope).getAttribute('data-sidebar-motion')).toBe('collapsing');
+    expect(scope.getAttribute('data-sidebar-state')).toBe('default');
+    expect(widthOf(scope)).toBe('60px');
+    expect(screen.getByText('Agents')).toBeDefined();
+
+    act(() => vi.advanceTimersByTime(200));
+    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
+    expect(panelOf(scope).hasAttribute('data-sidebar-motion')).toBe(false);
+    expect(window.localStorage.getItem('sidebar:state')).toBe('collapsed');
+  });
+
+  it('turns a collapse around when toggled again before it ends', () => {
+    const { scope, toggle } = renderSidebar();
+
+    fireEvent.click(toggle);
+    act(() => vi.advanceTimersByTime(100));
+    fireEvent.click(toggle);
+    expect(panelOf(scope).getAttribute('data-sidebar-motion')).toBe('expanding');
+    expect(widthOf(scope)).toBe('232px');
+
+    act(() => vi.advanceTimersByTime(300));
+    expect(scope.getAttribute('data-sidebar-state')).toBe('default');
+    expect(panelOf(scope).hasAttribute('data-sidebar-motion')).toBe(false);
+    expect(window.localStorage.getItem('sidebar:state')).toBe('default');
+  });
+
+  it('remembers a collapse that a click on the resize handle lands in the middle of', () => {
+    const { scope, toggle, rerender } = renderSidebar();
+
+    fireEvent.click(toggle);
+    rerender();
+    // Pressing and releasing the handle saves the sidebar's state while the collapse is still animating.
+    const separator = screen.getByRole('separator');
+    fireEvent(separator, pointerEvent('pointerdown', { button: 0, pointerId: 1, clientX: 232 }));
+    fireEvent(window, pointerEvent('pointerup', { pointerId: 1 }));
+    expect(window.localStorage.getItem('sidebar:state')).toBe('collapsed');
+
+    act(() => vi.advanceTimersByTime(200));
+    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
+  });
+
+  it('keeps collapsing when the edge is dragged inward during the collapse', () => {
+    const { scope, toggle } = renderSidebar();
+
+    fireEvent.click(toggle);
+    const separator = screen.getByRole('separator');
+    fireEvent(separator, pointerEvent('pointerdown', { button: 0, pointerId: 1, clientX: 150 }));
+    fireEvent(window, pointerEvent('pointermove', { pointerId: 1, clientX: 100 }));
+    expect(panelOf(scope).getAttribute('data-sidebar-motion')).toBe('collapsing');
+
+    act(() => vi.advanceTimersByTime(200));
+    fireEvent(window, pointerEvent('pointerup', { pointerId: 1 }));
+    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
+  });
+
+  it('opens back to its width when expanded without animation during a collapse', () => {
+    const { scope, toggle } = renderSidebar();
+
+    fireEvent.click(toggle);
+    act(() => vi.advanceTimersByTime(100));
+    fireEvent.click(screen.getByRole('button', { name: 'Expand' }));
+
+    expect(scope.getAttribute('data-sidebar-state')).toBe('default');
+    expect(panelOf(scope).hasAttribute('data-sidebar-motion')).toBe(false);
+    expect(widthOf(scope)).toBe('232px');
+  });
+
+  it('collapses at once for someone who prefers reduced motion', () => {
+    const { scope, toggle } = renderSidebar();
+    mockMatchMedia(true);
+
+    fireEvent.click(toggle);
+    expect(scope.getAttribute('data-sidebar-state')).toBe('collapsed');
+    expect(panelOf(scope).hasAttribute('data-sidebar-motion')).toBe(false);
   });
 });

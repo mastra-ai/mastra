@@ -7,9 +7,10 @@
   --ease-out-custom: cubic-bezier(0.33, 1, 0.68, 1);
 }
 
+/* The sidebar's collapse and the layout that follows it (app shell, main card): moves at once, settles slowly. */
 :root {
-  --resize-dur: 300ms;
-  --resize-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --resize-dur: 200ms;
+  --resize-ease: cubic-bezier(0.2, 0, 0, 1);
 }
 
 .t-resize {

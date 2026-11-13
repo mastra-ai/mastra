@@ -1,6 +1,7 @@
 /* Credits card (Sidebar.Meter): one card in both states. Its height follows the panel (70px, 34px in the rail);
  * the label and status lines fold away (height, gap, fade) and the amount shrinks to the rail's size, sliding to
- * the card's centre. Collapsing, the lines are gone in the first 30%, so their space closes with nothing
+ * the card's centre. The rail rules below apply as soon as a collapse starts, so the card heads for the rail's
+ * shape alongside the panel. Collapsing, the lines are gone in the first 30%, so their space closes with nothing
  * in it; expanding, the space opens first and the lines fade in over the last 40%. */
 [data-slot='sidebar-meter'] {
   interpolate-size: allow-keywords;
@@ -24,32 +25,44 @@
   width: 100%;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] {
+:is(
+  [data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'],
+  [data-slot='sidebar-meter'][data-state='collapsed']
+) {
   height: 34px;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-fold] {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-fold] {
   height: 0;
   margin: 0;
   opacity: 0;
   overflow: hidden;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-value] {
   margin-top: 0;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value]:not([data-meter-swap]) > * {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-value]:not([data-meter-swap])
+  > * {
   left: 10px;
   translate: -50% 0;
   font-size: var(--text-meta);
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] > [data-meter-skeleton] {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-value]
+  > [data-meter-skeleton] {
   width: 20px;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-value] [data-meter-skeleton] > :last-child {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-value]
+  [data-meter-skeleton]
+  > :last-child {
   height: 8px;
 }
 
@@ -65,7 +78,11 @@
       opacity calc(var(--resize-dur) * 0.4) ease-out calc(var(--resize-dur) * 0.6);
   }
 
-  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-fold] {
+  :is(
+      [data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'],
+      [data-slot='sidebar-meter'][data-state='collapsed']
+    )
+    [data-meter-fold] {
     transition:
       height var(--resize-dur) var(--resize-ease),
       margin var(--resize-dur) var(--resize-ease),
@@ -113,12 +130,16 @@
   scale: 0.9;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-full] {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-swap]
+  [data-meter-full] {
   opacity: 0;
   translate: -6px 0;
 }
 
-[data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-rail] {
+:is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+  [data-meter-swap]
+  [data-meter-rail] {
   opacity: 1;
   scale: 1;
 }
@@ -137,13 +158,17 @@
       translate var(--resize-dur) var(--resize-ease);
   }
 
-  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-full] {
+  :is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+    [data-meter-swap]
+    [data-meter-full] {
     transition:
       opacity calc(var(--resize-dur) * 0.4) ease-out,
       translate var(--resize-dur) var(--resize-ease);
   }
 
-  [data-slot='sidebar-meter'][data-state='collapsed'] [data-meter-swap] [data-meter-rail] {
+  :is([data-sidebar-motion='collapsing'] [data-slot='sidebar-meter'], [data-slot='sidebar-meter'][data-state='collapsed'])
+    [data-meter-swap]
+    [data-meter-rail] {
     transition:
       opacity calc(var(--resize-dur) * 0.6) ease-out calc(var(--resize-dur) * 0.4),
       scale calc(var(--resize-dur) * 0.6) var(--resize-ease) calc(var(--resize-dur) * 0.4);

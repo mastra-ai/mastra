@@ -31,15 +31,14 @@ export function SidebarHeader({ className, children, collapsedLogo, actions, ...
         collapsed && !collapsedLogo && 'px-1',
         collapsed && actions && 'h-auto flex-col gap-3 py-3',
         !collapsed && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',
+        // While the panel animates, the header follows its width instead of jumping to the end width.
+        'in-data-[sidebar-motion]:w-auto',
         className,
       )}
       {...props}
     >
       {collapsed && collapsedLogo ? (
-        <div
-          data-slot="sidebar-collapsed-logo"
-          className="group/collapsed-logo relative grid size-9 shrink-0 place-items-center"
-        >
+        <div className="group/collapsed-logo relative grid size-9 shrink-0 place-items-center">
           <span
             className={cn(
               hold,

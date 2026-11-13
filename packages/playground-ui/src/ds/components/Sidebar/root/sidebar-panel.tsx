@@ -2,6 +2,7 @@ import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useSidebar } from './sidebar-context';
+import { sidebarMotionDuration } from './sidebar-motion';
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
 import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '@/ds/primitives/raised-surface';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
@@ -37,11 +38,17 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
     commit,
     toggleSidebar,
     setGestureActive,
+    motion,
+    setPanelElement,
   } = useSidebar();
   const isCollapsed = state === 'collapsed';
   const isHidden = isCollapsed && collapsedWidth === 0;
 
   const draggedRef = useRef(false);
+  // Dragging past the collapse point plays the same animated collapse as the toggle, and dragging back out the same
+  // expand; the panel follows the cursor again once that expand is done.
+  const dragCollapsedRef = useRef(false);
+  const followCursorAtRef = useRef(0);
   const dragCleanupRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -57,6 +64,13 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
       event.preventDefault();
 
       draggedRef.current = false;
+      // A drag that starts during an animated collapse counts as starting collapsed.
+      dragCollapsedRef.current =
+        isCollapsed || event.currentTarget.closest('[data-sidebar-motion="collapsing"]') !== null;
+      followCursorAtRef.current = 0;
+      // Without motion (reduced motion), the drag collapses and expands in place, as it follows the cursor.
+      const duration = sidebarMotionDuration(event.currentTarget);
+      const animated = duration > 0;
       setGestureActive(true);
 
       const startX = event.clientX;
@@ -88,11 +102,28 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
         const cursorWidth = ev.clientX - sidebarLeft;
 
         if (collapseBelow > 0 && cursorWidth < collapseBelow) {
-          collapse();
+          if (dragCollapsedRef.current) return;
+          dragCollapsedRef.current = true;
+          // The panel's own width transition plays the collapse.
+          if (animated) setGestureActive(false);
+          collapse({ animate: animated });
           return;
         }
-        expand();
         setWidth(cursorWidth);
+        if (dragCollapsedRef.current) {
+          dragCollapsedRef.current = false;
+          // Until the expand is done the panel eases toward the cursor, then follows it 1:1 again.
+          if (animated) {
+            setGestureActive(false);
+            followCursorAtRef.current = performance.now() + duration;
+          }
+          expand({ animate: animated });
+          return;
+        }
+        if (followCursorAtRef.current && performance.now() >= followCursorAtRef.current) {
+          followCursorAtRef.current = 0;
+          setGestureActive(true);
+        }
       };
       const cleanup = (ev?: PointerEvent) => {
         if (ev && ev.pointerId !== pointerId) return;
@@ -110,7 +141,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
       window.addEventListener('pointerup', cleanup);
       window.addEventListener('pointercancel', cleanup);
     },
-    [collapseBelow, setWidth, expand, collapse, commit, setGestureActive],
+    [collapseBelow, isCollapsed, setWidth, expand, collapse, commit, setGestureActive],
   );
 
   const onClick = useCallback(() => {
@@ -247,6 +278,8 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   const currentWidth = isCollapsed ? collapsedWidth : width;
   return (
     <div
+      ref={setPanelElement}
+      data-sidebar-motion={motion}
       className={cn(
         'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
@@ -268,12 +301,11 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           // Inset on every side, like the mobile drawer's container, so the header and footer never touch an edge.
           // 9px top and bottom puts the header on the same line as the main card's header.
           'px-2 py-2.25',
-          // Collapsed, lay the rail out at its final width from the first frame: `--sidebar-width` is
-          // already the rail width while the panel still animates down to it, so items that center
-          // themselves (the credits meter, an avatar) don't start mid-panel and slide across
-          isCollapsed && !isHidden && 'w-(--sidebar-width)',
           isHidden && 'pointer-events-none p-0 opacity-0',
         )}
+        // The rail lays out at its own width, never the animating `--sidebar-width`: an expand sets that to the full
+        // width a frame before the expanded layout renders, which would stretch the rail for that frame.
+        style={isCollapsed && !isHidden ? { width: collapsedWidth } : undefined}
       >
         {children}
       </div>

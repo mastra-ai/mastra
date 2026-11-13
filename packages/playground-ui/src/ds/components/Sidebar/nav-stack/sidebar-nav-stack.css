@@ -1,0 +1,39 @@
+/* Sub-menu pages.
+ * While a page slides in or out (Sidebar.NavStack), the pages fade out at the sidebar's edges instead of being cut.
+ * The fade lives only in the 10px gutter between the rows and the panel's edge: for the length of the slide the
+ * nav, its scroll box and the stack are stretched out to the edges, with matching padding, so the rows don't move.
+ * The clip is on only during the slide, so it never cuts a row's focus ring at rest. */
+.sidebar-layout
+  [data-slot='sidebar-nav']:has([data-slot='sidebar-nav-stack']:not([data-instant]) > :is([data-starting-style], [data-ending-style])) {
+  margin-inline: -8px;
+}
+
+.sidebar-layout
+  [data-slot='sidebar-nav']:has([data-slot='sidebar-nav-stack']:not([data-instant]) > :is([data-starting-style], [data-ending-style]))
+  [data-slot='sidebar-nav-rows'] {
+  padding-inline: 8px;
+}
+
+.sidebar-layout [data-slot='sidebar-nav-stack']:not([data-instant]):has(> :is([data-starting-style], [data-ending-style])) {
+  overflow-x: clip;
+  margin-inline: -10px;
+  padding-inline: 10px;
+  mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+}
+
+/* A page change from collapsing or expanding (the rail always shows the root page) doesn't slide: the two pages
+ * crossfade in place, so nothing moves sideways inside a settling rail or across an expanding panel. */
+.sidebar-layout [data-slot='sidebar-nav-stack'][data-instant] > * {
+  translate: none;
+  transition: opacity 150ms ease-out;
+}
+
+.sidebar-layout [data-slot='sidebar-nav-stack'][data-instant] > :is([data-starting-style], [data-ending-style]) {
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-layout [data-slot='sidebar-nav-stack'][data-instant] > * {
+    transition: none;
+  }
+}

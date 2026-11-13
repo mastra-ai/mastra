@@ -1,14 +1,19 @@
 import React from 'react';
 import type { CSSProperties } from 'react';
 import { SidebarContext, MobileDrawerContext } from './sidebar-context';
-import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
+import type { MobileDrawerContextValue, SidebarMotion, SidebarState, SidebarSwitchOptions } from './sidebar-context';
+import { sidebarMotionDuration } from './sidebar-motion';
 import { SIDEBAR_WIDTHS } from './sidebar-widths';
 import type { LinkComponent } from '@/ds/types/link-component';
+
+import './sidebar-motion.css';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
 const SIDEBAR_WIDTH_KEY = 'sidebar:width';
 
 const SIDEBAR_WIDTH_VAR = '--sidebar-width';
+// How long past its duration a running width transition may take to end before the switch completes without it.
+const MOTION_FALLBACK_SLACK = 500;
 
 type InitialSidebarState = {
   state: SidebarState;
@@ -104,9 +109,19 @@ export function SidebarProvider({
   const mobileTriggerRef = React.useRef<HTMLButtonElement | null>(null);
   const widthRef = React.useRef<number>(initial.width);
   const stateRef = React.useRef<SidebarState>(initial.state);
-  stateRef.current = state;
-
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
+  // While the panel animates between widths, `data-sidebar-motion` on the panel says which way: items keep their
+  // expanded layout and narrow with the panel (their text fades), and the rail only renders once it's done.
+  const [motion, setMotion] = React.useState<SidebarMotion>();
+  const motionTimerRef = React.useRef(0);
+  // Which switch is current: a switch that lands mid-animation makes the earlier one's end a no-op.
+  const motionIdRef = React.useRef(0);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const panelWidthRef = React.useRef<number>(
+    initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax),
+  );
+
+  React.useEffect(() => () => window.clearTimeout(motionTimerRef.current), []);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -130,9 +145,16 @@ export function SidebarProvider({
     }
   }, [isMobile, openMobile, setOpenMobile]);
 
+  // Written on the panel, not on the scope: the scope wraps the whole app, and a variable changed there restyles every
+  // element on the page (about 100ms on a heavy page, every time). The scope keeps the first value for the first paint.
   const writeCssVar = React.useCallback((px: number) => {
-    const el = scopeRef.current;
-    if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+    panelWidthRef.current = px;
+    panelRef.current?.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+  }, []);
+
+  const setPanelElement = React.useCallback((el: HTMLDivElement | null) => {
+    panelRef.current = el;
+    el?.style.setProperty(SIDEBAR_WIDTH_VAR, `${panelWidthRef.current}px`);
   }, []);
 
   // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
@@ -151,19 +173,51 @@ export function SidebarProvider({
     [stateStorageKey],
   );
 
+  // `stateRef` always holds where the sidebar is going, ahead of a running animation: a same-tick `commit()` (or a
+  // second toggle) must act on that, not on the rendered state.
+  const switchTo = React.useCallback(
+    (next: SidebarState, { animate = false }: SidebarSwitchOptions = {}) => {
+      window.clearTimeout(motionTimerRef.current);
+      const id = ++motionIdRef.current;
+      stateRef.current = next;
+      persistState(next);
+      // Written here, not only on a state change: a switch that lands mid-animation may not change `state`.
+      writeCssVar(next === 'collapsed' ? safeCollapsed : clamp(widthRef.current, safeMin, safeMax));
+      const duration = animate && scopeRef.current ? sidebarMotionDuration(scopeRef.current) : 0;
+      if (duration === 0) {
+        setMotion(undefined);
+        setState(next);
+        return;
+      }
+
+      // The panel heads for its new width with the expanded layout; collapsing, the rail renders once it's there.
+      setMotion(next === 'collapsed' ? 'collapsing' : 'expanding');
+      if (next === 'default') setState('default');
+      const finish = () => {
+        if (motionIdRef.current !== id) return;
+        window.clearTimeout(motionTimerRef.current);
+        setMotion(undefined);
+        setState(next);
+      };
+      // Ends with the width transition itself, not a timer from the click: on a busy page the transition starts
+      // late, and a timer would swap in the rail while the panel is still wide. The timer stays as a fallback for
+      // when no transition runs (the width didn't change, or the app's CSS turned it off).
+      const transition = panelRef.current
+        ?.getAnimations?.()
+        .find(animation => 'transitionProperty' in animation && animation.transitionProperty === 'width');
+      transition?.finished.then(finish, () => {});
+      motionTimerRef.current = window.setTimeout(finish, transition ? duration + MOTION_FALLBACK_SLACK : duration);
+    },
+    [persistState, safeMin, safeMax, safeCollapsed, writeCssVar],
+  );
+
   const toggleSidebar = React.useCallback(() => {
     if (isMobile) {
       setOpenMobile(!openMobileRef.current);
       return;
     }
-    setState(prev => {
-      const next = prev === 'default' ? 'collapsed' : 'default';
-      // Sync ref: a same-tick `commit()` must persist this state, not the render-time one.
-      stateRef.current = next;
-      persistState(next);
-      return next;
-    });
-  }, [isMobile, persistState, setOpenMobile]);
+    switchTo(stateRef.current === 'collapsed' ? 'default' : 'collapsed', { animate: true });
+  }, [isMobile, setOpenMobile, switchTo]);
 
   const setWidth = React.useCallback(
     (next: number) => {
@@ -174,16 +228,8 @@ export function SidebarProvider({
     [safeMin, safeMax, writeCssVar],
   );
 
-  const collapse = React.useCallback(() => {
-    stateRef.current = 'collapsed';
-    persistState('collapsed');
-    setState('collapsed');
-  }, [persistState]);
-  const expand = React.useCallback(() => {
-    stateRef.current = 'default';
-    persistState('default');
-    setState('default');
-  }, [persistState]);
+  const collapse = React.useCallback((options?: SidebarSwitchOptions) => switchTo('collapsed', options), [switchTo]);
+  const expand = React.useCallback((options?: SidebarSwitchOptions) => switchTo('default', options), [switchTo]);
 
   const commit = React.useCallback(() => {
     setWidthState(widthRef.current);
@@ -238,6 +284,8 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      motion,
+      setPanelElement,
       LinkComponent,
     }),
     [
@@ -255,6 +303,8 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      motion,
+      setPanelElement,
       LinkComponent,
     ],
   );
