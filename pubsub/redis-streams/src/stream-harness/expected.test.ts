@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { checkCell, expectedCapture, parseFrames } from './expected';
 import { UNFILED, UNFILED_DIFFERENCES } from './known-differences';
 import { normalise } from './normalise';
-import { SCENARIO_NAMES } from './scenarios';
+import { getScenario, SCENARIO_NAMES } from './scenarios';
 import { LAYOUTS, READERS } from './types';
 import type { Cell, Frame, RunCapture } from './types';
 
@@ -28,10 +28,18 @@ describe('checkCell with the real observations', () => {
           const cell: Cell = { scenario, engine, backend, topology };
           const plain = engine === 'plain' ? undefined : expectedCapture(plainOf(cell));
           const { verdict, drift } = checkCell(cell, expectedCapture(cell), plain);
-          expect({ verdict, drift }, `${scenario} ${engine} ${backend}`).toEqual({
-            verdict: { unlisted: [], stale: [] },
-            drift: [],
-          });
+          expect(verdict, `${scenario} ${engine} ${backend}`).toEqual({ unlisted: [], stale: [] });
+          if (getScenario(scenario).fault && backend !== 'memory') {
+            expect(drift).toEqual([
+              {
+                reader: 'live',
+                kind: 'stale-symptom',
+                detail: expect.stringContaining('no pinned fault symptom reproduced'),
+              },
+            ]);
+          } else {
+            expect(drift).toEqual([]);
+          }
         }
       }
     }

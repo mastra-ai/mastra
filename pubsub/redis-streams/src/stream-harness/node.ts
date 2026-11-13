@@ -103,8 +103,12 @@ export class HarnessNode {
   async frames(cmd: Record<string, unknown>, reader: ReaderName | 'live-resume', timeoutMs = 30_000): Promise<Frame[]> {
     const id = (cmd.id as string) ?? randomUUID();
     this.send({ ...cmd, id });
-    const event = await this.next(e => e.type === 'frames' && e.id === id && e.reader === reader, timeoutMs);
-    return event.frames;
+    try {
+      const event = await this.next(e => e.type === 'frames' && e.id === id && e.reader === reader, timeoutMs);
+      return event.frames;
+    } catch (cause) {
+      throw new Error(`harness command ${cmd.cmd} (${id}, reader=${reader}) failed`, { cause });
+    }
   }
 
   async kill() {

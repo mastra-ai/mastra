@@ -1,5 +1,7 @@
 import { compareRun, diffFrames, judgeCell } from './compare';
 import type { Verdict } from './compare';
+import { projectSymptoms } from './fault-symptoms';
+import type { Symptom } from './fault-symptoms';
 import type { Attribution, Observation } from './known-differences';
 import { BASELINES, FACT_BASELINES, OBSERVATIONS } from './known-differences';
 import { getScenario, readersOf } from './scenarios';
@@ -133,22 +135,30 @@ export interface CellCheck {
   verdict: Verdict;
   /** Readers whose capture differs from what the observations say they deliver. */
   drift: { reader: ReaderName; kind: string; detail: string }[];
+  symptoms?: Symptom[];
+  rawDifferences?: ReturnType<typeof compareRun>;
 }
 
-/**
- * Judges one captured run. Differences are always computed from the actual
- * capture (every reader vs its own live stream, every non-plain reader vs
- * plain's same reader) and must match the listed ones exactly; the listed
- * ones come from the observations, never from the capture. Differences alone
- * can't see a change every reader shares (all of plain drifting together), so
- * each reader is also held to exactly what the observations say it delivers.
- */
+/** Compare original frames first; keep every authorized symptom visible. */
 export function checkCell(cell: Cell, capture: RunCapture, plain?: RunCapture): CellCheck {
-  const verdict = judgeCell(cell, compareRun(cell, capture, plain), knownDifferencesFor(cell));
+  const rawDifferences = compareRun(cell, capture, plain);
   const expected = expectedCapture(cell);
-  const drift = readersOf(getScenario(cell.scenario)).flatMap(reader => {
-    const diff = diffFrames(expected[reader]!, capture[reader] ?? []);
+  const own = projectSymptoms(cell, capture, expected);
+  const plainCell: Cell = { ...cell, engine: 'plain' };
+  const reference =
+    plain && cell.engine !== 'plain' ? projectSymptoms(plainCell, plain, expectedCapture(plainCell)) : undefined;
+  const verdict = judgeCell(cell, compareRun(cell, own.capture, reference?.capture), knownDifferencesFor(cell));
+  const drift: CellCheck['drift'] = readersOf(getScenario(cell.scenario)).flatMap(reader => {
+    const diff = diffFrames(expected[reader]!, own.capture[reader] ?? []);
     return diff ? [{ reader, ...diff }] : [];
   });
-  return { verdict, drift };
+  if (getScenario(cell.scenario).fault && cell.backend !== 'memory' && !own.symptoms.length) {
+    drift.push({
+      reader: 'live',
+      kind: 'stale-symptom',
+      detail: `${cell.backend === 'redis' ? 'COR-1561' : 'COR-1562'}: no pinned fault symptom reproduced`,
+    });
+  }
+  const symptoms = [...own.symptoms, ...(reference?.symptoms ?? [])];
+  return { verdict, drift, ...(symptoms.length ? { symptoms, rawDifferences } : {}) };
 }

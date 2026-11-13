@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { LLMock } from '@copilotkit/aimock';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vitest';
 
 import { getFreePort, makeStorageDir } from '../../test-fixtures/harness';
 import { formatVerdict } from './compare';
@@ -321,7 +321,7 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
       live: liveResult.value,
       'observe-mid': observeResult.value,
       ...(await readBack(nodes, runId)),
-      thread: await stopThread(),
+      thread: await stopThread(35_000),
     };
   },
   async 'publisher-death'(nodes, scenario) {
@@ -424,7 +424,11 @@ async function startNodes(
   return { publisher: publisher!, reader: reader!, port };
 }
 
-const stopNodes = (nodes?: Nodes) => Promise.all([nodes?.publisher.stop(), nodes?.reader.stop()]);
+const stopNodes = async (nodes?: Nodes) => {
+  const results = await Promise.allSettled([nodes?.publisher.stop(), nodes?.reader.stop()]);
+  const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+  if (errors.length) throw new AggregateError(errors, 'Failed to stop harness nodes');
+};
 
 /**
  * Runs each scenario of a group on every engine, backend and topology,
@@ -492,6 +496,13 @@ export function defineGrid(group: ScenarioGroup) {
             let own: Nodes | undefined;
             let capture: RunCapture;
             let proxy: Awaited<ReturnType<typeof createProxy>> | undefined;
+            let cleanupPromise: Promise<PromiseSettledResult<unknown>[]> | undefined;
+            const cleanup = () => (cleanupPromise ??= Promise.allSettled([stopNodes(own), proxy?.close()]));
+            onTestFinished(async () => {
+              const results = await cleanup();
+              const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+              if (errors.length) throw new AggregateError(errors, 'Failed to clean up harness cell');
+            });
             try {
               if (scenario.fault || scenario.name === 'transport-control') {
                 if (backend === 'memory') throw new Error('transport fault needs a real backend');
@@ -505,21 +516,22 @@ export function defineGrid(group: ScenarioGroup) {
               }
               capture = await FLOWS[scenario.flow ?? 'turn'](own ?? shared!, scenario);
             } finally {
-              await stopNodes(own);
-              await proxy?.close();
+              await cleanup();
             }
             if (process.env.STREAM_HARNESS_VERBOSE) console.log('RAW-CAPTURE', JSON.stringify({ cell, capture }));
             if (scenario.ignoreText) capture = withoutInterruptedText(capture, ABORT_ANSWER);
             if (engine === 'plain') plain.set(name, capture);
             if (process.env.STREAM_HARNESS_VERBOSE) console.log('CAPTURE', JSON.stringify({ cell, capture }));
 
-            const { verdict, drift: drifted } = checkCell(cell, capture, plain.get(name));
+            const { verdict, drift: drifted, symptoms, rawDifferences } = checkCell(cell, capture, plain.get(name));
+            if (symptoms) console.log('PINNED-SYMPTOMS', JSON.stringify({ cell, symptoms, rawDifferences }));
             const drift = drifted.map(d => `  DRIFT ${d.reader} [${d.kind}] ${d.detail}`);
             const report = [formatVerdict(cell, verdict), ...drift].join('\n');
             if (process.env.STREAM_HARNESS_VERBOSE) console.log(`${report}\n${JSON.stringify(capture)}`);
             expect(verdict.unlisted.length + verdict.stale.length + drift.length, report).toBe(0);
           },
-          group === 'faults' ? 150_000 : 60_000,
+          // Covers startup, the 100s observer, sequential readback, the 35s thread wait, and cleanup.
+          group === 'faults' ? 300_000 : 60_000,
         );
       });
     });
