@@ -12,7 +12,6 @@ import {
   useTracesFilters,
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
-import { effectiveTextSearch } from '@/domains/observability/lib/text-search';
 
 type TracesListProviderProps = {
   sort: TracesSort;
@@ -41,8 +40,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withDeltaPolling,
     isCapabilitiesLoading,
   } = useTracesConfig();
-  const { filters, dateFrom, dateTo } = useTracesFilters();
-  const textSearch = effectiveTextSearch(filters.textSearch);
+  const { filters, textSearch, dateFrom, dateTo } = useTracesFilters();
   const { displayedPreferences } = useTraceUsageColumns();
   // A TTFC/TTFT sort the store can't run, or on a column that isn't shown, lists newest first instead.
   // The host keeps its raw value, like filters the server can't query.

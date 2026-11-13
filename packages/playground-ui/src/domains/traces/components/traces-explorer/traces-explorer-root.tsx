@@ -294,13 +294,22 @@ export function TracesExplorerRoot({
     ],
   );
 
-  const contentFiltersApplied =
-    !!effectiveTextSearch(filters.textSearch) || filters.tokens.length > 0 || filters.groups.length > 0;
+  const textSearch = effectiveTextSearch(filters.textSearch);
+  const contentFiltersApplied = !!textSearch || filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
   const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
-    () => ({ ...filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
+    () => ({
+      ...filtersActions,
+      filters,
+      textSearch,
+      dateFrom,
+      dateTo,
+      filtersApplied,
+      contentFiltersApplied,
+      runningSelected,
+    }),
+    [filtersActions, filters, textSearch, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

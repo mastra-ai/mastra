@@ -13,7 +13,6 @@ import {
   histogramPlan,
   zoomWindow,
 } from '@/domains/observability/lib/histogram-buckets';
-import { effectiveTextSearch } from '@/domains/observability/lib/text-search';
 
 /** Compares selections, not instants: only filter or date changes move the chart's `now`. */
 const SELECTION_CLOCK = new Date(0);
@@ -33,7 +32,7 @@ export function TracesExplorerHistogram() {
     withTimeToFirstToken,
     withOutcomeFields,
   } = useTracesConfig();
-  const { filters, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
+  const { filters, textSearch, dateFrom, dateTo, runningSelected, zoomDateRange } = useTracesFilters();
   const aggregateAvailable = useTraceAggregateAvailable();
 
   const selectionKey = JSON.stringify(
@@ -73,7 +72,7 @@ export function TracesExplorerHistogram() {
   }, [filters, dateFrom, dateTo, withRootDuration, withTimeToFirstChunk, withTimeToFirstToken, withOutcomeFields, now]);
 
   const hidden =
-    !!effectiveTextSearch(filters.textSearch) ||
+    !!textSearch ||
     rootSource === 'aggregated' ||
     !withQueryTrace ||
     !aggregateAvailable.enabled ||
