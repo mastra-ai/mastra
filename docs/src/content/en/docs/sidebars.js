@@ -870,9 +870,9 @@ const sidebars = {
             contextualSidebar: true,
           },
           items: [
-            { type: 'doc', id: 'mastra-platform/trace-intelligence', label: 'Trace Intelligence' },
-            { type: 'doc', id: 'mastra-platform/dashboards', label: 'Dashboards' },
-            { type: 'doc', id: 'mastra-platform/observability-alerts', label: 'Observability Alerts' },
+            { type: 'doc', id: 'mastra-platform/observability/trace-intelligence', label: 'Trace Intelligence' },
+            { type: 'doc', id: 'mastra-platform/observability/dashboards', label: 'Dashboards' },
+            { type: 'doc', id: 'mastra-platform/observability/alerts', label: 'Observability Alerts' },
           ],
         },
         { type: 'doc', id: 'mastra-platform/connect', label: 'Connect', customProps: { tags: ['new'] } },
