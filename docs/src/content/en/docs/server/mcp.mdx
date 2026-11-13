@@ -231,6 +231,27 @@ The apps work with the conversation, where the client supports it:
 - **Open in Studio** opens the same view in Studio. With `mastra dev` this is the local Studio. Otherwise, set `studioUrl` to your Studio's URL to show the button.
 - When an app shows a result, the model gets a short text summary of the rows, such as each trace's name, status, and duration, instead of the full JSON. The app still gets the full result. Clients without MCP Apps get the full JSON as before.
 
+#### Steering an open explorer
+
+Each tool call normally renders a new view, so a debugging session can fill the conversation with explorers. With app steering on, the model changes what an open observability explorer shows instead: its tab, filters, or open trace and span. It calls `steer_observability_view` with the view's id, and the explorer on screen updates within a few seconds. When you change filters or open a trace in the explorer, the model can read your change back with the same tool.
+
+The view's state lives in Mastra's server cache, so every instance serving `/mcp` must share it. App steering is on under `mastra dev` and when you configure a cache other than the in-memory default:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisServerCache } from '@mastra/redis'
+import Redis from 'ioredis'
+
+export const mastra = new Mastra({
+  cache: new RedisServerCache({ client: new Redis(process.env.REDIS_URL!) }),
+  server: {
+    mcp: { appSteering: true },
+  },
+})
+```
+
+Views belong to the user who opened them, and expire after an hour without use. Set `appSteering: false` to turn steering off.
+
 Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
 
 ```typescript title="src/mastra/index.ts"

@@ -71,7 +71,9 @@ async function loadBuiltinMCP(mastra: Mastra) {
     });
   }
   const { buildBuiltinMCPTools, modelSummaryOf } = await import('./catalogue');
-  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools, modelSummaryOf };
+  const { STEER_VIEW_TOOL } = await import('./toolsets/view-steering');
+  const { openView, viewOwner } = await import('./view-state');
+  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools, modelSummaryOf, STEER_VIEW_TOOL, openView, viewOwner };
 }
 
 const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
@@ -150,6 +152,13 @@ export function isMissingAppsPackage(error: unknown): boolean {
   return false;
 }
 
+/** Whether the tool opens the observability explorer (its app link, not an app-only tool). */
+function opensExplorer(tool: unknown): boolean {
+  const ui = (tool as { mcp?: { _meta?: { ui?: { resourceUri?: string; visibility?: string[] } } } } | undefined)?.mcp
+    ?._meta?.ui;
+  return ui?.resourceUri === EXPLORER_URI && !(ui.visibility?.length === 1 && ui.visibility[0] === 'app');
+}
+
 /** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
 function bearerOnly(request: Request | undefined): Request | undefined {
   if (!request) return undefined;
@@ -186,7 +195,8 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       throw new HTTPException(404, { message: 'Not Found' });
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
-    const { MCPServer, buildBuiltinMCPTools, modelSummaryOf } = await loadBuiltinMCP(mastra);
+    const { MCPServer, buildBuiltinMCPTools, modelSummaryOf, STEER_VIEW_TOOL, openView, viewOwner } =
+      await loadBuiltinMCP(mastra);
     const apps = config.apps ? await loadBuiltinApps() : undefined;
     const tools = await buildBuiltinMCPTools(
       {
@@ -214,23 +224,33 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       appResources: apps?.appResources,
       // Clients without MCP Apps support see no app links, resources, or `ui` capability.
       appsRequireClientSupport: true,
+      // Steering changes a view the host shows; a client without apps has none.
+      appViewTools: [STEER_VIEW_TOOL],
       toolResult: {
         // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
         // output, the model reads a summary of it instead.
-        transform: ({ toolName, output, result, apps }) => {
+        transform: async ({ toolName, output, result, apps }) => {
           if (!apps || result.isError) return undefined;
-          const withStudio = config.studioUrl
-            ? { ...result, _meta: { ...result._meta, 'mastra/studioUrl': config.studioUrl } }
-            : result;
+          const meta: Record<string, unknown> = { ...result._meta };
+          if (config.studioUrl) meta['mastra/studioUrl'] = config.studioUrl;
           const summary = modelSummaryOf(tools[toolName]);
-          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return withStudio;
+          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) {
+            return Object.keys(meta).length > 0 ? { ...result, _meta: meta } : result;
+          }
           // Routes can return dates as `Date`s; read the output as the client receives it.
           const sent = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
-          return {
-            ...withStudio,
-            structuredContent: sent,
-            content: [{ type: 'text', text: summary(sent) }],
-          };
+          let text = summary(sent);
+          // A new explorer gets a view id: the model steers it, the explorer polls it, both by that id.
+          if (tools[STEER_VIEW_TOOL] && opensExplorer(tools[toolName])) {
+            const viewId = await openView(mastra.getServerCache(), viewOwner(requestContext));
+            meta['mastra/viewId'] = viewId;
+            text +=
+              `\n\nThe user sees this in an observability explorer, view ${viewId}. To change what it shows ` +
+              `(tab, filters, time range, an open trace), call ${STEER_VIEW_TOOL} with viewId "${viewId}" instead ` +
+              `of calling ${toolName} again, which opens another view. Call it with just the viewId to see what ` +
+              'the user changed.';
+          }
+          return { ...result, _meta: meta, structuredContent: sent, content: [{ type: 'text', text }] };
         },
       },
       legacy: 'stateless',

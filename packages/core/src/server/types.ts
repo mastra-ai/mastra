@@ -277,6 +277,13 @@ export type ServerMCPConfig = {
    */
   apps?: boolean;
   /**
+   * Let the model change what an open observability explorer shows (tab, filters, open trace) instead of opening
+   * another one, and let it read back what the user changed. The view's state lives in Mastra's server cache
+   * (`new Mastra({ cache })`), which every instance serving `/mcp` must share.
+   * Defaults to on under `mastra dev` and when a cache other than the in-memory default is configured.
+   */
+  appSteering?: boolean;
+  /**
    * Base URL of Studio, which MCP Apps use for "Open in Studio" links. Under `mastra dev` it defaults to the
    * local Studio, built from `studioProtocol`, `studioHost`, `studioPort`, and `studioBase`. Elsewhere the
    * links are only shown when this is set. `false` hides them.

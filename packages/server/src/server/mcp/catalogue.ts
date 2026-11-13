@@ -2,7 +2,7 @@ import type { ToolsInput } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
-import { createTool } from '@mastra/core/tools';
+import { createTool, validateToolInput } from '@mastra/core/tools';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE, getAgentFromSystem, LIST_AGENTS_ROUTE } from '../handlers/agents';
@@ -60,6 +60,8 @@ export interface CatalogueKit {
   /** Whether the caller may run the route from a tool (route RBAC and read-only mode), whether or not it has its own tool. */
   permitted(route: ServerRoute): boolean;
   call(route: ServerRoute, input: DispatchRouteInput, signal?: AbortSignal): Promise<unknown>;
+  /** Runs a tool registered so far, as a client calling it would; a 404 when the caller isn't offered it. */
+  run(name: string, args: Args, signal?: AbortSignal): Promise<unknown>;
   /** Registers a tool under an explicit name. Callers check `offered` first. */
   add(
     name: string,
@@ -289,7 +291,16 @@ export async function buildBuiltinMCPTools(
     isReadRoute(route) ? { readOnlyHint: true, ...extra } : { readOnlyHint: false, destructiveHint: false, ...extra };
 
   const tools: Record<string, MCPTool> = {};
+  const executes = new Map<string, Execute>();
   const used = new Set<string>();
+  const run = (name: string, args: Args, signal?: AbortSignal) => {
+    const execute = executes.get(name);
+    if (!execute) throw toolError(404, `Tool ${name} is not available`);
+    // The same input checks (and defaults) a client's call to the tool gets.
+    const input = validateToolInput(tools[name]!.inputSchema, args, name);
+    if (input.error) throw toolError(400, input.error.message);
+    return execute((input.data ?? {}) as Args, signal);
+  };
   const add = (
     name: string,
     route: ServerRoute,
@@ -299,6 +310,7 @@ export async function buildBuiltinMCPTools(
     options: AddOptions = {},
   ) => {
     used.add(name);
+    executes.set(name, execute);
     tools[name] = createTool({
       id: name,
       description,
@@ -643,6 +655,7 @@ export async function buildBuiltinMCPTools(
     offered,
     permitted,
     call,
+    run,
     add,
     addOperation,
     addCombined: (routes, inputSchema, execute, options) => {

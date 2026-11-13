@@ -261,6 +261,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
     description:
       'Serve MCP Apps only to clients that declare MCP Apps support. Other clients see the server as if it had no apps. See [Serving apps only to supporting clients](#serving-apps-only-to-supporting-clients).',
   },
+  {
+    name: 'appViewTools',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      'Names of tools that act on app views a host already shows, such as a tool that changes what a view displays. They are listed and callable only for clients the server serves apps to.',
+  },
 ]}
 />
 

@@ -18,6 +18,7 @@ function createAppServer(appsRequireClientSupport?: boolean) {
     name: 'Apps',
     version: '1.0.0',
     appsRequireClientSupport,
+    appViewTools: ['steer'],
     legacy: 'stateless',
     appResources: { 'ui://viewer': { name: 'Viewer', html: '<h1>viewer</h1>' } },
     tools: {
@@ -37,6 +38,7 @@ function createAppServer(appsRequireClientSupport?: boolean) {
         execute: async () => 'next page',
       }),
       plain: createTool({ id: 'plain', description: 'No app', execute: async () => 'plain' }),
+      steer: createTool({ id: 'steer', description: 'Changes the open viewer', execute: async () => 'steered' }),
     },
   });
 }
@@ -58,7 +60,7 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
       expect(client.getServerCapabilities()?.extensions).toEqual({ [UI]: {} });
       expect(client.getServerCapabilities()?.resources).toBeDefined();
       const { tools } = await client.listTools();
-      expect(tools.map(t => t.name)).toEqual(['show', 'page', 'plain']);
+      expect(tools.map(t => t.name)).toEqual(['show', 'page', 'plain', 'steer']);
       expect(tools[0]?._meta).toEqual({ ui: { resourceUri: 'ui://viewer' }, 'ui/resourceUri': 'ui://viewer' });
 
       const shown = await client.callTool({ name: 'show', arguments: {} });
@@ -90,6 +92,8 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
       expect(shown._meta).not.toHaveProperty('ui');
       expect(shown._meta).not.toHaveProperty('ui/resourceUri');
       await expect(client.callTool({ name: 'page', arguments: {} })).rejects.toThrow('Unknown tool: page');
+      // It has no views for a view tool to act on.
+      await expect(client.callTool({ name: 'steer', arguments: {} })).rejects.toThrow('Unknown tool: steer');
 
       // The client skips methods the server does not declare; on the wire they are not found either.
       expect((await client.listResources()).resources).toEqual([]);
@@ -118,7 +122,7 @@ describe('MCP Apps gated on the client declaring the UI extension', () => {
       expect(transport.sessionId).toMatch(/^mcp-apps\./);
 
       const { tools } = await client.listTools();
-      expect(tools.map(t => t.name)).toEqual(['show', 'page', 'plain']);
+      expect(tools.map(t => t.name)).toEqual(['show', 'page', 'plain', 'steer']);
       expect(tools[0]?._meta).toMatchObject({ ui: { resourceUri: 'ui://viewer' } });
       expect((await client.callTool({ name: 'show', arguments: {} }))._meta).toMatchObject({
         ui: { resourceUri: 'ui://viewer' },
@@ -165,7 +169,7 @@ describe('MCP Apps without the client-support requirement', () => {
     const client = await connectClient(served.url);
     try {
       expect(client.getServerCapabilities()?.extensions).toEqual({ [UI]: {} });
-      expect((await client.listTools()).tools.map(t => t.name)).toEqual(['show', 'page', 'plain']);
+      expect((await client.listTools()).tools.map(t => t.name)).toEqual(['show', 'page', 'plain', 'steer']);
       expect((await client.listResources()).resources.map(r => r.uri)).toEqual(['ui://viewer']);
     } finally {
       await client.close();
