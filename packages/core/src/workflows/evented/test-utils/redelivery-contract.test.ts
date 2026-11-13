@@ -121,7 +121,14 @@ describe('redelivery processor draining', () => {
           return inputData + 1;
         },
       });
-    const workflow = createEventedWorkflow({ id: 'drain-contract', inputSchema: z.number(), outputSchema: z.number() })
+    // Opting out of recovery also opts out of the finished-step check, so a replay runs the steps
+    // again and gives the drain descendants to wait for.
+    const workflow = createEventedWorkflow({
+      id: 'drain-contract',
+      inputSchema: z.number(),
+      outputSchema: z.number(),
+      options: { autoRestartActiveRuns: false },
+    })
       .then(step('before'))
       .then(step('after'))
       .commit();
@@ -141,7 +148,7 @@ describe('redelivery processor draining', () => {
         { executed },
         { executed: ['before', 'after'] },
         {
-          reason: 'COR-1307: completed transitions execute again.',
+          reason: 'COR-1307: completed transitions of a workflow without the finished-step check execute again.',
           expect: correct => ({ executed: [...correct.executed, ...correct.executed] }),
         },
       );

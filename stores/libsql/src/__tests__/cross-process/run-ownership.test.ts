@@ -35,7 +35,14 @@ describe('workflow run ownership across processes on a shared LibSQL file', () =
     const workflow = createOwnedWorkflow(async runId => {
       executedByB.push(runId);
     });
-    replicaB = new Mastra({ logger: false, storage, workflows: { workflow } });
+    // A zero grace leaves only the lease to keep replica B off a run, which is what these tests check. The
+    // short scan interval only matters to the case that starts B's workers, and with them its recovery loop.
+    replicaB = new Mastra({
+      logger: false,
+      storage,
+      workflows: { workflow },
+      recovery: { workflowGraceMs: 0, workflowScanIntervalMs: 500 },
+    });
   });
 
   afterEach(async () => {
@@ -111,15 +118,17 @@ describe('workflow run ownership across processes on a shared LibSQL file', () =
   );
 
   it(
-    'recovers the run once the crashed owner process lease lapses',
+    'recovers the run from the recovery loop once the crashed owner process lease lapses',
     async () => {
       const { peer, runId } = await startReplicaA();
 
+      // B boots like a server: its workers start the recovery loop, and the boot call joins its first pass.
+      await replicaB.startWorkers();
       await replicaB.restartAllActiveWorkflowRuns();
       expect(executedByB).toEqual([]);
 
       await peer.kill();
-      // The sweep re-checks after the lease expiry plus up to 5s jitter, then restarts the run.
+      // The first of B's passes after the lease expired restarts the run.
       await expect.poll(() => executedByB, { timeout: DEFAULT_HANG_GUARD_MS }).toEqual([runId]);
       await expect.poll(() => status(runId), { timeout: DEFAULT_HANG_GUARD_MS }).toBe('success');
     },
