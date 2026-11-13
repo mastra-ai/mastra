@@ -445,10 +445,11 @@ function errorKind(error: unknown): string {
 }
 
 /**
- * Core's tracked exception for a failed tool records only an `MCP_CLIENT_` id, also when another
- * tool wraps this one. It is not enumerable: the caller and the model still get the same error.
+ * Rethrows a failed tool call with an `MCP_CLIENT_` id. Core's tracked exception records only that
+ * id, also when another tool wraps this one. It is not enumerable: the caller and the model still
+ * get the same error.
  */
-function markToolCallFailure(error: unknown): unknown {
+function rethrowToolCallFailure(error: unknown): never {
   if (error instanceof Error && !('id' in error)) {
     const id = !(error instanceof ProtocolError)
       ? 'MCP_CLIENT_TOOL_CALL_FAILED'
@@ -457,7 +458,7 @@ function markToolCallFailure(error: unknown): unknown {
         : 'MCP_CLIENT_TOOL_PROTOCOL_ERROR';
     Reflect.defineProperty(error, 'id', { value: id, configurable: true });
   }
-  return error;
+  throw error;
 }
 
 /**
@@ -1940,10 +1941,10 @@ export class InternalMastraMCPClient extends MastraBase {
           // authenticate that handshake, and the streams the connection keeps open, as this call.
           // `connect()` is memoised: concurrent first calls share the handshake of the first one.
           if (serverMeta.connectFirst) {
-            await this.connectAsCall(operationContext, () => this.connect());
+            await this.connectAsCall(operationContext, () => this.connect()).catch(rethrowToolCallFailure);
           }
 
-          return this.operationContextStore.run(operationContext, async () => {
+          const call = this.operationContextStore.run(operationContext, async () => {
             const suspendHost = context?.agent ?? context?.workflow;
             const toolCallSpan = context?.tracingContext?.currentSpan;
 
@@ -1993,14 +1994,10 @@ export class InternalMastraMCPClient extends MastraBase {
               );
 
               const { result: res, serverSpan } = takeServerTraceContext(
-                await this.client
-                  .callTool(
-                    { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
-                    { timeout: this.timeout, signal: context?.abortSignal },
-                  )
-                  .catch((error: unknown) => {
-                    throw markToolCallFailure(error);
-                  }),
+                await this.client.callTool(
+                  { name: tool.name, arguments: input, ...(_meta ? { _meta } : {}) },
+                  { timeout: this.timeout, signal: context?.abortSignal },
+                ),
               );
               // A Mastra server names the span that served the call. The tool call span ends
               // after this returns, and its end export carries the link.
@@ -2129,7 +2126,7 @@ export class InternalMastraMCPClient extends MastraBase {
                     originalError: errorKind(e),
                     reconnectError: errorKind(reconnectError),
                   });
-                  throw markToolCallFailure(reconnectError);
+                  throw reconnectError;
                 }
               }
 
@@ -2139,6 +2136,7 @@ export class InternalMastraMCPClient extends MastraBase {
               throw e;
             }
           });
+          return call.catch(rethrowToolCallFailure);
         },
       });
 

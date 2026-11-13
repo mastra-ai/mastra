@@ -63,7 +63,8 @@ describe('MCP tool failures in tracked exceptions', () => {
       }
       if (body?.method === 'tools/call' && body.params?.name === 'refresh') {
         rejectReconnectFor = body.params.arguments.email;
-        res.writeHead(500, { 'Content-Type': 'text/plain' });
+        // A 403 proves the server did not run the call, so the client reconnects and retries.
+        res.writeHead(403, { 'Content-Type': 'text/plain' });
         res.end(`Not connected: ${rejectReconnectFor}`);
         return;
       }
