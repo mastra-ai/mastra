@@ -13,6 +13,11 @@ export type WorkflowSuspendedStep = {
   payload?: any;
   suspendPayload?: any;
   suspendOutput?: any;
+  /**
+   * Milliseconds after which this suspension is considered expired, as passed to
+   * `suspend(payload, { timeout })`. Recorded only; enforcement is up to the host.
+   */
+  suspendTimeout?: number;
   resumeLabels: Record<string, WorkflowResumeLabel>;
 };
 
@@ -94,6 +99,7 @@ export function getWorkflowSuspendedSteps(state: WorkflowState): WorkflowSuspend
       payload: Array.isArray(step) ? step.map(result => result?.payload) : step?.payload,
       suspendPayload: firstStepResult?.suspendPayload,
       suspendOutput: firstStepResult?.suspendOutput,
+      suspendTimeout: firstStepResult?.suspendTimeout,
       resumeLabels,
     };
   });

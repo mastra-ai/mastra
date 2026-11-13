@@ -250,6 +250,7 @@ function pruneStepResult(
     // suspension of the run.
     delete pruned.suspendPayload;
     delete pruned.suspendOutput;
+    delete pruned.suspendTimeout;
     delete pruned.resumePayload;
     if (!preserveTerminalPayloadState) pruned.payload = stripTerminalPayloadState(pruned.payload);
     if ('output' in pruned) pruned.output = stripTerminalOutputFields(pruned.output);

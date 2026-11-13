@@ -124,6 +124,12 @@ export type StepSuspended<P, S, T> = {
   payload: P;
   suspendPayload?: S;
   suspendOutput?: T;
+  /**
+   * Milliseconds after which this suspension is considered expired, as passed
+   * to `suspend(payload, { timeout })`. The engine records it but does not
+   * enforce it; hosts decide what an expired suspension means.
+   */
+  suspendTimeout?: number;
   startedAt: number;
   suspendedAt: number;
   metadata?: StepMetadata;
@@ -225,6 +231,7 @@ export type TimeTravelContext<P, R, S, T> = Record<
     resumePayload?: R;
     suspendPayload?: S;
     suspendOutput?: T;
+    suspendTimeout?: number;
     startedAt?: number;
     endedAt?: number;
     suspendedAt?: number;
@@ -327,6 +334,7 @@ export type WorkflowStateSingleStepResult = {
   resumePayload?: any;
   suspendPayload?: any;
   suspendOutput?: any;
+  suspendTimeout?: number;
   error?: SerializedError;
   startedAt?: number;
   endedAt?: number;

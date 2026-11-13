@@ -552,6 +552,7 @@ export const createTimeTravelExecutionParams = (params: {
         resumePayload: stepContext?.resumePayload,
         suspendPayload: stepContext?.suspendPayload,
         suspendOutput: stepContext?.suspendOutput,
+        suspendTimeout: stepContext?.suspendTimeout,
         startedAt: stepContext?.startedAt ?? Date.now(),
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
@@ -829,11 +830,12 @@ export function cleanStepResult(stepResult: unknown): unknown {
  */
 export function omitPriorSuspensionFields<T extends Record<string, unknown>>(
   stepInfo: T,
-): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput'> {
+): Omit<T, 'suspendedAt' | 'suspendPayload' | 'suspendOutput' | 'suspendTimeout'> {
   const {
     suspendedAt: _suspendedAt,
     suspendPayload: _suspendPayload,
     suspendOutput: _suspendOutput,
+    suspendTimeout: _suspendTimeout,
     ...rest
   } = stepInfo;
   return rest;
@@ -843,7 +845,15 @@ export function omitPriorCompletionFields<T extends Record<string, unknown>>(
   stepInfo: T,
 ): Omit<
   T,
-  'output' | 'error' | 'endedAt' | 'suspendedAt' | 'suspendPayload' | 'suspendOutput' | 'tripwire' | 'nonRetryable'
+  | 'output'
+  | 'error'
+  | 'endedAt'
+  | 'suspendedAt'
+  | 'suspendPayload'
+  | 'suspendOutput'
+  | 'suspendTimeout'
+  | 'tripwire'
+  | 'nonRetryable'
 > {
   const {
     output: _output,
@@ -852,6 +862,7 @@ export function omitPriorCompletionFields<T extends Record<string, unknown>>(
     suspendedAt: _suspendedAt,
     suspendPayload: _suspendPayload,
     suspendOutput: _suspendOutput,
+    suspendTimeout: _suspendTimeout,
     tripwire: _tripwire,
     nonRetryable: _nonRetryable,
     ...rest

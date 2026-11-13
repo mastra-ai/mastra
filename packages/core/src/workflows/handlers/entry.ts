@@ -19,6 +19,7 @@ import type {
   StepFailure,
   StepFlowEntry,
   StepResult,
+  StepSuspended,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
   WorkflowRunState,
@@ -94,10 +95,16 @@ function buildResumedBlockResult(
         stillSuspended && isSingleStepEntry(stillSuspended)
           ? stepResults[getSingleStepEntryId(stillSuspended)]?.suspendPayload
           : {};
+      const suspendTimeout =
+        stillSuspended && isSingleStepEntry(stillSuspended)
+          ? (stepResults[getSingleStepEntryId(stillSuspended)] as StepSuspended<any, any, any> | undefined)
+              ?.suspendTimeout
+          : undefined;
       result = {
         status: 'suspended',
         payload: suspendData,
         suspendPayload: suspendData,
+        ...(suspendTimeout !== undefined ? { suspendTimeout } : {}),
         suspendedAt: Date.now(),
       };
     }

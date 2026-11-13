@@ -13,6 +13,12 @@ import type { Workflow } from './workflow';
 
 export type SuspendOptions = {
   resumeLabel?: string | string[];
+  /**
+   * How long the suspension may stay unresolved, in milliseconds.
+   * Stored on the suspended step result as `suspendTimeout` so hosts can
+   * expire or escalate the run. Nothing is enforced by the workflow engine.
+   */
+  timeout?: number;
 } & Record<string, any>;
 
 // Create a unique symbol that only exists at the type level

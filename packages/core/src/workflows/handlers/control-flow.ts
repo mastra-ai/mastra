@@ -314,6 +314,7 @@ export async function executeParallel(
       status: 'suspended',
       suspendPayload: hasSuspended.suspendPayload,
       ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      ...(hasSuspended.suspendTimeout !== undefined ? { suspendTimeout: hasSuspended.suspendTimeout } : {}),
     };
   } else if (abortController?.signal?.aborted) {
     execResults = { status: 'canceled' };
@@ -660,6 +661,7 @@ export async function executeConditional(
       status: 'suspended',
       suspendPayload: hasSuspended.suspendPayload,
       ...(hasSuspended.suspendOutput ? { suspendOutput: hasSuspended.suspendOutput } : {}),
+      ...(hasSuspended.suspendTimeout !== undefined ? { suspendTimeout: hasSuspended.suspendTimeout } : {}),
       suspendedAt: hasSuspended.suspendedAt,
     };
   } else if (abortController?.signal?.aborted) {
@@ -1706,6 +1708,9 @@ export async function executeForeach(
       status: 'suspended',
       ...(foreachIndexObj[foreachIndex].suspendOutput
         ? { suspendOutput: foreachIndexObj[foreachIndex].suspendOutput }
+        : {}),
+      ...(foreachIndexObj[foreachIndex].suspendTimeout !== undefined
+        ? { suspendTimeout: foreachIndexObj[foreachIndex].suspendTimeout }
         : {}),
       suspendPayload: {
         ...foreachIndexObj[foreachIndex].suspendPayload,

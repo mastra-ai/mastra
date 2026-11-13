@@ -408,7 +408,7 @@ export async function executeStep(
         timeTravelSteps = timeTravel.steps[0] === step.id ? timeTravel.steps.slice(1) : [];
       }
 
-      let suspended: { payload: any } | undefined;
+      let suspended: { payload: any; timeout?: number } | undefined;
       let bailed: { payload: any } | undefined;
       const contextMutations: {
         suspendedPaths: Record<string, number[]>;
@@ -572,7 +572,10 @@ export async function executeStep(
             }
           }
 
-          suspended = { payload: suspendData };
+          suspended = {
+            payload: suspendData,
+            ...(suspendOptions?.timeout !== undefined ? { timeout: suspendOptions.timeout } : {}),
+          };
         },
         bail: (result: any) => {
           bailed = { payload: result };
@@ -693,6 +696,9 @@ export async function executeStep(
         status: 'suspended',
         suspendPayload: durableResult.suspended.payload,
         ...(durableResult.output ? { suspendOutput: durableResult.output } : {}),
+        ...(durableResult.suspended.timeout !== undefined
+          ? { suspendTimeout: durableResult.suspended.timeout }
+          : {}),
         suspendedAt: Date.now(),
       };
     } else if (durableResult.bailed) {

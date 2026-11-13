@@ -4790,6 +4790,9 @@ export class WorkflowEventProcessor extends EventProcessor {
               suspendedAt: Date.now(),
               suspendPayload: prevResult.suspendPayload,
               ...(prevResult.suspendOutput !== undefined ? { suspendOutput: prevResult.suspendOutput } : {}),
+              ...(prevResult.suspendTimeout !== undefined
+                ? { suspendTimeout: prevResult.suspendTimeout }
+                : {}),
             },
           },
         });

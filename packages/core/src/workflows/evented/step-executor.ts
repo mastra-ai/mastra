@@ -165,7 +165,7 @@ export class StepExecutor extends MastraBase {
     // Use provided abortController or create a new one for backwards compatibility
     const abortController = params.abortController ?? new AbortController();
 
-    let suspended: { payload: any } | undefined;
+    let suspended: { payload: any; timeout?: number } | undefined;
     let bailed: { payload: any } | undefined;
     const startedAt = Date.now();
     const { inputData, validationError } = await validateStepInput({
@@ -320,6 +320,7 @@ export class StepExecutor extends MastraBase {
                         resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
                       },
                     },
+                    ...(suspendOptions?.timeout !== undefined ? { timeout: suspendOptions.timeout } : {}),
                   };
                 },
                 bail: (result: any): InnerOutput => {
@@ -384,6 +385,7 @@ export class StepExecutor extends MastraBase {
           status: 'suspended',
           suspendedAt: endedAt,
           ...(stepOutput ? { suspendOutput: stepOutput } : {}),
+          ...(suspended.timeout !== undefined ? { suspendTimeout: suspended.timeout } : {}),
           __state: finalState,
         };
 
