@@ -6,11 +6,9 @@ import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
-  FACTORY_WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
 import type {
   BoardItemDbRecord,
-  WorkItemDbRecord,
   WorkItemSourceDbRecord,
   WorkItemSourceFacts,
   WorkItemSourceLinkDbRecord,
@@ -19,7 +17,6 @@ import type {
 
 const LINKS = FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name;
 const SOURCES = FACTORY_WORK_ITEM_SOURCES_SCHEMA.name;
-const WORK_ITEMS = FACTORY_WORK_ITEMS_SCHEMA.name;
 const BOARD_ITEMS = FACTORY_BOARD_ITEMS_SCHEMA.name;
 const BATCH = 500;
 
@@ -62,10 +59,24 @@ export function factsOf(source: WorkItemSourceDbRecord): WorkItemSourceFacts {
   return { state: source.state, labels: source.labels, author: source.author, metadata: source.metadata };
 }
 
-/** Record that `workItemId` reads `source`. A no-op when it already does. */
+/** The source's facts as a link stores them, stamped with the source's own sync time. */
+function linkFacts(source: WorkItemSourceDbRecord, now: Date) {
+  return { ...factsOf(source), facts_synced_at: source.synced_at ?? now };
+}
+
+/**
+ * Whether a link's facts are current. A release before links carried facts syncs only the source
+ * row, moving its `synced_at` past the link's, so the source row is read until the next sync.
+ */
+function linkIsCurrent(link: WorkItemSourceLinkDbRecord, source: WorkItemSourceDbRecord): boolean {
+  if (!link.facts_synced_at) return false;
+  return !source.synced_at || new Date(link.facts_synced_at).getTime() >= new Date(source.synced_at).getTime();
+}
+
+/** Record that `workItemId` reads `source`, with its current facts. A no-op when it already does. */
 export async function linkSource(
   ops: FactoryStorageOps,
-  source: Pick<WorkItemSourceDbRecord, 'id' | 'org_id' | 'factory_project_id'>,
+  source: WorkItemSourceDbRecord,
   workItemId: string,
   role: WorkItemSourceRole,
   now = new Date(),
@@ -78,6 +89,7 @@ export async function linkSource(
     work_item_id: workItemId,
     source_id: source.id,
     role,
+    ...linkFacts(source, now),
     created_at: now,
   });
   return true;
@@ -128,8 +140,9 @@ export async function itemsForSourceKeys(
 }
 
 /**
- * The sources each work item reads, as that item sees them: `work_item_id` is the item and
- * `role` its own link's role. Ordered by when each source was filed.
+ * The sources each work item reads, as that item sees them: `work_item_id` is the item, `role`
+ * its own link's role, and the facts its link's (the source row's until the link has them).
+ * Ordered by when each source was filed.
  */
 export async function sourcesForItems(
   ops: FactoryStorageOps,
@@ -141,18 +154,21 @@ export async function sourcesForItems(
   const missing = links.map(link => link.source_id).filter(id => !byId.has(id));
   for (const source of await findIn<WorkItemSourceDbRecord>(ops, SOURCES, 'id', missing)) byId.set(source.id, source);
   const result = new Map<string, WorkItemSourceDbRecord[]>();
-  const add = (workItemId: string, source: WorkItemSourceDbRecord, role: WorkItemSourceRole) => {
+  const add = (workItemId: string, source: WorkItemSourceDbRecord, link: WorkItemSourceLinkDbRecord | undefined) => {
     const group = result.get(workItemId) ?? [];
     if (group.some(existing => existing.id === source.id)) return;
-    group.push({ ...source, work_item_id: workItemId, role });
+    const facts =
+      link && linkIsCurrent(link, source)
+        ? { state: link.state, labels: link.labels ?? [], author: link.author, metadata: link.metadata }
+        : {};
+    group.push({ ...source, ...facts, work_item_id: workItemId, role: link?.role ?? ownerRole(source) });
     result.set(workItemId, group);
   };
-  const linkRole = new Map(links.map(link => [`${link.work_item_id}\0${link.source_id}`, link.role]));
-  for (const source of owned)
-    add(source.work_item_id, source, linkRole.get(`${source.work_item_id}\0${source.id}`) ?? ownerRole(source));
+  const linkOf = new Map(links.map(link => [`${link.work_item_id}\0${link.source_id}`, link]));
+  for (const source of owned) add(source.work_item_id, source, linkOf.get(`${source.work_item_id}\0${source.id}`));
   for (const link of links) {
     const source = byId.get(link.source_id);
-    if (source) add(link.work_item_id, source, link.role);
+    if (source) add(link.work_item_id, source, link);
   }
   for (const group of result.values()) {
     group.sort(
@@ -160,12 +176,6 @@ export async function sourcesForItems(
     );
   }
   return result;
-}
-
-/** A source as one work item reads it: the facts stored on the item, or the source's own until backfilled. */
-export function withItemFacts(source: WorkItemSourceDbRecord, work: WorkItemDbRecord | null): WorkItemSourceDbRecord {
-  const facts = work?.source_facts?.[source.id];
-  return facts ? { ...source, ...facts } : source;
 }
 
 /** Every work item sharing a source with any of these, including them. */
@@ -197,27 +207,21 @@ export async function lockSourceGroup(ops: FactoryStorageOps, workItemIds: reado
 }
 
 /**
- * Store one source's current facts on every work item linked to it and stamp their cards, so
- * siblings never disagree. The caller holds the group's card locks ({@link lockSourceGroup}).
- * Returns the work item ids written.
+ * Write one source's current facts to every link it has, in one statement, and stamp the linked
+ * cards, so siblings never disagree. The caller holds the group's card locks ({@link lockSourceGroup})
+ * and then the source row: the order every fact write takes them in. Returns the work item ids.
  */
 export async function fanOutSourceFacts(
   ops: FactoryStorageOps,
   source: WorkItemSourceDbRecord,
   { now = new Date(), stamp = true }: { now?: Date; stamp?: boolean } = {},
 ): Promise<string[]> {
-  const items = (await linkedItems(ops, [source]))
-    .get(source.id)!
-    .map(link => link.workItemId)
-    .sort();
-  const facts = factsOf(source);
-  for (const id of items) {
-    await ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id }, work => ({
-      source_facts: { ...work.source_facts, [source.id]: facts },
-      facts_synced_at: now,
-    }));
-  }
-  if (stamp && items.length) await ops.updateMany(BOARD_ITEMS, { work_item_id: { in: items } }, { changed_at: now });
+  const holders = (await linkedItems(ops, [source])).get(source.id)!;
+  // An owner filed before links existed gets its link here, with the facts.
+  for (const holder of holders) await linkSource(ops, source, holder.workItemId, holder.role, now);
+  await ops.updateMany(LINKS, { source_id: source.id }, linkFacts(source, now));
+  const items = holders.map(holder => holder.workItemId).sort();
+  if (stamp) await ops.updateMany(BOARD_ITEMS, { work_item_id: { in: items } }, { changed_at: now });
   return items;
 }
 
@@ -248,21 +252,19 @@ export async function unlinkSource(
 
 export interface SourceLinkBackfillReport {
   links: number;
-  facts: number;
   aborted: boolean;
 }
 
 /**
- * Give every source written before links existed a link for its owner, and every work item the
- * facts of the sources it reads. Idempotent and resumable: each row is checked on its own, and a
- * work item's facts are filled under its row lock only for sources it lacks, so a sync that got
- * there first is never overwritten.
+ * Give every source written before links existed a link for its owner, carrying the source's
+ * facts. Idempotent and resumable: a source that already has its owner's link is skipped. Reads
+ * fall back to the source row for any link it has not reached yet.
  */
 export async function backfillSourceLinks(
-  storage: { ops: FactoryStorageOps; withTransaction<T>(fn: (ops: FactoryStorageOps) => Promise<T>): Promise<T> },
+  storage: { ops: FactoryStorageOps },
   { signal, pageSize = BATCH }: { signal?: AbortSignal; pageSize?: number } = {},
 ): Promise<SourceLinkBackfillReport> {
-  const report: SourceLinkBackfillReport = { links: 0, facts: 0, aborted: false };
+  const report: SourceLinkBackfillReport = { links: 0, aborted: false };
   const orderBy: Array<[string, 'asc']> = [['id', 'asc']];
   let cursor: string | undefined;
   while (!signal?.aborted) {
@@ -277,40 +279,6 @@ export async function backfillSourceLinks(
       if (await linkSource(storage.ops, source, source.work_item_id, ownerRole(source), source.created_at)) {
         report.links++;
       }
-    }
-  }
-  cursor = undefined;
-  while (!signal?.aborted) {
-    const page: WorkItemDbRecord[] = await storage.ops.findMany<WorkItemDbRecord>(
-      WORK_ITEMS,
-      {},
-      { orderBy, limit: pageSize, ...(cursor ? { cursor: { values: [cursor] } } : {}) },
-    );
-    if (!page.length) break;
-    cursor = page[page.length - 1]!.id;
-    const read = await sourcesForItems(
-      storage.ops,
-      page.map(work => work.id),
-    );
-    for (const work of page) {
-      const sources = read.get(work.id) ?? [];
-      if (!sources.some(source => !work.source_facts?.[source.id])) continue;
-      let filled = false;
-      await storage.withTransaction(ops =>
-        ops.updateAtomic<WorkItemDbRecord>(WORK_ITEMS, { id: work.id }, current => {
-          const missing = sources.filter(source => !current.source_facts?.[source.id]);
-          if (!missing.length) return null;
-          filled = true;
-          return {
-            source_facts: {
-              ...current.source_facts,
-              ...Object.fromEntries(missing.map(source => [source.id, factsOf(source)])),
-            },
-            facts_synced_at: current.facts_synced_at ?? new Date(),
-          };
-        }),
-      );
-      if (filled) report.facts++;
     }
   }
   report.aborted = signal?.aborted ?? false;

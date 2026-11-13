@@ -15,7 +15,6 @@ import {
 } from './legacy-review.js';
 import type { ReviewBoardInUse } from './legacy-review.js';
 import {
-  factsOf,
   fanOutSourceFacts,
   itemsForSourceKeys,
   linkedItems,
@@ -23,7 +22,6 @@ import {
   lockSourceGroup,
   sourcesForItems,
   unlinkSource,
-  withItemFacts,
 } from './source-links.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
@@ -263,11 +261,7 @@ export class Cards {
         joinCard(
           board,
           items.get(board.work_item_id) ?? null,
-          originFirst(
-            (sources.get(board.work_item_id) ?? []).map(source =>
-              withItemFacts(source, items.get(board.work_item_id) ?? null),
-            ),
-          ),
+          originFirst(sources.get(board.work_item_id) ?? []),
           usingReview.has(`${board.org_id}\0${board.factory_project_id}`),
         ),
       );
@@ -341,10 +335,7 @@ export class Cards {
       { workItemId: randomUUID() },
     );
     const now = new Date();
-    const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, {
-      ...rows.workItem,
-      ...(rows.source ? { source_facts: { [rows.source.id]: factsOf(rows.source) }, facts_synced_at: now } : {}),
-    });
+    const work = await this.ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, rows.workItem);
     if (rows.source) {
       await this.ops.insertOne(SOURCES, rows.source);
       await linkSource(this.ops, rows.source, work.id, 'origin', now);
@@ -442,7 +433,6 @@ export class Cards {
         } else if (next) {
           const inserted = await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, next);
           await linkSource(this.ops, inserted, row.work_item_id, 'origin');
-          await fanOutSourceFacts(this.ops, inserted, { stamp: false });
           wroteCard = true;
         } else if (previous) {
           const stored = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, { id: previous.id });
@@ -608,8 +598,6 @@ export class Cards {
       title: card.title,
       description: card.description ?? null,
       parent_work_item_id: null,
-      source_facts: Object.fromEntries(sources.map(read => [read.id, factsOf(read)])),
-      facts_synced_at: now,
       revision: 1,
       created_at: now,
       updated_at: now,

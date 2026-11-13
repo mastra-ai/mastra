@@ -11,7 +11,7 @@ import {
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
 } from './work-item-schema.js';
-import type { WorkItemDbRecord, WorkItemSourceDbRecord } from './work-item-schema.js';
+import type { WorkItemDbRecord, WorkItemSourceDbRecord, WorkItemSourceLinkDbRecord } from './work-item-schema.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -52,7 +52,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       (await storage.ops.findOne<WorkItemDbRecord>(FACTORY_WORK_ITEMS_SCHEMA.name, { id: workItemId }))!;
     const sourceRows = () =>
       storage.ops.findMany<WorkItemSourceDbRecord>(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, { org_id: scope.orgId });
-    return { storage, workItems, scope, file, addTo, workRow, sourceRows };
+    const linkRow = async (workItemId: string, sourceId: string) =>
+      (await storage.ops.findOne<WorkItemSourceLinkDbRecord>(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, {
+        work_item_id: workItemId,
+        source_id: sourceId,
+      }))!;
+    return { storage, workItems, scope, file, addTo, workRow, sourceRows, linkRow };
   }
 
   it('puts a second card for the same issue on another board, with its own id and placement', async () => {
@@ -100,8 +105,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     ]);
   });
 
-  it('writes a provider sync to every card of the issue in one go, on each work item row', async () => {
-    const { workItems, scope, file, addTo, workRow } = await setup();
+  it("writes a provider sync to every card of the issue in one go, on each card's link to it", async () => {
+    const { workItems, scope, file, addTo, workRow, linkRow } = await setup();
     const first = await file(issue12, { state: 'open', labels: ['bug'], author: 'reporter' });
     const second = await addTo(first.id, 'security');
 
@@ -117,13 +122,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       const stored = (await workItems.get({ orgId: scope.orgId, id: card.id }))!;
       expect(stored.workItem).toMatchObject({ state: 'closed', labels: ['bug', 'p1'], author: 'reporter' });
       expect(stored.changedAt!.getTime()).toBeGreaterThan(card.changedAt!.getTime());
-      // The facts live on the card's own work item row, so reads need no source join.
-      const row = await workRow(card.workItemId);
-      expect(row.source_facts?.[first.workItem.sources[0]!.id]).toMatchObject({
-        state: 'closed',
-        labels: ['bug', 'p1'],
-      });
-      expect(row.facts_synced_at).toBeInstanceOf(Date);
+      // The facts live on the card's own link to the issue, as columns.
+      const link = await linkRow(card.workItemId, first.workItem.sources[0]!.id);
+      expect(link).toMatchObject({ state: 'closed', labels: ['bug', 'p1'], author: 'reporter' });
+      expect(link.facts_synced_at).toBeInstanceOf(Date);
+      expect(await workRow(card.workItemId)).not.toHaveProperty('source_facts');
     }
   });
 
@@ -151,7 +154,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
   });
 
   it('shows a pull request joined to the issue on every card of the issue, and syncs it to all of them', async () => {
-    const { workItems, scope, file, addTo, sourceRows } = await setup();
+    const { workItems, scope, file, addTo, sourceRows, linkRow } = await setup();
     const first = await file(issue12, { state: 'open' });
     const second = await addTo(first.id, 'security');
 
@@ -183,6 +186,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
         ['pull-request', 'merged'],
       ]);
       expect(stored.externalSource).toMatchObject({ type: 'issue' });
+      expect(await linkRow(card.workItemId, pr.id)).toMatchObject({
+        role: 'attached',
+        state: 'merged',
+        author: 'maintainer',
+      });
       expect((await workItems.getByProjectSource({ ...scope, source: pullRequest34 }))?.id).toBe(first.id);
     }
   });
@@ -255,25 +263,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
     ]);
   });
 
-  it('reads cards filed before links and per-item facts existed, and backfills them once', async () => {
-    const { workItems, scope, file, storage, workRow } = await setup();
+  it('reads cards filed before links existed, and backfills their links with facts once', async () => {
+    const { workItems, scope, file, storage, linkRow } = await setup();
     const first = await file(issue12, { state: 'open', labels: ['bug'], author: 'reporter' });
-    // Rows an older release wrote: no link and no facts on the work item.
+    // Rows an older release wrote: a source and no link.
     await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
-    await storage.ops.updateMany(
-      FACTORY_WORK_ITEMS_SCHEMA.name,
-      { id: first.workItemId },
-      {
-        source_facts: null,
-        facts_synced_at: null,
-      },
-    );
 
     const before = (await workItems.get({ orgId: scope.orgId, id: first.id }))!;
     expect(before.workItem).toMatchObject({ state: 'open', labels: ['bug'], author: 'reporter' });
     expect((await workItems.getByProjectSource({ ...scope, source: issue12 }))?.id).toBe(first.id);
 
-    expect(await workItems.backfillSourceLinks()).toMatchObject({ links: 1, facts: 1 });
+    expect(await workItems.backfillSourceLinks()).toMatchObject({ links: 1 });
     // Done once: later boots skip it.
     expect(workItems.sourceLinkBackfillPending).toBe(false);
     expect(await workItems.backfillSourceLinks()).toBeNull();
@@ -281,7 +281,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       org_id: scope.orgId,
     });
     expect(links).toMatchObject([{ work_item_id: first.workItemId, role: 'origin' }]);
-    expect((await workRow(first.workItemId)).facts_synced_at).toBeInstanceOf(Date);
+    const link = await linkRow(first.workItemId, first.workItem.sources[0]!.id);
+    expect(link).toMatchObject({ state: 'open', labels: ['bug'], author: 'reporter' });
+    expect(link.facts_synced_at).toBeInstanceOf(Date);
 
     // A card added from a not-yet-backfilled issue still reaches the original card's facts.
     await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCE_LINKS_SCHEMA.name, { org_id: scope.orgId });
@@ -296,5 +298,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('an issue on sev
       first.id,
       second.id,
     ]);
+  });
+
+  it('reads a sync an older release wrote to the source row only, until a link catches up', async () => {
+    const { workItems, scope, file, addTo, storage } = await setup();
+    const first = await file(issue12, { state: 'open', labels: ['bug'] });
+    const second = await addTo(first.id, 'security');
+    // After a rollback, an older release syncs the source row and leaves the links behind.
+    await storage.ops.updateMany(
+      FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+      { id: first.workItem.sources[0]!.id },
+      { state: 'closed', synced_at: new Date(Date.now() + 60_000) },
+    );
+
+    for (const card of [first, second]) {
+      expect((await workItems.get({ orgId: scope.orgId, id: card.id }))!.workItem.state).toBe('closed');
+    }
   });
 });

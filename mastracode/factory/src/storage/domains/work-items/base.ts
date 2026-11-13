@@ -1383,7 +1383,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return this.#split.pending;
   }
 
-  /** Whether sources written before links existed may still lack their link or per-item facts. */
+  /** Whether sources written before links existed may still lack their owner's link. */
   get sourceLinkBackfillPending(): boolean {
     return this.#sourceLinksPending;
   }
@@ -1391,9 +1391,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   #sourceLinksPending = false;
 
   /**
-   * Link every source to its owning work item and copy source facts onto work items that lack
-   * them, then mark the pass done. Reads fall back to source rows meanwhile, so this only makes
-   * the links authoritative. Returns null once done.
+   * Link every source to its owning work item, carrying the source's facts, then mark the pass
+   * done. Reads fall back to source rows meanwhile, so this only makes the links authoritative.
+   * Returns null once done.
    */
   async backfillSourceLinks({ signal }: { signal?: AbortSignal } = {}): Promise<SourceLinkBackfillReport | null> {
     if (this.#legacyMode) return null;
@@ -1401,10 +1401,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       this.#sourceLinksPending = false;
       return null;
     }
-    const report = await backfillSourceLinks(
-      { ops: super.ops, withTransaction: fn => this.#withTransaction(fn) },
-      { signal },
-    );
+    const report = await backfillSourceLinks({ ops: super.ops }, { signal });
     if (!report.aborted) {
       await super.ops.upsertOne(FACTORY_WORK_ITEM_SPLIT_STATE_SCHEMA.name, ['id'], {
         id: SOURCE_LINKS_MARKER_ID,
