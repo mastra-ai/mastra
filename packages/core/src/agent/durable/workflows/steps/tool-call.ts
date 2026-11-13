@@ -50,6 +50,7 @@ import {
   resolveToolOutputValidationSchema,
   validateToolOutput,
 } from '../../../../tools/validation';
+import type { ModelFacingValidationError } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import type { SuspendOptions } from '../../../../workflows/step';
 import { defineLazyWriter } from '../../../../workflows/utils';
@@ -1761,10 +1762,14 @@ export function createDurableToolCallStep() {
 
       // Live-attempt barrier only. Durable recovery must use persisted task and
       // transcript state because this Promise does not survive workflow replay.
-      let resolveReconciliation!: (outcome: { error?: unknown }) => void;
-      const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
-        resolveReconciliation = resolve;
-      });
+      // `validationError` is read from the result in `onResult`, in the process that ran the
+      // task, so an awaited call can map its result after the stored copy dropped the marker.
+      let resolveReconciliation!: (outcome: { error?: unknown; validationError?: ModelFacingValidationError }) => void;
+      const reconciliationComplete = new Promise<{ error?: unknown; validationError?: ModelFacingValidationError }>(
+        resolve => {
+          resolveReconciliation = resolve;
+        },
+      );
       const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
         ...typedInput.providerMetadata,
         mastra: {
@@ -2006,7 +2011,10 @@ export function createDurableToolCallStep() {
                   }
                 },
               });
-              resolveReconciliation({});
+              resolveReconciliation({
+                validationError:
+                  params.status === 'completed' ? getModelFacingValidationError(params.result) : undefined,
+              });
               if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
                 const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
                 void owner?.__notifyBackgroundTaskFinished({
@@ -2085,11 +2093,13 @@ export function createDurableToolCallStep() {
             };
           }
           // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+          let reconciledValidationError: ModelFacingValidationError | undefined;
           if (completedTask.status !== 'cancelled') {
             const reconciliation = await reconciliationComplete;
             if (reconciliation.error) {
               throw reconciliation.error;
             }
+            reconciledValidationError = reconciliation.validationError;
           }
 
           if (completedTask.status !== 'completed') {
@@ -2105,6 +2115,20 @@ export function createDurableToolCallStep() {
             // Normalize a void result to null like executeToolCall does, so the loop continues.
             result: completedTask.result === undefined ? null : completedTask.result,
             providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+            // Map a validation error here: llm-mapping only sees the stored copy, which lost the marker.
+            ...(reconciledValidationError
+              ? {
+                  providerMetadata: await computeModelOutputProviderMetadata({
+                    tool: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool,
+                    toolName,
+                    toolCallId,
+                    result: completedTask.result,
+                    validationError: reconciledValidationError,
+                    existingProviderMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
+                  }),
+                  modelOutputComputed: true,
+                }
+              : {}),
             ...(bgOutcome.status === 'started' ? (approvalGrant ?? {}) : {}),
             ...(processorDataParts.length ? { processorDataParts } : {}),
           };

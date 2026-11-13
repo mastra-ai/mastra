@@ -379,6 +379,49 @@ describeForAllEngines(
       // ...without quoting the raw arguments back.
       expect(toolMessages.some(message => JSON.stringify(message.content).includes('Provided arguments'))).toBe(false);
     });
+
+    it('an awaited background tool whose arguments are rejected reports the error, not a mapping of it', async () => {
+      const { tool, mapperCalls } = createLookupTool({ background: true });
+
+      const { output, requests } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Look up the answer and wait for it.',
+        tools: { lookup: tool },
+        agentBackgroundTasks: { tools: { lookup: true } },
+        backgroundTasks: { enabled: true },
+        memory: new MockMemory(),
+        threadId: `to-model-output-bg-awaited-${engine}`,
+        resourceId: 'user-to-model-output-bg-awaited',
+        stopWhen: stepCountIs(3),
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            {
+              toolCalls: [
+                {
+                  id: 'call_bg_awaited',
+                  name: 'lookup',
+                  arguments: { query: '', _background: { disposition: 'awaited' } },
+                },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat' }, { content: 'Done.' });
+        },
+      });
+      await output.text;
+
+      expect(mapperCalls.filter(isValidationError)).toEqual([]);
+      const toolMessages = requests
+        .flatMap(request => ((request.body as { messages?: any[] } | undefined)?.messages ?? []) as any[])
+        .filter(message => message.role === 'tool' && message.tool_call_id === 'call_bg_awaited');
+      expect(toolMessages.length).toBeGreaterThan(0);
+      for (const message of toolMessages) {
+        expect(JSON.stringify(message.content)).toContain('Tool input validation failed');
+        expect(JSON.stringify(message.content)).not.toContain('Provided arguments');
+      }
+    });
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
   { skip: ['inngest'] },

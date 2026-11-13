@@ -23,6 +23,7 @@ import {
   resolveToolOutputValidationSchema,
   validateToolOutput,
 } from '../../../tools/validation';
+import type { ModelFacingValidationError } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
 import type { SuspendOptions } from '../../../workflows/step';
 import { createStep } from '../../../workflows/workflow';
@@ -1149,10 +1150,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // been reconciled into the message list (or reconciliation threw).
         // Lives outside `taskContext` because the `awaited` disposition below
         // must block the turn on it after the ladder returns.
-        let resolveReconciliation!: (outcome: { error?: unknown }) => void;
-        const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
-          resolveReconciliation = resolve;
-        });
+        // `validationError` is read from the result in `onResult`, in the process that ran the
+        // task, so an awaited call can carry it past the step boundary.
+        let resolveReconciliation!: (outcome: {
+          error?: unknown;
+          validationError?: ModelFacingValidationError;
+        }) => void;
+        const reconciliationComplete = new Promise<{ error?: unknown; validationError?: ModelFacingValidationError }>(
+          resolve => {
+            resolveReconciliation = resolve;
+          },
+        );
         const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
           ...inputData.providerMetadata,
           mastra: {
@@ -1475,7 +1483,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     flush: flushBackgroundMessages,
                   });
 
-                  resolveReconciliation({});
+                  resolveReconciliation({
+                    validationError:
+                      params.status === 'completed' ? getModelFacingValidationError(params.result) : undefined,
+                  });
                   void notifyBackgroundWorkTerminal(mastra, {
                     originRunId: runId,
                     originToolCallId: params.toolCallId,
@@ -1544,11 +1555,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           if (bgOutcome.disposition === 'awaited') {
             const completedTask = await bgOutcome.waitForCompletion({ abortSignal });
             // Cancellation deregisters the task context without calling onResult, so there is no reconciliation to await.
+            let reconciledValidationError: ModelFacingValidationError | undefined;
             if (completedTask.status !== 'cancelled') {
               const reconciliation = await reconciliationComplete;
               if (reconciliation.error) {
                 throw reconciliation.error;
               }
+              reconciledValidationError = reconciliation.validationError;
             }
 
             if (completedTask.status !== 'completed') {
@@ -1566,7 +1579,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               ...inputData,
               providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),
-              validationError: getModelFacingValidationError(serializedResult),
+              // The stored task result is a copy without the marker; onResult read it from the original.
+              validationError: reconciledValidationError,
             };
           }
           if (bgOutcome.status === 'started') {
