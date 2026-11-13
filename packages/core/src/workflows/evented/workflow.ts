@@ -27,7 +27,7 @@ import {
   getRootExportSpan,
   resolveObservabilityContext,
 } from '../../observability';
-import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
+import type { ObservabilityContext, TracingContext, TracingOptions, TracingPolicy } from '../../observability';
 import { initContextStorage } from '../../observability/context-storage';
 import { executionFailureTermination } from '../../observability/execution-outcome';
 import { executeWithContext } from '../../observability/utils';
@@ -2001,10 +2001,12 @@ export class EventedRun<
     perStep,
     outputOptions,
     tracingContext,
+    tracingOptions,
     actor,
   }: {
     inputData?: TInput;
     requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
     initialState?: TState;
     perStep?: boolean;
     outputOptions?: {
@@ -2088,6 +2090,7 @@ export class EventedRun<
       metadata: { resourceId: this.resourceId, runId: this.runId },
       tracingPolicy: this.tracingPolicy,
       tracingContext,
+      tracingOptions,
       requestContext,
       mastra: this.mastra,
     });
@@ -2144,6 +2147,8 @@ export class EventedRun<
     this.releaseWorkflowTracing(workflowSpan);
     if (result.status !== 'suspended') this.cleanup?.();
 
+    result.traceId = workflowSpan?.externalTraceId;
+    result.spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
     return result;
   }
 
@@ -2477,6 +2482,7 @@ export class EventedRun<
     label?: string;
     forEachIndex?: number;
     requestContext?: RequestContext;
+    tracingOptions?: TracingOptions;
     actor?: ActorSignal;
     perStep?: boolean;
     outputOptions?: {
@@ -2659,6 +2665,7 @@ export class EventedRun<
       },
       tracingPolicy: this.tracingPolicy,
       resumeFrom: snapshot.tracingContext,
+      tracingOptions: params.tracingOptions,
       requestContext,
       mastra: this.mastra,
     });
@@ -2795,6 +2802,8 @@ export class EventedRun<
           this.cleanup?.();
         }
 
+        result.traceId = workflowSpan?.externalTraceId;
+        result.spanId = workflowSpan?.isValid ? workflowSpan.id : undefined;
         return result;
       })
       .catch(async error => {
