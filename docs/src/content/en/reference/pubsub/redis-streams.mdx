@@ -133,7 +133,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'reclaimIntervalMs',
     type: 'number',
     description:
-      'How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable.',
+      "How often, in milliseconds, a subscription reclaims events that an earlier consumer read but never acknowledged. Set to 0 to disable. While it's enabled, workflow recovery leaves evented runs to this reclaim instead of restarting them.",
     isOptional: true,
     defaultValue: '30000',
   },
@@ -141,7 +141,7 @@ const pubsub = new RedisStreamsPubSub({
     name: 'reclaimIdleMs',
     type: 'number',
     description:
-      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery.',
+      'Minimum idle time, in milliseconds, before a pending event is eligible for reclaim. Keep this well above typical processing time to avoid double delivery, and at 30000 or more for evented workflows: a step event reclaimed sooner can be dropped as a duplicate.',
     isOptional: true,
     defaultValue: '60000',
   },
