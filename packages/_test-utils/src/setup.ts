@@ -25,7 +25,10 @@ import { vi, beforeEach } from 'vitest';
 // Covers both `globalThis.crypto.randomUUID()` and packages that have not yet
 // migrated their `node:crypto` or `crypto` imports.
 // ---------------------------------------------------------------------------
-const uuidStore = new AsyncLocalStorage<{ counter: number }>();
+// One store per worker process: without isolation this file re-runs for every
+// test file, and each enabled AsyncLocalStorage adds per-async-op cost forever.
+const uuidStore: AsyncLocalStorage<{ counter: number }> = ((globalThis as any).__mastraTestUuidStore ??=
+  new AsyncLocalStorage<{ counter: number }>());
 let fallbackCounter = 0;
 
 function deterministicUUID(): `${string}-${string}-${string}-${string}-${string}` {
