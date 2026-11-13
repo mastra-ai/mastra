@@ -191,43 +191,41 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
   content: { format: 2, parts: [{ type: 'text', text }], metadata },
 });
 
-// Controllable browser SpeechRecognition stub: mocks the browser API only, not our hooks.
-interface FakeRecognitionEvent {
-  resultIndex: number;
-  results: Array<{ 0: { transcript: string }; isFinal: boolean }>;
-}
+const originalMediaDevices = Object.getOwnPropertyDescriptor(navigator, 'mediaDevices');
+const originalCreateObjectURL = Object.getOwnPropertyDescriptor(URL, 'createObjectURL');
 
-let lastRecognition: {
-  onstart: (() => void) | null;
-  onresult: ((event: FakeRecognitionEvent) => void) | null;
-  onend: (() => void) | null;
-} | null = null;
-
-const installFakeSpeechRecognition = () => {
-  class FakeSpeechRecognition {
-    continuous = false;
-    lang = '';
-    onstart: (() => void) | null = null;
-    onresult: ((event: FakeRecognitionEvent) => void) | null = null;
-    onerror: ((event: unknown) => void) | null = null;
-    onend: (() => void) | null = null;
-    start = () => this.onstart?.();
-    stop = () => this.onend?.();
-    constructor() {
-      lastRecognition = this;
+const installFakeRecorder = () => {
+  class FakeMediaRecorder {
+    static isTypeSupported() {
+      return true;
+    }
+    state = 'inactive';
+    ondataavailable: ((event: { data: Blob }) => void) | null = null;
+    onstop: (() => void) | null = null;
+    start() {
+      this.state = 'recording';
+    }
+    stop() {
+      this.ondataavailable?.({ data: new Blob(['audio'], { type: 'audio/webm' }) });
+      this.state = 'inactive';
+      this.onstop?.();
     }
   }
-  Object.assign(window, { SpeechRecognition: FakeSpeechRecognition, webkitSpeechRecognition: FakeSpeechRecognition });
-};
-
-const uninstallFakeSpeechRecognition = () => {
-  delete (window as { SpeechRecognition?: unknown }).SpeechRecognition;
-  delete (window as { webkitSpeechRecognition?: unknown }).webkitSpeechRecognition;
-  lastRecognition = null;
+  vi.stubGlobal('MediaRecorder', FakeMediaRecorder);
+  Object.defineProperty(navigator, 'mediaDevices', {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop: () => {} }] }) },
+  });
 };
 
 afterEach(() => {
   delete window.MASTRA_AGENT_SIGNALS;
+  delete window.MASTRA_PLATFORM_PROJECT_ID;
+  vi.unstubAllGlobals();
+  if (originalMediaDevices) Object.defineProperty(navigator, 'mediaDevices', originalMediaDevices);
+  else Reflect.deleteProperty(navigator, 'mediaDevices');
+  if (originalCreateObjectURL) Object.defineProperty(URL, 'createObjectURL', originalCreateObjectURL);
+  else Reflect.deleteProperty(URL, 'createObjectURL');
   cleanup();
 });
 
@@ -237,39 +235,103 @@ describe('Thread', () => {
     server.resetHandlers();
   });
 
-  describe('when the user dictates two phrases in one browser dictation session', () => {
-    beforeEach(() => installFakeSpeechRecognition());
-    afterEach(() => uninstallFakeSpeechRecognition());
-
-    it('keeps both phrases in the composer', async () => {
-      // `/voice/speakers` returns [] in baseHandlers, so the hook uses the browser path.
+  describe('when Gateway audio is unavailable', () => {
+    it('does not render Gateway speech controls', async () => {
       server.use(...baseHandlers());
-
       await act(async () => {
         renderThread([]);
       });
+      expect(screen.queryByRole('button', { name: 'Start dictation' })).toBeNull();
+      expect(screen.queryByLabelText('Gateway speech settings')).toBeNull();
+    });
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
-      await screen.findByRole('button', { name: 'Stop dictation' });
+    it('hides speech controls when the deployed user is denied access', async () => {
+      window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+      const accessChecked = vi.fn();
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/system/gateway-audio/models`, () => {
+          accessChecked();
+          return new HttpResponse(null, { status: 403 });
+        }),
+      );
+      renderThread([]);
 
-      const first = { 0: { transcript: 'Accept the newer address.' }, isFinal: true };
-      act(() => {
-        lastRecognition?.onresult?.({ resultIndex: 0, results: [first] });
-      });
-      act(() => {
-        lastRecognition?.onresult?.({
-          resultIndex: 1,
-          results: [first, { 0: { transcript: 'And note that Sentinel confirmed it.' }, isFinal: true }],
-        });
-      });
+      await waitFor(() => expect(accessChecked).toHaveBeenCalledOnce());
+      expect(screen.queryByRole('button', { name: 'Start dictation' })).toBeNull();
+      expect(screen.queryByLabelText('Gateway speech settings')).toBeNull();
+    });
+  });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+  describe('when a deployed user has Gateway audio access', () => {
+    beforeEach(() => {
+      window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+      installFakeRecorder();
+    });
+
+    it('offers Gateway models and inserts dictated text into the composer', async () => {
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/system/gateway-audio/models`, () =>
+          HttpResponse.json({
+            speech: [{ id: 'minimax/speech', voices: ['george'] }],
+            transcription: [{ id: 'openai/whisper' }],
+          }),
+        ),
+        http.post(`${BASE_URL}/api/system/gateway-audio/transcriptions`, async ({ request }) => {
+          expect(await request.text()).toContain('openai/whisper');
+          return HttpResponse.json({ text: 'spoken words' });
+        }),
+      );
+      renderThread([assistantMessage('A reply')]);
+
+      expect(await screen.findByLabelText('Gateway speech settings')).toBeTruthy();
+      expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Speech model' }).value).toBe('minimax/speech');
+      fireEvent.change(screen.getByRole('textbox', { name: 'Gateway voice ID' }), { target: { value: 'sarah' } });
+      expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Gateway voice ID' }).value).toBe('sarah');
+      fireEvent.click(screen.getByRole('button', { name: 'Start dictation' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Stop dictation' }));
 
       await waitFor(() =>
-        expect((screen.getByRole('textbox') as HTMLTextAreaElement).value).toBe(
-          'Accept the newer address. And note that Sentinel confirmed it. ',
-        ),
+        expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('spoken words'),
       );
+    });
+
+    it('does not play speech that arrives after playback is stopped', async () => {
+      let finishSpeech: (() => void) | undefined;
+      const requested = vi.fn();
+      const createObjectURL = vi.fn(() => 'blob:gateway-audio');
+      vi.stubGlobal('Audio', vi.fn());
+      Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createObjectURL });
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/system/gateway-audio/models`, () =>
+          HttpResponse.json({ speech: [{ id: 'minimax/speech', voices: ['george'] }], transcription: [] }),
+        ),
+        http.post(`${BASE_URL}/api/system/gateway-audio/speech`, async ({ request }) => {
+          expect(await request.json()).toEqual({
+            model: 'minimax/speech',
+            voice: 'george',
+            input: 'A reply',
+          });
+          requested();
+          await new Promise<void>(resolve => {
+            finishSpeech = resolve;
+          });
+          return new HttpResponse(new Uint8Array([1, 2, 3]), { headers: { 'content-type': 'audio/mpeg' } });
+        }),
+      );
+      renderThread([assistantMessage('A reply')]);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Read latest reply aloud' }));
+      await waitFor(() => expect(requested).toHaveBeenCalledOnce());
+      fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }));
+      await act(async () => {
+        finishSpeech?.();
+      });
+
+      expect(createObjectURL).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Read latest reply aloud' })).toBeTruthy();
     });
   });
 
