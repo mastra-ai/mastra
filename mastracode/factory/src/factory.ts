@@ -583,7 +583,7 @@ export class MastraFactory {
   readonly #dispatchWakeOrigin = globalThis.crypto.randomUUID();
   #unsubscribeDispatchWakes: Promise<(() => Promise<void>) | undefined> | undefined;
   #unsubscribeSandboxEnvChanges: Promise<(() => Promise<void>) | undefined> | undefined;
-  #unsubscribeLinkedRepositoryChanges: Promise<(() => Promise<void>) | undefined> | undefined;
+  #unsubscribeLinkedRepositoryChanges: Promise<() => Promise<void>> | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   #channelShutdowns: Array<() => Promise<void>> = [];
@@ -903,15 +903,7 @@ export class MastraFactory {
     const sourceControlStorage = storage.registerDomain(new SourceControlStorage());
     // Event polling keeps its repository list in memory; the bus tells the
     // polling replica about links made on another one.
-    this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage).catch(
-      error => {
-        sourceControlStorage.linkedRepositoryChangesUnshared();
-        console.warn(
-          `[factory] subscribing to linked repository changes failed; the GitHub event poll reads linked repositories from the database on every tick: ${error instanceof Error ? error.message : error}`,
-        );
-        return undefined;
-      },
-    );
+    this.#unsubscribeLinkedRepositoryChanges = shareLinkedRepositoryChanges(eventBus, sourceControlStorage);
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
@@ -2529,7 +2521,7 @@ export class MastraFactory {
       await unsubscribeSandboxEnvChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
       const unsubscribeLinkedRepositoryChanges = this.#unsubscribeLinkedRepositoryChanges;
       this.#unsubscribeLinkedRepositoryChanges = undefined;
-      await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe?.()).catch(() => undefined);
+      await unsubscribeLinkedRepositoryChanges?.then(unsubscribe => unsubscribe()).catch(() => undefined);
       await unsubscribeDispatchWakes
         ?.then(unsubscribe => unsubscribe?.())
         .catch(error =>

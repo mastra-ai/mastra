@@ -1,10 +1,14 @@
+import { randomUUID } from 'node:crypto';
+import { EventEmitter } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { EventEmitterPubSub } from '@mastra/core/events';
+import type { FactoryStorage } from '@mastra/core/storage';
 import type { WorkerDeps } from '@mastra/core/worker';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { shareLinkedRepositoryChanges } from '../../../linked-repositories-changed.js';
@@ -17,17 +21,66 @@ import type { PlatformGithubEventStorage } from './event-worker.js';
 
 const POLL_MS = 15;
 
+/** A database several replicas connect to independently. */
+interface SharedDatabase {
+  connect(id: string): FactoryStorage;
+  drop(): Promise<void>;
+}
+
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+
+const databases: Array<{ name: string; skip: boolean; create(): Promise<SharedDatabase> }> = [
+  {
+    name: 'LibSQL',
+    skip: false,
+    async create() {
+      const directory = await mkdtemp(join(tmpdir(), 'linked-repositories-'));
+      const url = `file:${join(directory, 'factory.db')}`;
+      return {
+        connect: id => new LibSQLFactoryStorage({ id, url }),
+        drop: () => rm(directory, { recursive: true, force: true }),
+      };
+    },
+  },
+  {
+    name: 'PostgreSQL',
+    skip: !postgresUrl,
+    async create() {
+      const admin = new PostgresStore({ id: 'linked-repositories-admin', connectionString: postgresUrl!, disableInit: true });
+      const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
+      await admin.pool.query(`CREATE SCHEMA "${schema}"`);
+      const url = new URL(postgresUrl!);
+      url.searchParams.set('options', `-c search_path=${schema}`);
+      return {
+        connect: id => new PgFactoryStorage({ id, connectionString: url.toString() }),
+        drop: async () => {
+          await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+          await admin.close();
+        },
+      };
+    },
+  },
+];
+
 /** One Factory replica: its own storage connection to the shared database. */
-async function createReplica(url: string, pubsub: EventEmitterPubSub) {
-  const backend = new LibSQLFactoryStorage({ id: 'linked-repositories-test', url });
+async function createReplica(database: SharedDatabase, id: string) {
+  const backend = database.connect(id);
   const projects = backend.registerDomain(new FactoryProjectsStorage());
   const domain = backend.registerDomain(new SourceControlStorage());
   await backend.init();
-  const stopSharing = await shareLinkedRepositoryChanges(pubsub, domain);
-  return { backend, projects, domain, github: domain.forIntegration('github'), stopSharing };
+  return { backend, projects, domain, github: domain.forIntegration('github'), stopSharing: async () => {} };
 }
 
 type Replica = Awaited<ReturnType<typeof createReplica>>;
+
+/** Connects a replica to the event bus, replacing any earlier connection. */
+async function share(replica: Replica, pubsub: EventEmitterPubSub): Promise<void> {
+  await replica.stopSharing();
+  replica.stopSharing = async () => {};
+  const stopSharing = await shareLinkedRepositoryChanges(pubsub, replica.domain).catch(() => undefined);
+  if (stopSharing) replica.stopSharing = stopSharing;
+}
+
 
 async function linkRepository(replica: Replica, repositoryExternalId: string): Promise<{ unlink(): Promise<boolean> }> {
   const project = await replica.projects.create({
@@ -69,9 +122,10 @@ async function linkRepository(replica: Replica, repositoryExternalId: string): P
   return { unlink: () => replica.github.projectRepositories.unlink({ orgId: 'org-1', id: link.id }) };
 }
 
-describe('PlatformGithubEventWorker linked repositories', () => {
-  let directory: string;
-  let pubsub: EventEmitterPubSub;
+describe.each(databases)('PlatformGithubEventWorker linked repositories on $name', ({ skip, create }) => {
+  let database: SharedDatabase;
+  /** The bus every replica's connection is attached to. */
+  let bus: EventEmitter;
   let polling: Replica;
   let other: Replica;
   let worker: PlatformGithubEventWorker | undefined;
@@ -82,26 +136,35 @@ describe('PlatformGithubEventWorker linked repositories', () => {
   /** Repositories each pull request reconcile sweep was handed. */
   let reconciled: Array<Array<{ id: number; fullName: string }>>;
 
-  beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'linked-repositories-'));
-    const url = `file:${join(directory, 'factory.db')}`;
-    pubsub = new EventEmitterPubSub();
-    polling = await createReplica(url, pubsub);
-    other = await createReplica(url, pubsub);
+  /** A replica's own connection to the shared event bus. */
+  function connection(): EventEmitterPubSub {
+    return new EventEmitterPubSub(bus);
+  }
+
+  beforeEach(async ({ skip: skipTest }) => {
+    if (skip) skipTest();
+    database = await create();
+    bus = new EventEmitter();
+    polling = await createReplica(database, 'polling');
+    other = await createReplica(database, 'other');
+    await share(polling, connection());
+    await share(other, connection());
     polled = [];
     platformNames = new Map();
     reconciled = [];
   });
 
   afterEach(async () => {
+    if (skip) return;
     await worker?.stop();
     worker = undefined;
     await polling.stopSharing();
     await other.stopSharing();
     await polling.backend.close();
     await other.backend.close();
-    await rm(directory, { recursive: true, force: true });
+    await database.drop();
   });
+
 
   async function startWorker(
     sourceControl: SourceControlStorageHandle = polling.github,
@@ -152,7 +215,7 @@ describe('PlatformGithubEventWorker linked repositories', () => {
       intervalMs: POLL_MS,
     });
     await worker.init({
-      pubsub,
+      pubsub: connection(),
       storage: {} as WorkerDeps['storage'],
       logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as unknown as WorkerDeps['logger'],
     });
@@ -213,9 +276,36 @@ describe('PlatformGithubEventWorker linked repositories', () => {
     expect(storageReads()).toBe(readsForFirstPoll);
   });
 
-  it('re-reads the linked repositories on every poll once other replicas cannot be heard', async () => {
+  it('re-reads the linked repositories on every poll while it is still subscribing to other replicas', async () => {
+    const connected = Promise.withResolvers<void>();
+    const pubsub = connection();
+    const subscribe = pubsub.subscribe.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribe').mockImplementation(async (...args) => {
+      await connected.promise;
+      return subscribe(...args);
+    });
+    const sharing = share(polling, pubsub);
     await linkRepository(polling, '101');
-    polling.domain.linkedRepositoryChangesUnshared();
+    await startWorker();
+    await polls('101', 1);
+
+    // Announced before the polling replica is listening, so only a re-read finds it.
+    await linkRepository(other, '202');
+    await polls('202', 1);
+
+    connected.resolve();
+    await sharing;
+    await polls('101', 2);
+    const storageReads = countStorageReads(polling);
+    await polls('101', 3);
+    expect(storageReads()).toBe(0);
+  });
+
+  it('re-reads the linked repositories on every poll when it cannot subscribe to other replicas', async () => {
+    const pubsub = connection();
+    vi.spyOn(pubsub, 'subscribe').mockRejectedValue(new Error('broker unreachable'));
+    await share(polling, pubsub);
+    await linkRepository(polling, '101');
     await startWorker();
     await polls('101', 1);
 
@@ -223,5 +313,17 @@ describe('PlatformGithubEventWorker linked repositories', () => {
     await other.stopSharing();
     await linkRepository(other, '202');
     await polls('202', 1);
+  });
+
+  it('still announces its own links when it cannot subscribe to other replicas', async () => {
+    const pubsub = connection();
+    vi.spyOn(pubsub, 'subscribe').mockRejectedValue(new Error('broker unreachable'));
+    await share(other, pubsub);
+    await linkRepository(polling, '101');
+    await startWorker();
+    await polls('101', 1);
+
+    await linkRepository(other, '202');
+    await polls('202', 2);
   });
 });
