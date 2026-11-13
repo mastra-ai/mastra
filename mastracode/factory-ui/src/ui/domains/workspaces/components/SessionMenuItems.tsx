@@ -1,7 +1,7 @@
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, Lock, Pin, PinOff, RefreshCw, Trash2, Users } from 'lucide-react';
+import { Check, ExternalLink, Lock, Pin, PinOff, RefreshCw, Trash2, Users, X } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
@@ -16,6 +16,8 @@ export function SessionMenuItems({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  onAnswerApproval,
+  answeringApproval,
   visibility,
   onVisibilityChange,
   changingVisibility,
@@ -28,6 +30,8 @@ export function SessionMenuItems({
   onDelete?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  onAnswerApproval?: (decision: 'approve' | 'decline') => void;
+  answeringApproval?: boolean;
   visibility?: 'org' | 'private';
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   changingVisibility?: boolean;
@@ -47,6 +51,19 @@ export function SessionMenuItems({
         </Menu.Item>
       ))}
       <Menu.Separator />
+      {onAnswerApproval ? (
+        <>
+          <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('approve')}>
+            <Check />
+            Approve
+          </Menu.Item>
+          <Menu.Item disabled={answeringApproval} onClick={() => onAnswerApproval('decline')}>
+            <X />
+            Decline
+          </Menu.Item>
+          <Menu.Separator />
+        </>
+      ) : null}
       <Menu.Item onClick={() => onPinChange(!pinned)}>
         {pinned ? <PinOff /> : <Pin />}
         {pinned ? 'Unpin' : 'Pin session'}

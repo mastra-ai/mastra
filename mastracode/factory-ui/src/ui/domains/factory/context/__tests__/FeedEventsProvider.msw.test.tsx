@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { pushableFeedStream } from '../../../../../../e2e/ui/feed-stream';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { useSidebarWorkItemsQuery } from '../../../../../hooks/useWorkItems';
 import { HIDDEN_STREAM_GRACE_MS } from '../../../../lib/hooks/useDocumentVisible';
 import { FeedEventsProvider } from '../FeedEventsProvider';
 
@@ -21,7 +21,7 @@ function inner({ children }: { children: React.ReactNode }) {
 }
 
 function watch() {
-  return useWorkItemsQuery(PROJECT_ID);
+  return useSidebarWorkItemsQuery(PROJECT_ID);
 }
 
 function countCardReads(count: () => void) {

@@ -17,6 +17,7 @@ const MAX_VERSION_LENGTH = 128;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MAX_REASON_LENGTH = 512;
 const MAX_TITLE_LENGTH = 512;
+const MAX_DESCRIPTION_LENGTH = 8000;
 const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
@@ -46,6 +47,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'linear-issue',
   'jira-issue',
   'incidentio-follow-up',
+  'vanta-vulnerability',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [
@@ -337,6 +339,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           // Decisions saved before claims were dropped still carry it; it is ignored.
           'claimKey',
           'title',
+          'description',
           'url',
           'stage',
           'skipRules',
@@ -363,6 +366,15 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
+        ...(value.description === undefined
+          ? {}
+          : {
+              description: boundedString(
+                value.description,
+                'Factory linked work item description',
+                MAX_DESCRIPTION_LENGTH,
+              ),
+            }),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),

@@ -132,7 +132,9 @@ describe('Review card action lifecycle', () => {
     const { data, transitions, transitionGate, decisionsGate } = stubReviewBoard(candidate);
     const user = userEvent.setup();
     const { client } = renderReviewBoard();
-    await user.click(await screen.findByRole('button', { name: 'Review' }));
+    // The Review column's own header is a button of that name: press the card's.
+    const card = await screen.findByRole('article', { name: reviewItem.title });
+    await user.click(within(card).getByRole('button', { name: 'Review' }));
 
     const reviewing = screen.getByRole('region', { name: 'Review' });
     await waitFor(() => expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled());

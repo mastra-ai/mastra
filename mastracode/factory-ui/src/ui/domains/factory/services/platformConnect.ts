@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'vanta';
 
 export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
@@ -30,6 +30,7 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
 };
 
 export interface PlatformProviderConnection {
