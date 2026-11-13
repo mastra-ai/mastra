@@ -1,4 +1,4 @@
-import z from 'zod';
+import { z } from 'zod/v4';
 
 export const responseIdPathParams = z.object({
   responseId: z.string().describe('Unique identifier for the stored response'),
