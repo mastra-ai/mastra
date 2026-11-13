@@ -36,6 +36,8 @@ A **provider** is a service you can connect, identified by a provider ID such as
 
 A project can have more than one connection for the same provider, such as accounts in different Slack workspaces. Give each connection a distinct display name so agents can choose the right account.
 
+The connections above are global: every user of the project shares them. To let each user of your application connect their own accounts, use [end-user connections](/docs/mastra-platform/connect/end-user-connections). Each end-user connection belongs to one user, and the agent resolves the shared connections plus the current user's own.
+
 Providers differ in what they offer and how they authorize. Some use OAuth, others need an API key, and channels can require a bot or app in the vendor's console. The provider's integration page lists these requirements.
 
 ## Get started
