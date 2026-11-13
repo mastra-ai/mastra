@@ -1,6 +1,6 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { MongoClient, ObjectId } from 'mongodb';
-import { vi, describe, it, expect, beforeAll, afterAll, test } from 'vitest';
+import { Collection, MongoClient, ObjectId } from 'mongodb';
+import { vi, describe, it, expect, beforeAll, beforeEach, afterAll, test } from 'vitest';
 import { MongoDBVector } from './';
 import type { MongoDBCreateIndexParams } from './';
 
@@ -119,6 +119,15 @@ async function waitForAtlasSearchReady(
     'Atlas Search did not become ready in time. Last error: ' + (lastError ? lastError.message : 'unknown'),
   );
 }
+
+// deleteIndex and createSearchIndex read the durable registry, not the in-process cache.
+const stubRegistered = (v: MongoDBVector, entries: Record<string, object>) =>
+  vi
+    .spyOn(v as any, 'readRegistryEntry')
+    .mockImplementation(async (name: any) => (entries[name] ? { _id: name, indexName: name, ...entries[name] } : null));
+
+// Mocked collections that hold no Atlas Search indexes yet.
+const noSearchIndexes = () => ({ toArray: async () => [] });
 
 // Helper function to wait for a condition with timeout
 async function waitForCondition(
@@ -492,7 +501,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       // Collection already exists so createIndex skips db.createCollection.
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       // createIndex now persists to the durable registry collection; stub the registry
       // helpers so these mocked, unconnected instances don't hit a real MongoDB.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
@@ -535,7 +544,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
         .mockRejectedValueOnce(indexExists) // vector index creation
         .mockResolvedValueOnce(undefined); // full-text index creation
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
@@ -582,7 +591,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       // An entry already exists pointing at a DIFFERENT collection.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
@@ -616,7 +625,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       // Existing entry points at the SAME collection this call resolves to.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue({
@@ -637,7 +646,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const indexExists = Object.assign(new Error('index already exists'), { codeName: 'IndexAlreadyExists' });
       const createSearchIndex = vi.fn().mockResolvedValueOnce(undefined).mockRejectedValueOnce(indexExists);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
@@ -662,6 +671,14 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       expect((v as any).buildDeclaredMetadataPaths(undefined)).toEqual([]);
       expect((v as any).buildDeclaredMetadataPaths([])).toEqual([]);
+    });
+
+    // NODE-7967: BYO documents keep their fields at the root, where document-mode filters look.
+    it('declares bring-your-own names as written, including nested paths', () => {
+      const v = makeVector();
+      expect(
+        (v as any).buildDeclaredMetadataPaths(['category', 'specs.gpu', 'metadata.category', '_id', 'document'], true),
+      ).toEqual(['category', 'specs.gpu', 'metadata.category']);
     });
   });
 
@@ -823,6 +840,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(aggregate.mock.calls[0][0]).toEqual([
         { $match: { 'metadata.category': 'news' } },
         { $project: { _id: 1 } },
+        { $limit: 100_001 },
       ]);
       expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['a'] } });
     });
@@ -858,8 +876,77 @@ describe('MongoDBVector filterFields (#18587)', () => {
       expect(aggregate.mock.calls[0][0]).toEqual([
         { $match: { 'metadata.category': 'news' } },
         { $project: { _id: 1 } },
+        { $limit: 100_001 },
       ]);
       expect(aggregate.mock.calls[1][0][0].$vectorSearch.filter).toEqual({ _id: { $in: ['a'] } });
+    });
+  });
+
+  describe('hybridQuery per-branch push-down', () => {
+    const makeCursor = (docs: any[]) => ({
+      toArray: async () => docs,
+      map: (cb: (d: any) => any) => ({ toArray: async () => docs.map(cb) }),
+    });
+    const stubHybrid = (v: MongoDBVector, target: { isByo: boolean }, declared: string[]) => {
+      const aggregate = vi.fn().mockReturnValue(makeCursor([{ _id: 'a' }]));
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'idx',
+        searchIndexName: 'idx_vector_index',
+        textSearchIndexName: 'idx_search_index',
+        ...target,
+      });
+      const getDeclaredFilterPaths = vi.spyOn(v as any, 'getDeclaredFilterPaths').mockResolvedValue(new Set(declared));
+      return { aggregate, getDeclaredFilterPaths };
+    };
+    // The search pipeline is the last aggregate; a fallback runs a $match aggregate before it.
+    const vectorSearchOf = (aggregate: ReturnType<typeof vi.fn>) =>
+      aggregate.mock.calls.at(-1)![0][0].$rankFusion.input.pipelines.vector[0].$vectorSearch;
+
+    it('passes a declared filter straight to $vectorSearch on the registered index', async () => {
+      const v = makeVector();
+      const { aggregate } = stubHybrid(v, { isByo: false }, ['metadata.category']);
+
+      await v.hybridQuery({
+        indexName: 'idx',
+        vector: { queryVector: [0.1, 0.2] },
+        text: { query: 'q', paths: ['document'] },
+        filter: { category: 'news' },
+      });
+
+      expect(aggregate).toHaveBeenCalledTimes(1);
+      expect(vectorSearchOf(aggregate).filter).toEqual({ 'metadata.category': 'news' });
+    });
+
+    it('falls back to candidate _ids when vector.searchIndexName overrides the vector index', async () => {
+      const v = makeVector();
+      // `category` is declared on the registered index, so without the override it is pushed down.
+      const { aggregate, getDeclaredFilterPaths } = stubHybrid(v, { isByo: true }, ['category']);
+      const request = {
+        indexName: 'idx',
+        text: { query: 'q', paths: ['note'] },
+        filter: { category: 'news' },
+      };
+
+      await v.hybridQuery({ ...request, vector: { queryVector: [0.1, 0.2] } });
+      expect(aggregate).toHaveBeenCalledTimes(1);
+      expect(vectorSearchOf(aggregate).filter).toEqual({ category: 'news' });
+
+      aggregate.mockClear();
+      getDeclaredFilterPaths.mockClear();
+      await v.hybridQuery({ ...request, vector: { queryVector: [0.1, 0.2], searchIndexName: 'alt_vectors' } });
+
+      // The declared fields belong to the registered index, so they aren't consulted for the override.
+      expect(getDeclaredFilterPaths).not.toHaveBeenCalled();
+      expect(aggregate).toHaveBeenCalledTimes(2);
+      expect(aggregate.mock.calls[0][0]).toEqual([
+        { $match: { category: 'news' } },
+        { $project: { _id: 1 } },
+        { $limit: 100_001 },
+      ]);
+      expect(vectorSearchOf(aggregate).index).toBe('alt_vectors');
+      expect(vectorSearchOf(aggregate).filter).toEqual({ _id: { $in: ['a'] } });
     });
   });
 
@@ -1131,7 +1218,14 @@ describe('MongoDBVector filterFields (#18587)', () => {
       stubNotShared(v);
       // BYO index whose collectionName matches its indexName — name equality cannot
       // distinguish it from a managed index, so the registry flag must govern.
-      (v as any).indexTargets.set('docs', { collectionName: 'docs', searchIndexName: 'docs_vec', isByo: true });
+      stubRegistered(v, {
+        docs: {
+          collectionName: 'docs',
+          searchIndexName: 'docs_vec',
+          isByo: true,
+          ownsVectorIndex: true,
+        },
+      });
 
       await v.deleteIndex({ indexName: 'docs' });
 
@@ -1148,11 +1242,15 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
       stubNotShared(v);
       // BYO index that has opted into a full-text index via createSearchIndex.
-      (v as any).indexTargets.set('docs', {
-        collectionName: 'ops',
-        searchIndexName: 'docs_vec',
-        isByo: true,
-        textSearchIndexName: 'ops_search_index',
+      stubRegistered(v, {
+        docs: {
+          collectionName: 'ops',
+          searchIndexName: 'docs_vec',
+          isByo: true,
+          textSearchIndexName: 'ops_search_index',
+          ownsVectorIndex: true,
+          ownsTextIndex: true,
+        },
       });
 
       await v.deleteIndex({ indexName: 'docs' });
@@ -1171,7 +1269,14 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
       stubNotShared(v);
       // BYO index with no text index provisioned (textSearchIndexName unset).
-      (v as any).indexTargets.set('docs', { collectionName: 'ops', searchIndexName: 'docs_vec', isByo: true });
+      stubRegistered(v, {
+        docs: {
+          collectionName: 'ops',
+          searchIndexName: 'docs_vec',
+          isByo: true,
+          ownsVectorIndex: true,
+        },
+      });
 
       await v.deleteIndex({ indexName: 'docs' });
 
@@ -1191,32 +1296,36 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex });
       vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
       stubNotShared(v);
-      (v as any).indexTargets.set('docs', {
-        collectionName: 'ops',
-        searchIndexName: 'docs_vec',
-        isByo: true,
-        textSearchIndexName: 'ops_search_index',
+      stubRegistered(v, {
+        docs: {
+          collectionName: 'ops',
+          searchIndexName: 'docs_vec',
+          isByo: true,
+          textSearchIndexName: 'ops_search_index',
+          ownsVectorIndex: true,
+          ownsTextIndex: true,
+        },
       });
 
       await expect(v.deleteIndex({ indexName: 'docs' })).resolves.toBeUndefined();
       expect(dropSearchIndex).toHaveBeenCalledTimes(2);
     });
 
-    it('drops the collection for a managed index (no registered target)', async () => {
+    it('refuses to drop an unregistered collection even when it carries the legacy managed index name', async () => {
       const v = makeVector();
       const drop = vi.fn().mockResolvedValue(undefined);
       const dropSearchIndex = vi.fn().mockResolvedValue(undefined);
-      // Unregistered fallback: the collection must verifiably carry the legacy managed
-      // `${indexName}_vector_index` for deleteIndex to drop it (fail-closed check).
       const listSearchIndexes = vi.fn(() => ({ toArray: async () => [{ name: 'managed_idx_vector_index' }] }));
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ drop, dropSearchIndex, listSearchIndexes });
       // No in-memory target and no durable registry entry → resolves to the managed default.
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
 
-      await v.deleteIndex({ indexName: 'managed_idx' });
+      // The name is no proof of ownership: a BYO delete keeps a caller's index of that name and
+      // removes the registration, so a second delete would otherwise drop the caller's collection.
+      await expect(v.deleteIndex({ indexName: 'managed_idx' })).rejects.toThrow(/not registered/);
 
-      expect(drop).toHaveBeenCalledTimes(1);
+      expect(drop).not.toHaveBeenCalled();
       expect(dropSearchIndex).not.toHaveBeenCalled();
     });
 
@@ -1236,6 +1345,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
         collectionName: 'transactions',
         searchIndexName: 'txn_vec_idx',
         isByo: true,
+        ownsVectorIndex: true,
       });
 
       await v.deleteIndex({ indexName: 'precedents' });
@@ -1350,7 +1460,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
@@ -1359,6 +1469,50 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const persisted = writeRegistryEntry.mock.calls[0][1] as any;
       expect(persisted.isByo).toBe(true);
       expect(persisted.allowWrites).toBe(true);
+    });
+
+    it('createSearchIndex maps nested fields as document mappings, since Atlas Search reads dotted keys literally', async () => {
+      const v = makeVector();
+      const createSearchIndex = vi.fn().mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
+      vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'markOwned').mockResolvedValue(undefined);
+      stubRegistered(v, { cat: { collectionName: 'cat', searchIndexName: 'cat_vector_index', isByo: false } });
+
+      await v.createSearchIndex({ indexName: 'cat', fields: ['metadata.name', 'metadata.specs.gpu', 'title'] });
+
+      expect(createSearchIndex.mock.calls[0][0].definition.mappings).toEqual({
+        dynamic: false,
+        fields: {
+          metadata: {
+            type: 'document',
+            fields: { name: [{ type: 'string' }], specs: { type: 'document', fields: { gpu: [{ type: 'string' }] } } },
+          },
+          title: [{ type: 'string' }],
+        },
+      });
+    });
+
+    it('createIndex warns that allowWrites: true is deprecated on a BYO index, and still honors it', async () => {
+      const v = makeVector();
+      (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({
+        createSearchIndex: vi.fn().mockResolvedValue(undefined),
+        listSearchIndexes: noSearchIndexes,
+      });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
+      const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
+      const warn = vi.spyOn((v as any).logger, 'warn');
+
+      await v.createIndex({ indexName: 'ro', dimension: 4, collectionName: 'ops_col' });
+      await v.createIndex({ indexName: 'ro2', dimension: 4, collectionName: 'ops_col', allowWrites: false });
+      expect(warn).not.toHaveBeenCalledWith(expect.stringMatching(/allowWrites/));
+
+      await v.createIndex({ indexName: 'rw', dimension: 4, collectionName: 'ops_col', allowWrites: true });
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/allowWrites: true.*deprecated/));
+      expect(
+        writeRegistryEntry.mock.calls.some(([name, entry]: any[]) => name === 'rw' && entry.allowWrites === true),
+      ).toBe(true);
     });
 
     it('upsert rejects circular metadata fast instead of hanging in bson calculateObjectSize', async () => {
@@ -1405,7 +1559,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
@@ -1424,7 +1578,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     const stubCreate = (v: MongoDBVector, existingEntry: any = null) => {
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
       (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(existingEntry);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       return { createSearchIndex, writeRegistryEntry };
@@ -1483,7 +1637,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       // e.g. a second deleteIndex racing a completed BYO delete whose registry entry is gone,
       // or an arbitrary operational collection name — must never drop the collection.
-      await expect(v.deleteIndex({ indexName: 'ops_txns' })).rejects.toThrow(/refusing to drop|DELETE_INDEX/i);
+      await expect(v.deleteIndex({ indexName: 'ops_txns' })).rejects.toThrow(/not registered|DELETE_INDEX/i);
       expect(drop).not.toHaveBeenCalled();
       expect(deleteRegistryEntry).not.toHaveBeenCalled();
     });
@@ -1504,11 +1658,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
     it('R5-3b: createSearchIndex rejects a text name that collides with the vector index name', async () => {
       const v = makeVector();
-      (v as any).indexTargets.set('idx', {
-        collectionName: 'ops_col',
-        searchIndexName: 'ops_vec',
-        isByo: true,
-        allowWrites: false,
+      stubRegistered(v, {
+        idx: { collectionName: 'ops_col', searchIndexName: 'ops_vec', isByo: true, allowWrites: false },
       });
 
       await expect(v.createSearchIndex({ indexName: 'idx', searchIndexName: 'ops_vec' })).rejects.toThrow(/collides/i);
@@ -1520,13 +1671,14 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const createSearchIndex = vi.fn().mockImplementation(async () => {
         order.push('provision');
       });
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       (v as any).indexTargets.set('idx', {
         collectionName: 'ops',
         searchIndexName: 'idx_vector_index',
         isByo: true,
         allowWrites: false,
       });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockImplementation(async () => {
         order.push('persist');
       });
@@ -1535,7 +1687,8 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       // Crash between the two steps must leave a REGISTERED (possibly not-yet-existing)
       // index, never an unregistered physical index leaked onto a caller-owned collection.
-      expect(order).toEqual(['persist', 'provision']);
+      // The final write records ownership once the index exists.
+      expect(order).toEqual(['persist', 'provision', 'persist']);
     });
 
     it('R5-5: deleteIndex preserves a physical index still referenced by a sibling logical index', async () => {
@@ -1549,12 +1702,16 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockImplementation(
         async (...args: unknown[]) => args[2] === 'ops_search_index',
       );
-      (v as any).indexTargets.set('a', {
-        collectionName: 'ops',
-        searchIndexName: 'a_vec',
-        isByo: true,
-        allowWrites: false,
-        textSearchIndexName: 'ops_search_index',
+      stubRegistered(v, {
+        a: {
+          collectionName: 'ops',
+          searchIndexName: 'a_vec',
+          isByo: true,
+          allowWrites: false,
+          textSearchIndexName: 'ops_search_index',
+          ownsVectorIndex: true,
+          ownsTextIndex: true,
+        },
       });
 
       await v.deleteIndex({ indexName: 'a' });
@@ -1572,11 +1729,13 @@ describe('MongoDBVector filterFields (#18587)', () => {
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ dropSearchIndex });
       const deleteRegistryEntry = vi.spyOn(v as any, 'deleteRegistryEntry').mockResolvedValue(undefined);
       vi.spyOn(v as any, 'isIndexNameReferencedElsewhere').mockResolvedValue(false);
-      (v as any).indexTargets.set('docs', {
-        collectionName: 'ops',
-        searchIndexName: 'docs_vec',
-        isByo: true,
-        allowWrites: false,
+      stubRegistered(v, {
+        docs: {
+          collectionName: 'ops',
+          searchIndexName: 'docs_vec',
+          isByo: true,
+          allowWrites: false,
+        },
       });
 
       await expect(v.deleteIndex({ indexName: 'docs' })).resolves.toBeUndefined();
@@ -1588,7 +1747,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
       const oid = new ObjectId();
       const hex = oid.toHexString();
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'describeIndex').mockResolvedValue({ dimension: 4, count: 1, metric: 'cosine' });
+      vi.spyOn(v as any, 'readVectorIndexDefinition').mockResolvedValue({ dimension: 4, metric: 'cosine' });
       const bulkWrite = vi.fn().mockResolvedValue({});
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
 
@@ -1607,7 +1766,7 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('R5-7b: upsert keeps the plain equality filter (and no $setOnInsert) for non-hex string ids', async () => {
       const v = makeVector();
       vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
-      vi.spyOn(v as any, 'describeIndex').mockResolvedValue({ dimension: 4, count: 1, metric: 'cosine' });
+      vi.spyOn(v as any, 'readVectorIndexDefinition').mockResolvedValue({ dimension: 4, metric: 'cosine' });
       const bulkWrite = vi.fn().mockResolvedValue({});
       vi.spyOn(v as any, 'getCollection').mockResolvedValue({ bulkWrite });
 
@@ -1628,13 +1787,9 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('FIX1: createSearchIndex persists a COMPLETE registry target (never partial)', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
-      // Managed index with a full in-memory target (as createIndex would have set).
-      (v as any).indexTargets.set('idx', {
-        collectionName: 'idx',
-        searchIndexName: 'idx_vector_index',
-        isByo: false,
-      });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
+      // A legacy managed index with no registry entry yet: the first write creates a full one.
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       const writeRegistryEntry = vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note'] });
@@ -1670,11 +1825,10 @@ describe('MongoDBVector filterFields (#18587)', () => {
     it('FIX6: field-mapped search index name is unique per logical index', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
       const target = { collectionName: 'shared_col', searchIndexName: 'a_vec', isByo: true };
-      (v as any).indexTargets.set('logical_a', { ...target });
-      (v as any).indexTargets.set('logical_b', { ...target, searchIndexName: 'b_vec' });
+      stubRegistered(v, { logical_a: target, logical_b: { ...target, searchIndexName: 'b_vec' } });
 
       await v.createSearchIndex({ indexName: 'logical_a', fields: ['note'] });
       await v.createSearchIndex({ indexName: 'logical_b', fields: ['note'] });
@@ -1727,6 +1881,37 @@ describe('MongoDBVector filterFields (#18587)', () => {
 
       await expect(v.deleteIndex({ indexName: 'managed_gone' })).resolves.toBeUndefined();
       expect(deleteRegistryEntry).toHaveBeenCalledWith('managed_gone');
+    });
+
+    it('hybridQuery reranks with the generally available rerank-2.5 model by default', async () => {
+      const v = makeVector();
+      const aggregate = vi.fn().mockReturnValue({ toArray: async () => [] });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ aggregate });
+      vi.spyOn(v as any, 'assertRankFusionSupported').mockResolvedValue(undefined);
+      vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
+        collectionName: 'c',
+        searchIndexName: 'c_vec',
+        isByo: false,
+      });
+      vi.spyOn(v as any, 'resolveTextSearchIndexName').mockResolvedValue('c_search');
+      const rerank = { query: 'q', paths: ['document'], numDocsToRerank: 5 };
+
+      await v.hybridQuery({
+        indexName: 'idx',
+        vector: { queryVector: [0.1, 0.2] },
+        text: { query: 'q', paths: ['document'] },
+        rerank,
+      });
+      await v.hybridQuery({
+        indexName: 'idx',
+        vector: { queryVector: [0.1, 0.2] },
+        text: { query: 'q', paths: ['document'] },
+        rerank: { ...rerank, model: 'rerank-3' },
+      });
+
+      const model = (call: number) => aggregate.mock.calls[call][0].find((s: any) => s.$rerank).$rerank.model;
+      expect(model(0)).toBe('rerank-2.5');
+      expect(model(1)).toBe('rerank-3');
     });
 
     // FIX 3: hybridQuery must floor numCandidates at the branch limit (perBranch), not topK,
@@ -1793,12 +1978,20 @@ describe('MongoDBVector filterFields (#18587)', () => {
       // First create succeeds; second call hits IndexAlreadyExists (returns false internally).
       const createSearchIndex = vi.fn().mockRejectedValue({ codeName: 'IndexAlreadyExists' });
       const updateSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, updateSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({
+        createSearchIndex,
+        updateSearchIndex,
+        listSearchIndexes: noSearchIndexes,
+      });
+      // Only a text index this registration created may be updated in place.
       vi.spyOn(v as any, 'resolveIndexTarget').mockResolvedValue({
         collectionName: 'ops',
         searchIndexName: 'ops_vec',
         isByo: true,
+        textSearchIndexName: 'ops_idx_search_fields_index',
+        ownsTextIndex: true,
       });
+      vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
       vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
 
       await v.createSearchIndex({ indexName: 'idx', fields: ['note', 'title'] });
@@ -1862,7 +2055,11 @@ describe('MongoDBVector filterFields (#18587)', () => {
       });
 
       // The $match uses the ROOT field, not metadata.lane.
-      expect(aggregate.mock.calls[0][0]).toEqual([{ $match: { lane: 'fraud' } }, { $project: { _id: 1 } }]);
+      expect(aggregate.mock.calls[0][0]).toEqual([
+        { $match: { lane: 'fraud' } },
+        { $project: { _id: 1 } },
+        { $limit: 100_001 },
+      ]);
     });
 
     // FIX 2: idToString + buildIdMatch behavior.
@@ -2378,7 +2575,7 @@ describe('MongoDBVector autoEmbed', () => {
   const stubCreateIndex = (v: MongoDBVector) => {
     const createSearchIndex = vi.fn().mockResolvedValue(undefined);
     (v as any).db = { listCollections: () => ({ hasNext: async () => true }) };
-    vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+    vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
     vi.spyOn(v as any, 'readRegistryEntry').mockResolvedValue(null);
     vi.spyOn(v as any, 'writeRegistryEntry').mockResolvedValue(undefined);
     return createSearchIndex;
@@ -2632,7 +2829,7 @@ describe('MongoDBVector autoEmbed', () => {
     it('rejects a createIndex whose registry claim is lost to a concurrent call', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       // The entry the winning call registered after this one read an empty registry.
       const winner = {
         _id: 'movies',
@@ -2674,7 +2871,7 @@ describe('MongoDBVector autoEmbed', () => {
     it('conditions the registry write on the resolved embedding target', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
@@ -2694,7 +2891,7 @@ describe('MongoDBVector autoEmbed', () => {
     it('conditions the registry write of a client-side index on the absence of autoEmbed', async () => {
       const v = makeVector();
       const createSearchIndex = vi.fn().mockResolvedValue(undefined);
-      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex });
+      vi.spyOn(v as any, 'getCollection').mockResolvedValue({ createSearchIndex, listSearchIndexes: noSearchIndexes });
       const registry = { findOne: vi.fn().mockResolvedValue(null), updateOne: vi.fn().mockResolvedValue({}) };
       (v as any).db = {
         listCollections: () => ({ hasNext: async () => true }),
@@ -3435,5 +3632,1025 @@ describeAutoEmbed('MongoDBVector Automated Embedding (live)', () => {
     const stats = await store.describeIndex({ indexName });
     expect(stats.count).toBe(movies.length);
     expect(stats.dimension).toBe(1024);
+  });
+});
+
+// SDAP review hardening: writes, prototype safety and error messages, against a real cluster.
+describe('MongoDBVector SDAP hardening', () => {
+  const opsCol = 'sdap_ops';
+  const byoIdx = 'sdap_byo';
+  const managedIdx = 'sdap_managed';
+  let v: MongoDBVector;
+  const commands: { name: string; command: any }[] = [];
+
+  beforeAll(async () => {
+    // monitorCommands lets the tests assert on what actually went over the wire.
+    v = new MongoDBVector({ uri, dbName, id: 'mongodb-sdap', options: { monitorCommands: true } });
+    await v.connect();
+    await waitForAtlasSearchReady(v);
+    (v as any).client.on('commandStarted', (e: any) => commands.push({ name: e.commandName, command: e.command }));
+
+    const col = v['db'].collection(opsCol);
+    await col.deleteMany({});
+    await col.insertMany([
+      { _id: 'a', embedding: [1, 0, 0, 0], lane: 'clean' },
+      { _id: 'b', embedding: [0, 1, 0, 0], lane: 'fraud' },
+    ] as any[]);
+    await v.createIndex({ indexName: byoIdx, dimension: 4, collectionName: opsCol, allowWrites: true });
+    await createIndexAndWait(v, { indexName: managedIdx, dimension: 4 });
+    await v.waitForIndexReady({ indexName: byoIdx, timeoutMs: 60000 });
+  }, 500000);
+
+  afterAll(async () => {
+    await v.deleteIndex({ indexName: byoIdx }).catch(() => {});
+    await v.deleteIndex({ indexName: managedIdx }).catch(() => {});
+    await v['db']
+      .collection(opsCol)
+      .drop()
+      .catch(() => {});
+    await v.disconnect();
+  });
+
+  // countDocuments runs as an aggregate ending in a { $group: { n: { $sum: 1 } } } stage.
+  const countCommands = () =>
+    commands.filter(
+      c => c.name === 'count' || (c.name === 'aggregate' && c.command.pipeline?.some((s: any) => s.$group?.n)),
+    );
+
+  it('upsert and updateVector validate dimensions without counting the collection (PENGINT-278)', async () => {
+    commands.length = 0;
+    await v.upsert({ indexName: managedIdx, vectors: [[1, 0, 0, 0]], ids: ['w1'] });
+    await v.updateVector({ indexName: managedIdx, id: 'w1', update: { vector: [0, 1, 0, 0] } });
+    expect(countCommands()).toHaveLength(0);
+
+    // Dimension validation still runs off the index definition.
+    await expect(v.upsert({ indexName: managedIdx, vectors: [[1, 0]], ids: ['w2'] })).rejects.toThrow(
+      /invalid dimension 2. Expected 4/,
+    );
+
+    // describeIndex still reports the exact count.
+    commands.length = 0;
+    const stats = await v.describeIndex({ indexName: managedIdx });
+    expect(stats).toMatchObject({ dimension: 4, count: 1, metric: 'cosine' });
+    expect(countCommands()).toHaveLength(1);
+  });
+
+  it('stores a __proto__ metadata key as data instead of changing the prototype (PENGINT-279)', async () => {
+    const metadata = JSON.parse('{"__proto__":{"polluted":true},"category":"a"}');
+    await v.upsert({ indexName: managedIdx, vectors: [[1, 0, 0, 0]], ids: ['p1'], metadata: [metadata] });
+
+    const stored = await v['db'].collection(managedIdx).findOne({ _id: 'p1' as any });
+    expect(Object.keys(stored!.metadata)).toEqual(['__proto__', 'category']);
+    expect(Object.getPrototypeOf(stored!.metadata)).toBe(Object.prototype);
+    expect(({} as any).polluted).toBeUndefined();
+
+    await v.updateVector({ indexName: managedIdx, id: 'p1', update: { metadata } });
+    const updated = await v['db'].collection(managedIdx).findOne({ _id: 'p1' as any });
+    expect(Object.keys(updated!.metadata)).toEqual(['__proto__', 'category']);
+  });
+
+  it('a __proto__ filter key never widens a query to every document (PENGINT-279)', async () => {
+    // No document has a `__proto__` field, so the filter must match nothing. Before the fix the
+    // key was dropped, the filter became {} and the query returned every document.
+    const filter = JSON.parse('{"__proto__":"x"}');
+    const query = (metadataMode: 'field' | 'document') =>
+      v.query({ indexName: byoIdx, queryVector: [1, 0, 0, 0], topK: 10, filter, metadataMode });
+    await waitForSync(
+      v,
+      byoIdx,
+      async () => (await v.query({ indexName: byoIdx, queryVector: [1, 0, 0, 0] })).length === 2,
+    );
+
+    expect(await query('document')).toEqual([]);
+    expect(await query('field')).toEqual([]);
+  });
+
+  it('names the physical collection when the search index is missing (PENGINT-286)', async () => {
+    await v['db'].collection('sdap_other').insertOne({ _id: 'x' } as any);
+    try {
+      await v.createIndex({ indexName: 'sdap_missing', dimension: 4, collectionName: 'sdap_other' });
+      // Simulate an index dropped outside Mastra.
+      await v['db'].collection('sdap_other').dropSearchIndex('sdap_missing_vector_index');
+      await waitForCondition(
+        async () => (await v['db'].collection('sdap_other').listSearchIndexes().toArray()).length === 0,
+        30000,
+      );
+      const error = await v.describeIndex({ indexName: 'sdap_missing' }).catch(e => e);
+      expect(error.message).toContain('does not exist on collection "sdap_other"');
+      expect(error.details).toMatchObject({ indexName: 'sdap_missing', collectionName: 'sdap_other' });
+    } finally {
+      await v.deleteIndex({ indexName: 'sdap_missing' }).catch(() => {});
+      await v['db']
+        .collection('sdap_other')
+        .drop()
+        .catch(() => {});
+    }
+  });
+});
+
+// PENGINT-280/281: Mastra only drops or modifies search indexes and collections it created, and a
+// failed creation leaves no registry entry behind.
+describe('MongoDBVector index ownership', () => {
+  // Atlas Local keeps a dropped collection's search indexes, so every run uses fresh names.
+  const run = Date.now();
+  const col = `own_ops_${run}`;
+  const managed = `own_managed_${run}`;
+  const failing = `own_fail_${run}`;
+  let v: MongoDBVector;
+  const registry = () => v['db'].collection('__mastra_vector_indexes__');
+  const searchIndexNames = async (name: string) =>
+    (await v['db'].collection(name).listSearchIndexes().toArray()).map(i => i.name);
+  // Atlas drops search indexes asynchronously; poll until the name is gone.
+  const gone = (name: string, index: string) =>
+    waitForCondition(async () => !(await searchIndexNames(name)).includes(index), 30000);
+  const fresh = () => new MongoDBVector({ uri, dbName, id: 'mongodb-own-fresh' });
+
+  beforeAll(async () => {
+    v = new MongoDBVector({ uri, dbName, id: 'mongodb-own' });
+    await v.connect();
+    await waitForAtlasSearchReady(v);
+  }, 500000);
+
+  beforeEach(async () => {
+    for (const name of [col, managed, failing]) {
+      await v['db']
+        .collection(name)
+        .drop()
+        .catch(() => {});
+    }
+    await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
+    await v['db'].collection(col).insertOne({ _id: 'a', embedding: [1, 0, 0, 0], note: 'n' } as any);
+    (v as any).indexTargets.clear();
+    (v as any).collections.clear();
+  });
+
+  afterAll(async () => {
+    for (const name of [col, managed, failing]) {
+      await v['db']
+        .collection(name)
+        .drop()
+        .catch(() => {});
+    }
+    await registry().deleteMany({ _id: { $in: ['own_byo', managed, failing] as any[] } });
+    await v.disconnect();
+  });
+
+  it("keeps a caller's existing vector index when a BYO registration on it is deleted", async () => {
+    await v['db'].collection(col).createSearchIndex({
+      name: 'caller_vec',
+      type: 'vectorSearch',
+      // Exactly the definition createIndex sends: the server then answers createIndex's own
+      // create with success, which must not be mistaken for Mastra having built the index.
+      definition: {
+        fields: [
+          { type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' },
+          { type: 'filter', path: '_id' },
+          { type: 'filter', path: 'document' },
+        ],
+      },
+    });
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'caller_vec' });
+
+    await v.deleteIndex({ indexName: 'own_byo' });
+
+    expect(await searchIndexNames(col)).toContain('caller_vec');
+    expect(await v['db'].collection(col).countDocuments()).toBe(1);
+    expect(await registry().findOne({ _id: 'own_byo' as any })).toBeNull();
+  });
+
+  it('drops a vector index it created, from a fresh instance after a repeated createIndex', async () => {
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'own_vec' });
+    // The repeat hits IndexAlreadyExists and must not downgrade ownership.
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'own_vec' });
+
+    const other = fresh();
+    try {
+      await other.deleteIndex({ indexName: 'own_byo' });
+    } finally {
+      await other.disconnect();
+    }
+
+    expect(await gone(col, 'own_vec')).toBe(true);
+    expect(await v['db'].collection(col).countDocuments()).toBe(1);
+  });
+
+  it('keeps the indexes of a registration written before ownership was recorded', async () => {
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'own_vec' });
+    await registry().updateOne({ _id: 'own_byo' as any }, { $unset: { ownsVectorIndex: '', ownsCollection: '' } });
+
+    const other = fresh();
+    try {
+      await other.deleteIndex({ indexName: 'own_byo' });
+    } finally {
+      await other.disconnect();
+    }
+
+    expect(await searchIndexNames(col)).toContain('own_vec');
+  });
+
+  it("does not modify a caller's existing text index, and refuses a different mapping", async () => {
+    await v['db'].collection(col).createSearchIndex({
+      name: 'caller_text',
+      type: 'search',
+      definition: { mappings: { dynamic: false, fields: { note: { type: 'string' } } } },
+    });
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'own_vec' });
+
+    const conflict = await v
+      .createSearchIndex({ indexName: 'own_byo', fields: ['title'], searchIndexName: 'caller_text' })
+      .catch(e => e);
+    expect(conflict.id).toMatch(/CREATE_SEARCH_INDEX.*CONFLICT/);
+    expect(conflict.category).toBe('USER');
+    // The failed call left the registration as it was.
+    expect((await registry().findOne({ _id: 'own_byo' as any }))?.textSearchIndexName).toBeUndefined();
+
+    // Same fields: attach without touching it.
+    await v.createSearchIndex({ indexName: 'own_byo', fields: ['note'], searchIndexName: 'caller_text' });
+    const [text] = await v['db'].collection(col).listSearchIndexes('caller_text').toArray();
+    expect(Object.keys((text as any).latestDefinition.mappings.fields)).toEqual(['note']);
+
+    await v.deleteIndex({ indexName: 'own_byo' });
+    expect(await gone(col, 'own_vec')).toBe(true);
+    expect(await searchIndexNames(col)).toContain('caller_text');
+  });
+
+  it('does not drop an existing collection that a managed createIndex adopted', async () => {
+    await v['db'].collection(managed).insertOne({ _id: 'keep', embedding: [1, 0, 0, 0] } as any);
+
+    await v.createIndex({ indexName: managed, dimension: 4 });
+    await v.deleteIndex({ indexName: managed });
+
+    expect(await v['db'].collection(managed).countDocuments()).toBe(1);
+    // The indexes Mastra created on it are removed.
+    expect(await gone(managed, `${managed}_vector_index`)).toBe(true);
+    expect(await gone(managed, `${managed}_search_index`)).toBe(true);
+  });
+
+  it('still drops a managed collection it created', async () => {
+    await v.createIndex({ indexName: managed, dimension: 4 });
+    await v.deleteIndex({ indexName: managed });
+    expect(await v['db'].listCollections({ name: managed }).hasNext()).toBe(false);
+  });
+
+  it('leaves no registration or collection behind when vector index creation fails, and a retry converges', async () => {
+    // Atlas rejects numDimensions above 8192.
+    await expect(v.createIndex({ indexName: failing, dimension: 9000 })).rejects.toThrow(/numDimensions/);
+
+    expect(await registry().findOne({ _id: failing as any })).toBeNull();
+    expect(await v['db'].listCollections({ name: failing }).hasNext()).toBe(false);
+    expect(await v.listIndexes()).not.toContain(failing);
+
+    await v.createIndex({ indexName: failing, dimension: 4 });
+    expect(await registry().findOne({ _id: failing as any })).toMatchObject({ ownsVectorIndex: true });
+    await v.deleteIndex({ indexName: failing });
+  });
+
+  it('restores a working registration when text index creation fails', async () => {
+    await v.createIndex({ indexName: 'own_byo', dimension: 4, collectionName: col, searchIndexName: 'own_vec' });
+    await v.createSearchIndex({ indexName: 'own_byo', searchIndexName: 'own_text' });
+    const before = await registry().findOne({ _id: 'own_byo' as any });
+
+    const spy = vi.spyOn(Collection.prototype, 'createSearchIndex').mockRejectedValueOnce(new Error('injected'));
+    try {
+      await expect(
+        v.createSearchIndex({ indexName: 'own_byo', fields: ['note'], searchIndexName: 'own_text_2' }),
+      ).rejects.toThrow();
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(await registry().findOne({ _id: 'own_byo' as any })).toEqual(before);
+    // The in-process cache does not serve the failed target either.
+    expect((await (v as any).resolveIndexTarget('own_byo')).textSearchIndexName).toBe('own_text');
+
+    // A retry converges and the new index is recorded as owned.
+    await v.createSearchIndex({ indexName: 'own_byo', fields: ['note'], searchIndexName: 'own_text_2' });
+    expect(await registry().findOne({ _id: 'own_byo' as any })).toMatchObject({
+      textSearchIndexName: 'own_text_2',
+      ownsTextIndex: true,
+    });
+    await v.deleteIndex({ indexName: 'own_byo' });
+  });
+});
+
+// PENGINT-282: filters on a BYO collection can run inside $vectorSearch, and the fallback that
+// loads candidate _ids into memory is bounded.
+describe('MongoDBVector pre-filter bounds', () => {
+  const run = Date.now();
+  const col = `bound_ops_${run}`;
+  const idx = `bound_${run}`;
+  let v: MongoDBVector;
+  const commands: any[] = [];
+
+  beforeAll(async () => {
+    v = new MongoDBVector({ uri, dbName, id: 'mongodb-bound', options: { monitorCommands: true } });
+    await v.connect();
+    await waitForAtlasSearchReady(v);
+    (v as any).client.on('commandStarted', (e: any) => e.commandName === 'aggregate' && commands.push(e.command));
+    await v['db'].collection(col).insertMany([
+      { _id: 'a', embedding: [1, 0, 0, 0], amount: 100, lane: 'clean', note: 'refund' },
+      { _id: 'b', embedding: [0, 1, 0, 0], amount: 5000, lane: 'fraud', note: 'refund' },
+    ] as any[]);
+    await v.createIndex({ indexName: idx, dimension: 4, collectionName: col, filterFields: ['lane'] });
+    await v.waitForIndexReady({ indexName: idx, timeoutMs: 60000 });
+    await v.createSearchIndex({ indexName: idx, waitUntilReady: true });
+    await waitForSync(v, idx, async () => (await v.query({ indexName: idx, queryVector: [1, 0, 0, 0] })).length === 2);
+  }, 500000);
+
+  afterAll(async () => {
+    await v.deleteIndex({ indexName: idx }).catch(() => {});
+    await v['db']
+      .collection(col)
+      .drop()
+      .catch(() => {});
+    await v.disconnect();
+  });
+
+  it('runs a document-mode filter on a declared root field inside $vectorSearch', async () => {
+    const [def] = await v['db'].collection(col).listSearchIndexes(`${idx}_vector_index`).toArray();
+    expect((def as any).latestDefinition.fields).toContainEqual({ type: 'filter', path: 'lane' });
+
+    commands.length = 0;
+    const res = await v.query({
+      indexName: idx,
+      queryVector: [1, 0, 0, 0],
+      filter: { lane: 'fraud' },
+      metadataMode: 'document',
+    });
+
+    expect(res.map(r => r.id)).toEqual(['b']);
+    // One aggregate, the $vectorSearch itself, carrying the filter: no candidate _id pass.
+    expect(commands).toHaveLength(1);
+    expect(commands[0].pipeline[0].$vectorSearch.filter).toEqual({ lane: 'fraud' });
+  });
+
+  it('fails with a USER error instead of loading an oversized candidate list', async () => {
+    const statics = MongoDBVector as any;
+    const max = statics.MAX_PREFILTER_CANDIDATES;
+    statics.MAX_PREFILTER_CANDIDATES = 1;
+    try {
+      // `amount` is not declared, so the filter falls back to loading candidate _ids.
+      const tooMany = { amount: { $gte: 0 } };
+      const queryError = await v
+        .query({ indexName: idx, queryVector: [1, 0, 0, 0], filter: tooMany, metadataMode: 'document' })
+        .catch(e => e);
+      expect(queryError.id).toMatch(/QUERY.*TOO_MANY_CANDIDATES/);
+      expect(queryError.category).toBe('USER');
+
+      const hybridError = await v
+        .hybridQuery({
+          indexName: idx,
+          queryVector: [1, 0, 0, 0],
+          query: 'refund',
+          paths: ['note'],
+          filter: tooMany,
+          metadataMode: 'document',
+        })
+        .catch(e => e);
+      expect(hybridError.id).toMatch(/HYBRID_QUERY.*TOO_MANY_CANDIDATES/);
+
+      // A fallback within the limit still works.
+      const res = await v.query({
+        indexName: idx,
+        queryVector: [1, 0, 0, 0],
+        filter: { amount: 100 },
+        metadataMode: 'document',
+      });
+      expect(res.map(r => r.id)).toEqual(['a']);
+    } finally {
+      statics.MAX_PREFILTER_CANDIDATES = max;
+    }
+  });
+});
+
+// Sequences from the security review of the ownership change: none of them may drop or modify
+// a collection or search index Mastra did not create.
+describe('MongoDBVector ownership review regressions', () => {
+  const run = Date.now();
+  let v: MongoDBVector;
+  const others: MongoDBVector[] = [];
+  const created: string[] = [];
+  const instance = async () => {
+    const o = new MongoDBVector({ uri, dbName, id: 'mongodb-own-review' });
+    await o.connect();
+    others.push(o);
+    return o;
+  };
+  const indexNames = async (name: string) =>
+    (await v['db'].collection(name).listSearchIndexes().toArray()).map(i => i.name);
+  const callerCollection = async (name: string) => {
+    created.push(name);
+    await v['db'].collection(name).insertOne({ _id: 'keep', embedding: [1, 0, 0, 0] } as any);
+  };
+  const callerVectorIndex = (col: string, name: string) =>
+    v['db'].collection(col).createSearchIndex({
+      name,
+      type: 'vectorSearch',
+      definition: { fields: [{ type: 'vector', path: 'embedding', numDimensions: 4, similarity: 'cosine' }] },
+    });
+
+  beforeAll(async () => {
+    v = new MongoDBVector({ uri, dbName, id: 'mongodb-own-review-main' });
+    await v.connect();
+    await waitForAtlasSearchReady(v);
+  }, 500000);
+
+  afterAll(async () => {
+    for (const name of created) {
+      await v['db']
+        .collection(name)
+        .drop()
+        .catch(() => {});
+      await v['db']
+        .collection('__mastra_vector_indexes__')
+        .deleteOne({ _id: name as any })
+        .catch(() => {});
+    }
+    await Promise.all(others.map(o => o.disconnect()));
+    await v.disconnect();
+  });
+
+  it("a repeated deleteIndex never drops a caller's collection that carries <indexName>_vector_index", async () => {
+    // BYO index named after its collection, on a vector index the caller already had.
+    const name = `twice_${run}`;
+    await callerCollection(name);
+    await callerVectorIndex(name, `${name}_vector_index`);
+    await v.createIndex({ indexName: name, dimension: 4, collectionName: name });
+
+    await v.deleteIndex({ indexName: name });
+    // A retry, or another process: the registration is gone now.
+    await expect(v.deleteIndex({ indexName: name })).rejects.toThrow();
+
+    expect(await v['db'].collection(name).countDocuments()).toBe(1);
+    expect(await indexNames(name)).toContain(`${name}_vector_index`);
+  });
+
+  it("pointing a registration at a caller's existing vector index does not carry ownership over", async () => {
+    const col = `rename_${run}`;
+    await callerCollection(col);
+    await callerVectorIndex(col, 'caller_vs');
+    await v.createIndex({ indexName: col, dimension: 4, collectionName: col, searchIndexName: 'mastra_vs' });
+    await v.createIndex({ indexName: col, dimension: 4, collectionName: col, searchIndexName: 'caller_vs' });
+
+    expect((await v['db'].collection('__mastra_vector_indexes__').findOne({ _id: col as any }))?.ownsVectorIndex).toBe(
+      false,
+    );
+    await v.deleteIndex({ indexName: col });
+    expect(await indexNames(col)).toContain('caller_vs');
+  });
+
+  it("a stale cache in another instance never drops a collection re-registered as the caller's", async () => {
+    const name = `stale_${run}`;
+    created.push(name);
+    const a = await instance();
+    const b = await instance();
+    // A caches the managed registration it created.
+    await a.createIndex({ indexName: name, dimension: 4 });
+    // B deletes it; then the name is reused for a caller's own collection.
+    await b.deleteIndex({ indexName: name });
+    await waitForCondition(async () => !(await v['db'].listCollections({ name }).hasNext()), 30000);
+    await v['db'].collection(name).insertOne({ _id: 'keep', embedding: [1, 0, 0, 0] } as any);
+    await b.createIndex({ indexName: name, dimension: 4, collectionName: name, searchIndexName: `${name}_byo` });
+
+    await a.deleteIndex({ indexName: name });
+
+    expect(await v['db'].collection(name).countDocuments()).toBe(1);
+  });
+});
+
+// ─── hybridQuery with per-branch options (NODE-7937) ─────────────────────────────────────
+// Three articles: "password-reset" is the only keyword match for "password", and the query
+// vector [1, 0, 0, 0] ranks "overdue-invoice", then "password-reset", then "spreadsheet-sort".
+const ARTICLE_IDS = ['password-reset', 'overdue-invoice', 'spreadsheet-sort'];
+const ARTICLES = [
+  'To reset your password, open account settings and request a password reset email.',
+  'Pay an overdue invoice by opening billing settings and selecting the unpaid invoice.',
+  'Sort a spreadsheet by selecting a column and choosing ascending or descending order.',
+];
+const CATEGORIES = ['account', 'billing', 'spreadsheet'];
+const ARTICLE_VECTORS = [
+  [0.8, 0.6, 0, 0],
+  [1, 0, 0, 0],
+  [0, 0, 1, 0],
+];
+
+/** Managed collection: the store creates it, and the article text lives in `document`. */
+async function seedManaged(store: MongoDBVector, indexName: string, { autoEmbed = false } = {}) {
+  await store.createIndex({ indexName, ...(autoEmbed ? { autoEmbed: { model: 'voyage-4' } } : { dimension: 4 }) });
+  await store.upsert({
+    indexName,
+    ids: ARTICLE_IDS,
+    documents: ARTICLES,
+    metadata: CATEGORIES.map(category => ({ category })),
+    ...(autoEmbed ? {} : { vectors: ARTICLE_VECTORS }),
+  });
+  await store.waitForIndexReady({ indexName, timeoutMs: 300000 });
+  await store.createSearchIndex({ indexName, waitUntilReady: true });
+}
+
+/** BYO collection: the caller owns it, and the article text lives in `note`. */
+async function seedByo(store: MongoDBVector, indexName: string, { autoEmbed = false } = {}) {
+  const collectionName = `${indexName}_source`;
+  await store['db'].collection(collectionName).insertMany(
+    ARTICLES.map((note, i) => ({
+      _id: ARTICLE_IDS[i] as any,
+      note,
+      category: CATEGORIES[i],
+      ...(autoEmbed ? {} : { embedding: ARTICLE_VECTORS[i] }),
+    })),
+  );
+  await store.createIndex({
+    indexName,
+    collectionName,
+    searchIndexName: `${indexName}_vectors`,
+    ...(autoEmbed ? { autoEmbed: { model: 'voyage-4', path: 'note' } } : { dimension: 4 }),
+  });
+  await store.waitForIndexReady({ indexName, timeoutMs: 300000 });
+  await store.createSearchIndex({ indexName, waitUntilReady: true });
+}
+
+/**
+ * Index readiness doesn't mean every document is searchable yet. The vector branch alone can
+ * return all three articles, so also poll the full-text index until it finds the keyword match.
+ */
+async function waitUntilSearchable(store: MongoDBVector, indexName: string, vector: any, path: string) {
+  await waitForSync(
+    store,
+    indexName,
+    async () =>
+      (await store.hybridQuery({ indexName, vector, text: { query: 'password', paths: [path] } })).length === 3 &&
+      ids(await store.textQuery({ indexName, query: 'password', paths: [path] })).includes('password-reset'),
+    300000,
+    2000,
+  );
+}
+
+async function cleanUp(store: MongoDBVector, indexName: string, byo: boolean) {
+  await store.deleteIndex({ indexName }).catch(() => {});
+  if (byo)
+    await store['db']
+      .collection(`${indexName}_source`)
+      .drop()
+      .catch(() => {});
+  await store.disconnect();
+}
+
+async function waitForSearchIndexesReady(collection: any, names: string[]) {
+  const ready = await waitForCondition(
+    async () => {
+      const indexes: any[] = await collection.listSearchIndexes().toArray();
+      return names.every(name => indexes.find(index => index.name === name)?.status === 'READY');
+    },
+    300000,
+    1000,
+  );
+  if (!ready) throw new Error(`Search indexes ${names.join(', ')} did not become ready`);
+}
+
+const ids = (results: { id: string }[]) => results.map(result => result.id);
+
+describe('hybridQuery per-branch options: managed collection (Atlas Local)', () => {
+  const indexName = `hq_managed_${Date.now()}`;
+  const store = new MongoDBVector({ id: 'hq-managed', uri, dbName });
+
+  beforeAll(async () => {
+    await store.connect();
+    await seedManaged(store, indexName);
+    await waitUntilSearchable(store, indexName, { queryVector: [1, 0, 0, 0] }, 'document');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, false));
+
+  it('fuses vector and text results', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+    });
+    // "password-reset" is in both branches, so fusion ranks it first.
+    expect(ids(results)).toEqual(['password-reset', 'overdue-invoice', 'spreadsheet-sort']);
+  });
+
+  it('returns the managed metadata and document fields, without the embedding', async () => {
+    const [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      topK: 1,
+    });
+    expect(first.metadata).toEqual({ category: 'account' });
+    expect(first.document).toBe(ARTICLES[0]);
+    expect(first).not.toHaveProperty('vector');
+  });
+
+  it('returns the stored embedding with includeVector', async () => {
+    let [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      topK: 1,
+      includeVector: false,
+    });
+    expect(first.vector).toBeUndefined();
+
+    [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      topK: 1,
+      includeVector: true,
+    });
+    expect(first.vector).toEqual(ARTICLE_VECTORS[0]);
+  });
+
+  it('filters both branches before fusion', async () => {
+    // Unfiltered, the text branch returns only "password-reset" and the vector branch ranks
+    // "overdue-invoice" first. Only "spreadsheet-sort" survives if both branches are filtered.
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      filter: { category: 'spreadsheet' },
+    });
+    expect(ids(results)).toEqual(['spreadsheet-sort']);
+  });
+
+  it('filters with query operators', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      filter: { category: { $in: ['account', 'spreadsheet'] } },
+    });
+    expect(ids(results)).toEqual(['password-reset', 'spreadsheet-sort']);
+  });
+
+  it('returns nothing when the filter matches no documents', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'] },
+      filter: { category: 'no-such-category' },
+    });
+    expect(results).toEqual([]);
+  });
+
+  it('limits the vector branch to vector.limit', async () => {
+    // The vector branch keeps only "overdue-invoice", and the text branch matches only
+    // "password-reset", so "spreadsheet-sort" is in neither.
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0], limit: 1 },
+      text: { query: 'password', paths: ['document'] },
+    });
+    expect(ids(results).sort()).toEqual(['overdue-invoice', 'password-reset']);
+  });
+
+  it('limits the text branch to text.limit', async () => {
+    // "settings" also matches "overdue-invoice", but "password-reset" scores higher on both
+    // terms, so a text limit of 1 keeps only it. The vector branch keeps only "spreadsheet-sort".
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [0, 0, 1, 0], limit: 1 },
+      text: { query: 'password settings', paths: ['document'], limit: 1 },
+    });
+    expect(ids(results).sort()).toEqual(['password-reset', 'spreadsheet-sort']);
+  });
+
+  it('sends an explicit vector.numCandidates unchanged, so MongoDB rejects one below vector.limit', async () => {
+    const results = store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0], limit: 3, numCandidates: 2 },
+      text: { query: 'password', paths: ['document'] },
+    });
+    await expect(results).rejects.toMatchObject({ category: 'THIRD_PARTY', cause: { message: /numCandidates/ } });
+  });
+
+  it('rejects search index name overrides, which are for BYO collections only', async () => {
+    const withVectorOverride = store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0], searchIndexName: `${indexName}_vector_index` },
+      text: { query: 'password', paths: ['document'] },
+    });
+    await expect(withVectorOverride).rejects.toMatchObject({ category: 'USER', message: /bring-your-own/ });
+
+    const withTextOverride = store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['document'], searchIndexName: `${indexName}_search_index` },
+    });
+    await expect(withTextOverride).rejects.toMatchObject({ category: 'USER', message: /bring-your-own/ });
+  });
+});
+
+describe('hybridQuery per-branch options: BYO collection (Atlas Local)', () => {
+  const indexName = `hq_byo_${Date.now()}`;
+  const store = new MongoDBVector({ id: 'hq-byo', uri, dbName });
+
+  beforeAll(async () => {
+    await store.connect();
+    await seedByo(store, indexName);
+    // Existing indexes the caller owns, alongside the registered ones, for the override tests.
+    const collection = store['db'].collection(`${indexName}_source`);
+    await collection.createSearchIndex({
+      name: `${indexName}_alt_vectors`,
+      type: 'vectorSearch',
+      definition: { fields: [{ type: 'vector', path: 'embedding', numDimensions: 2, similarity: 'cosine' }] },
+    });
+    await collection.createSearchIndex({
+      name: `${indexName}_alt_text`,
+      type: 'search',
+      definition: { mappings: { dynamic: false, fields: { note: { type: 'string', analyzer: 'lucene.keyword' } } } },
+    });
+    await waitForSearchIndexesReady(collection, [`${indexName}_alt_vectors`, `${indexName}_alt_text`]);
+    await waitUntilSearchable(store, indexName, { queryVector: [1, 0, 0, 0] }, 'note');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, true));
+
+  it('fuses vector and text results', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+    });
+    expect(ids(results)).toEqual(['password-reset', 'overdue-invoice', 'spreadsheet-sort']);
+  });
+
+  it('returns the source document as metadata, without the embedding', async () => {
+    const [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      topK: 1,
+    });
+    expect(first.metadata).toEqual({ _id: 'password-reset', note: ARTICLES[0], category: 'account' });
+    expect(first).not.toHaveProperty('vector');
+  });
+
+  it('returns the stored embedding with includeVector', async () => {
+    let [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      topK: 1,
+      includeVector: false,
+    });
+    expect(first).not.toHaveProperty('vector');
+
+    [first] = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      topK: 1,
+      includeVector: true,
+    });
+    expect(first.vector).toEqual(ARTICLE_VECTORS[0]);
+  });
+
+  it('filters both branches before fusion', async () => {
+    // BYO filters target source fields at the document root, not a managed `metadata` field.
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      filter: { category: 'spreadsheet' },
+    });
+    expect(ids(results)).toEqual(['spreadsheet-sort']);
+  });
+
+  it('filters with query operators', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      filter: { category: { $in: ['account', 'spreadsheet'] } },
+    });
+    expect(ids(results)).toEqual(['password-reset', 'spreadsheet-sort']);
+  });
+
+  it('returns nothing when the filter matches no documents', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+      filter: { category: 'no-such-category' },
+    });
+    expect(results).toEqual([]);
+  });
+
+  it('searches the vector index named in vector.searchIndexName', async () => {
+    const registered = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+    });
+    expect(ids(registered)).toEqual(['password-reset', 'overdue-invoice', 'spreadsheet-sort']);
+
+    // The alternate index declares 2 dimensions, so MongoDB rejects the 4-dimension query
+    // vector. It can only fail this way if the override reached that index.
+    const overridden = store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0], searchIndexName: `${indexName}_alt_vectors` },
+      text: { query: 'password', paths: ['note'] },
+    });
+    await expect(overridden).rejects.toMatchObject({ category: 'THIRD_PARTY', cause: { message: /dimension/i } });
+  });
+
+  it('searches the text index named in text.searchIndexName', async () => {
+    const registered = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'] },
+    });
+    // The registered index matches "password", so fusion moves "password-reset" first.
+    expect(ids(registered)).toEqual(['password-reset', 'overdue-invoice', 'spreadsheet-sort']);
+
+    // The alternate index keeps each note as one keyword token, so it matches a note only as a
+    // whole string. The vector branch ranks "spreadsheet-sort" last, so only a text match from
+    // the alternate index can put it first. Poll, because READY doesn't mean documents are indexed.
+    const wholeNote = () =>
+      store.hybridQuery({
+        indexName,
+        vector: { queryVector: [1, 0, 0, 0] },
+        text: { query: ARTICLES[2], paths: ['note'], searchIndexName: `${indexName}_alt_text` },
+      });
+    await waitForSync(store, indexName, async () => ids(await wholeNote())[0] === 'spreadsheet-sort', 30000, 1000);
+    expect(ids(await wholeNote())[0]).toBe('spreadsheet-sort');
+
+    // A single word matches nothing in the alternate index, so only the vector order remains.
+    const overridden = await store.hybridQuery({
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'password', paths: ['note'], searchIndexName: `${indexName}_alt_text` },
+    });
+    expect(ids(overridden)).toEqual(['overdue-invoice', 'password-reset', 'spreadsheet-sort']);
+  });
+});
+
+// ─── hybridQuery against Atlas: native reranking and automatic embeddings ────────────────
+// These run against an Atlas cluster and consume Voyage AI embedding and reranking tokens.
+// Set MONGODB_URI in stores/mongodb/.env to run them; skipped otherwise.
+// Native reranking also needs MongoDB 9.0+, M10 or larger, and Native Reranking enabled in the
+// project, so its tests need an explicit opt-in as well:
+//   TEST_RERANKER=1 pnpm --filter @mastra/mongodb test
+const ATLAS_URI = process.env.MONGODB_URI;
+const RERANKING_ENABLED = Boolean(ATLAS_URI) && process.env.TEST_RERANKER === '1';
+const describeAtlas = ATLAS_URI ? describe : describe.skip;
+const describeReranking = RERANKING_ENABLED ? describe : describe.skip;
+const itReranks = RERANKING_ENABLED ? it : it.skip;
+const RERANK_QUERY = 'How do I reset my password?';
+
+describeReranking('hybridQuery native reranking: managed collection (Atlas)', () => {
+  const indexName = `hq_atlas_managed_${Date.now()}`;
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ id: 'hq-atlas-managed', uri: ATLAS_URI!, dbName });
+    await store.connect();
+    await seedManaged(store, indexName);
+    await waitUntilSearchable(store, indexName, { queryVector: [1, 0, 0, 0] }, 'document');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, false));
+
+  it('reranks the fused results', async () => {
+    const request = {
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'invoice', paths: ['document'] },
+      topK: 3,
+    };
+    const fused = await store.hybridQuery(request);
+    // Both branches favour "overdue-invoice", so fusion alone ranks it first.
+    expect(ids(fused)[0]).toBe('overdue-invoice');
+
+    const reranked = await store.hybridQuery({
+      ...request,
+      rerank: { query: RERANK_QUERY, paths: ['document'], numDocsToRerank: 3 },
+    });
+    // The reranker judges relevance to the password question and moves "password-reset" first.
+    expect(ids(reranked)[0]).toBe('password-reset');
+    expect(new Set(ids(reranked))).toEqual(new Set(ids(fused)));
+    // $rerank replaces the fusion score with its own relevance score.
+    const fusedScore = fused.find(result => result.id === 'password-reset')!.score;
+    expect(reranked[0].score).not.toBe(fusedScore);
+  });
+});
+
+describeReranking('hybridQuery native reranking: BYO collection (Atlas)', () => {
+  const indexName = `hq_atlas_byo_${Date.now()}`;
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ id: 'hq-atlas-byo', uri: ATLAS_URI!, dbName });
+    await store.connect();
+    await seedByo(store, indexName);
+    await waitUntilSearchable(store, indexName, { queryVector: [1, 0, 0, 0] }, 'note');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, true));
+
+  it('reranks the fused results', async () => {
+    const request = {
+      indexName,
+      vector: { queryVector: [1, 0, 0, 0] },
+      text: { query: 'invoice', paths: ['note'] },
+      topK: 3,
+    };
+    const fused = await store.hybridQuery(request);
+    expect(ids(fused)[0]).toBe('overdue-invoice');
+
+    const reranked = await store.hybridQuery({
+      ...request,
+      rerank: { query: RERANK_QUERY, paths: ['note'], numDocsToRerank: 3 },
+    });
+    expect(ids(reranked)[0]).toBe('password-reset');
+    expect(new Set(ids(reranked))).toEqual(new Set(ids(fused)));
+    const fusedScore = fused.find(result => result.id === 'password-reset')!.score;
+    expect(reranked[0].score).not.toBe(fusedScore);
+  });
+});
+
+describeAtlas('hybridQuery with automatic embeddings: managed collection (Atlas)', () => {
+  const indexName = `hq_atlas_managed_auto_${Date.now()}`;
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ id: 'hq-atlas-managed-auto', uri: ATLAS_URI!, dbName });
+    await store.connect();
+    await seedManaged(store, indexName, { autoEmbed: true });
+    await waitUntilSearchable(store, indexName, { query: RERANK_QUERY }, 'document');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, false));
+
+  it('fuses vector and text results', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { query: RERANK_QUERY },
+      text: { query: 'password', paths: ['document'] },
+    });
+    expect(ids(results)[0]).toBe('password-reset');
+  });
+
+  itReranks('reranks the fused results', async () => {
+    const request = {
+      indexName,
+      vector: { query: 'pay an overdue invoice' },
+      text: { query: 'invoice', paths: ['document'] },
+      topK: 3,
+    };
+    const fused = await store.hybridQuery(request);
+    // Both branches favour "overdue-invoice", so fusion alone ranks it first.
+    expect(ids(fused)[0]).toBe('overdue-invoice');
+
+    const reranked = await store.hybridQuery({
+      ...request,
+      rerank: { query: RERANK_QUERY, paths: ['document'], numDocsToRerank: 3 },
+    });
+    // The reranker judges relevance to the password question and moves "password-reset" first.
+    expect(ids(reranked)[0]).toBe('password-reset');
+    expect(new Set(ids(reranked))).toEqual(new Set(ids(fused)));
+    // $rerank replaces the fusion score with its own relevance score.
+    const fusedScore = fused.find(result => result.id === 'password-reset')!.score;
+    expect(reranked[0].score).not.toBe(fusedScore);
+  });
+});
+
+describeAtlas('hybridQuery with automatic embeddings: BYO collection (Atlas)', () => {
+  const indexName = `hq_atlas_byo_auto_${Date.now()}`;
+  let store: MongoDBVector;
+
+  beforeAll(async () => {
+    store = new MongoDBVector({ id: 'hq-atlas-byo-auto', uri: ATLAS_URI!, dbName });
+    await store.connect();
+    await seedByo(store, indexName, { autoEmbed: true });
+    await waitUntilSearchable(store, indexName, { query: RERANK_QUERY }, 'note');
+  }, 600000);
+  afterAll(() => cleanUp(store, indexName, true));
+
+  it('fuses vector and text results', async () => {
+    const results = await store.hybridQuery({
+      indexName,
+      vector: { query: RERANK_QUERY },
+      text: { query: 'password', paths: ['note'] },
+    });
+    expect(ids(results)[0]).toBe('password-reset');
+  });
+
+  itReranks('reranks the fused results', async () => {
+    const request = {
+      indexName,
+      vector: { query: 'pay an overdue invoice' },
+      text: { query: 'invoice', paths: ['note'] },
+      topK: 3,
+    };
+    const fused = await store.hybridQuery(request);
+    expect(ids(fused)[0]).toBe('overdue-invoice');
+
+    const reranked = await store.hybridQuery({
+      ...request,
+      rerank: { query: RERANK_QUERY, paths: ['note'], numDocsToRerank: 3 },
+    });
+    expect(ids(reranked)[0]).toBe('password-reset');
+    expect(new Set(ids(reranked))).toEqual(new Set(ids(fused)));
+    const fusedScore = fused.find(result => result.id === 'password-reset')!.score;
+    expect(reranked[0].score).not.toBe(fusedScore);
   });
 });

@@ -133,7 +133,7 @@ Creates a new vector index (collection) in MongoDB.
     type: 'string[]',
     isOptional: true,
     description:
-      'Metadata field names to declare as filter fields in the MongoDB vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically.',
+      "Metadata field names to declare as filter fields in the MongoDB vectorSearch index (registered as `metadata.<field>`). Queries that filter only on declared fields are pushed directly into `$vectorSearch` instead of pre-filtering candidate `_id`s, avoiding the 16 MB BSON limit on large result sets. Filters that reference an undeclared field, or use an operator `$vectorSearch` does not support, fall back to the pre-filter automatically. On a bring-your-own index, names are declared as written (for example, `lane` or `specs.gpu`), so `metadataMode: 'document'` filters can use them.",
   },
   {
     name: 'collectionName',
@@ -155,7 +155,7 @@ Creates a new vector index (collection) in MongoDB.
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Opt-in to write operations (`upsert`, `updateVector`, `deleteVector`, `deleteVectors`) on a bring-your-own collection. By default a BYO index is read-only: the store never modifies or deletes caller-owned operational documents. Ignored for managed collections, which are always writable. The policy is persisted with the index registration and survives restarts.',
+      'Deprecated, and removed in the next major version. Opts in to `upsert`, `updateVector`, `deleteVector`, and `deleteVectors` on a bring-your-own collection, which is read-only by default. Ignored for managed collections, which are always writable. The policy is persisted with the index registration and survives restarts. See the warning under [Indexing an existing collection](#indexing-an-existing-collection).',
   },
 ]}
 />
@@ -190,7 +190,7 @@ Waits for an index to become ready after creation. Useful when you need to ensur
 
 ### `upsert()`
 
-Adds or updates vectors and their metadata in the collection. On a bring-your-own index, this requires `allowWrites: true` at `createIndex()` time because BYO collections are read-only by default.
+Adds or updates vectors and their metadata in the collection. On a bring-your-own index, this requires the deprecated `allowWrites: true` option at `createIndex()` time because BYO collections are read-only by default.
 
 <PropertiesTable
   content={[
@@ -304,6 +304,12 @@ Searches for similar vectors with optional metadata filtering.
 ]}
 />
 
+#### Filters that can't run inside `$vectorSearch`
+
+A filter runs inside `$vectorSearch` only when every field it uses is declared in `filterFields` and every operator is one `$vectorSearch` supports. Otherwise `query()` and `hybridQuery()` first run the filter as a `$match`, load the matching `_id`s into memory, and pass them to `$vectorSearch`. Without a regular index on the filtered fields, that step scans the collection. If more than 100,000 documents match, the query throws `TOO_MANY_CANDIDATES` instead of loading the list.
+
+Results come back as a complete array of at most 10,000 hits. Memory use grows with `topK`, `includeVector`, and document size, and `metadataMode: 'document'` returns full source documents.
+
 ### `createSearchIndex()`
 
 Provisions a MongoDB Search (BM25/full-text) index on the collection backing an index and records it as the text-search index that `textQuery()` and `hybridQuery()` will target.
@@ -329,7 +335,8 @@ Naming:
     name: 'fields',
     type: 'string[]',
     isOptional: true,
-    description: 'Field names to index for full-text search. Omit for dynamic mapping (all string fields).',
+    description:
+      'Field names to index for full-text search. Use dot notation for nested fields, for example `metadata.name`. Omit for dynamic mapping (all string fields).',
   },
   {
     name: 'searchIndexName',
@@ -358,7 +365,7 @@ await store.createSearchIndex({
 })
 ```
 
-The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Calling `createSearchIndex()` again for the _same_ logical index with different `fields` updates the existing text index definition in place. You don't need to drop it first.
+The field-mapped index name includes the logical `indexName`, so two logical indexes on the same collection get distinct text indexes. Calling `createSearchIndex()` again for the _same_ logical index with different `fields` updates the existing text index definition in place if Mastra created it. You don't need to drop it first. Mastra never changes a full-text index it didn't create: an existing index with the requested name is reused when it maps the same fields, and `createSearchIndex()` throws a `CONFLICT` error otherwise.
 
 ### `waitForSearchIndexReady()`
 
@@ -464,7 +471,7 @@ const results = await store.textQuery({
 
 ### `hybridQuery()`
 
-Runs a hybrid search that fuses vector similarity with full-text results through MongoDB's server-side `$rankFusion`. The feature requires MongoDB 8.0 or later and is generally available from 8.1. MongoDB Atlas 8.0.x supports it where enabled, although enablement may require a support case. A full-text search index must exist. Managed indexes create one automatically, while bring-your-own collections require an explicit `createSearchIndex()` call.
+Runs a hybrid search that fuses vector similarity with full-text results through MongoDB's server-side `$rankFusion`. The feature requires MongoDB 8.0 or later. A full-text search index must exist. Managed indexes create one automatically, while bring-your-own collections require an explicit `createSearchIndex()` call.
 
 <PropertiesTable
   content={[
@@ -557,7 +564,191 @@ const results = await store.hybridQuery({
 })
 ```
 
-`hybridQuery()` requires MongoDB 8.0 or later for the `$rankFusion` stage, which is generally available from 8.1. On 8.0.x, the stage runs where enabled, including MongoDB Atlas, but enablement may require a support case. If your deployment is older or lacks `$rankFusion`, run `query()` and `textQuery()` separately before merging the results client-side.
+`hybridQuery()` requires MongoDB 8.0 or later for the `$rankFusion` stage. If your deployment is older or lacks `$rankFusion`, run `query()` and `textQuery()` separately before merging the results client-side.
+
+#### Per-branch options and native reranking
+
+`hybridQuery()` also accepts separate `vector` and `text` options. Use this form to set a different retrieval limit for each branch, and optionally rerank the fused results before the final `topK` limit. Existing calls that use the parameters above don't change.
+
+This form has the same `$rankFusion` requirements and registered indexes. For bring-your-own collections, register a full-text index with `createSearchIndex()` or pass `text.searchIndexName`.
+
+Native [`$rerank`](https://www.mongodb.com/docs/vector-search/query/aggregation-stages/rerank/) requires Atlas running MongoDB 9.0 or later with **Native Reranking** enabled in the project's settings. The default `rerank-2.5` model is generally available. The `rerank-3` and `rerank-3-lite` models are in Preview and require a dedicated M10-or-higher cluster. Self-managed and Atlas Local deployments don't support native reranking. No separate Voyage AI client or application-side API key is required.
+
+With an initialized `store`, registered indexes, an `embedding` you generated, and text stored in `metadata.text`, retrieve candidates and rerank them in one call:
+
+```typescript
+const results = await store.hybridQuery({
+  indexName: 'articles',
+  vector: { queryVector: embedding, limit: 50, numCandidates: 1000 },
+  text: { query: question, paths: ['metadata.text'], limit: 50 },
+  rerank: { query: question, paths: ['metadata.text'], numDocsToRerank: 50 },
+  topK: 5,
+})
+```
+
+Each retrieval branch contributes up to its own `limit` documents. `$rerank` evaluates up to `numDocsToRerank` fused documents, then `topK` limits the response. The reranker receives source documents before projection, so `text.paths` and `rerank.paths` are relative to the document root, for both managed and bring-your-own collections.
+
+This form has no `metadataMode` option. Managed indexes return the managed `metadata` and `document` fields. Bring-your-own indexes return the source document as `metadata`, excluding the embedding field.
+
+On an `autoEmbed` index, use `vector.query` instead of `vector.queryVector`. Omit `rerank` to return fused results without reranking:
+
+```typescript
+const results = await store.hybridQuery({
+  indexName: 'articles_auto',
+  vector: { query: question, limit: 50 },
+  text: { query: question, paths: ['document'], limit: 50 },
+  topK: 5,
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Logical Mastra index identifying the collection and registered search indexes.',
+  },
+  {
+    name: 'topK',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10',
+    description: 'Final result limit after fusion and optional reranking. Integer from 1 to 10000.',
+  },
+  {
+    name: 'filter',
+    type: 'MongoDBVectorFilter',
+    isOptional: true,
+    description:
+      'Filter applied to both retrieval branches before fusion. On managed indexes, keys target the managed metadata fields. On bring-your-own indexes, keys target source document fields. Filters on fields declared in `filterFields` run inside `$vectorSearch`. Other filters use the [`_id` pre-filter](#filters-that-cant-run-inside-vectorsearch), as in the flat form.',
+  },
+  {
+    name: 'weights',
+    type: '{ vector?: number; text?: number }',
+    isOptional: true,
+    description:
+      'Finite, non-negative fusion weights. Each omitted weight defaults to 1. At least one must be positive.',
+  },
+  {
+    name: 'includeVector',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Return each result's stored embedding as `vector`. Not supported on `autoEmbed` indexes, which throw an error.",
+  },
+  {
+    name: 'vector',
+    type: 'object',
+    description: 'Vector retrieval configuration. Supply exactly one of queryVector or query.',
+  },
+  {
+    name: 'vector.queryVector',
+    type: 'number[]',
+    isOptional: true,
+    description:
+      'Non-empty, finite embedding that you generate. Mutually exclusive with vector.query and vector.model. Not supported on `autoEmbed` indexes, which throw an error; use vector.query instead.',
+  },
+  {
+    name: 'vector.query',
+    type: 'string',
+    isOptional: true,
+    description: 'Non-empty text for MongoDB to embed. Requires an autoEmbed index and is independent of text.query.',
+  },
+  {
+    name: 'vector.model',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Query embedding model override. Requires vector.query and must be compatible with the index model. Independent of rerank.model.',
+  },
+  {
+    name: 'vector.limit',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 'min(10000, max(4 * topK, 20))',
+    description: 'Maximum vector results contributed to fusion. Integer from 1 to 10000.',
+  },
+  {
+    name: 'vector.numCandidates',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 'min(10000, 20 * vector.limit)',
+    description:
+      'Vector search candidates. Integer from 1 to 10000. An explicit value is sent to MongoDB unchanged, which rejects a value below the resolved `vector.limit`.',
+  },
+  {
+    name: 'vector.searchIndexName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Bring-your-own collections only. Search this existing vector index instead of the registered one. With this option, filters always use the [`_id` pre-filter](#filters-that-cant-run-inside-vectorsearch), so the index must declare `_id` as a filter field. Managed indexes throw an error.',
+  },
+  {
+    name: 'text',
+    type: 'object',
+    description: 'Full-text retrieval configuration, independent of vector retrieval.',
+  },
+  {
+    name: 'text.query',
+    type: 'string',
+    description: 'Non-empty full-text query.',
+  },
+  {
+    name: 'text.paths',
+    type: 'string[]',
+    description: 'Non-empty array of indexed source field paths for full-text matching.',
+  },
+  {
+    name: 'text.searchIndexName',
+    type: 'string',
+    isOptional: true,
+    description:
+      'Bring-your-own collections only. Search this existing full-text index instead of the registered one. Managed indexes throw an error.',
+  },
+  {
+    name: 'text.limit',
+    type: 'number',
+    isOptional: true,
+    defaultValue: 'min(10000, max(4 * topK, 20))',
+    description: 'Maximum text results contributed to fusion. Integer from 1 to 10000.',
+  },
+  {
+    name: 'rerank',
+    type: 'object',
+    isOptional: true,
+    description: 'Enable native reranking after fusion. Omit for hybrid retrieval only. An empty object is invalid.',
+  },
+  {
+    name: 'rerank.query',
+    type: 'string',
+    description: 'Required when rerank is supplied. Non-empty relevance query, independent of both retrieval queries.',
+  },
+  {
+    name: 'rerank.paths',
+    type: 'string[]',
+    description:
+      'Required when rerank is supplied. Non-empty array of source fields used to judge relevance. MongoDB returns an error if any candidate document lacks a specified field.',
+  },
+  {
+    name: 'rerank.model',
+    type: 'string',
+    isOptional: true,
+    defaultValue: 'rerank-2.5',
+    description: 'Native reranking model, independent of the embedding model. MongoDB determines model availability.',
+  },
+  {
+    name: 'rerank.numDocsToRerank',
+    type: 'number',
+    description:
+      'Required when rerank is supplied. Maximum fused documents to rerank and return before topK. Integer from 1 to 1000.',
+  },
+]}
+/>
+
+Returns `QueryResult[]` in final relevance order. `score` is the native reranking score when reranking is enabled, or the fusion score otherwise. These scores use different scales.
+
+Invalid requests throw `MastraError`. Server failures preserve their causes, including unavailable reranking, unsupported models, and missing source fields. The method never silently substitutes a model or skips reranking.
 
 ### `describeIndex()`
 
@@ -585,12 +776,18 @@ interface IndexStats {
 
 On an `autoEmbed` index, `dimension` is read from the index definition and reports MongoDB's default of `1024` when the index doesn't pin one. `metric` is omitted when the `autoEmbed` index doesn't specify a similarity. `count` counts documents that carry the embedded text field, since the generated vectors aren't stored on your documents.
 
+`count` is an exact count of the documents that carry the embedding field. On a large collection without a regular MongoDB index on that field, the count scans the collection, so avoid calling `describeIndex()` from request paths or health checks. `upsert()` and `updateVector()` read the dimension from the index definition and don't count documents.
+
 ### `deleteIndex()`
 
-Deletes a vector index. Behavior depends on how the index was created:
+Deletes a vector index. Mastra records which search indexes and collections it created, and drops only those:
 
-- **Managed index** (created without `collectionName`): drops the entire collection and all its data.
-- **Bring-your-own index** (created with `collectionName`): drops the MongoDB vectorSearch index. If `createSearchIndex()` provisioned a companion full-text search index, it drops that index too. A vectorSearch or full-text index that another logical index on the same collection still references is kept for that index. The caller's operational collection and its documents are preserved. This store never drops a collection it didn't create.
+- **Managed index** (created without `collectionName`): drops the collection and all its data. If a collection with that name already existed when `createIndex()` ran, Mastra keeps it and drops only the search indexes it created. Managed indexes registered by earlier versions still drop their collection.
+- **Bring-your-own index** (created with `collectionName`): drops the vector and full-text indexes Mastra created. The collection and its documents are kept.
+
+Mastra keeps any search index that existed before `createIndex()` or `createSearchIndex()` ran, that another logical index still uses, or that an earlier version registered. Drop those yourself if you no longer need them. Pointing an index at a different `searchIndexName` counts as a new index that Mastra doesn't own unless that call creates it. `deleteIndex()` throws for a name with no registration and drops nothing.
+
+If `createIndex()` fails to create the vector index, or `createSearchIndex()` the full-text index, Mastra removes or restores the registration that call wrote.
 
 The BYO classification is recorded durably when the index is created, so it's applied correctly even by a different process (e.g. an index created by a setup job and later deleted by a long-lived service). Always pass the **logical index name** (the `indexName` used at `createIndex`), not the physical collection name.
 
@@ -614,7 +811,7 @@ Returns: `Promise<string[]>`
 
 Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
 
-> **Bring-your-own collections are read-only by default.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a USER-category error on a BYO index unless it was created with `allowWrites: true`. See [Indexing an existing collection](#indexing-an-existing-collection).
+> **Bring-your-own collections are read-only by default.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a USER-category error on a BYO index unless it was created with the deprecated `allowWrites: true` option. See [Indexing an existing collection](#indexing-an-existing-collection).
 
 <PropertiesTable
   content={[
@@ -842,7 +1039,7 @@ Any other field the `autoEmbed` index definition accepts is forwarded to MongoDB
 
 **Important notes:**
 
-- Automated Embedding is a **MongoDB Preview feature**. It requires an Atlas cluster with Automated Embedding available, or the `mongodb/mongodb-atlas-local:preview` image for local development. Self-managed deployments need `mongot` configured with a Voyage AI API key.
+- Automated Embedding is generally available on MongoDB Atlas, where the cluster needs storage auto-scaling enabled. On self-managed deployments it's a Preview feature that needs `mongot` configured with a Voyage AI API key. For local development, use the `mongodb/mongodb-atlas-local:preview` image.
 - The Voyage AI API key must be provisioned through the Atlas UI. A key issued directly by Voyage AI is rejected by the default embedding endpoint.
 - **MongoDB stores the generated vectors outside your collection**, so documents carry text only. `includeVector: true` isn't supported on an `autoEmbed` index and throws.
 - Embeddings are generated asynchronously. A query can legitimately return no results for a short time after a write, even once the index reports ready.
@@ -892,17 +1089,58 @@ console.log(hits[0].metadata.amount, hits[0].metadata.customField)
 await store.createSearchIndex({ indexName: 'precedents', fields: ['note'] })
 ```
 
+The diagram shows what `MongoDBVector` reads, writes, and drops in a bring-your-own setup.
+
+![MongoDBVector records each index in the mastra_vector_indexes registry, queries your collection's documents, creates and drops only the search indexes it created, and reuses search indexes that already existed without changing them. With Automated Embedding, document text is sent to Voyage AI.](/img/integrations/mongodb/byoc-architecture.png)
+
+<details>
+  <summary>Text version of the diagram</summary>
+
+  ```mermaid
+  ---
+  title: Bring-your-own collection with MongoDBVector
+  ---
+  graph LR
+  app["Mastra app<br/>Agents, RAG, Memory"]
+  store["MongoDBVector<br/>@mastra/mongodb"]
+  subgraph atlas[MongoDB Atlas]
+    registry[("__mastra_vector_indexes__<br/>Target, allowWrites, ownership")]
+    subgraph yours[Your collection]
+      docs[("Operational documents<br/>Read-only by default, never dropped")]
+      owned["Search indexes Mastra created<br/>Dropped by deleteIndex"]
+      existing["Search indexes that already existed<br/>Reused, never changed or dropped"]
+    end
+  end
+  voyage["Voyage AI<br/>Automated Embedding, optional"]
+  app --> store
+  store -->|records and resolves| registry
+  store -->|queries| docs
+  store -->|creates and drops| owned
+  store -.->|reuses| existing
+  docs -.->|text to embed| voyage
+  ```
+</details>
+
 **Important notes:**
 
 - The collection must already exist and contain documents with an `embedding` field (or the custom `embeddingFieldPath` you configured)
 - The collection is never created or dropped when using `collectionName`
-- **A BYO index is read-only by default.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a clear error rather than mutating caller-owned operational documents. To let the store write embeddings into (or delete documents from) your collection, opt in explicitly with `createIndex({ ..., allowWrites: true })`. The policy is persisted and survives restarts. Entries written by older versions without the flag are treated as read-only (fail closed).
+- **A BYO index is read-only.** `upsert()`, `updateVector()`, `deleteVector()`, and `deleteVectors()` throw a clear error rather than mutating caller-owned operational documents. Write embeddings into the same documents from your application, or use `autoEmbed` and let MongoDB generate them. The deprecated `allowWrites: true` option still lets the store write; entries written by older versions without the flag are treated as read-only (fail closed).
 - Use `metadataMode: 'document'` when querying to retrieve the full source document as `metadata`
 - In `'document'` mode the embedding is omitted from `metadata` by default; pass `includeVector: true` to retain it (and also expose it as a top-level `vector`)
 - **Filtering in `'document'` mode operates on root document fields**, not a nested `metadata.` subdocument. `filter: { lane: 'fraud' }` matches the top-level `lane` field of your operational documents (in the default `'field'` mode, bare fields are rewritten to `metadata.<field>` for managed collections). Both the pushdown and `$match` fallback paths honor this.
 - **Native `ObjectId` `_id`s are supported.** Operational collections commonly key on `ObjectId`; query results coerce `_id` to a string (the `QueryResult.id` contract), and `deleteVector()`/`updateVector()`/`deleteVectors()` accept that string and match the underlying `ObjectId` document. Managed collections (string `_id`s) are unaffected.
 - Full-text and hybrid search on a BYO collection are **opt-in**: no full-text index is auto-created, so call `createSearchIndex()` before `textQuery()`/`hybridQuery()`. The full-text index builds asynchronously. Call `waitForSearchIndexReady()` (or pass `waitUntilReady: true`) before an immediate text/hybrid query.
-- `deleteIndex()` on a BYO index drops the vector index (and the text index if one was created) but **preserves** the collection and its documents
+- `deleteIndex()` on a BYO index drops the vector and text indexes Mastra created but **preserves** the collection, its documents, and any search index that existed before
+- To filter in `'document'` mode without loading candidate `_id`s, declare the root fields you filter on: `createIndex({ ..., filterFields: ['lane'] })`
+
+:::warning
+
+`allowWrites` is deprecated and will be removed in the next major version. With `allowWrites: true`, `deleteVector()` and `deleteVectors()` delete your original documents, not only their embeddings, and `upsert()` replaces each document's `metadata` field. The setting is stored with the index, so it applies to every process that uses that index name.
+
+`allowWrites` is a guard in Mastra, not database access control. It doesn't limit the MongoDB user, and it doesn't stop `createIndex()`, `createSearchIndex()`, or `deleteIndex()` from managing search indexes and the `__mastra_vector_indexes__` registry. To enforce read-only access, connect with a MongoDB role that can only read the collection, and use a separate user to create indexes.
+
+:::
 
 ## Best practices
 
