@@ -171,7 +171,7 @@ export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSour
             };
           })
           .sort((a, b) => a.providerName.localeCompare(b.providerName));
-        return c.json({ connections });
+        return c.json({ projectId, connections });
       } catch (err) {
         return platformError(c, err);
       }
