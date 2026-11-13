@@ -72,6 +72,7 @@ catalogs:
       version: 6.0.3
 
 overrides:
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'
   miniflare@4.20260730.0>workerd: 1.20261023.1
@@ -7025,6 +7026,9 @@ importers:
       '@mastra/mcp':
         specifier: workspace:*
         version: link:../../packages/mcp
+      '@mastra/mcp-apps-components':
+        specifier: workspace:*
+        version: link:../../packages/mcp-apps-components
       '@mastra/memory':
         specifier: workspace:*
         version: link:../../packages/memory
@@ -7034,6 +7038,9 @@ importers:
       '@mastra/server-adapters-test-suite':
         specifier: workspace:*
         version: link:../server-adapters-test-suite
+      '@modelcontextprotocol/client':
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

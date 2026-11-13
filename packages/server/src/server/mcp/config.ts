@@ -22,6 +22,10 @@ export type MCPPrimitiveKind = keyof ServerMCPPrimitiveFilter;
 export interface ResolvedBuiltinMCPConfig {
   toolsets: ReadonlySet<MastraMCPToolset>;
   readOnly: boolean;
+  /** Whether to serve MCP Apps when `@mastra/mcp-apps-components` is installed. */
+  apps: boolean;
+  /** Studio's base URL, sent to MCP Apps for "Open in Studio" links. */
+  studioUrl?: string;
   enumLimit: number;
   featured: { agents: string[]; workflows: string[] };
   /**
@@ -143,6 +147,8 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
   return {
     toolsets,
     readOnly,
+    apps: config.apps ?? true,
+    studioUrl: resolveStudioUrl(mastra, config),
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },
     isSelected: (kind, names) => {
@@ -154,6 +160,24 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     },
     serverInfo: config.serverInfo ?? {},
   };
+}
+
+/** Studio's base URL for app links: `server.mcp.studioUrl`, else the local Studio under `mastra dev`. */
+function resolveStudioUrl(mastra: Mastra, config: ServerMCPConfig): string | undefined {
+  if (config.studioUrl === false) return undefined;
+  if (config.studioUrl) return config.studioUrl.replace(/\/+$/, '');
+  if (!isDev()) return undefined;
+  const server = mastra.getServer();
+  const bound = server?.host && server.host !== '0.0.0.0' && server.host !== '::' ? server.host : undefined;
+  const name = server?.studioHost ?? bound ?? 'localhost';
+  // An IPv6 address goes in brackets in a URL.
+  const host = name.includes(':') && !name.startsWith('[') ? `[${name}]` : name;
+  const port = server?.studioPort ?? server?.port ?? 4111;
+  const base = (server?.studioBase ?? '/').replace(/\/+$/, '');
+  // Like the dev server: HTTPS when `server.https` or `mastra dev --https` (which passes the cert in env) is set.
+  const https =
+    (server?.https?.key && server.https.cert) || (process.env.MASTRA_HTTPS_KEY && process.env.MASTRA_HTTPS_CERT);
+  return `${server?.studioProtocol ?? (https ? 'https' : 'http')}://${host}:${port}${base}`;
 }
 
 /** DNS-rebinding protection for `mastra dev` only; production hosts sit behind proxies and custom domains. */

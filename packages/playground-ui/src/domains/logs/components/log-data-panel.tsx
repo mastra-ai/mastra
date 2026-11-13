@@ -1,5 +1,6 @@
 import { ArrowRightIcon } from 'lucide-react';
 import { Fragment } from 'react';
+import type { ReactNode } from 'react';
 import type { LogRecord } from '../types';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -18,6 +19,8 @@ export interface LogDataPanelProps {
   onPrevious?: () => void;
   onNext?: () => void;
   depth?: 1 | 2 | 3;
+  /** Extra controls in the header, before the previous/next buttons. */
+  actions?: ReactNode;
 }
 
 export function LogDataPanel({
@@ -28,6 +31,7 @@ export function LogDataPanel({
   onPrevious,
   onNext,
   depth,
+  actions,
 }: LogDataPanelProps) {
   const formattedDate = log ? (formatTimestampPrecise(log.timestamp) ?? '') : '';
 
@@ -42,6 +46,7 @@ export function LogDataPanel({
               <DataPanel.Meta tooltip={formattedDate}>{formattedDate}</DataPanel.Meta>
             </DataPanel.Metadata>
             <DataPanel.HeaderActions>
+              {actions}
               <DataPanel.NextPrevNav
                 onPrevious={onPrevious}
                 onNext={onNext}

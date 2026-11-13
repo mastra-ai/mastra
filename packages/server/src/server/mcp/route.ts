@@ -3,6 +3,7 @@ import type { MCPHttpTransportResult } from '../handlers/mcp';
 import { HTTPException } from '../http-exception';
 import type { ServerRoute } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import type { BuiltinMCPApps } from './catalogue';
 import {
   BUILTIN_MCP_SERVER_ID,
   DEFAULT_BUILTIN_MCP_PATH,
@@ -69,8 +70,84 @@ async function loadBuiltinMCP(mastra: Mastra) {
       res: Response.json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: MISSING_MCP_MESSAGE } }),
     });
   }
-  const { buildBuiltinMCPTools } = await import('./catalogue');
-  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools };
+  const { buildBuiltinMCPTools, modelSummaryOf } = await import('./catalogue');
+  return { MCPServer: mcp.MCPServer, buildBuiltinMCPTools, modelSummaryOf };
+}
+
+const TRACE_VIEWER_URI = 'ui://mastra/trace-viewer';
+const EXPLORER_URI = 'ui://mastra/observability-explorer';
+const APPS_PACKAGE = '@mastra/mcp-apps-components';
+
+type AppResource = { name: string; description?: string; html: string };
+type BuiltinApps = {
+  appResources: Record<string, AppResource>;
+  apps: BuiltinMCPApps;
+};
+let builtinApps: Promise<BuiltinApps | undefined> | undefined;
+
+/**
+ * The MCP Apps the built-in server ships, from `@mastra/mcp-apps-components` (an optional peer dependency
+ * like `@mastra/mcp`): without it, tools carry no app link and clients get their JSON results as before.
+ * Loaded once per process.
+ */
+function loadBuiltinApps(): Promise<BuiltinApps | undefined> {
+  builtinApps ??= (async () => {
+    try {
+      // Keep each import directly inside its own `try`, like `@mastra/mcp` above (wrangler's esbuild only
+      // accepts an unresolvable dynamic import there). Separate subpaths let an older package without the
+      // observability explorer still serve the trace viewer.
+      let traceViewer: AppResource | undefined;
+      let observabilityExplorer: AppResource | undefined;
+      try {
+        traceViewer = (await import('@mastra/mcp-apps-components/trace-viewer')).traceViewerApp;
+      } catch (error) {
+        if (!isMissingAppsPackage(error)) throw error;
+      }
+      try {
+        observabilityExplorer = (await import('@mastra/mcp-apps-components/observability-explorer'))
+          .observabilityExplorerApp;
+      } catch (error) {
+        if (!isMissingAppsPackage(error)) throw error;
+      }
+      if (!traceViewer && !observabilityExplorer) return undefined;
+      const result: BuiltinApps = { appResources: {}, apps: {} };
+      if (traceViewer) {
+        result.appResources[TRACE_VIEWER_URI] = traceViewer;
+        result.apps.traceViewer = TRACE_VIEWER_URI;
+      }
+      if (observabilityExplorer) {
+        result.appResources[EXPLORER_URI] = observabilityExplorer;
+        result.apps.observabilityExplorer = EXPLORER_URI;
+      }
+      return result;
+    } catch (error) {
+      builtinApps = undefined;
+      throw error;
+    }
+  })();
+  return builtinApps;
+}
+
+/** Whether `error` says `@mastra/mcp-apps-components` (or, in an older version, its app subpath) isn't installed. */
+export function isMissingAppsPackage(error: unknown): boolean {
+  for (let current = error; current instanceof Error; current = current.cause) {
+    const code = (current as { code?: unknown }).code;
+    if (
+      (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') &&
+      current.message.includes(`'${APPS_PACKAGE}`)
+    ) {
+      return true;
+    }
+    // An older version, without the app's subpath.
+    if (code === 'ERR_PACKAGE_PATH_NOT_EXPORTED' && current.message.includes(`/${APPS_PACKAGE}/package.json`)) {
+      return true;
+    }
+    // Cloudflare Workers (workerd) throws a plain Error without a `code`.
+    if (/^No such module "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
+    // Vite (e.g. vitest running the app) replaces an uninstalled optional peer with a module that throws this.
+    if (/^Could not resolve "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
+  }
+  return false;
 }
 
 /** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
@@ -109,7 +186,8 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       throw new HTTPException(404, { message: 'Not Found' });
     }
     const config = resolveBuiltinMCPConfig(mastra, request);
-    const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP(mastra);
+    const { MCPServer, buildBuiltinMCPTools, modelSummaryOf } = await loadBuiltinMCP(mastra);
+    const apps = config.apps ? await loadBuiltinApps() : undefined;
     const tools = await buildBuiltinMCPTools(
       {
         mastra,
@@ -120,6 +198,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
         abortSignal,
         request: bearerOnly(request),
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
+        apps: apps?.apps,
       },
       config,
     );
@@ -131,6 +210,29 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
       title: serverInfo.title,
       instructions: serverInfo.instructions,
       tools,
+      // An app only opens from a tool the caller was given, and its own calls are tool calls.
+      appResources: apps?.appResources,
+      // Clients without MCP Apps support see no app links, resources, or `ui` capability.
+      appsRequireClientSupport: true,
+      toolResult: {
+        // Hosts give the model `content` and the app `structuredContent`: when the app renders the full
+        // output, the model reads a summary of it instead.
+        transform: ({ toolName, output, result, apps }) => {
+          if (!apps || result.isError) return undefined;
+          const withStudio = config.studioUrl
+            ? { ...result, _meta: { ...result._meta, 'mastra/studioUrl': config.studioUrl } }
+            : result;
+          const summary = modelSummaryOf(tools[toolName]);
+          if (!summary || typeof output !== 'object' || output === null || Array.isArray(output)) return withStudio;
+          // Routes can return dates as `Date`s; read the output as the client receives it.
+          const sent = JSON.parse(JSON.stringify(output)) as Record<string, unknown>;
+          return {
+            ...withStudio,
+            structuredContent: sent,
+            content: [{ type: 'text', text: summary(sent) }],
+          };
+        },
+      },
       legacy: 'stateless',
       requestState: { key: getRequestStateKey() },
     });

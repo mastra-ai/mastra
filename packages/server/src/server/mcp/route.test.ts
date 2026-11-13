@@ -122,3 +122,87 @@ describe('built-in MCP route module load', () => {
     expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('requestState.key'));
   });
 });
+
+describe('built-in MCP route without @mastra/mcp-apps-components installed', () => {
+  const appsNotInstalled = {
+    esm: () =>
+      Object.assign(
+        new Error("Cannot find package '@mastra/mcp-apps-components' imported from /app/.mastra/output/index.mjs"),
+        { code: 'ERR_MODULE_NOT_FOUND' },
+      ),
+    cjs: () =>
+      Object.assign(new Error("Cannot find module '@mastra/mcp-apps-components/trace-viewer'"), {
+        code: 'MODULE_NOT_FOUND',
+      }),
+    // An older version without the app's subpath.
+    olderVersion: () =>
+      Object.assign(
+        new Error(
+          'Package subpath \'./trace-viewer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+        ),
+        { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
+      ),
+    workerd: () => new Error('No such module "@mastra/mcp-apps-components/trace-viewer".'),
+    vite: () => new Error('Could not resolve "@mastra/mcp-apps-components/trace-viewer" imported by "@mastra/server".'),
+  };
+
+  const VIEWER = '@mastra/mcp-apps-components/trace-viewer';
+  const LIST = '@mastra/mcp-apps-components/observability-explorer';
+  // What each installed subpath exports. The server's workspace doesn't install the package (see the
+  // override in `pnpm-workspace.yaml`); `@mastra/hono`'s MCP Apps tests serve the real apps.
+  const viewerModule = () => ({ traceViewerApp: { name: 'Trace viewer', html: '<html>viewer</html>' } });
+  const explorerModule = () => ({
+    observabilityExplorerApp: { name: 'Observability explorer', html: '<html>explorer</html>' },
+  });
+  afterEach(() => {
+    vi.doUnmock(VIEWER);
+    vi.doUnmock(LIST);
+  });
+
+  async function serveWithAppsImport(loadViewer: () => unknown, loadList: () => unknown = loadViewer) {
+    vi.stubEnv('MASTRA_DEV', 'true');
+    vi.doMock(VIEWER, loadViewer);
+    vi.doMock(LIST, loadList);
+    const app = await serveWithMCPImport(() => vi.importActual('@mastra/mcp'));
+    const { server } = (await app.request()) as { server: { appResourceList: { uri: string }[] } };
+    return server.appResourceList.map(resource => resource.uri);
+  }
+
+  for (const [kind, error] of Object.entries(appsNotInstalled)) {
+    it(`serves the tools without apps (${kind})`, async () => {
+      const apps = await serveWithAppsImport(() => {
+        throw error();
+      });
+      expect(apps).toEqual([]);
+    });
+  }
+
+  it('serves both apps when installed', async () => {
+    const apps = await serveWithAppsImport(viewerModule, explorerModule);
+    expect(apps.sort()).toEqual(['ui://mastra/observability-explorer', 'ui://mastra/trace-viewer']);
+  });
+
+  it('serves the trace viewer from an older version without the observability explorer', async () => {
+    const apps = await serveWithAppsImport(viewerModule, () => {
+      throw Object.assign(
+        new Error(
+          'Package subpath \'./observability-explorer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+        ),
+        { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
+      );
+    });
+    expect(apps).toEqual(['ui://mastra/trace-viewer']);
+  });
+
+  it('rethrows other load failures', async () => {
+    const broken = Object.assign(
+      new Error("Cannot find package 'react' imported from /app/node_modules/@mastra/mcp-apps-components/dist/x.js"),
+      { code: 'ERR_MODULE_NOT_FOUND' },
+    );
+    await expect(
+      serveWithAppsImport(() => {
+        throw broken;
+      }),
+    ).rejects.toThrow();
+  });
+});

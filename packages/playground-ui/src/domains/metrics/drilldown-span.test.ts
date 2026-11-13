@@ -70,3 +70,13 @@ describe('buildTracesDrilldownUrl with a span scope', () => {
     });
   });
 });
+
+describe('buildTracesDrilldownUrl with a model scope', () => {
+  it('opens traces with a span that used that model', () => {
+    const url = buildTracesDrilldownUrl({ preset: '7d', dashboardFilter: {}, scope: { model: 'gpt-5-mini' } });
+    expect(tracesWhere(url)).toEqual({
+      op: 'and',
+      args: [{ spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5-mini' } } } }],
+    });
+  });
+});

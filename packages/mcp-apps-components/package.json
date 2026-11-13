@@ -35,6 +35,26 @@
         "default": "./dist/dashboards.cjs"
       }
     },
+    "./observability-explorer": {
+      "import": {
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.js"
+      },
+      "require": {
+        "types": "./dist/observability-explorer.d.ts",
+        "default": "./dist/observability-explorer.cjs"
+      }
+    },
+    "./trace-viewer": {
+      "import": {
+        "types": "./dist/trace-viewer.d.ts",
+        "default": "./dist/trace-viewer.js"
+      },
+      "require": {
+        "types": "./dist/trace-viewer.d.ts",
+        "default": "./dist/trace-viewer.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

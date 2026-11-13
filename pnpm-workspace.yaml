@@ -356,6 +356,10 @@ trustPolicyExclude:
   # flags it because modal stopped attaching provenance after 0.7.2.
   - 'modal@0.11.1'
 overrides:
+  # @mastra/server imports @mastra/mcp-apps-components only when an app installs it (an optional peer).
+  # Keep the published one out of the workspace: the server's tests mock it, and @mastra/hono's resolve
+  # the workspace build (see its vitest config).
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   # The Lance adapter supplies vectors; its optional embedding providers are unused here.
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'

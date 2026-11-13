@@ -5,6 +5,7 @@ packages:
   - '@mastra/core'
   - '@mastra/server'
   - '@mastra/mcp'
+  - '@mastra/mcp-apps-components'
   - '@mastra/auth'
 ---
 
@@ -208,9 +209,43 @@ export const mastra = new Mastra({
 
 :::
 
+### MCP Apps
+
+Clients that render [MCP Apps](https://modelcontextprotocol.io/extensions/apps/overview), such as the Claude app, can show tool results as interactive views. Install `@mastra/mcp-apps-components` next to `@mastra/server` to turn them on:
+
+```bash npm2yarn
+npm install @mastra/mcp-apps-components
+```
+
+With it installed, `get_trace` opens the trace in Studio's trace timeline. Select a span to see its input, output, and attributes. The view loads the rest of a long trace and each span through `get_trace` and `get_span`, so it shows only what the caller's permissions allow.
+
+`query_traces` and `list_traces` open Studio's observability explorer on the results. The time range, sort, and filters the model asked for stay applied, and you can clear the model's filters to see every trace. From there you can filter, change the time range, page through traces, and open a trace on its timeline. If the observability store supports span and thread queries, the explorer also has Spans and Threads tabs. Every query goes back through the same MCP tools, with the caller's permissions.
+
+`list_logs` opens the explorer on its Logs tab, with the level, entity, and time range the model asked for applied. Select a log to see its details, or open the trace it belongs to. With the `observability_analytics` toolset enabled, `analyze_metrics` opens the Metrics tab: Studio's metrics dashboard of token usage, latency, and run counts. Select a breakdown row to see its traces or logs. The explorer shows the Logs and Metrics tabs only when the store keeps logs or metrics and the caller can use the tools that read them.
+
+The apps work with the conversation, where the client supports it:
+
+- The app tells the model what's on screen: the open trace and span, the explorer's tab and filters, or the open log. Ask about "this trace" and the model knows which one you mean.
+- **Ask about this** buttons on a trace, span, or log send a message about it to the conversation.
+- **Fullscreen** opens the app full screen.
+- **Open in Studio** opens the same view in Studio. With `mastra dev` this is the local Studio. Otherwise, set `studioUrl` to your Studio's URL to show the button.
+- When an app shows a result, the model gets a short text summary of the rows, such as each trace's name, status, and duration, instead of the full JSON. The app still gets the full result. Clients without MCP Apps get the full JSON as before.
+
+Apps are served only to clients that declare MCP Apps support. Other clients, such as Claude Code in a terminal, get the same tools and JSON results as without the package. Set `apps: false` to turn them off:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  server: {
+    mcp: { apps: false },
+  },
+})
+```
+
 ### Agents creating agents
 
-`create_stored_agent` lets an MCP client create agents that other clients can then call. It needs `stored-agents:write`. A created agent is owned by the caller and is private by default. Without a caller identity, such as when `server.auth` isn't configured, the agent has no owner and is public, even with `visibility: 'private'`. Other users don't see a private agent in `list_agents` or `list_stored_agents`, and unless they're admins or granted that agent by id, calling it answers as if it doesn't exist, the same as over HTTP. Set `visibility: 'public'` to let every user call it. Only the owner, admins, and users granted that agent by id can edit it either way. An agent with no owner can be edited by any user with `stored-agents:write`. See [stored agent visibility](/docs/studio/editor#visibility). When the agent builder restricts models, the MCP tools accept only allowed models for the agent's model (the `provider` and `name` it runs, in each conditional variant), for any model named in `defaultOptions` (such as `structuredOutput.model`), for each enabled entry of the fallback `modelList`, for the memory models (the Observational Memory observer and reflector models and the title model), and for the `model` of every input and output processor step, at any depth of the processor graph. They also reject anything that would run on a default model the policy can't check: `observationalMemory: true`, an Observational Memory config without a `model`, memory left out on create (which the agent builder fills with Observational Memory on its default model), or a processor that needs a model, such as `moderation`, without one. Set an allowed `model` instead. A stored `model` takes only `provider`, `name`, and model settings such as `temperature`. Other keys, such as `modelId` or `providerId`, are rejected. If the agent builder's policy can't be loaded, the tools return an error instead of saving unchecked. `list_available_models` returns the allowed models. The HTTP route doesn't apply this check, so a user who can call `POST /stored/agents` directly can still save any model. Embedding models (`memory.embedder`) aren't on the builder's model list and aren't checked. Tool allowlists aren't checked when an agent is saved, so a created agent can use any tool the server has. Its tools run with the permissions of the user who calls it.
+`create_stored_agent` lets an MCP client create agents that other clients can then call. It needs `stored-agents:write`. A created agent is owned by the caller and is private by default. Without a caller identity, such as when `server.auth` isn't configured, the agent has no owner and is public, even with `visibility: 'private'`. A private agent is hidden from other users in `list_agents` and `list_stored_agents`. Calling it as anyone other than an admin or a user granted that agent by id answers as if it doesn't exist, the same as over HTTP. Set `visibility: 'public'` to let every user call it. Only the owner, admins, and users granted that agent by id can edit it either way. An agent with no owner can be edited by any user with `stored-agents:write`. See [stored agent visibility](/docs/studio/editor#visibility). When the agent builder restricts models, the MCP tools accept only allowed models for the agent's model (the `provider` and `name` it runs, in each conditional variant), for any model named in `defaultOptions` (such as `structuredOutput.model`), for each enabled entry of the fallback `modelList`, for the memory models (the Observational Memory observer and reflector models and the title model), and for the `model` of every input and output processor step, at any depth of the processor graph. They also reject anything that would run on a default model the policy can't check: `observationalMemory: true`, an Observational Memory config without a `model`, memory left out on create (which the agent builder fills with Observational Memory on its default model), or a processor that needs a model, such as `moderation`, without one. Set an allowed `model` instead. A stored `model` takes only `provider`, `name`, and model settings such as `temperature`. Other keys, such as `modelId` or `providerId`, are rejected. If the agent builder's policy can't be loaded, the tools return an error instead of saving unchecked. `list_available_models` returns the allowed models. The HTTP route doesn't apply this check, so a user who can call `POST /stored/agents` directly can still save any model. Embedding models (`memory.embedder`) aren't on the builder's model list and aren't checked. Tool allowlists aren't checked when an agent is saved, so a created agent can use any tool the server has. Its tools run with the permissions of the user who calls it.
 
 Observational Memory starts observing only after a thread reaches its token threshold, 30,000 tokens by default. For a short demo, set a lower `observation.messageTokens` so the agent learns from a few messages. Observational Memory processes messages in the background, so right after `call_agent`, call `get_observations` with `waitForPending: true` to wait (up to 30 seconds) for it to finish before reading.
 

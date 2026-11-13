@@ -1,12 +1,18 @@
+import { readFileSync } from 'node:fs';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8')) as {
+  version: string;
+};
+
 export default defineConfig({
-  plugins: [react()],
   test: {
     projects: [
       {
-        extends: true,
+        // Set on the project itself: the repo's root vitest config runs it without this file's top level.
+        plugins: [react()],
+        define: { __PACKAGE_VERSION__: JSON.stringify(version) },
         test: {
           name: 'unit:packages/mcp-apps-components',
           // Browser-side tests opt into jsdom with a `@vitest-environment jsdom` comment.

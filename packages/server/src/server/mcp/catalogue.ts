@@ -31,7 +31,21 @@ type MCPTool = ReturnType<typeof createTool>;
 export type ToolAnnotations = { readOnlyHint?: boolean; destructiveHint?: boolean; openWorldHint?: boolean };
 export type Args = Record<string, any>;
 type Execute = (args: Args, signal?: AbortSignal) => Promise<unknown>;
-type AddOptions = { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 };
+/** What the model reads instead of the full output, when the caller renders the tool's app with it. */
+export type ModelSummary = (output: Args) => string;
+type AddOptions = {
+  annotations?: ToolAnnotations;
+  outputSchema?: JSONSchema7;
+  meta?: Record<string, unknown>;
+  summary?: ModelSummary;
+};
+
+const modelSummaries = new WeakMap<object, ModelSummary>();
+
+/** The summary a tool sends the model when its result is rendered in an MCP App, if it has one. */
+export function modelSummaryOf(tool: object | undefined): ModelSummary | undefined {
+  return tool ? modelSummaries.get(tool) : undefined;
+}
 
 /** What a toolset needs to register route-backed tools. Every call goes through `dispatchRoute`. */
 export interface CatalogueKit {
@@ -39,6 +53,8 @@ export interface CatalogueKit {
   requestContext: RequestContext;
   config: ResolvedBuiltinMCPConfig;
   capabilities: BuiltinMCPCapabilities;
+  /** `ui://` URIs of the MCP Apps the server ships, keyed by app; empty without `@mastra/mcp-apps-components`. */
+  apps: BuiltinMCPApps;
   /** Whether the caller may use the route in the selected toolsets, mode, and server capabilities. */
   offered(route: ServerRoute): boolean;
   /** Whether the caller may run the route from a tool (route RBAC and read-only mode), whether or not it has its own tool. */
@@ -59,7 +75,7 @@ export interface CatalogueKit {
    * Registers one tool backed by several routes (named by the first route's `mcp`), offered only when
    * every route is. `execute` dispatches each call to the route it needs.
    */
-  addCombined(routes: ServerRoute[], inputSchema: JSONSchema7, execute: Execute): void;
+  addCombined(routes: ServerRoute[], inputSchema: JSONSchema7, execute: Execute, options?: AddOptions): void;
   /** Agent ids the caller can see, or undefined when it cannot list agents. */
   visibleAgentIds(): Promise<string[] | undefined>;
   /** Throws a 404 when `id` names a primitive that include/exclude leaves out. */
@@ -81,7 +97,11 @@ export interface BuiltinMCPContext {
   request?: Request;
   /** The built-in MCP route, used to check `mcp:execute` with the same RBAC provider. */
   mcpRoute: ServerRoute;
+  /** `ui://` URIs of the MCP Apps the server ships. */
+  apps?: BuiltinMCPApps;
 }
+
+export type BuiltinMCPApps = { traceViewer?: string; observabilityExplorer?: string };
 
 /** A backing route's permission is a read when every permission it accepts has the `read` action. */
 function isReadRoute(route: ServerRoute): boolean {
@@ -276,7 +296,7 @@ export async function buildBuiltinMCPTools(
     description: string,
     inputSchema: JSONSchema7,
     execute: (args: Args, signal?: AbortSignal) => Promise<unknown>,
-    options: { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 } = {},
+    options: AddOptions = {},
   ) => {
     used.add(name);
     tools[name] = createTool({
@@ -284,15 +304,19 @@ export async function buildBuiltinMCPTools(
       description,
       inputSchema,
       outputSchema: options.outputSchema,
-      mcp: { annotations: options.annotations ?? annotationsFor(route) },
+      mcp: {
+        annotations: options.annotations ?? annotationsFor(route),
+        ...(options.meta ? { _meta: options.meta } : {}),
+      },
       execute: async (args, context) => execute((args ?? {}) as Args, context?.abortSignal),
     });
+    if (options.summary) modelSummaries.set(tools[name], options.summary);
   };
   const addOperation = (
     route: ServerRoute,
     inputSchema: JSONSchema7,
     execute: (args: Args, signal?: AbortSignal) => Promise<unknown>,
-    options?: { annotations?: ToolAnnotations; outputSchema?: JSONSchema7 },
+    options?: AddOptions,
   ) => {
     if (offered(route)) add(route.mcp!.name, route, route.mcp!.description, inputSchema, execute, options);
   };
@@ -615,14 +639,15 @@ export async function buildBuiltinMCPTools(
     requestContext,
     config,
     capabilities,
+    apps: ctx.apps ?? {},
     offered,
     permitted,
     call,
     add,
     addOperation,
-    addCombined: (routes, inputSchema, execute) => {
+    addCombined: (routes, inputSchema, execute, options) => {
       if (routes.every(offered))
-        add(routes[0]!.mcp!.name, routes[0]!, routes[0]!.mcp!.description, inputSchema, execute);
+        add(routes[0]!.mcp!.name, routes[0]!, routes[0]!.mcp!.description, inputSchema, execute, options);
     },
     visibleAgentIds: async () => {
       const agents = await listVisibleAgents();

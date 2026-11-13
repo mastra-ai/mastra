@@ -47,6 +47,7 @@ import {
   createRequestStateCodec,
   inputRequired,
   inputResponse,
+  isInitializeRequest,
   specTypeSchemas,
 } from '@modelcontextprotocol/server';
 import type {
@@ -138,11 +139,46 @@ import type {
 } from './types';
 import { matchesUriTemplate } from './uri-template';
 
+const UI_EXTENSION_ID = 'io.modelcontextprotocol/ui';
+
+/**
+ * Prefix of the `Mcp-Session-Id` handed to a 2025-era client that declared the UI extension at
+ * `initialize`. Stateless HTTP keeps nothing between requests, so the id itself carries the
+ * declaration back on every later request. It only selects whether app links are shown, never access.
+ */
+const APPS_SESSION_PREFIX = 'mcp-apps.';
+
+function declaresUiExtension(capabilities: ClientCapabilities | undefined): boolean {
+  const entry = capabilities?.extensions?.[UI_EXTENSION_ID];
+  return typeof entry === 'object' && entry !== null && !Array.isArray(entry);
+}
+
+/** Whether the request is a 2025-era `initialize` whose client declares the UI extension. */
+async function initializesWithUi(request: Request, parsedBody: unknown): Promise<boolean> {
+  // 2026-07-28 requests name their method in a header and never initialize.
+  if (request.method !== 'POST' || request.headers.has('mcp-method')) return false;
+  const body =
+    parsedBody ??
+    (await request
+      .clone()
+      .json()
+      .catch(() => undefined));
+  return isInitializeRequest(body) && declaresUiExtension(body.params.capabilities);
+}
+
 export interface MCPServerConfig extends CoreMCPServerConfig {
   resources?: MCPServerResources;
   prompts?: MCPServerPrompts;
   /** MCP Apps (SEP-1865) HTML resources served under `ui://`. */
   appResources?: AppResources;
+  /**
+   * Serve MCP Apps only to clients that declare the `io.modelcontextprotocol/ui` extension. Other
+   * clients get no `ui://` resources, no tool app links, no app-only tools and no UI capability.
+   * 2026-07-28 clients declare it on every request. A 2025-era client declares it at `initialize`;
+   * on stateless HTTP the answer then carries an `Mcp-Session-Id` that brings the declaration back
+   * on the client's later requests.
+   */
+  appsRequireClientSupport?: boolean;
   /** Custom JSON Schema validator, for runtimes where the SDK default is unavailable. */
   jsonSchemaValidator?: jsonSchemaValidator;
   cacheHints?: MCPServerCacheHints;
@@ -241,6 +277,8 @@ type ToolTaskContext = {
   requestContext: Record<string, unknown>;
   /** The answered `input_required` round the creating `tools/call` carried, if any. */
   resume?: { resumeData: unknown; suspendPayload: unknown };
+  /** Whether the creating caller is served MCP Apps; its result drops app links when not. */
+  apps?: boolean;
 };
 
 /**
@@ -289,6 +327,9 @@ export class MCPServer extends MCPServerBase {
   private readonly promptOptions?: MCPServerPrompts;
   private readonly appResourceList: Resource[] = [];
   private readonly appResourceHtml = new Map<string, string>();
+  private readonly appsRequireClientSupport: boolean;
+  /** 2025-era instances serving a request that carries an apps session id (see `withAppsSession`). */
+  private readonly legacyAppClients = new WeakSet<Server>();
   private readonly jsonSchemaValidator?: jsonSchemaValidator;
   private readonly cacheHints?: MCPServerCacheHints;
   private readonly mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
@@ -323,6 +364,7 @@ export class MCPServer extends MCPServerBase {
     this.promptOptions = config.prompts;
     this.resourceOptions = config.resources;
     this.loadAppResources(config.appResources);
+    this.appsRequireClientSupport = config.appsRequireClientSupport ?? false;
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
     this.legacy = config.legacy ?? 'reject';
@@ -620,7 +662,7 @@ export class MCPServer extends MCPServerBase {
   }
 
   /** Builds the wire tool description, validated against the spec schema. */
-  private toMCPTool(name: string, tool: InternalCoreTool): MCPTool {
+  private toMCPTool(name: string, tool: InternalCoreTool, apps = true): MCPTool {
     const info = this.toolInfo(name, tool);
     const validation = specTypeSchemas.Tool['~standard'].validate({
       name,
@@ -629,7 +671,7 @@ export class MCPServer extends MCPServerBase {
       inputSchema: info.inputSchema,
       outputSchema: info.outputSchema,
       annotations: tool.mcp?.annotations,
-      _meta: normalizeUiMeta(info._meta),
+      _meta: apps ? normalizeUiMeta(info._meta) : withoutUiMeta(info._meta),
     });
     if (validation instanceof Promise || validation.issues) {
       throw new Error(`Tool '${name}' does not describe a valid MCP tool (input schemas must be objects)`);
@@ -639,6 +681,19 @@ export class MCPServer extends MCPServerBase {
 
   private hasUiMetadata(): boolean {
     return Object.values(this.convertedTools).some(tool => Boolean(uiResourceUri(tool.mcp?._meta)));
+  }
+
+  /**
+   * Whether this request may see MCP Apps. Unless `appsRequireClientSupport` is set, every client may;
+   * otherwise the client must declare the UI extension, in the request's envelope or at `initialize`.
+   * A 2025-era client's later requests carry that declaration in their apps session id.
+   */
+  private servesApps(server: Server, ctx?: ServerContext): boolean {
+    if (!this.appsRequireClientSupport || this.legacyAppClients.has(server)) return true;
+    const envelope = ctx?.mcpReq.envelope as Record<string, unknown> | undefined;
+    return declaresUiExtension(
+      (envelope?.[CLIENT_CAPABILITIES_META_KEY] as ClientCapabilities | undefined) ?? server.getClientCapabilities(),
+    );
   }
 
   // ---------------------------------------------------------------------------
@@ -656,7 +711,7 @@ export class MCPServer extends MCPServerBase {
     }
     if (this.promptOptions) capabilities.prompts = { listChanged: true };
     if (this.appResourceList.length > 0 || this.hasUiMetadata()) {
-      capabilities.extensions = { 'io.modelcontextprotocol/ui': {} };
+      capabilities.extensions = { [UI_EXTENSION_ID]: {} };
     }
     if (this.eventRegistry.size > 0) {
       capabilities.extensions = { ...capabilities.extensions, [EVENTS_EXTENSION_ID]: this.eventsCapability() };
@@ -665,6 +720,17 @@ export class MCPServer extends MCPServerBase {
       capabilities.extensions = { ...capabilities.extensions, ...tasksCapabilityEntry() };
     }
     return capabilities;
+  }
+
+  /** The capabilities a server without MCP Apps would declare. */
+  private withoutAppCapabilities(capabilities: ServerCapabilities): ServerCapabilities {
+    const { resources, extensions, ...rest } = capabilities;
+    const { [UI_EXTENSION_ID]: _ui, ...otherExtensions } = extensions ?? {};
+    return {
+      ...rest,
+      ...(this.resourceOptions && resources ? { resources } : {}),
+      ...(Object.keys(otherExtensions).length > 0 ? { extensions: otherExtensions } : {}),
+    };
   }
 
   /**
@@ -676,7 +742,7 @@ export class MCPServer extends MCPServerBase {
     return {};
   }
 
-  private createServerInstance(era: 'legacy' | 'modern' = 'modern'): Server {
+  private createServerInstance(era: 'legacy' | 'modern' = 'modern', request?: Request): Server {
     const server = new Server(
       {
         name: this.name,
@@ -699,6 +765,15 @@ export class MCPServer extends MCPServerBase {
     // Deprecated session-level log control (SEP-2577): not served on 2026-07-28. 2025-era clients
     // still send it because `logging` is advertised, so legacy (stateless) instances keep it.
     if (era === 'modern') server.removeRequestHandler('logging/setLevel');
+    if (this.appsRequireClientSupport) {
+      if (era === 'legacy' && request?.headers.get('mcp-session-id')?.startsWith(APPS_SESSION_PREFIX)) {
+        this.legacyAppClients.add(server);
+      }
+      // `initialize` and `server/discover` both answer with getCapabilities(), after the client's declaration is known.
+      const capabilities = server.getCapabilities.bind(server);
+      server.getCapabilities = () =>
+        this.servesApps(server) ? capabilities() : this.withoutAppCapabilities(capabilities());
+    }
     this.registerToolHandlers(server);
     this.registerResourceHandlers(server);
     this.registerPromptHandlers(server);
@@ -1011,15 +1086,23 @@ export class MCPServer extends MCPServerBase {
   }
 
   private registerToolHandlers(server: Server): void {
-    this.setTracedHandler(server, 'tools/list', async (_request, _ctx, trace) => {
+    this.setTracedHandler(server, 'tools/list', async (_request, ctx, trace) => {
       const entries = await this.authorizedToolEntries(trace.requestContext);
-      return { tools: entries.map(([name, tool]) => this.toMCPTool(name, tool)) };
+      const apps = this.servesApps(server, ctx);
+      return {
+        tools: entries
+          .filter(([, tool]) => apps || !isAppOnly(tool.mcp?._meta))
+          .map(([name, tool]) => this.toMCPTool(name, tool, apps)),
+      };
     });
 
     this.setTracedHandler(server, 'tools/call', async (request, ctx, trace) => {
       const name = request.params.name;
+      const apps = this.servesApps(server, ctx);
       // `name` comes from the client, so names like `constructor` must not resolve to Object.prototype members.
-      const tool = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
+      const known = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
+      // A client that may not see apps does not know their app-only tools either.
+      const tool = known && (apps || !isAppOnly(known.mcp?._meta)) ? known : undefined;
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
         // The spec makes an unknown tool a protocol error; `isError` is for a tool that ran and failed.
@@ -1058,6 +1141,7 @@ export class MCPServer extends MCPServerBase {
           try {
             return await this.startToolTask(ctx, requestContext, name, args, taskMode, {
               resume,
+              apps,
               rootSpan: trace.requestSpan,
             });
           } catch (error) {
@@ -1073,7 +1157,7 @@ export class MCPServer extends MCPServerBase {
         };
         let execution: MCPToolExecutionResultV2;
         if (asTask) {
-          const raced = await this.runWithinSyncWindow(ctx, requestContext, name, tool, args, taskMode, options);
+          const raced = await this.runWithinSyncWindow(ctx, requestContext, name, tool, args, taskMode, options, apps);
           if ('task' in raced) return raced.task;
           execution = raced.execution;
         } else {
@@ -1092,11 +1176,11 @@ export class MCPServer extends MCPServerBase {
         }
         // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
         const result = server.projectCallToolResult(
-          await this.completedToolResult(name, tool, execution.output, requestContext),
+          await this.completedToolResult(name, tool, execution.output, requestContext, apps),
           this.toolInfo(name, tool).outputSchema,
         );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
-        return result;
+        return apps ? result : { ...result, _meta: withoutUiMeta(result._meta) };
       } catch (error) {
         if (error instanceof ProtocolError) throw error;
         const mastraError = this.toolError(name, error);
@@ -1140,6 +1224,7 @@ export class MCPServer extends MCPServerBase {
     args: unknown,
     taskMode: ResolvedToolTaskMode,
     options: RunToolOptions & { mcp: MCPToolExecutionContext },
+    apps: boolean,
   ): Promise<{ execution: MCPToolExecutionResultV2 } | { task: CallToolResult }> {
     const controller = new AbortController();
     const requestSignal = ctx.mcpReq.signal;
@@ -1176,6 +1261,7 @@ export class MCPServer extends MCPServerBase {
       return {
         task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
           rootSpan: options.tracingContext?.currentSpan as Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+          apps,
           resume:
             options.resumeData === undefined
               ? undefined
@@ -1184,7 +1270,7 @@ export class MCPServer extends MCPServerBase {
             outcome: settled.then((outcome): Promise<MCPTaskAttemptOutcome> | MCPTaskAttemptOutcome =>
               'error' in outcome
                 ? this.toolErrorOutcome(name, outcome.error)
-                : this.toTaskOutcome(name, tool, outcome.execution, requestContext),
+                : this.toTaskOutcome(name, tool, outcome.execution, requestContext, apps),
             ),
             abort: reason => controller.abort(reason),
           }),
@@ -1220,10 +1306,12 @@ export class MCPServer extends MCPServerBase {
     taskMode: ResolvedToolTaskMode,
     {
       resume,
+      apps,
       initialAttempt,
       rootSpan,
     }: {
       resume?: ToolTaskContext['resume'];
+      apps: boolean;
       /** The request's span, which becomes the task's root. */
       rootSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
       initialAttempt?: () => NonNullable<MCPTaskRunOptions['initialAttempt']>;
@@ -1234,6 +1322,7 @@ export class MCPServer extends MCPServerBase {
       args,
       requestContext: this.persistTaskRequestContext(name, requestContext),
       ...(resume && { resume }),
+      apps,
     };
     const params = {
       ttlMs: taskMode.ttlMs,
@@ -1338,7 +1427,8 @@ export class MCPServer extends MCPServerBase {
               suspendPayload,
               tracingContext: span ? { currentSpan: span } : undefined,
             });
-            return await this.toTaskOutcome(name, tool, execution, requestContext);
+            // Tasks recorded before `apps` existed kept their app links.
+            return await this.toTaskOutcome(name, tool, execution, requestContext, context.apps !== false);
           } catch (error) {
             return this.toolErrorOutcome(name, error);
           }
@@ -1455,6 +1545,7 @@ export class MCPServer extends MCPServerBase {
     tool: InternalCoreTool,
     execution: MCPToolExecutionResultV2,
     requestContext: RequestContext,
+    apps: boolean,
   ): Promise<MCPTaskAttemptOutcome> {
     if (execution.status === 'suspended') {
       this.logger.debug(`Tool task '${name}' requires client input.`);
@@ -1476,7 +1567,8 @@ export class MCPServer extends MCPServerBase {
       );
     }
     try {
-      return completed(await this.completedToolResult(name, tool, execution.output, requestContext));
+      const result = await this.completedToolResult(name, tool, execution.output, requestContext, apps);
+      return completed(apps ? result : { ...result, _meta: withoutUiMeta(result._meta) });
     } catch (error) {
       return this.toolErrorOutcome(name, error);
     }
@@ -1901,6 +1993,7 @@ export class MCPServer extends MCPServerBase {
     tool: InternalCoreTool,
     output: unknown,
     requestContext: RequestContext,
+    apps = false,
   ): Promise<CallToolResult> {
     let result = this.toCallToolResult(name, tool, output);
     const { modelOutput = false, transform } = this.toolResultOptions;
@@ -1916,7 +2009,7 @@ export class MCPServer extends MCPServerBase {
         };
       }
     }
-    if (transform) result = (await transform({ toolName: name, output, result, requestContext })) ?? result;
+    if (transform) result = (await transform({ toolName: name, output, result, requestContext, apps })) ?? result;
     return result;
   }
 
@@ -1956,8 +2049,15 @@ export class MCPServer extends MCPServerBase {
     const hasAppResources = this.appResourceList.length > 0;
     if (!options && !hasAppResources) return;
 
+    // Without app access a server holding only apps answers as one without resources.
+    const appResourcesFor = (ctx: ServerContext): Resource[] => {
+      if (this.servesApps(server, ctx)) return this.appResourceList;
+      if (!options) throw new ProtocolError(ProtocolErrorCode.MethodNotFound, 'Method not found');
+      return [];
+    };
+
     const listResources = async (ctx: ServerContext, requestContext: RequestContext): Promise<Resource[]> => [
-      ...this.appResourceList,
+      ...appResourcesFor(ctx),
       ...((await options?.listResources({
         extra: toToolExecutionContext(ctx, this.name).extra,
         requestContext,
@@ -1992,7 +2092,7 @@ export class MCPServer extends MCPServerBase {
       const resource = await findResource(uri, ctx, trace.requestContext);
       if (!resource) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
-      const html = this.appResourceHtml.get(uri);
+      const html = this.servesApps(server, ctx) ? this.appResourceHtml.get(uri) : undefined;
       if (html !== undefined) return { contents: [this.resourceContents(resource, { text: html })] };
       if (!options) throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Resource not found: ${uri}`);
 
@@ -2203,15 +2303,35 @@ export class MCPServer extends MCPServerBase {
 
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
-      this.httpHandler = createMcpHandler(({ era }) => this.createServerInstance(era), {
+      const handler = createMcpHandler(({ era, requestInfo }) => this.createServerInstance(era, requestInfo), {
         legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
+      this.httpHandler =
+        this.appsRequireClientSupport && this.legacy === 'stateless' ? this.withAppsSession(handler) : handler;
       this.nodeHandler = toNodeHandler(this.httpHandler, {
         onerror: error => this.logger.error('MCP Node handler adapter error', { error: error.toString() }),
       });
     }
     return this.nodeHandler;
+  }
+
+  /**
+   * 2025-era stateless HTTP only sees the client's capabilities on `initialize`. When they declare the
+   * UI extension, the answer gets an apps session id, which the client sends on every later request.
+   */
+  private withAppsSession(handler: McpHttpHandler): McpHttpHandler {
+    return {
+      ...handler,
+      fetch: async (request, options) => {
+        const declaresUi = await initializesWithUi(request, options?.parsedBody);
+        const response = await handler.fetch(request, options);
+        if (!declaresUi || !response.ok || response.headers.has('mcp-session-id')) return response;
+        const headers = new Headers(response.headers);
+        headers.set('mcp-session-id', `${APPS_SESSION_PREFIX}${crypto.randomUUID()}`);
+        return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+      },
+    };
   }
 
   /** Serves the current process's stdio. Legacy openings are rejected. */
@@ -2669,6 +2789,19 @@ function persistableRequestContext(requestContext: RequestContext): {
 function uiResourceUri(meta: Record<string, unknown> | undefined): string | undefined {
   const ui = meta?.ui as { resourceUri?: string } | undefined;
   return ui?.resourceUri || (meta?.[RESOURCE_URI_META_KEY] as string | undefined) || undefined;
+}
+
+/** Whether the tool is visible only to apps, per `_meta.ui.visibility`. */
+function isAppOnly(meta: Record<string, unknown> | undefined): boolean {
+  const visibility = (meta?.ui as { visibility?: unknown } | undefined)?.visibility;
+  return Array.isArray(visibility) && !visibility.includes('model');
+}
+
+/** `_meta` without the MCP Apps keys, or `undefined` when nothing else is left. */
+function withoutUiMeta(meta: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!meta) return meta;
+  const { ui: _ui, [RESOURCE_URI_META_KEY]: _resourceUri, ...rest } = meta;
+  return Object.keys(rest).length > 0 ? rest : undefined;
 }
 
 /** Writes the tool's MCP App URI to both the nested and the flat key, so every host opens the same app. */
