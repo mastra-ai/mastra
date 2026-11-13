@@ -56,6 +56,7 @@ export function attachIncidentioIssueReconciler(
     intake: incidentio.intake,
     projects: context.storage.projects,
     storage: context.runtime.workItems,
+    ...(context.runtime.keptCards ? { cards: context.runtime.keptCards } : {}),
     isTerminal: item => workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind === 'terminal',
     issueId: item => item.externalSource?.externalId,
     metadata: (item, issue) => ({

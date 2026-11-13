@@ -990,6 +990,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             findByExternalId: args => this.storage.repositories.findByExternalId(args),
           },
         },
+        onRepositoriesChanged: listener => this.storage.onLinkedRepositoriesChanged(listener),
+        repositoryChangesShared: () => this.storage.linkedRepositoryChangesShared(),
       }),
     ];
   }
