@@ -1,6 +1,11 @@
 import type { Card } from '@mastra/factory';
 import type { GithubIssuePage } from '../../domains/factory/services/factory';
 
+/** The id of the card titled `Large task <index>`. */
+export function largeCardId(index: number): string {
+  return `00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
+}
+
 export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
   return Array.from({ length: count }, (_, index) => ({
     workItemId: `work-large-${index}`,
@@ -25,7 +30,7 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
       createdAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
       updatedAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
     },
-    id: `large-${index}`,
+    id: largeCardId(index),
     orgId: 'org-1',
     createdBy: 'user-1',
     factoryProjectId,

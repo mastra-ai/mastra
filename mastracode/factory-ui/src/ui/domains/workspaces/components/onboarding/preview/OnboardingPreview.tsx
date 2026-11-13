@@ -2,7 +2,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
-import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../../../hooks/useWorkSourceConnections';
+import type { SourceControlRepository } from '../../../services/github';
 import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
@@ -16,8 +17,8 @@ export interface OnboardingPreviewProps {
   modelScope?: OnboardingModelScope;
   local?: boolean;
   personalModel?: string;
-  repository?: { name: string; fullName: string; defaultBranch: string };
-  source?: WorkSource;
+  repository?: SourceControlRepository;
+  source?: BoardSource;
   model?: string;
   providerId?: string;
   personalProviderId?: string;
@@ -32,7 +33,6 @@ export const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
 };
 
 function sceneForStep(step: OnboardingStep): DrawingScene {
-  if (step === 'initial') return 'factory';
   if (step === 'vcs') return 'codebase';
   if (step === 'project-management') return 'intake';
   return 'accounts';
@@ -43,28 +43,6 @@ function OnboardingScene({ active, children }: { active: boolean; children: Reac
     <div className="onboarding-scene absolute inset-0" data-active={active} inert={!active}>
       {children}
     </div>
-  );
-}
-
-function OnboardingWelcomePreview() {
-  return (
-    <section aria-label="Welcome illustration" className="relative h-full">
-      <SketchLabel x={20} y={300} width={112}>
-        <Txt variant="meta" tone="muted">
-          Issues & ideas
-        </Txt>
-      </SketchLabel>
-      <SketchLabel x={147} y={42} width={126}>
-        <Txt variant="meta" tone="muted">
-          Build & review
-        </Txt>
-      </SketchLabel>
-      <SketchLabel x={288} y={300} width={110}>
-        <Txt variant="meta" tone="muted">
-          Ready to ship
-        </Txt>
-      </SketchLabel>
-    </section>
   );
 }
 
@@ -107,21 +85,17 @@ export function OnboardingPreview({
   const scene = sceneForStep(step);
   const mode = ACCOUNT_MODES[modelScope];
   return (
-    <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
+    <div className="onboarding-preview relative h-full min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
         <OnboardingIllustration scene={scene} mode={mode} />
-        <OnboardingScene active={step === 'initial'}>
-          <OnboardingWelcomePreview />
-        </OnboardingScene>
         <OnboardingScene active={step === 'vcs'}>
           <OnboardingCodebasePreview repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={step === 'project-management'}>
-          <OnboardingIntakePreview source={source} />
+          <OnboardingIntakePreview source={source} repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={scene === 'accounts'}>
           <OnboardingAccountsPreview
-            step={step}
             modelScope={modelScope}
             local={local}
             model={model}
@@ -133,6 +107,6 @@ export function OnboardingPreview({
           />
         </OnboardingScene>
       </div>
-    </aside>
+    </div>
   );
 }

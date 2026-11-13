@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { BaseUIEvent } from '@base-ui/react/types';
-import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
+import { AlertTriangleIcon, LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
@@ -29,7 +29,7 @@ import { controlIconOnly, controlIconState } from '@/ds/primitives/control-icon'
 import { controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { fieldErrorRim, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
@@ -74,6 +74,7 @@ export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: tr
 export const chipClass = cn(
   'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full p-px [--control-border:1px]',
   inputSurfaceAndFocusWithinStyle,
+  fieldErrorRim,
   controlHeight[FILTER_BAR_CONTROL_SIZE],
   controlSpacing[FILTER_BAR_CONTROL_SIZE],
 );
@@ -211,6 +212,7 @@ export function FilterBarChip({
     };
   }, [leaving, item.id, settleRemove]);
 
+  const validationMessage = !draft && typeof item.value === 'string' ? field?.validateInput?.(item.value) : undefined;
   const operatorImplied = field ? ctx.getFieldOperators(field).length === 1 : false;
   const label = [
     field?.label ?? item.fieldId,
@@ -237,6 +239,11 @@ export function FilterBarChip({
       <FilterBarChipField />
       <FilterBarChipOperator />
       <FilterBarChipValue />
+      {validationMessage && (
+        <span className={cn(segmentClass, 'text-destructive-foreground')} title={validationMessage}>
+          <AlertTriangleIcon aria-hidden="true" />
+        </span>
+      )}
       {removable && <FilterBarChipRemove />}
     </>
   );
@@ -246,6 +253,8 @@ export function FilterBarChip({
         ref={rootRef}
         role="group"
         aria-label={label}
+        aria-invalid={!!validationMessage || undefined}
+        aria-description={validationMessage}
         // The input already announces the draft's progress through its placeholder.
         aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
@@ -445,6 +454,12 @@ function FieldEditor() {
   const chip = useChip();
   const [query, setQuery] = useState('');
 
+  const isRoot = ctx.expression.nodes.some(node => node.id === chip.item.id);
+  const fields = ctx.fields.filter(field => {
+    if (field.rootOnly && !isRoot) return false;
+    return !field.singleton || !ctx.items.some(item => item.id !== chip.item.id && item.fieldId === field.id);
+  });
+
   const onSelect = useCallback(
     (field: FilterBarField) => {
       const allowed = ctx.getFieldOperators(field);
@@ -465,7 +480,7 @@ function FieldEditor() {
       segment="field"
       ariaLabel="Field"
       label={chip.field?.label ?? chip.item.fieldId}
-      items={ctx.fields}
+      items={fields}
       itemToString={fieldLabel}
       filter={matchesQueryFilter}
       value={chip.field}
@@ -586,6 +601,9 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
+      {step.validationMessage && (
+        <ComboboxPrimitive.Status className={comboboxStyles.empty}>{step.validationMessage}</ComboboxPrimitive.Status>
+      )}
       {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"

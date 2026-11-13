@@ -1779,7 +1779,13 @@ describe('storage v2 nested runs', () => {
       await vi.waitFor(() => expect(died).toBe(true));
       await expireRunLeases(storage);
 
-      await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+      // A zero grace restarts the crashed runs, written just now, at once.
+      await new Mastra({
+        logger: false,
+        storage,
+        workflows: build(),
+        recovery: { workflowGraceMs: 0 },
+      }).restartAllActiveWorkflowRuns();
 
       expect(innerBRuns).toBe(1);
       const state = { items: [PAD, 'before:0', 'inner-a:1', 'inner-b:2'] };

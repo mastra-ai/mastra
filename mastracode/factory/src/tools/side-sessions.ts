@@ -2,9 +2,9 @@ import type { NotificationRecord, NotificationsStorage } from '@mastra/core/noti
 
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import { FACTORY_SESSION_NOTIFICATION_SOURCE, resolveSessionThread } from './deliver.js';
 import type { FactoryDeliveryController } from './deliver.js';
-import { workItemNumber } from './read-tools.js';
 import type { FactoryToolScope } from './scope.js';
 
 /** Recent notifications scanned to find each side session's last report. */

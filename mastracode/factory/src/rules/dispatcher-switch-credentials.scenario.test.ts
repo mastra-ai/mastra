@@ -23,8 +23,7 @@ import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry } from '../boards/registry.js';
-import { autoStartingBoards } from '../boards/test-utils.js';
+import { autoStartingBoards, createTriageWorkRegistry } from '../boards/test-utils.js';
 import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
@@ -111,11 +110,11 @@ async function setup() {
 
   const dispatcher = new FactoryDecisionDispatcher({
     controller,
-    boards: autoStartingBoards(),
+    boards: autoStartingBoards(createTriageWorkRegistry()),
     transitionService: new FactoryTransitionService({
       storage,
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
     }),
     storage,
     intakeRoutes: factory.boards,

@@ -396,6 +396,14 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     return ['push'];
   }
 
+  /**
+   * A nack redelivers only to the subscriber that nacked. The broker keeps no
+   * pending list across processes, so a message a dead process held is lost.
+   */
+  override get redeliversUnacked(): boolean {
+    return false;
+  }
+
   get isBroker(): boolean {
     return this.#isBroker;
   }

@@ -23,8 +23,9 @@ import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vites
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import type { MastraModelOutput } from '../../stream/base/output';
-import type { Agent } from '../agent';
-import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
+import { Agent } from '../agent';
+import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { createTextStreamModel, readNextRunWithParts, withTimeout } from './signals-test-utils';
 
 const { SUSPENDED_RUN_TTL_MS, LEASE_RENEW_INTERVAL_MS } = vi.hoisted(() => {
   const ttlMs = 60_000;
@@ -327,6 +328,53 @@ describe('suspended run in-memory TTL', () => {
       expect(accepted).toMatchObject({ action: 'wake' });
       expect(stream).toHaveBeenCalledTimes(1);
       run.settle('success');
+    });
+
+    it('reports a finished background task once the swept lease clears, instead of dropping it', async () => {
+      // The finish report is the one sender that can't ask again: nothing retries it later.
+      // While the swept run still holds the lease, both the wake and the queued fallback come
+      // back blocked; the report has to wait for the lease to clear and then wake the thread.
+      runtime = agentThreadStreamRuntime;
+      runtime.resetForTests();
+      try {
+        const watcher = await watchThread(pubsub, 'thread-1');
+        await registerSuspendedRun('run-1', 'thread-1', watcher);
+        await sweepAfter(SUSPENDED_RUN_TTL_MS + 1);
+        const agent = new Agent({
+          id: 'ttl-report-agent',
+          name: 'TTL Report Agent',
+          instructions: 'Test',
+          model: createTextStreamModel('the task finished'),
+          pubsub,
+        });
+        const subscription = await agent.subscribeToThread({ resourceId: RESOURCE_ID, threadId: 'thread-1' });
+        const nextRun = readNextRunWithParts(subscription.stream[Symbol.asyncIterator]());
+        const acquireLease = vi.spyOn(pubsub, 'acquireLease');
+        try {
+          const report = agent.__notifyBackgroundTaskFinished({
+            resourceId: RESOURCE_ID,
+            threadId: 'thread-1',
+            taskId: 'task-1',
+            toolCallId: 'call-1',
+            toolName: 'research',
+            status: 'completed',
+          });
+          // The wake and at least one queued attempt lost the lease to the swept run.
+          await vi.waitFor(() => expect(acquireLease.mock.calls.length).toBeGreaterThanOrEqual(2));
+          // Stand-in for the abandoned lease expiring on its own.
+          await pubsub.releaseLease(threadKey(RESOURCE_ID, 'thread-1'), 'run-1');
+          await report;
+
+          const woken = await withTimeout(nextRun, 'Timed out waiting for the background-task report run');
+          expect(woken.value.text).toBe('the task finished');
+          const notice = woken.value.parts.find((part: any) => part.type === 'data-signal');
+          expect(notice?.data).toMatchObject({ attributes: { taskId: 'task-1', status: 'completed' } });
+        } finally {
+          subscription.unsubscribe();
+        }
+      } finally {
+        runtime.resetForTests();
+      }
     });
 
     it('reports blocked when the swept run’s registration is redelivered to a thread subscriber', async () => {
