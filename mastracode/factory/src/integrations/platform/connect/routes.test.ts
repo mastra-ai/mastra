@@ -3,7 +3,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { fakeRouteAuth, mountApiRoutes } from '../../../routes/test-utils.js';
 import type { TestAuthUser } from '../../../routes/test-utils.js';
-import { PlatformApiClient } from '../api-client.js';
+import { createPlatformConnectClient } from '../platform-connect.js';
 import { buildConnectToolListRoute, buildConnectToolsRoute, buildPlatformConnectRoutes } from './routes.js';
 import type { ConnectToolsSetupMissing, ConnectToolsSource } from './routes.js';
 
@@ -40,10 +40,10 @@ function buildApp(
     await next();
   });
   const auth = fakeRouteAuth({ enabled: options.authEnabled ?? true });
-  const client = new PlatformApiClient({
+  const client = createPlatformConnectClient({
     baseUrl: 'https://integrations.example.com',
     accessToken: 'platform-secret',
-    fetchImpl,
+    fetch: fetchImpl,
   });
   const projectId = options.connectToolsProjectId;
   const source: ConnectToolsSource | { missing: ConnectToolsSetupMissing } = projectId
