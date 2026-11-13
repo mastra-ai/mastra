@@ -66,6 +66,7 @@ async function startWorker(
     storage?: PlatformEventsWorkerStorage;
     topics?: PlatformTopicSubscription[];
     pubsub?: EventEmitterPubSub;
+    leaseTtlMs?: number;
   },
 ) {
   const worker = new PlatformEventsWorker({
@@ -75,6 +76,7 @@ async function startWorker(
     ...(options.topics ? { topics: options.topics } : {}),
     retryDelayMs: 5,
     resubscribeDelayMs: 20,
+    ...(options.leaseTtlMs ? { leaseTtlMs: options.leaseTtlMs } : {}),
   });
   const workerDeps = deps(options.pubsub);
   await worker.init(workerDeps);
@@ -358,7 +360,7 @@ describe('PlatformEventsWorker', () => {
     await vi.waitFor(() => expect(gitlab.handled.map(event => event.id)).toEqual([linked]));
   });
 
-  it('retries a failing handler three times, then gives up on that event and moves on', async () => {
+  it('retries a failing handler three times, then gives up on that event, reconciles, and moves on', async () => {
     const platform = await platformWith([{ id: 'conn-gitlab', integrationId: 'gitlab' }]);
     const gitlab = recordingRoute(platform, 'gitlab');
     const poison = platform.publishConnect({
@@ -388,6 +390,8 @@ describe('PlatformEventsWorker', () => {
     expect(gitlab.route.handle.mock.calls.filter(([event]) => event.id === poison)).toHaveLength(3);
     expect(gitlab.handled.map(event => event.id)).toEqual([next]);
     expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('giving up'), expect.anything());
+    // Started from a stored cursor, so the only reconcile is the one repairing the dropped event.
+    expect(gitlab.route.reconcile).toHaveBeenCalledTimes(1);
     expect(worker.diagnostics()).toMatchObject({ topics: { connect: { handlerFailures: 1, cursor: next } } });
   });
 
@@ -402,6 +406,42 @@ describe('PlatformEventsWorker', () => {
 
     expect(platform.streamRequests).toHaveLength(1);
     expect([a.worker.hasLease, b.worker.hasLease].filter(Boolean)).toHaveLength(1);
+  });
+
+  it('resumes from the cursor the previous lease holder saved when it takes over the lease', async () => {
+    const platform = await platformWith([{ id: 'conn-gitlab', integrationId: 'gitlab' }]);
+    const pubsub = new EventEmitterPubSub();
+    const { storage, cursor } = memoryStorage();
+    // Both replicas boot, and read their cursors, before anything is handled.
+    const a = recordingRoute(platform, 'gitlab');
+    const b = recordingRoute(platform, 'gitlab');
+    const first = await startWorker(platform, { routes: [a.route], storage, pubsub, leaseTtlMs: 200 });
+    const second = await startWorker(platform, { routes: [b.route], storage, pubsub, leaseTtlMs: 200 });
+    await subscribed(platform);
+    const [leader, leaderRoute, follower, followerRoute] = first.worker.hasLease
+      ? [first.worker, a, second.worker, b]
+      : [second.worker, b, first.worker, a];
+
+    const handledByLeader = platform.publishConnect({
+      connectionId: 'conn-gitlab',
+      integrationId: 'gitlab',
+      eventType: 'Note Hook',
+      payload: '{}',
+    });
+    await vi.waitFor(() => expect(cursor()).toBe(handledByLeader));
+    await leader.stop();
+    const sentDuringHandoff = platform.publishConnect({
+      connectionId: 'conn-gitlab',
+      integrationId: 'gitlab',
+      eventType: 'Note Hook',
+      payload: '{}',
+    });
+
+    await vi.waitFor(() => expect(follower.hasLease).toBe(true), { timeout: 2_000 });
+    await vi.waitFor(() => expect(followerRoute.handled.map(event => event.id)).toEqual([sentDuringHandoff]));
+    expect(platform.streamRequests.at(-1)).toEqual({ topic: 'connect', lastEventId: handledByLeader });
+    expect(leaderRoute.handled.map(event => event.id)).toEqual([handledByLeader]);
+    expect(followerRoute.route.reconcile).not.toHaveBeenCalled();
   });
 
   it('reads extra topics with their own cursors', async () => {

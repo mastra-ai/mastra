@@ -122,6 +122,8 @@ export class PlatformJiraIntegration extends PlatformConnectIntegration {
     event: PlatformConnectEventDelivery,
     ctx: IntegrationContext,
   ): Promise<void> {
+    // The reconcile kill switch covers events too: both run the card-closing path.
+    if (!jiraReconciliationEnabled()) return;
     let reconcileOne = this.#reconcileOne.get(ctx);
     if (reconcileOne === undefined) {
       reconcileOne = attachJiraIssueReconcileOne(this, ctx) ?? null;

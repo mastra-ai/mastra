@@ -10,6 +10,7 @@ import { createVantaSync, DEFAULT_VANTA_SYNC_INTERVAL_MS, VANTA_VULNERABILITIES_
 import type { VantaVulnerability } from '../../vanta/sync.js';
 import type { PlatformConnection } from '../foundation/connect-binding.js';
 import { PlatformConnectIntegration } from '../foundation/integration.js';
+import { logPlatformWarn } from '../logging.js';
 import type { PlatformConnectOption } from '../platform-connect.js';
 
 export interface PlatformVantaIntegrationConfig {
@@ -110,6 +111,14 @@ export class PlatformVantaIntegration extends PlatformConnectIntegration {
       connection.resourceId ? ownerByProject.get(connection.resourceId) === orgId : true,
     );
     if (owned.length === 0 || owned.some(connection => connection.status === 'needs_reauth')) return null;
+    // A Vanta connection the project can't see would read as all its vulnerabilities resolved.
+    const unlinked = await this.binding.unlinkedOrgConnections();
+    if (unlinked.length > 0) {
+      logPlatformWarn('Skipping the Vanta sync: some Vanta connections are not linked to the Factory project', {
+        connectionIds: unlinked,
+      });
+      return null;
+    }
     return this.listVulnerabilities(owned.filter(connection => connection.status === 'active'));
   }
 

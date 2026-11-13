@@ -126,6 +126,7 @@ async function setup(options: { tracked?: string[]; incidentResponse?: () => Res
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('incidentioItemFromPayload', () => {
@@ -211,6 +212,15 @@ describe('PlatformIncidentioIntegration events', () => {
         { eventType: 'public_alert.alert_created_v1' },
       ),
     );
+
+    expect(itemRequests).toEqual([]);
+  });
+
+  it('handles no events while incident.io reconciliation is turned off', async () => {
+    vi.stubEnv('MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED', 'false');
+    const { route, itemRequests } = await setup();
+
+    await route.handle(delivery(incidentWebhook()));
 
     expect(itemRequests).toEqual([]);
   });

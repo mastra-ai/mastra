@@ -162,6 +162,8 @@ export class PlatformIncidentioIntegration extends PlatformConnectIntegration {
     event: PlatformConnectEventDelivery,
     ctx: IntegrationContext,
   ): Promise<void> {
+    // The reconcile kill switch covers events too: both run the card-closing path.
+    if (!incidentioReconciliationEnabled()) return;
     let reconcileOne = this.#reconcileOne.get(ctx);
     if (reconcileOne === undefined) {
       reconcileOne = attachIncidentioIssueReconcileOne(this, ctx) ?? null;

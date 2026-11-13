@@ -61,6 +61,8 @@ export class FakePlatform {
   readonly nextListingReplies: FakeReply[] = [];
   readonly requests: FakePlatformRequest[] = [];
   proxy: (connectionId: string, path: string, query: URLSearchParams) => FakeReply = () => ({ status: 200, body: {} });
+  /** `GET /v2/connections/:id/context` bodies, by connection id. */
+  readonly contexts = new Map<string, unknown>();
   /** Events published per topic, oldest first. */
   readonly topics = new Map<string, FakeTopicEvent[]>();
   /** Cursors the events service answers with 400, as it does for a cursor outside the stream. */
@@ -227,6 +229,11 @@ export class FakePlatform {
           expiresAt: '2026-11-13T13:00:00.000Z',
         },
       };
+    }
+    const context = /^\/v2\/connections\/([^/]+)\/context$/.exec(path);
+    if (method === 'GET' && context) {
+      const body = this.contexts.get(decodeURIComponent(context[1]!));
+      return body === undefined ? problem(404, 'not_found', path) : { status: 200, body };
     }
     const proxy = /^\/v2\/connections\/([^/]+)\/proxy(\/.*)?$/.exec(path);
     if (proxy) return this.proxy(decodeURIComponent(proxy[1]!), proxy[2] ?? '/', query);

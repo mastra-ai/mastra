@@ -1,9 +1,12 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { WorkerDeps } from '@mastra/core/worker';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../../boards/index.js';
 import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
 import type { IntegrationContext } from '../../base.js';
-import type { PlatformConnectEventDelivery } from '../foundation/events-worker.js';
+import { PlatformEventsWorker } from '../foundation/events-worker.js';
+import type { PlatformConnectEventDelivery, PlatformEventsWorkerStorage } from '../foundation/events-worker.js';
+import { startFakePlatform } from '../foundation/test-utils.js';
 import { jiraIssueFromPayload } from './connect-events.js';
 import { encodeIssueReference, PlatformJiraIntegration } from './integration.js';
 
@@ -57,7 +60,7 @@ function delivery(
   };
 }
 
-async function setup(options: { issueId?: string; issueResponse?: () => Response } = {}) {
+async function seedCard(issueId = 'ENG-42') {
   const seeded = await createFactoryStorageForTests();
   const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
   await seeded.workItems.upsert({
@@ -70,7 +73,7 @@ async function setup(options: { issueId?: string; issueResponse?: () => Response
         type: 'issue',
         externalId: encodeIssueReference({
           connectionId: 'a1b_acme',
-          issueId: options.issueId ?? 'ENG-42',
+          issueId,
           projectId: '1',
         }),
         url: 'https://acme.atlassian.net/browse/ENG-42',
@@ -81,6 +84,16 @@ async function setup(options: { issueId?: string; issueResponse?: () => Response
       metadata: { stateType: 'started', labels: ['stale'] },
     },
   });
+  const context = {
+    storage: { projects: seeded.projects },
+    runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
+  } as unknown as IntegrationContext;
+  const card = async () => (await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id }))[0]!;
+  return { context, card };
+}
+
+async function setup(options: { issueId?: string; issueResponse?: () => Response } = {}) {
+  const { context, card } = await seedCard(options.issueId);
   const issueRequests: string[] = [];
   vi.stubGlobal(
     'fetch',
@@ -108,17 +121,13 @@ async function setup(options: { issueId?: string; issueResponse?: () => Response
   const jira = new PlatformJiraIntegration({
     connect: { baseUrl: PLATFORM_BASE, projectId: 'proj_factory', accessToken: 'platform-token' },
   });
-  const context = {
-    storage: { projects: seeded.projects },
-    runtime: { configVersion: 'test-v1', workItems: seeded.workItems, boards: createBoardRegistry() },
-  } as unknown as IntegrationContext;
   const route = jira.connectEventRoute(context)!;
-  const card = async () => (await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id }))[0]!;
   return { route, card, issueRequests };
 }
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe('PlatformJiraIntegration events', () => {
@@ -164,12 +173,79 @@ describe('PlatformJiraIntegration events', () => {
     expect((await card()).workItem.metadata).toEqual(before.workItem.metadata);
   });
 
+  it('handles no events while Jira reconciliation is turned off', async () => {
+    vi.stubEnv('MASTRACODE_JIRA_RECONCILE_ENABLED', 'false');
+    const { route, card, issueRequests } = await setup();
+    const before = await card();
+
+    await route.handle(delivery(webhook()));
+
+    expect(issueRequests).toEqual([]);
+    expect((await card()).workItem.metadata).toEqual(before.workItem.metadata);
+  });
+
   it('fails the delivery when Jira cannot be read, so the events worker retries it', async () => {
     const { route, card } = await setup({ issueResponse: () => json({ errorMessages: ['down'] }, 503) });
     const before = await card();
 
     await expect(route.handle(delivery(webhook()))).rejects.toThrow('Jira issue ENG-42 could not be reconciled');
     expect((await card()).workItem.metadata).toEqual(before.workItem.metadata);
+  });
+});
+
+describe('PlatformJiraIntegration through the events worker', () => {
+  it('refreshes a stale card when the platform publishes a Jira event for its issue', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [
+      { id: 'a1b_acme', integrationId: 'jira', status: 'active', accountLabel: 'acme.atlassian.net' },
+    ];
+    platform.linked.add('a1b_acme');
+    platform.contexts.set('a1b_acme', { connection_config: { cloudId: CLOUD_ID }, metadata: null });
+    platform.proxy = (_connectionId, path) =>
+      path.includes('/comment')
+        ? { status: 200, body: { comments: [], startAt: 0, maxResults: 50, total: 0 } }
+        : path.includes('/rest/api/3/issue/ENG-42')
+          ? { status: 200, body: liveIssue }
+          : { status: 404, body: { errorMessages: [path] } };
+    const { context, card } = await seedCard();
+    const jira = new PlatformJiraIntegration({ connect: platform.connect() });
+    let saved: unknown = null;
+    const worker = new PlatformEventsWorker({
+      events: jira.binding.connect.events,
+      storage: {
+        integrationId: 'platform-events',
+        settings: {
+          get: async () => saved,
+          save: async (_o: string, _u: string, next: unknown) => void (saved = next),
+        },
+      } as unknown as PlatformEventsWorkerStorage,
+      routes: [jira.connectEventRoute(context)!],
+    });
+    await worker.init({
+      pubsub: {},
+      storage: {},
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+    } as unknown as WorkerDeps);
+    await worker.start();
+    onTestFinished(() => worker.stop());
+    await vi.waitFor(() => expect(platform.openStreams).toBe(1));
+
+    platform.publishConnect({
+      connectionId: 'a1b_acme',
+      integrationId: 'jira',
+      eventType: 'jira:issue_updated',
+      payload: webhook(),
+    });
+
+    await vi.waitFor(() =>
+      expect(
+        (card() as Promise<{ workItem: { metadata: unknown } }>).then(c => c.workItem.metadata),
+      ).resolves.toMatchObject({
+        state: 'To Do',
+        stateType: 'unstarted',
+        labels: ['bug'],
+      }),
+    );
   });
 });
 

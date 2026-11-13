@@ -281,7 +281,7 @@ export function buildPlatformConnectRoutes(options: BuildPlatformConnectRoutesOp
           );
         }
         try {
-          const result = await provider.binding.linkOrgConnections({ retryOnly: 'transient' });
+          const result = await provider.binding.linkOrgConnections();
           return c.json(result);
         } catch (err) {
           return platformError(c, err);
