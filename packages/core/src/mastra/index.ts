@@ -5148,7 +5148,17 @@ export class Mastra<
           return;
         }
 
+        // A stopWorkers() during the awaits above already released the row: a claim now would hold it for good.
+        if (this.#stopWorkflowRecoveryLoop !== stop) {
+          return;
+        }
+
         if (!(await this.#leadWorkflowRecovery(workflowsStore))) {
+          return;
+        }
+
+        // Stopped during the claim, which the release waited for: the row is handed back, so no pass either.
+        if (this.#stopWorkflowRecoveryLoop !== stop) {
           return;
         }
 

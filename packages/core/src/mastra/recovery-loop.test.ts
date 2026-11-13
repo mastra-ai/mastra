@@ -257,6 +257,39 @@ describe('workflow recovery loop (#28712)', () => {
     await vi.waitFor(() => expect(b.listings()).toBeGreaterThan(0));
   });
 
+  it.each(['its first tick opens the store', 'a later tick probes the store'] as const)(
+    'claims no leader row from a tick that stopWorkers() overtook while %s',
+    async moment => {
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('workflows'))!;
+      const a = replica(storage, 'A', [], scanning);
+      const b = replica(storage, 'B', [], scanning);
+      const probing = Promise.withResolvers<void>();
+      const answer = Promise.withResolvers<void>();
+      if (moment === 'its first tick opens the store') {
+        // startWorkers() returns while the first tick still awaits the store.
+        await a.mastra.startWorkers();
+      } else {
+        await a.mastra.startWorkers();
+        await vi.waitFor(() => expect(a.listings()).toBeGreaterThan(0));
+        const probe = store.supportsRunFencing.bind(store);
+        vi.spyOn(store, 'supportsRunFencing').mockImplementationOnce(async () => {
+          probing.resolve();
+          await answer.promise;
+          return probe();
+        });
+        await probing.promise;
+      }
+
+      await a.mastra.stopWorkers({ drainTimeout: 0 });
+      answer.resolve();
+
+      // A row A claimed after its stop would be renewed for as long as the process lives, and B would never lead.
+      await b.mastra.startWorkers();
+      await vi.waitFor(() => expect(b.listings()).toBeGreaterThan(0), { timeout: WORKFLOW_RUN_LEASE_TTL_MS * 5 });
+    },
+  );
+
   it('leaves the default-engine runs to the leader from an explicit call on another instance, which still restarts its evented runs', async () => {
     const storage = new InMemoryStore();
     const leader = replica(storage, 'A', [], scanning);
