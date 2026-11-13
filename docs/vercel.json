@@ -2313,6 +2313,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/trace-intelligence",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
       "destination": "/docs/mastra-platform/connect/llms.txt",
       "permanent": false
@@ -4290,6 +4295,11 @@
     {
       "source": "/docs/mastra-platform/observability/llms.txt",
       "destination": "/docs/mastra-platform/observability/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/trace-intelligence/llms.txt",
+      "destination": "/docs/mastra-platform/observability/trace-intelligence/llms.txt",
       "permanent": true
     },
     {
