@@ -1,8 +1,5 @@
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
-import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
-import type { MastraUser } from '@mastra/core/types';
-import { getRequestUser } from '@mastra/core/utils';
 
 import {
   createProjectConnectSession,
@@ -25,13 +22,9 @@ import { renderConnectPage } from './user-connect-page.js';
  */
 export interface UserConnectIdentityContext {
   /** Request-scoped context populated by the server (auth middleware, custom middleware). */
-  requestContext?: RequestContext;
-  /**
-   * Authenticated end user, normalized via the auth provider's `toMastraUser()`
-   * (the same `user` a `DynamicArgument` callback receives). `undefined` when
-   * the request is unauthenticated.
-   */
-  user?: MastraUser;
+  requestContext?: { get(key: string): unknown };
+  /** The authenticated user the server's auth pipeline stored on the request context, when present. */
+  user?: unknown;
 }
 
 export interface UserConnectRoutesOptions {
@@ -300,11 +293,11 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
 
   /** Resolves the caller's resource key or null when the request carries no usable identity. */
   const identify = async (c: RouteContext): Promise<string | null> => {
-    const requestContext = c.get?.('requestContext') as RequestContext | undefined;
+    const requestContext = c.get?.('requestContext') as { get(key: string): unknown } | undefined;
     let raw: unknown;
     if (options.resourceId) {
       try {
-        raw = await options.resourceId({ requestContext, user: getRequestUser(requestContext) });
+        raw = await options.resourceId({ requestContext, user: requestContext?.get('user') });
       } catch (error) {
         logRouteError(c, error);
         return null;

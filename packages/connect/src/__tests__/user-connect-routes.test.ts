@@ -1,5 +1,4 @@
-import { MASTRA_NORMALIZED_USER_KEY, MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
-import type { MastraUser } from '@mastra/core/types';
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { RESOURCE_ID_HEADER } from '../client.js';
@@ -132,13 +131,12 @@ function makeCtx(options?: {
   params?: Record<string, string>;
   query?: Record<string, string>;
   requestHeaders?: Record<string, string>;
-  user?: MastraUser;
-  rawUser?: unknown;
+  user?: unknown;
 }) {
-  const requestContext = new RequestContext();
-  if (options?.resourceId !== undefined) requestContext.set(MASTRA_RESOURCE_ID_KEY, options.resourceId);
-  if (options?.rawUser !== undefined) requestContext.set('user', options.rawUser);
-  if (options?.user !== undefined) requestContext.set(MASTRA_NORMALIZED_USER_KEY, options.user);
+  const store = new Map<string, unknown>();
+  if (options?.resourceId !== undefined) store.set(MASTRA_RESOURCE_ID_KEY, options.resourceId);
+  if (options?.user !== undefined) store.set('user', options.user);
+  const requestContext = { get: (key: string) => store.get(key) };
   const headers: Record<string, string> = {};
   return {
     req: {
@@ -268,15 +266,15 @@ describe('identity gate', () => {
     expect(emptyResponse.status).toBe(401);
   });
 
-  it('derives the key from the resourceId callback, exposing the normalized authenticated user', async () => {
+  it('derives the key from the resourceId callback, exposing the authenticated user', async () => {
     const { fetchMock, requests } = fakePlatform();
     const routes = userConnectRoutes(
       routeOptions(fetchMock as unknown as typeof fetch, {
-        resourceId: ({ user }) => user?.id,
+        resourceId: ctx => (ctx.user as { id: string }).id,
       }),
     );
     const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
-      makeCtx({ rawUser: { sub: 'end-user-7', claims: {} }, user: { id: 'end-user-7', name: 'Ada' } }),
+      makeCtx({ user: { id: 'end-user-7' } }),
     );
     expect(response.status).toBe(200);
     expect(requests[0]!.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-7');
