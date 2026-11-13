@@ -71,7 +71,7 @@ describe('IntakeSection gitlab', () => {
         expect(saved).toEqual([{ gitlab: { enabled: true, sourceIds: ['gitlab-project:encoded'] } }]),
       );
       await closeSourcePicker();
-      expect(await screen.findByText(/Not routed. This source's issues won't be picked up/)).toBeInTheDocument();
+      expect(await screen.findByText(/This source's issues won't be picked up/)).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));

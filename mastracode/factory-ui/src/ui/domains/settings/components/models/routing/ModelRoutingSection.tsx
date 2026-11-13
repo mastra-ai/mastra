@@ -43,7 +43,7 @@ function FactoryModelRouting({ factoryId }: { factoryId: string }) {
     <SettingsSubsection
       scope="factory"
       title="Model routing"
-      description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
+      description="Which defaults chats and work-item runs use."
       action={modelScope && <ModelRoutingSwitch value={modelScope} pending={saving} onValueChange={pickScope} />}
     >
       <div className="flex flex-col gap-6">

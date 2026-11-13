@@ -41,7 +41,7 @@ export function RoutedSourcePicker({
           if (!bindings) return undefined;
           const binding = bindingBySource.get(sourceId);
           if (!factories.some(factory => factory.id === binding?.factoryProjectId))
-            return "Not routed. This source's issues won't be picked up.";
+            return "This source's issues won't be picked up.";
           return undefined;
         }}
         itemActions={item =>

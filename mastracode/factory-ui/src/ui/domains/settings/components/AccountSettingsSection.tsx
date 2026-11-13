@@ -72,11 +72,7 @@ export function AccountSettingsSection() {
 
   return (
     <>
-      <SettingsSubsection
-        scope="personal"
-        title="Profile"
-        description="Your signed-in identity for this MastraCode deployment."
-      >
+      <SettingsSubsection scope="personal" title="Profile">
         <SettingsContainer>
           <SettingsRow label="Name" description="From your sign-in provider.">
             <AccountValue>{user?.name ?? 'Not provided'}</AccountValue>
@@ -84,7 +80,7 @@ export function AccountSettingsSection() {
           <SettingsRow label="Email" description="From your sign-in provider.">
             <AccountValue>{user?.email ?? 'Not provided'}</AccountValue>
           </SettingsRow>
-          <SettingsRow label="Authentication" description="How you signed in.">
+          <SettingsRow label="Authentication">
             <AccountValue>{authProviderLabel(state.provider)}</AccountValue>
           </SettingsRow>
           {user?.userId && (
@@ -93,7 +89,7 @@ export function AccountSettingsSection() {
             </SettingsRow>
           )}
           {user?.organizationId && (
-            <SettingsRow label="Organization ID" description="The organization that owns this Factory.">
+            <SettingsRow label="Organization ID">
               <CopyInput value={user.organizationId} label="organization ID" />
             </SettingsRow>
           )}

@@ -35,17 +35,12 @@ export function LinearWorkspaceControl({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reconnect {workspace.name}</DialogTitle>
-            <DialogDescription>
-              Intake from this workspace is paused. Reconnect to resume your saved sources and routing.
-            </DialogDescription>
+            <DialogDescription>Choose {workspace.name} on the Linear authorization screen.</DialogDescription>
           </DialogHeader>
           <DialogBody>
-            <Txt as="p" variant="caption">
-              Choose {workspace.name} on the Linear authorization screen.
-            </Txt>
             <Txt as="p" variant="caption" tone="muted">
               {targeted
-                ? "After you return, we'll check that this workspace is connected. Connecting a different workspace won't restore its intake."
+                ? "Connecting a different workspace won't restore its intake."
                 : 'Check the workspace in Linear before granting access.'}
             </Txt>
           </DialogBody>

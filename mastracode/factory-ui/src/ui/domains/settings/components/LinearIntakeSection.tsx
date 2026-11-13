@@ -153,11 +153,7 @@ export function LinearIntakeSection({
         <DisconnectedLinearWorkspaces workspaces={inferredSources.disconnected} onRemove={removeSources} />
       )}
       {[...workspaceErrors.values()].map(error => (
-        <SettingsRow
-          key={error.workspaceId}
-          label={`Couldn't load sources from ${error.name}.`}
-          description="Sources from other workspaces remain available. Your saved selections and routing are kept."
-        >
+        <SettingsRow key={error.workspaceId} label={`Couldn't load sources from ${error.name}.`}>
           <Button
             size="sm"
             variant="ghost"

@@ -97,7 +97,7 @@ export function GithubIntakeSection({
             <IntakeSyncControl
               label="Sync alerts"
               accessibleLabel="Sync Dependabot alerts"
-              description="Poll selected repositories for open Dependabot alerts every 15 minutes. Cards close when the alert is fixed or dismissed."
+              description="Polls every 15 minutes. Cards close when the alert is fixed or dismissed."
               checked={dependabot.enabled}
               disabled={false}
               onCheckedChange={enabled => dependabotSelection.update(current => ({ ...current, enabled }))}
