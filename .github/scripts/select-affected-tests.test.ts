@@ -87,6 +87,97 @@ describe('Prebuild test routing', () => {
   });
 });
 
+describe('Prebuild test tiers', () => {
+  const out = { tier: 'out' };
+  const tierFiles: Record<string, { tier: string }> = {
+    'packages/core/src/quiet.test.ts': out,
+    'packages/core/src/quiet.e2e.test.ts': out,
+    'job:store/pg': out,
+    'job:memory': out,
+    'job:workspace-unit/docker': out,
+  };
+  const tiered = (
+    input: { changedFiles: string[]; affectedTests?: string[]; fullSuite?: boolean },
+    fullTestsLabel = false,
+  ) =>
+    route({ ...input, storeNames: ['pg', 'libsql'], tiers: { tiers: { files: tierFiles }, fullTestsLabel } } as never);
+
+  test('drops quiet files the PR does not edit, before deciding the unit shards', () => {
+    const many = Array.from({ length: 499 }, (_, i) => `packages/core/src/t${i}.test.ts`);
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: [...many, 'packages/core/src/quiet.test.ts', 'packages/core/src/quiet.e2e.test.ts'],
+    });
+
+    expect(result.unitTestFiles).not.toContain('packages/core/src/quiet.test.ts');
+    expect(result.e2eTestFiles).toEqual([]);
+    expect(result.unitShards).toEqual([1]);
+    expect(result.tiers.droppedFiles).toEqual([
+      'packages/core/src/quiet.test.ts',
+      'packages/core/src/quiet.e2e.test.ts',
+    ]);
+  });
+
+  test('keeps a quiet file the PR edits', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/quiet.test.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+  });
+
+  test('turns a gate off when every job behind it is quiet and untouched', () => {
+    const memory = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/memory/integration-tests/a.test.ts'],
+    });
+    expect(memory.flags.memory_changed).toBe(false);
+    expect(memory.tiers.skippedJobs).toContain('job:memory');
+
+    // libsql is not tiered out, so the store workflow still starts and skips only pg.
+    const stores = tiered({ changedFiles: ['stores/_test-utils/src/index.ts'] });
+    expect(stores.flags.stores_changed).toBe(true);
+  });
+
+  test('a quiet job still runs when the PR edits its own paths', () => {
+    const result = tiered({ changedFiles: ['packages/memory/src/index.ts'] });
+
+    expect(result.flags.memory_changed).toBe(true);
+    expect(result.tiers.skippedJobs).not.toContain('job:memory');
+  });
+
+  test('skips quiet workspace packages but keeps the full list for the cloud tests', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['workspaces/docker/src/a.test.ts', 'workspaces/s3/src/a.test.ts'],
+    });
+
+    expect(result.workspaceSelection.packages).toEqual(expect.arrayContaining(['docker', 's3']));
+    expect(result.workspaceUnitRun).toEqual(['s3']);
+    expect(result.workspaceDockerRun).toEqual(['s3']);
+    expect(result.flags.workspaces_changed).toBe(true);
+  });
+
+  test('the full-tests label and the full suite run everything', () => {
+    const input = { changedFiles: ['packages/core/src/index.ts'], affectedTests: ['packages/core/src/quiet.test.ts'] };
+
+    expect(tiered(input, true).unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(tiered(input, true).tiers.skippedJobs).toEqual([]);
+    expect(tiered({ ...input, fullSuite: true }).tiers.skippedJobs).toEqual([]);
+  });
+
+  test('without tiers nothing is dropped', () => {
+    const result = route({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(result.tiers.skippedJobs).toEqual([]);
+  });
+});
+
 // Lines kept apart so the branch and main edits merge without a conflict.
 const lockfile = (a: number, b: number) => `a: ${a}\n${'pad: 0\n'.repeat(5)}b: ${b}\n`;
 
