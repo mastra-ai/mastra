@@ -2647,7 +2647,7 @@ describe('getModelFacingValidationError', () => {
   it('drops the rejected value schema libraries quote in input issue messages', () => {
     // A transform resolves the model's customer id to a stored email, so the value Zod v3's enum
     // message quotes is not one the model sent.
-    const emails: Record<string, string> = { 'cust-1': EMAIL };
+    const emails: Record<string, string> = { 'cust-1': EMAIL, 'cust-2': `private\n${EMAIL}` };
     const zod3Schema = z3.object({
       customer: z3
         .string()
@@ -2659,6 +2659,10 @@ describe('getModelFacingValidationError', () => {
     const zod3ModelFacing = getModelFacingValidationError(zod3);
     expect(zod3ModelFacing?.message).toContain("- customer: Invalid enum value. Expected 'allowed@example.com'");
     expect(JSON.stringify(zod3ModelFacing)).not.toContain(EMAIL);
+    // A resolved value with a line break is dropped too.
+    const multiline = validateToolInput(toStandardSchema(zod3Schema), { customer: 'cust-2' }, 'lookup').error;
+    expect(JSON.stringify(multiline)).toContain(EMAIL);
+    expect(JSON.stringify(getModelFacingValidationError(multiline))).not.toContain(EMAIL);
 
     // Valibot only implements StandardSchemaV1; add the JSON Schema half like the tests above.
     const valibotSchema = v.object({ contact: v.pipe(v.string(), v.email()), count: v.number() });

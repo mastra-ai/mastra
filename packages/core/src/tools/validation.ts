@@ -145,7 +145,8 @@ export function getModelFacingValidationError(value: unknown): ModelFacingValida
  * the expected part is enough to retry.
  */
 function withoutReceivedValue(message: string): string {
-  return message.replace(/(?:,|:|\s+but)\s*received\b.*$/i, '');
+  // [\s\S] rather than `.`, so a quoted value with a line break is dropped too.
+  return message.replace(/(?:,|:|\s+but)\s*received\b[\s\S]*$/i, '');
 }
 
 /**
