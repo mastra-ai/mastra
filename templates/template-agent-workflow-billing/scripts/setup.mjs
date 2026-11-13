@@ -33,7 +33,8 @@ try {
   console.log(
     'Personal image profiles and local allowances are ready. Credentials remain private in data/local-profiles.json.',
   );
-} catch {
+} catch (error) {
+  if (error?.name === 'SetupLockError') console.error(error.message);
   console.error(
     'Setup failed safely. Check local mode, private state, and current credentials. Existing state was preserved.',
   );

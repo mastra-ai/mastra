@@ -414,6 +414,16 @@ async function developmentFixture() {
   };
 }
 
+it('setup reports an existing lock without deleting it and resumes after explicit recovery', async () => {
+  const f = await developmentFixture();
+  const lockPath = join(f.directory.directory, 'data/setup.lock');
+  await writeFile(lockPath, String(process.pid), { mode: 0o600 });
+  await expect(setupLocal(f.environment)).rejects.toThrow('Confirm that no setup process is running');
+  expect(await readFile(lockPath, 'utf8')).toBe(String(process.pid));
+  await unlink(lockPath);
+  expect(await setupLocal(f.environment)).toEqual(f.manifest);
+});
+
 it('fresh development state starts without Polar and setup preserves spent credit', async () => {
   const f = await developmentFixture();
   expect(Object.values(f.manifest.profiles).map(profile => [profile!.name, profile!.organizationName])).toEqual([

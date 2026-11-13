@@ -23,8 +23,16 @@ export async function setupLocal(environment: NodeJS.ProcessEnv) {
     paths.lock,
     constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
     0o600,
-  );
+  ).catch(error => {
+    if (error?.code !== 'EEXIST') throw error;
+    const failure = new Error(
+      `Setup lock exists at ${paths.lock}. Confirm that no setup process is running before removing only this lock file, then rerun npm run setup. Existing profiles and balances will be preserved.`,
+    );
+    failure.name = 'SetupLockError';
+    throw failure;
+  });
   try {
+    await lock.writeFile(`${process.pid}\n`);
     const databaseUrl = await billingDatabaseUrl(environment);
     const organizations = await configuredOrganizations(environment);
     try {
