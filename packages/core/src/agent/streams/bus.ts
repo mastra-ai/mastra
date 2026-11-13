@@ -59,10 +59,10 @@ export class AgentStreamBus {
   /** Record cache for an unregistered agent with replay off. */
   #localRecordCache: MastraServerCache | undefined;
 
-  constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks) {
+  constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks, defaultPubsub?: PubSub) {
     this.#hooks = hooks;
     this.#hasCustomPubsub = !!config.pubsub;
-    this.#innerPubsub = config.pubsub ?? new EventEmitterPubSub();
+    this.#innerPubsub = config.pubsub ?? defaultPubsub ?? new EventEmitterPubSub();
     this.#cacheConfig = config.cache;
     this.#shouldCache = config.shouldCache;
     this.#cleanupTimeoutMs = config.cleanupTimeoutMs ?? DEFAULT_STREAM_CLEANUP_TIMEOUT_MS;

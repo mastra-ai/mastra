@@ -28,10 +28,12 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
 
   const setup = ({
     resolveBeforeRegistering = false,
+    standalone = false,
     agentPubsub,
     streamPubsub,
   }: {
     resolveBeforeRegistering?: boolean;
+    standalone?: boolean;
     agentPubsub?: PubSub;
     streamPubsub?: PubSub;
   } = {}) => {
@@ -73,6 +75,15 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     const serverCache = new InMemoryServerCache();
     // Reading the bus before registration resolves it against the agent's own default bus.
     const agentA = createDurableAgent({ agent: makeAgent(), pubsub: streamPubsub });
+    if (standalone) {
+      return {
+        a: agentA,
+        b: agentA,
+        pubsub: agentA.pubsub instanceof CachingPubSub ? agentA.pubsub.getInner() : agentA.pubsub,
+        started,
+        release,
+      };
+    }
     if (resolveBeforeRegistering) void (agentA as DurableAgent).pubsub;
     const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache: serverCache, logger: false });
     const mastraB = new Mastra({
@@ -91,15 +102,16 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
   };
 
   it.each([
-    { resolveBeforeRegistering: false, fork: false },
-    { resolveBeforeRegistering: true, fork: false },
-    { resolveBeforeRegistering: false, fork: true },
-    { resolveBeforeRegistering: true, fork: true },
+    { resolveBeforeRegistering: false, fork: false, standalone: false },
+    { resolveBeforeRegistering: true, fork: false, standalone: false },
+    { resolveBeforeRegistering: false, fork: true, standalone: false },
+    { resolveBeforeRegistering: true, fork: true, standalone: false },
+    { resolveBeforeRegistering: false, fork: true, standalone: true },
   ])(
-    'publishes on mastra.pubsub so another instance observes replay plus live tail (resolveBeforeRegistering=$resolveBeforeRegistering, fork=$fork)',
+    'observes replay plus live tail on the inherited bus (resolveBeforeRegistering=$resolveBeforeRegistering, fork=$fork, standalone=$standalone)',
     { timeout: 15_000 },
-    async ({ resolveBeforeRegistering, fork }) => {
-      const { a, b, pubsub, started, release } = setup({ resolveBeforeRegistering });
+    async ({ resolveBeforeRegistering, fork, standalone }) => {
+      const { a, b, pubsub, started, release } = setup({ resolveBeforeRegistering, standalone });
       const runner = fork ? (a.__fork() as unknown as DurableAgent) : a;
       const publish = vi.spyOn(pubsub, 'publish');
 
@@ -118,9 +130,11 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       await consumed;
       await reading;
 
-      // Replay: frames published before the observer subscribed.
-      expect(types.slice(0, 1)).toEqual(['start']);
-      expect(types).toContain('tool-call');
+      // Registered replicas share replay storage; standalone forks only inherit the transport.
+      if (!standalone) {
+        expect(types.slice(0, 1)).toEqual(['start']);
+        expect(types).toContain('tool-call');
+      }
       // Live tail: the second turn ran after the observer subscribed.
       expect(types).toContain('tool-result');
       expect(types).toContain('text-delta');
