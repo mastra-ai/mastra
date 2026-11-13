@@ -1047,7 +1047,7 @@ interface WorkflowStepAttributes {
 }
 ```
 
-Agent and workflow identifiers are not span attributes. Read them from the span's `entityType`, `entityId`, and `entityName` fields.
+`AgentRunAttributes`, `WorkflowRunAttributes`, and `WorkflowStepAttributes` don't include agent or workflow identifiers. Read them from the span's `entityType`, `entityId`, and `entityName` fields.
 
 ### `UsageStats`
 
