@@ -91,4 +91,21 @@ describe('FACTORY_TIMING instrumentation', () => {
     await expect(timed('phase', run)).resolves.toBe(1);
     expect(write).not.toHaveBeenCalled();
   });
+
+  it('keeps boot phase timing on by default but quiet under mastra factory dev unless --debug is set', async () => {
+    const write = vi.spyOn(process.stderr, 'write').mockReturnValue(true);
+    const run = async () => 1;
+
+    vi.stubEnv('MASTRA_FACTORY_DEV', '');
+    await (await loadTiming(undefined)).timedPhase('deployed', run);
+    vi.stubEnv('MASTRA_FACTORY_DEV', 'true');
+    await (await loadTiming(undefined)).timedPhase('factory-dev', run);
+    vi.stubEnv('MASTRA_FACTORY_DEBUG', 'true');
+    await (await loadTiming(undefined)).timedPhase('factory-dev-debug', run);
+
+    expect(timingLines(write)).toEqual([
+      expect.stringMatching(/^deployed \d+ms$/),
+      expect.stringMatching(/^factory-dev-debug \d+ms$/),
+    ]);
+  });
 });

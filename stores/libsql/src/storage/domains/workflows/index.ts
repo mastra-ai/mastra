@@ -63,6 +63,9 @@ import { runPrune, resolveTargets } from '../../retention';
 
 const RUN_OWNER_COLUMNS = `generation, ownerId, leaseExpiresAt, ${DB_NOW_MS} AS nowMs`;
 
+/** Run ids per query in `getRunOwnerships`, under the bound-variable limit of older SQLite builds (999). */
+const RUN_OWNERSHIP_BATCH_SIZE = 500;
+
 /** A storage v2 entry as written: one element of the JSON array the write statements unpack. */
 interface EntryInput {
   kind: WorkflowRunEntry['kind'];
@@ -201,6 +204,24 @@ function insertEntries(run: RunWrite, entries: EntryInput[]): SqliteStatement {
  */
 const STATE_BASE_WORKFLOW_EXPR = `payload ->> '$.workflowName'`;
 const STATE_BASE_RUN_EXPR = `payload ->> '$.runId'`;
+
+/**
+ * The summary snapshot `listWorkflowRuns({ summary: true })` returns, built from the JSON column
+ * `state` (a v1 snapshot or a storage v2 header): `status` (the `status` expression) and
+ * `timestamp` when set, and `parentWorkflow` with only its `workflowId` and `runId` when both are
+ * non-empty strings. Only these paths are read, so `context` is never sent. `json_object()` keeps
+ * a SQL NULL as a JSON null, and patching `{}` with it drops those keys.
+ */
+function summarySnapshotSql(state: string, status: string): string {
+  const workflowId = `json_extract(${state}, '$.parentWorkflow.workflowId')`;
+  const runId = `json_extract(${state}, '$.parentWorkflow.runId')`;
+  const hasParent = `json_type(${state}, '$.parentWorkflow.workflowId') = 'text' AND json_type(${state}, '$.parentWorkflow.runId') = 'text'
+      AND ${workflowId} <> '' AND ${runId} <> ''`;
+  return `json_patch('{}', json_object(
+      'status', ${status},
+      'timestamp', json_extract(${state}, '$.timestamp'),
+      'parentWorkflow', CASE WHEN ${hasParent} THEN json_object('workflowId', ${workflowId}, 'runId', ${runId}) END))`;
+}
 
 /**
  * A JSON array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
@@ -508,7 +529,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     const branches: string[] = [];
     if (v1Where !== null) {
       const snapshot = summary
-        ? `json_object('status', json_extract(snapshot, '$.status'), 'timestamp', json_extract(snapshot, '$.timestamp'))`
+        ? summarySnapshotSql('snapshot', `json_extract(snapshot, '$.status')`)
         : 'json(snapshot)';
       branches.push(
         `SELECT workflow_name, run_id, resourceId, ${snapshot} AS snapshot, NULL AS header, createdAt, updatedAt, 1 AS version
@@ -517,7 +538,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     }
     if (v2Where !== null) {
       const columns = summary
-        ? `json_object('status', status, 'timestamp', json_extract(header, '$.timestamp')) AS snapshot, NULL AS header`
+        ? `${summarySnapshotSql('header', 'status')} AS snapshot, NULL AS header`
         : 'NULL AS snapshot, json(header) AS header';
       branches.push(
         `SELECT workflow_name, run_id, resourceId, ${columns}, createdAt, updatedAt, 2 AS version
@@ -1050,6 +1071,38 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
       return await this.#readRunOwner(this.#client, runId);
     } catch (error) {
       throw this.#ownershipError('GET_RUN_OWNERSHIP', runId, error);
+    }
+  }
+
+  /** Reads the records with one query per {@link RUN_OWNERSHIP_BATCH_SIZE} runs. */
+  async getRunOwnerships({ runIds }: { runIds: string[] }): Promise<Map<string, RunOwnershipRecord>> {
+    const records = new Map<string, RunOwnershipRecord>();
+    const ids = [...new Set(runIds)];
+
+    try {
+      for (let start = 0; start < ids.length; start += RUN_OWNERSHIP_BATCH_SIZE) {
+        const chunk = ids.slice(start, start + RUN_OWNERSHIP_BATCH_SIZE);
+        const result = await this.#client.execute({
+          sql: `SELECT runId, ${RUN_OWNER_COLUMNS} FROM ${TABLE_WORKFLOW_RUN_OWNERS}
+            WHERE runId IN (${chunk.map(() => '?').join(', ')})`,
+          args: chunk,
+        });
+        for (const row of result.rows) {
+          records.set(String(row.runId), toRunOwnershipRecord(String(row.runId), row));
+        }
+      }
+
+      return records;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_RUN_OWNERSHIPS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { runCount: ids.length },
+        },
+        error,
+      );
     }
   }
 

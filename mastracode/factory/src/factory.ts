@@ -90,6 +90,7 @@ import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
@@ -196,6 +197,7 @@ import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import {
   createRequestTimingMiddleware,
+  bootDiagnosticsEnabled,
   factoryTimingEnabled,
   instrumentAsyncMethods,
   logTiming,
@@ -616,6 +618,7 @@ export class MastraFactory {
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
   #prepareStartedAt: number | undefined;
+  #integrations: FactoryIntegration[] = [];
   #reviewedChangeRequest: ((requestContext: RequestContext) => Promise<ReviewedChangeRequest | undefined>) | undefined;
   #preparing = false;
 
@@ -858,6 +861,10 @@ export class MastraFactory {
         const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
+      if (!integrations.some(integration => integration.id === 'vanta')) {
+        const { PlatformVantaIntegration } = await import('./integrations/platform/vanta/integration.js');
+        integrations.push(new PlatformVantaIntegration());
+      }
     }
     // Never let the key be a silent no-op: it only applies to the integration
     // the factory installs itself, so warn when it had nothing to apply to.
@@ -880,6 +887,7 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
+    this.#integrations = integrations;
     const configVersion = this.#configVersion;
 
     // FactoryStorage owns every app-table domain and initializes them through
@@ -1220,28 +1228,16 @@ export class MastraFactory {
         }
       });
     }
-    if (workItemsStorage.legacyBackfillPending || workItemsStorage.sourceLinkBackfillPending) {
+    if (workItemsStorage.legacyBackfillPending) {
       const controller = new AbortController();
-      const splitPending = workItemsStorage.legacyBackfillPending;
       this.#workItemSplitBackfill = {
         controller,
-        promise: (async () => {
-          if (splitPending) {
-            await timedPhase('background.migrate.workItemSplit', () =>
-              backfillUntilDone(
-                () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
-                controller.signal,
-              ),
-            );
-          }
-          // After the split, so cards it copies are linked in the same pass.
-          await timedPhase('background.migrate.sourceLinks', () =>
-            backfillUntilDone(
-              () => workItemsStorage.backfillSourceLinks({ signal: controller.signal }),
-              controller.signal,
-            ),
-          );
-        })(),
+        promise: timedPhase('background.migrate.workItemSplit', () =>
+          backfillUntilDone(
+            () => workItemsStorage.backfillLegacyCards({ signal: controller.signal }),
+            controller.signal,
+          ),
+        ),
       };
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
@@ -2570,9 +2566,11 @@ export class MastraFactory {
       );
     this.#dispatcher?.start();
     this.#startMetrics();
-    // Unconditional and outside the Mastra logger, which production runs at WARN.
-    if (this.#prepareStartedAt !== undefined)
+    // Outside the Mastra logger, which production runs at WARN. Under
+    // `mastra factory dev` the CLI's ready banner reports boot time instead.
+    if (bootDiagnosticsEnabled && this.#prepareStartedAt !== undefined)
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
+    if (process.env.MASTRA_FACTORY_DEV === 'true') void logIntegrationSummary(this.#integrations);
   }
 
   #startMetrics(): void {

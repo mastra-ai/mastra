@@ -111,7 +111,7 @@ export class GithubReconcileWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('GithubReconcileWorker: call init() before start()');
     this.#running = true;
-    this.deps.logger.info('GitHub reconcile worker started', {
+    this.deps.logger.debug('GitHub reconcile worker started', {
       pullRequestIntervalMs: this.#reconcile ? this.#intervalMs : undefined,
       issueIntervalMs: this.#reconcileIssues ? this.#issueIntervalMs : undefined,
       pullRequestDiscoveryIntervalMs: this.#discover ? this.#discoveryIntervalMs : undefined,

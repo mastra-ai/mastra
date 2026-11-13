@@ -132,7 +132,7 @@ import {
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
 } from '../request-context';
-import { getRequestContextInputValues } from '../request-context/input-source';
+import { getRequestContextInputSource, getRequestContextInputValues } from '../request-context/input-source';
 import type { DeclaredAgentSchedule } from '../schedules/define';
 import type { InferStandardSchemaOutput } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -227,6 +227,7 @@ import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMes
 import { createStoredMessageLoader } from './message-list/memory-message-refs';
 import { modelSpanAttributes } from './model-span-attributes';
 import { buildResumeSpanInput } from './resume-span-input';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { SaveQueueManager } from './save-queue';
 import {
   applyAgentScopesConfig,
@@ -10509,8 +10510,11 @@ export class Agent<
     if (this.#mastra?.backgroundTaskManager?.config.notifyAgentOnFinish === false) return;
     if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
     const outcome = status === 'completed' ? 'completed' : 'failed';
-    // A copy, so later writes by the finished run don't reach the woken one.
-    const requestContext = params.requestContext ? new RequestContext(params.requestContext.entries()) : undefined;
+    // A copy, so later writes by the finished run don't reach the woken one. A tool's
+    // schema-transformed view is copied in its input form: the woken run validates it again.
+    const requestContext = params.requestContext
+      ? new RequestContext((getRequestContextInputSource(params.requestContext) ?? params.requestContext).entries())
+      : undefined;
     const ifIdleStreamOptions = requestContext ? { streamOptions: { requestContext } } : {};
     const signal: AgentSignal = {
       type: 'notification',
@@ -10534,10 +10538,28 @@ export class Agent<
       // Another agent's run holds the thread (e.g. waiting for approval, or in another
       // process). Queue the notice so it starts this agent's run once that run ends.
       if (accepted.action === 'blocked' && accepted.reason === 'thread-blocked') {
-        await this.queueSignal<unknown>(
-          { ...signal, id: result.signal.id },
-          { threadId, resourceId, ...(requestContext ? { ifIdle: { streamOptions: { requestContext } } } : {}) },
-        ).accepted;
+        const queued = { ...signal, id: result.signal.id };
+        const target = {
+          threadId,
+          resourceId,
+          ...(requestContext ? { ifIdle: { streamOptions: { requestContext } } } : {}),
+        };
+        // Queueing is refused too while the lease is held by a suspended run this process
+        // evicted, or is mid-handover. Both clear within a lease TTL, and nothing else
+        // reports this task, so try again until then.
+        const deadline = Date.now() + 2 * AGENT_LEASE_TTL_MS;
+        for (;;) {
+          const queuedAccepted = await this.queueSignal<unknown>(queued, target).accepted;
+          if (queuedAccepted.action !== 'blocked' || queuedAccepted.reason !== 'thread-blocked') break;
+          if (Date.now() >= deadline) {
+            this.logger.warn('Could not notify the agent that a background task finished: the thread stayed blocked', {
+              taskId,
+              toolCallId,
+            });
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, AGENT_LEASE_RENEW_INTERVAL_MS));
+        }
       }
     } catch (error) {
       this.logger.warn('Could not notify the agent that a background task finished', {

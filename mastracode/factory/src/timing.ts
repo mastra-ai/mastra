@@ -16,6 +16,17 @@ import { recordWorkspacePhase } from './metrics/sandbox.js';
  */
 export const factoryTimingEnabled = /^(1|true|yes)$/i.test(process.env.FACTORY_TIMING ?? '');
 
+/**
+ * Boot diagnostics (phase timings, integration config) are on by default so
+ * slow or misconfigured deployed boots stay visible. `mastra factory dev`
+ * (`MASTRA_FACTORY_DEV=true`) keeps first boot quiet unless run with
+ * `--debug` (`MASTRA_FACTORY_DEBUG=true`) or `FACTORY_TIMING` is set.
+ */
+export const bootDiagnosticsEnabled =
+  factoryTimingEnabled ||
+  process.env.MASTRA_FACTORY_DEV !== 'true' ||
+  /^(1|true)$/i.test(process.env.MASTRA_FACTORY_DEBUG ?? '');
+
 export function logTiming(line: string): void {
   process.stderr.write(`[factory:timing] ${line}\n`);
 }
@@ -116,7 +127,10 @@ export function instrumentAsyncMethods<T extends object>(target: T, label: strin
   });
 }
 
-/** Run `fn`, always logging its duration under `phase`. Workspace phases also feed the `sandbox` metrics. */
+/**
+ * Run `fn`, logging its duration under `phase` when `bootDiagnosticsEnabled`. Workspace phases also
+ * feed the `sandbox` metrics, whether or not the line is logged.
+ */
 export async function timedPhase<T>(phase: string, fn: () => Promise<T>): Promise<T> {
   const start = performance.now();
   let ok = false;
@@ -126,7 +140,7 @@ export async function timedPhase<T>(phase: string, fn: () => Promise<T>): Promis
     return result;
   } finally {
     const elapsed = performance.now() - start;
-    process.stderr.write(`[factory:timing] ${phase} ${Math.round(elapsed)}ms\n`);
+    if (bootDiagnosticsEnabled) process.stderr.write(`[factory:timing] ${phase} ${Math.round(elapsed)}ms\n`);
     recordWorkspacePhase(phase, elapsed, ok);
   }
 }

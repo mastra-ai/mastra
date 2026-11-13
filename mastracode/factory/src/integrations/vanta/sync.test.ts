@@ -96,42 +96,36 @@ describe('createVantaSync', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
-  it("runs a card added to another board under its own identity when the vulnerability was first seen without a card", async () => {
-    const { project, sync, workItems } = await setup({ enabled: true });
-    // The first sync sees the vulnerability before any card exists, and files one.
-    await sync();
-    const { item: filed } = await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: project.id,
-      input: {
-        externalSource: { integrationId: 'vanta', type: 'vulnerability', externalId: vulnerability.id },
-        title: 'lodash: CVE-2026-1',
-        stages: ['intake'],
-        sessions: {},
-        metadata: { state: 'open' },
-      },
+  it('does not reconcile an unavailable snapshot or retry it for another project in the same org', async () => {
+    const ingest = vi.fn();
+    const listVulnerabilities = vi.fn(async () => null);
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities,
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-1', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
     });
-    const security = await workItems.linkWorkItemToBoard({
-      orgId: 'org-1',
-      id: filed.id,
-      board: 'release',
-      stage: 'queued',
-      userId: 'user-1',
+    expect(await sync()).toMatchObject({ projects: 0, checked: 0 });
+    expect(listVulnerabilities).toHaveBeenCalledTimes(1);
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  it('passes only the owning organization snapshot to each project', async () => {
+    const ingest = vi.fn();
+    const sync = createVantaSync({
+      connected: async () => true,
+      listVulnerabilities: async orgId => orgId === 'org-1' ? [vulnerability] : [{ ...vulnerability, id: 'vuln-2' }],
+      listProjects: async () => [{ orgId: 'org-1', id: 'project-1' }, { orgId: 'org-2', id: 'project-2' }],
+      intakeEnabled: async () => true,
+      boundProjectIds: async () => [],
+      ingest,
+      userId: 'factory-rule-dispatcher',
     });
-    const commits = vi.spyOn(workItems, 'commitRuleEvaluation');
-
-    await sync();
-    await sync();
-
-    const results = await Promise.all(commits.mock.results.map(result => result.value));
-    const byCard = commits.mock.calls.map(([input], index) => [input.workItemId, input.ingress.identity, results[index].status]);
-    expect(byCard).toEqual([
-      // The first card keeps the identity the unbound evaluation was stored under.
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'committed'],
-      [filed.id, 'vanta:vuln-1:open', 'replayed'],
-      [security!.id, `vanta:vuln-1:open:${security!.id}`, 'replayed'],
-    ]);
+    expect(await sync()).toMatchObject({ projects: 2, checked: 2 });
+    expect(ingest.mock.calls[0]?.[0]).toMatchObject({ orgId: 'org-1', vulnerabilities: [{ id: 'vuln-1' }] });
+    expect(ingest.mock.calls[1]?.[0]).toMatchObject({ orgId: 'org-2', vulnerabilities: [{ id: 'vuln-2' }] });
   });
 });
