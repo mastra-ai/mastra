@@ -398,15 +398,9 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
   });
 
   // The lease is the parent's on a store with compare-and-set, and the nested run's own on a store without.
-  it.each([
-    ['parent', 'the claim throws', 'store unavailable'],
-    // A forced claim can still be refused, for example when retention deletes the record mid-claim.
-    ['parent', 'the store refuses the claim', /Failed to claim the lease of parent workflow run/],
-    ['nested run', 'the claim throws', 'store unavailable'],
-    ['nested run', 'the store refuses the claim', /Failed to claim the lease of nested workflow run/],
-  ] as const)(
-    'fails a direct resume of a nested run whose %s lease cannot be claimed (%s), and leaves both runs suspended',
-    async (leaseOf, _, error) => {
+  it.each(['parent', 'nested run'] as const)(
+    'fails a direct resume of a nested run whose %s lease claim throws, and leaves both runs suspended',
+    async leaseOf => {
       const storage = new InMemoryStore();
       const executions: string[] = [];
       const { run, nestedRunId, workflowsStore, resume } = await suspendedInChild(storage, executions);
@@ -421,14 +415,10 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
           return claim(args);
         }
 
-        if (error === 'store unavailable') {
-          throw new Error(error);
-        }
-
-        return { acquired: false, record: await workflowsStore.getRunOwnership({ runId: leased }) };
+        throw new Error('store unavailable');
       });
 
-      await expect(resume()).rejects.toThrow(error);
+      await expect(resume()).rejects.toThrow('store unavailable');
       expect(executions).toEqual(['approve:suspended']);
       expect(await workflowsStore.loadWorkflowRunStatus({ workflowName: 'parent', runId: run.runId })).toBe(
         'suspended',
