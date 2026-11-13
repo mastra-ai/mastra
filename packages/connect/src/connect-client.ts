@@ -224,7 +224,7 @@ export class ConnectClient {
     const context = `calling ${method} ${path.split('?', 1)[0]}`;
     const response = await this.#send(method, path, init);
     if (!response.ok) {
-      await throwPlatformError(response, context);
+      await throwPlatformError(response, context, this.#client.accessToken);
     }
     const text = await response.text();
     if (!text) return undefined as T;

@@ -22,3 +22,5 @@ for await (const event of connect.events.connectEvents({ after: savedCursor })) 
   await saveCursor(event.id);
 }
 ```
+
+Error messages from the platform and from the connection proxy no longer include your platform access token when the server echoes it back.

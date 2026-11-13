@@ -213,8 +213,8 @@ async function parsePlatformJson(response: Response, context: string): Promise<u
 }
 
 /** Maps a non-2xx response from the platform's own endpoints to a typed error. */
-export async function throwPlatformError(response: Response, context: string): Promise<never> {
-  const { detail, code, type, isProblemJson } = await extractProblemDetail(response);
+export async function throwPlatformError(response: Response, context: string, secret?: string): Promise<never> {
+  const { detail, code, type, isProblemJson } = await extractProblemDetail(response, secret);
   const meta = {
     status: response.status,
     detail,
@@ -402,7 +402,7 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
       : '';
   const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/connections${query}`);
   if (!response.ok) {
-    await throwPlatformError(response, `listing connections for project ${projectId}`);
+    await throwPlatformError(response, `listing connections for project ${projectId}`, client.accessToken);
   }
   const parsed = connectionListSchema.safeParse(
     await parsePlatformJson(response, `listing connections for project ${projectId}`),
@@ -420,7 +420,7 @@ export async function listProjectConnections(client: ResolvedClient, projectId: 
 export async function listIntegrations(client: ResolvedClient): Promise<IntegrationCatalogEntry[]> {
   const response = await platformFetch(client, '/v2/integrations');
   if (!response.ok) {
-    await throwPlatformError(response, 'listing integrations');
+    await throwPlatformError(response, 'listing integrations', client.accessToken);
   }
   const parsed = integrationCatalogResponseSchema.safeParse(await parsePlatformJson(response, 'listing integrations'));
   if (!parsed.success) {
@@ -446,7 +446,7 @@ export async function getProjectIntegrationSettings(
     );
   }
   if (!response.ok) {
-    await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
+    await throwPlatformError(response, `retrieving integration settings for project ${projectId}`, client.accessToken);
   }
   const parsed = projectIntegrationSettingsResponseSchema.safeParse(
     await parsePlatformJson(response, `retrieving integration settings for project ${projectId}`),
@@ -464,7 +464,7 @@ export async function getProjectIntegrationSettings(
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
   const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/context`);
   if (!response.ok) {
-    await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
+    await throwPlatformError(response, `retrieving context for connection ${connectionId}`, client.accessToken);
   }
   const parsed = connectionContextSchema.safeParse(
     await parsePlatformJson(response, `retrieving context for connection ${connectionId}`),
@@ -482,7 +482,7 @@ export async function getConnectionContext(client: ResolvedClient, connectionId:
 export async function getCredential(client: ResolvedClient, connectionId: string): Promise<ConnectionCredential> {
   const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/credentials`);
   if (!response.ok) {
-    await throwPlatformError(response, `fetching credentials for connection ${connectionId}`);
+    await throwPlatformError(response, `fetching credentials for connection ${connectionId}`, client.accessToken);
   }
   const parsed = credentialSchema.safeParse(
     await parsePlatformJson(response, `fetching credentials for connection ${connectionId}`),
@@ -674,7 +674,7 @@ export async function proxyRequestWithResponse(
   const response = await platformFetch(client, url, init);
 
   if (!response.ok) {
-    const { detail, type, isProblemJson } = await extractProblemDetail(response);
+    const { detail, type, isProblemJson } = await extractProblemDetail(response, client.accessToken);
     const retryAfterMs = parseRetryAfterMs(response);
     if (isProblemJson) {
       // Platform-originated error (bad path, unknown connection, auth, limits).
@@ -762,7 +762,7 @@ export async function createProjectConnectSession(
     },
   );
   if (!response.ok) {
-    await throwPlatformError(response, `creating a connect session for ${integrationId}`);
+    await throwPlatformError(response, `creating a connect session for ${integrationId}`, client.accessToken);
   }
   const parsed = connectSessionSchema.safeParse(
     await parsePlatformJson(response, `creating a connect session for ${integrationId}`),
@@ -791,7 +791,7 @@ export async function createReconnectSession(client: ResolvedClient, connectionI
     },
   );
   if (!response.ok) {
-    await throwPlatformError(response, context);
+    await throwPlatformError(response, context, client.accessToken);
   }
   const parsed = connectSessionSchema.safeParse(await parsePlatformJson(response, context));
   if (!parsed.success) {
@@ -820,7 +820,11 @@ export async function linkConnectionToProject(
     { method: 'POST' },
   );
   if (!response.ok) {
-    await throwPlatformError(response, `linking connection ${connectionId} to project ${projectId}`);
+    await throwPlatformError(
+      response,
+      `linking connection ${connectionId} to project ${projectId}`,
+      client.accessToken,
+    );
   }
 }
 
@@ -849,7 +853,7 @@ export async function getConnectUrl(client: ResolvedClient, connectionId: string
     );
   }
   if (!response.ok) {
-    await throwPlatformError(response, `fetching the connect URL for ${connectionId}`);
+    await throwPlatformError(response, `fetching the connect URL for ${connectionId}`, client.accessToken);
   }
   const parsed = connectUrlSchema.safeParse(
     await parsePlatformJson(response, `fetching the connect URL for ${connectionId}`),
@@ -870,6 +874,6 @@ export async function disconnectConnection(client: ResolvedClient, connectionId:
     method: 'DELETE',
   });
   if (!response.ok) {
-    await throwPlatformError(response, `disconnecting connection ${connectionId}`);
+    await throwPlatformError(response, `disconnecting connection ${connectionId}`, client.accessToken);
   }
 }
