@@ -24,6 +24,8 @@ export function asPool(value: unknown): PoolLike | undefined {
 /**
  * Pool usage plus a `SELECT 1` round trip for each Postgres pool. `waiting` above 0 means queries
  * are queued for a connection: the pool is too small or queries hold connections too long.
+ * The gauges are read after the probe, so a pool that had closed its idle connections shows the
+ * connection the probe just opened; the probe's duration then includes connecting.
  */
 export function postgresPoolCollector(pools: Record<string, PoolLike>, timeoutMs: number): MetricsCollector {
   const probe = createProbe();
@@ -31,10 +33,10 @@ export function postgresPoolCollector(pools: Record<string, PoolLike>, timeoutMs
     async collect(sink) {
       await Promise.all(
         Object.entries(pools).map(async ([name, pool]) => {
+          await probe(sink, `db_${name}`, timeoutMs, () => pool.query('SELECT 1'));
           sink.emit('mastra_factory_db_pool', pool.totalCount, { pool: name, state: 'total' });
           sink.emit('mastra_factory_db_pool', pool.idleCount, { pool: name, state: 'idle' });
           sink.emit('mastra_factory_db_pool', pool.waitingCount, { pool: name, state: 'waiting' });
-          await probe(sink, `db_${name}`, timeoutMs, () => pool.query('SELECT 1'));
         }),
       );
     },

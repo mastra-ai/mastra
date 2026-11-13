@@ -7,7 +7,7 @@ Added opt-in health metrics to Factory, sent through `mastra.metrics`. Pick the 
 ```ts
 new MastraFactory({
   // ...
-  metrics: { groups: ['process', 'postgres', 'redis', 'sandbox', 'sessions', 'intake'] }, // or 'all'
+  metrics: { groups: ['process', 'postgres', 'redis', 'sandbox', 'intake'] }, // or 'all'
 });
 ```
 

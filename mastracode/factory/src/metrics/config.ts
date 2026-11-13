@@ -1,5 +1,5 @@
 /** Metric groups a deployment can turn on, one per component to investigate. */
-export const METRIC_GROUPS = ['process', 'postgres', 'redis', 'sandbox', 'sessions', 'intake'] as const;
+export const METRIC_GROUPS = ['process', 'postgres', 'redis', 'sandbox', 'intake'] as const;
 export type MetricGroup = (typeof METRIC_GROUPS)[number];
 
 export interface FactoryMetricsOptions {

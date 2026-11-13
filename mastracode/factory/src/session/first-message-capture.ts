@@ -1,6 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 
-import { factoryMetrics } from '../metrics/metrics.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 
 export interface FirstMessageCaptureSession {
@@ -43,18 +42,8 @@ export function observeSessionFirstMessage(
     if (role !== 'user' && role !== 'assistant') return;
     seen = true;
     unsubscribe();
-    // Taken now: the storage round trip below must not count toward the latency.
-    const at = Date.now();
     void sourceControl.sessions
-      .markFirstMessage({
-        sessionId: session.identity.getId(),
-        // The extra read for the creation time only happens when the metric is on.
-        ...(factoryMetrics().enabled('sessions') && { withCreatedAt: true }),
-      })
-      .then(createdAt => {
-        if (createdAt)
-          factoryMetrics().observe('sessions', 'mastra_factory_session_first_message_ms', at - createdAt.getTime());
-      })
+      .markFirstMessage({ sessionId: session.identity.getId() })
       .catch(error => console.warn('[Factory first-message capture] Unable to persist first message time.', error));
   });
   return unsubscribe;

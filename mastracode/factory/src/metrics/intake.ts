@@ -29,6 +29,16 @@ export function recordReconcileSweep(
 }
 
 /**
+ * The reconcile worker for `source` started sweeping `kind`. The age counts from here until the
+ * first clean sweep, so a sweep that fails or stalls from boot shows a growing age instead of no series.
+ */
+export function recordSweepWorkerStarted(source: IntakeSource, kind: string): void {
+  if (!factoryMetrics().enabled('intake')) return;
+  const key = `${source}:${kind}`;
+  if (!lastSweepAt.has(key)) lastSweepAt.set(key, { source, kind, at: Date.now() });
+}
+
+/**
  * Age of each source's last clean reconcile sweep, per kind. Growing without bound means the sweep has
  * stalled, and webhooks it would have caught stay missed.
  */

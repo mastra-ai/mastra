@@ -54,7 +54,7 @@ describe('resolveMetricsConfig', () => {
   });
 
   it('parses all, lists and unknown names, with env winning', () => {
-    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(6);
+    expect([...resolveMetricsConfig(undefined, { FACTORY_METRICS: 'all' })!.groups]).toHaveLength(5);
     const config = resolveMetricsConfig({ groups: ['process'] }, { FACTORY_METRICS: 'sandbox, intake,nope' })!;
     expect([...config.groups]).toEqual(['sandbox', 'intake']);
     expect(config.unknownGroups).toEqual(['nope']);
@@ -217,76 +217,10 @@ describe('process collector', () => {
     expect(records.find(r => r.name === 'mastra_factory_process_cpu_limit_cores')?.value).toBeGreaterThan(0);
     const gc = records.filter(r => r.name === 'mastra_factory_gc_ms');
     expect(gc.length).toBeGreaterThan(0);
-    expect(gc.every(r => ['minor', 'major', 'incremental', 'weakcb', 'other'].includes(r.labels.kind!))).toBe(true);
+    expect(gc.every(r => ['major', 'incremental'].includes(r.labels.kind!))).toBe(true);
     expect(records.some(r => r.name === 'mastra_factory_process_memory_bytes' && r.labels.kind === 'heap_limit')).toBe(
       true,
     );
-  });
-});
-
-describe('first-message capture', () => {
-  it('asks storage for the creation time only when the sessions group is on', async () => {
-    const { observeSessionFirstMessage } = await import('../session/first-message-capture.js');
-    for (const groups of [['process'], ['sessions']] as const) {
-      installFactoryMetrics(new FactoryMetrics(resolveMetricsConfig({ groups: [...groups] }, {}), 'all'));
-      let listener: ((event: never) => void) | undefined;
-      const markFirstMessage = vi.fn().mockResolvedValue(undefined);
-      observeSessionFirstMessage(
-        { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) },
-        { sourceControl: { sessions: { markFirstMessage } } },
-      );
-      listener!({ type: 'message_start', message: { role: 'assistant' } } as never);
-      expect(markFirstMessage).toHaveBeenCalledWith(
-        groups[0] === 'sessions' ? { sessionId: 's1', withCreatedAt: true } : { sessionId: 's1' },
-      );
-    }
-  });
-});
-
-describe('session latency', () => {
-  it('records time to first message when the stamping call returns the creation time', async () => {
-    const { observeSessionFirstMessage } = await import('../session/first-message-capture.js');
-    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sessions'] }, {}), 'all');
-    installFactoryMetrics(metrics);
-    const { records, targets } = capture();
-    metrics.start(targets, []);
-    let listener: ((event: never) => void) | undefined;
-    const markFirstMessage = vi.fn().mockResolvedValue(new Date(Date.now() - 1_000));
-    observeSessionFirstMessage(
-      { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) },
-      { sourceControl: { sessions: { markFirstMessage } } },
-    );
-    listener!({ type: 'message_start', message: { role: 'user' } } as never);
-    await vi.waitFor(() => expect(markFirstMessage).toHaveBeenCalled());
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await metrics.tick();
-    metrics.stop();
-    const max = records.find(r => r.name === 'mastra_factory_session_first_message_ms' && r.labels.stat === 'max');
-    expect(max?.value).toBeGreaterThanOrEqual(1_000);
-  });
-
-  it('records time to first exec when the stamping call returns the creation time', async () => {
-    const { observeSessionFirstExec } = await import('../session/first-exec-capture.js');
-    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sessions'] }, {}), 'all');
-    installFactoryMetrics(metrics);
-    const { records, targets } = capture();
-    metrics.start(targets, []);
-    const markFirstMeaningfulExec = vi.fn().mockResolvedValue(new Date(Date.now() - 2_000));
-    let listener: ((event: never) => void) | undefined;
-    observeSessionFirstExec(
-      { identity: { getId: () => 's1' }, subscribe: l => ((listener = l as never), () => {}) } as never,
-      { sourceControl: { sessions: { markFirstMeaningfulExec } } },
-    );
-    listener!({ type: 'tool_start', toolCallId: 'c1', toolName: 'view', args: {} } as never);
-    listener!({ type: 'tool_end', toolCallId: 'c1', result: null, isError: false } as never);
-    await vi.waitFor(() =>
-      expect(markFirstMeaningfulExec).toHaveBeenCalledWith({ sessionId: 's1', withCreatedAt: true }),
-    );
-    await new Promise(resolve => setTimeout(resolve, 0));
-    await metrics.tick();
-    metrics.stop();
-    const max = records.find(r => r.name === 'mastra_factory_session_first_exec_ms' && r.labels.stat === 'max');
-    expect(max?.value).toBeGreaterThanOrEqual(2_000);
   });
 });
 
@@ -410,5 +344,167 @@ describe('redis collectors', () => {
     const records = await collect(fakeRedis(async () => [], true));
     expect(records.some(r => r.labels.component === 'redis')).toBe(true);
     expect(records.some(r => r.name === 'mastra_factory_redis_memory_bytes')).toBe(false);
+  });
+});
+
+describe('review follow-ups', () => {
+  function deferred() {
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<void>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  }
+
+  function fakeSandbox() {
+    const gate = deferred();
+    const sandbox = {
+      status: 'stopped',
+      calls: 0,
+      shared: undefined as Promise<void> | undefined,
+      async _start() {
+        // Concurrent callers share one start, like MastraSandbox.
+        this.shared ??= (async () => {
+          this.calls++;
+          await gate.promise;
+          this.status = 'running';
+        })().finally(() => (this.shared = undefined));
+        return this.shared;
+      },
+    };
+    return { sandbox, gate };
+  }
+
+  it('times a session start, the first wait on it, and reports starts in flight', async () => {
+    const { instrumentSandboxStart, markEagerSandboxStart, sessionStartsCollector } = await import('./sandbox.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sandbox'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    metrics.start(targets, [sessionStartsCollector()]);
+
+    const { sandbox, gate } = fakeSandbox();
+    instrumentSandboxStart(sandbox, 'platform', false);
+    markEagerSandboxStart(sandbox);
+    const eager = sandbox._start();
+    const toolCall = sandbox._start();
+    const another = sandbox._start();
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    await metrics.tick();
+    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_session_start_oldest_age_s')!.value).toBeGreaterThan(0);
+
+    records.length = 0;
+    gate.resolve();
+    await Promise.all([eager, toolCall, another]);
+    await metrics.tick();
+    metrics.stop();
+
+    const stat = (name: string, s: string) => records.find(r => r.name === name && r.labels.stat === s);
+    expect(stat('mastra_factory_session_ready_ms', 'count')).toMatchObject({
+      value: 1,
+      labels: { kind: 'first', outcome: 'ok' },
+    });
+    // Only the first caller other than the eager start counts as waiting.
+    expect(stat('mastra_factory_session_sandbox_wait_ms', 'count')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(0);
+    expect(sandbox.calls).toBe(1);
+  });
+
+  it('counts a failed start as not ready, by sandbox provider', async () => {
+    const { instrumentSandboxStart } = await import('./sandbox.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['sandbox'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+
+    const { sandbox, gate } = fakeSandbox();
+    instrumentSandboxStart(sandbox, 'platform', true);
+    const start = sandbox._start();
+    gate.reject(new Error('lease timed out'));
+    await expect(start).rejects.toThrow('lease timed out');
+    await metrics.tick();
+    metrics.stop();
+
+    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms')?.labels).toMatchObject({
+      kind: 'resume',
+      outcome: 'error',
+    });
+    expect(records.find(r => r.name === 'mastra_factory_sandbox_start_failures_total')?.labels).toMatchObject({
+      sandbox_provider: 'platform',
+      cause: 'timeout',
+    });
+  });
+
+  it('releases a probe whose call throws synchronously, and times only the round-trip probes', async () => {
+    const { createProbe } = await import('./collectors/probe.js');
+    const probe = createProbe();
+    const records: Emitted[] = [];
+    const sink = {
+      emit: (name: string, value: number, labels?: Record<string, string>) =>
+        void records.push({ name, value, labels: labels ?? {} }),
+    };
+    const throws = () => {
+      throw new Error('boom');
+    };
+    await probe(sink, 'db_stats', 1000, throws);
+    await probe(sink, 'db_stats', 1000, throws);
+    expect(records.map(r => r.labels.reason)).toEqual(['error', 'error']);
+
+    records.length = 0;
+    await probe(sink, 'db_stats', 1000, async () => {});
+    await probe(sink, 'db_store', 1000, async () => {});
+    expect(records.map(r => `${r.name}:${r.labels.component}`)).toEqual(['mastra_factory_probe_duration_ms:db_store']);
+  });
+
+  it('reads the pool gauges after the probe', async () => {
+    const { postgresPoolCollector } = await import('./collectors/postgres.js');
+    const pool = { ...fakePool(), totalCount: 0, idleCount: 0 };
+    pool.query = vi.fn(async () => {
+      pool.totalCount = 1;
+      pool.idleCount = 1;
+      return { rows: [] };
+    });
+    const records: Emitted[] = [];
+    await postgresPoolCollector({ vector: pool }, 1000).collect({
+      emit: (name, value, labels) => void records.push({ name, value, labels: labels ?? {} }),
+    });
+    expect(records.find(r => r.name === 'mastra_factory_db_pool' && r.labels.state === 'total')?.value).toBe(1);
+  });
+
+  it('sends event counts before gauges, so the cap drops gauges first', async () => {
+    const metrics = new FactoryMetrics(
+      resolveMetricsConfig({ groups: ['intake'], intervalMs: 15_000, maxRecordsPerMinute: 12 }, {}),
+      'all',
+    );
+    const { records, targets } = capture();
+    metrics.start(targets, [{ collect: sink => [1, 2, 3].forEach(i => sink.emit(`gauge_${i}`, i)) }]);
+    metrics.count('intake', 'mastra_factory_intake_sweep_failures_total', { source: 'github', kind: 'open' });
+    await metrics.tick();
+    metrics.stop();
+    expect(records[0]?.name).toBe('mastra_factory_intake_sweep_failures_total');
+    expect(records.some(r => r.name === 'mastra_factory_metrics_dropped_total')).toBe(true);
+  });
+
+  it('reports sweep age from when the sweep worker started, before any sweep succeeds', async () => {
+    const { recordSweepWorkerStarted } = await import('./intake.js');
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['intake'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    const stop = startFactoryMetrics(metrics, targets, { storage: undefined, vector: undefined, pubsub: undefined });
+    recordSweepWorkerStarted('gitlab', 'merge_close');
+    recordReconcileSweep('gitlab', 'merge_close', { replayed: 0, ok: false });
+    await metrics.tick();
+    await stop();
+    expect(
+      records.some(
+        r =>
+          r.name === 'mastra_factory_intake_last_sweep_age_s' &&
+          r.labels.source === 'gitlab' &&
+          r.labels.kind === 'merge_close',
+      ),
+    ).toBe(true);
   });
 });

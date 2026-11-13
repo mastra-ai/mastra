@@ -3,7 +3,7 @@ import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
-import { recordReconcileSweep } from '../../metrics/intake.js';
+import { recordReconcileSweep, recordSweepWorkerStarted } from '../../metrics/intake.js';
 import type {
   ConfiguredExternalRepositoryKey,
   ExternalRepositoryProjectTarget,
@@ -117,6 +117,8 @@ export class GithubReconcileWorker extends MastraWorker {
       pullRequestDiscoveryIntervalMs: this.#discover ? this.#discoveryIntervalMs : undefined,
     });
     // Sweep on boot: a restart is exactly when webhooks were most likely missed.
+    if (this.#reconcile) recordSweepWorkerStarted('github', 'merge_close');
+    if (this.#discover) recordSweepWorkerStarted('github', 'open');
     this.#schedule(0);
   }
 
@@ -231,7 +233,10 @@ export class GithubReconcileWorker extends MastraWorker {
         const startedAt = Date.now();
         try {
           const { errors, ...counts } = await this.#discover(targets);
-          recordReconcileSweep('github', 'open', { replayed: counts.created + counts.repaired, ok: counts.failed === 0 });
+          recordReconcileSweep('github', 'open', {
+            replayed: counts.created + counts.repaired,
+            ok: counts.failed === 0,
+          });
           const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
           if (counts.failed > 0) {
             this.deps?.logger.warn('GitHub pull request discovery completed with failures', { ...context, errors });

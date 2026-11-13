@@ -29,16 +29,17 @@ export function cpuLimitCores(): number {
   return Math.min(quota / period, parallelism);
 }
 
+// Only the pauses worth a series: minor pauses already show in event-loop delay, and weak-callback
+// passes are noise.
 const GC_KINDS: Record<number, string> = {
-  [constants.NODE_PERFORMANCE_GC_MINOR]: 'minor',
   [constants.NODE_PERFORMANCE_GC_MAJOR]: 'major',
   [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: 'incremental',
-  [constants.NODE_PERFORMANCE_GC_WEAKCB]: 'weakcb',
 };
 
 /**
  * Event-loop delay and utilization, memory against the heap limit, CPU against the CPU limit, and
- * uptime of this Node process. Each GC pause is passed to `onGcPause` as it happens, to be aggregated per interval.
+ * uptime of this Node process. Each major or incremental GC pause is passed to `onGcPause` as it
+ * happens, to be aggregated per interval.
  */
 export function processCollector(onGcPause?: (kind: string, ms: number) => void): MetricsCollector {
   const cpuLimit = cpuLimitCores();
@@ -50,7 +51,7 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
     gc = new PerformanceObserver(list => {
       for (const entry of list.getEntries()) {
         const kind = GC_KINDS[(entry as PerformanceEntry & { detail?: { kind?: number } }).detail?.kind ?? -1];
-        onGcPause(kind ?? 'other', entry.duration);
+        if (kind) onGcPause(kind, entry.duration);
       }
     });
     gc.observe({ entryTypes: ['gc'] });

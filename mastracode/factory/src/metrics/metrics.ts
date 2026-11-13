@@ -150,7 +150,7 @@ export class FactoryMetrics {
   }
 
   /**
-   * Samples the collectors, then sends aggregated counters and timings. Skipped while the previous
+   * Sends aggregated counters and timings, then samples the collectors. Skipped while the previous
    * tick is still running, so a hung dependency never piles up probes. Exposed for tests.
    */
   async tick(): Promise<void> {
@@ -177,13 +177,7 @@ export class FactoryMetrics {
         },
       };
 
-      const results = await Promise.allSettled(this.#collectors.map(collector => collector.collect(sink)));
-      for (const result of results) {
-        if (result.status === 'rejected') {
-          this.#targets?.getLogger()?.warn('[factory:metrics] Collector failed.', { error: String(result.reason) });
-        }
-      }
-
+      // Event counts and timings go first: they are lost if dropped, while gauges are sampled again next tick.
       for (const counter of this.#counters.values()) sink.emit(counter.name, counter.value, counter.labels);
       this.#counters.clear();
       for (const observation of this.#observations.values()) {
@@ -195,6 +189,13 @@ export class FactoryMetrics {
         sink.emit(name, max, { ...labels, stat: 'max' });
       }
       this.#observations.clear();
+
+      const results = await Promise.allSettled(this.#collectors.map(collector => collector.collect(sink)));
+      for (const result of results) {
+        if (result.status === 'rejected') {
+          this.#targets?.getLogger()?.warn('[factory:metrics] Collector failed.', { error: String(result.reason) });
+        }
+      }
 
       // Sent from the held-back record, so a capped deployment can see it is capped.
       if (dropped > 0 && used < available) {
