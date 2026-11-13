@@ -15,7 +15,10 @@ import {
 } from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
-import { computeModelOutputProviderMetadata } from '../../../../loop/shared/steps/tool-result-commit-core';
+import {
+  computeModelOutputProviderMetadata,
+  withAgentWorkflowToolMarker,
+} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -1761,13 +1764,18 @@ export function createDurableToolCallStep() {
       const reconciliationComplete = new Promise<{ error?: unknown }>(resolve => {
         resolveReconciliation = resolve;
       });
-      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') => ({
-        ...typedInput.providerMetadata,
-        mastra: {
-          ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
-          backgroundTask: { taskId, status },
-        },
-      });
+      // Marked here so a later step needn't resolve the tool to know it ran a workflow (#30219).
+      const backgroundResultMetadata = (taskId: string, status: 'running' | 'completed' | 'failed') =>
+        withAgentWorkflowToolMarker(
+          {
+            ...typedInput.providerMetadata,
+            mastra: {
+              ...(typeof typedInput.providerMetadata?.mastra === 'object' ? typedInput.providerMetadata.mastra : {}),
+              backgroundTask: { taskId, status },
+            },
+          },
+          tool,
+        );
       // Background task dispatch via the shared dispatch ladder with the
       // durable policy: steps replay under at-least-once redelivery, so an
       // already-running task is restarted to reattach hooks and
@@ -1932,6 +1940,7 @@ export function createDurableToolCallStep() {
               // process restart.
               const liveEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
               const mappingTool = liveEntry?.tools?.[toolName] ?? tool;
+              const baseProviderMetadata = withAgentWorkflowToolMarker(typedInput.providerMetadata, mappingTool);
               await applyBackgroundToolResult({
                 params,
                 currentRunId: runId,
@@ -1939,7 +1948,7 @@ export function createDurableToolCallStep() {
                 args: cleanedArgs,
                 messageList,
                 approvalGrant: approvalGrant as Record<string, unknown> | undefined,
-                baseProviderMetadata: typedInput.providerMetadata as any,
+                baseProviderMetadata: baseProviderMetadata as any,
                 // Resolve the tool-level transform from the live registry at
                 // completion, since the entry may have been rebuilt after dispatch.
                 // Use the same resolved run/agent/Mastra policy as the other chunks.
@@ -1984,7 +1993,7 @@ export function createDurableToolCallStep() {
                       ? transcriptResultTransform.transformed
                       : result,
                     providerMetadata: withToolPayloadTransformProviderMetadata(
-                      typedInput.providerMetadata as any,
+                      baseProviderMetadata as any,
                       transformCarrier.metadata,
                     ) as any,
                   };
@@ -2341,6 +2350,11 @@ export function createDurableToolCallStep() {
             mappingFailure = { error: mappingError };
             throw mappingError;
           }
+        }
+        // Mark results of an agent's workflow tools here, like the mapping above:
+        // llm-mapping may run where the run registry, and so the tool, is gone (#30219).
+        if (outcome.status === 'success') {
+          providerMetadata = withAgentWorkflowToolMarker(providerMetadata, mappingTool);
         }
 
         // Run processToolResult hooks before the tool-result chunk is emitted.

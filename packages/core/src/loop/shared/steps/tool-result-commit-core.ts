@@ -2,6 +2,7 @@ import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
 import type { ProviderMetadata } from '../../../stream/types';
+import { isAgentWorkflowTool } from '../../../tools/toolchecks';
 import { normalizeModelOutput } from '../normalize-model-output';
 
 /** Minimal span surface for the MAPPING child span; both engines' spans satisfy it. */
@@ -27,6 +28,11 @@ export interface ToolMappingParentSpan {
  * real result with `undefined`, producing a tool message with no output.
  *
  * Mapping failures propagate so a broken `toModelOutput` fails the run.
+ *
+ * A result from a tool an agent built from its `workflows` also gets
+ * `mastra.workflowTool: true`. Workflow tools can't define `toModelOutput`, so
+ * this per-call marker is how tracing knows it may show their result in the
+ * next MODEL_STEP input (#30219). The tool output the model receives is unchanged.
  *
  * Deliberately NOT consolidated with the background-task path
  * (`background-task-result-core.ts`), which always overwrites
@@ -72,11 +78,30 @@ export async function computeModelOutputProviderMetadata(deps: {
   }
 
   const existingMastra = (deps.existingProviderMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
-  const providerMetadata = {
-    ...deps.existingProviderMetadata,
-    ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
-  };
-  return Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+  const providerMetadata = withAgentWorkflowToolMarker(
+    {
+      ...deps.existingProviderMetadata,
+      ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
+    },
+    tool,
+  );
+  return providerMetadata && Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
+}
+
+/**
+ * Adds `mastra.workflowTool: true` to a result's provider metadata when `tool`
+ * is one an agent built from its `workflows`; otherwise returns it unchanged.
+ * Shared by every engine path that records a tool result (#30219). The stored
+ * tool-invocation part holds call and result together, so prompts carry the
+ * marker on both the tool-call and tool-result parts, under `providerOptions.mastra`,
+ * which provider adapters don't read.
+ */
+export function withAgentWorkflowToolMarker<T extends Record<string, any> | undefined>(
+  providerMetadata: T,
+  tool: unknown,
+): T | Record<string, any> {
+  if (!isAgentWorkflowTool(tool)) return providerMetadata;
+  return { ...providerMetadata, mastra: { ...providerMetadata?.mastra, workflowTool: true } };
 }
 
 /** Resolved terminal state for one tool call, as recorded to the transcript. */

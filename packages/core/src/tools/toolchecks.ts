@@ -81,6 +81,20 @@ export function isApprovalExempt(tool: unknown): boolean {
   return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[APPROVAL_EXEMPT] === true;
 }
 
+const AGENT_WORKFLOW_TOOL = Symbol.for('mastra.tool.agentWorkflow');
+
+/**
+ * Marks a tool an agent built from one of its `workflows`. Enumerable so that
+ * wrappers which spread the tool (e.g. tool hooks) keep the marker.
+ */
+export function markAgentWorkflowTool(tool: object): void {
+  Object.defineProperty(tool, AGENT_WORKFLOW_TOOL, { value: true, enumerable: true, configurable: true });
+}
+
+export function isAgentWorkflowTool(tool: unknown): boolean {
+  return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[AGENT_WORKFLOW_TOOL] === true;
+}
+
 /**
  * Reads a per-tool {@link NeedsApprovalFn} attached to a tool instance, if present.
  *

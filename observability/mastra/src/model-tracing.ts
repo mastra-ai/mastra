@@ -218,8 +218,15 @@ function summarizePart(part: unknown): string {
           | Record<string, unknown>
           | undefined;
         const toolName = formatPreviewLabel((part as { toolName?: unknown }).toolName, 'unknown');
-        if (mastraMeta?.modelOutput !== undefined) {
+        // A nullish `modelOutput` means no mapping (the background-task path writes null).
+        if (mastraMeta?.modelOutput != null) {
           return formatToolResultPreviewValue(mastraMeta.modelOutput);
+        }
+        // Workflow tools can't define `toModelOutput`; core marks their results
+        // instead. Show the prompt `output` the model received (#30219).
+        const output = (part as { output?: unknown }).output;
+        if (mastraMeta?.workflowTool === true && output !== undefined) {
+          return formatToolResultPreviewValue(output);
         }
         return `[tool-result: ${toolName}]`;
       }
