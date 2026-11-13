@@ -314,6 +314,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/intake-routes/reroute": {
+    "contractKey": "intakeRouteReroutePreview",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake-routes/reroute",
+    "description": "Untouched cards the project's intake routes would now file on a different board",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "moves"
+    }
+  },
   "GET /web/factory/projects/:id/metrics": {
     "contractKey": "metricsGet",
     "method": "GET",
@@ -818,6 +835,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "intakeRoutes"
+    }
+  },
+  "POST /web/factory/projects/:id/intake-routes/reroute": {
+    "contractKey": "intakeRouteRerouteApply",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/intake-routes/reroute",
+    "description": "Move untouched cards to the start of the board the project's intake routes now file them on",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "POST /web/factory/projects/:id/runs/start": {
@@ -3341,6 +3374,60 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         }
       }
+    }
+  },
+  "GET /web/factory/projects/:id/intake-routes/reroute": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "moves": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "fromBoard": {
+                "type": "string"
+              },
+              "toBoard": {
+                "type": "string"
+              },
+              "count": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "fromBoard",
+              "toBoard",
+              "count"
+            ]
+          }
+        }
+      },
+      "required": [
+        "total",
+        "moves"
+      ]
     }
   },
   "GET /web/factory/projects/:id/metrics": {
@@ -8613,6 +8700,41 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       }
     }
   },
+  "POST /web/factory/projects/:id/intake-routes/reroute": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "moved": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "skipped": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "moved",
+        "skipped"
+      ]
+    }
+  },
   "POST /web/factory/projects/:id/runs/start": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -9346,6 +9468,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "intakeRouteList": "GET /web/factory/projects/:id/intake-routes",
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
+  "intakeRouteReroutePreview": "GET /web/factory/projects/:id/intake-routes/reroute",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
   "workItemList": "GET /web/factory/projects/:id/work-items",
@@ -9372,6 +9495,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectEnvironmentBuild": "POST /web/factory/projects/:id/environment/build",
   "intakeRouteCreate": "POST /web/factory/projects/:id/intake-routes",
   "intakeRouteReorder": "POST /web/factory/projects/:id/intake-routes/reorder",
+  "intakeRouteRerouteApply": "POST /web/factory/projects/:id/intake-routes/reroute",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",

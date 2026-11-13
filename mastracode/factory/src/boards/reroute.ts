@@ -40,7 +40,9 @@ export function planReroute(
 }
 
 /** How many cards a plan moves from each board to each other board. */
-export function summarizeReroute(moves: readonly RerouteMove[]): { fromBoard: string; toBoard: string; count: number }[] {
+export function summarizeReroute(
+  moves: readonly RerouteMove[],
+): { fromBoard: string; toBoard: string; count: number }[] {
   const counts = new Map<string, { fromBoard: string; toBoard: string; count: number }>();
   for (const { fromBoard, toBoard } of moves) {
     const key = `${fromBoard}\u0000${toBoard}`;
