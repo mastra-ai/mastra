@@ -56,7 +56,25 @@ export function useCanEditBoards(factoryProjectId: string | undefined): boolean 
   return useIntakeRoutesQuery(factoryProjectId).data?.canEdit ?? false;
 }
 
-type RouteWrite =
+export interface RerouteMove {
+  fromBoard: string;
+  toBoard: string;
+  count: number;
+}
+
+/** Untouched cards the current routes would now file on another board. */
+export function previewReroute(baseUrl: string, factoryProjectId: string) {
+  return sendRouteRequest<{ total: number; moves: RerouteMove[] }>(baseUrl, routesPath(factoryProjectId, '/reroute'));
+}
+
+/** Moves those cards to the start of the board their route now names. */
+export function applyReroute(baseUrl: string, factoryProjectId: string) {
+  return sendRouteRequest<{ moved: number; skipped: number }>(baseUrl, routesPath(factoryProjectId, '/reroute'), {
+    method: 'POST',
+  });
+}
+
+export type RouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
   | { kind: 'update'; id: string; patch: IntakeRoutePatch }
   | { kind: 'delete'; id: string; expectedRevision: number }
@@ -69,12 +87,17 @@ type RouteWrite =
 export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  return useMutation<void, BoardRequestError, RouteWrite[]>({
+  return useMutation<IntakeRouteInfo[], BoardRequestError, RouteWrite[]>({
     mutationFn: async writes => {
       const project = factoryProjectId!;
+      const created: IntakeRouteInfo[] = [];
       for (const write of writes) {
         if (write.kind === 'create') {
-          await sendRouteRequest(baseUrl, routesPath(project), { method: 'POST', body: write.route });
+          const response = await sendRouteRequest<{ intakeRoute: IntakeRouteInfo }>(baseUrl, routesPath(project), {
+            method: 'POST',
+            body: write.route,
+          });
+          created.push(response.intakeRoute);
         } else if (write.kind === 'update') {
           await sendRouteRequest(baseUrl, routesPath(project, `/${encodeURIComponent(write.id)}`), {
             method: 'PATCH',
@@ -92,6 +115,7 @@ export function useIntakeRouteWrites(factoryProjectId: string | undefined) {
           });
         }
       }
+      return created;
     },
     onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.intakeRoutes(factoryProjectId) }),
   });

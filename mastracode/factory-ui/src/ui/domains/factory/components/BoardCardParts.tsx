@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { Button, buttonVariants } from '@mastra/playground-ui/components/Button';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -6,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
+import { Hand, Maximize2, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -15,7 +16,6 @@ import {
   HIDDEN_CARD_LABELS,
   SOURCE_LABELS,
   metadataLabelColors,
-  metadataLabels,
   pullRequestStatusForItem,
   pullRequestStatusForSource,
   workItemKey,
@@ -78,22 +78,6 @@ export function CardDetailsHint({ onOpen }: { onOpen: () => void }) {
     >
       <Maximize2 size={13} aria-hidden />
     </button>
-  );
-}
-
-export function CommentCount({ count }: { count: number }) {
-  if (count === 0) return null;
-  return (
-    <Txt
-      as="span"
-      variant="meta"
-      tone="faint"
-      className="flex shrink-0 items-center gap-1"
-      aria-label={`${count} ${count === 1 ? 'comment' : 'comments'}`}
-    >
-      <MessageSquare size={11} aria-hidden />
-      {count}
-    </Txt>
   );
 }
 

@@ -1,4 +1,4 @@
-import { getRunAgentScopes } from '../agent/scopes';
+import { getRunAgentScopes, withoutIdentityAgentScopes } from '../agent/scopes';
 import type {
   KnowledgePage,
   KnowledgeProvenance,
@@ -7,7 +7,12 @@ import type {
 } from '../storage/domains/knowledge';
 import { knowledgeScopeReadable, parseKnowledgePageRef } from '../storage/domains/knowledge';
 import { knowledgeRoleOn } from './access';
-import { knowledgeRoleAtLeast, knowledgeRunScopes } from './declarations';
+import {
+  KnowledgeDeclarationError,
+  knowledgeRoleAtLeast,
+  knowledgeRunScopes,
+  knowledgeScopeAddress,
+} from './declarations';
 import type { KnowledgeRole } from './declarations';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
@@ -60,7 +65,7 @@ export class KnowledgeRun {
     // Held scopes are host-vouched, so a writing run materializes (and late-links) them. Reads create
     // nothing: a scope with no pages yet reads the same as one that doesn't exist.
     if (options.write) {
-      for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+      await runtime.materializeScopes(principals, principals, provenance);
     }
     const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
     return new KnowledgeRun(runtime, storage, principals, read, provenance);
@@ -204,11 +209,25 @@ export function knowledgeRunPrincipals(
   runtime: KnowledgeScopeRuntime,
   context: KnowledgeRunContext | undefined,
 ): string[] {
-  const raw = getRunAgentScopes(context?.requestContext);
-  if (context?.agent?.resourceId) raw.push(`resource:${context.agent.resourceId}`);
-  if (context?.agent?.threadId) raw.push(`thread:${context.agent.threadId}`);
-  if (raw.length === 0) {
+  // Identity comes only from the resolved Memory ids below. Core already strips resource:/thread: from
+  // the run's scopes; one written there anyway is raw Memory syntax, not a canonical address.
+  const raw = withoutIdentityAgentScopes(getRunAgentScopes(context?.requestContext));
+  // Memory ids are app-chosen and may contain colons (`slack:U123`), so they're bound encoded rather
+  // than parsed back out of a raw `resource:<id>` string.
+  const memory: string[] = [];
+  if (context?.agent?.resourceId)
+    memory.push(knowledgeScopeAddress('resource:$resourceId', { resourceId: context.agent.resourceId }));
+  if (context?.agent?.threadId)
+    memory.push(knowledgeScopeAddress('thread:$threadId', { threadId: context.agent.threadId }));
+  if (raw.length === 0 && memory.length === 0) {
     throw new Error('Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.');
   }
-  return knowledgeRunScopes(runtime.compiled, raw);
+  for (const address of memory) {
+    if (!runtime.compiled.match(address)) {
+      throw new KnowledgeDeclarationError(
+        `Knowledge run scope "${address}" does not match a declared scope type. Declare it in Knowledge \`scopes\` (for Memory's resource:/thread: scopes, spread \`...knowledgeMemoryScopes()\`).`,
+      );
+    }
+  }
+  return [...new Set([...knowledgeRunScopes(runtime.compiled, raw), ...memory])];
 }

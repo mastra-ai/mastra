@@ -2,7 +2,7 @@ import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
 import { isLeaseProvider, PubSub } from './pubsub';
 import type { LeaseProvider } from './pubsub';
-import { cachedLogTtlMs } from './topics';
+import { cachedLogTtlMs, toCachedLogFrame } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -19,6 +19,11 @@ export interface CachingPubSubOptions {
    * Falls back to console.error if not provided.
    */
   logger?: IMastraLogger;
+  /**
+   * Use Redis Cluster hash tags for replay keys. Opt in only for new logs or
+   * after existing logs have expired; the default preserves legacy keys.
+   */
+  keyFormat?: 'redis-cluster';
   /**
    * Optional per-topic caching policy. Defaults to caching every topic.
    *
@@ -121,6 +126,7 @@ const EMPTY_INDICES: ReadonlySet<number> = new Set();
  */
 export class CachingPubSub extends PubSub {
   private readonly keyPrefix: string;
+  private readonly keyFormat: 'legacy' | 'redis-cluster';
   private readonly logger?: IMastraLogger;
   private readonly shouldCache?: (topic: string) => boolean;
   private readonly extendExistingLogsOnly: boolean;
@@ -143,6 +149,7 @@ export class CachingPubSub extends PubSub {
   ) {
     super();
     this.keyPrefix = options.keyPrefix ?? 'pubsub:';
+    this.keyFormat = options.keyFormat ?? 'legacy';
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
     this.extendExistingLogsOnly = options.extendExistingLogsOnly ?? false;
@@ -169,6 +176,17 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Topics `shouldCache` leaves out only reach the inner transport. With
+   * `extendExistingLogsOnly`, a process that doesn't hold a run's log
+   * publishes it live only; that setup is already warned about (`onUnlogged`)
+   * and its replays miss those frames whatever they carry, so it still counts
+   * as kept.
+   */
+  override __replaysTopic(topic: string): boolean {
+    return this.shouldCache?.(topic) !== false || this.inner.__replaysTopic(topic);
+  }
+
+  /**
    * Log an error message using the configured logger or console.error.
    */
   private logError(message: string, error: unknown): void {
@@ -190,18 +208,17 @@ export class CachingPubSub extends PubSub {
     }
   }
 
-  /**
-   * Get the cache key for a topic's event list
-   */
+  /** Get the cache key for a topic's event list. */
   private getCacheKey(topic: string): string {
-    return `${this.keyPrefix}${topic}`;
+    if (this.keyFormat === 'legacy') return `${this.keyPrefix}${topic}`;
+    // Encode braces and percent signs so topics cannot create nested tags or collide with one another.
+    const tag = encodeURIComponent(topic) || '%EMPTY';
+    return `${this.keyPrefix}{${tag}}`;
   }
 
-  /**
-   * Get the cache key for a topic's index counter
-   */
+  /** Get the cache key for a topic's index counter in the same Redis slot. */
   private getCounterKey(topic: string): string {
-    return `${this.keyPrefix}${topic}:counter`;
+    return `${this.getCacheKey(topic)}:counter`;
   }
 
   /**
@@ -271,7 +288,7 @@ export class CachingPubSub extends PubSub {
       index = await this.cache.listPushIndexed(
         this.getCacheKey(topic),
         this.getCounterKey(topic),
-        fullEvent,
+        toCachedLogFrame(topic, fullEvent),
         cachedLogTtlMs(topic),
       );
     } catch (error) {

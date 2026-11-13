@@ -37,6 +37,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  /** Platform withholds a personal-account install while the Mastra organization has more than one member. */
+  | 'personal_install_hidden'
   | 'ready'
   | 'unavailable';
 
@@ -442,14 +444,10 @@ export async function updateFactoryThinkingDefault(
 
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
-  applied: string[];
-  skipped: Array<{
-    threadId: string;
-    reason: 'not-running' | 'work-item-missing' | 'stage-inactive' | 'thread-missing' | 'mode-unknown' | 'apply-failed';
-  }>;
+  status: 'started';
 }
 
-/** Apply the Factory default model to currently running work and review sessions. */
+/** Start applying the Factory default model to currently running work and review sessions. */
 export async function applyFactoryDefaultModelToSessions(
   baseUrl: string,
   factoryProjectId: string,

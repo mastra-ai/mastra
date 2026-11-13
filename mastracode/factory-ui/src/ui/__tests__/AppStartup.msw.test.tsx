@@ -10,6 +10,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { builtinBoardCatalog, releaseBoard } from '../../../e2e/ui/board-catalog';
+import { answerBoardPhases, answerWorkItemFilterOptions } from '../../../e2e/ui/board-reads';
 import { listedRepository } from '../../../e2e/ui/factory-projects';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_API, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
@@ -21,6 +22,7 @@ const AUTH_ME_URL = `${TEST_BASE_URL}/auth/me`;
 const PROJECTS_URL = `${TEST_BASE_URL}/web/factory/projects`;
 const linkedFactory = { ...factory, repositories: [listedRepository('project-repo-1', 'octo/app')] };
 const emptyFactory = { ...factory, repositories: [] };
+const BOARDS = [...builtinBoardCatalog.boards, releaseBoard];
 
 // Requests keyed by another response or by state a component resolves, so
 // they go out once the page that reads them renders.
@@ -33,23 +35,53 @@ const STARTED_BY_THE_PAGE = [
   /^GET \/web\/config\/models\b/,
   // The board's issue and pull request lists: keyed by its repositories and intake settings.
   /^GET \/web\/github\/projects\/[^/]+\/(issues|prs)\b/,
-  // The board's recent activity: keyed by the people on its cards.
+  // The board's recent activity: keyed by the people the filter options name.
   /^GET \/web\/factory\/projects\/[^/]+\/audit\b/,
 ];
 // Settings sections load their own data once they render; only their code starts early.
 const SETTINGS_SECTION_DATA = [/^GET \/api\/agent-controller\/code\/sessions\/factory-1$/];
+const REREAD_ONCE_THE_FEED_CONNECTS = [
+  /^GET \/web\/factory\/projects\/[^/]+\/work-items\b/,
+  /^GET \/web\/factory\/projects\/[^/]+\/boards\/[^/]+\/phases\b/,
+  /^GET \/web\/factory\/projects\/[^/]+\/decisions\b/,
+  /^GET \/api\/agent-controller\/code\/active-runs$/,
+];
+const CARDS_URL = 'GET /web/factory/projects/factory-1/work-items';
+// Any page asks for the cards holding a session, which its sidebar marks.
+const WITH_SESSIONS = [`${CARDS_URL}?scope=sessions`];
+const PROJECT_URL = 'GET /web/factory/projects/factory-1';
+// A board asks for its own phases, with the cards they list, and for what its filters offer: never for every card.
+const boardOf = (board: string, view: string) => [
+  ...WITH_SESSIONS,
+  `${PROJECT_URL}/boards/${board}/phases?${view}&cards=true`,
+  `${CARDS_URL}/filter-options`,
+];
+// A draft also asks the server for what its starters count and when cards came in and shipped, from a week back.
+const WITH_SESSIONS_AND_COUNTS = [...WITH_SESSIONS, `${CARDS_URL}/starters`, `${CARDS_URL}/activity?since=`];
+
+// A draft offers starters and activity only once it has a model to start a session with.
+const USABLE_MODEL = [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }];
 
 function renderApp(
   path: string,
   {
     listed = linkedFactory,
     projects = () => HttpResponse.json({ projects: [listed] }),
-  }: { listed?: typeof linkedFactory; projects?: Parameters<typeof http.get>[1] } = {},
+    models = [],
+  }: { listed?: typeof linkedFactory; projects?: Parameters<typeof http.get>[1]; models?: typeof USABLE_MODEL } = {},
 ) {
   server.use(
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({ models, fallbackModelId: models[0]?.id ?? null }),
+    ),
     http.get(PROJECTS_URL, projects),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, () =>
-      HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards`, () => HttpResponse.json({ boards: BOARDS })),
+    // Answered here, not by the ambient handlers: those ask who is signed in, which this suite holds back.
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/boards/:boardKey/phases`, ({ request, params }) =>
+      answerBoardPhases(request, { workItems: [], boards: BOARDS, userId: 'user-1' }, String(params.boardKey)),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/work-items/filter-options`, () =>
+      answerWorkItemFilterOptions([]),
     ),
     // No ambient handler: the sidebar's sessions, the chat's permissions, the
     // composer's model defaults and the board's intake.
@@ -82,7 +114,9 @@ function recordRequests() {
   let signInAnswered = false;
   const listener = ({ request }: { request: Request }) => {
     const { pathname, search } = new URL(request.url);
-    requests.push({ url: `${request.method} ${pathname}${search}`, afterSignIn: signInAnswered });
+    // `since` is the moment the read was sent, so a re-read differs only by it: recorded without its value.
+    const query = search.replace(/([?&]since=)[^&]*/, '$1');
+    requests.push({ url: `${request.method} ${pathname}${query}`, afterSignIn: signInAnswered });
   };
   server.events.on('request:start', listener);
   onTestFinished(() => server.events.removeListener('request:start', listener));
@@ -108,16 +142,34 @@ function returnToTab() {
 
 describe('Opening Factory', () => {
   it.each([
-    { page: 'Work', path: '/factories/factory-1/work' },
-    // The retired Review board's links open Work, so they load what Work needs.
-    { page: 'Work from a Review board link', path: '/factories/factory-1/review' },
-    { page: 'a custom board', path: '/factories/factory-1/boards/release' },
-    { page: 'Rules', path: '/factories/factory-1/rules?group=failed' },
-    { page: 'a new session', path: '/factories/factory-1/new' },
-    { page: 'a draft session', path: '/factories/factory-1/user/new/draft-1' },
-    { page: 'Settings', path: '/factories/factory-1/settings/preferences' },
-    { page: 'Work before a repository is linked', path: '/factories/factory-1/work', listed: emptyFactory },
-  ])('loads everything $page needs during the sign-in check, once each', async ({ path, listed }) => {
+    { page: 'Work', path: '/factories/factory-1/work', cards: boardOf('work', 'sort=recent') },
+    // The retired Review board's links open Work on its pull requests, so they load what that view needs.
+    {
+      page: 'Work from a Review board link',
+      path: '/factories/factory-1/review',
+      cards: boardOf('work', 'sort=recent&source=pull-request'),
+    },
+    {
+      page: 'a custom board',
+      path: '/factories/factory-1/boards/release',
+      cards: boardOf('release', 'sort=recent'),
+    },
+    { page: 'Rules', path: '/factories/factory-1/rules?group=failed', cards: WITH_SESSIONS },
+    { page: 'a new session', path: '/factories/factory-1/new', cards: WITH_SESSIONS },
+    {
+      page: 'a draft session',
+      path: '/factories/factory-1/user/new/draft-1',
+      models: USABLE_MODEL,
+      cards: WITH_SESSIONS_AND_COUNTS,
+    },
+    { page: 'Settings', path: '/factories/factory-1/settings/preferences', cards: [] },
+    {
+      page: 'Work before a repository is linked',
+      path: '/factories/factory-1/work',
+      listed: emptyFactory,
+      cards: boardOf('work', 'sort=recent'),
+    },
+  ])('loads everything $page needs during the sign-in check, once each', async ({ path, listed, models, cards }) => {
     const { requests, markSignInAnswered } = recordRequests();
     let finishSignInCheck = () => {};
     const signInCheck = new Promise<void>(resolve => {
@@ -131,7 +183,7 @@ describe('Opening Factory', () => {
         return HttpResponse.json(signedIn);
       }),
     );
-    const { client } = renderApp(path, { listed });
+    const { client } = renderApp(path, { listed, models });
 
     // Everything the loaders started has answered; only the sign-in check is left.
     await waitFor(() => expect(client.isFetching()).toBe(1));
@@ -149,14 +201,23 @@ describe('Opening Factory', () => {
       .filter(url => !STARTED_BY_THE_PAGE.some(pattern => pattern.test(url)))
       .filter(url => !(settings && SETTINGS_SECTION_DATA.some(pattern => pattern.test(url))));
     expect(late, 'requests that waited for the sign-in check').toEqual([]);
-    // The page settles well before the first poll (2 s), so any repeat is a second fetch.
+    // The page settles well before the first poll (5 s), so any other repeat is a second fetch.
     const sent = requests.map(({ url }) => url);
+    const timesNeeded = (url: string) => (REREAD_ONCE_THE_FEED_CONNECTS.some(pattern => pattern.test(url)) ? 2 : 1);
     expect(
-      sent.filter((url, index) => sent.indexOf(url) !== index),
-      'requests sent twice',
+      [...new Set(sent)].filter(url => sent.filter(other => other === url).length > timesNeeded(url)),
+      'requests sent more often than the page needs',
     ).toEqual([]);
+    const aboutCards = (url: string) => url.startsWith(CARDS_URL) || /\/boards\/[^/]+\/phases\b/.test(url);
+    expect([...new Set(sent.filter(aboutCards))], 'what the page asks about the cards').toEqual(cards);
     const unread = prefetched.filter(query => query.getObserversCount() === 0).map(query => query.queryHash);
-    expect(unread, 'queries started for the page but never read by it').toEqual([]);
+    // A board without a repository shows how to link one instead of its phases. Its reads left
+    // with the Factory list, before anything could say so, rather than a round trip later on every board.
+    const boardHidden = listed === emptyFactory;
+    expect(
+      unread.filter(hash => !(boardHidden && /"phases"|"filter-options"/.test(hash))),
+      'queries started for the page but never read by it',
+    ).toEqual([]);
   });
 
   it('loads the Factory list during the sign-in check from a link without a Factory', async () => {

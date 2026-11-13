@@ -14,15 +14,7 @@ import type { AuditActorProfile } from '../services/audit';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
-import {
-  CardActions,
-  CardKey,
-  CardStatus,
-  CommentCount,
-  MetadataLabels,
-  SourceTitle,
-  WorkItemSourceIcon,
-} from './BoardCardParts';
+import { CardActions, CardKey, CardStatus, MetadataLabels, SourceTitle, WorkItemSourceIcon } from './BoardCardParts';
 import { BoardListRow } from './BoardListRow';
 import { WorkItemActivity } from './WorkItemActivity';
 import type { ReworkReason } from '../reworkReason';
@@ -91,7 +83,6 @@ export function WorkItemListRow({
         links: relatedLinks,
         labels: (
           <span className="flex items-center gap-2">
-            <CommentCount count={item.commentCount} />
             {item.workItem?.author && (
               <Txt as="span" variant="meta" tone="faint">
                 {item.workItem.author}

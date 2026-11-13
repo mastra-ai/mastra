@@ -10,9 +10,8 @@ import {
   useRemoveGithubPatMutation,
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
-import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import type { GithubPatKind } from '../../workspaces/services/github';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
@@ -34,7 +33,7 @@ function TokenRows() {
   const statusQuery = useGithubPatStatusQuery();
 
   if (statusQuery.isPending) {
-    return <SettingsRowsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
+    return <SettingsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
   }
   if (statusQuery.error) {
     return (

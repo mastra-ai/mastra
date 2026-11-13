@@ -79,7 +79,7 @@ describe('ChartCard', () => {
         <ChartCard
           title="Spend by model"
           titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
-          persistentActions={
+          actions={
             <button type="button" onClick={onPin}>
               Pin
             </button>

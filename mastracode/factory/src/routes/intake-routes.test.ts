@@ -2,14 +2,14 @@ import { randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
-
 import { ProjectBoardCache } from '../boards/project-boards.js';
-import { createBoardRegistry } from '../boards/registry.js';
+
+import { createTriageWorkRegistry } from '../boards/test-utils.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -82,7 +82,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   /** One replica: the intake route and board routes over HTTP, with its own board cache. */
   function replica(domains: Client, orgId: string, options: { auth?: RouteAuth } = {}) {
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry(),
+      codeRegistry: createTriageWorkRegistry(),
       storage: domains.boards,
       projects: domains.projects,
       recheckMs: 1000,
@@ -102,6 +102,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         auth,
         audit,
         projects: domains.projects,
+        workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
       }).routes(),
@@ -555,6 +556,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
     expect(created.status).toBe(201);
     expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'App and ENG', when })]);
+  });
+
+  it('previews, then moves untouched cards a new route now files elsewhere to the start of that board', async () => {
+    const { a, scope, projectPath, base, replicaA } = await setup();
+    expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+    const card = async (title: string, stage: string, labels: string[]) =>
+      (
+        await a.workItems.upsert({
+          ...scope,
+          userId: ADMIN,
+          input: { title, board: 'work', stages: [stage], metadata: { labels } },
+        })
+      ).item;
+    const waiting = await card('Docs waiting', 'intake', ['docs']);
+    const started = await card('Docs started', 'triage', ['docs']);
+    const other = await card('Not docs', 'intake', []);
+
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
+    expect((await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).status).toBe(
+      201,
+    );
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({
+      total: 1,
+      moves: [{ fromBoard: 'work', toBoard: 'docs', count: 1 }],
+    });
+    // Moving cards is an admin's call, like changing the routes.
+    expect((await replicaA.send('POST', `${base}/reroute`, undefined, MEMBER)).status).toBe(403);
+
+    expect(await replicaA.send('POST', `${base}/reroute`)).toEqual({ status: 200, body: { moved: 1, skipped: 0 } });
+    const after = await a.workItems.listShared(scope);
+    const where = (id: string) => after.find(item => item.id === id)!;
+    expect(where(waiting.id)).toMatchObject({ board: 'docs', stages: ['inbox'] });
+    expect(where(started.id)).toMatchObject({ board: 'work', stages: ['triage'] });
+    expect(where(other.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+    expect((await replicaA.send('GET', `${base}/reroute`)).body).toEqual({ total: 0, moves: [] });
+
+    const trail = await a.audit.list({ orgId: scope.orgId, actions: auditActionsInNamespaces(['intake_route']) });
+    expect(trail.events.filter(event => event.action === 'factory.intake_route.rerouted')).toMatchObject([
+      { metadata: { moved: 1, skipped: 0, moves: [{ fromBoard: 'work', toBoard: 'docs', count: 1 }] } },
+    ]);
   });
 
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {

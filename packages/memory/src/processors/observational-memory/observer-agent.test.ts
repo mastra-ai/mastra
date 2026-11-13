@@ -1,13 +1,73 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildMultiThreadObserverHistoryMessage,
+  buildObserverHistoryMessage,
   buildObserverSystemPrompt,
+  formatMultiThreadMessagesForObserver,
   formatMessagesForObserver,
   optimizeObservationsForContext,
   parseMultiThreadObserverOutput,
   parseObserverOutput,
   sortObservationsByTime,
 } from './observer-agent';
+
+describe('Observer history with incomplete text parts', () => {
+  it.each([undefined, null, 42, { partial: true }])(
+    'ignores non-string text %j without dropping adjacent content',
+    text => {
+      const messages = JSON.parse(
+        JSON.stringify([
+          {
+            id: 'incomplete',
+            role: 'assistant',
+            createdAt: '2026-01-01T12:00:00Z',
+            content: {
+              format: 2,
+              parts: [
+                { type: 'text', text: 'Before' },
+                { type: 'text', text },
+                { type: 'text', text: 'After' },
+              ],
+            },
+          },
+        ]),
+      );
+      const control = structuredClone(messages);
+      control[0].content.parts.splice(1, 1);
+
+      for (const maxPartLength of [500, undefined, 0]) {
+        const options = { maxPartLength, timeZone: 'UTC' };
+        expect(formatMessagesForObserver(messages, options)).toBe(formatMessagesForObserver(control, options));
+        expect(buildObserverHistoryMessage(messages, options)).toEqual(buildObserverHistoryMessage(control, options));
+        const byThread = new Map([['t1', messages]]);
+        const controlByThread = new Map([['t1', control]]);
+        expect(formatMultiThreadMessagesForObserver(byThread, ['t1'], options)).toBe(
+          formatMultiThreadMessagesForObserver(controlByThread, ['t1'], options),
+        );
+        expect(buildMultiThreadObserverHistoryMessage(byThread, ['t1'], options)).toEqual(
+          buildMultiThreadObserverHistoryMessage(controlByThread, ['t1'], options),
+        );
+      }
+      expect(messages[0].content.parts).toHaveLength(3);
+    },
+  );
+
+  it('still truncates valid strings at a surrogate-safe boundary', () => {
+    const messages = JSON.parse(
+      JSON.stringify([
+        {
+          id: 'long-text',
+          role: 'user',
+          content: { format: 2, parts: [{ type: 'text', text: 'Before😀After' }] },
+        },
+      ]),
+    );
+    const formatted = formatMessagesForObserver(messages, { maxPartLength: 7 });
+    expect(formatted).toContain('Before\n... [truncated 7 characters]');
+    expect(formatted).not.toContain('\uFFFD');
+  });
+});
 
 describe('optimizeObservationsForContext', () => {
   it('should strip yellow and green emojis', () => {

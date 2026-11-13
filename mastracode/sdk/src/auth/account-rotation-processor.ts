@@ -132,7 +132,16 @@ export interface PendingModelFallback {
 export type RotationClassification =
   | { kind: 'rotate'; reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed' }
   | { kind: 'hop' }
+  | { kind: 'stream-cut' }
   | { kind: 'never' };
+
+/**
+ * Same-account retries for a stream the provider cut after accepting the
+ * request. Each one can cost a full stream (900 s on the ChatGPT Codex route),
+ * so the budget is small. This is the whole budget: Mastra Code's
+ * `StreamErrorRetryProcessor` leaves these errors to this processor.
+ */
+export const MAX_STREAM_CUT_RETRIES = 2;
 
 const ROTATION_BY_PROVIDER_KIND: Partial<Record<ProviderFailureKind, RotationClassification>> = {
   auth: { kind: 'rotate', reason: 'auth-failed' },
@@ -202,6 +211,47 @@ function isNetworkErrorLike(error: unknown): boolean {
   return false;
 }
 
+/** The code the ChatGPT Codex backend puts on the error frame it sends when it ends a stream at 900 s. */
+const STREAM_DURATION_LIMIT_CODE = 'request_timeout';
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : undefined;
+}
+
+/** The `error.code` of a stream error frame: the raw frame, or the frame `@ai-sdk/openai` keeps as `data`. */
+function streamErrorFrameCode(value: Record<string, unknown>): unknown {
+  const data = asRecord(value.data);
+  const frame = value.type === 'error' ? value : data?.type === 'error' ? data : undefined;
+  return asRecord(frame?.error)?.code;
+}
+
+/**
+ * Whether the provider accepted the request and then the response stream died:
+ * the AI SDK reports a body that fails after a 2xx response as
+ * "Failed to process successful response" with the 2xx status, and the ChatGPT
+ * Codex backend ends streams at 900 s, sometimes with a `request_timeout` error
+ * frame first. Either way the account and the provider answered, so this is
+ * not an outage, and another account would be cut the same way.
+ *
+ * `@ai-sdk/openai` raises that frame with `code: 'request_timeout'` and a
+ * derived `statusCode: 504`, so callers must check this before any 5xx rule.
+ * Mastra Code's transient retry matchers call it first so that account
+ * rotation is the only processor that retries these errors.
+ */
+export function isStreamCutAfterResponse(error: unknown): boolean {
+  let current: unknown = error;
+  for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
+    const record = asRecord(current);
+    if (!record) break;
+    const { statusCode, status, code } = record;
+    const httpStatus = typeof statusCode === 'number' ? statusCode : status;
+    if (typeof httpStatus === 'number' && httpStatus >= 200 && httpStatus < 300) return true;
+    if (code === STREAM_DURATION_LIMIT_CODE || streamErrorFrameCode(record) === STREAM_DURATION_LIMIT_CODE) return true;
+    current = record.cause;
+  }
+  return false;
+}
+
 /**
  * The locked Q7 taxonomy. Rate limits and exhausted quotas rotate immediately
  * (429 is not covered by any transient matcher, so it arrives here on first
@@ -214,6 +264,10 @@ export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
+  // Before the status, wording and network checks: the duration-limit frame
+  // carries a derived 504, and a cut body's socket-error cause reads as
+  // network-like. Each of those would hop.
+  if (isStreamCutAfterResponse(error)) return { kind: 'stream-cut' };
   const status = readErrorStatus(error);
   const byStatus = rotationFromStatus(status);
   if (byStatus) return byStatus;
@@ -600,6 +654,32 @@ export class AccountRotationProcessor implements Processor {
     if (classification.kind === 'never') {
       await this.gateChainHop(args, error);
       return { retry: false };
+    }
+
+    // A stream cut after the provider accepted the request (e.g. the ChatGPT
+    // Codex 900 s limit) says nothing about the account: retry it on the same
+    // account a few times, and when that runs out surface the error itself
+    // rather than marking every account unavailable as a persistent outage.
+    if (classification.kind === 'stream-cut') {
+      // The budget belongs to one model step: `state` lives for the whole request, and a
+      // step's retries keep its step number, while the next step starts with a fresh budget.
+      const budget = state.streamCutRetries as { step: number; count: number } | undefined;
+      const cuts = budget?.step === args.stepNumber ? budget.count : 0;
+      if (cuts >= MAX_STREAM_CUT_RETRIES) {
+        await this.gateChainHop(args, error);
+        return { retry: false };
+      }
+      state.streamCutRetries = { step: args.stepNumber, count: cuts + 1 };
+      // The retry replays the request from scratch (Q10), as a rotation does.
+      args.rotateResponseMessageId?.();
+      const controller = args.requestContext?.get('controller') as
+        | { emitEvent?: (event: { type: 'info'; message: string }) => void }
+        | undefined;
+      controller?.emitEvent?.({
+        type: 'info',
+        message: `The provider ended the response stream early (it may have hit a stream duration limit). Retrying (${cuts + 1}/${MAX_STREAM_CUT_RETRIES}).`,
+      });
+      return { retry: true };
     }
 
     const cascade = await this.getModelRouteCascade(args);

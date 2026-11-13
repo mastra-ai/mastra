@@ -24,7 +24,7 @@ import {
   isToolBackgroundEligible,
 } from '../../background-tasks';
 import { MastraBase } from '../../base';
-import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
+import { ErrorCategory, MastraError, ErrorDomain, getErrorFromUnknown } from '../../error';
 import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import {
   eagerToolCallDidNotExecute,
@@ -1002,11 +1002,13 @@ export class CoreToolBuilder extends MastraBase {
           // Eager suspension deliberately unwinds; other errors must retain their details.
           toolSpan?.end({ outcome: 'suspend', stopReason: null, stopReasonContext: null });
         } else {
+          const failure = getErrorFromUnknown(error, { supportSerialization: false });
           toolSpan?.error({
-            error: error as Error,
+            error: failure,
             ...executionFailureTermination(error),
             attributes: { success: false },
           });
+          throw failure;
         }
         throw error;
       }

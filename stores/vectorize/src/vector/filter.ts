@@ -20,6 +20,18 @@ export type VectorizeVectorFilter = VectorFilter<
   VectorizeBlacklistedRootOperators
 >;
 
+/** Vectorize runs several operators on one field only as a single lower plus upper bound. */
+const isRangePair = (operators: string[]): boolean =>
+  operators.length === 2 &&
+  operators.filter(operator => operator === '$gt' || operator === '$gte').length === 1 &&
+  operators.filter(operator => operator === '$lt' || operator === '$lte').length === 1;
+
+/** Equal primitives, or arrays of equal primitives in the same order. */
+const sameValue = (a: unknown, b: unknown): boolean =>
+  Array.isArray(a) && Array.isArray(b)
+    ? a.length === b.length && a.every((item, index) => Object.is(item, b[index]))
+    : Object.is(a, b);
+
 export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVectorFilter> {
   protected override getSupportedOperators(): OperatorSupport {
     return {
@@ -34,8 +46,69 @@ export class VectorizeFilterTranslator extends BaseFilterTranslator<VectorizeVec
 
   translate(filter?: VectorizeVectorFilter): VectorizeVectorFilter {
     if (this.isEmpty(filter)) return filter;
+    const clauses = this.topLevelAndClauses(filter);
+    if (clauses) return this.mergeClauses(clauses);
     this.validateFilter(filter);
     return this.translateNode(filter);
+  }
+
+  /**
+   * The clauses of a filter that is only `{ $and: [...] }`, as Memory.recall() and SemanticRecall
+   * send to combine the scope with a user filter. Vectorize has no `$and`, but it ANDs top-level
+   * keys, so these clauses can be merged into one filter.
+   */
+  private topLevelAndClauses(filter: unknown): VectorizeVectorFilter[] | undefined {
+    if (typeof filter !== 'object' || filter === null || Array.isArray(filter)) return undefined;
+    const keys = Object.keys(filter);
+    const clauses = (filter as { $and?: unknown }).$and;
+    if (keys.length !== 1 || keys[0] !== '$and' || !Array.isArray(clauses)) return undefined;
+    return clauses as VectorizeVectorFilter[];
+  }
+
+  private mergeClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter {
+    // A Map, so field names like `constructor` are never read from Object.prototype.
+    const merged = new Map<string, Record<string, unknown>>();
+    for (const clause of this.flattenAndClauses(clauses)) {
+      if (clause === null || clause === undefined) continue;
+      if (typeof clause !== 'object' || Array.isArray(clause)) {
+        throw new Error('Vectorize $and clause must be a filter object');
+      }
+      if (this.isEmpty(clause)) continue;
+      this.validateFilter(clause);
+      const translated = this.translateNode(clause) as Record<string, Record<string, unknown>>;
+      for (const [field, condition] of Object.entries(translated)) {
+        const existing = merged.get(field);
+        if (existing) {
+          // A condition repeated with the same value (e.g. a filter that repeats the scope's
+          // resource_id) adds nothing; the same operator with another value can't be combined.
+          for (const [operator, value] of Object.entries(condition)) {
+            if (operator in existing && !sameValue(existing[operator], value)) {
+              throw new Error(`Vectorize $and clauses on ${field} set ${operator} to different values`);
+            }
+          }
+          const operators = Object.keys({ ...existing, ...condition });
+          if (operators.length > 1 && !isRangePair(operators)) {
+            throw new Error(
+              `Vectorize $and clauses on ${field} can only combine one lower and one upper bound; got ${operators.join(', ')}`,
+            );
+          }
+        }
+        merged.set(field, { ...existing, ...condition });
+      }
+    }
+    const result: Record<string, Record<string, unknown>> = {};
+    for (const [field, condition] of merged) {
+      Object.defineProperty(result, field, { value: condition, enumerable: true, writable: true, configurable: true });
+    }
+    return result as VectorizeVectorFilter;
+  }
+
+  /** Expands clauses that are themselves only `{ $and: [...] }`, such as a user filter written as one. */
+  private flattenAndClauses(clauses: VectorizeVectorFilter[]): VectorizeVectorFilter[] {
+    return clauses.flatMap(clause => {
+      const nested = this.topLevelAndClauses(clause);
+      return nested ? this.flattenAndClauses(nested) : [clause];
+    });
   }
 
   private translateNode(node: VectorizeVectorFilter, currentPath: string = ''): any {

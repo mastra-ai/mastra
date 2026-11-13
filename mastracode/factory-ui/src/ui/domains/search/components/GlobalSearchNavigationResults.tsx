@@ -3,7 +3,7 @@ import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
-import { PULL_REQUEST_SOURCE_FILTER } from '../../factory/boardSourceFilters';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
@@ -77,7 +77,7 @@ export function GlobalSearchNavigationResults({
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.intake}
         subtitle="Settings"
-        value={`Work Intake Settings intake ${settingsSectionPath(factoryId, 'intake')}`}
+        value={`Work Intake Settings intake routes new cards ${settingsSectionPath(factoryId, 'intake')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'intake'), true)}
       />
       <CommandPaletteItem

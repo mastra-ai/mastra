@@ -14,7 +14,7 @@ import {
   togglePropertyOption,
 } from '../../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { PULL_REQUEST_SOURCE_FILTER } from '../../domains/factory/boardSourceFilters';
+import { PULL_REQUEST_SOURCE_FILTER } from '@mastra/factory/work-items/card-source-filters';
 import type { WorkItem } from '../../domains/factory/services/workItems';
 import type { GithubIssue, GithubPullRequest } from '../../domains/factory/services/factory';
 import { FactoryLayout } from '../../domains/workspaces/components/FactoryLayout';
@@ -39,7 +39,7 @@ const workItem = (id: string, card: 'issue' | 'pull-request', metadata: Record<s
   metadata,
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
+  description: null,
   revision: 1,
   createdAt: now,
   updatedAt: now,

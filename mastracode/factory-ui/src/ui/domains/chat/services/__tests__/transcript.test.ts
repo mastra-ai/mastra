@@ -1030,6 +1030,51 @@ describe('transcript reducer mergeWindow', () => {
     expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
   });
 
+  it('fills a gap between anchors when an answered suspension prompt disappears', () => {
+    const onScreen = createInitialTranscript({
+      messages: [
+        dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+        dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+      ],
+    });
+    const withPrompt = {
+      ...onScreen,
+      entries: [
+        onScreen.entries[0],
+        {
+          kind: 'suspension' as const,
+          id: 'suspension-ask-1',
+          toolCallId: 'ask-1',
+          toolName: 'ask_user',
+          args: { question: 'Continue?' },
+          suspendPayload: {},
+        },
+        onScreen.entries[1],
+      ],
+    };
+    const refreshed = [
+      dbMessage('msg-1', 'user', [{ type: 'text', text: 'first' }]),
+      dbMessage('msg-2', 'assistant', [
+        {
+          type: 'tool-invocation' as const,
+          toolInvocation: {
+            state: 'result' as const,
+            toolCallId: 'ask-1',
+            toolName: 'ask_user',
+            args: { question: 'Continue?' },
+            result: 'yes',
+          },
+        },
+        { type: 'text' as const, text: 'second' },
+      ]),
+      dbMessage('msg-3', 'assistant', [{ type: 'text', text: 'third' }]),
+    ];
+
+    const next = transcriptReducer(withPrompt, { type: 'mergeWindow', messages: refreshed });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['msg-1', 'msg-2', 'msg-3']);
+  });
+
   it('keeps the streaming entry for a message the window also carries', () => {
     let state = createInitialTranscript({ messages: [] });
     state = transcriptReducer(state, {
@@ -2129,5 +2174,62 @@ describe('transcript reducer shell output', () => {
     const output = entry.runtimeTools?.['shell-1']?.output ?? '';
     expect(output.length).toBe(1024 * 1024);
     expect(output.endsWith('last line\n')).toBe(true);
+  });
+});
+
+describe('transcript reducer prompts answered elsewhere', () => {
+  const callPart = (toolCallId: string, state: 'call' | 'result'): MastraMessagePart => ({
+    type: 'tool-invocation',
+    toolInvocation:
+      state === 'result'
+        ? { state, toolCallId, toolName: 'write_file', args: {}, result: 'ok' }
+        : { state, toolCallId, toolName: 'write_file', args: {} },
+  });
+
+  const parked = (toolCallIds: string[]): MastraDBMessage => ({
+    ...dbMessage(
+      'a1',
+      'assistant',
+      toolCallIds.map(id => callPart(id, 'call')),
+    ),
+    content: {
+      format: 2,
+      parts: toolCallIds.map(id => callPart(id, 'call')),
+      metadata: {
+        pendingToolApprovals: Object.fromEntries(
+          toolCallIds.map(id => [id, { toolCallId: id, toolName: 'write_file', args: {} }]),
+        ),
+      },
+    },
+  });
+
+  const prompts = (state: TranscriptState) =>
+    state.entries.flatMap(e => (e.kind === 'approval' || e.kind === 'suspension' ? [e.toolCallId] : []));
+
+  it('keeps a stored prompt whose call has no result', () => {
+    expect(prompts(createInitialTranscript({ messages: [parked(['c1'])] }))).toEqual(['c1']);
+  });
+
+  it('hides a stored prompt once a later message carries the call result', () => {
+    const answered = dbMessage('a2', 'assistant', [callPart('c1', 'result')]);
+    expect(prompts(createInitialTranscript({ messages: [parked(['c1']), answered] }))).toEqual([]);
+  });
+
+  it('drops the card when a refetched window shows the call settled', () => {
+    const onScreen = createInitialTranscript({ messages: [parked(['c1'])] });
+    const next = transcriptReducer(onScreen, {
+      type: 'mergeWindow',
+      messages: [dbMessage('a1', 'assistant', [callPart('c1', 'result')])],
+    });
+    expect(prompts(next)).toEqual([]);
+  });
+
+  it('clears only the prompt whose call ended', () => {
+    const onScreen = createInitialTranscript({ messages: [parked(['c1', 'c2'])] });
+    const next = transcriptReducer(onScreen, {
+      type: 'event',
+      event: { type: 'tool_end', toolCallId: 'c1', result: 'ok', isError: false },
+    });
+    expect(prompts(next)).toEqual(['c2']);
   });
 });

@@ -11,7 +11,6 @@ import { simulateReadableStream } from '@internal/ai-sdk-v4';
 import type { LanguageModelV1 } from '@internal/ai-sdk-v4';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { Mastra } from '@mastra/core/mastra';
 // @ts-ignore - module resolution for test utilities
 import type { StreamEvent } from '@mastra/core/workflows';
 import { describe, it, expect, onTestFinished, vi } from 'vitest';
@@ -291,9 +290,6 @@ export function createStreamingWorkflows(ctx: WorkflowCreatorContext) {
       resetMocks: () => mockRegistry.reset(),
     };
   }
-
-  // Note: Agent streaming tests remain in engine-specific files because they require
-  // MockLanguageModel which has module resolution issues when imported from shared suite.
 
   // Test: should handle streaming suspend and resume flow
   {
@@ -1105,10 +1101,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingAgentDetailedEventsLegacy)(
         'should be able to use an agent as a step with detailed events (streamLegacy)',
         async ({ skip }) => {
-          const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return skip('engine factory does not provide Agent');
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const workflow = createWorkflow({
@@ -1515,10 +1511,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it('should pass agentOptions with callbacks when wrapping agent with createStep', async ({ skip }) => {
-        const { createWorkflow, createStep, Agent } = ctx;
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return skip('engine factory does not provide Agent');
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const onFinishSpy = vi.fn();
@@ -1598,10 +1594,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it('should be able to use an agent as a step with detailed events (stream vNext)', async ({ skip }) => {
-        const { createWorkflow, createStep, Agent } = ctx;
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return skip('engine factory does not provide Agent');
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const workflow = createWorkflow({
@@ -1735,10 +1731,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it('should be able to use an agent as a step (non-streaming)', async ({ skip }) => {
-        const { createWorkflow, createStep, Agent } = ctx;
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return skip('engine factory does not provide Agent');
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const agent1Prompts: string[] = [];
@@ -1866,10 +1862,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       });
 
       it('should be able to use an agent as a step via mastra instance', async ({ skip }) => {
-        const { createWorkflow, createStep, Agent } = ctx;
+        const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-        if (!Agent) {
-          return skip('engine factory does not provide Agent');
+        if (!Agent || !Mastra) {
+          return skip('engine factory does not provide Agent or Mastra');
         }
 
         const agent1Prompts: string[] = [];
@@ -1995,10 +1991,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingTripwireInput)(
         'should bubble up tripwire from agent input processor to workflow result',
         async ({ skip }) => {
-          const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return skip('engine factory does not provide Agent');
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const tripwireProcessor = {
@@ -2082,10 +2078,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingTripwireStreaming)(
         'should return tripwire status when streaming agent in workflow',
         async ({ skip }) => {
-          const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return skip('engine factory does not provide Agent');
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const tripwireProcessor = {
@@ -2179,10 +2175,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.streamingTripwireOutputStream)(
         'should handle tripwire from output stream processor in agent within workflow',
         async ({ skip }) => {
-          const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return skip('engine factory does not provide Agent');
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const outputStreamTripwireProcessor = {
@@ -2265,10 +2261,10 @@ export function createStreamingTests(ctx: WorkflowTestContext, registry?: Workfl
       it.skipIf(skipTests.schemaStructuredOutput)(
         'should pass structured output from agent step to next step with correct types',
         async ({ skip }) => {
-          const { createWorkflow, createStep, Agent } = ctx;
+          const { createWorkflow, createStep, Agent, Mastra } = ctx;
 
-          if (!Agent) {
-            return skip('engine factory does not provide Agent');
+          if (!Agent || !Mastra) {
+            return skip('engine factory does not provide Agent or Mastra');
           }
 
           const articleSchema = z.object({

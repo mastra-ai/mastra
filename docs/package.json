@@ -1,6 +1,6 @@
 {
   "name": "mastra-docs",
-  "version": "0.0.92",
+  "version": "0.0.93",
   "private": true,
   "repository": "https://github.com/mastra-ai/mastra",
   "homepage": "https://mastra.ai",
@@ -67,6 +67,7 @@
     "@radix-ui/react-slot": "^1.5.0",
     "@tanstack/react-virtual": "^3.14.22",
     "@vercel/analytics": "^2.0.1",
+    "algoliasearch": "^5.53.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dotenv": "^17.4.2",

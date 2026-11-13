@@ -16,6 +16,7 @@ import { createBoardRegistry } from './registry.js';
 import type { BoardRegistry } from './registry.js';
 import { boardDefinitionOf } from './stored-board.js';
 import { BOARD_MIGRATIONS, workSeedWithSelfReview } from './work-migrations.js';
+import { workSeedWithTriage } from './work-seeds.js';
 import { workBoard } from './work.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -23,6 +24,9 @@ const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 /** Work as Factory seeds it today: no phase starts on its own. */
 const WORK = boardDefinitionOf(workBoard);
 const WORKING = WORK.phases.filter(phase => phase.kind === 'working').map(phase => phase.key);
+/** Work as a project's first load stores it (one not created through the create route): with Triage. */
+const FIRST_LOAD_WORK = workSeedWithTriage();
+const FIRST_LOAD_WORKING = FIRST_LOAD_WORK.phases.filter(phase => phase.kind === 'working').map(phase => phase.key);
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
   "the retired project automation switches carried into a project's boards on %s",
@@ -125,8 +129,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
         const boards = await load();
 
-        for (const phase of WORKING) expect(boards.get('work')!.startsAutomatically(phase, {}), phase).toBe(true);
-        expect((await work())!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual(WORKING);
+        for (const phase of FIRST_LOAD_WORKING) {
+          expect(boards.get('work')!.startsAutomatically(phase, {}), phase).toBe(true);
+        }
+        expect((await work())!.phases.filter(phase => phase.autoStart).map(phase => phase.key)).toEqual(
+          FIRST_LOAD_WORKING,
+        );
       });
 
       it('runs once: a phase a person stopped starting on its own afterwards stays stopped', async () => {
@@ -372,12 +380,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         },
       );
 
-      it("seeds a project that stored no boards with today's Work, which has no self-review phase", async () => {
+      it('seeds a project that stored no boards with Work as a first load stores it: Triage, no self-review phase', async () => {
         const { load, work } = await setup({ self_review_enabled: true });
 
         await load();
 
-        expect((await work())!.phases.map(phase => phase.key)).toEqual(WORK.phases.map(phase => phase.key));
+        expect((await work())!.phases.map(phase => phase.key)).toEqual(FIRST_LOAD_WORK.phases.map(phase => phase.key));
       });
     });
   },

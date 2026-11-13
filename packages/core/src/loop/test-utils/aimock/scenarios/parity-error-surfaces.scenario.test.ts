@@ -103,7 +103,6 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   const DEADLINE_MS = engine === 'inngest' ? 2_500 : 500;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 15_000 : 5_000;
   // The default and filesystem loops save the turn when the total deadline fires.
-  const plainLoop = engine === 'normal' || engine === 'fs';
 
   it.each([false, true])(
     'closes a stuck tool run on time even while its memory save is held (save blocked: %s)',
@@ -170,6 +169,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        // Inngest stops the tool on its worker at the deadline, so that worker finishes the turn and
+        // saves it with the abort notice. A held save holds the worker until it is let through.
+        if (engine === 'inngest') {
+          releaseSave();
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
+            expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+          });
+        }
         const workflows = await result.mastra.getStorage()!.getStore('workflows');
         const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
         const prefix = engine === 'inngest' ? 'inngest:' : '';
@@ -190,16 +198,16 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await new Promise<void>(resolve => setImmediate(resolve));
         expect(onOutput).not.toHaveBeenCalled();
         expect(onError).toHaveBeenCalledTimes(1);
-        if (plainLoop) {
-          // The deadline saves the stuck step with the abort notice.
+        if (engine !== 'inngest') {
+          // The deadline saves the stuck step with the abort notice, and a held save does not delay the close.
+          if (blockSave && engine !== 'normal' && engine !== 'fs') {
+            await vi.waitFor(() => expect(saveBlocked).toBe(true));
+          }
           releaseSave();
           await vi.waitFor(async () => {
             const { messages } = await memory.recall({ threadId: THREAD, resourceId: RESOURCE });
             expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
           });
-        } else if (blockSave && (engine === 'durable' || engine === 'evented')) {
-          await new Promise(resolve => setTimeout(resolve, 50));
-          expect(saveBlocked).toBe(false);
         }
       } finally {
         execution.resolve(undefined);
@@ -222,13 +230,17 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     // mid-run. The deadline save must use the processors the run started with.
     { savePerStep: false, readOnly: false, dynamicHistory: true },
     // A custom processor takes the message-history id, so memory adds no MessageHistory and the
-    // finish path would not save to agent memory. The deadline save must not either.
+    // default loop's finish path would not save to agent memory. Its deadline save must not either.
+    // Durable/evented save the whole turn when they finish, so their deadline save does too. Inngest also
+    // saves it: the stopped step ends the turn through its finish path (asserted below) until that
+    // path respects this config.
     { savePerStep: false, readOnly: false, customHistory: true },
-    // History disabled in config and no MessageHistory configured, so the finish path saves nothing.
-    // The deadline save must not either.
+    // History disabled in config and no MessageHistory configured, so the default loop's finish path
+    // saves nothing and its deadline save must not either. Durable/evented match their finish path again,
+    // and Inngest saves it as above.
     { savePerStep: false, readOnly: false, historyOff: true },
   ])(
-    'completed steps, and on the default loop the aborted step, reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
+    'completed steps and the aborted step reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
     async ({ savePerStep, readOnly, explicitHistory, dynamicHistory, historyStore, customHistory, historyOff }) => {
       const memory = new MockMemory();
       const historyMemory = historyStore ? new MockMemory() : memory;
@@ -312,27 +324,51 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      if (engine === 'inngest') {
+        // Inngest stops the courier tool on its worker once the abort grace window passes, so that
+        // worker finishes the turn through its normal finish path, the same path that saves a tool that
+        // returns after the deadline. Both steps are saved, the courier step with the abort notice.
+        if (readOnly) {
+          // Absence can't be polled for; give the worker's finish time to land.
+          await new Promise(resolve => setTimeout(resolve, 2_000));
+          expect(JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages)).not.toContain(
+            'The order lookup is complete.',
+          );
+          return;
+        }
+        await vi.waitFor(
+          async () => {
+            const saved = JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages);
+            expect(saved.includes('Look up the order, then check the courier.')).toBe(true);
+            expect(saved.includes('The order lookup is complete.')).toBe(true);
+            expect(saved.includes('Checking the courier now.')).toBe(true);
+            expect(saved.includes(TOOL_ABORT_NOTICE)).toBe(true);
+          },
+          { timeout: 10_000, interval: 100 },
+        );
+        return;
+      }
+      const inputSaved =
+        engine === 'durable' || engine === 'evented'
+          ? !readOnly
+          : !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
-      // The default loop saves the completed lookup step and the courier step, which ends with the abort
+      // The deadline saves the completed lookup step and the courier step, which ends with the abort
       // notice once its grace window passes, along with the input.
-      const completedStepSaved = plainLoop ? inputSaved : savePerStep && !readOnly;
-      const abortedStepSaved = plainLoop && inputSaved;
-      expect(saved.includes('The order lookup is complete.')).toBe(completedStepSaved);
-      expect(saved.includes('Checking the courier now.')).toBe(abortedStepSaved);
-      expect(saved.includes(TOOL_ABORT_NOTICE)).toBe(abortedStepSaved);
+      expect(saved.includes('The order lookup is complete.')).toBe(inputSaved);
+      expect(saved.includes('Checking the courier now.')).toBe(inputSaved);
+      expect(saved.includes(TOOL_ABORT_NOTICE)).toBe(inputSaved);
       for (const message of messages) assertNoDuplicateParts(message.content.parts);
     },
     TEST_TIMEOUT_MS,
   );
 
   // The tool ignores cancellation and finishes after the deadline. The run already reported the
-  // timeout. Inngest and the default loop still save the step that ran it. Durable/evented release
-  // their claim at the deadline, so storage rejects it.
+  // timeout. Every engine still saves the step that ran it.
   it.each([false, true])(
-    'a tool that finishes after the deadline is saved on Inngest and the default loop (savePerStep: %s)',
+    'a tool that finishes after the deadline is saved (savePerStep: %s)',
     async savePerStep => {
       const memory = new MockMemory();
       const threadId = `late-tool-${engine}-${savePerStep}`;
@@ -373,15 +409,6 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       await toolFinished.promise;
-
-      if (engine === 'durable' || engine === 'evented') {
-        // Absence can't be polled for; give a late write time to land.
-        await new Promise(resolve => setTimeout(resolve, 500));
-        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-        expect(messages.map(message => message.role)).toEqual(['user']);
-        expect(JSON.stringify(messages).includes('call_slow')).toBe(false);
-        return;
-      }
 
       // The step that ran the tool is saved. The tool outlived the abort grace period, so its
       // result is recorded as aborted rather than as its late return value.
@@ -451,10 +478,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         }
         await Promise.all(heldSaves);
         const { messages } = await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE });
-        // Inngest takes no execution claim: the request was accepted before the deadline, so the deadline
-        // alone must not drop it (see #28659). Durable and evented cover memory with their claim, and the
-        // deadline releases it, so storage rejects an input save still in flight.
-        expect(messages.map(message => message.role)).toEqual(engine === 'inngest' ? ['user'] : []);
+        // The request was accepted before the deadline, so the deadline alone must not drop it (see #28659).
+        // Durable and evented keep it through their deadline save.
+        expect(messages.map(message => message.role)).toEqual(['user']);
       } finally {
         saveSpy.mockRestore();
       }

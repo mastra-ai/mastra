@@ -3,9 +3,9 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { reviewBoard } from '../boards/review.js';
-import { createToolRuleTestRegistry, selfReviewWorkBoard } from '../boards/test-utils.js';
+import { createToolRuleTestRegistry, selfReviewWorkBoard, createTriageWorkRegistry } from '../boards/test-utils.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FactoryPhaseStateProcessor } from './processor.js';
@@ -138,7 +138,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -163,7 +163,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -180,7 +180,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -205,7 +205,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -241,7 +241,7 @@ describe('FactoryPhaseStateProcessor', () => {
     });
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -260,7 +260,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -291,7 +291,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings: vi.fn(async () => {
         throw new Error('storage unavailable');
@@ -334,7 +334,7 @@ describe('FactoryPhaseStateProcessor', () => {
       });
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -364,7 +364,7 @@ describe('FactoryPhaseStateProcessor', () => {
       });
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -388,7 +388,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const loadMemorySettings = vi.fn();
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       loadMemorySettings,
     });
@@ -436,7 +436,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const recordPullRequestProvenance = vi.fn(async () => undefined);
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
       recordPullRequestProvenance,
     });
@@ -506,7 +506,7 @@ describe('FactoryPhaseStateProcessor', () => {
       for (const c of cases) {
         const storage = (await createFactoryStorageForTests()).workItems;
         const prepared = await prepare(storage, c.role);
-        const boards = createBoardRegistry();
+        const boards = createTriageWorkRegistry();
         const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
         const processor = new FactoryPhaseStateProcessor({
           configVersion: 'rules-v1',
@@ -542,7 +542,7 @@ describe('FactoryPhaseStateProcessor', () => {
     it('reads an approved plan from the in-run submit_plan result, whose plan fields may be undefined', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'work');
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
       await processor.processInputStep(
         inputArgs(requestContext(), [
@@ -561,7 +561,7 @@ describe('FactoryPhaseStateProcessor', () => {
     it('reads an approved plan from the latest message when a continued run’s steps carry no tool results', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'work');
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
       // A run continued after submit_plan's approval: its steps hold the tool call without its result.
       const signal = { id: 'signal-1', role: 'signal', createdAt: new Date(), content: { format: 2, parts: [] } };
@@ -578,7 +578,7 @@ describe('FactoryPhaseStateProcessor', () => {
     it('does not release a card that came back to Planning on the plan approved in its earlier visit', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'work');
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
       const processor = new FactoryPhaseStateProcessor({
         configVersion: 'rules-v1',
@@ -624,7 +624,7 @@ describe('FactoryPhaseStateProcessor', () => {
     it('records no approved plan for a card that is not in its exit tool’s phase', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'triage' });
-      const boards = createBoardRegistry();
+      const boards = createTriageWorkRegistry();
       const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
       const processor = new FactoryPhaseStateProcessor({
         configVersion: 'rules-v1',
@@ -824,7 +824,7 @@ describe('FactoryPhaseStateProcessor', () => {
     it('fails closed when the item’s board is not installed', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const prepared = await prepare(storage, 'plan');
-      const boards = createBoardRegistry({ boards: [], includeDefaultBoards: false });
+      const boards = boardRegistryOf([]);
       const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
       const processor = new FactoryPhaseStateProcessor({
         configVersion: 'rules-v1',
@@ -841,7 +841,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('records an approved plan on the card and keeps it in Planning for the next phase signal', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage, 'plan');
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
 
@@ -868,7 +868,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('still records an approved plan when an unrelated write to the card lands first', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage, 'plan');
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
     const update = storage.update.bind(storage);
@@ -931,7 +931,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
       storage,
-      boards: createBoardRegistry({ boards: [releaseBoard], includeDefaultBoards: false }),
+      boards: boardRegistryOf([releaseBoard]),
     });
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext()));
@@ -968,7 +968,7 @@ describe('FactoryPhaseStateProcessor', () => {
         },
       },
     });
-    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    const boards = boardRegistryOf([board]);
     const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
     const reader = {
       listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'request_restart' })], hasMore: false })),
@@ -1042,7 +1042,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'release-v1',
       storage,
-      boards: createBoardRegistry({ boards: [release], includeDefaultBoards: false }),
+      boards: boardRegistryOf([release]),
       messageReader: reader as never,
     });
     await processor.reconcileBinding(prepared.binding);
@@ -1281,7 +1281,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('tells a parked card`s agent to transition back before resuming, and only then', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
@@ -1351,7 +1351,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('does nothing for sessions that were never Factory-bound', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
     await expect(processor.processInputStep(inputArgs(requestContext(), [toolMessage()]))).resolves.toBeUndefined();
@@ -1361,7 +1361,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('emits phase state for a server-started bound turn without an authenticated user context', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext({ authenticated: false })));
@@ -1420,7 +1420,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it("gives a pull request card reviewed on the Work board the review runtime, but not an issue card in an older Work's self-review", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'review', 'pull-request', { id: 'work', stage: 'pr-review' });
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
 
     const signal = await processor.computeStateSignal(stateArgs(requestContext({ modelId: 'openai/gpt-5.5' })));
@@ -1455,7 +1455,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('tells the planner Planning holds the card until the plan is approved, and then to move it', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage, 'plan', 'issue', { id: 'work', stage: 'planning' });
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const signal = await new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
       boards,
@@ -1470,7 +1470,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('emits, suppresses, re-emits after compaction, and retracts a revoked phase snapshot', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const context = requestContext();
     const first = await processor.computeStateSignal(stateArgs(context));
@@ -1535,7 +1535,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const prepared = await prepare(storage, 'work');
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
     });
     const context = requestContext();
@@ -1554,7 +1554,7 @@ describe('FactoryPhaseStateProcessor', () => {
     await prepare(storage, 'plan');
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
-      boards: createBoardRegistry(),
+      boards: createTriageWorkRegistry(),
       storage,
     });
     const planning = await processor.computeStateSignal(stateArgs(requestContext()));
@@ -1566,7 +1566,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('preserves the cacheable phase history and appends an empty snapshot on revocation', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const context = requestContext();
     const active = await processor.computeStateSignal(stateArgs(context));
@@ -1645,7 +1645,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('emits a full snapshot when an active binding follows an in-window empty snapshot', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const emptySnapshot = { metadata: { value: { phase: { status: 'none' } } } };
 
@@ -1664,7 +1664,7 @@ describe('FactoryPhaseStateProcessor', () => {
   it('re-emits when the exact bound role changes', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const context = requestContext();
     const first = await processor.computeStateSignal(stateArgs(context));
@@ -1732,7 +1732,7 @@ describe('FactoryPhaseStateProcessor', () => {
         },
       });
     }
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });
     const first = await processor.computeStateSignal(stateArgs(requestContext()));
     expect(String(first?.contents).match(/github-pr Review/g)).toHaveLength(5);
@@ -1744,6 +1744,50 @@ describe('FactoryPhaseStateProcessor', () => {
       }),
     );
     expect(versionChanged?.cacheKey).not.toBe(first?.cacheKey);
+  });
+
+  // Each model step used to read every card on the board to find these, and any card change on a
+  // busy board refetched them all for every bound session.
+  it("names the card's parent and children, newest first, without reading the rest of the board", async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const card = (title: string, externalId: string, parentWorkItemId?: string) =>
+      storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId },
+          ...(parentWorkItemId ? { parentWorkItemId } : {}),
+          title,
+          stages: ['intake'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+    const epic = await card('Settings epic', 'github-issue:10');
+    const prepared = await prepare(storage);
+    await storage.update({
+      orgId: 'org-1',
+      id: prepared.item.id,
+      userId: 'user-1',
+      patch: { parentWorkItemId: epic.item.id },
+    });
+    await card('Unrelated work', 'github-issue:11');
+    await card('Older child', 'github-issue:12', prepared.item.id);
+    await card('Newer child', 'github-issue:13', prepared.item.id);
+    const listShared = vi.spyOn(storage, 'listShared');
+
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createTriageWorkRegistry(),
+      storage,
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+
+    expect(String(signal?.contents)).toContain(
+      'Linked items: github-issue Newer child; github-issue Older child; github-issue Settings epic',
+    );
+    expect(listShared).not.toHaveBeenCalled();
   });
 
   it('revisits the inclusive cursor when a suspended invocation later resumes with a result', async () => {
@@ -1782,6 +1826,65 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(reader.listMessages).toHaveBeenLastCalledWith(
       expect.objectContaining({ filter: { dateRange: { start: createdAt } } }),
     );
+  });
+
+  it('waits for a background pass before reading a binding’s trailing results and cursor', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage);
+    const onResult = vi.fn(() => undefined);
+    const first = toolMessage({ id: 'assistant-first', toolCallId: 'first-call' });
+    const trailing = toolMessage({
+      id: 'assistant-trailing',
+      toolCallId: 'trailing-call',
+      createdAt: new Date('2026-07-18T10:01:00Z'),
+    });
+    let unblockFirst!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      unblockFirst = resolve;
+    });
+    let firstReadStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      firstReadStarted = resolve;
+    });
+    let readsInFlight = 0;
+    let maxReadsInFlight = 0;
+    const reader = {
+      listMessages: vi.fn(async () => {
+        readsInFlight += 1;
+        maxReadsInFlight = Math.max(readsInFlight, maxReadsInFlight);
+        const read = reader.listMessages.mock.calls.length;
+        if (read === 1) {
+          firstReadStarted();
+          await blocked;
+        }
+        readsInFlight -= 1;
+        return { messages: read === 1 ? [first] : [first, trailing], hasMore: false };
+      }),
+    };
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createToolRuleTestRegistry({ submit_plan: { onResult } }),
+      storage,
+      messageReader: reader as never,
+    });
+
+    const background = processor.reconcileAllBoundThreads();
+    await started;
+    const final = processor.reconcileBinding(prepared.binding);
+    await Promise.resolve();
+    expect(reader.listMessages).toHaveBeenCalledTimes(1);
+    unblockFirst();
+    await Promise.all([background, final]);
+
+    expect(maxReadsInFlight).toBe(1);
+    expect(reader.listMessages).toHaveBeenCalledTimes(2);
+    expect(reader.listMessages).toHaveBeenLastCalledWith(
+      expect.objectContaining({ filter: { dateRange: { start: first.createdAt } } }),
+    );
+    expect(onResult).toHaveBeenCalledTimes(2);
+    await expect(storage.getToolResultCursor('org-1', PROJECT_ID, prepared.binding.id)).resolves.toMatchObject({
+      lastMessageId: trailing.id,
+    });
   });
 
   it('reconciles paginated terminal results from a durable cursor across restart retries', async () => {
@@ -1837,7 +1940,7 @@ describe('FactoryPhaseStateProcessor', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const prepared = await prepare(storage);
     const reader = { listMessages: vi.fn(async () => ({ messages: [], hasMore: false })) };
-    const boards = createBoardRegistry();
+    const boards = createTriageWorkRegistry();
     const processor = new FactoryPhaseStateProcessor({
       configVersion: 'rules-v1',
       boards,

@@ -41,7 +41,7 @@ function makeItem(overrides: Partial<Card>): Card {
     acceptedAt: null,
     autonomyArmedAt: null,
     plansPreapprovedAt: null,
-    commentCount: 0,
+    description: null,
     revision: 1,
     workItem: {
       id: 'work-1',

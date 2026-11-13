@@ -16,11 +16,9 @@ import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { ConnectToolsSection } from './ConnectToolsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
-import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeRoutesSection } from './IntakeRoutesSection';
 import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { BoardsSection } from './BoardsSection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
@@ -57,19 +55,18 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+    <>
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'intake' && (
-        <>
+        <div className="flex flex-col gap-8">
           <IntakeSection />
           <IntakeRoutesSection factoryId={factoryId} />
-        </>
+        </div>
       )}
-      {section === 'board' && <BoardsSection factoryId={factoryId} />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && (
         <MemorySettings
@@ -79,7 +76,6 @@ export function SettingsPanel() {
           resourceId={resourceId}
         />
       )}
-      {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'tools' && <ConnectToolsSection />}
       {section === 'debug' && <DebugSection />}
       {section === 'behavior' && (
@@ -90,6 +86,6 @@ export function SettingsPanel() {
           setPermissionForCategory={setPermissionForCategory}
         />
       )}
-    </section>
+    </>
   );
 }

@@ -3,7 +3,7 @@
  * executing (issue #25579). Two Mastra instances share one store, the way two
  * replicas share one database.
  */
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
@@ -56,6 +56,14 @@ async function advanceUntil(condition: () => boolean | Promise<boolean>, maxMs: 
     await vi.advanceTimersByTimeAsync(stepMs);
   }
 }
+
+// Asserts the default shutdown drain budget lets in-flight work finish; keep real waits.
+beforeAll(() => {
+  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('boot-time workflow recovery and run ownership (#25579)', () => {
   it('does not re-execute a run that another live replica is executing', async () => {

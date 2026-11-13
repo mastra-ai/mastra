@@ -49,8 +49,6 @@ import { resolvePromptInvocation, resolveSkillInvocation, resolveSkillResumeInvo
 import type { SkillSession } from '../skills/service.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
-import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
-import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
@@ -67,6 +65,7 @@ import type {
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { withWorkItemDescription } from '../work-items/description-context.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
@@ -189,7 +188,12 @@ function reviewSeatSkill(decision: unknown): { skillName?: unknown } | undefined
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  const failure = factoryDispatchFailureMetadata(failureCode);
+  return (
+    attempts >= (failureCode === 'run_incomplete' ? 2 : MAX_ATTEMPTS) ||
+    !failure.canRetry ||
+    failure.autoRetry === false
+  );
 }
 
 /**
@@ -219,14 +223,18 @@ function watchRun(
   session: Pick<DispatcherSession, 'subscribe' | 'respondToToolSuspension'>,
   {
     timeoutMs,
-    approvePlans,
+    autoApprovedTool,
+    autoApproving,
     requestContext,
     onAgentEnd,
     label,
     runStillActive,
   }: {
     timeoutMs: number;
-    approvePlans: boolean;
+    /** The tool this run answers itself when it pauses on it; any other pause waits for a person. */
+    autoApprovedTool?: string;
+    /** Where the run says which paused calls it is about to answer. */
+    autoApproving?: Set<string>;
     /** The run's own request context; resuming an approved plan resolves the session's workspace with it. */
     requestContext?: RequestContext;
     onAgentEnd?: () => Promise<boolean>;
@@ -240,6 +248,8 @@ function watchRun(
   let endReason: 'complete' | 'aborted' | 'error' | 'suspended' | undefined;
   let supersededAtEnd: Promise<boolean> | undefined;
   let parked: { toolName: string; toolCallId: string } | undefined;
+  let approvals = 0;
+  const announced = new Set<string>();
   // Latest observational-memory failure seen on this run. The stream aborts the
   // run when observation/reflection fails, but the abort itself carries no
   // reason — so without this the true cause (e.g. a provider rejecting the OM
@@ -276,6 +286,11 @@ function watchRun(
     }
     if (event.type === 'tool_suspended') {
       parked = { toolName: event.toolName, toolCallId: event.toolCallId };
+      // Said before the run ends on it, so nobody is asked to answer what this run answers itself.
+      if (event.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        announced.add(event.toolCallId);
+        autoApproving?.add(event.toolCallId);
+      }
       return;
     }
     if (event.type === 'tool_suspension_cancelled' && parked?.toolCallId === event.toolCallId) {
@@ -303,19 +318,27 @@ function watchRun(
     endReason: () => endReason,
     /** The tool the run is parked on, when it ended suspended. */
     parked: () => parked,
-    close: unsubscribe,
+    close: () => {
+      // A watch that gives up answers nothing more, so its pauses wait for a person again.
+      for (const toolCallId of announced) autoApproving?.delete(toolCallId);
+      unsubscribe();
+    },
     /** The run's own verdict, thrown as what the dispatcher should record. */
     async settle(): Promise<void> {
       let observed = await wait();
       // Past the cap the plan stays parked: the person it waits for sees it in the inbox.
-      if (approvePlans) {
-        for (let approvals = 0; parked?.toolName === 'submit_plan' && approvals < MAX_PLAN_APPROVALS; approvals += 1) {
-          const { toolCallId } = parked;
-          parked = undefined;
-          arm();
+      while (autoApprovedTool && parked?.toolName === autoApprovedTool && approvals < MAX_PLAN_APPROVALS) {
+        const { toolCallId } = parked;
+        parked = undefined;
+        // Counted before the resumed run can pause again, so its next pause is judged against the cap.
+        approvals += 1;
+        arm();
+        try {
           await session.respondToToolSuspension({ resumeData: { action: 'approved' }, toolCallId, requestContext });
-          observed = await wait();
+        } finally {
+          autoApproving?.delete(toolCallId);
         }
+        observed = await wait();
       }
       if (!observed) {
         // A completed decision with no observed run end is exactly the
@@ -369,11 +392,9 @@ function waitForAgentEndOrTimeout(agentEnd: Promise<void>, timeoutMs: number): P
   });
 }
 
-interface ThreadSwitchSession {
-  thread: {
-    requireId(): string;
-    switch(input: { threadId: string }): Promise<unknown>;
-  };
+interface SessionOwner {
+  userId: string;
+  orgId: string;
 }
 
 interface FactoryNotificationResult {
@@ -478,6 +499,7 @@ export interface FactoryDecisionDispatcherOptions {
   intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
+  reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   /**
@@ -486,8 +508,6 @@ export interface FactoryDecisionDispatcherOptions {
    * per-session listener (`observeSessionRunReports`). Never throws.
    */
   reportRunEnd?: FactoryRunEndReporter;
-  /** Injects the work item's recent comments into skill-invocation kickoffs. */
-  feedReader?: FactoryFeedReader;
   /**
    * Told each step of a pull request review run: accepted, started, retrying,
    * and how it ended. Driven by the dispatcher rather than the agent, so a run
@@ -692,11 +712,12 @@ export class FactoryDecisionDispatcher {
   readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
+  readonly #autoApproving = new Set<string>();
   readonly #reconcileToolResults?: () => Promise<void>;
+  readonly #reconcileRunBinding?: FactoryDecisionDispatcherOptions['reconcileRunBinding'];
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
   readonly #reportRunEnd?: FactoryRunEndReporter;
-  readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #reportReviewStatus?: FactoryReviewStatusReporter;
   /** Review attempts that already said `queued`, and those that watched their run start. */
@@ -751,10 +772,10 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
+    this.#reconcileRunBinding = options.reconcileRunBinding;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
     this.#reportRunEnd = options.reportRunEnd;
-    this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#reportReviewStatus = options.reportReviewStatus;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
@@ -1119,7 +1140,6 @@ export class FactoryDecisionDispatcher {
     if (runStillActive()) {
       const run = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label: 'Factory skill run',
         runStillActive,
       });
@@ -1419,7 +1439,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,
@@ -1443,7 +1463,7 @@ export class FactoryDecisionDispatcher {
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
-          await this.#switchThread(session, binding);
+          await this.#switchThread(session, binding, { userId: startedBy, orgId: record.orgId });
           const deliveryId =
             record.deliveryGeneration === 0 ? record.id : `${record.id}:retry:${record.deliveryGeneration}`;
           const kickoffLanded = async () =>
@@ -1469,11 +1489,11 @@ export class FactoryDecisionDispatcher {
           }
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
           // Safe under the replay guard above: it matches deliveryId, never prompt content.
-          const kickoffContents = await withWorkItemFeed(
-            this.#feedReader,
-            { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.contents,
-          );
+          // Re-read: the description may have been edited while the open run drained.
+          const current = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const kickoffContents = withWorkItemDescription(resolved.contents, current?.description);
           // A skill kickoff is system-generated, not something the human typed: send it
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
@@ -1485,7 +1505,7 @@ export class FactoryDecisionDispatcher {
                   attributes: { name: resolved.skillName },
                 }
               : { type: 'user' as const, tagName: 'user' };
-          // The feed read is async storage I/O; the card can move while it runs.
+          // The description read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) {
             if (decision.goal) await this.#startPhaseGoal(record, decision.goal, session, binding, requestContext);
             return this.#replayLanded(record, decision, session, runStillActive);
@@ -1522,9 +1542,28 @@ export class FactoryDecisionDispatcher {
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
           const since = new Date();
+          const runItem = record.workItemId
+            ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId })
+            : null;
+          const boards = runItem ? await this.#boards.load(record) : null;
+          const stage = runItem?.stages.length === 1 ? runItem.stages[0] : undefined;
+          const phase = stage && runItem ? boards?.get(boardForWorkItem(runItem))?.phases[stage] : undefined;
+          const workingRevision =
+            phase?.kind === 'working' &&
+            (phase.runner.goal || phase.exitTool) &&
+            phase.runner.context === decision.role &&
+            phase.runner.skill === decision.skillName
+              ? runItem!.revision
+              : null;
+          const existingLinkedReviewIds = new Set(
+            workingRevision === null || !runItem
+              ? []
+              : (await this.#storage.listLinked({ item: runItem, limit: 100 })).map(card => card.id),
+          );
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            autoApprovedTool: await this.#autoApprovedExitTool(record),
+            autoApproving: this.#autoApproving,
             requestContext,
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
@@ -1613,7 +1652,35 @@ export class FactoryDecisionDispatcher {
                   superseded: async () =>
                     (await run.supersededAtEnd()) ?? (await this.#roleSuperseded(record, decision.role)),
                 },
-                () => this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle()),
+                async () => {
+                  await this.#withOpenRunHeartbeat(session, deliveryId, () => run.settle());
+                  if (run.endReason() !== 'complete' || workingRevision === null || (await run.supersededAtEnd()))
+                    return;
+                  // A final tool result can persist after agent_end. Read this binding's trailing
+                  // results before deciding the unchanged card means the run did no work.
+                  await this.#reconcileRunBinding?.(binding);
+                  const after = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
+                  if (after?.revision === workingRevision && !(await kickoffStale())) {
+                    const linked = await this.#storage.listLinked({ item: after, limit: 100 });
+                    const ownCardHandOff = linked.some(card => {
+                      if (
+                        card.parentWorkItemId !== after.id ||
+                        existingLinkedReviewIds.has(card.id) ||
+                        card.externalSource?.integrationId !== 'github' ||
+                        card.externalSource.type !== 'pull-request' ||
+                        card.stages.length !== 1
+                      )
+                        return false;
+                      const review = boards?.get(boardForWorkItem(card))?.phases[card.stages[0]!];
+                      return review?.kind === 'working' && review.runner.context === 'review';
+                    });
+                    if (ownCardHandOff) return;
+                    throw new FactoryDispatchError(
+                      'run_incomplete',
+                      'Factory skill run ended before completing the working phase.',
+                    );
+                  }
+                },
               );
               // Handed on before the turn ended: the run's clean end is the successor's, not
               // a finished review. A move after the turn ended (a merge) keeps the completion.
@@ -1646,7 +1713,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({
           session,
           binding,
@@ -1692,7 +1759,7 @@ export class FactoryDecisionDispatcher {
         const startedBy = item?.sessions[binding.role]?.startedBy;
         if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
         await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-        const session = await this.#requireSession(binding);
+        const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
         const requestContext = factoryRequestContext({ session, binding, userId: startedBy, orgId: record.orgId });
         await awaitNotification(() =>
           session.sendNotificationSignal(
@@ -1722,11 +1789,13 @@ export class FactoryDecisionDispatcher {
   ) {
     const issueId = decision.metadata?.linearIssueId;
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
-    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const items = await this.#storage.listShared({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
       item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
-    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+    const card = cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0];
+    // The shared list is the cache itself: hand on a copy of the card.
+    return card ? structuredClone(card) : null;
   }
 
   async #upsertLinkedItem(
@@ -1842,6 +1911,7 @@ export class FactoryDecisionDispatcher {
             externalSource: externalSourceForDecision(decision),
             parentWorkItemId,
             title: decision.title,
+            ...(decision.description ? { description: decision.description } : {}),
             board: decision.board,
             stages: [entryStage],
             sessions: {},
@@ -2300,7 +2370,11 @@ export class FactoryDecisionDispatcher {
     }
     if (!first.board.isTerminal(first.route.phase)) {
       const binding = await this.#findBinding(record);
-      const session = binding ? await this.#findSession(binding) : undefined;
+      // A binding with no recorded owner never started a run, so it has none in flight.
+      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
+      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+      const session =
+        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
       // Checked again on the next claim: the card may have moved, or the routes changed, by then.
       if (binding && session && (await this.#hasRunInFlight(session, binding))) {
         throw new FactoryDecisionPostponed();
@@ -2404,7 +2478,7 @@ export class FactoryDecisionDispatcher {
     const startedBy = item?.sessions[binding.role]?.startedBy;
     if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
     await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-    const session = await this.#requireSession(binding);
+    const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
     const author = decision.author
       ? `@${decision.author}${decision.authorTrusted ? '' : ' (untrusted author)'}`
       : decision.authorTrusted
@@ -2518,18 +2592,21 @@ export class FactoryDecisionDispatcher {
     return this.#requireBinding(record, role);
   }
 
-  async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
+  async #findSession(
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<BoundDispatcherSession | undefined> {
     const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
-    await this.#switchThread(session, binding);
+    await this.#switchThread(session, binding, owner);
     return session;
   }
 
   /**
-   * Whether the run answers its plan approvals itself: the card's phase ends with an auto-approved
-   * `submit_plan`. Otherwise a plan waits for a person.
+   * The tool whose pauses the run answers itself: the exit tool of the card's phase, where the
+   * board approves it without a person for this card. Any other pause waits for a person.
    */
-  async #plansAreAutoApproved({
+  async #autoApprovedExitTool({
     orgId,
     factoryProjectId,
     workItemId,
@@ -2537,12 +2614,14 @@ export class FactoryDecisionDispatcher {
     orgId: string;
     factoryProjectId: string;
     workItemId: string | null;
-  }): Promise<boolean> {
+  }): Promise<string | undefined> {
     const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
-    return (
-      item !== null &&
-      autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
-    );
+    return item ? autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) : undefined;
+  }
+
+  /** Whether a run this dispatcher watches is about to approve `toolCallId` itself, so no person needs asking. */
+  autoApproves(toolCallId: string): boolean {
+    return this.#autoApproving.has(toolCallId);
   }
 
   /**
@@ -2573,7 +2652,6 @@ export class FactoryDecisionDispatcher {
     while (true) {
       const openRun = watchRun(session, {
         timeoutMs: this.#skillCompletionObservationTimeoutMs,
-        approvePlans: false,
         label,
         runStillActive,
       });
@@ -2595,15 +2673,22 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
-    const session = await this.#findSession(binding);
+  async #requireSession(binding: FactoryRunBindingRecord, owner: SessionOwner): Promise<BoundDispatcherSession> {
+    const session = await this.#findSession(binding, owner);
     if (!session) throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
     return session;
   }
 
-  async #switchThread(session: ThreadSwitchSession, binding: FactoryRunBindingRecord): Promise<void> {
+  // Switching subscribes to the thread, which resolves memory and model
+  // credentials, so it always runs as the session owner.
+  async #switchThread(
+    session: BoundDispatcherSession,
+    binding: FactoryRunBindingRecord,
+    owner: SessionOwner,
+  ): Promise<void> {
     if (session.thread.requireId() === binding.threadId) return;
-    await session.thread.switch({ threadId: binding.threadId });
+    const requestContext = factoryRequestContext({ session, binding, userId: owner.userId, orgId: owner.orgId });
+    await session.thread.switch({ threadId: binding.threadId, requestContext });
   }
 
   async #withBindingSkillRun(bindingId: string, effect: () => Promise<void>): Promise<void> {
@@ -2774,7 +2859,7 @@ export class FactoryDecisionDispatcher {
           const startedBy = item?.sessions[binding.role]?.startedBy;
           if (!startedBy) throw new Error(`Factory binding ${binding.id} has no authenticated session owner.`);
           await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-          const session = await this.#requireSession(binding);
+          const session = await this.#requireSession(binding, { userId: startedBy, orgId: record.orgId });
           const requestContext = factoryRequestContext({
             session,
             binding,
@@ -2788,7 +2873,8 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            autoApprovedTool: await this.#autoApprovedExitTool({ ...record, workItemId: binding.workItemId }),
+            autoApproving: this.#autoApproving,
             requestContext,
             label: 'Factory kickoff run',
             runStillActive: () =>

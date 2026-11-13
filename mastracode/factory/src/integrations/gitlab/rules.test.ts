@@ -6,9 +6,11 @@ import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
-import type { FactoryGitLabRuleContext } from '../../rules/types.js';
+import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
+import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
+import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
 import { GitLabRules } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
@@ -116,6 +118,7 @@ async function setup(
     platformOnly?: boolean;
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
+    rules?: GitLabRuleOverrides;
   } = {},
 ) {
   const seeded = options.storage
@@ -180,7 +183,7 @@ async function setup(
   });
 
   const gitlab: GitLabRulesIntegration = {
-    rules: resolveGitLabRules(),
+    rules: resolveGitLabRules(options.rules),
     getProjectMemberAccessLevel: vi.fn().mockResolvedValue(options.accessLevel ?? 40),
     getWorkItemAuthorUsername: vi.fn().mockResolvedValue('maintainer'),
     resolveActiveConnectionForHost: vi
@@ -1037,6 +1040,160 @@ describe('GitLabRules', () => {
       status: 'committed',
     });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+});
+
+describe('GitLabRules and the shared board list', () => {
+  // A webhook finds its cards in the board list the storage keeps cached for every reader in the
+  // process. A rule may write to the card it is handed (its context is typed mutable), so a card
+  // leaked from that cache would corrupt every later read of the board.
+  it('hands every event kind its own copy of the card, leaving the cached board list untouched', async () => {
+    const seen = new Map<FactoryGitLabEventName, FactoryRuleItemContext[]>();
+    const mutateItem = (event: FactoryGitLabEventName) => (context: Readonly<FactoryGitLabRuleContext>) => {
+      if (!context.item) return;
+      seen.set(event, [...(seen.get(event) ?? []), context.item]);
+      context.item.workItem.title = `mutated by ${event}`;
+      context.item.workItem.metadata = { ...context.item.workItem.metadata, mutatedBy: event };
+      if (context.item.metadata) context.item.metadata.mutatedBy = event;
+    };
+    const rules = Object.fromEntries(FACTORY_GITLAB_EVENTS.map(event => [event, mutateItem(event)]));
+    const { seeded, project, service } = await setup({ rules });
+    const issueKey = encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 });
+    const reviewKey = `gitlab-pr:${Buffer.from(
+      JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 17 }),
+      'utf8',
+    ).toString('base64url')}`;
+    // The issue's card is also the one whose session builds the merge request's branch.
+    const work = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'gitlab', type: 'issue', externalId: issueKey },
+          title: 'Issue 42',
+          board: 'work',
+          stages: ['execute'],
+          sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+        parentWorkItemId: work.id,
+        title: 'MR 17',
+        board: 'review',
+        stages: ['review'],
+        sessions: {},
+        metadata: { authorTrusted: true, reviewVerdict: 'approve' },
+      },
+    });
+    // Merge request 19 has no card of its own: it is attached to another card as a source.
+    const carrier = (
+      await seeded.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'ENG-7' },
+          title: 'ENG-7',
+          board: 'work',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      })
+    ).item;
+    await seeded.workItems.attachSource({
+      orgId: 'org-1',
+      id: carrier.id,
+      source: {
+        integrationId: 'gitlab',
+        type: 'pull-request',
+        externalId: `gitlab-pr:${Buffer.from(
+          JSON.stringify({ version: 1, host: 'gitlab.example.com', projectId: 101, mergeRequestIid: 19 }),
+          'utf8',
+        ).toString('base64url')}`,
+        url: 'https://gitlab.example.com/acme/app/-/merge_requests/19',
+      },
+      metadata: { state: 'open', gitlabMergeRequestIid: 19 },
+    });
+
+    const issueHook = (action: string, deliveryId: string) => {
+      const base = issueOpened(deliveryId);
+      return { ...base, payload: { ...base.payload, object_attributes: { ...base.payload.object_attributes, action } } };
+    };
+    const mergeRequestHook = (action: string, deliveryId: string, extra: Record<string, unknown> = {}) => {
+      const base = mergeRequestOpened(deliveryId);
+      return {
+        ...base,
+        payload: { ...base.payload, object_attributes: { ...base.payload.object_attributes, action, ...extra } },
+      };
+    };
+    const issueNote = {
+      ...mergeRequestNote('shared-issue-note'),
+      payload: {
+        ...mergeRequestNote().payload,
+        object_attributes: {
+          id: 98,
+          noteable_type: 'Issue',
+          note: 'A comment',
+          url: 'https://gitlab.example.com/acme/app/-/issues/42#note_98',
+        },
+        merge_request: undefined,
+        issue: issueOpened().payload.object_attributes,
+      },
+    };
+    const deliveries: Array<[FactoryGitLabEventName, { event: string; deliveryId: string; payload: object }]> = [
+      ['issueOpened', issueHook('open', 'shared-issue-open')],
+      ['issueUpdated', issueHook('update', 'shared-issue-update')],
+      ['issueClosed', issueHook('close', 'shared-issue-close')],
+      ['issueReopened', issueHook('reopen', 'shared-issue-reopen')],
+      ['issueCommented', issueNote],
+      // A merge request with no card of its own looks for the card whose branch it comes from.
+      ['mergeRequestOpened', mergeRequestHook('open', 'shared-mr-open-new', { iid: 18, id: 180 })],
+      ['mergeRequestOpened', mergeRequestHook('reopen', 'shared-mr-reopen')],
+      // A push records the new head on the Review card and on its parent.
+      [
+        'mergeRequestUpdated',
+        mergeRequestHook('update', 'shared-mr-update', {
+          last_commit: { id: '8fa258d000000000000000000000000000000000' },
+          updated_at: '2030-01-01 01:00:00 UTC',
+        }),
+      ],
+      ['mergeRequestCommented', mergeRequestNote('shared-mr-note')],
+      // A merge request attached to another card is evaluated on that card.
+      [
+        'mergeRequestUpdated',
+        mergeRequestHook('update', 'shared-attached-mr-update', {
+          iid: 19,
+          id: 190,
+          source_branch: 'feature-19',
+          url: 'https://gitlab.example.com/acme/app/-/merge_requests/19',
+        }),
+      ],
+      // A merged merge request settles both the Review card and the card that built it.
+      ['mergeRequestMerged', mergeRequestHook('merge', 'shared-mr-merge', { state: 'merged' })],
+      ['mergeRequestClosed', mergeRequestHook('close', 'shared-mr-close', { state: 'closed' })],
+    ];
+    expect(new Set(deliveries.map(([event]) => event))).toEqual(new Set(FACTORY_GITLAB_EVENTS));
+
+    for (const [event, delivery] of deliveries) {
+      const shared = await seeded.workItems.listShared({ orgId: 'org-1', factoryProjectId: project.id });
+      const before = structuredClone(shared);
+      await service.ingest(delivery);
+      expect(shared, `${event} wrote to the cached board list`).toEqual(before);
+      for (const item of seen.get(event) ?? []) {
+        expect(shared.some(card => card.workItem === item.workItem || card.metadata === item.metadata)).toBe(false);
+      }
+    }
+    // Every event kind resolved a card, so each one exercised the shared read.
+    expect([...seen.keys()].sort()).toEqual([...FACTORY_GITLAB_EVENTS].sort());
   });
 });
 

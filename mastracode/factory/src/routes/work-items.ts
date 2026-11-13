@@ -11,7 +11,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes } from '../boards/index.js';
+import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -29,7 +29,6 @@ import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -48,12 +47,34 @@ import {
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import { workItemFilterOptions } from '../work-items/board-filter-options.js';
+import { boardPhases } from '../work-items/board-phases.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
+import { relatedCardsIn } from '../work-items/list-related-cards.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
+import {
+  boardSnapshot,
+  hashedBody,
+  listCheck,
+  matchesEtag,
+  movedBody,
+  namedBody,
+  scopedSnapshot,
+  sha1,
+} from './board-snapshot.js';
+import type { BoardSnapshot } from './board-snapshot.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
+import { workItemActivity } from './work-item-activity.js';
+import { cardsFiledFrom, cardsWithIds, unstartedCards } from './work-item-selection.js';
+import {
+  CARD_DECISION_PAGE_SIZE,
+  CARD_DECISION_STATUSES,
+  cardsWithFailedRun,
+  workItemStarters,
+} from './work-item-starters.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -66,8 +87,6 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
-  /** Comments domain — backs the mention attention provider. */
-  comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -88,6 +107,24 @@ function toWireWorkItem(item: Card): Card {
   };
 }
 
+// One hash per card object: `listShared` keeps a card's object until the card changes.
+const wireVersions = new WeakMap<Card, string>();
+
+/**
+ * Names the body a card is sent with. It is a hash of that body, not a stamp: two bodies of one
+ * card can carry the same `changedAt`, and a card can read differently without a write.
+ */
+function wireVersion(card: Card): string {
+  let version = wireVersions.get(card);
+  if (version === undefined) wireVersions.set(card, (version = sha1(JSON.stringify(toWireWorkItem(card)))));
+  return version;
+}
+
+/** The card for a reader that keeps it between reads, and tells by `version` whether it holds this body. */
+function toVersionedWireWorkItem(card: Card): Card & { version: string } {
+  return { ...toWireWorkItem(card), version: wireVersion(card) };
+}
+
 /** Session ids of the listed cards that the predicate picks, each once. */
 function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
@@ -97,6 +134,77 @@ function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) 
     }
   }
   return [...picked];
+}
+
+/** Sends a JSON body, gzipped for a reader that accepts it. */
+async function sendJson(
+  c: Context,
+  body: Pick<BoardSnapshot, 'json' | 'gzipped'>,
+  headers: Record<string, string>,
+): Promise<Response> {
+  headers['Content-Type'] = 'application/json; charset=UTF-8';
+  headers.Vary = 'Accept-Encoding';
+  if (!/\bgzip\b/.test(c.req.header('accept-encoding') ?? '')) return c.body(body.json, 200, headers);
+  headers['Content-Encoding'] = 'gzip';
+  return c.body(new Uint8Array(await body.gzipped()), 200, headers);
+}
+
+/** Sends an answer its reader revalidates: a 304 without a body when the reader holds it already. */
+async function sendRevalidated(c: Context, answer: BoardSnapshot): Promise<Response> {
+  const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
+  if (matchesEtag(c.req.header('if-none-match'), answer.etag)) {
+    return c.body(null, 304, { ...headers, Vary: 'Accept-Encoding' });
+  }
+  return sendJson(c, answer, headers);
+}
+
+// One list per board version, so every tab's sidebar shares its serialization.
+const cardsInSessions = new WeakMap<readonly Card[], Card[]>();
+
+/** The cards `holds` picks, and the cards related to them, in board order. */
+function withRelatedCards(board: readonly Card[], holds: (card: Card) => boolean): Card[] {
+  const relatedTo = relatedCardsIn(board);
+  const picked = new Set<Card>();
+  for (const card of board) {
+    if (!holds(card)) continue;
+    picked.add(card);
+    for (const related of relatedTo(card)) picked.add(related);
+  }
+  return board.filter(card => picked.has(card));
+}
+
+/** The cards that hold one of the sessions, and the cards related to them, in board order. */
+function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Card[] {
+  const wanted = new Set(sessionIds);
+  return withRelatedCards(board, card => Object.values(card.sessions).some(session => wanted.has(session.sessionId)));
+}
+
+/** The cards that hold any session, and the cards related to them, in board order. */
+function allSessionCards(board: readonly Card[]): Card[] {
+  let cards = cardsInSessions.get(board);
+  if (!cards) {
+    cards = withRelatedCards(board, card => Object.keys(card.sessions).length > 0);
+    cardsInSessions.set(board, cards);
+  }
+  return cards;
+}
+
+/** The error a list query is refused with, named after the parameter that failed to parse. */
+function listQueryError(field: PropertyKey | undefined): string {
+  switch (field) {
+    case 'scope':
+      return 'invalid_scope';
+    case 'started':
+      return 'invalid_started';
+    case 'q':
+      return 'invalid_search';
+    case 'source':
+      return 'invalid_source';
+    case 'workItemId':
+      return 'invalid_work_item_id';
+    default:
+      return 'invalid_session_id';
+  }
 }
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -390,18 +498,56 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
         method: FACTORY_ROUTE_CONTRACTS.workItemList.method,
         requiresAuth: false,
         handler: async c => {
-          const resolved = await this.#resolveProject(loose(c));
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
           if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
+            sessionId: context.req.queries('sessionId'),
+            scope: context.req.query('scope'),
+            started: context.req.query('started'),
+            q: context.req.query('q'),
+            limit: context.req.query('limit'),
+            source: context.req.queries('source'),
+            workItemId: context.req.queries('workItemId'),
+            since: context.req.query('since'),
+          });
+          // A filter that fails to parse must not widen to the whole board.
+          if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
-          const items = await workItems.listShared({
+          const { sessionId: sessionIds, scope, started, q, limit, source, workItemId: ids, since } = query.data;
+          const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
+            since,
           });
-          return c.json({
-            workItems: items.map(toWireWorkItem),
-            runningSessionIds: sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined),
-          });
+          const board = list.items;
+          const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
+          const part =
+            unstarted?.cards ??
+            (scope
+              ? allSessionCards(board)
+              : sessionIds
+                ? sessionCards(board, sessionIds)
+                : source
+                  ? cardsFiledFrom(board, source)
+                  : ids && cardsWithIds(board, ids));
+          const items = part ?? board;
+          const running = sessionIdsWhere(items, sessionId => liveSessions.isRunning(sessionId));
+          const parked = sessionIdsWhere(items, sessionId => liveSessions.parked(sessionId) !== undefined);
+          // A tab that kept the board gets what moved since its cursor: a body the size of the change.
+          if (list.changed) {
+            const workItems = list.changed.map(toWireWorkItem);
+            const moved = { workItems, removedIds: list.removed, check: listCheck(board), cursor: list.cursor };
+            return sendJson(context, movedBody({ ...moved, runningSessionIds: running, parkedSessionIds: parked }), {
+              'Cache-Control': 'no-store',
+            });
+          }
+          const snapshot = part
+            ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
+              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
+            : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
+          // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
+          return sendRevalidated(context, snapshot);
         },
       }),
 
@@ -420,7 +566,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           if (!query.success) return c.json({ error: 'invalid_metrics_range' }, 400);
           const { windowStart, windowEnd } = parseMetricsRange(query.data.from, query.data.to, new Date());
           await workItems.ensureReady();
-          const items = await workItems.list({
+          const items = await workItems.listShared({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
           });
@@ -431,6 +577,133 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           return c.json({
             metrics: computeFactoryMetrics(items, { windowStart, windowEnd }, boardPhaseOutcomes(boards)),
           });
+        },
+      }),
+
+      // ── What the draft page's starter buttons count on the default board ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStarters.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemStarters.method,
+        requiresAuth: false,
+        handler: async c => {
+          const resolved = await this.#resolveProject(loose(c));
+          if ('response' in resolved) return resolved.response;
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards, { decisions }] = await Promise.all([
+            workItems.listShared(project),
+            this.#boards.load(project),
+            workItems.listDeferredDecisionPage({
+              ...project,
+              statuses: [...CARD_DECISION_STATUSES],
+              limit: CARD_DECISION_PAGE_SIZE,
+            }),
+          ]);
+          return c.json(
+            workItemStarters({
+              board: boards.get(DEFAULT_BOARD_ID),
+              cards,
+              failedCardIds: cardsWithFailedRun(decisions),
+              now: Date.now(),
+            }),
+          );
+        },
+      }),
+
+      // ── When cards were created and completed, for the draft page's band ────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemActivity.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemActivity.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const query = FACTORY_ROUTE_CONTRACTS.workItemActivity.querySchema.safeParse({
+            since: context.req.query('since'),
+          });
+          if (!query.success) return c.json({ error: 'invalid_activity_since' }, 400);
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [cards, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
+          const answer = hashedBody(workItemActivity(cards, boards, query.data.since));
+          // A draft tab asks again on each feed frame; most frames change no card of the period.
+          const headers = { ETag: answer.etag, 'Cache-Control': 'private, no-cache' };
+          if (matchesEtag(c.req.header('if-none-match'), answer.etag)) return c.body(null, 304, headers);
+          return c.body(answer.json, 200, { ...headers, 'Content-Type': 'application/json; charset=UTF-8' });
+        },
+      }),
+
+      // ── What each phase of a board view lists, a page of it at a time ───────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.boardPhases.path, {
+        method: FACTORY_ROUTE_CONTRACTS.boardPhases.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const path = FACTORY_ROUTE_CONTRACTS.boardPhases.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            boardKey: context.req.param('boardKey'),
+          });
+          if (!path.success) return c.json({ error: 'board_not_found' }, 404);
+          const query = FACTORY_ROUTE_CONTRACTS.boardPhases.querySchema.safeParse({
+            sort: context.req.query('sort'),
+            q: context.req.query('q'),
+            source: context.req.queries('source'),
+            linearProject: context.req.queries('linearProject'),
+            label: context.req.queries('label'),
+            teammate: context.req.queries('teammate'),
+            author: context.req.queries('author'),
+            assignee: context.req.queries('assignee'),
+            reviewer: context.req.queries('reviewer'),
+            worked: context.req.queries('worked'),
+            limit: context.req.query('limit'),
+            window: context.req.queries('window'),
+            item: context.req.query('item'),
+            cards: context.req.query('cards'),
+          });
+          // A view that fails to parse must not answer as another view.
+          if (!query.success) return c.json({ error: 'invalid_phases_query' }, 400);
+          const { cards: withBodies, ...view } = query.data;
+          const project = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          await workItems.ensureReady();
+          const [list, boards] = await Promise.all([workItems.listShared(project), this.#boards.load(project)]);
+          const board = boards.get(path.data.boardKey);
+          if (!board) return c.json({ error: 'board_not_found' }, 404);
+          const phases = Object.keys(board.phases);
+          const { body, named } = boardPhases(
+            list,
+            { id: path.data.boardKey, phases },
+            view,
+            resolved.userId,
+            wireVersion,
+          );
+          const names = {
+            ...body,
+            runningSessionIds: sessionIdsWhere(named, sessionId => liveSessions.isRunning(sessionId)),
+            parkedSessionIds: sessionIdsWhere(named, sessionId => liveSessions.parked(sessionId) !== undefined),
+          };
+          // The board asks again on each feed frame; most frames change nothing it shows.
+          return sendRevalidated(
+            context,
+            namedBody(names, withBodies ? () => ({ workItems: named.map(toVersionedWireWorkItem) }) : undefined),
+          );
+        },
+      }),
+
+      // ── The labels and people the board's filter menus offer ────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemFilterOptions.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const list = await workItems.listShared({
+            orgId: resolved.orgId,
+            factoryProjectId: resolved.factoryProjectId,
+          });
+          return sendRevalidated(context, hashedBody(workItemFilterOptions(list)));
         },
       }),
 
@@ -495,7 +768,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
       ...buildAttentionRoutes({
         workItems,
         boards: this.#boards,
-        comments: this.deps.comments,
         liveSessions,
         resolveProject: context => this.#resolveProject(loose(context)),
       }),
