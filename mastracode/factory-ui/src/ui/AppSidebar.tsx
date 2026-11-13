@@ -23,11 +23,12 @@ const BOARD_CONFIG_VIEW = 'board-config';
 
 export function AppSidebar() {
   const settingsOpen = useSettingsOpen();
-  const pageHeaderOwnsToggle = useSidebar().desktopState === 'collapsed';
+  const { desktopState, state } = useSidebar();
+  const pageHeaderOwnsToggle = desktopState === 'collapsed';
 
   return (
     <Sidebar aria-label="Main sidebar" className="h-full">
-      <Sidebar.CommandHeader>
+      <Sidebar.CommandHeader className={state === 'collapsed' ? undefined : 'px-0'}>
         <FactorySwitcher />
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           <SidebarGlobalSearchButton />
