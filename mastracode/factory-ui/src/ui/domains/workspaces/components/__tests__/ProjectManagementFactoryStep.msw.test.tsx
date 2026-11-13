@@ -5,15 +5,46 @@ import userEvent from '@testing-library/user-event';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import type { GitLabRepository } from '../../../factory/services/gitlab';
+import type { GithubRepo } from '../../services/github';
 import { ProjectManagementFactoryStep } from '../ProjectManagementFactoryStep';
+import type { ProjectManagementFactoryStepProps } from '../ProjectManagementFactoryStep';
 
-function renderStep() {
+const githubRepository: GithubRepo = {
+  id: 99,
+  fullName: 'acme/widgets',
+  name: 'widgets',
+  owner: 'acme',
+  defaultBranch: 'main',
+  private: false,
+  installationId: 7,
+  installationStorageId: 'inst-7',
+  sandboxProvider: 'local',
+  sandboxWorkdir: '/workspace/widgets',
+};
+
+const gitlabProject: GitLabRepository = {
+  provider: 'gitlab',
+  id: 'gitlab-source',
+  externalId: '42',
+  fullName: 'acme/platform',
+  name: 'platform',
+  owner: 'acme',
+  defaultBranch: 'main',
+  private: true,
+  sandboxProvider: 'local',
+  sandboxWorkdir: '/workspace/platform',
+};
+
+function renderStep(overrides: Partial<ProjectManagementFactoryStepProps> = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: true, connected: false, reason: 'not_connected' }),
     ),
   );
-  return renderWithProviders(<ProjectManagementFactoryStep onConnect={() => {}} onContinue={() => {}} />);
+  return renderWithProviders(
+    <ProjectManagementFactoryStep onConnect={() => {}} onContinue={() => {}} {...overrides} />,
+  );
 }
 
 describe('ProjectManagementFactoryStep', () => {
@@ -81,6 +112,55 @@ describe('ProjectManagementFactoryStep', () => {
       expect(screen.getByRole('heading', { name: 'incident.io' })).toBeInTheDocument();
       expect(screen.getByText('Connected to acme.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    });
+  });
+
+  describe('given the codebase step picked a repository', () => {
+    it('lists the GitHub repository as a source that is on by default', async () => {
+      renderStep({ repository: githubRepository });
+
+      expect(await screen.findByRole('heading', { name: 'GitHub' })).toBeInTheDocument();
+      expect(screen.getByText('Sync issues from acme/widgets')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync GitHub issues' })).toBeChecked();
+      // The repository is a source on its own, so Work has something to bring in
+      // without any tracker, and "Skip for now" would be misleading.
+      expect(screen.getByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    });
+
+    it('reports the switch being turned off', async () => {
+      const onCodeHostSyncChange = vi.fn();
+      renderStep({ repository: githubRepository, onCodeHostSyncChange });
+
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
+
+      // The switch reports the new value alongside its change details.
+      expect(onCodeHostSyncChange).toHaveBeenCalledWith(false, expect.anything());
+    });
+
+    it('offers to skip while the switch is off', async () => {
+      renderStep({ repository: githubRepository, codeHostSync: false });
+
+      expect(await screen.findByRole('switch', { name: 'Sync GitHub issues' })).not.toBeChecked();
+      expect(screen.getByRole('button', { name: 'Skip for now' })).toBeInTheDocument();
+    });
+
+    it('names the GitLab project its issues come from', async () => {
+      renderStep({ repository: gitlabProject });
+
+      expect(await screen.findByRole('heading', { name: 'GitLab' })).toBeInTheDocument();
+      expect(screen.getByText('Sync issues from acme/platform')).toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Sync GitLab issues' })).toBeChecked();
+    });
+
+    it('previews the repository host while the row is hovered', async () => {
+      const onPreviewSource = vi.fn();
+      renderStep({ repository: gitlabProject, onPreviewSource });
+
+      const user = userEvent.setup();
+      await user.hover(await screen.findByRole('heading', { name: 'GitLab' }));
+
+      expect(onPreviewSource).toHaveBeenCalledWith('gitlab');
     });
   });
 });

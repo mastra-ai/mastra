@@ -24,6 +24,7 @@ import type { LinearWorkspaceListingError } from '../../linear/routes.js';
 import { attachLinearRules } from '../../linear/rules.js';
 import type { LinearConnectionData, LinearConnectionRow, LinearStorageHandle } from '../../linear/storage.js';
 import {
+  logPlatformBootInfo,
   logPlatformInfo,
   logPlatformWarn,
   PlatformApiClient,
@@ -314,7 +315,7 @@ export class PlatformLinearIntegration implements FactoryIntegration {
   initialize({ projects, auth }: { projects: FactoryProjectsStorage; auth?: RouteAuth }): void {
     this.#projects = projects;
     this.#auth = auth;
-    logPlatformInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
+    logPlatformBootInfo('Platform Linear integration initialized', { endpointHost: this.#endpointHost });
   }
 
   get authEnabled(): boolean {
@@ -658,6 +659,10 @@ export class PlatformLinearIntegration implements FactoryIntegration {
 
   async listWorkspaces(): Promise<LinearWorkspace[]> {
     return this.#listWorkspaces();
+  }
+
+  async hasActiveConnections(): Promise<boolean> {
+    return (await this.#listWorkspaces()).length > 0;
   }
 
   async #listWorkspaces(): Promise<LinearWorkspace[]> {
