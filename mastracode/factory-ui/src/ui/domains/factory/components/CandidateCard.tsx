@@ -34,7 +34,7 @@ export function CandidateCard({
   candidate: BoardCandidate;
   /** Repository id resolving GitHub descriptions in the detail panel. */
   projectRepositoryId: string;
-  /** Factory project id resolving Linear descriptions in the detail panel. */
+  /** Factory project id resolving issue descriptions in the detail panel. */
   factoryProjectId: string;
   /** Board the candidate is filed on. */
   board?: BoardInfo;

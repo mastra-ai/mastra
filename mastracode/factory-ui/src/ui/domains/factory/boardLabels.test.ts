@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { issueCandidate, linearCandidate } from './boardCandidates';
+import { gitlabCandidate, issueCandidate } from './boardCandidates';
 import { boardLabels } from './boardLabels';
 
 describe('board labels', () => {
@@ -16,23 +16,25 @@ describe('board labels', () => {
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
-    const linear = linearCandidate({
-      id: 'linear-2',
-      identifier: 'ENG-13',
-      title: 'Linear labels',
-      url: 'https://linear.app/acme/issue/ENG-13',
-      state: 'Todo',
+    const gitlab = gitlabCandidate({
+      id: 'gitlab-issue-13',
+      externalId: 'gitlab:acme/app#13',
+      identifier: 'acme/app#13',
+      title: 'GitLab labels',
+      url: 'https://gitlab.com/acme/app/-/issues/13',
+      state: 'opened',
       stateType: 'unstarted',
-      priorityLabel: 'High',
+      priority: null,
       assignee: null,
-      creator: null,
-      team: 'Engineering',
+      author: null,
+      source: 'acme/app',
+      sourceId: 'gitlab-project:1',
       labels: ['frontend'],
       createdAt: '2026-08-01T09:00:00.000Z',
       updatedAt: '2026-08-01T09:00:00.000Z',
     });
 
-    expect(boardLabels({ labels: ['p1', 'bug'], candidates: [github, linear] })).toEqual([
+    expect(boardLabels({ labels: ['p1', 'bug'], candidates: [github, gitlab] })).toEqual([
       'bug',
       'frontend',
       'p1',

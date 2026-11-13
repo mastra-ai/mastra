@@ -82,16 +82,10 @@ function serialWrite<TCache, TVariables>(
   };
 }
 
-// The GitHub feed never reads intake config or bindings, so it has nothing to refresh.
+// Only the GitLab issue feed is listed under intake config and bindings: GitHub's reads neither,
+// and the other providers' issues reach the board as cards the server files.
 function invalidateIssueFeed(queryClient: QueryClient, baseUrl: string, integrationId: string) {
-  const feeds: Record<string, QueryKey> = {
-    linear: queryKeys.linearIssuesAll(),
-    jira: queryKeys.jiraIssuesAll(),
-    gitlab: queryKeys.gitlabIssuesAll(baseUrl),
-    incidentio: queryKeys.incidentioIssuesAll(),
-  };
-  const queryKey = feeds[integrationId];
-  if (queryKey) void queryClient.invalidateQueries({ queryKey });
+  if (integrationId === 'gitlab') void queryClient.invalidateQueries({ queryKey: queryKeys.gitlabIssuesAll(baseUrl) });
 }
 
 export function useSaveIntakeSelectionMutation(

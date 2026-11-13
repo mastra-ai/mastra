@@ -12,12 +12,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { GithubIssue, GithubPullRequest } from '../../ui/domains/factory/services/factory';
-import {
-  INTAKE_ERROR_POLL_MS,
-  INTAKE_POLL_MS,
-  useProjectIssuesQuery,
-  useProjectPullRequestsQuery,
-} from '../useFactoryData';
+import type { GitLabIssuePage, GitLabMergeRequestPage } from '../../ui/domains/factory/services/gitlab';
+import { useProjectIssuesQuery, useProjectPullRequestsQuery } from '../useFactoryData';
+import { useGitLabIssuesQuery, useGitLabMergeRequestsQuery } from '../useGitLabData';
 
 const PROJECT_ID = 'github-project-1';
 const ISSUES_URL = `${TEST_BASE_URL}/web/github/projects/${PROJECT_ID}/issues`;
@@ -102,33 +99,6 @@ describe('useProjectIssuesQuery', () => {
     expect(hit).not.toHaveBeenCalled();
   });
 
-  it('given new intake arrives after mount, when the poll interval elapses, then the feed refreshes without a reload', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      let hits = 0;
-      const freshIssue: GithubIssue = { ...issues[0], number: 99, title: 'Fresh intake' };
-      server.use(
-        http.get(ISSUES_URL, () => {
-          hits += 1;
-          return hits === 1
-            ? HttpResponse.json({ issues, nextPage: null })
-            : HttpResponse.json({ issues: [...issues, freshIssue], nextPage: null });
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
-      await waitFor(() => expect(result.current.data).toBeDefined());
-      expect(result.current.data).toHaveLength(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
-
-      await waitFor(() => expect(result.current.data).toHaveLength(2));
-      expect(result.current.data?.map(issue => issue.number)).toEqual([12, 99]);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
   it('given the server fails, when the hook resolves, then it surfaces the server message', async () => {
     server.use(
       http.get(ISSUES_URL, () => HttpResponse.json({ error: 'github_error', message: 'boom' }, { status: 502 })),
@@ -139,31 +109,6 @@ describe('useProjectIssuesQuery', () => {
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toBeInstanceOf(Error);
     expect((result.current.error as Error).message).toBe('boom');
-  });
-
-  it('given the feed keeps failing, when the normal poll interval elapses, then it backs off instead of hammering', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    try {
-      let hits = 0;
-      server.use(
-        http.get(ISSUES_URL, () => {
-          hits += 1;
-          return HttpResponse.json({ error: 'github_error', message: 'installation unavailable' }, { status: 502 });
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => useProjectIssuesQuery([PROJECT_ID]));
-      await waitFor(() => expect(result.current.isError).toBe(true));
-      expect(hits).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_POLL_MS + 1_000);
-      expect(hits).toBe(1);
-
-      await vi.advanceTimersByTimeAsync(INTAKE_ERROR_POLL_MS);
-      await waitFor(() => expect(hits).toBe(2));
-    } finally {
-      vi.useRealTimers();
-    }
   });
 });
 
@@ -191,6 +136,56 @@ describe('useProjectPullRequestsQuery', () => {
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(result.current.fetchStatus).toBe('idle');
     expect(hit).not.toHaveBeenCalled();
+  });
+});
+
+describe('intake feeds on an open board', () => {
+  it('given a board left open for five minutes, when nothing asks again, then each provider list is requested once', async () => {
+    const FACTORY_ID = 'factory-1';
+    const GITLAB_REPOSITORY_ID = 'gitlab-repository-1';
+    const requests = { githubIssues: 0, githubPulls: 0, gitlabIssues: 0, gitlabMergeRequests: 0 };
+    const noGitLabIssues: GitLabIssuePage = { issues: [], nextCursor: null };
+    const noMergeRequests: GitLabMergeRequestPage = { pullRequests: [], nextPage: null };
+    server.use(
+      http.get(ISSUES_URL, () => {
+        requests.githubIssues += 1;
+        return HttpResponse.json({ issues, nextPage: null });
+      }),
+      http.get(PRS_URL, () => {
+        requests.githubPulls += 1;
+        return HttpResponse.json({ pullRequests, nextPage: null });
+      }),
+      http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => {
+        requests.gitlabIssues += 1;
+        return HttpResponse.json(noGitLabIssues);
+      }),
+      http.get(`${TEST_BASE_URL}/web/gitlab/projects/${GITLAB_REPOSITORY_ID}/prs`, () => {
+        requests.gitlabMergeRequests += 1;
+        return HttpResponse.json(noMergeRequests);
+      }),
+    );
+
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { result } = renderHookWithProviders(() => ({
+        githubIssues: useProjectIssuesQuery([PROJECT_ID]),
+        githubPulls: useProjectPullRequestsQuery([PROJECT_ID]),
+        gitlabIssues: useGitLabIssuesQuery(FACTORY_ID),
+        gitlabMergeRequests: useGitLabMergeRequestsQuery(FACTORY_ID, GITLAB_REPOSITORY_ID),
+      }));
+      await waitFor(() => {
+        expect(result.current.githubIssues.isSuccess).toBe(true);
+        expect(result.current.githubPulls.isSuccess).toBe(true);
+        expect(result.current.gitlabIssues.isSuccess).toBe(true);
+        expect(result.current.gitlabMergeRequests.isSuccess).toBe(true);
+      });
+
+      await vi.advanceTimersByTimeAsync(5 * 60_000);
+
+      expect(requests).toEqual({ githubIssues: 1, githubPulls: 1, gitlabIssues: 1, gitlabMergeRequests: 1 });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

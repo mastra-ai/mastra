@@ -116,7 +116,6 @@ function stubBoardEndpoints({
   workItems = [issueWorkItem] as object[],
   multiRepository = false,
   mappedLinearRepository = false,
-  linearIssues = [] as object[],
 } = {}) {
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
@@ -169,7 +168,6 @@ function stubBoardEndpoints({
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: multiRepository, connected: multiRepository, workspace: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/linear/issues`, () => HttpResponse.json({ issues: linearIssues, nextCursor: null })),
     // The label-filtered (status: auto-triaged) feed stays empty; the plain feed
     // serves the candidate under test.
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, ({ request }) => {
@@ -405,45 +403,6 @@ describe('Board card buttons move the card', () => {
     expect(within(reopened).getByRole('button', { name: /acme\/other/ })).toBeVisible();
     expect(patches).toHaveLength(0);
     expect(transitions).toHaveLength(0);
-  });
-
-  it('chooses a repository before filing and investigating a Linear candidate', async () => {
-    const { created, transitions } = stubBoardEndpoints({
-      multiRepository: true,
-      workItems: [],
-      linearIssues: [
-        {
-          id: 'linear-issue-1',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          url: 'https://linear.app/acme/issue/ENG-42/fix-intake-sync',
-          state: 'Todo',
-          stateType: 'unstarted',
-          priorityLabel: 'High',
-          assignee: null,
-          team: 'Engineering',
-          sourceId: 'linear-project-1',
-          projectId: 'linear-project-1',
-          labels: [],
-          createdAt: '2026-07-01T00:00:00Z',
-          updatedAt: '2026-07-02T00:00:00Z',
-        },
-      ],
-    });
-    renderWorkBoard();
-
-    await moveFromCardDetails('Fix intake sync', 'Investigate');
-
-    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
-    const user = userEvent.setup();
-    await user.type(within(dialog).getByRole('searchbox', { name: 'Search repositories' }), 'OTHER');
-    await waitFor(() => expect(within(dialog).queryByRole('button', { name: /acme\/app/ })).not.toBeInTheDocument());
-    expect(created).toHaveLength(0);
-    expect(transitions).toHaveLength(0);
-    await user.click(within(dialog).getByRole('button', { name: /acme\/other/ }));
-
-    await waitFor(() => expect(transitions).toHaveLength(1));
-    expect(created[0]?.metadata).toMatchObject({ linearProjectId: 'linear-project-1', repository: 'acme/other' });
   });
 
   it('uses the configured Linear project repository without prompting', async () => {

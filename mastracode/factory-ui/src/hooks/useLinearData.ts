@@ -1,11 +1,10 @@
-import { queryOptions, skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
   fetchLinearStatus,
   getLinearIssue,
-  listLinearIssues,
   listLinearProjects,
   listLinearTeams,
 } from '../ui/domains/factory/services/linear';
@@ -24,28 +23,6 @@ export function linearStatusQueryOptions(baseUrl: string) {
 export function useLinearStatusQuery(enabled: boolean = true) {
   const { baseUrl } = useApiConfig();
   return useQuery({ ...linearStatusQueryOptions(baseUrl), enabled });
-}
-
-/**
- * The connected workspace's active issues, loaded one cursor page at a time as
- * the list is scrolled. The server applies the caller's intake config (project
- * selection); disabled until Linear is connected.
- */
-export function useLinearIssuesQuery(githubProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useInfiniteQuery({
-    queryKey: queryKeys.linearIssues(githubProjectId),
-    queryFn: githubProjectId
-      ? ({ pageParam }) => listLinearIssues(baseUrl, githubProjectId, pageParam || undefined)
-      : skipToken,
-    initialPageParam: '',
-    getNextPageParam: lastPage => lastPage.nextCursor,
-    enabled: githubProjectId !== undefined,
-    select: data => data.pages.flatMap(page => page.issues),
-    // Read when the board opens and when its tab is looked at again. The server
-    // files new issues itself, and their cards reach the board over its stream.
-    refetchOnWindowFocus: true,
-  });
 }
 
 export function useLinearIssueDetail(
