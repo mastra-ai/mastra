@@ -12,7 +12,7 @@ Every workspace exposes two capabilities:
 - One **bucket** for filesystem storage, wrapped by [`PlatformFilesystem`](/reference/workspace/platform-filesystem). The bucket is a durable, environment-scoped store agents read from and write to across runs.
 - A pool of **on-demand sandboxes** for command execution, wrapped by [`PlatformSandbox`](/reference/workspace/platform-sandbox). Each `PlatformSandbox` instance provisions its own remote sandbox on `start()` and destroys it on `destroy()`. Agents typically spin up many sandboxes per session, use them for a task, and let them go.
 
-Workspaces are scoped to a single [environment](/docs/mastra-platform/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, authentication, and idle cleanup.
+Workspaces are scoped to a single [environment](/docs/mastra-platform/deploy/environments), so `production` and `staging` don't share buckets or sandbox pools. The platform manages provisioning, authentication, and idle cleanup.
 
 ## When workspaces are provisioned
 
@@ -135,4 +135,4 @@ The Workspaces tab in your platform project shows, per environment:
 
 - [`PlatformFilesystem`](/reference/workspace/platform-filesystem): reference for the filesystem provider.
 - [`PlatformSandbox`](/reference/workspace/platform-sandbox): reference for the sandbox provider, including checkpoint recovery and cloning.
-- [Environments](/docs/mastra-platform/environments): how environments scope workspaces, variables, and databases.
+- [Environments](/docs/mastra-platform/deploy/environments): how environments scope workspaces, variables, and databases.

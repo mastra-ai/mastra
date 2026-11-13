@@ -808,11 +808,11 @@ const sidebars = {
             contextualSidebar: true,
           },
           items: [
-            { type: 'doc', id: 'mastra-platform/server', label: 'Server' },
-            { type: 'doc', id: 'mastra-platform/studio', label: 'Studio' },
-            { type: 'doc', id: 'mastra-platform/github', label: 'GitHub integration' },
-            { type: 'doc', id: 'mastra-platform/environments', label: 'Environments' },
-            { type: 'doc', id: 'mastra-platform/regions', label: 'Regions' },
+            { type: 'doc', id: 'mastra-platform/deploy/server', label: 'Server' },
+            { type: 'doc', id: 'mastra-platform/deploy/studio', label: 'Studio' },
+            { type: 'doc', id: 'mastra-platform/deploy/github', label: 'GitHub integration' },
+            { type: 'doc', id: 'mastra-platform/deploy/environments', label: 'Environments' },
+            { type: 'doc', id: 'mastra-platform/deploy/regions', label: 'Regions' },
           ],
         },
         {

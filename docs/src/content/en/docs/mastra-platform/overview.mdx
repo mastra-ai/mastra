@@ -8,12 +8,12 @@ description: "Deploy, monitor, and manage AI applications with Mastra platform p
 The [Mastra platform](https://projects.mastra.ai) provides three products for deploying, monitoring, and managing AI applications built with the Mastra framework:
 
 - [**Observability**](/docs/mastra-platform/observability/overview): The baseline product for every platform project, with searchable traces, logs, and metrics across Mastra projects and deploys
-- [**Studio**](/docs/mastra-platform/studio): A hosted visual environment for testing agents and running workflows, with tools for inspecting traces. Starting with Studio also gives you Observability.
-- [**Server**](/docs/mastra-platform/server): A production deployment target that runs your Mastra application as an API server. Starting with Server also gives you Observability.
+- [**Studio**](/docs/mastra-platform/deploy/studio): A hosted visual environment for testing agents and running workflows, with tools for inspecting traces. Starting with Studio also gives you Observability.
+- [**Server**](/docs/mastra-platform/deploy/server): A production deployment target that runs your Mastra application as an API server. Starting with Server also gives you Observability.
 
-Deploy with a single command, [`mastra deploy`](/docs/mastra-platform/deploy/overview), or connect a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/github) for the repository-linked flow.
+Deploy with a single command, [`mastra deploy`](/docs/mastra-platform/deploy/overview), or connect a GitHub repository for push-to-deploy. See the [GitHub integration](/docs/mastra-platform/deploy/github) for the repository-linked flow.
 
-Each project can run multiple [**Environments**](/docs/mastra-platform/environments) (for example `production` and `staging`) and provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data. Each environment also gets a managed [**Workspace**](/docs/mastra-platform/workspaces) that gives agents a filesystem and sandbox with no manual configuration.
+Each project can run multiple [**Environments**](/docs/mastra-platform/deploy/environments) (for example `production` and `staging`) and provision [**Hosted databases**](/docs/mastra-platform/database) from the CLI or project settings to persist application data. Each environment also gets a managed [**Workspace**](/docs/mastra-platform/workspaces) that gives agents a filesystem and sandbox with no manual configuration.
 
 Organization-level [**Alerts**](/docs/mastra-platform/alerts) notify your team when deploys fail or running services stop. Alerts can cover every project or selected projects and environments, with notifications sent to Slack, email, or webhooks.
 
@@ -26,8 +26,8 @@ Organization-level [**Alerts**](/docs/mastra-platform/alerts) notify your team w
 Choose the path that matches what you want to do:
 
 - **Add hosted observability**: Use [Observability](/docs/mastra-platform/observability/overview) to collect searchable traces, logs, and metrics across projects and deploys. Start here if you want monitoring without deploying Studio or Server first.
-- **Deploy Studio**: Use [Studio](/docs/mastra-platform/studio) to host the visual development environment for your team. Start here if you want a shared UI for testing agents and running workflows, as well as inspecting traces.
-- **Deploy Server**: Use [Server](/docs/mastra-platform/server) to run your Mastra application as a production API server. Start here when you’re ready to serve agents, tools, and workflows from the cloud.
+- **Deploy Studio**: Use [Studio](/docs/mastra-platform/deploy/studio) to host the visual development environment for your team. Start here if you want a shared UI for testing agents and running workflows, as well as inspecting traces.
+- **Deploy Server**: Use [Server](/docs/mastra-platform/deploy/server) to run your Mastra application as a production API server. Start here when you’re ready to serve agents, tools, and workflows from the cloud.
 - **Build a software factory:** Deploy [Mastra Factory](https://factory.mastra.ai) to Mastra platform and connect your repository to turn issues into plans, implementations, and reviewed pull requests.
 
 ## Key concepts

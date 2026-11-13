@@ -33,7 +33,7 @@ mastra deploy --env staging
 mastra env create eu-preview --type preview --region eu
 ```
 
-Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Attached databases are placed near the environment automatically, while observability data goes to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/regions) for supported regions and database placement, along with observability co-location. The number of environments per project depends on your plan.
+Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Attached databases are placed near the environment automatically, while observability data goes to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/deploy/regions) for supported regions and database placement, along with observability co-location. The number of environments per project depends on your plan.
 
 ## List environments
 
@@ -107,6 +107,6 @@ The CLI asks for confirmation before deleting. Deleting an environment removes i
 ## Related
 
 - [Deploy](/docs/mastra-platform/deploy/overview)
-- [Regions](/docs/mastra-platform/regions)
+- [Regions](/docs/mastra-platform/deploy/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra env` CLI reference](/reference/cli/mastra#mastra-env)

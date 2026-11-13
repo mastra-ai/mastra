@@ -42,7 +42,7 @@ For most agent-focused projects, **Turso** is the simplest starting point. It pr
 A database is attached at one of two scopes:
 
 - **Environment scope**: The default. Attached to a single environment so data stays isolated between environments (for example separate production and staging databases). When your project has one environment, `mastra env db create` picks it automatically; with several, the CLI prompts you to select one.
-- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/environments). Opt in with `--shared`. Its variables are injected into every deploy.
+- **Project scope**: One database shared by all of the project's [environments](/docs/mastra-platform/deploy/environments). Opt in with `--shared`. Its variables are injected into every deploy.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
 
