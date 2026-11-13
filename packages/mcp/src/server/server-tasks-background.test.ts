@@ -336,6 +336,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     slots = 'default',
     mode = 'always',
     traced = false,
+    env: NodeJS.ProcessEnv = {},
   ): Promise<{ url: URL; process: ChildProcess }> {
     // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
     const proc = spawn(
@@ -352,7 +353,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         traced ? 'traced' : 'untraced',
         String(LEASE_MS),
       ],
-      { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
+      { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } },
     );
     children.push(proc);
     const url = await new Promise<URL>((resolve, reject) => {
@@ -1242,6 +1243,20 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         },
       });
     const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
+    // The run a killed server held lapses sooner.
+    const shortLeases = { MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000' };
+    /** A short scan interval, for an instance whose loop must look again at a run that looked live at boot. */
+    const scanningSoon = ({ mastraExtra, ...options }: { mastraExtra?: Record<string, unknown> } = {}) => ({
+      ...options,
+      mastraExtra: { ...mastraExtra, recovery: { workflowScanIntervalMs: 2_000 } },
+    });
+
+    /** Starts the workers, and with them the recovery loop, and the boot-time restart, as a deployed server does. */
+    async function bootLikeServer(mastra: Mastra) {
+      await mastra.startWorkers();
+      // Not awaited, as the server's boot handler doesn't; the call logs its failures and never rejects.
+      void mastra.restartAllActiveWorkflowRuns();
+    }
 
     async function onlyRun(mastra: Mastra, key: string) {
       const workflow = mastra.getWorkflow(key);
@@ -1418,13 +1433,13 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     // tracing across a crash); the task's attempt that follows the run stays in the task's trace.
     it('keeps the attempt following a run that workflow recovery restarted in the task trace', async () => {
       const stepsFile = `${counterFile}.nightly`;
-      const dying = await child(false, 'default', 'always', true);
+      const dying = await child(false, 'default', 'always', true, shortLeases);
       const taskId = await call(dying.url, 'run_nightly', { day: 'tuesday' });
       await until(() => stepsIn(stepsFile).includes('crunch'));
       dying.process.kill('SIGKILL');
 
-      const survivor = await workflowInstance(traced());
-      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const survivor = await workflowInstance(scanningSoon(traced()));
+      await bootLikeServer(survivor.mastra);
       await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       const root = await spanNamed(survivor.mastra, 'tools/call run_nightly');
       const followed = await spanNamed(survivor.mastra, 'task attempt run_nightly #2');
@@ -1435,14 +1450,14 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
     it('completes a run whose server died mid-step once workflow recovery continues it, without running it twice', async () => {
       const stepsFile = `${counterFile}.nightly`;
-      const dying = await child(false);
+      const dying = await child(false, 'default', 'always', false, shortLeases);
       const taskId = await call(dying.url, 'run_nightly', { day: 'monday' });
       await until(() => stepsIn(stepsFile).includes('crunch'));
       dying.process.kill('SIGKILL');
 
       // The next instance boots like a deployed server: Mastra recovers the workflow runs it finds.
-      const survivor = await workflowInstance();
-      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const survivor = await workflowInstance(scanningSoon());
+      await bootLikeServer(survivor.mastra);
       const done = await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       expect(done.result).toMatchObject({ isError: false });
       expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
