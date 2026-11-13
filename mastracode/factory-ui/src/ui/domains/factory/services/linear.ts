@@ -50,6 +50,8 @@ export interface LinearStatus {
   migration?: LinearMigrationStatus;
   /** Platform servers only: connections Linear revoked, which only a fresh connect restores. */
   requiresFreshConnect?: LinearFreshConnect[];
+  /** Platform servers only: connections whose workspace Linear didn't name on the last check. */
+  unidentified?: Array<{ connectionId: string; error: string }>;
 }
 
 export interface LinearWorkspaceConnection {
