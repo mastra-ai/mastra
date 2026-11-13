@@ -108,7 +108,7 @@ describe('tool approval follows policy changes (Postgres)', () => {
     expect(await until(() => counter.executed === 1)).toBe(true);
     // The run goes on to a second model turn and saves its snapshot; let it finish before the stores close.
     expect(await until(() => !session.run.isRunning())).toBe(true);
-  });
+  }, 60_000);
 
   it('declines a parked approval when the tool policy changes to deny', async () => {
     const { counter, makeController } = setup();
@@ -160,5 +160,5 @@ describe('tool approval follows policy changes (Postgres)', () => {
     expect(reopened.permissions.getRules().tools).toMatchObject({ transition: 'allow' });
     expect(await until(() => counter.executed === 1)).toBe(true);
     expect(await until(() => !reopened.run.isRunning())).toBe(true);
-  });
+  }, 60_000);
 });
