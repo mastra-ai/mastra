@@ -410,7 +410,7 @@ A step can run more than once. If a worker stops during a step, or after the ste
 
 The scheduler calculates the next fire time from the current time after it restarts. It doesn't replay schedules that elapsed while it was unavailable.
 
-If an instance crashes while a default-engine workflow run is executing, the [recovery loop](/docs/workflows/overview#recovery-loop) of an instance running the orchestration worker restarts the run once its lease expires and `recovery.workflowGraceMs` passed, at its next pass. A `mastra worker` process calls `stopWorkers()` on `SIGTERM` and exits without `shutdown()`. The default-engine runs it was executing wait as long as a crashed instance's. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery).
+If an instance crashes while a default-engine workflow run is executing, the [recovery loop](/docs/workflows/overview#recovery-loop) of an instance running the orchestration worker restarts the run at the first pass after the run's lease expired and `recovery.workflowGraceMs` passed. A `mastra worker` process calls `stopWorkers()` on `SIGTERM` and exits without `shutdown()`. The default-engine runs it was executing wait as long as a crashed instance's. See [known limitations](#known-limitations) and [durable agent crash recovery](/docs/harness/durable-agents#crash-recovery).
 
 ## Known limitations
 

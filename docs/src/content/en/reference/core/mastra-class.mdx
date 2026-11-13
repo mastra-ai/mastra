@@ -429,7 +429,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '2000',
             description:
-              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before recovery restarts it. The [recovery loop](/docs/workflows/overview#recovery-loop) looks at a run that stopped more recently again. The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
+              "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before recovery restarts it. A run that stopped more recently is left to the [recovery loop](/docs/workflows/overview#recovery-loop). The grace applies on a storage adapter with run-ownership support; without it, every active default-engine run is restarted, as before. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
           },
           {
             name: 'workflowScanIntervalMs',
@@ -437,7 +437,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             isOptional: true,
             defaultValue: '60000',
             description:
-              'How often the [recovery loop](/docs/workflows/overview#recovery-loop) that `startWorkers()` starts looks for default-engine runs whose instance stopped. Each wait is up to a fifth shorter or longer, and shorter when a run the last pass saw comes out of its grace period sooner. Capped at 2^31 - 1 ms. One instance at a time runs the passes. A run whose instance crashed is restarted about `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15 seconds by default) plus `workflowGraceMs` after the crash, at the next pass.',
+              'How often the [recovery loop](/docs/workflows/overview#recovery-loop) that `startWorkers()` starts looks for default-engine runs whose instance stopped. Each wait is up to a fifth shorter or longer, and shorter when a run the last pass saw comes out of its grace period sooner. Capped at 2^31 - 1 ms. One instance at a time runs the passes. A run whose instance crashed is restarted at the first pass after its lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`, 15 seconds by default) expired and `workflowGraceMs` passed, so within about one interval of that. A lower interval recovers such runs sooner and lists runs more often.',
           },
         ],
       },
