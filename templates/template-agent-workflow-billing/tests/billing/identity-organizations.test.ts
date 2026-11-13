@@ -1,5 +1,5 @@
 import { setTimeout } from 'node:timers/promises';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { JwtIdentityAdapter, LocalIdentityAdapter, hashSecret } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
@@ -331,10 +331,17 @@ describe('trusted identity and shared workspace journeys', () => {
     expect((await request(server.url, valid, '/billing/context')).status).toBe(401);
     await expect(jwtService.authorize(aliceContext)).rejects.toMatchObject({ code: 'unauthenticated' });
     expect((await request(server.url, bobToken, '/billing/context')).status).toBe(200);
-    const expiringToken = await sign({ ...claims, sub: 'bob', exp: Math.floor(Date.now() / 1000) + 1 });
-    const expiringContext = await jwtService.context({ credential: expiringToken });
-    await setTimeout(1100);
-    await expect(jwtService.authorize(expiringContext)).rejects.toMatchObject({ code: 'unauthenticated' });
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const now = Math.floor(Date.now() / 1000) * 1000;
+      vi.setSystemTime(now);
+      const expiringToken = await sign({ ...claims, sub: 'bob', exp: now / 1000 + 1 });
+      const expiringContext = await jwtService.context({ credential: expiringToken });
+      vi.setSystemTime(now + 2000);
+      await expect(jwtService.authorize(expiringContext)).rejects.toMatchObject({ code: 'unauthenticated' });
+    } finally {
+      vi.useRealTimers();
+    }
     expect(
       (
         await observer.execute({
