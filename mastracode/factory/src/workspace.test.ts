@@ -713,6 +713,10 @@ describe('bundled Factory skill assets', () => {
     for (const skill of [review, await read('factory-rereview')]) {
       expect(skill).toContain('**The head must not have moved.**');
       expect(skill).toContain('If the head moved, do not publish');
+      expect(skill).toContain(
+        'Immediately before publishing, run `gh pr view <number> --json headRefOid --jq .headRefOid`',
+      );
+      expect(skill).toContain('Name the reviewed head SHA in the handoff.');
     }
     // Factory offers no test check tool; the test report comment carries the results.
     for (const name of ['factory-review', 'factory-rereview', 'factory-gitlab-review', 'factory-gitlab-rereview']) {
