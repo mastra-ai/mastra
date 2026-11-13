@@ -684,5 +684,64 @@ export function describeFinishedOccurrenceCases({
       expect(travelled.status).toBe('success');
       expect(executions).toEqual(['first', 'second', 'first', 'second']);
     }, 20_000);
+
+    // A workflow that skips running snapshots leaves the stored active path at the step that last
+    // saved one, here the step that suspended. The check can't tell from it whether the run went
+    // past a finished step, so a late delivery runs the step again instead of leaving the run stuck.
+    it('runs a finished step again when the workflow does not save running snapshots', async () => {
+      const executions: string[] = [];
+      const build = (replica: string) => {
+        const reused = work('reused', async id => void executions.push(`${replica}:${id}`));
+        return createWorkflow({
+          id: 'finished',
+          inputSchema: Num,
+          outputSchema: Num,
+          options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'running' },
+        })
+          .then(reused)
+          .then(
+            createStep({
+              id: 'gate',
+              inputSchema: Num,
+              outputSchema: Num,
+              resumeSchema: z.object({ ok: z.boolean() }),
+              execute: async ({ inputData, resumeData, suspend }) => {
+                if (!resumeData) {
+                  await suspend({});
+                }
+                return inputData;
+              },
+            }),
+          )
+          .then(reused)
+          .then(work('last', async id => void executions.push(`${replica}:${id}`)))
+          .commit();
+      };
+      // A stops after the second `reused` saved its result, before `last`'s message goes out.
+      const lastDropped = deferred<void>();
+      const a = await startReplica(build('A'), event => {
+        if (event.type !== 'workflow.step.run' || !samePath(event, [3])) {
+          return undefined;
+        }
+
+        lastDropped.resolve();
+        return 'drop';
+      });
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('suspended');
+      run.resume({ step: 'gate', resumeData: { ok: true } }).catch((error: unknown) => {
+        console.error('A resume left behind by its replica rejected', error);
+      });
+      await lastDropped.promise;
+      const original = a.delivered.filter(event => event.type === 'workflow.step.run' && samePath(event, [2])).at(-1)!;
+      expect(original.id).toBeTruthy();
+      await crash(a);
+
+      const b = await startReplica(build('B'));
+      expect(await redeliver(b, original)).toEqual({ ok: true });
+
+      await expect.poll(async () => (await storedRun(run.runId))?.status).toBe('success');
+      expect(executions).toEqual(['A:reused', 'A:reused', 'B:reused', 'B:last']);
+    }, 20_000);
   });
 }

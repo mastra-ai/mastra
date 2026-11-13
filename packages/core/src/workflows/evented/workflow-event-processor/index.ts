@@ -2389,6 +2389,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       return 'run';
     }
 
+    // Without running snapshots the stored active path lags behind the run, so it can't tell a
+    // step the run went past from one it still has to continue from.
+    const persistsRunning =
+      args.workflow.options?.shouldPersistSnapshot?.({
+        stepResults: args.stepResults ?? {},
+        workflowStatus: 'running',
+      }) ?? true;
+    if (!persistsRunning) {
+      return 'run';
+    }
+
     const snapshot =
       loaded !== undefined
         ? loaded
