@@ -137,6 +137,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     perStep?: boolean;
     workflowSpan?: Span<SpanType.WORKFLOW_RUN>;
+    /**
+     * Called once the start/resume event is published. `Run.startAsync()` returns at this point
+     * and leaves the returned promise to settle in the background, so lifecycle callbacks still
+     * run when the worker reports the finish.
+     */
+    onDispatched?: () => void;
   }): Promise<TOutput> {
     const { workflowSpan, ...executeParams } = params;
     if (workflowSpan) {
@@ -361,6 +367,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
       releaseTracking();
       throw err;
     }
+    params.onDispatched?.();
 
     // Wait for workflow to complete
     let resultData: any;
