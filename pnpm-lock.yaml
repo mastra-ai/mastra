@@ -72,6 +72,7 @@ catalogs:
       version: 6.0.3
 
 overrides:
+  '@mastra/server>@mastra/mcp-apps-components': '-'
   '@lancedb/lancedb@0.31.0>@huggingface/transformers': '-'
   '@lancedb/lancedb@0.31.0>openai': '-'
   miniflare@4.20260730.0>workerd: 1.20261023.1
@@ -6486,9 +6487,6 @@ importers:
 
   packages/server:
     dependencies:
-      '@mastra/mcp-apps-components':
-        specifier: workspace:>=0.1.0-0 <1.0.0-0
-        version: link:../mcp-apps-components
       hono:
         specifier: ^4.13.13
         version: 4.13.16

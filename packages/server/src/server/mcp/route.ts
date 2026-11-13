@@ -144,6 +144,8 @@ export function isMissingAppsPackage(error: unknown): boolean {
     }
     // Cloudflare Workers (workerd) throws a plain Error without a `code`.
     if (/^No such module "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
+    // Vite (e.g. vitest running the app) replaces an uninstalled optional peer with a module that throws this.
+    if (/^Could not resolve "@mastra\/mcp-apps-components[/"]/.test(current.message)) return true;
   }
   return false;
 }

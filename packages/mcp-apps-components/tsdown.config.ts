@@ -19,8 +19,9 @@ export default defineConfig({
   sourcemap: true,
   // The dashboard schemas (the main entry's and `dashboards`) use the kind option modules from
   // `@mastra/playground-ui`, which stays bundled (a devDependency); `@mastra/core` is a peer, as for `@mastra/mcp`.
+  // The observability explorer's iframe app uses `@mastra/react` too; it's built into the app's HTML.
   deps: {
-    alwaysBundle: ['@mastra/playground-ui'],
+    alwaysBundle: ['@mastra/playground-ui', '@mastra/react'],
   },
   plugins: [
     {

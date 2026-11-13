@@ -143,10 +143,17 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
         { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
       ),
     workerd: () => new Error('No such module "@mastra/mcp-apps-components/trace-viewer".'),
+    vite: () => new Error('Could not resolve "@mastra/mcp-apps-components/trace-viewer" imported by "@mastra/server".'),
   };
 
   const VIEWER = '@mastra/mcp-apps-components/trace-viewer';
   const LIST = '@mastra/mcp-apps-components/observability-explorer';
+  // What each installed subpath exports. The server's workspace doesn't install the package (see the
+  // override in `pnpm-workspace.yaml`); `@mastra/hono`'s MCP Apps tests serve the real apps.
+  const viewerModule = () => ({ traceViewerApp: { name: 'Trace viewer', html: '<html>viewer</html>' } });
+  const explorerModule = () => ({
+    observabilityExplorerApp: { name: 'Observability explorer', html: '<html>explorer</html>' },
+  });
   afterEach(() => {
     vi.doUnmock(VIEWER);
     vi.doUnmock(LIST);
@@ -171,25 +178,19 @@ describe('built-in MCP route without @mastra/mcp-apps-components installed', () 
   }
 
   it('serves both apps when installed', async () => {
-    const apps = await serveWithAppsImport(
-      () => vi.importActual(VIEWER),
-      () => vi.importActual(LIST),
-    );
+    const apps = await serveWithAppsImport(viewerModule, explorerModule);
     expect(apps.sort()).toEqual(['ui://mastra/observability-explorer', 'ui://mastra/trace-viewer']);
   });
 
   it('serves the trace viewer from an older version without the observability explorer', async () => {
-    const apps = await serveWithAppsImport(
-      () => vi.importActual(VIEWER),
-      () => {
-        throw Object.assign(
-          new Error(
-            'Package subpath \'./observability-explorer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
-          ),
-          { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
-        );
-      },
-    );
+    const apps = await serveWithAppsImport(viewerModule, () => {
+      throw Object.assign(
+        new Error(
+          'Package subpath \'./observability-explorer\' is not defined by "exports" in /app/node_modules/@mastra/mcp-apps-components/package.json',
+        ),
+        { code: 'ERR_PACKAGE_PATH_NOT_EXPORTED' },
+      );
+    });
     expect(apps).toEqual(['ui://mastra/trace-viewer']);
   });
 
