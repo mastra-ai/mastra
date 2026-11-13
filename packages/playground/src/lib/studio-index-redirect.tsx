@@ -1,5 +1,5 @@
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { Navigate } from 'react-router';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getFirstAccessibleRoute } from '@/domains/auth/route-permissions';
 
 /**

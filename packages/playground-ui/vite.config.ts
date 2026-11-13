@@ -227,6 +227,8 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
         ...fileEntries('src/ds/icons', 'icons'),
         ...fileEntries('src/hooks', 'hooks'),
         ...fileEntries('src/lib/form', 'lib/form'),
+        ...fileEntries('src/lib/ai-ui', 'lib/ai-ui'),
+        'lib/view-transition': resolve(srcDir, 'lib/view-transition.ts'),
         ...componentEntries('src/ds/components', 'components'),
         ...componentEntries('src/ds/layout', 'layout'),
         ...componentEntries('src/ds/new', 'new'),

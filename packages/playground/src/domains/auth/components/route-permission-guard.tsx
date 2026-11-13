@@ -1,7 +1,7 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Navigate, useLocation } from 'react-router';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 
-import { usePermissions } from '../hooks/use-permissions';
+import { Navigate, useLocation } from 'react-router';
 import { getFirstAccessibleRoute, getPermissionForRoute, hasRoutePermission } from '../route-permissions';
 
 /**

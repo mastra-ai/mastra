@@ -10,6 +10,7 @@ import {
   CommandPaletteScope,
 } from '@mastra/playground-ui/components/CommandPalette';
 import { useMaybeSidebarState } from '@mastra/playground-ui/components/Sidebar';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
@@ -31,10 +32,9 @@ import {
   SearchIcon,
   SlidersHorizontalIcon,
 } from 'lucide-react';
-import React from 'react';
 
+import React from 'react';
 import { useNavigationCommand } from './use-navigation-command';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';

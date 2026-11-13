@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
 import 'fake-indexeddb/auto';
+import { createThreadDraftState } from '@mastra/playground-ui/domains/conversation/context/thread-draft-state';
+import {
+  readThreadDraft,
+  writeThreadDraft,
+} from '@mastra/playground-ui/domains/conversation/context/thread-draft-storage';
 import { MastraReactProvider, useMastraClient } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
@@ -10,8 +15,6 @@ import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useLogout } from '../use-logout';
 import { logoutResponse } from './fixtures/logout';
-import { createThreadDraftState } from '@/domains/conversation/context/thread-draft-state';
-import { readThreadDraft, writeThreadDraft } from '@/domains/conversation/context/thread-draft-storage';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
@@ -11,7 +12,6 @@ import { CopySkillDialog } from '@/domains/agent-builder/components/skill-list/c
 import { SkillFavoriteButton } from '@/domains/agent-builder/components/skill-list/skill-favorite-button';
 import { useCopySkill } from '@/domains/agent-builder/hooks/use-copy-skill';
 import { useStoredSkill } from '@/domains/agent-builder/hooks/use-stored-skill';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsView() {
   const { id } = useParams<{ id: string }>();

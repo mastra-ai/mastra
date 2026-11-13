@@ -7,6 +7,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredSkills } from '@mastra/react/hooks/agents';
 import { useCurrentUser } from '@mastra/react/hooks/auth';
@@ -20,7 +21,6 @@ import {
   SkillBuilderListSkeleton,
 } from '@/domains/agent-builder/components/skill-list/skill-builder-list';
 import { useBuilderRegistries } from '@/domains/agent-builder/hooks/use-builder-registries';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 export default function AgentBuilderSkillsPage() {
   const navigate = useNavigate();

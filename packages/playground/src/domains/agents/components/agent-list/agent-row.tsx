@@ -1,10 +1,10 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import type { useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { DataList } from '@mastra/playground-ui/components/DataList';
+import { extractPrompt } from '@mastra/playground-ui/domains/agents/utils/extractPrompt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useRef } from 'react';
 import type { SyntheticEvent } from 'react';
-import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentProviderDetails } from './agent-provider-details';
 import { AgentSubagentDetails } from './agent-subagent-details';
 import { AgentToolsDetails } from './agent-tools-details';

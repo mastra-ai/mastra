@@ -1,9 +1,18 @@
 import { v4 as uuid } from '@lukeed/uuid';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import {
+  AgentChatLoadingSkeleton,
+  AgentLandingLoadingSkeleton,
+} from '@mastra/playground-ui/domains/agents/components/agent-loading-skeletons';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { ObservationalMemoryProvider } from '@mastra/playground-ui/domains/agents/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@mastra/playground-ui/domains/agents/context/agent-working-memory-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { buildAgentDefaultSettings } from '@mastra/playground-ui/domains/agents/utils/agent-default-settings';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import type { ThreadDraftHandle } from '@mastra/playground-ui/domains/conversation/context/ThreadInputContext';
+import { ThreadInputProvider } from '@mastra/playground-ui/domains/conversation/context/ThreadInputContext';
 import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
@@ -14,27 +23,18 @@ import { useMemory, useThreads } from '@mastra/react/hooks/memory';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
-import { AgentChat } from '@/domains/agents/components/agent-chat';
 import { AgentLayout } from '@/domains/agents/components/agent-layout';
-import {
-  AgentChatLoadingSkeleton,
-  AgentLandingLoadingSkeleton,
-} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentUnavailable } from '@/domains/agents/components/agent-unavailable';
 import { ChatThreads } from '@/domains/agents/components/chat-threads';
 import { SidebarPanel } from '@/domains/agents/components/sidebar-panel';
+import { StudioAgentChat } from '@/domains/agents/components/studio-agent-chat';
 import { ThreadsPanelShortcuts } from '@/domains/agents/components/threads-panel-shortcuts';
-import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
-import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { ThreadPreferencesProvider } from '@/domains/agents/context/thread-preferences-provider';
 import { ThreadsPanelProvider } from '@/domains/agents/context/threads-panel-context';
 import { useThreadsPanel } from '@/domains/agents/context/use-threads-panel';
-import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { getAgentSuggestedPrompts } from '@/domains/agents/utils/agent-suggested-prompts';
-import type { ThreadDraftHandle } from '@/domains/conversation/context/ThreadInputContext';
-import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
 function AgentThread() {
@@ -197,7 +197,7 @@ function AgentThread() {
                     >
                       <div key={actualThreadId} className="relative flex h-full min-h-0 flex-col">
                         <div className="relative grid min-h-0 flex-1">
-                          <AgentChat
+                          <StudioAgentChat
                             agentId={agentId!}
                             agentName={agent?.name}
                             modelVersion={agent?.modelVersion}

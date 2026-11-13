@@ -2,20 +2,20 @@ import { v4 as uuid } from '@lukeed/uuid';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ActivatedSkillsProvider } from '@mastra/playground-ui/domains/agents/context/activated-skills-context';
+import { AgentSettingsProvider } from '@mastra/playground-ui/domains/agents/context/agent-context';
 import { BrowserToolCallsProvider } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { buildAgentDefaultSettings } from '@mastra/playground-ui/domains/agents/utils/agent-default-settings';
 import { DatasetSaveProvider } from '@mastra/playground-ui/domains/chat';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { Save } from 'lucide-react';
+
 import { useMemo } from 'react';
 import { useFormState } from 'react-hook-form';
-
-import { AgentSettingsProvider } from '../../context/agent-context';
 import { useOptionalAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { BrowserSessionProvider } from '../../context/browser-session-provider';
-import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
-import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
+import { StudioAgentChat } from '@/domains/agents/components/studio-agent-chat';
 import { ThreadInputProvider } from '@/domains/conversation';
 import { AgentRunActions } from '@/domains/run-options/components/agent-run-actions';
 
@@ -106,7 +106,7 @@ export function AgentPlaygroundTestChat({
                 <div className="flex h-full flex-col">
                   {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
                   <div className="min-h-0 flex-1">
-                    <AgentChat
+                    <StudioAgentChat
                       key={testThreadId}
                       agentId={agentId}
                       agentName={agentName}

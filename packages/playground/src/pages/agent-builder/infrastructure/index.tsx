@@ -5,8 +5,8 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SectionCard } from '@mastra/playground-ui/components/SectionCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useInfrastructureStatus } from '@/domains/agent-builder/hooks/use-infrastructure-status';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 const InfrastructureStatus = ({ ok, label }: { ok: boolean; label: string }) => (
   <Badge

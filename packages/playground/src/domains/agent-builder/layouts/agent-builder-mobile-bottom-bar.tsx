@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -8,7 +9,6 @@ import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 interface MobileLink {
   name: string;

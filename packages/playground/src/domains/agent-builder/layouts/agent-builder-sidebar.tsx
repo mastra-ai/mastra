@@ -1,6 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
@@ -10,7 +11,6 @@ import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder
 import { useBuilderAgentFeatures } from '@/domains/agent-builder/hooks/use-builder-agent-features';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 
 const agentsLink: SidebarLink = {
   name: 'My agents',

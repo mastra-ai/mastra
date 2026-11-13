@@ -1,11 +1,11 @@
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 import { renderHook } from '@testing-library/react';
 import React from 'react';
 import { FormProvider, useForm } from 'react-hook-form';
-import { describe, expect, it } from 'vitest';
 
+import { describe, expect, it } from 'vitest';
 import type { AgentBuilderEditFormValues } from '../../schemas';
 import { SET_AGENT_MODEL_TOOL_NAME, useSetAgentModelTool } from '../use-set-agent-model-tool';
-import type { ModelInfo } from '@/domains/llm';
 
 const availableModels: ModelInfo[] = [
   { provider: 'openai', providerName: 'OpenAI', model: 'gpt-4o' },

@@ -1,12 +1,18 @@
+import { useAgentBuilderAllowedModels } from '@mastra/playground-ui/domains/agent-builder/hooks/use-agent-builder-allowed-models';
+import {
+  useBuilderModelPolicy,
+  useBuilderPickerVisibility,
+  useBuilderSettings,
+  useIsBuilderEnabled,
+} from '@mastra/playground-ui/domains/agent-builder/hooks/use-builder-settings';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { PropsWithChildren } from 'react';
+
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-
-import { useAgentBuilderAllowedModels } from '../use-agent-builder-allowed-models';
 import { useBuilderAgentFeatures } from '../use-builder-agent-features';
 import { useCanCreateAgent } from '../use-can-create-agent';
 import { useChatDraft } from '../use-chat-draft';
@@ -14,12 +20,6 @@ import { useStarterUserMessage } from '../use-starter-user-message';
 import { authDisabledCapabilities } from './fixtures/auth';
 import { availableModelsResponse } from './fixtures/builder-models';
 import { buildBuilderSettings } from './fixtures/builder-settings';
-import {
-  useBuilderModelPolicy,
-  useBuilderPickerVisibility,
-  useBuilderSettings,
-  useIsBuilderEnabled,
-} from '@/domains/agent-builder/hooks/use-builder-settings';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';

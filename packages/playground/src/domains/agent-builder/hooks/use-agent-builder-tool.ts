@@ -1,6 +1,7 @@
 import type { createTool, StoredSkillResponse } from '@mastra/client-js';
-import { useMemo } from 'react';
+import type { ModelInfo } from '@mastra/playground-ui/domains/llm';
 
+import { useMemo } from 'react';
 import type { useBuilderAgentFeatures } from './use-builder-agent-features';
 import {
   SET_AGENT_BROWSER_ENABLED_TOOL_NAME,
@@ -14,7 +15,6 @@ import { SET_AGENT_SKILLS_TOOL_NAME, useSetAgentSkillsTool } from './use-set-age
 import { SET_AGENT_TOOLS_TOOL_NAME, useSetAgentToolsTool } from './use-set-agent-tools-tool';
 import { SET_AGENT_WORKSPACE_ID_TOOL_NAME, useSetAgentWorkspaceIdTool } from './use-set-agent-workspace-id-tool';
 import type { AgentTool } from '@/domains/agent-builder/types/agent-tool';
-import type { ModelInfo } from '@/domains/llm';
 
 export interface AvailableWorkspace {
   id: string;

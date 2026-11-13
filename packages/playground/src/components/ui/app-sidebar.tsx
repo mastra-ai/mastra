@@ -1,6 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
+import { usePermissions } from '@mastra/playground-ui/domains/auth/hooks/use-permissions';
 import { useConnectSurface } from '@mastra/playground-ui/domains/connect';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
@@ -11,7 +12,6 @@ import { useLocation } from 'react-router';
 import { useAgentBuilderSidebarVisibility } from '@/domains/agent-builder/hooks/use-agent-builder-sidebar-visibility';
 import { AuthStatus } from '@/domains/auth/components/auth-status';
 import { ImpersonationBanner } from '@/domains/auth/components/impersonation-banner';
-import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { MastraVersionNavLink } from '@/domains/configuration/components/mastra-version-nav-link';
