@@ -90,6 +90,7 @@ import { KeptCards } from './integrations/kept-cards.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildConnectToolsRoute, buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { platformConnectTools } from './integrations/platform/connect/session-tools.js';
+import { logIntegrationSummary } from './integrations/startup-summary.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { shareLinkedRepositoryChanges } from './linked-repositories-changed.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
@@ -188,6 +189,7 @@ import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work
 import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import {
   createRequestTimingMiddleware,
+  bootDiagnosticsEnabled,
   factoryTimingEnabled,
   instrumentAsyncMethods,
   logTiming,
@@ -599,6 +601,7 @@ export class MastraFactory {
   #sessionResourceMigration: Promise<boolean> | undefined;
   #workItemSplitBackfill: { controller: AbortController; promise: Promise<void> } | undefined;
   #prepareStartedAt: number | undefined;
+  #integrations: FactoryIntegration[] = [];
   #reviewedChangeRequest: ((requestContext: RequestContext) => Promise<ReviewedChangeRequest | undefined>) | undefined;
   #preparing = false;
 
@@ -861,6 +864,7 @@ export class MastraFactory {
       }
       integrationIds.add(integration.id);
     }
+    this.#integrations = integrations;
     const configVersion = this.#configVersion;
 
     // FactoryStorage owns every app-table domain and initializes them through
@@ -2538,9 +2542,11 @@ export class MastraFactory {
         ),
       );
     this.#dispatcher?.start();
-    // Unconditional and outside the Mastra logger, which production runs at WARN.
-    if (this.#prepareStartedAt !== undefined)
+    // Outside the Mastra logger, which production runs at WARN. Under
+    // `mastra factory dev` the CLI's ready banner reports boot time instead.
+    if (bootDiagnosticsEnabled && this.#prepareStartedAt !== undefined)
       logTiming(`boot ${Math.round(performance.now() - this.#prepareStartedAt)}ms`);
+    if (process.env.MASTRA_FACTORY_DEV === 'true') void logIntegrationSummary(this.#integrations);
   }
 
   /** Stop Factory-owned background work and channel transports before the host process shuts down. */
