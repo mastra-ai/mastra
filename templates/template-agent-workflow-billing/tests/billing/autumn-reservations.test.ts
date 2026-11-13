@@ -93,6 +93,19 @@ async function nativeFixture(
   return { ...f, model, runtime, open };
 }
 
+it('a missing Autumn balance returns zero funds and a definite reservation denial', async () => {
+  const f = await fixture();
+  f.behavior.missingBalance = true;
+  const account = await f.provider().ensureAccount({ workspaceId: f.owner.workspaceId });
+  expect((await f.provider().getState(account)).meters).toMatchObject([
+    { key: 'credits', confirmedBalance: 0, providerUsageIncludingHolds: 0 },
+  ]);
+  await expect(f.execute('no-grant')).rejects.toMatchObject({ code: 'insufficient_credits' });
+  expect(f.computes()).toBe(0);
+  expect((await f.execute('no-grant')).billing).toMatchObject({ billedUnits: 0, settlementStatus: 'released' });
+  expect(f.locks.size).toBe(0);
+});
+
 it('equivalent provider accounts allow execution regardless of property insertion order', async () => {
   const f = await fixture();
   const ensureAccount = f.provider().ensureAccount.bind(f.provider());

@@ -25,6 +25,7 @@ export async function autumnFixture() {
     cost: 1,
     unlimited: false,
     overage: false,
+    missingBalance: false,
     featureId: 'generated_images',
     creditPoolId: 'image_credits',
     checkoutUrl: 'https://checkout.example.test/test-session',
@@ -85,7 +86,7 @@ export async function autumnFixture() {
             };
     else if (path === '/v1/balances.check') {
       status = body.lock ? behavior.reserveStatus : 200;
-      let allowed = balance().remaining >= (body.required_balance ?? 1);
+      let allowed = !behavior.missingBalance && balance().remaining >= (body.required_balance ?? 1);
       if (body.lock && locks.has(body.lock.lock_id)) {
         status = 409;
         allowed = false;
@@ -95,7 +96,7 @@ export async function autumnFixture() {
         allowed,
         customer_id: body.customer_id,
         required_balance: body.required_balance ?? 1,
-        balance: balance(),
+        balance: behavior.missingBalance ? null : balance(),
         flag: null,
       };
       if (body.lock && status === 200 && allowed) await hooks.afterReserve?.();

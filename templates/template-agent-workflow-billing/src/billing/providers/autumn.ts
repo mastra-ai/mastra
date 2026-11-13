@@ -197,6 +197,8 @@ export class AutumnBillingProvider implements BillingProvider {
           });
           if (result.customerId !== value.customerId || result.requiredBalance !== value.request.units)
             return { status: 'uncertain' };
+          if (result.balance === null && result.allowed === false)
+            return { status: 'denied', evidence: JSON.stringify(result) };
           this.validateBalance(result.balance, value.creditPoolId);
           return { status: result.allowed === true ? 'reserved' : 'denied', evidence: JSON.stringify(result) };
         } catch {
@@ -380,7 +382,10 @@ export class AutumnBillingProvider implements BillingProvider {
         await this.validateFeature(binding.featureId, binding.creditPoolId);
         const result = await this.client.check({ customerId: customer.customerId, featureId: binding.featureId });
         if (result.customerId !== customer.customerId) throw new BillingError('state_unavailable');
-        const balance = this.validateBalance(result.balance, binding.creditPoolId);
+        const balance =
+          result.balance === null && result.allowed === false
+            ? { remaining: 0, usage: 0 }
+            : this.validateBalance(result.balance, binding.creditPoolId);
         return {
           key: binding.key,
           funding: 'prepaid' as const,
