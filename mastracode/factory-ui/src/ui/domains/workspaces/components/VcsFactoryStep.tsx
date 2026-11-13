@@ -101,15 +101,21 @@ export function VcsFactoryStep({
     // The repository refresh re-syncs status itself; refetching here too cancels and repeats it.
     if (connected) {
       const listedIds = new Set(repos.data?.map(repository => repository.id));
+      const listedAt = repos.dataUpdatedAt;
       const installationCount = githubStatus.data?.installations.length ?? 0;
       refreshRepos.mutate(undefined, {
         // A new installation or repository means the access an approval or a Platform fix waited on has landed.
-        // The list is capped to the most recent repositories, so its length alone can't show that.
+        // The list is capped to the most recent repositories, so its length alone can't show that, and a
+        // repository pushed since it loaded may only have moved into it.
         onSuccess: next => {
           if (!githubCallbackAwaitsAccess(githubCallback)) return;
           const status = queryClient.getQueryData<GithubStatus>(queryKeys.githubStatus());
           const newInstallation = (status?.installations.length ?? 0) > installationCount;
-          if (newInstallation || next.some(repository => !listedIds.has(repository.id))) onDismissGithubCallback();
+          const newRepository = next.some(
+            repository =>
+              !listedIds.has(repository.id) && !(repository.pushedAt && Date.parse(repository.pushedAt) > listedAt),
+          );
+          if (newInstallation || newRepository) onDismissGithubCallback();
         },
       });
       return;

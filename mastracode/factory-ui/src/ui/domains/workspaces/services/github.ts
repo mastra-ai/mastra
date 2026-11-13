@@ -93,6 +93,8 @@ export interface GithubRepo {
   installationStorageId: string;
   sandboxProvider: string;
   sandboxWorkdir: string;
+  /** When the repository last received a push, if the server reports it. */
+  pushedAt?: string | null;
 }
 
 export type SourceControlRepository = GithubRepo | GitLabRepository;
