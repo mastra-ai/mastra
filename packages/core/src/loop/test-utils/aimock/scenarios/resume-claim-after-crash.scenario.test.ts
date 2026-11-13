@@ -179,6 +179,21 @@ describe('AIMock loop scenario: resume claim after the claimant dies', () => {
     expect(workerB.executions).toEqual(['B']);
   }, 30_000);
 
+  it('replays the decision a dead resume persisted when the next resume does not supply it', async () => {
+    const { storage, runId, workerA } = await setup();
+    const workerB = createWorker(storage, 'B', async () => {});
+
+    workerA.die();
+    await advance(AGENT_RESUME_CLAIM_STALE_MS + 1);
+
+    // The decision died with worker A; the claim it took carries it, so the takeover resumes with it
+    // instead of asking for approval again.
+    const resumed = await workerB.agent.resumeGenerate(undefined, { runId });
+
+    expect(resumed.text).toBe('Found Ada.');
+    expect(workerB.executions).toEqual(['B']);
+  }, 30_000);
+
   it('still rejects a resume while the first resume is alive past the stale window', async () => {
     const { storage, runId, workerA, resumeA, finishA } = await setup();
     const workerB = createWorker(storage, 'B', async () => {});

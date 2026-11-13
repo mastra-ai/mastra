@@ -76,3 +76,37 @@ describe('WorkflowsInMemory guarded snapshot writes', () => {
     expect(await workflows.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'missing' })).toBeNull();
   });
 });
+
+describe('WorkflowsInMemory resume claim payload', () => {
+  // The resume claim payload rides the v1 snapshot merge, which must persist it verbatim and
+  // drop it when a later claim clears it with an explicit `undefined`. See WorkflowRunState.
+  it('persists the payload with the claim and clears it with an explicit undefined', async () => {
+    const workflows = (await new InMemoryStore().getStore('workflows'))!;
+    const workflowName = 'agentic-loop';
+    const runId = 'run-claim';
+
+    await workflows.persistWorkflowSnapshot({ workflowName, runId, snapshot: makeSnapshot(runId, 'suspended') });
+
+    const claimed = await workflows.updateWorkflowState({
+      workflowName,
+      runId,
+      opts: {
+        status: 'pending',
+        expectedStatus: 'suspended',
+        resumeClaimedAt: 1,
+        resumeClaimedPayload: { approved: true },
+      },
+    });
+    expect(claimed).toMatchObject({ status: 'pending', resumeClaimedPayload: { approved: true } });
+
+    const reloaded = await workflows.loadWorkflowSnapshot({ workflowName, runId });
+    expect(reloaded!.resumeClaimedPayload).toEqual({ approved: true });
+
+    await workflows.updateWorkflowState({
+      workflowName,
+      runId,
+      opts: { status: 'suspended', expectedStatus: 'pending', resumeClaimedPayload: undefined },
+    });
+    expect((await workflows.loadWorkflowSnapshot({ workflowName, runId }))!.resumeClaimedPayload).toBeUndefined();
+  });
+});

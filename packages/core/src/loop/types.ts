@@ -245,6 +245,11 @@ export type AgentLoopResumeClaim = {
   start?: () => Promise<void>;
   /** Called right before the resumed run starts executing steps. */
   onExecutionStarted?: () => void;
+  /**
+   * The payload the suspended tool call resumes with: the caller's when it supplied one, otherwise
+   * the payload an abandoned claim already persisted. Absent when neither exists.
+   */
+  resumeData?: unknown;
   /** Ends the claim. Idempotent; hands the suspension back only if the run never started. */
   release: () => Promise<void>;
 };

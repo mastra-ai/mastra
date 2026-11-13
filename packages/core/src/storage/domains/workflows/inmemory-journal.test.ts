@@ -86,6 +86,30 @@ describe('WorkflowsInMemory v1 methods on storage v2 runs', () => {
     expect((await store.loadWorkflowSnapshot(run))!.status).toBe('canceled');
   });
 
+  it('persists the resume claim payload on the header, and clears it with an explicit undefined', async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: { a: ok(1) }, state: { n: 1 } });
+
+    const claimed = await store.updateWorkflowState({
+      ...run,
+      opts: {
+        status: 'pending',
+        expectedStatus: 'running',
+        resumeClaimedAt: 1,
+        resumeClaimedPayload: { approved: true },
+      },
+    });
+    expect(claimed).toMatchObject({ status: 'pending', resumeClaimedPayload: { approved: true } });
+    expect((await store.loadWorkflowSnapshot(run))!.resumeClaimedPayload).toEqual({ approved: true });
+
+    const cleared = await store.updateWorkflowState({
+      ...run,
+      opts: { status: 'suspended', expectedStatus: 'pending', resumeClaimedPayload: undefined },
+    });
+    expect(cleared!.resumeClaimedPayload).toBeUndefined();
+    expect((await store.loadWorkflowSnapshot(run))!.resumeClaimedPayload).toBeUndefined();
+  });
+
   it('rejects updateWorkflowResults on v2 runs', async () => {
     const { store } = setup();
     await store.writeWorkflowRunCheckpoint({ ...run, header: makeHeader('r1'), steps: {}, state: {} });

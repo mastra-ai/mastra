@@ -435,6 +435,16 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeLeasedClaimAt?: number;
+  /**
+   * The payload the claiming resume is resuming the suspended tool call with — the approval
+   * decision (`{ approved, reason? }`) or the resume data validated against the tool's
+   * `resumeSchema`. Persisted as part of the claim so a later resume that takes over an abandoned
+   * claim can replay it: without this, a process that dies between claiming the run and the resumed
+   * tool executing loses the decision and the run cannot be finished with it. Must be
+   * JSON-serializable.
+   * @internal
+   */
+  resumeClaimedPayload?: unknown;
   /** @internal Snapshot created only to guard evented step deliveries. */
   guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */

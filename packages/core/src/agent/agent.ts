@@ -802,6 +802,27 @@ function alreadyClaimedResumeError({
 }
 
 /**
+ * Whether a resume claim on a suspended run looks abandoned, i.e. the process that took it died
+ * before the resumed run finished. Only a claim on the same suspension (same snapshot timestamp)
+ * can be abandoned, and only a claim that started while holding a run-ownership lease (`running`
+ * with `resumeLeasedClaimAt` set) or one that never started and is past the stale window can be
+ * taken over. A `running` claim started by a process without the lease is never taken over, since
+ * a dead claimant cannot be told apart from a slow one.
+ */
+function isAbandonedResumeClaim(
+  current: WorkflowRunState | null | undefined,
+  snapshotTimestamp: number | undefined,
+  leased: boolean,
+): current is WorkflowRunState {
+  if (!current || current.timestamp !== snapshotTimestamp) return false;
+  if (typeof current.resumeClaimedAt !== 'number') return false;
+  if (current.status === 'running') {
+    return leased && current.resumeLeasedClaimAt === current.resumeClaimedAt;
+  }
+  return current.status === 'pending' && Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
+}
+
+/**
  * Run-level tool hooks with every non-function entry dropped. A request body can
  * carry `hooks: { beforeToolCall: null }`; that must not unset configured hooks.
  */
@@ -8543,6 +8564,34 @@ export class Agent<
   }
 
   /**
+   * The payload an abandoned resume claim persisted for a suspended run, if any. A resume that
+   * arrives without the decision (e.g. after the process that received the approval died) replays
+   * it, so it is validated against the suspended tool's `resumeSchema` before the claim is taken,
+   * exactly as a payload the caller supplied would be.
+   */
+  async #getStoredResumeClaimPayload({
+    snapshot,
+    runId,
+  }: {
+    snapshot: WorkflowRunState;
+    runId: string;
+  }): Promise<unknown> {
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+    // Stores without atomic updates persist no claim, so there is nothing to replay.
+    if (!workflowsStore?.supportsConcurrentUpdates()) return undefined;
+
+    const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+    // Mirror the claim's takeover rule: only replay from a claim that can be taken over, never
+    // from one a live resume may still be running.
+    const leased = await Promise.resolve()
+      .then(() => workflowsStore.supportsRunFencing())
+      .catch(() => false);
+    if (!isAbandonedResumeClaim(current, snapshot.timestamp, leased)) return undefined;
+    return current!.resumeClaimedPayload;
+  }
+
+  /**
    * Claims a suspended agentic-loop run for one resume before the resumed loop starts, so
    * concurrent approvals/resumes of the same run (double clicks, client retries, two tabs)
    * cannot both execute the suspended tool. Losers throw `AGENT_RESUME_ALREADY_CLAIMED`.
@@ -8568,6 +8617,11 @@ export class Agent<
    * goes back to `suspended` while someone may still run it. Without run fencing a `running` claim
    * is never taken over: nothing can tell a dead claimant from a slow one.
    *
+   * The payload this claim resumes the suspended tool call with is persisted with the claim
+   * (`resumeClaimedPayload`), so a resume that takes over an abandoned claim replays the decision
+   * when the process that received it died. A takeover keeps the caller's payload when it has one
+   * and otherwise replays the abandoned claim's; `release()` and the hand-back clear it.
+   *
    * `claim.release()` is idempotent. The loop calls it when the resumed run ends; resume methods
    * also call it on any failure before or after handing the claim to the loop. It hands the
    * suspension back to later callers only if the resumed run never started executing.
@@ -8577,15 +8631,21 @@ export class Agent<
     runId,
     toolCallId,
     method,
+    resumeData,
   }: {
     snapshot: WorkflowRunState;
     runId: string;
     toolCallId: string | undefined;
     method: string;
+    resumeData?: unknown;
   }): Promise<AgentLoopResumeClaim> {
     const throwAlreadyClaimed = (): never => {
       throw alreadyClaimedResumeError({ agentName: this.name, method, runId, toolCallId });
     };
+
+    // The payload this claim resumes the suspended tool call with. The caller's when it supplied
+    // one, otherwise the payload an earlier claim of the same suspension already persisted.
+    let resumePayload = resumeData;
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
@@ -8601,6 +8661,8 @@ export class Agent<
       if (inFlightUnclaimedResumes.has(runId)) throwAlreadyClaimed();
       inFlightUnclaimedResumes.add(runId);
       return {
+        // Nothing is persisted without concurrent updates, so the caller's payload is the only one.
+        resumeData,
         release: async () => {
           inFlightUnclaimedResumes.delete(runId);
         },
@@ -8611,7 +8673,14 @@ export class Agent<
       workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
         runId,
-        opts: { status: 'pending', expectedStatus: 'suspended', resumeClaimedAt: Date.now() },
+        opts: {
+          status: 'pending',
+          expectedStatus: 'suspended',
+          resumeClaimedAt: Date.now(),
+          // Persisted with the claim so a resume that takes over an abandoned claim can replay the
+          // decision even though the process that received it is gone.
+          resumeClaimedPayload: resumePayload,
+        },
       });
 
     // A probe that fails leaves the claim unleased, which is how a store without fencing behaves.
@@ -8653,13 +8722,10 @@ export class Agent<
     } else if (!claimed && leased) {
       const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
       const claimStatus = current?.status;
-      const abandoned =
-        current?.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        (claimStatus === 'running'
-          ? current.resumeLeasedClaimAt === current.resumeClaimedAt
-          : claimStatus === 'pending' && Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS);
-      if (!abandoned) throwAlreadyClaimed();
+      if (!isAbandonedResumeClaim(current, snapshot.timestamp, true)) throwAlreadyClaimed();
+      // The claim being taken over may have persisted the decision of the resume that died; replay
+      // it unless this caller supplied its own.
+      resumePayload = resumePayload ?? current!.resumeClaimedPayload;
       const owner = await workflowsStore.getRunOwnership({ runId: ownershipRunId });
       if (owner?.live) throwAlreadyClaimed();
       // Racing takers read the same generation, so only one of them gets the lease.
@@ -8673,7 +8739,12 @@ export class Agent<
       claimed = await workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
         runId,
-        opts: { status: 'pending', expectedStatus: claimStatus, resumeClaimedAt: Date.now() },
+        opts: {
+          status: 'pending',
+          expectedStatus: claimStatus,
+          resumeClaimedAt: Date.now(),
+          resumeClaimedPayload: resumePayload,
+        },
       });
       if (!claimed) {
         await releaseLease();
@@ -8681,12 +8752,9 @@ export class Agent<
       }
     } else if (!claimed) {
       const current = await workflowsStore.loadWorkflowSnapshot({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
-      const abandoned =
-        current?.status === 'pending' &&
-        current.timestamp === snapshot.timestamp &&
-        typeof current.resumeClaimedAt === 'number' &&
-        Date.now() - current.resumeClaimedAt >= AGENT_RESUME_CLAIM_STALE_MS;
-      if (!abandoned) throwAlreadyClaimed();
+      if (!isAbandonedResumeClaim(current, snapshot.timestamp, false)) throwAlreadyClaimed();
+      // Replay the decision the resume that died persisted, unless this caller supplied its own.
+      resumePayload = resumePayload ?? current!.resumeClaimedPayload;
 
       // Hand the abandoned suspension back, then claim it like any other. If a concurrent caller
       // re-claimed it in between, this hand-back can only make that caller's `start()` fail; the
@@ -8697,7 +8765,8 @@ export class Agent<
       await workflowsStore.updateWorkflowState({
         workflowName: AGENTIC_LOOP_WORKFLOW_ID,
         runId,
-        opts: { status: 'suspended', expectedStatus: 'pending' },
+        // Clear the dead claim's payload: the re-claim below re-writes the effective one.
+        opts: { status: 'suspended', expectedStatus: 'pending', resumeClaimedPayload: undefined },
       });
       claimed = await claim();
       if (!claimed) throwAlreadyClaimed();
@@ -8743,7 +8812,8 @@ export class Agent<
         await workflowsStore.updateWorkflowState({
           workflowName: AGENTIC_LOOP_WORKFLOW_ID,
           runId,
-          opts: { status: 'suspended', expectedStatus: claimStatus },
+          // The claim never executed anything, so its payload must not be replayable by a later resume.
+          opts: { status: 'suspended', expectedStatus: claimStatus, resumeClaimedPayload: undefined },
         });
       } catch (error) {
         this.logger.warn(`[Agent ${this.name}] Failed to release resume claim for run ${runId}`, { error });
@@ -8762,6 +8832,8 @@ export class Agent<
 
     return {
       snapshot,
+      // The caller's payload, or the one replayed from the claim this takeover replaced.
+      resumeData: resumePayload,
       start: async () => {
         // A claim whose lease lapsed before it started may have been taken over already.
         if (fence && !(await renewLease())) {
@@ -11485,10 +11557,16 @@ export class Agent<
       runId,
       method: 'resumeStream',
     });
+    // A resume arriving without the decision (e.g. after the process that received it died) replays
+    // the payload an abandoned claim persisted, so validate and resume with that one.
+    const effectiveResumeData =
+      resumeData !== undefined
+        ? resumeData
+        : await this.#getStoredResumeClaimPayload({ snapshot: resumeSnapshot, runId });
     await this.#validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId: streamOptions?.toolCallId,
-      resumeData,
+      resumeData: effectiveResumeData,
       requestContext: mergedStreamOptions.requestContext,
       toolsets: mergedStreamOptions.toolsets,
       clientTools: mergedStreamOptions.clientTools,
@@ -11500,6 +11578,7 @@ export class Agent<
       runId,
       toolCallId: streamOptions?.toolCallId,
       method: 'resumeStream',
+      resumeData: effectiveResumeData,
     });
 
     let preparedOptions: AgentExecutionOptions<OUTPUT> | undefined;
@@ -11555,7 +11634,8 @@ export class Agent<
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
         resumeContext: {
-          resumeData,
+          // The claim replays the payload of an abandoned claim it took over, if this call had none.
+          resumeData: resumeClaim.resumeData ?? effectiveResumeData,
           snapshot: resumeSnapshot,
           claim: resumeClaim,
         },
@@ -11694,10 +11774,16 @@ export class Agent<
       runId,
       method: 'resumeGenerate',
     });
+    // A resume arriving without the decision (e.g. after the process that received it died) replays
+    // the payload an abandoned claim persisted, so validate and resume with that one.
+    const effectiveResumeData =
+      resumeData !== undefined
+        ? resumeData
+        : await this.#getStoredResumeClaimPayload({ snapshot: resumeSnapshot, runId });
     await this.#validateToolResumeData({
       snapshot: resumeSnapshot,
       toolCallId: options?.toolCallId,
-      resumeData,
+      resumeData: effectiveResumeData,
       requestContext: mergedOptions.requestContext,
       toolsets: mergedOptions.toolsets,
       clientTools: mergedOptions.clientTools,
@@ -11709,6 +11795,7 @@ export class Agent<
       runId,
       toolCallId: options?.toolCallId,
       method: 'resumeGenerate',
+      resumeData: effectiveResumeData,
     });
 
     let fullOutput: Awaited<ReturnType<MastraModelOutput<OUTPUT>['getFullOutput']>>;
@@ -11756,7 +11843,8 @@ export class Agent<
         messages: [],
         resolvedScopes: resolvedScopes.scopes,
         resumeContext: {
-          resumeData,
+          // The claim replays the payload of an abandoned claim it took over, if this call had none.
+          resumeData: resumeClaim.resumeData ?? effectiveResumeData,
           snapshot: resumeSnapshot,
           claim: resumeClaim,
         },
@@ -11833,6 +11921,30 @@ export class Agent<
   ): Promise<MastraModelOutput<OUTPUT>> {
     // @ts-expect-error - the types here are wrong
     return this.resumeStream({ approved: true }, options);
+  }
+
+  /**
+   * Resumes a run whose suspended tool call was already claimed by a resume that died before the
+   * tool ran, replaying the payload that claim persisted.
+   *
+   * `approveToolCall()`, `declineToolCall()`, and `resumeStream()` carry the decision themselves,
+   * but a process that dies between claiming the run and executing the suspended tool loses it. A
+   * claim persists the payload it resumes with, so this replays it. Behaves like
+   * `resumeStream(undefined, options)` when no claim is abandoned (or the store cannot persist one).
+   *
+   * @example
+   * ```typescript
+   * // The process that approved this run crashed before the tool ran.
+   * const stream = await agent.resumeClaimedRun({ runId: 'suspended-run-id' });
+   * ```
+   */
+  async resumeClaimedRun<OUTPUT = undefined>(
+    options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
+      model?: DynamicArgument<MastraModelConfig>;
+    },
+  ): Promise<MastraModelOutput<OUTPUT>> {
+    // @ts-expect-error - the types here are wrong
+    return this.resumeStream(undefined, options);
   }
 
   async sendStreamResume<OUTPUT = undefined>(

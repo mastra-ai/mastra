@@ -2359,6 +2359,11 @@ export interface UpdateWorkflowStateOptions {
   /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
   resumeLeasedClaimAt?: number;
   /**
+   * The payload the claiming resume will resume the suspended tool call with. See
+   * `WorkflowRunState.resumeClaimedPayload`. Written with `resumeClaimedAt`; `undefined` clears it.
+   */
+  resumeClaimedPayload?: unknown;
+  /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a
    * no-op and `updateWorkflowState` resolves to `undefined`.
