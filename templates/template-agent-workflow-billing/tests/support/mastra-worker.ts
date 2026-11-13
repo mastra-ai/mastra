@@ -1,4 +1,10 @@
 import { runtimeFixture } from './mastra.js';
+async function send(message: object) {
+  if (!process.send) return;
+  await new Promise<void>((resolve, reject) => {
+    process.send!(message, error => (error ? reject(error) : resolve()));
+  });
+}
 const [phase, serialized, executionId] = process.argv.slice(2);
 const runtime = await runtimeFixture(JSON.parse(serialized));
 try {
@@ -31,14 +37,14 @@ try {
           resumeData: { approved: true },
         })
       : undefined;
-  process.send?.({
+  await send({
     executionId: handle.executionId,
     projection: result.kind === 'immediate' ? result.projection : result.result,
     billing: result.billing,
     duplicate,
   });
 } catch (error) {
-  process.send?.({ error: error instanceof Error ? error.stack : String(error) });
+  await send({ error: error instanceof Error ? error.stack : String(error) });
   process.exitCode = 1;
 } finally {
   await runtime.close();
