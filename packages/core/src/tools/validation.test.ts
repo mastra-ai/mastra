@@ -1,3 +1,4 @@
+import { type } from 'arktype';
 import * as v from 'valibot';
 import { describe, expect, it, vi } from 'vitest';
 import { z as z3 } from 'zod/v3';
@@ -2715,6 +2716,34 @@ describe('getModelFacingValidationError', () => {
     expect(valibotModelFacing?.message).toContain('- count: number (expected number)');
     expect(JSON.stringify(valibotModelFacing)).not.toContain('not-an-email');
     expect(JSON.stringify(valibotModelFacing)).not.toContain('four');
+  });
+
+  it('never forwards issue metadata a custom check can set, such as an ArkType expected value', () => {
+    const token = 'PrivateCustomerToken123';
+    const arkSchema = type({ token: type('string').narrow((value, ctx) => ctx.reject({ expected: value })) });
+    const { error } = validateToolOutput(arkSchema, { token }, 'lookup');
+
+    expect(JSON.stringify(error)).toContain(token);
+    const modelFacing = getModelFacingValidationError(error);
+    expect(modelFacing?.message).toContain('- token: predicate');
+    expect(JSON.stringify(modelFacing)).not.toContain(token);
+
+    // Any Standard Schema library: kinds and types off the fixed lists become `invalid`.
+    const custom = {
+      '~standard': {
+        version: 1,
+        vendor: 'custom',
+        validate: () => ({ issues: [{ message: token, path: ['token'], code: token, type: token, expected: token }] }),
+        jsonSchema: {
+          input: () => ({ type: 'object', properties: { token: { type: 'string' } } }),
+          output: () => ({ type: 'object', properties: { token: { type: 'string' } } }),
+        },
+      },
+    };
+    const customError = validateToolOutput(custom as any, { token }, 'lookup').error;
+    const customModelFacing = getModelFacingValidationError(customError);
+    expect(customModelFacing?.message).toContain('- token: invalid');
+    expect(JSON.stringify(customModelFacing)).not.toContain(token);
   });
 
   it('names only the failing output fields, never the output or values an issue message quotes', () => {

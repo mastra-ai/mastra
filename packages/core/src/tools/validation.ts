@@ -139,18 +139,113 @@ export function getModelFacingValidationError(value: unknown): ModelFacingValida
 }
 
 /**
+ * Issue kinds that may reach the model: Zod v3/v4 `code`s, Valibot schema and action `type`s and
+ * ArkType `code`s. A fixed list, because issue metadata is not value-free: a custom check can set
+ * `code`, `type` or `expected` to anything, including the rejected value.
+ */
+const MODEL_FACING_ISSUE_KINDS: ReadonlySet<string> = new Set([
+  // Zod v3 and v4
+  'invalid_type',
+  'invalid_literal',
+  'invalid_value',
+  'invalid_enum_value',
+  'invalid_union',
+  'invalid_union_discriminator',
+  'invalid_intersection_types',
+  'invalid_arguments',
+  'invalid_return_type',
+  'invalid_date',
+  'invalid_string',
+  'invalid_format',
+  'invalid_key',
+  'invalid_element',
+  'unrecognized_keys',
+  'too_small',
+  'too_big',
+  'not_multiple_of',
+  'not_finite',
+  'custom',
+  // Valibot action types (schema types are covered by MODEL_FACING_TYPE_NAMES)
+  'email',
+  'url',
+  'uuid',
+  'regex',
+  'check',
+  'length',
+  'min_length',
+  'max_length',
+  'non_empty',
+  'min_value',
+  'max_value',
+  'iso_date',
+  'iso_date_time',
+  'iso_timestamp',
+  // ArkType
+  'domain',
+  'required',
+  'predicate',
+  'pattern',
+  'divisor',
+  'min',
+  'max',
+  'minLength',
+  'maxLength',
+  'exactLength',
+  'unit',
+  'proto',
+  'after',
+  'before',
+]);
+
+/** Plain type names that may reach the model as an issue's expected type (or Valibot's schema `type`). */
+const MODEL_FACING_TYPE_NAMES: ReadonlySet<string> = new Set([
+  'string',
+  'number',
+  'bigint',
+  'boolean',
+  'symbol',
+  'undefined',
+  'null',
+  'object',
+  'array',
+  'tuple',
+  'record',
+  'map',
+  'set',
+  'date',
+  'function',
+  'integer',
+  'int',
+  'nan',
+  'literal',
+  'enum',
+  'picklist',
+  'union',
+  'variant',
+  'never',
+  'nonoptional',
+  'nonnullable',
+  'nonnullish',
+]);
+
+/**
  * Generic, value-free description of one issue for the model: the schema library's issue kind
- * (Zod's `code`, Valibot's `type`) and, when it is a plain type name, the expected type. Issue
- * messages are left out: custom refinements can quote anything, including values an input
- * transform resolved, and built-in messages can quote the rejected value.
+ * (Zod's `code`, Valibot's `type`, ArkType's `code`) and the expected type, each only when it is
+ * on a fixed list, else `invalid`. Issue messages are left out: custom refinements can quote
+ * anything, including values an input transform resolved, and built-in messages can quote the
+ * rejected value.
  */
 function describeIssueForModel(issue: StandardSchemaIssue): string {
-  const field = (key: string): string | undefined => {
+  const listed = (key: string, allowed: ReadonlySet<string>): string | undefined => {
     const value: unknown = Reflect.get(issue, key);
-    return typeof value === 'string' && /^[A-Za-z][A-Za-z0-9_]*$/.test(value) ? value : undefined;
+    return typeof value === 'string' && allowed.has(value) ? value : undefined;
   };
-  const kind = field('code') ?? field('type') ?? 'invalid';
-  const expected = field('expected');
+  const kind =
+    listed('code', MODEL_FACING_ISSUE_KINDS) ??
+    listed('type', MODEL_FACING_ISSUE_KINDS) ??
+    listed('type', MODEL_FACING_TYPE_NAMES) ??
+    'invalid';
+  const expected = listed('expected', MODEL_FACING_TYPE_NAMES);
   return expected ? `${kind} (expected ${expected})` : kind;
 }
 
