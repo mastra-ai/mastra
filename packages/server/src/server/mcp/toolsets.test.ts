@@ -211,6 +211,19 @@ describe('working-memory inspection authorization', () => {
     expect((await access.db.listThreads({ perPage: false })).threads).toHaveLength(2);
   });
 
+  it('passes the same request context to the handler check as route-level FGA', async () => {
+    const access = await workingMemoryAccess({
+      serverFga: {
+        check: async (_user, { resource, context }) =>
+          resource.type === 'resource' &&
+          context?.resourceId === resource.id &&
+          context?.requestContext instanceof RequestContext,
+      },
+    });
+    expect(await access.handlerRead()).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+    expect(await access.read()).toMatchObject({ workingMemory: 'RESOURCE MEMO' });
+  });
+
   it('does not treat a thread grant as a resource grant', async () => {
     const access = await workingMemoryAccess({
       serverFga: { check: async (_user, { resource }) => resource.type === 'thread' },

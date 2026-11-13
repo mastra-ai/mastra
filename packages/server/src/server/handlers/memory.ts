@@ -1506,6 +1506,7 @@ export const GET_RESOURCE_WORKING_MEMORY_ROUTE = createRoute({
         const allowed = await fgaProvider.check(user, {
           resource: { type: 'resource', id: effectiveResourceId! },
           permission: MastraFGAPermissions.MEMORY_READ,
+          context: { resourceId: effectiveResourceId, requestContext },
         });
         if (!allowed) {
           throw new HTTPException(403, { message: 'FGA authorization denied: resource working memory access' });
