@@ -686,11 +686,11 @@ const factory = new MastraFactory({ storage, dispatcher: { maxInFlight: 25 } });
 
 The cap counts per process, not per deployment: three replicas with the default run up to 30 at once.
 
-The board shows how many runs are waiting, and opens a list of them in the order they will start. A waiting card reads `Queued (#3)`. `GET /web/factory/projects/:id/run-queue` returns the same data:
+The board shows how many automated runs are waiting, and opens a list of them, oldest first. A waiting card reads `Queued (#3)`. Manual starts take the same slots and are claimed ahead of these runs, but are not listed. `GET /web/factory/projects/:id/run-queue` returns the same data:
 
 - `slots` — this server's `inUse` and `cap`, or `null` when it runs no dispatcher. Other replicas keep their own.
-- `running` and `claimed` — the project's runs a server holds a slot for, on any replica.
-- `queuedCount` and `queued` — every run waiting for a slot, and the oldest 50 with their `position`, card, phase and the skill they will run. A retry still backing off is not waiting yet.
+- `running` and `claimed` — the project's automated runs a server holds a slot for, on any replica. A manual start holding a slot counts in `slots.inUse` but not here, so `running` can be lower than `inUse`.
+- `queuedCount` and `queued` — every automated run waiting for a slot, and the oldest 50 with their `position`, card, phase and the skill they will run. A retry still backing off is not waiting yet.
 
 ### The `factory-work-item` signal
 

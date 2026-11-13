@@ -15,4 +15,4 @@ new MastraFactory({
 
 **See the run queue on the board**
 
-The board now shows how many automated runs are waiting for a free slot. Click the indicator to see each waiting run in order, with its card, and open the card from the list. A waiting card says `Queued (#3)` instead of `Starting an automated run…`. The same data is available from `GET /web/factory/projects/:id/run-queue`.
+The board now shows how many automated runs are waiting for a free slot. Click the indicator to see each waiting automated run, oldest first, with its card, and open the card from the list. A waiting card says `Queued (#3)` instead of `Starting an automated run…`. The same data is available from `GET /web/factory/projects/:id/run-queue`.

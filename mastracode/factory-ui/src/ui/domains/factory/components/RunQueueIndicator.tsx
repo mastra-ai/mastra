@@ -21,7 +21,7 @@ function slotsLabel(slots: RunQueueResponse['slots']): string | undefined {
   return slots ? `${slots.inUse} of ${slots.cap} run slots in use on this server` : undefined;
 }
 
-/** How many automated runs wait for a run slot, opening the list in the order they will start. */
+/** How many automated runs wait for a run slot, opening the list oldest first. */
 export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; queue: RunQueueResponse | undefined }) {
   const catalog = useBoardCatalog(factoryId);
   if (!queue || queue.queuedCount === 0) return null;
@@ -43,7 +43,7 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
         <span className="tabular-nums">{queue.queuedCount} queued</span>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-[min(24rem,calc(100vw-1.5rem))]">
-        <DropdownMenu.Label>Waiting for a run slot, next first</DropdownMenu.Label>
+        <DropdownMenu.Label>Waiting for a run slot, oldest first</DropdownMenu.Label>
         {queue.queued.map(run => {
           const card = run.workItem;
           const details = [card?.key, runLabel(run), phaseName(card?.board ?? null, card?.phase ?? null)].filter(
