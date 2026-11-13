@@ -415,9 +415,14 @@ describe('factory-environment-build workflow', () => {
         sleep: () => new Promise<void>(resolve => setTimeout(resolve, 5)),
       });
       mastra = bootMastra(runner);
+      const start = vi.spyOn(runner, 'start');
+      /** Saves, then resolves with the outcome of the `settings` run the save fired. */
       const saveSetupCommand = async (setupCommand: string) => {
         await github.projectRepositories.update({ orgId: 'org-1', id: link!.id, input: { setupCommand } });
+        start.mockClear();
         runner.onEnvironmentSaved(project.id);
+        await vi.waitFor(() => expect(start).toHaveBeenCalledWith(project.id, 'settings'));
+        return start.mock.results[start.mock.calls.findIndex(([, trigger]) => trigger === 'settings')]!.value;
       };
       return { project, sandbox, runner, mastra, saveSetupCommand };
     }
@@ -457,14 +462,17 @@ describe('factory-environment-build workflow', () => {
       headLookup();
       await expect(scheduled).resolves.toEqual({ outcome: 'skipped', reason: 'unchanged' });
       await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined, 'pnpm i']));
+      sandbox.finish('build-2');
+      await vi.waitFor(async () => {
+        expect((await seed.projects.getById({ id: project.id }))?.activeTemplateId).toBe('tpl-2');
+      });
     });
 
     it('is built once a run the runner started is over', async () => {
       const { project, sandbox, runner, saveSetupCommand } = await boot();
 
       await expect(runner.start(project.id, 'manual')).resolves.toMatchObject({ outcome: 'started' });
-      await saveSetupCommand('pnpm i');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await expect(saveSetupCommand('pnpm i')).resolves.toMatchObject({ outcome: 'skipped', reason: 'in_progress' });
       expect(sandbox.starts).toEqual([undefined]);
 
       sandbox.finish('build-1');
@@ -484,8 +492,7 @@ describe('factory-environment-build workflow', () => {
       // Fires through the same `workflow.start` event the scheduler publishes.
       await mastra.schedules.run(scheduleIdFor(project.id));
       await vi.waitFor(() => expect(sandbox.starts).toEqual([undefined]));
-      await saveSetupCommand('pnpm i');
-      await new Promise(resolve => setTimeout(resolve, 50));
+      await expect(saveSetupCommand('pnpm i')).resolves.toMatchObject({ outcome: 'skipped', reason: 'in_progress' });
       expect(sandbox.starts).toEqual([undefined]);
 
       sandbox.finish('build-1');
