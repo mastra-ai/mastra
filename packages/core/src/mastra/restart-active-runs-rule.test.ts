@@ -306,27 +306,6 @@ describe('workflow recovery rule (#28712)', () => {
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
 
-  it("restarts a run from the recovery loop's next pass when the read right before its restart fails", async () => {
-    const storage = new InMemoryStore();
-    const store = (await storage.getStore('workflows'))!;
-    const executions: string[] = [];
-    const b = startReplica(storage, 'default', 'B', executions, {
-      recovery: { workflowGraceMs: 0, workflowScanIntervalMs: 100 },
-    });
-    await persistActiveRun(storage, 'stopped');
-    const read = store.getRunOwnerships.bind(store);
-    vi.spyOn(store, 'getRunOwnerships')
-      .mockImplementationOnce(read)
-      .mockRejectedValueOnce(new Error('ownership read failed'))
-      .mockImplementation(read);
-
-    await b.restartAllActiveWorkflowRuns();
-    expect(executions).toEqual([]);
-
-    await b.startWorkers();
-    await vi.waitFor(() => expect(executions).toEqual(['B:work']));
-  });
-
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];

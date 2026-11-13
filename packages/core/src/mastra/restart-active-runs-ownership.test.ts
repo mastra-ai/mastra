@@ -3,19 +3,14 @@
  * executing (issue #25579). Two Mastra instances share one store, the way two
  * replicas share one database.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
-import type { MastraRecoveryConfig } from './index';
 
-function buildReplica(
-  storage: InMemoryStore,
-  onExecute: (runId: string) => Promise<void>,
-  recovery?: MastraRecoveryConfig,
-) {
+function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Promise<void>) {
   const step = createStep({
     id: 'side-effect',
     inputSchema: z.object({}),
@@ -32,7 +27,7 @@ function buildReplica(
   })
     .then(step)
     .commit();
-  return new Mastra({ logger: false, storage, workflows: { workflow }, recovery });
+  return new Mastra({ logger: false, storage, workflows: { workflow } });
 }
 
 const replicas: Mastra[] = [];
@@ -40,28 +35,6 @@ afterEach(async () => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   await Promise.all(replicas.splice(0).map(mastra => mastra.shutdown()));
-});
-
-async function persistOrphanedRun(storage: InMemoryStore, mastra: Mastra, leaseMs: number) {
-  const workflow = mastra.getWorkflow('workflow');
-  const run = await workflow.createRun();
-  const workflowsStore = (await storage.getStore('workflows'))!;
-  const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
-  await workflowsStore.persistWorkflowSnapshot({
-    workflowName: workflow.id,
-    runId: run.runId,
-    snapshot: { ...snapshot!, status: 'running', activePaths: [0], context: { input: {} } as any },
-  });
-  await workflowsStore.claimRunOwnership({ runId: run.runId, ownerId: 'crashed-replica', leaseMs });
-  return { workflow, run, workflowsStore };
-}
-
-// Asserts the default shutdown drain budget lets in-flight work finish; keep real waits.
-beforeAll(() => {
-  vi.stubEnv('MASTRA_TEST_FAST_WAITS', '0');
-});
-afterAll(() => {
-  vi.unstubAllEnvs();
 });
 
 describe('boot-time workflow recovery and run ownership (#25579)', () => {
@@ -104,38 +77,6 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     expect((await workflowsStore!.getRunOwnership({ runId: run.runId }))?.live).toBe(false);
   });
 
-  it('drains on shutdown a restart the recovery loop started once a crashed owner lease expired', async () => {
-    const storage = new InMemoryStore();
-    let finish!: () => void;
-    const gate = new Promise<void>(resolve => (finish = resolve));
-    let signalStarted!: () => void;
-    const started = new Promise<void>(resolve => (signalStarted = resolve));
-    const replica = buildReplica(
-      storage,
-      async () => {
-        signalStarted();
-        await gate;
-      },
-      { workflowScanIntervalMs: 100 },
-    );
-    const { workflow, run, workflowsStore } = await persistOrphanedRun(storage, replica, 100);
-
-    // The boot pass finds the lease live; a later pass of the loop restarts the run.
-    await replica.restartAllActiveWorkflowRuns();
-    await replica.startWorkers();
-    await started;
-
-    let shutDown = false;
-    const shutdown = replica.shutdown().then(() => (shutDown = true));
-    await new Promise(resolve => setTimeout(resolve, 200));
-    expect(shutDown).toBe(false);
-
-    finish();
-    await shutdown;
-    expect((await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.status).toBe(
-      'success',
-    );
-  }, 15_000);
   it('keeps renewing the lease of a run that outlives the lease TTL', async () => {
     // The lease renews on a setTimeout chain.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });

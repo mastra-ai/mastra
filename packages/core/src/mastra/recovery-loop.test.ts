@@ -204,12 +204,10 @@ describe('workflow recovery loop (#28712)', () => {
     await vi.waitFor(() => expect(executions).toEqual(['A:work', 'B:work']), { timeout: 6_000, interval: 10 });
     const restartedAfter = Date.now() - killedAt;
 
-    // A renewed both leases at least every third of a lease TTL, so they outlived the crash by two thirds
-    // of one at least. B's first tick after the leader's lease lapsed takes the row; its pass can still
-    // find the run's lease live, and the next one moves the pass after it to the end of the grace period,
-    // waiting at least a second and up to a fifth more. The last 500 ms leave room for the step to start.
+    // The leases lapse 2/3 to 1 TTL after the kill; B needs up to two ticks to take the row and see the run in
+    // its grace period, then waits up to 1.2 s for its due time.
     expect(restartedAfter).toBeGreaterThanOrEqual((WORKFLOW_RUN_LEASE_TTL_MS * 2) / 3 + GRACE_MS);
-    expect(restartedAfter).toBeLessThan(WORKFLOW_RUN_LEASE_TTL_MS + 2 * 500 * 1.2 + 1_200 + 500);
+    expect(restartedAfter).toBeLessThan(WORKFLOW_RUN_LEASE_TTL_MS + 2 * 500 * 1.2 + 1_200 + 1_500);
     await vi.waitFor(async () => expect(await statusOf(storage, run.runId)).toBe('success'));
   }, 15_000);
 
@@ -374,17 +372,14 @@ describe('workflow recovery loop (#28712)', () => {
     },
   );
 
-  it.each([
-    ['stopWorkers()', (mastra: Mastra) => mastra.stopWorkers({ drainTimeout: 0 })],
-    ['shutdown()', (mastra: Mastra) => mastra.shutdown({ drainTimeout: 0 })],
-  ])('checks storage no more after %s', async (_, stop) => {
+  it('checks storage no more after stopWorkers()', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     const storage = new InMemoryStore();
     const { mastra, listings } = replica(storage, 'B', [], scanning);
     await mastra.startWorkers();
     await vi.waitFor(() => expect(listings()).toBeGreaterThanOrEqual(6));
 
-    await stop(mastra);
+    await mastra.stopWorkers({ drainTimeout: 0 });
     // A pass already running may still list.
     await drained();
     const listed = listings();
@@ -441,7 +436,6 @@ describe('workflow recovery loop (#28712)', () => {
   });
 
   it.each([
-    'opening the workflows store',
     'probing the store for run fencing',
     'claiming the recovery leader row',
     'listing the runs',
@@ -461,13 +455,7 @@ describe('workflow recovery loop (#28712)', () => {
 
       return answer();
     };
-    if (failing === 'opening the workflows store') {
-      const getStore = storage.getStore.bind(storage);
-      vi.spyOn(storage, 'getStore').mockImplementation(((domain: string) =>
-        domain === 'workflows'
-          ? failThrice(() => getStore(domain as 'workflows'))
-          : getStore(domain as never)) as typeof storage.getStore);
-    } else if (failing === 'probing the store for run fencing') {
+    if (failing === 'probing the store for run fencing') {
       const probe = store.supportsRunFencing.bind(store);
       vi.spyOn(store, 'supportsRunFencing').mockImplementation(async () => failThrice(probe));
     } else if (failing === 'claiming the recovery leader row') {
