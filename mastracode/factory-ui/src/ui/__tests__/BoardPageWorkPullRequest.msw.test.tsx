@@ -238,4 +238,16 @@ describe('Pull requests on the Work board', () => {
     expect(within(card as HTMLElement).getByRole('img', { name: 'Open pull request' })).toBeInTheDocument();
     expect(screen.queryByText(plainIssue.title)).toBeNull();
   });
+
+  it("keeps an issue row's attached pull request icon on one line with its source icon", async () => {
+    stubBoards({ items: [issueWithPullRequest] });
+    renderBoard('work');
+
+    const card = (await screen.findByText(issueWithPullRequest.title)).closest('[data-testid="work-item-card"]');
+    const pullRequestIcon = within(card as HTMLElement).getByRole('img', { name: 'Open pull request' });
+    // The list row's icon cell is a grid, so the pair needs its own flex row or each icon takes a grid row.
+    const pair = pullRequestIcon.parentElement as HTMLElement;
+    expect(pair).toHaveClass('flex');
+    expect(pair.querySelector('[data-source="github-issue"]')).not.toBeNull();
+  });
 });
