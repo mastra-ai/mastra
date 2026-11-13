@@ -94,7 +94,7 @@ export async function mastraServer(databaseUrl: string, credential: string) {
   const url = `http://127.0.0.1:${port}`;
   try {
     for (let attempt = 0; attempt < 300; attempt++) {
-      if (child.exitCode !== null) throw new Error(`Mastra exited: ${output}`);
+      if (child.exitCode !== null || child.signalCode !== null) throw new Error(`Mastra exited: ${output}`);
       try {
         const response = await fetch(`${url}/billing/context`, {
           headers: { authorization: `Bearer ${credential}` },
