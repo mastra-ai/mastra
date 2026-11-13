@@ -41,6 +41,7 @@ function queued(position: number, decisionId: string, workItem: QueueEntry['work
     state: 'waiting',
     position,
     type: 'invokeSkill',
+    lane: 'automated',
     role: 'work',
     skillName: 'factory-plan',
     queuedSince: `2026-08-05T00:0${position}:00.000Z`,
@@ -49,10 +50,11 @@ function queued(position: number, decisionId: string, workItem: QueueEntry['work
 }
 
 const runQueue: RunQueueResponse = {
-  slots: { scope: 'server', inUse: 2, cap: 2 },
+  slots: { scope: 'server', inUse: 2, cap: 2, interactive: { inUse: 0, cap: 2 } },
   running: 2,
   claimed: [],
   queuedCount: 3,
+  queuedByLane: { automated: 3, interactive: 0 },
   queued: [
     queued(1, 'decision-a', { id: 'other-a', key: 'ACME-1', title: 'Fix login', board: 'work', phase: 'execute' }),
     queued(2, 'decision-b', { id: 'other-b', key: null, title: 'Add rate limits', board: 'work', phase: 'execute' }),
@@ -102,6 +104,47 @@ describe('Board run queue', () => {
 
     await user.click(rows[2]);
     expect(router.state.location.search).toBe('?item=recent-card');
+  });
+
+  it("lists a person's reply waiting for a slot apart from the automated runs, with each lane's slots", async () => {
+    stubWorkBoard();
+    const reply: QueueEntry = {
+      ...queued(1, 'decision-reply', {
+        id: 'other-b',
+        key: 'ACME-2',
+        title: 'Add rate limits',
+        board: 'work',
+        phase: 'review',
+      }),
+      type: 'sendMessage',
+      lane: 'interactive',
+      skillName: null,
+    };
+    server.use(
+      http.get(`${projectUrl}/run-queue`, () =>
+        HttpResponse.json({
+          ...runQueue,
+          slots: { scope: 'server', inUse: 2, cap: 2, interactive: { inUse: 2, cap: 2 } },
+          queuedCount: 2,
+          queuedByLane: { automated: 1, interactive: 1 },
+          queued: [runQueue.queued[0], reply],
+        } satisfies RunQueueResponse),
+      ),
+    );
+    const user = userEvent.setup();
+    renderBoard();
+
+    await user.click(await screen.findByRole('button', { name: '2 queued, 2 running on this server' }));
+
+    const menu = await screen.findByRole('menu');
+    expect(menu.textContent).toMatch(
+      /Replies waiting.*Add rate limits.*Waiting for a run slot, oldest first.*Fix login/,
+    );
+    const [replyRow] = await screen.findAllByRole('menuitem');
+    expect(replyRow).toHaveTextContent('#1');
+    expect(replyRow).toHaveTextContent('Reply from a person');
+    expect(menu).toHaveTextContent('2 of 2 run slots in use on this server');
+    expect(menu).toHaveTextContent('2 of 2 reply slots in use on this server');
   });
 
   it('labels a card waiting for a slot with its place in the queue', async () => {
