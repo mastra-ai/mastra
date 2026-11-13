@@ -207,8 +207,8 @@ async function setup(
 describe('GitLabRules', () => {
   it('commits a selected linked issue once and replays the same delivery', async () => {
     const { seeded, project, service } = await setup();
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'replayed' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'committed' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'replayed' });
 
     const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toHaveLength(1);
@@ -242,20 +242,20 @@ describe('GitLabRules', () => {
 
   it('ignores a same-numbered project linked from a different GitLab host', async () => {
     const { seeded, project, gitlab, service } = await setup({ installationHost: 'other-gitlab.example.com' });
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'ignored' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'ignored' });
     expect(gitlab.getProjectMemberAccessLevel).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it('ignores an issue when its canonical source is not selected', async () => {
     const { seeded, project, service } = await setup({ selected: false });
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'ignored' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'ignored' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it('deduplicates direct and Platform installations linked to the same Factory project', async () => {
     const { seeded, project, gitlab, service } = await setup({ duplicateInstallation: true });
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
     expect(gitlab.getProjectMemberAccessLevel).toHaveBeenCalledTimes(1);
   });
@@ -266,7 +266,7 @@ describe('GitLabRules', () => {
       if (connectionId !== 'direct') throw new Error('Platform credential is unavailable');
       return 40;
     });
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(gitlab.getProjectMemberAccessLevel).toHaveBeenCalledWith('direct', PROJECT_ID, 'maintainer');
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { actor: { trusted: true }, decision: { metadata: { authorTrusted: true, autoStartCandidate: true } } },
@@ -276,7 +276,7 @@ describe('GitLabRules', () => {
   it('fails actor trust closed when GitLab membership cannot be resolved', async () => {
     const { seeded, project, gitlab, service } = await setup();
     vi.mocked(gitlab.getProjectMemberAccessLevel).mockRejectedValue(new Error('GitLab unavailable'));
-    await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
         actor: { type: 'gitlab', trusted: false },
@@ -291,7 +291,7 @@ describe('GitLabRules', () => {
       username === 'maintainer' ? 40 : 10,
     );
 
-    await expect(service.ingest(issueOpened('issue-untrusted-author', 'external-author'))).resolves.toEqual({
+    await expect(service.ingest(issueOpened('issue-untrusted-author', 'external-author'))).resolves.toMatchObject({
       status: 'committed',
     });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -321,7 +321,7 @@ describe('GitLabRules', () => {
           object_attributes: { ...attributes, author_id: 7 },
         },
       }),
-    ).resolves.toEqual({ status: 'committed' });
+    ).resolves.toMatchObject({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -345,7 +345,7 @@ describe('GitLabRules', () => {
           object_attributes: { ...attributes, author_id: 7 },
         },
       }),
-    ).resolves.toEqual({ status: 'committed' });
+    ).resolves.toMatchObject({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'issue', 42);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -369,7 +369,7 @@ describe('GitLabRules', () => {
           object_attributes: { ...attributes, author_id: 7 },
         },
       }),
-    ).resolves.toEqual({ status: 'committed' });
+    ).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { authorTrusted: false, autoStartCandidate: false } } },
     ]);
@@ -377,7 +377,7 @@ describe('GitLabRules', () => {
 
   it('materializes GitLab merge requests as Work cards with provider identity', async () => {
     const { seeded, project, service } = await setup();
-    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
         decision: {
@@ -412,7 +412,7 @@ describe('GitLabRules', () => {
           object_attributes: { ...attributes, author_id: 7 },
         },
       }),
-    ).resolves.toEqual({ status: 'committed' });
+    ).resolves.toMatchObject({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).not.toHaveBeenCalled();
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { metadata: { author: 'maintainer', authorTrusted: true } } },
@@ -435,7 +435,7 @@ describe('GitLabRules', () => {
           object_attributes: { ...attributes, author_id: 7 },
         },
       }),
-    ).resolves.toEqual({ status: 'committed' });
+    ).resolves.toMatchObject({ status: 'committed' });
     expect(gitlab.getWorkItemAuthorUsername).toHaveBeenCalledWith('direct', PROJECT_ID, 'merge_request', 17);
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
@@ -450,7 +450,7 @@ describe('GitLabRules', () => {
       username === 'maintainer' ? 40 : 10,
     );
 
-    await expect(service.ingest(mergeRequestOpened('mr-untrusted-author', 'external-author'))).resolves.toEqual({
+    await expect(service.ingest(mergeRequestOpened('mr-untrusted-author', 'external-author'))).resolves.toMatchObject({
       status: 'committed',
     });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
@@ -494,7 +494,7 @@ describe('GitLabRules', () => {
         sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
       },
     });
-    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       { decision: { type: 'upsertLinkedWorkItem', source: 'gitlab-pr', board: 'work' } },
     ]);
@@ -533,7 +533,7 @@ describe('GitLabRules', () => {
         sessions: { work: { sessionId: 'work-session', threadId: 'work-thread', branch: 'feature-17' } },
       },
     });
-    await expect(service.ingest(mergeRequestOpened())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestOpened())).resolves.toMatchObject({ status: 'committed' });
     expect(handler).toHaveBeenCalledOnce();
     expect(handler.mock.calls[0]![0]).toMatchObject({
       board: 'delivery',
@@ -565,7 +565,7 @@ describe('GitLabRules', () => {
         },
       })
     ).item;
-    await expect(service.ingest(mergeRequestNote())).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(mergeRequestNote())).resolves.toMatchObject({ status: 'committed' });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
       {
         workItemId: work.id,
@@ -710,6 +710,16 @@ describe('GitLabRules', () => {
       return { seeded, service, workId: work.id, reviewId: review.id, metadataOf };
     }
 
+    it('reports a listed head the webhook already recorded as settled, so the sweep can skip it', async () => {
+      const { service } = await seed({ openPullRequestNumber: 17 });
+      await service.ingest(mergeRequestUpdated('d-push', pushedHeadSha, reviewedHeadSha, '2030-01-01 02:00:00 UTC'));
+
+      const listed = `poll:merge-request-head:gitlab.example.com:101:17:2030-01-01T02:05:00Z:${pushedHeadSha}`;
+      await expect(
+        service.ingest(mergeRequestUpdated(listed, pushedHeadSha, undefined, '2030-01-01 02:05:00 UTC')),
+      ).resolves.toEqual({ status: 'ignored', settled: true });
+    });
+
     it('ignores a push delivered after a newer one', async () => {
       const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
 
@@ -786,7 +796,7 @@ describe('GitLabRules', () => {
       if (commitTimestamp) {
         push.payload.object_attributes.last_commit = { id: pushedHeadSha, timestamp: commitTimestamp } as never;
       }
-      await expect(service.ingest(push)).resolves.toEqual({
+      await expect(service.ingest(push)).resolves.toMatchObject({
         status: 'committed',
       });
       await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
@@ -1036,7 +1046,7 @@ describe('GitLabRules', () => {
         metadata: { authorTrusted: true },
       },
     });
-    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toEqual({
+    await expect(service.ingest(mergeRequestNote('delivery-mr-note-unrelated'))).resolves.toMatchObject({
       status: 'committed',
     });
     expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
@@ -1275,7 +1285,7 @@ describe('merge request cards on the Work board', () => {
 
   it('files an untrusted merge request in Work intake without starting a review', async () => {
     const { seeded, project, service, dispatch, decisions } = await harness({ accessLevel: 10 });
-    await expect(service.ingest(mergeRequestOpened('d-open', 'external-author'))).resolves.toEqual({
+    await expect(service.ingest(mergeRequestOpened('d-open', 'external-author'))).resolves.toMatchObject({
       status: 'committed',
     });
     await dispatch();
@@ -1296,7 +1306,7 @@ describe('merge request cards on the Work board', () => {
       const { seeded, project, service, dispatch, decisions, get } = await harness();
       const card = await mergeRequestCard(seeded, project.id, board, 'intake');
 
-      await expect(service.ingest(mergeRequestEvent('d-reopen', 'reopen'))).resolves.toEqual({ status: 'committed' });
+      await expect(service.ingest(mergeRequestEvent('d-reopen', 'reopen'))).resolves.toMatchObject({ status: 'committed' });
       await dispatch();
 
       expect(await seeded.workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);

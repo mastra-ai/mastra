@@ -136,7 +136,9 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
       type: decision.type,
       ...('title' in decision && { title: decision.title, author: decision.metadata?.author }),
     }));
-  return { sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded };
+  /** GitLab member lookups, which every rule evaluation of a listed event pays twice. */
+  const memberLookups = () => fetchImpl.mock.calls.filter(([input]) => String(input).includes('/members/all')).length;
+  return { sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded, memberLookups };
 }
 
 const openMergeRequest = {
@@ -175,6 +177,41 @@ describe('GitLab sweep discovery', () => {
       ]);
       await sweep();
       expect(await filed()).toEqual(afterFirstSweep);
+    });
+  });
+
+  describe('when nothing changed at GitLab since the last sweep', () => {
+    const pushed = (sha: string, updatedAt: string) => ({ ...openMergeRequest, sha, updated_at: updatedAt });
+
+    it('asks GitLab for no members and commits nothing, while a new head and a new merge request still go through the rules', async () => {
+      let mergeRequests = [pushed('abc', '2030-01-02T00:00:00Z')];
+      const { sweep, filed, seeded, memberLookups } = await linkedFactory(() => json(mergeRequests));
+      await sweep();
+      const afterFirstSweep = await filed();
+      const commits = vi.spyOn(seeded.workItems, 'commitRuleEvaluation');
+
+      const lookupsBefore = memberLookups();
+      await expect(sweep()).resolves.toMatchObject({ failed: 0 });
+      expect(memberLookups()).toBe(lookupsBefore);
+      expect(commits).not.toHaveBeenCalled();
+      expect(await filed()).toEqual(afterFirstSweep);
+
+      mergeRequests = [pushed('def', '2030-01-03T00:00:00Z'), { ...openMergeRequest, id: 9006, iid: 6, title: 'Later MR' }];
+      await sweep();
+      expect(memberLookups()).toBeGreaterThan(lookupsBefore);
+      expect((await filed()).map(decision => decision.title)).toContain('Later MR');
+    });
+
+    it('still files what it ignored before its source was selected', async () => {
+      const { sweep, filed, seeded } = await linkedFactory(() => json([openMergeRequest]));
+      await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [] } } });
+      await sweep();
+      expect(await filed()).toEqual([]);
+
+      await seeded.intake.saveConfig({ orgId: 'org-1', config: { gitlab: { enabled: true, sourceIds: [SOURCE_ID] } } });
+      await sweep();
+
+      expect((await filed()).map(decision => decision.title)).toEqual(['Unannounced MR', 'Unannounced issue']);
     });
   });
 
