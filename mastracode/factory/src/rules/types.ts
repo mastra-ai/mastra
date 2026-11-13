@@ -11,6 +11,7 @@ export type WorkItemSource =
   | 'jira-issue'
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
+  | 'vanta-vulnerability'
   | 'manual';
 
 export function externalSourceForWorkItem(
@@ -35,7 +36,9 @@ export function externalSourceForWorkItem(
                   ? ['incidentio', 'issue']
                   : source === 'github-dependabot-alert'
                     ? ['github', 'dependabot-alert']
-                    : ['factory', 'manual'];
+                    : source === 'vanta-vulnerability'
+                      ? ['vanta', 'vulnerability']
+                      : ['factory', 'manual'];
   return { integrationId, type, externalId: sourceKey, ...(url ? { url } : {}) };
 }
 
@@ -67,6 +70,7 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   if (source.integrationId === 'gitlab') return source.type === 'pull-request' ? 'gitlab-pr' : 'gitlab-issue';
   if (source.integrationId === 'jira') return 'jira-issue';
   if (source.integrationId === 'incidentio') return 'incidentio-follow-up';
+  if (source.integrationId === 'vanta') return 'vanta-vulnerability';
   // Only GitHub, GitLab, Linear, Jira, and incident.io have provider-specific
   // rules; anything else (a Slack thread, say) is a plain work item, not a
   // mislabeled GitHub issue.
@@ -128,6 +132,7 @@ export const FACTORY_RULE_SOURCES = [
   'jiraIssue',
   'incidentioFollowUp',
   'dependabotAlert',
+  'vantaVulnerability',
   'manual',
 ] as const;
 export type FactoryRuleSource = (typeof FACTORY_RULE_SOURCES)[number];
@@ -175,6 +180,8 @@ export type FactoryIncidentioEventName = (typeof FACTORY_INCIDENTIO_EVENTS)[numb
 
 export const FACTORY_DEPENDABOT_EVENTS = ['alertObserved', 'alertClosed'] as const;
 export type FactoryDependabotEventName = (typeof FACTORY_DEPENDABOT_EVENTS)[number];
+export const FACTORY_VANTA_EVENTS = ['vulnerabilityObserved', 'vulnerabilityClosed'] as const;
+export type FactoryVantaEventName = (typeof FACTORY_VANTA_EVENTS)[number];
 
 export type FactoryRuleJsonValue =
   | null
@@ -210,7 +217,7 @@ export type FactoryRuleActor =
   | { type: 'system'; id: string };
 
 export interface FactoryRuleIngressIdentity {
-  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'rule';
+  type: 'human' | 'agent' | 'toolResult' | 'github' | 'gitlab' | 'linear' | 'jira' | 'incidentio' | 'vanta' | 'rule';
   id: string;
 }
 
@@ -605,6 +612,34 @@ export interface FactoryDependabotRuleContext extends FactoryRuleContextBase {
   };
 }
 
+export interface FactoryVantaRuleContext extends FactoryRuleContextBase {
+  boardEvent?: BoardEventFacts;
+  item?: FactoryRuleItemContext;
+  board?: FactoryRuleBoard;
+  itemRevision?: number;
+  boardClosure?: FactoryRuleBoardClosure;
+  phase?: FactoryRulePhaseContext;
+  intake?: FactoryRuleIntakeTarget;
+  event: FactoryVantaEventName;
+  vulnerability: {
+    /** Vanta vulnerability id — one card per vulnerability, not per advisory. */
+    id: string;
+    /** Advisory name, e.g. `CVE-2026-118764` or `AIKIDO-2026-54683`. */
+    name: string;
+    title: string;
+    description: string | null;
+    url: string | null;
+    /** `open`, or `resolved` once Vanta no longer lists it as active. */
+    state: 'open' | 'resolved';
+    severity: string | null;
+    packageIdentifier: string | null;
+    fixable: boolean | null;
+    remediateBy: string | null;
+    labels: readonly string[];
+    createdAt: string;
+  };
+}
+
 export type FactoryRuleHandler<TContext> = (
   context: Readonly<TContext>,
 ) => FactoryRuleDecision | void | Promise<FactoryRuleDecision | void>;
@@ -858,6 +893,8 @@ export function factoryRuleSourceForWorkItem(source: WorkItemSource): FactoryRul
       return 'incidentioFollowUp';
     case 'github-dependabot-alert':
       return 'dependabotAlert';
+    case 'vanta-vulnerability':
+      return 'vantaVulnerability';
     case 'manual':
       return 'manual';
   }

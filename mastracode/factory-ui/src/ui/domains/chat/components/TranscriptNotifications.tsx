@@ -1,7 +1,16 @@
 import { NotificationActivity } from '@mastra/playground-ui/components/ai/activity';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, CircleDot } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Link, useParams } from 'react-router';
+
+import { useApiConfig } from '../../../../api/config';
+import { queryKeys } from '../../../../api/keys';
+import { useSessionParked } from '../../../../hooks/useWorkItems';
+import { answerParkedApproval } from '../../workspaces/services/user-sessions';
 
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
@@ -55,7 +64,9 @@ function notificationPresentation(entry: NotificationEntry): { state: string; ic
 export function NotificationCard({ entry }: { entry: NotificationEntry }) {
   const presentation = notificationPresentation(entry);
   const url = notificationUrl(entry);
-  return (
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const waiting = waitingSession(entry);
+  const activity = (
     <NotificationActivity
       state={presentation.state}
       label={entry.source ?? 'notification'}
@@ -63,6 +74,89 @@ export function NotificationCard({ entry }: { entry: NotificationEntry }) {
       icon={<span className={cn('flex items-center', presentation.className)}>{presentation.icon}</span>}
       link={url ? { href: url, label: notificationLinkLabel(entry) } : undefined}
     />
+  );
+  if (!waiting || !factoryId) return activity;
+  return (
+    <div className="flex flex-col gap-1.5">
+      {activity}
+      <WaitingSessionActions factoryId={factoryId} waiting={waiting} />
+    </div>
+  );
+}
+
+/** The session a notification says is waiting on someone, and the call a yes or no would answer. */
+interface WaitingSession {
+  sessionId: string;
+  threadId: string;
+  /** Set when the session waits on a bare yes or no; a typed answer is given in the session itself. */
+  toolCallId?: string;
+}
+
+function waitingSession(entry: NotificationEntry): WaitingSession | undefined {
+  if (entry.notifKind !== 'approval' && entry.notifKind !== 'blocked') return undefined;
+  const sessionId = entry.attributes?.['from-session'];
+  if (typeof sessionId !== 'string' || !sessionId) return undefined;
+  const threadId = entry.attributes?.['from-thread'];
+  const toolCallId = entry.attributes?.['tool-call-id'];
+  return {
+    sessionId,
+    threadId: typeof threadId === 'string' && threadId ? threadId : sessionId,
+    ...(entry.attributes?.['waiting-for'] === 'approval' && typeof toolCallId === 'string' && toolCallId
+      ? { toolCallId }
+      : {}),
+  };
+}
+
+/**
+ * Opens the waiting session, and answers its call from here where a yes or no is all it needs.
+ * The server decides who may answer; its refusal is shown in place of the buttons.
+ */
+function WaitingSessionActions({ factoryId, waiting }: { factoryId: string; waiting: WaitingSession }) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const parked = useSessionParked(factoryId, waiting.sessionId);
+  const { toolCallId } = waiting;
+  const answer = useMutation({
+    mutationKey: ['answer-parked-approval', waiting.sessionId, toolCallId],
+    mutationFn: (decision: 'approve' | 'decline') =>
+      answerParkedApproval(baseUrl, waiting.sessionId, decision, toolCallId),
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
+  });
+  const outcome = answer.isSuccess
+    ? answer.variables === 'approve'
+      ? 'Approved'
+      : 'Declined'
+    : answer.isError
+      ? answer.error.message
+      : parked === false
+        ? 'Answered'
+        : undefined;
+
+  return (
+    <div role="group" aria-label="Waiting session" className="flex flex-wrap items-center gap-2 pl-6">
+      {toolCallId && !outcome && parked && (
+        <>
+          <Button size="sm" variant="primary" disabled={answer.isPending} onClick={() => answer.mutate('approve')}>
+            Approve
+          </Button>
+          <Button size="sm" disabled={answer.isPending} onClick={() => answer.mutate('decline')}>
+            Decline
+          </Button>
+        </>
+      )}
+      {toolCallId && outcome && (
+        <Txt variant="caption" tone="muted" role="status">
+          {outcome}
+        </Txt>
+      )}
+      <Button
+        size="sm"
+        variant="ghost"
+        render={<Link to={`/factories/${factoryId}/workspaces/${waiting.sessionId}/threads/${waiting.threadId}`} />}
+      >
+        Open session
+      </Button>
+    </div>
   );
 }
 
@@ -159,6 +253,7 @@ function signalNotifications(entry: MessageEntry): Array<NotificationEntry | Not
       notifKind: typeof attributes.kind === 'string' ? attributes.kind : undefined,
       priority: typeof attributes.priority === 'string' ? attributes.priority : undefined,
       metadata,
+      attributes,
     },
   ];
 }

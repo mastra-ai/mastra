@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
+import { isFactoryOwnedSession } from '../../workspaces/services/sessionPresentation';
 import { TakeOwnershipDialog } from './TakeOwnershipDialog';
 
 export function TeammateSessionLine() {
@@ -23,7 +24,9 @@ export function TeammateSessionLine() {
         </div>
       )}
       <Txt as="p" variant="caption" tone="muted" className="truncate">
-        You’re steering {owner?.name ?? 'a teammate'}’s session
+        {isFactoryOwnedSession(session)
+          ? 'You’re steering the Factory’s session'
+          : `You’re steering ${owner?.name ?? 'a teammate'}’s session`}
       </Txt>
       {canTakeOwnership && <TakeOwnershipDialog factoryId={factoryId} session={session} />}
     </div>

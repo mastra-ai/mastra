@@ -1,14 +1,12 @@
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { keepPreviousData, skipToken, useQuery } from '@tanstack/react-query';
 import { useMemo } from 'react';
-import { useLocation } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { filedFromQueryOptions, useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import type { BoardCandidate } from '../../factory/boardCandidates';
 import { isPersistedCandidate, persistedSourceKeys } from '../../factory/boardItems';
-import { pageLoadsBoard } from '../../factory/pageLoadsBoard';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { BoardSnapshot, WorkItem } from '../../factory/services/workItems';
 import { candidateSearchValue } from '../services/searchResults';
@@ -63,11 +61,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string, candi
   const offered = bestCandidates(candidates, search);
   const sources = offered.flatMap(({ candidate }) => [candidate.sourceKey, candidate.url]).filter(Boolean);
   const filed = useQuery({
-    queryKey: queryKeys.workItemsFiledFrom(factoryId, sources),
-    queryFn:
-      factoryId && sources.length > 0
-        ? async ({ signal }) => ({ ...(await listWorkItems(baseUrl, factoryId, signal, { source: sources })), sources })
-        : skipToken,
+    ...filedFromQueryOptions(baseUrl, factoryId, sources),
     placeholderData: keepPreviousData,
   });
   const filedCards = filed.data?.workItems ?? NO_CARDS;
@@ -94,9 +88,7 @@ function useUnstartedSearch(factoryId: string | undefined, search: string, candi
  * once typing pauses, and so are the cards already filed from the best unfiled candidates.
  */
 export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: string, candidates: Candidate[]) {
-  const { baseUrl } = useApiConfig();
-  const { pathname } = useLocation();
-  const sessionCards = useSidebarWorkItemsQuery(factoryId, pageLoadsBoard(pathname));
+  const sessionCards = useSidebarWorkItemsQuery(factoryId);
   const withSessions = sessionCards.data?.workItems ?? NO_CARDS;
   const settled = useDebouncedValue(typed.trim(), 150);
   // Clearing the box goes back to the cached empty search at once.
@@ -117,22 +109,6 @@ export function useGlobalSearchWorkItems(factoryId: string | undefined, typed: s
     /** Every card either search loaded, for acting on a row. A card several reads sent is in it several times. */
     loaded,
     count: everything.count,
-    /**
-     * The clicked row's card alone, read fresh: it may have gained a session since it was listed,
-     * or been deleted. Not the lists again: a card can leave the search's first rows and still exist.
-     */
-    refetch: async (
-      itemId: string,
-    ): Promise<{ isSuccess: true; data: WorkItem[] } | { isSuccess: false; error: unknown }> => {
-      // Without a Factory no row is listed, so none is clicked.
-      if (!factoryId) return { isSuccess: true, data: NO_CARDS };
-      try {
-        const card = await listWorkItems(baseUrl, factoryId, undefined, { workItemId: [itemId] });
-        return { isSuccess: true, data: card.workItems };
-      } catch (error) {
-        return { isSuccess: false, error };
-      }
-    },
     pending: sessionCards.isLoading || search.unstarted.isLoading,
     failed: sessionCards.isError || search.unstarted.isError || search.filed.isError,
     retry: () => {

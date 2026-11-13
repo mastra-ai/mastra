@@ -48,6 +48,7 @@ const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'jira-issue',
   'incidentio-follow-up',
   'github-dependabot-alert',
+  'vanta-vulnerability',
   'manual',
 ];
 const REJECTION_CODES: readonly FactoryRuleRejectionCode[] = [

@@ -29,6 +29,18 @@ export function factoryProjectSettingsUserId(factoryProjectId: string): string {
   return `factory-project:${factoryProjectId}`;
 }
 
+/**
+ * The Factory as the owner of work nobody started: the `user_id` of a phase session a
+ * webhook, an automatic phase or a rule opened, and the user its runs authenticate as.
+ * It is the settings sentinel, so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export const factoryPrincipalId = factoryProjectSettingsUserId;
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;

@@ -89,12 +89,12 @@ describe('intake configuration', () => {
     expect((await buildApp({ workosId: 'u1' }).request('/web/intake/config')).status).toBe(403);
   });
 
-  it('defaults every configured capability to enabled with no selected sources', async () => {
+  it('defaults every configured capability to disabled with no selected sources', async () => {
     const response = await buildApp(orgUser).request('/web/intake/config');
     expect(await response.json()).toEqual({
       config: {
-        github: { enabled: true, sourceIds: null },
-        linear: { enabled: true, sourceIds: null },
+        github: { enabled: false, sourceIds: null },
+        linear: { enabled: false, sourceIds: null },
       },
     });
   });

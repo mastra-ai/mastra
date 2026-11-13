@@ -14,6 +14,7 @@ export type WorkItemBranchSource =
   | 'jira-issue'
   | 'incidentio-follow-up'
   | 'github-dependabot-alert'
+  | 'vanta-vulnerability'
   | 'slack-thread'
   | 'manual';
 
@@ -34,6 +35,7 @@ export function workItemBranchSource(externalSource: ExternalWorkItemSource | nu
   if (externalSource.integrationId === 'incidentio') return 'incidentio-follow-up';
   // Only GitHub, GitLab, Linear, Jira, and incident.io carry provider identities; anything
   // else (a Slack thread, say) is a plain work item rather than a mislabeled GitHub issue.
+  if (externalSource.integrationId === 'vanta') return 'vanta-vulnerability';
   if (externalSource.integrationId !== 'github') return 'manual';
   if (externalSource.type === 'dependabot-alert') return 'github-dependabot-alert';
   return externalSource.type === 'pull-request' ? 'github-pr' : 'github-issue';
