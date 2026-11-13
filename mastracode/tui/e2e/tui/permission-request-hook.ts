@@ -66,6 +66,7 @@ process.stdin.on('end', () => {
     permission_kind: payload.permission_kind || null,
     tool_call_id: payload.tool_call_id || null,
     tool_name: payload.tool_name || null,
+    suspension_kind: payload.tool_input?.kind || null,
     ts: Date.now(),
   }) + '\\n');
   process.exit(0);
@@ -206,6 +207,15 @@ process.stdin.on('end', () => {
         failures.push(
           `sandbox_access record carries the wrong tool_call_id: ${JSON.stringify(sandboxRecord.tool_call_id)}`,
         );
+      }
+    }
+    for (const [permissionKind, suspensionKind] of [
+      ['ask_question', 'user_question_request'],
+      ['sandbox_access', 'sandbox_access_request'],
+    ]) {
+      const record = readJsonl(permissionLogPath).find(entry => entry.permission_kind === permissionKind);
+      if (record?.suspension_kind !== suspensionKind) {
+        failures.push(`Expected ${permissionKind} hook to carry ${suspensionKind}, received ${JSON.stringify(record)}`);
       }
     }
     if (agentDoneRecords.length !== 1) {

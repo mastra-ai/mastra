@@ -22,6 +22,7 @@ describe('submitPlanTool (native suspend)', () => {
 
     expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
+      kind: 'plan_approval_request',
       toolId: 'submit_plan',
       path: '.mastracode/plans/ship-it.md',
     });

@@ -10,6 +10,7 @@ import type {
 } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
+import { INTERACTIVE_TOOL_SUSPENSION_KINDS } from '@mastra/core/tools';
 
 import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
 import { getBackgroundToolMetadata } from './background-tool-result.js';
@@ -56,6 +57,7 @@ import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
 import { isEventRoutedToCurrentThread } from './thread-routing.js';
 import { setCurrentThreadTitle } from './thread-title.js';
+import { classifyToolSuspension } from './tool-suspension.js';
 
 /**
  * Dispatch a AgentControllerEvent to the appropriate handler.
@@ -651,14 +653,15 @@ export async function dispatchEvent(
       // Route the suspension to the matching prompt UI using the suspend payload;
       // the UI resumes the tool by calling controller.session.respondToToolSuspension({ toolCallId }).
       const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
-      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+      const kind = classifyToolSuspension(event.suspendPayload, event.toolName);
+      if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.requestAccess) {
         await handleSandboxAccessRequest(
           ectx,
           event.toolCallId,
           String(payload.path ?? ''),
           String(payload.reason ?? ''),
         );
-      } else if (event.toolName === 'ask_user') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.askUser) {
         await handleAskQuestion(
           ectx,
           event.toolCallId,
@@ -666,7 +669,7 @@ export async function dispatchEvent(
           payload.options as Array<{ label: string; description?: string }> | undefined,
           payload.selectionMode as AskUserSelectionMode | undefined,
         );
-      } else if (event.toolName === 'submit_plan') {
+      } else if (kind === INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan) {
         await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
       }
       break;
