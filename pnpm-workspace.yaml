@@ -155,12 +155,6 @@ packageExtensions:
   'weaviate-client@*':
     dependencies:
       protobufjs: '*'
-  # @daytonaio/sdk requires tslib at runtime without declaring it; with the
-  # global virtual store there is no fallback hoist, so importing the SDK
-  # fails with "Cannot find module 'tslib'".
-  '@daytonaio/sdk@*':
-    dependencies:
-      tslib: '*'
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
@@ -215,11 +209,11 @@ minimumReleaseAgeExclude:
   # Renovate security update: svgo@3.3.5
   - svgo@3.3.4
   - svgo@3.3.5
-  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
-  - '@hono/node-server@2.0.10 || 2.0.5'
+  # Renovate security update: @hono/node-server@2.0.10 || 2.0.5 || 2.1.6 || 2.1.7
+  - '@hono/node-server@2.0.10 || 2.0.5 || 2.1.6 || 2.1.7'
   - '@hono/node-server@1.19.17'
-  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
-  - hono@4.13.5
+  # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories) || 4.13.16 || 4.13.17
+  - hono@4.13.5 || 4.13.16 || 4.13.17
   - hono@4.13.7
   # Security bump: tinypool 2.2.0, image-size 2.0.4, mysql2 3.24.4
   - tinypool@2.2.0
@@ -326,6 +320,8 @@ minimumReleaseAgeExclude:
   - serialize-javascript@7.1.4
   # Renovate security update: follow-redirects@1.16.2
   - follow-redirects@1.16.2
+  # Renovate security update: basic-ftp@6.2.4
+  - basic-ftp@6.2.4
 trustPolicyExclude:
   # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
   # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
@@ -505,7 +501,7 @@ overrides:
   '@modelcontextprotocol/core@>=2.0.0 <2.3.0': 2.3.1
   # Vanta 2026-10-28: GHSA-f897-62hf-6gxq (MCP HTTP transports: no body-size / batch-length limit); published @mastra/mcp 1.18 pins node 2.0.0; 2.1.1 is the fixed release whose peer range (server ^2.3.0) matches its server 2.3.1
   '@modelcontextprotocol/node@>=2.0.0 <2.1.0': 2.1.1
-  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.3
+  '@hono/node-server@>=2.0.0 <2.1.3': 2.1.6
   # Vanta 2026-11-02: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (serveStatic double-decode, >=1.19.10 <2.1.3; fixed only in 2.1.3).
   # The MCP SDK and @modelcontextprotocol/node already declare `^1.19.9 || ^2.x`; resolve them onto the 2.x line the
   # server adapters/deployer already use (2.x only drops Node 18 and the unused /vercel entry).

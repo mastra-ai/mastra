@@ -21,7 +21,7 @@ import {
   PlatformApiError,
   waitForDatabaseReady,
 } from './platform.js';
-import { cloneTemplate, renameProject } from './utils/clone.js';
+import { canScaffoldInto, cloneTemplate, renameProject } from './utils/clone.js';
 import { detectPackageManager, getInstallArgs } from './utils/pm.js';
 
 export const PLATFORM_TEMPLATE_REPO = 'https://github.com/mastra-ai/template-factory';
@@ -73,24 +73,33 @@ export async function create(args: CreateArgs): Promise<void> {
   p.intro(color.inverse(' Mastra Factory '));
 
   const requestedRegion = args.region ? parseProjectRegion(args.region) : undefined;
-  const projectName =
+  const cwd = process.cwd();
+  const cwdIsUsable = canScaffoldInto(cwd);
+  const nameInput =
     args.projectName ??
     (await p.text({
-      message: 'What do you want to name your project?',
-      placeholder: 'my-mastra-factory',
+      // An empty current directory is the default: pressing Enter scaffolds into it.
+      message: cwdIsUsable
+        ? `What do you want to name your project? Press Enter to use the current directory (${path.basename(cwd)}).`
+        : 'What do you want to name your project?',
+      placeholder: cwdIsUsable ? path.basename(cwd) : 'my-mastra-factory',
       validate: value => {
-        if (!value?.trim()) return `Project name can't be empty`;
-        if (fs.existsSync(path.resolve(value.trim()))) return `Directory ${value.trim()} already exists`;
+        const name = value?.trim() ?? '';
+        if (!name && !cwdIsUsable) return `The current directory isn't empty. Enter a name for a new directory.`;
+        if (!canScaffoldInto(path.resolve(name))) return `Directory ${name || '.'} already exists and isn't empty`;
         return undefined;
       },
     }));
 
-  if (p.isCancel(projectName)) {
+  if (p.isCancel(nameInput)) {
     p.cancel('Operation cancelled');
     process.exit(0);
   }
 
-  const projectPath = path.resolve(projectName);
+  // A blank name or "." means the current directory.
+  const projectPath = path.resolve(nameInput.trim());
+  const projectName = path.basename(projectPath);
+  const cdStep = projectPath === cwd ? '' : `cd ${path.relative(cwd, projectPath)} && `;
   const packageManager = detectPackageManager();
 
   args.analytics.trackEvent('sf_create_started', {
@@ -137,7 +146,7 @@ export async function create(args: CreateArgs): Promise<void> {
   } catch (err) {
     installSpinner.stop('Dependency install failed.');
     throw new Error(
-      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: cd ${projectName} && ${packageManager} install`,
+      `${err instanceof Error ? err.message : String(err)}\nYou can retry manually: ${cdStep}${packageManager} install`,
     );
   }
 
@@ -206,7 +215,7 @@ export async function create(args: CreateArgs): Promise<void> {
   const lines: string[] = [
     color.green('Your Mastra Factory is ready!'),
     '',
-    `${color.cyan('cd')} ${projectName}`,
+    ...(projectPath === cwd ? [] : [`${color.cyan('cd')} ${path.relative(cwd, projectPath)}`]),
     color.cyan(`${packageManager} run dev`),
     '',
     `Factory UI     ${color.underline('http://localhost:4111')}`,
