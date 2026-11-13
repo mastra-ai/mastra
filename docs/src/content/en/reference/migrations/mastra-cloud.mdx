@@ -279,7 +279,7 @@ See [Studio deployment](/docs/studio/deployment#mastra-platform) for details.
 
 ### Multiple environments
 
-A single Mastra platform project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy) command:
+A single Mastra platform project runs the same codebase across multiple [environments](/docs/mastra-platform/deploy/environments), such as `production` and `staging`. Deploy to each with the unified [`mastra deploy`](/docs/mastra-platform/deploy/overview) command:
 
 ```bash
 mastra deploy --env production --yes
@@ -296,7 +296,7 @@ If you need a production API endpoint, deploy a Server:
 mastra server deploy
 ```
 
-This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/docs/mastra-platform/server) for the full walkthrough.
+This creates a separate deployment with a stable API URL, environment variable management, and custom domain support. See the [Server deployment guide](/docs/mastra-platform/deploy/server) for the full walkthrough.
 
 :::note
 Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically on first deploy. After that, manage env vars through the [web dashboard](https://projects.mastra.ai).
@@ -383,6 +383,6 @@ Update any clients pointing to your old Mastra Cloud URL to the new Server or St
 
 - [Mastra platform overview](/docs/mastra-platform/overview)
 - [Observability overview](/docs/mastra-platform/observability/overview)
-- [Studio deployment](/docs/mastra-platform/studio)
-- [Server deployment](/docs/mastra-platform/server)
+- [Studio deployment](/docs/mastra-platform/deploy/studio)
+- [Server deployment](/docs/mastra-platform/deploy/server)
 - [CLI reference](/reference/cli/mastra)

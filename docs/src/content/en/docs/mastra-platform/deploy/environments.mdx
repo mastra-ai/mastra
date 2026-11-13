@@ -11,7 +11,7 @@ An environment is an isolated deployment target with its own URL, environment va
 
 Use environments to run `production`, `staging`, and preview versions of the same codebase inside a single project.
 
-Your first [`mastra deploy`](/docs/mastra-platform/deploy) creates the `production` environment. Create more with the CLI or by deploying to a name that doesn't exist yet.
+Your first [`mastra deploy`](/docs/mastra-platform/deploy/overview) creates the `production` environment. Create more with the CLI or by deploying to a name that doesn't exist yet.
 
 ## Create an environment
 
@@ -33,7 +33,7 @@ mastra deploy --env staging
 mastra env create eu-preview --type preview --region eu
 ```
 
-Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Attached databases are placed near the environment automatically, while observability data goes to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/regions) for supported regions and database placement, along with observability co-location. The number of environments per project depends on your plan.
+Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Attached databases are placed near the environment automatically, while observability data goes to the ingest region for the matching residency zone. See [Regions](/docs/mastra-platform/deploy/regions) for supported regions and database placement, along with observability co-location. The number of environments per project depends on your plan.
 
 ## List environments
 
@@ -52,7 +52,7 @@ An environment resolves its variables from two scopes:
 - **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`) and by the platform itself. The platform defines these, and you can't edit them. See [System environment variables](/docs/mastra-platform/system-environment-variables) for the full list.
 - **Environment-scoped variables**: Stored on each environment through the dashboard. When you apply one variable to several environments, each environment keeps its own copy. Use these for values that differ between environments, like API keys for staging and production services.
 
-Environment-scoped variables are the stored variables described on the [Deploy](/docs/mastra-platform/deploy#environment-variables) page. A deploy of one environment uses only that environment's variables. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy#migrating-from-server-and-studio-deploys) store their variables on the project instead, and every deploy of that project uses them.
+Environment-scoped variables are the stored variables described on the [Deploy](/docs/mastra-platform/deploy/overview#environment-variables) page. A deploy of one environment uses only that environment's variables. Projects still on the [legacy pipeline](/docs/mastra-platform/deploy/overview#migrating-from-server-and-studio-deploys) store their variables on the project instead, and every deploy of that project uses them.
 
 Variables are applied when a deploy starts. To apply changed variables to a running service without a full redeploy:
 
@@ -106,7 +106,7 @@ The CLI asks for confirmation before deleting. Deleting an environment removes i
 
 ## Related
 
-- [Deploy](/docs/mastra-platform/deploy)
-- [Regions](/docs/mastra-platform/regions)
+- [Deploy](/docs/mastra-platform/deploy/overview)
+- [Regions](/docs/mastra-platform/deploy/regions)
 - [Hosted databases](/docs/mastra-platform/database)
 - [`mastra env` CLI reference](/reference/cli/mastra#mastra-env)

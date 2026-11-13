@@ -4,7 +4,8 @@
  * At a high level, the script does the following in the docs package:
  * 1. Moves the mdx file(s) under src/content/en/<family>
  * 2. Updates matching Docusaurus sidebar doc ids for same-family moves
- * 3. Updates links in Markdown and MDX source files that point to the old route(s)
+ * 3. Updates links that point to the old route(s) in Markdown, MDX, and JS/TS source files
+ *    (including sidebar hrefs, component props, and other quoted route strings)
  * 4. Adds redirect(s) to vercel.redirects.json
  * 5. Updates existing redirects to point to the new route(s)
  *
@@ -35,6 +36,7 @@ const VERCEL_REDIRECTS_FILE = 'vercel.redirects.json'
 const SOURCE_ROOT = 'src'
 const CONTENT_ROOT = 'src/content/en'
 const GENERATED_CONTENT_DIRS = [path.join(CONTENT_ROOT, 'models')]
+const LINK_SOURCE_EXTENSIONS = ['.md', '.mdx', '.js', '.jsx', '.ts', '.tsx']
 
 const FAMILIES = {
   '/docs': 'docs',
@@ -209,7 +211,7 @@ const dedupeRedirectsBySource = (redirects: Redirect[]): Redirect[] => {
     const redirect = redirects[index]
     if (seen.has(redirect.source)) continue
     seen.add(redirect.source)
-    deduped.unshift({ ...redirect, permanent: true })
+    deduped.unshift(redirect)
   }
 
   return deduped
@@ -341,6 +343,14 @@ const updateMdxLinks = async (
         const finalHash = newHash || defHash || ''
         return `${prefix}${open}${newBasePath}${finalHash}${close}${trailing || ''}`
       })
+
+      // Any other quoted string that is exactly the old route, e.g. sidebar `href` values or
+      // component props like `blocklist={['/docs/...']}`.
+      const quotedRouteRegex = new RegExp(`(['"\`])(?:${escapeRegExp(oldBasePath)})(#[^'"\`\\s]*)?\\1`, 'g')
+      updatedContent = updatedContent.replace(quotedRouteRegex, (_match, quote, linkHash = '') => {
+        const finalHash = newHash || linkHash
+        return `${quote}${newBasePath}${finalHash}${quote}`
+      })
     })
 
     if (content !== updatedContent) {
@@ -349,7 +359,14 @@ const updateMdxLinks = async (
     }
   }
 
-  const processDirectory = async (dir: string): Promise<void> => {
+  for (const filePath of await listLinkSourceFiles()) await processFile(filePath)
+}
+
+/** Lists every source file whose links `updateMdxLinks` may rewrite. */
+export const listLinkSourceFiles = async (): Promise<string[]> => {
+  const files: string[] = []
+
+  const walk = async (dir: string): Promise<void> => {
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
@@ -364,14 +381,15 @@ const updateMdxLinks = async (
 
       if (entry.isDirectory()) {
         if (GENERATED_CONTENT_DIRS.includes(fullPath)) continue
-        await processDirectory(fullPath)
-      } else if (entry.name.endsWith('.mdx') || entry.name.endsWith('.md')) {
-        await processFile(fullPath)
+        await walk(fullPath)
+      } else if (LINK_SOURCE_EXTENSIONS.includes(path.extname(entry.name))) {
+        files.push(fullPath)
       }
     }
   }
 
-  await processDirectory(SOURCE_ROOT)
+  await walk(SOURCE_ROOT)
+  return files
 }
 
 const isGlobPattern = (pattern: string): boolean => {
@@ -459,7 +477,7 @@ const updateRedirects = async (
 ): Promise<string[]> => {
   const { glob = false, verbose = true } = options
   const config = await readRedirectConfig()
-  let redirects = config.redirects.map(redirect => ({ ...redirect, permanent: true }))
+  let redirects = config.redirects
 
   if (glob) {
     const sourceDynamicPattern = globToDynamicPattern(oldPath)
@@ -493,7 +511,7 @@ const updateRedirects = async (
       return { ...redirect, destination: `${newPathBase}${newHash || destHash || ''}`, permanent: true }
     }
 
-    return { ...redirect, permanent: true }
+    return redirect
   })
 
   if (oldPath !== newPath) {

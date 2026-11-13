@@ -509,6 +509,36 @@ describe('deleteDocument', () => {
     expect(await fixture.snapshot()).toEqual(before)
   })
 
+  test('rewrites quoted routes in JS/TS sources and rolls them back on failure', async () => {
+    process.chdir(originalCwd)
+    await fixture.cleanup()
+    fixture = await createFixture({
+      'src/components/old-page-link.ts': "export const OLD_PAGE = '/docs/old/page'\n",
+    })
+    process.chdir(fixture.tempDir)
+
+    const before = await fixture.snapshot()
+    const originalWrite = fs.writeFile.bind(fs)
+    let failedOnce = false
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args) => {
+      if (!failedOnce && String(args[0]).endsWith('old-page-link.ts')) {
+        failedOnce = true
+        throw new Error('JS link write failed')
+      }
+      return await originalWrite(...args)
+    })
+
+    const failed = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+    expect(failed.success).toBe(false)
+    expect(failed.message).toContain('JS link write failed')
+    expect(await fixture.snapshot()).toEqual(before)
+
+    vi.restoreAllMocks()
+    const result = await deleteDocument('/docs/old/page', '/docs/replacement', { verbose: false })
+    expect(result.success).toBe(true)
+    expect(await fixture.read('src/components/old-page-link.ts')).toBe("export const OLD_PAGE = '/docs/replacement'\n")
+  })
+
   test('reports both the original error and rollback failures', async () => {
     const originalWrite = fs.writeFile.bind(fs)
     let calls = 0

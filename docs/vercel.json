@@ -2308,6 +2308,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/deploy",
+      "destination": "/docs/mastra-platform/deploy/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/observability",
       "destination": "/docs/mastra-platform/observability/overview",
       "permanent": true
@@ -2315,6 +2320,31 @@
     {
       "source": "/docs/mastra-platform/trace-intelligence",
       "destination": "/docs/mastra-platform/observability/trace-intelligence",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/server",
+      "destination": "/docs/mastra-platform/deploy/server",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/studio",
+      "destination": "/docs/mastra-platform/deploy/studio",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/github",
+      "destination": "/docs/mastra-platform/deploy/github",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/environments",
+      "destination": "/docs/mastra-platform/deploy/environments",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/regions",
+      "destination": "/docs/mastra-platform/deploy/regions",
       "permanent": true
     },
     {
@@ -4293,6 +4323,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/mastra-platform/deploy/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/overview/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/mastra-platform/observability/llms.txt",
       "destination": "/docs/mastra-platform/observability/overview/llms.txt",
       "permanent": true
@@ -4300,6 +4335,31 @@
     {
       "source": "/docs/mastra-platform/trace-intelligence/llms.txt",
       "destination": "/docs/mastra-platform/observability/trace-intelligence/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/server/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/server/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/studio/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/studio/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/github/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/github/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/environments/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/environments/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/regions/llms.txt",
+      "destination": "/docs/mastra-platform/deploy/regions/llms.txt",
       "permanent": true
     },
     {

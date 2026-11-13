@@ -11,7 +11,7 @@ This page explains both mechanisms.
 
 ## Project config
 
-The `.mastra-project.json` file is auto-generated on your first [`mastra deploy`](/docs/mastra-platform/deploy). It links your local project to a platform project. The [GitHub integration](/docs/mastra-platform/github) writes the same file into linked repositories.
+The `.mastra-project.json` file is auto-generated on your first [`mastra deploy`](/docs/mastra-platform/deploy/overview). It links your local project to a platform project. The [GitHub integration](/docs/mastra-platform/deploy/github) writes the same file into linked repositories.
 
 Commit it to your version control so that subsequent deploys (including from CI) target the correct project.
 
@@ -33,7 +33,7 @@ Your file will look something like this:
 
 ## Environment variables
 
-A local env file is optional. [`mastra deploy`](/docs/mastra-platform/deploy) resolves variables from three sources:
+A local env file is optional. [`mastra deploy`](/docs/mastra-platform/deploy/overview) resolves variables from three sources:
 
 - **Managed variables**: Injected by platform resources like [hosted databases](/docs/mastra-platform/database). The platform defines these, and you can't edit them.
 - **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
@@ -62,7 +62,7 @@ The following environment variables configure the Observability product on the M
 
 ## Multiple environments
 
-A single project runs the same codebase across multiple [environments](/docs/mastra-platform/environments), such as `production` and `staging`. Each environment has its own URL and its own stored variables, plus its own deploy history. One `.mastra-project.json` file covers all of them:
+A single project runs the same codebase across multiple [environments](/docs/mastra-platform/deploy/environments), such as `production` and `staging`. Each environment has its own URL and its own stored variables, plus its own deploy history. One `.mastra-project.json` file covers all of them:
 
 ```bash
 mastra deploy --env production --yes
