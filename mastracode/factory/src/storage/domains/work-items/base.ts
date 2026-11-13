@@ -2517,6 +2517,36 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return row ? toRow(row) : null;
   }
 
+  /**
+   * The ingress identity a card evaluates an event under. A record with one card uses the event's
+   * own identity, as before cards could share a record; a record with several gives each card the
+   * identity suffixed with its id. Which one a card gets never depends on the record's other cards
+   * once an evaluation is stored: a card keeps an identity it already evaluated under, and the
+   * event's own identity stays with the card that stored it, so deleting that card does not hand
+   * its evaluation to another.
+   */
+  async cardIngressIdentity({
+    orgId,
+    factoryProjectId,
+    base,
+    cardId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    base: string;
+    cardId: string | undefined;
+  }): Promise<string> {
+    if (!cardId) return base;
+    const own = `${base}:${cardId}`;
+    if (await this.getTransitionResultByIngress(orgId, factoryProjectId, own)) return own;
+    const stored = await this.getTransitionResultByIngress(orgId, factoryProjectId, base);
+    if (stored) return typeof stored.itemId === 'string' && stored.itemId !== cardId ? own : base;
+    const card = await this.get({ orgId, id: cardId });
+    if (!card?.externalSource) return base;
+    const cards = await this.listByProjectSource({ orgId, factoryProjectId, source: card.externalSource });
+    return cards.length > 1 ? own : base;
+  }
+
   async getTransitionResultByIngress(
     orgId: string,
     factoryProjectId: string,

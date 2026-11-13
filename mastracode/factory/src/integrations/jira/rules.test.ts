@@ -492,9 +492,9 @@ describe('a Jira issue with a card on several boards', () => {
     await ingest({ ...issue, title: 'Fix intake sync faster', updatedAt: '2026-07-03T00:00:00Z' });
     await drain();
 
-    // One evaluation per card: the first filed keeps the delivery's identity, the other is suffixed with its id.
+    // One evaluation per card, each under the event's identity suffixed with the card's id.
     expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
-      [work!.id, `jira:${issue.id}:2026-07-03T00:00:00Z`],
+      [work!.id, `jira:${issue.id}:2026-07-03T00:00:00Z:${work!.id}`],
       [release!.id, `jira:${issue.id}:2026-07-03T00:00:00Z:${release!.id}`],
     ]);
     // Each card stayed on its own board; neither refile dragged the other.
@@ -505,5 +505,47 @@ describe('a Jira issue with a card on several boards', () => {
         [release!.id, 'release', ['queued']],
       ].sort(),
     );
+  });
+
+  it("keeps each card's identity for an event when another card of the issue is deleted", async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup(
+      undefined,
+      createBoardRegistry({ boards: [createTestBoard()] }),
+    );
+    const edited = { ...issue, title: 'Fix intake sync faster', updatedAt: '2026-07-03T00:00:00Z' };
+    const ingest = (observed = edited) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    // The edit is evaluated for the issue's only card, under the event's own identity.
+    await ingest();
+    await drain();
+    const [work] = await cardsFor(project.id);
+    // Added after the edit, so the edit has not been evaluated for it.
+    const release = await workItems.linkWorkItemToBoard({
+      orgId: 'org-1',
+      id: work!.id,
+      board: 'release',
+      stage: 'queued',
+      userId: 'user-1',
+    });
+    await workItems.delete({ orgId: 'org-1', id: work!.id });
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest();
+    await drain();
+    // The deleted card's evaluation of the event is not the release card's: it runs under its own identity.
+    expect(evaluate.mock.calls.map(([input]) => [input.workItemId, input.ingress.identity])).toEqual([
+      [release!.id, `jira:${issue.id}:${edited.updatedAt}:${release!.id}`],
+    ]);
+    expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'committed' });
+
+    // And it replays under that identity from then on.
+    evaluate.mockClear();
+    await ingest();
+    expect(evaluate.mock.calls.map(([input]) => input.ingress.identity)).toEqual([
+      `jira:${issue.id}:${edited.updatedAt}:${release!.id}`,
+    ]);
+    expect(await evaluate.mock.results[0]!.value).toMatchObject({ status: 'replayed' });
   });
 });

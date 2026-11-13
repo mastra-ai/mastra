@@ -119,8 +119,8 @@ export class JiraRules {
       const cards = itemsBySourceKey.get(issue.id) ?? [];
       if (!cards.length) statuses.push(await this.#ingestIssue(input, issue, undefined));
       // Each board's card runs its own rules for the record.
-      for (const [index, card] of cards.entries()) {
-        statuses.push(await this.#ingestIssue(input, issue, structuredClone(card), 1, index > 0));
+      for (const card of cards) {
+        statuses.push(await this.#ingestIssue(input, issue, structuredClone(card), 1));
       }
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
@@ -133,9 +133,8 @@ export class JiraRules {
     issue: JiraIssueIngress,
     relatedItem: Card | undefined,
     attempt = 1,
-    sibling = false,
   ): Promise<IngressStatus> {
-    const ingressId = cardIngressId(`jira:${issue.id}:${issue.updatedAt}`, relatedItem, sibling);
+    const ingressId = await cardIngressId(this.options.storage, `jira:${issue.id}:${issue.updatedAt}`, relatedItem);
     const actor = { type: 'human' as const, id: input.userId };
 
     // Closed issues without existing work items should not create new ones.
@@ -247,7 +246,7 @@ export class JiraRules {
       }
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
-      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1, sibling);
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
     }
     return committed.status;
   }

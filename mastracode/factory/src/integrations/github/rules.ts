@@ -51,6 +51,7 @@ import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js'
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
+import { cardIngressId } from '../record-cards.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -1082,7 +1083,11 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
+    const primary = await evaluate(
+      evaluated,
+      await cardIngressId(this.options.storage, deliveryIdentity, evaluated),
+      pullRequestOpened,
+    );
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -1237,7 +1242,7 @@ export class GithubRules {
     // The record's cards on other boards run their own rules for it, each under its own identity.
     const statuses = [primary, ...(secondary ? [secondary] : [])];
     for (const sibling of await this.#siblingCards([relatedItem, companion])) {
-      statuses.push(await evaluate(sibling, `${deliveryIdentity}:${sibling.id}`));
+      statuses.push(await evaluate(sibling, await cardIngressId(this.options.storage, deliveryIdentity, sibling)));
     }
     for (const status of ['committed', 'replayed'] as const) {
       if (statuses.some(result => result.status === status)) return { status };

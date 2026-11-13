@@ -98,16 +98,16 @@ export class VantaRules {
       const cards = itemsBySourceKey.get(vulnerability.id) ?? [];
       if (!cards.length) statuses.push(await this.#ingestAlert(input, vulnerability, undefined));
       // Each board's card runs its own rules for the vulnerability.
-      for (const [index, card] of cards.entries()) {
-        statuses.push(await this.#ingestAlert(input, vulnerability, structuredClone(card), 1, index > 0));
+      for (const card of cards) {
+        statuses.push(await this.#ingestAlert(input, vulnerability, structuredClone(card), 1));
       }
     }
     for (const [sourceKey, cards] of itemsBySourceKey) {
       if (!sourceKey || active.has(sourceKey)) continue;
-      for (const [index, item] of cards.entries()) {
+      for (const item of cards) {
         if (item.metadata?.state === 'resolved') continue;
         statuses.push(
-          await this.#ingestAlert(input, resolvedFromCard(sourceKey, item), structuredClone(item), 1, index > 0),
+          await this.#ingestAlert(input, resolvedFromCard(sourceKey, item), structuredClone(item), 1),
         );
       }
     }
@@ -121,13 +121,12 @@ export class VantaRules {
     alert: VantaVulnerabilityIngress,
     relatedItem: Card | undefined,
     attempt = 1,
-    sibling = false,
   ): Promise<IngressStatus> {
     const closed = alert.state === 'resolved';
     // A resolved vulnerability Factory never filed stays off the board.
     if (closed && !relatedItem) return 'missing';
 
-    const ingressId = cardIngressId(`vanta:${alert.id}:${alert.state}`, relatedItem, sibling);
+    const ingressId = await cardIngressId(this.options.storage, `vanta:${alert.id}:${alert.state}`, relatedItem);
     const actor = { type: 'human' as const, id: input.userId };
     const event = closed ? 'vulnerabilityClosed' : 'vulnerabilityObserved';
     const boards = this.#boards(input);
@@ -213,7 +212,7 @@ export class VantaRules {
       }
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
-      return this.#ingestAlert(input, alert, fresh ?? undefined, attempt + 1, sibling);
+      return this.#ingestAlert(input, alert, fresh ?? undefined, attempt + 1);
     }
     return committed.status;
   }

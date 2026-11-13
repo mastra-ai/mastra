@@ -1,8 +1,7 @@
-import type { Card } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /**
  * A provider record's cards, keyed by external id: one per board it is on, first filed first.
- * The first keeps the delivery's own ingress identity; the others take one suffixed with their id.
  */
 export function cardsByExternalId(items: readonly Card[]): Map<string | undefined, Card[]> {
   const byId = new Map<string | undefined, Card[]>();
@@ -20,7 +19,13 @@ export function cardsByExternalId(items: readonly Card[]): Map<string | undefine
   return byId;
 }
 
-/** The ingress identity a record's card evaluates under: suffixed for every card but the first. */
-export function cardIngressId(base: string, item: Card | undefined, sibling: boolean): string {
-  return sibling && item ? `${base}:${item.id}` : base;
+/** The ingress identity a record's card evaluates an event under; see `cardIngressIdentity`. */
+export function cardIngressId(
+  storage: Pick<WorkItemsStorage, 'cardIngressIdentity'>,
+  base: string,
+  item: Card | undefined,
+): Promise<string> {
+  return item
+    ? storage.cardIngressIdentity({ orgId: item.orgId, factoryProjectId: item.factoryProjectId, base, cardId: item.id })
+    : Promise.resolve(base);
 }
