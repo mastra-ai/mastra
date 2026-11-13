@@ -2213,6 +2213,29 @@ describe('MastraFactory.prepare', () => {
     }
   });
 
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    const config = await prepareWithPlatformToken({ storage: fakeStorage() });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/vanta/status');
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    const config = await prepareWithPlatformToken({
+      storage: fakeStorage(),
+      integrations: [
+        fakeIntegration({
+          id: 'vanta',
+          routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+        }),
+      ],
+    });
+    const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+    const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+    expect(paths).toContain('/web/custom-vanta');
+    expect(paths).not.toContain('/web/vanta/status');
+  });
+
   it('keeps an explicit Jira integration instead of registering Platform Jira', async () => {
     vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
     try {

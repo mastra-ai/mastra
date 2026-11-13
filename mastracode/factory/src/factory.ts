@@ -832,6 +832,10 @@ export class MastraFactory {
         const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
+      if (!integrations.some(integration => integration.id === 'vanta')) {
+        const { PlatformVantaIntegration } = await import('./integrations/platform/vanta/integration.js');
+        integrations.push(new PlatformVantaIntegration());
+      }
     }
     // Never let the key be a silent no-op: it only applies to the integration
     // the factory installs itself, so warn when it had nothing to apply to.
