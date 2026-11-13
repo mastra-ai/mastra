@@ -180,6 +180,47 @@ describe('Linear intake discovery', () => {
     expect(await filed('org-1', board.id)).toEqual([]);
   });
 
+  it('files a project issue only where its project is bound, not through a team bound elsewhere', async () => {
+    const { linear, connect, project, filed, sweep } = await setup();
+    await connect('org-1');
+    const teamSourceId = 'linear-team:team-1';
+    const selected = ['proj-1', teamSourceId];
+    const projectBoard = await project('org-1', selected, ['proj-1']);
+    const teamBoard = await project('org-1', selected, [teamSourceId]);
+    const projectIssue = {
+      id: 'issue-1',
+      identifier: 'ENG-42',
+      title: 'Project issue',
+      url: 'https://linear.app/acme/issue/ENG-42',
+      author: 'grace',
+      state: 'Todo',
+      stateType: 'unstarted',
+      priority: 'High',
+      assignee: null,
+      source: 'ENG',
+      sourceId: 'proj-1',
+      labels: [],
+      commentCount: null,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    };
+    const teamIssue = { ...projectIssue, id: 'issue-2', identifier: 'ENG-43', sourceId: teamSourceId };
+    // Linear answers a team's listing with every issue of the team, the project's included.
+    const listIssues = vi
+      .spyOn(linear.intake, 'listIssues')
+      .mockResolvedValue({ issues: [projectIssue, teamIssue], nextCursor: null });
+
+    expect(await sweep()).toMatchObject({ observed: 2, failed: 0 });
+
+    expect(listIssues).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceIds: [teamSourceId], attributionSourceIds: selected }),
+    );
+    expect(await filed('org-1', projectBoard.id)).toEqual([
+      { type: 'upsertLinkedWorkItem', sourceKey: 'linear:ENG-42' },
+    ]);
+    expect(await filed('org-1', teamBoard.id)).toEqual([{ type: 'upsertLinkedWorkItem', sourceKey: 'linear:ENG-43' }]);
+  });
+
   it('does not list Linear for an org that turned Linear intake off', async () => {
     const { seed, connect, project, filed, sweep } = await setup();
     await connect('org-1');
