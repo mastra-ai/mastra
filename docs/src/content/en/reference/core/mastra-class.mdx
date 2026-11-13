@@ -426,7 +426,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             name: 'workflowGraceMs',
             type: 'number',
             isOptional: true,
-            defaultValue: '2000 with the default in-process pubsub, 60000 with any other pubsub',
+            defaultValue: '2000',
             description:
               "How long a `running` or `waiting` default-engine workflow run must go without an instance holding its lease, and without any change, before `restartAllActiveWorkflowRuns()` restarts it. A run that stopped more recently is checked again once this period ends. Evented runs don't use it: a broker that redelivers unacknowledged events recovers them, and on any other pubsub they're restarted at once.",
           },

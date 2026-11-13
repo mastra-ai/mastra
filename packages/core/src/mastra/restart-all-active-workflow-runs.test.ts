@@ -15,8 +15,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../agent/durable/create-durable-agent';
-import { InMemoryServerCache } from '../cache/inmemory';
-import { CachingPubSub } from '../events/caching-pubsub';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MockStore } from '../storage/mock';
 import { createEmptyWorkflowSnapshot } from '../storage/workflow-snapshot';
@@ -288,7 +286,6 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     expect(new Mastra({ logger: false }).recoveryConfig).toEqual({
       workflows: 'auto',
       workflowConcurrency: 5,
-      // The in-process pubsub is the default.
       workflowGraceMs: 2_000,
       durableAgents: 'off',
     });
@@ -297,23 +294,20 @@ describe('Mastra.restartAllActiveWorkflowRuns', () => {
     ).toMatchObject({ workflows: 'off', workflowConcurrency: 1 });
   });
 
+  // The grace only covers default-engine runs, so it doesn't depend on the pubsub.
   it.each([
-    { pubsub: 'a broker', create: () => sharedBroker().connect(), graceMs: 60_000 },
+    { pubsub: 'the in-process pubsub', create: () => new EventEmitterPubSub() },
     {
       pubsub: 'a broker that redelivers unacked messages',
       create: () => sharedBroker({ redeliversUnacked: true }).connect(),
-      graceMs: 60_000,
     },
-    // The cache decorator still delivers in-process only.
-    {
-      pubsub: 'the in-process pubsub behind a cache',
-      create: () => new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache()),
-      graceMs: 2_000,
-    },
-  ])('defaults workflowGraceMs to $graceMs with $pubsub, unless set', ({ create, graceMs }) => {
-    expect(new Mastra({ logger: false, pubsub: create() }).recoveryConfig.workflowGraceMs).toBe(graceMs);
+  ])('defaults workflowGraceMs to 2 s with $pubsub, and honors an explicit value', ({ create }) => {
+    expect(new Mastra({ logger: false, pubsub: create() }).recoveryConfig.workflowGraceMs).toBe(2_000);
     expect(
       new Mastra({ logger: false, pubsub: create(), recovery: { workflowGraceMs: 0 } }).recoveryConfig,
     ).toMatchObject({ workflowGraceMs: 0 });
+    expect(
+      new Mastra({ logger: false, pubsub: create(), recovery: { workflowGraceMs: -1 } }).recoveryConfig,
+    ).toMatchObject({ workflowGraceMs: 2_000 });
   });
 });

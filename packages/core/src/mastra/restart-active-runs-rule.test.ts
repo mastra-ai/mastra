@@ -147,7 +147,7 @@ describe('workflow recovery rule (#28712)', () => {
     const store = (await storage.getStore('workflows'))!;
     const executions: string[] = [];
     const mastra = startReplica(storage, 'evented', 'B', executions, {
-      // Explicit, so the rows don't depend on how the pubsub sets the default.
+      // A minute, so a run restarted here can't have been due under the grace rule.
       recovery: { workflowGraceMs: 60_000 },
       pubsub: pubsub(),
       scheduled,

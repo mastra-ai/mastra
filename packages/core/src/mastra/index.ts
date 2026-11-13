@@ -728,7 +728,7 @@ export interface Config<
    * (must be idempotent). In multi-instance deploys a run another replica
    * still drives is skipped, and recovered once that replica's claim lapses.
    *
-   * @default { workflows: 'auto', workflowConcurrency: 5, durableAgents: 'off' }
+   * @default { workflows: 'auto', workflowConcurrency: 5, workflowGraceMs: 2000, durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
 
@@ -776,7 +776,7 @@ export interface MastraRecoveryConfig {
    * Evented runs don't use it. On a pubsub whose broker redelivers unacked
    * messages (see `PubSub.redeliversUnacked`) the broker recovers them; on any
    * other pubsub they are restarted at once.
-   * @default 2000 with the default in-process pubsub, 60000 with any other pubsub
+   * @default 2000
    */
   workflowGraceMs?: number;
   /**
@@ -869,11 +869,12 @@ const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
 const DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS = 30_000;
 const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
 const DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS = 30_000;
-// Default `recovery.workflowGraceMs`: long enough for an event a broker holds between instances.
-const DEFAULT_WORKFLOW_GRACE_MS = 60_000;
-// Default `recovery.workflowGraceMs` with the in-process pubsub, where nothing but this process
-// delivers a run's events, so the grace only has to absorb an event loop stall or a dev reload.
-const IN_PROCESS_WORKFLOW_GRACE_MS = 2_000;
+// Default `recovery.workflowGraceMs`, the same for every pubsub. The rule applies only to default-engine
+// runs, which have no broker message in flight to wait for: the grace covers the short gaps where such a
+// run is `running` without a live lease (between a status write and its claim, or a nested resume handing
+// its parent's lease over) and clock skew between the store and the app. Evented runs between two
+// messages are what needed a longer grace, and the pass no longer applies the rule to them.
+const DEFAULT_WORKFLOW_GRACE_MS = 2_000;
 // The longest delay `setTimeout` honours.
 const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 // The active runs whose leases one `getRunOwnerships` call reads during a recovery pass.
@@ -1033,6 +1034,7 @@ export class Mastra<
   #recoveryConfig: MastraRecoveryConfig = {
     workflows: 'auto',
     workflowConcurrency: DEFAULT_RESTART_CONCURRENCY,
+    workflowGraceMs: DEFAULT_WORKFLOW_GRACE_MS,
     durableAgents: 'off',
   };
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
@@ -1780,6 +1782,7 @@ export class Mastra<
     this.#recoveryConfig = {
       workflows: config?.recovery?.workflows ?? 'auto',
       workflowConcurrency: normalizeConcurrency(config?.recovery?.workflowConcurrency),
+      workflowGraceMs: normalizeGraceMs(config?.recovery?.workflowGraceMs, DEFAULT_WORKFLOW_GRACE_MS),
       durableAgents: config?.recovery?.durableAgents ?? 'off',
     };
     this.#recoveryRestarts = createConcurrencyLimiter(this.#recoveryConfig.workflowConcurrency);
@@ -1805,12 +1808,6 @@ export class Mastra<
     } else {
       this.#pubsub = new EventEmitterPubSub();
     }
-
-    // `__rawBus()` sees through decorators such as `CachingPubSub`.
-    this.#recoveryConfig.workflowGraceMs = normalizeGraceMs(
-      config?.recovery?.workflowGraceMs,
-      this.#pubsub.__rawBus() instanceof EventEmitterPubSub ? IN_PROCESS_WORKFLOW_GRACE_MS : DEFAULT_WORKFLOW_GRACE_MS,
-    );
 
     this.#events = {};
     for (const topic in config?.events ?? {}) {
