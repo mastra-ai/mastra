@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { posix as posixPath } from 'node:path';
 
 import { ATTACH_TIMEOUT_MS, CommandsApiProcessHandle, CommandsApiProcessManager } from '@internal/workspace';
 import type { CommandsApi, CommandsApiHandle, CommandsApiOperation } from '@internal/workspace';
@@ -372,6 +373,33 @@ function shellQuote(arg: string): string {
   return `'${arg.replace(/'/g, `'\\''`)}'`;
 }
 
+/**
+ * `command` run from `cwd` by a leading shell `cd`, with the transports left to
+ * start in the working directory. The exec transports report a `cwd` that
+ * doesn't exist as a broken connection (retried, then "transport failed"), so
+ * changing directory in the shell turns it into an ordinary failed command.
+ *
+ * A relative `cwd` resolves under `workingDirectory`. An absolute one outside it
+ * that doesn't exist falls back to the same path under `workingDirectory`: the
+ * workspace file tools read absolute paths that way (`/repo` is
+ * `<workingDirectory>/repo`), so agents pass command `cwd`s the same way.
+ */
+export function commandInCwd(command: string, cwd: string | undefined, workingDirectory: string | undefined): string {
+  if (!cwd) return command;
+  const normalize = (dir: string) => posixPath.normalize(dir).replace(/(.)\/$/, '$1');
+  const base = workingDirectory ? normalize(workingDirectory) : undefined;
+  const target = normalize(base && !cwd.startsWith('/') ? posixPath.join(base, cwd) : cwd);
+  if (target === base) return command;
+  const candidates = [target];
+  if (base && cwd.startsWith('/') && !target.startsWith(`${base}/`)) candidates.push(posixPath.join(base, target));
+  const branches = candidates.map(
+    (dir, i) => `${i === 0 ? 'if' : 'elif'} [ -d ${shellQuote(dir)} ]; then cd -- ${shellQuote(dir)}`,
+  );
+  const tried = candidates.length > 1 ? ` (also tried ${candidates[1]})` : '';
+  const notFound = shellQuote(`Working directory not found: ${target}${tried}`);
+  return `${branches.join('; ')}; else echo ${notFound} >&2; exit 1; fi\n${command}`;
+}
+
 class PlatformProcessHandle extends ProcessHandle {
   readonly pid: string;
   private readonly resultPromise: Promise<CommandResult>;
@@ -450,6 +478,11 @@ const withCommands = Symbol('withCommands');
  * process runs, `kill` stops it, and `list` reports what is running in the VM.
  */
 class PlatformCommandsProcessManager extends CommandsApiProcessManager<PlatformSandbox> {
+  async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
+    const { cwd, ...rest } = options;
+    return super.spawn(commandInCwd(command, cwd, this.sandbox.workingDirectory), rest);
+  }
+
   runCommands<T>(operation: CommandsApiOperation, fn: (commands: CommandsApi) => Promise<T>): Promise<T> {
     return this.sandbox[withCommands](operation, fn);
   }
@@ -1423,8 +1456,10 @@ export class PlatformSandbox extends MastraSandbox {
     // transport below (private network, WebSocket lease, E2B lease) receives
     // these options, and none of them route through the process manager.
     const sandboxEnv = this.getEnv();
-    const execCallOptions =
-      Object.keys(sandboxEnv).length > 0 ? { ...options, env: { ...sandboxEnv, ...options?.env } } : options;
+    const { cwd, ...restOptions } = options ?? {};
+    const execCommand = commandInCwd(fullCommand, cwd, this.workingDirectory);
+    const execCallOptions: ExecuteCommandOptions =
+      Object.keys(sandboxEnv).length > 0 ? { ...restOptions, env: { ...sandboxEnv, ...options?.env } } : restOptions;
 
     // Wait for the transport to become ready before proceeding. During the
     // sidecar boot window (immediately after start()), concurrent execs all
@@ -1448,7 +1483,7 @@ export class PlatformSandbox extends MastraSandbox {
     if (instanceUrl) {
       const privateNet = await this._tryExecViaPrivateNetwork(
         instanceUrl,
-        fullCommand,
+        execCommand,
         effectiveTimeout,
         execCallOptions,
       );
@@ -1476,7 +1511,7 @@ export class PlatformSandbox extends MastraSandbox {
     // `PlatformApiError` for other `/exec-lease` errors (404/500/501).
     // See ./direct-exec.ts and `docs/factory/direct-sandbox-connection.md`
     // in the Platform repo.
-    const result = await this._runDirectExec(fullCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
+    const result = await this._runDirectExec(execCommand, effectiveTimeout, execCallOptions, once ? 1 : 2);
     // `_runDirectExec` throws on transport failure (see its jsdoc), so a
     // `null` exitCode here can only mean `timedOut: true` — the sandbox
     // never got to send an exit frame because we cut the command short.
