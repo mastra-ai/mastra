@@ -472,8 +472,10 @@ export const createTimeTravelExecutionParams = (params: {
 
     const prevStep = graph.steps[index - 1]!;
     let stepPayload = undefined;
+    let callerOverridesStepPayload = inputData !== undefined;
     if (prevStep) {
       const prevStepIds = getStepIds(prevStep);
+      callerOverridesStepPayload ||= prevStepIds.some(stepId => context?.[stepId] !== undefined);
       if (prevStepIds.length > 0) {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
@@ -534,6 +536,27 @@ export const createTimeTravelExecutionParams = (params: {
         ? defaultStepStatus
         : (stepContext?.status ?? defaultStepStatus);
       const isCompleteStatus = ['success', 'failed', 'canceled'].includes(status);
+      // Carry an interrupted loop body's iteration count so a time-travelled loop continues counting instead of
+      // restarting at 1. A body recorded as finished replays the whole loop, and so does any loop the target
+      // comes before: only the target's own loop continues from the snapshot.
+      const callerIterationCount = context?.[stepId]?.metadata?.iterationCount;
+      if (
+        callerIterationCount !== undefined &&
+        !(Number.isInteger(callerIterationCount) && callerIterationCount >= 1)
+      ) {
+        throw new Error(
+          `timeTravel context for step "${stepId}" has an invalid metadata.iterationCount (${String(callerIterationCount)}): it must be a positive integer`,
+        );
+      }
+      const iterationCount =
+        callerIterationCount ??
+        (isTargetEntry && ['failed', 'canceled', 'suspended'].includes(snapshotContext[stepId]?.status)
+          ? snapshotContext[stepId]?.metadata?.iterationCount
+          : undefined);
+      // The previous step's output is only the loop's first input, so a loop continuing mid-way must
+      // resume with the recorded iteration's input unless the caller supplied a new one.
+      const resumesRecordedIteration =
+        entry.type === 'loop' && iterationCount !== undefined && steps.includes(stepId) && !callerOverridesStepPayload;
       // A target in the first entry has no previous step, so it replays the workflow input the
       // default engine also gives it, kept even when null or undefined instead of becoming {}
       // (#29424). New inputData replaces it, except when the target is a nested workflow
@@ -543,9 +566,14 @@ export const createTimeTravelExecutionParams = (params: {
         steps.length === 1 ? stepResults.input : (context?.[stepId]?.payload ?? snapshotContext.input);
       result = {
         status,
-        payload: isFirstEntryTarget
-          ? firstEntryInput
-          : (context?.[stepId]?.payload ?? stepPayload ?? snapshotContext[stepId]?.payload ?? {}),
+        payload:
+          isFirstEntryTarget && !resumesRecordedIteration
+            ? firstEntryInput
+            : (context?.[stepId]?.payload ??
+              (resumesRecordedIteration ? snapshotContext[stepId]?.payload : undefined) ??
+              stepPayload ??
+              snapshotContext[stepId]?.payload ??
+              {}),
         output: isCompleteStatus
           ? (context?.[stepId]?.output ?? stepOutput ?? snapshotContext[stepId]?.output ?? {})
           : undefined,
@@ -556,6 +584,7 @@ export const createTimeTravelExecutionParams = (params: {
         endedAt: isCompleteStatus ? (stepContext?.endedAt ?? Date.now()) : undefined,
         suspendedAt: stepContext?.suspendedAt,
         resumedAt: stepContext?.resumedAt,
+        metadata: iterationCount !== undefined ? { iterationCount } : undefined,
       };
       const execPathLengthToUse = perStep ? executionPath.length : currentExecPathLength;
       if (
