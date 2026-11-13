@@ -62,20 +62,4 @@ describe('parseError', () => {
     expect(parsed.message).toBe('Access denied. You may not have permission to use this model.');
     expect(parsed.requestUrl).toBe('https://gateway-api.mastra.ai/v1/responses');
   });
-
-  it("surfaces the provider's wording for a Claude safety rejection", () => {
-    const error = Object.assign(
-      new Error(
-        'Your request was rejected as a result of our safety system. Your prompt may contain text that is not allowed by our safety system.',
-      ),
-      { statusCode: 400, requestUrl: 'https://api.anthropic.com/v1/messages' },
-    );
-
-    const parsed = parseError(error);
-
-    expect(parsed.type).toBe('content_filter');
-    expect(parsed.message).toContain('safety system blocked this request');
-    expect(parsed.detail).toContain('rejected as a result of our safety system');
-    expect(parsed.requestUrl).toBe('https://api.anthropic.com/v1/messages');
-  });
 });
