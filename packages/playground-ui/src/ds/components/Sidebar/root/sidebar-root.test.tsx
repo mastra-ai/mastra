@@ -882,6 +882,27 @@ describe('Sidebar', () => {
     expect(screen.getByText('Grouped navigation')).toBeDefined();
   });
 
+  it('leaves focus where it is when the sidebar expands onto an open takeover', async () => {
+    mockMatchMedia(false);
+    render(
+      <Sidebar.Provider storageKey="sidebar-stack-expand-test" disableKeyboardShortcut={false}>
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    const trigger = screen.getByRole('button', { name: 'Open account settings' });
+    fireEvent.click(trigger);
+    const back = await screen.findByRole('button', { name: 'Back to main navigation: Account settings' });
+    await waitFor(() => expect(document.activeElement).toBe(back));
+
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="collapsed"]')).not.toBeNull());
+    trigger.focus();
+    fireEvent.keyDown(window, { code: 'KeyB', ctrlKey: true });
+    await waitFor(() => expect(document.querySelector('[data-sidebar-state="default"]')).not.toBeNull());
+
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('renders only the active takeover page once its exit finishes', async () => {
     mockMatchMedia(false);
     render(
@@ -997,7 +1018,8 @@ describe('Sidebar padding', () => {
       </SidebarProvider>,
     );
     const content = document.querySelector('.sidebar-layout > div');
-    expect(content?.className).toMatch(/\bp-2\b/);
+    expect(content?.className).toMatch(/\bpx-2\b/);
+    expect(content?.className).toMatch(/\bpy-2\.25\b/);
     expect(document.querySelector('[data-slot=sidebar-footer]')?.className).not.toMatch(/\bpb-/);
   });
 });

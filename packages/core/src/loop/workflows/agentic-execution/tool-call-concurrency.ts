@@ -35,6 +35,21 @@ export function normalizeToolCallConcurrency(toolCallConcurrency: ToolCallConcur
   };
 }
 
+/**
+ * Prepares an agent's default options for merging under call options. A call that passes
+ * `toolCallConcurrency` as an object (e.g. `{ strategy: 'called' }`) would replace a numeric
+ * default outright, so the number becomes the object's `limit` and the call's own fields win.
+ */
+export function withDefaultToolCallConcurrencyLimit<T extends { toolCallConcurrency?: ToolCallConcurrency }>(
+  defaults: T,
+  options: { toolCallConcurrency?: ToolCallConcurrency } | undefined,
+): T {
+  const limit = defaults?.toolCallConcurrency;
+  const callValue = options?.toolCallConcurrency;
+  if (typeof limit !== 'number' || typeof callValue !== 'object' || callValue === null) return defaults;
+  return { ...defaults, toolCallConcurrency: { limit } };
+}
+
 export function resolveConfiguredToolCallConcurrency(toolCallConcurrency: ToolCallConcurrency | undefined): number {
   return normalizeToolCallConcurrency(toolCallConcurrency).limit;
 }

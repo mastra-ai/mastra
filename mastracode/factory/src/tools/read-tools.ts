@@ -28,7 +28,7 @@ import type {
   Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
-import { CARD_NUMBER_METADATA_KEY } from '../work-items/create-work-item.js';
+import { workItemNumber } from '../work-items/card-number.js';
 import { sessionActivity } from './deliver.js';
 import type { FactorySessionActivity } from './deliver.js';
 import type { FactoryMessaging } from './messaging-tools.js';
@@ -70,16 +70,6 @@ function iso(value: Date | string | null | undefined): string | null {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-/** The number a person sees on the card: the issue or PR number the item was filed from, or the project's own number for a card filed by hand. */
-export function workItemNumber(item: Pick<Card, 'workItem' | 'metadata'>): number | null {
-  const number =
-    item.workItem.metadata?.number ??
-    item.workItem.metadata?.githubIssueNumber ??
-    item.workItem.metadata?.githubPullRequestNumber ??
-    item.metadata?.[CARD_NUMBER_METADATA_KEY];
-  return typeof number === 'number' ? number : null;
 }
 
 export function workItemStage(item: Pick<Card, 'stages'>): string {

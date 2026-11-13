@@ -63,7 +63,7 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
     onFailure: toastFailureAfterPaletteCloses,
     items: workItems.loaded,
   });
-  const runs = useBoardRuns({ factoryProjectId: factoryId, refetchItems: workItems.refetch });
+  const runs = useBoardRuns({ factoryProjectId: factoryId });
   const { effectByItem } = useItemDecisions(searchableFactoryId);
   const { selectPath } = useGlobalSearchNavigation(closeSearch);
   const [activeScope, setActiveScope] = useState<GlobalSearchScope>('all');

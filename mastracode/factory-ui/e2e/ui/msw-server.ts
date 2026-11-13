@@ -2,6 +2,7 @@ import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
+import { boardReadHandlers } from './board-reads';
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -28,6 +29,10 @@ export const server = setupServer(
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),
+  // Ambient run queue: no automated run waits for a slot. Run-queue tests override it with `server.use(...)`.
+  http.get('*/web/factory/projects/:id/run-queue', () =>
+    HttpResponse.json({ slots: null, running: 0, claimed: [], queuedCount: 0, queued: [] }),
+  ),
   // The sidebar and the board page read the intake routes to learn whether the caller may change
   // boards. The ambient caller is a member who may not; board tests override it with `server.use(...)`.
   http.get('*/web/factory/projects/:id/intake-routes', () => HttpResponse.json({ intakeRoutes: [], canEdit: false })),
@@ -61,7 +66,9 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/sandbox-envs', () => HttpResponse.json({ envs: [], writable: true })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  // What a test stubs here is the project's cards: the board's paged reads are answered from it.
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
+  ...boardReadHandlers,
   // Ambient empty board for the draft page's starters and activity; their tests override these with `server.use(...)`.
   http.get('*/web/factory/projects/:id/work-items/starters', () =>
     HttpResponse.json({
