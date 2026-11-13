@@ -56,7 +56,7 @@ export async function command(root: string, args: string[], env: NodeJS.ProcessE
       /* Already stopped. */
     }
   }, 600000);
-  const [code] = await once(child, 'exit');
+  const [code] = await once(child, 'close');
   globalThis.clearTimeout(timer);
   if (success && code !== 0) throw new Error(`Template command ${args.join(' ')} failed (${code}): ${output}`);
   return { code, output };
