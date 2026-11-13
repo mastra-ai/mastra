@@ -37,8 +37,8 @@ export interface IntakeDiscoveryOptions<TIssue> {
  * Extend a provider's reconcile sweep so it also files issues nobody has
  * carded yet: after refreshing existing cards, list what each project's board
  * shows and replay it through the provider rules. Providers that send Factory
- * no events have no other first-sight path. A failing project is recorded and
- * the sweep moves on.
+ * no events have no other first-sight path. A failing project or source is
+ * recorded and the sweep moves on.
  */
 export function withIntakeDiscovery<TIssue>(
   reconcile: () => Promise<IssueReconcileSummary>,
@@ -56,27 +56,36 @@ export function withIntakeDiscovery<TIssue>(
         const selection = config[options.integrationId];
         if (!selection?.enabled) continue;
         for (const listPage of await options.open(project, selection.sourceIds ?? [])) {
-          let cursor: string | undefined;
-          for (let page = 0; page < (options.maxPages ?? INTAKE_DISCOVERY_MAX_PAGES); page += 1) {
-            const { issues, nextCursor } = await listPage(cursor);
-            if (issues.length > 0) {
-              await options.ingest({
-                orgId: project.orgId,
-                userId: 'factory-rule-dispatcher',
-                factoryProjectId: project.id,
-                issues,
-              });
-              summary.observed += issues.length;
+          // A failing source, such as a revoked connection, must not skip the project's other sources.
+          try {
+            let cursor: string | undefined;
+            for (let page = 0; page < (options.maxPages ?? INTAKE_DISCOVERY_MAX_PAGES); page += 1) {
+              const { issues, nextCursor } = await listPage(cursor);
+              if (issues.length > 0) {
+                await options.ingest({
+                  orgId: project.orgId,
+                  userId: 'factory-rule-dispatcher',
+                  factoryProjectId: project.id,
+                  issues,
+                });
+                summary.observed += issues.length;
+              }
+              if (!nextCursor) break;
+              cursor = nextCursor;
             }
-            if (!nextCursor) break;
-            cursor = nextCursor;
+          } catch (error) {
+            recordFailure(summary, project, error);
           }
         }
       } catch (error) {
-        summary.failed += 1;
-        summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+        recordFailure(summary, project, error);
       }
     }
     return summary;
   };
+}
+
+function recordFailure(summary: IntakeDiscoverySummary, project: FactoryProject, error: unknown): void {
+  summary.failed += 1;
+  summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
 }
