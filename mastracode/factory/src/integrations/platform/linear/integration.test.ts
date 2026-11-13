@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { createBoardRegistry } from '../../../boards/index.js';
 import { createStateSigner } from '../../../state-signing.js';
 import type { IntegrationContext } from '../../base.js';
+import { EXTERNAL_SOURCE_MISSING_KEY } from '../../issue-reconciler.js';
 import { attachLinearIssueReconciler } from '../../linear/issue-reconciler.js';
 import { buildPlatformConnectRoutes } from '../connect/routes.js';
 import { createPlatformStorageForTests, mountApiRoutes } from '../test-utils.js';
@@ -661,20 +662,88 @@ describe('PlatformLinearIntegration', () => {
     expect((resolved?.connection as { accessToken?: string }).accessToken).not.toBe('platform-secret');
   });
 
-  it('returns null dispatch context without a connected workspace or for non-issue sources', async () => {
+  it('resolves issue dispatch without a connected workspace and leaves the read to say it is unreachable', async () => {
     const integration = createIntegration();
-    await expect(
-      integration.intake.resolveIntakeDispatch({
-        orgId: 'org-1',
-        externalSource: { type: 'issue', externalId: 'issue-1' },
-      }),
-    ).resolves.toBeNull();
+    // `null` here would tell the reconciler the card is gone; an unreachable workspace isn't that.
+    const dispatch = await integration.intake.resolveIntakeDispatch({
+      orgId: 'org-1',
+      externalSource: { type: 'issue', externalId: 'issue-1' },
+    });
+    expect(dispatch).toMatchObject({ issueId: 'issue-1' });
+    await expect(integration.intake.getIssue({ ...dispatch!, issueId: 'issue-1' })).rejects.toMatchObject({
+      status: 401,
+    });
     await expect(
       integration.intake.resolveIntakeDispatch({
         orgId: 'org-1',
         externalSource: { type: 'pull-request', externalId: 'x' },
       }),
     ).resolves.toBeNull();
+  });
+
+  it('reports an unscoped issue as gone only once every workspace is reachable', async () => {
+    fake.addLegacy(linearWorkspace('workspace-legacy', { issues: [linearIssue({ id: 'issue-legacy' })] }));
+    fake.connect(linearWorkspace());
+    const integration = createIntegration();
+    // The legacy workspace hasn't moved yet, so its issue can't be called deleted.
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-legacy' })).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining('has not finished'),
+    });
+    await expect(
+      integration.intake.createComment({ connection: oauth, issueId: 'issue-legacy', body: 'hi' }),
+    ).rejects.toMatchObject({ status: 401 });
+
+    await integration.migration.run('admin');
+    expect(integration.migration.settled).toBe(true);
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'issue-legacy' })).resolves.toMatchObject({
+      id: 'issue-legacy',
+    });
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).resolves.toBeNull();
+  });
+
+  it('refuses to report an unscoped issue as gone while a connection needs a fresh connect', async () => {
+    fake.connect(linearWorkspace());
+    fake.connect(linearWorkspace('workspace-2'), { status: 'needs_reauth' });
+    const integration = createIntegration();
+    await integration.migration.refreshStatus();
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).rejects.toMatchObject({
+      status: 401,
+      message: expect.stringContaining('fresh connect'),
+    });
+  });
+
+  it('keeps a pre-migration reconcile from marking a card missing, so the post-migration reconcile refreshes it', async () => {
+    fake.addLegacy(linearWorkspace());
+    const seed = await createPlatformStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Factory' } });
+    const { item } = await seed.workItems.upsert({
+      orgId: project.orgId,
+      userId: project.createdBy,
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: linearIssue().url },
+        title: 'ENG-42: Fix intake',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { linearIssueId: 'issue-1' },
+      },
+    });
+    const integration = createIntegration();
+    const reconcile = attachLinearIssueReconciler(integration, {
+      storage: { projects: seed.projects, intake: seed.intake },
+      runtime: { configVersion: 'v1', workItems: seed.workItems, boards: createBoardRegistry() },
+    })!;
+    const metadata = async () =>
+      (await seed.workItems.get({ orgId: project.orgId, id: item.id }))?.workItem.metadata ?? {};
+
+    // Boot: the reconcile runs before the workspace has moved. A failure, retried later; not "gone".
+    await expect(reconcile()).resolves.toMatchObject({ checked: 1, missing: 0, failed: 1 });
+    expect(await metadata()).not.toHaveProperty(EXTERNAL_SOURCE_MISSING_KEY);
+
+    await integration.migration.run('boot');
+    await expect(reconcile()).resolves.toMatchObject({ checked: 1, updated: 1, missing: 0, failed: 0 });
+    expect(await metadata()).toMatchObject({ identifier: 'ENG-42', linearStateType: 'unstarted' });
   });
 
   it('lists connected workspace projects and teams as Intake sources', async () => {
@@ -925,7 +994,9 @@ describe('PlatformLinearIntegration', () => {
   it('searches connected workspaces when issue operations have no source id and returns null when none has it', async () => {
     fake.connect(linearWorkspace());
     fake.connect(linearWorkspace('workspace-2', { name: 'Second' }));
-    await expect(createIntegration().intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).resolves.toBeNull();
+    const integration = createIntegration();
+    await integration.migration.refreshStatus();
+    await expect(integration.intake.getIssue({ connection: oauth, issueId: 'ENG-404' })).resolves.toBeNull();
     expect(
       fake
         .ops('IssueDetail')

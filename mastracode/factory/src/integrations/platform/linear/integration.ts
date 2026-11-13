@@ -61,7 +61,10 @@ export interface PlatformLinearIntegrationConfig {
  * Linear reports `migration_required` for it; there is no legacy fallback.
  */
 export class PlatformLinearIntegration extends PlatformConnectIntegration {
-  readonly intake = new PlatformLinearIntake(this);
+  readonly intake = new PlatformLinearIntake(this, {
+    unreachableWorkspaces: () =>
+      this.#migration.settled ? null : 'the move of legacy Linear workspaces to Mastra Connect has not finished',
+  });
   readonly #rules: LinearEventRules;
   readonly #endpointHost: string;
   readonly #migration: PlatformLinearMigration;

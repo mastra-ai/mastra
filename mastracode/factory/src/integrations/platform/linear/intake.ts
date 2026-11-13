@@ -116,9 +116,18 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
   /** Workflow states per `${workspaceId}:${teamId}`, for the process lifetime. */
   readonly #workflowStatesByTeam = new Map<string, LinearGraphqlWorkflowState[]>();
 
-  constructor(integration: PlatformConnectIntegration) {
+  readonly #unreachableWorkspaces: () => string | null;
+
+  constructor(
+    integration: PlatformConnectIntegration,
+    options: {
+      /** Why the org may have Linear workspaces Factory can't reach yet (e.g. a migration in progress), or null. */
+      unreachableWorkspaces?: () => string | null;
+    } = {},
+  ) {
     super(integration, 'linear-connection:');
     this.#integration = integration;
+    this.#unreachableWorkspaces = options.unreachableWorkspaces ?? (() => null);
   }
 
   protected notConnectedError(workspaceId: string): Error {
@@ -212,8 +221,8 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
   }
 
   async resolveIntakeDispatch({ externalSource }: ResolveIntakeDispatchInput): Promise<ResolvedIntakeDispatch | null> {
+    // Like Jira, an unreachable workspace surfaces from the read, not here: `null` tells the reconciler the card is gone.
     if (externalSource.type !== 'issue') return null;
-    if ((await this.listWorkspaces()).length === 0) return null;
     return {
       connection: { type: 'oauth', accessToken: PLATFORM_MANAGED_CONNECTION_TOKEN },
       issueId: externalSource.externalId,
@@ -616,7 +625,23 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       }
       return { workspace, issue };
     }
+    if (!scopedSources) await this.#assertEveryWorkspaceReachable(issueId);
     return null;
+  }
+
+  /**
+   * An unscoped lookup searches every connected workspace. Not finding the
+   * issue means it is gone only if no workspace is out of reach; otherwise the
+   * issue may live in one Factory can't see yet, and callers close cards on `null`.
+   */
+  async #assertEveryWorkspaceReachable(issueId: string): Promise<void> {
+    const pending = this.#unreachableWorkspaces();
+    const unusable = (await this.inventory()).unusable.length;
+    const reason = pending ?? (unusable > 0 ? `${unusable} Linear connection(s) need a fresh connect` : null);
+    if (!reason) return;
+    throw Object.assign(new Error(`Linear issue ${issueId} was not found in a reachable workspace: ${reason}.`), {
+      status: 401,
+    });
   }
 
   /** The workspace that has the issue, and the issue's UUID (writes don't accept identifiers). */
@@ -636,6 +661,7 @@ export class PlatformLinearIntake extends PlatformIntakeCapability {
       const resolved = await resolveIssueId(this.#transport(workspace), issueId);
       if (resolved) return { workspace, issueId: resolved };
     }
+    if (!sourceId) await this.#assertEveryWorkspaceReachable(issueId);
     return null;
   }
 
