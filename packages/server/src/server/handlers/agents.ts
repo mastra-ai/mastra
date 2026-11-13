@@ -101,6 +101,7 @@ import { assertStoredAgentAccess } from './agent-access';
 import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import type { OwnedRecord } from './authorship';
 import { handleError } from './error';
+import { isGatewayV2 } from './gateway-memory-client';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
   sanitizeBody,
@@ -2055,8 +2056,14 @@ export async function buildProvidersList(mastra: Context['mastra']): Promise<Pro
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === 'true' || process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS === '1';
   const defaultGatewayIds = new Set<string>(defaultGateways.map(gateway => gateway.id));
 
+  // Consult registered gateway instances too: a user-registered MastraGateway
+  // may carry a v2 key via config.apiKey that env-only checks cannot see.
+  const gatewayV2 = isGatewayV2(mastra);
+
   if (!blockExternalProviders) {
     for (const [id, provider] of Object.entries(PROVIDER_REGISTRY)) {
+      // In v2 the live catalog (via the gateway manager) replaces the static registry entry.
+      if (id === 'mastra' && gatewayV2) continue;
       allProviders[id] = provider;
     }
   }
