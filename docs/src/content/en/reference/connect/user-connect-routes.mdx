@@ -20,7 +20,7 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        resourceId: ({ user }) => (user as { id: string } | undefined)?.id,
+        resourceId: ({ user }) => user?.id,
       }),
     ],
   },
@@ -44,9 +44,9 @@ The routes do no authentication of their own: the server's auth pipeline authent
   },
   {
     name: 'resourceId',
-    type: '(ctx: { requestContext?, user? }) => string | undefined | Promise<string | undefined>',
+    type: '(ctx: { requestContext?: RequestContext; user?: MastraUser }) => string | undefined | Promise<string | undefined>',
     description:
-      "Derives the caller's project-scoped resource ID per request, usually from user, the authenticated user exactly as your auth configuration returned it (typed unknown, so narrow it to your user type). Without the callback, the routes use the value that mapUserToResourceId sets after authentication. The trimmed value must contain 1 to 256 characters. A request where the callback returns a falsy or invalid value, or throws, is rejected with 401.",
+      "Derives the caller's project-scoped resource ID per request, usually from user, the authenticated user normalized to a MastraUser (the same user a DynamicArgument callback receives). Without the callback, the routes use the value that mapUserToResourceId sets after authentication. The trimmed value must contain 1 to 256 characters. A request where the callback returns a falsy or invalid value, or throws, is rejected with 401.",
     isOptional: true,
   },
   {

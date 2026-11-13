@@ -112,8 +112,7 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        // `user` is the object authenticateToken returned for this request
-        resourceId: ({ user }) => (user as { id: string } | undefined)?.id,
+        resourceId: ({ user }) => user?.id,
         // Optional: override the project's provider policy in code.
         // Omit to use endUserProviders from Mastra Platform.
         providers: ['linear', 'slack'],
