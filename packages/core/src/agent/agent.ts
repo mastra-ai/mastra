@@ -990,6 +990,8 @@ export class Agent<
   readonly #durable?: AgentDurableOption;
   /** Resumable stream layer, built on first use once streams are enabled. */
   #streamBus?: AgentStreamBus;
+  /** Forks share the fallback transport without making it override Mastra registration. */
+  #defaultStreamPubsub?: PubSub;
   /** Execution wrappers configure the same bus without taking over plain-run bookkeeping. */
   #durableStreamConfig?: AgentStreamsConfig;
   #streamBusUsesSharedRunLog?: () => boolean;
@@ -1784,6 +1786,7 @@ export class Agent<
           usesSharedRunLog: () => this.#streamBusUsesSharedRunLog?.() ?? this.__usesSharedRunLog(),
           warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
         },
+        (this.#defaultStreamPubsub ??= new EventEmitterPubSub()),
       );
       if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
     }
@@ -4534,6 +4537,7 @@ export class Agent<
 
     fork.#inheritedPubSub = this.#inheritedPubSub;
     fork.#durableStreamConfig = this.#durableStreamConfig;
+    fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
     // A version fork runs inside this agent's `untilIdle` wrapper, so it must see that wrapper
