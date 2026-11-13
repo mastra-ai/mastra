@@ -573,12 +573,16 @@ export function describeFinishedOccurrenceCases({
         });
         expect(finished.every(event => event.id)).toBe(true);
 
-        for (const event of finished) expect(await redeliver(b, event)).toEqual({ ok: true });
+        for (const event of finished) {
+          expect(await redeliver(b, event)).toEqual({ ok: true });
+        }
         expect(executions.filter(e => e.startsWith('B:'))).toEqual([]);
 
         gate.resolve();
         expect((await result).status).toBe('success');
-        for (const event of finished) expect(await redeliver(b, event)).toEqual({ ok: true });
+        for (const event of finished) {
+          expect(await redeliver(b, event)).toEqual({ ok: true });
+        }
 
         expect(executions.sort()).toEqual(shape.labels.map(label => `A:${label}`).sort());
         expect(stepEventsOf(b.published, run.runId)).toEqual([]);
@@ -602,22 +606,6 @@ export function describeFinishedOccurrenceCases({
       );
       expect(executions).toEqual(['reused', 'between', 'reused']);
     }, 20_000);
-
-    /** Runs `first` then `second` to success on replica A and returns the run and A's step messages. */
-    async function finishTwoSteps() {
-      const executions: string[] = [];
-      const build = (replica: string) =>
-        createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
-          .then(work('first', async id => void executions.push(`${replica}:${id}`)))
-          .then(work('second', async id => void executions.push(`${replica}:${id}`)))
-          .commit();
-      const a = await startReplica(build('A'));
-      const run = await a.workflow.createRun({ runId: uniqueRunId() });
-      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
-      const first = a.delivered.find(event => event.type === 'workflow.step.run' && samePath(event, [0]))!;
-      expect(first.id).toBeTruthy();
-      return { executions, build, run, first };
-    }
 
     it.each(['running', 'suspended'] as const)(
       'drops a finished step whose redelivery exhausted its attempts while the next step is %s',
@@ -681,12 +669,20 @@ export function describeFinishedOccurrenceCases({
     );
 
     it('runs a finished step and the steps after it again on time travel', async () => {
-      const { executions, run } = await finishTwoSteps();
+      const executions: string[] = [];
+      const report: Report = async id => void executions.push(id);
+      const workflow = createWorkflow({ id: 'finished', inputSchema: Num, outputSchema: Num })
+        .then(work('first', report))
+        .then(work('second', report))
+        .commit();
+      const a = await startReplica(workflow);
+      const run = await a.workflow.createRun({ runId: uniqueRunId() });
+      expect((await run.start({ inputData: { n: 1 } })).status).toBe('success');
 
       const travelled = await run.timeTravel({ step: 'first', inputData: { n: 2 } });
 
       expect(travelled.status).toBe('success');
-      expect(executions).toEqual(['A:first', 'A:second', 'A:first', 'A:second']);
+      expect(executions).toEqual(['first', 'second', 'first', 'second']);
     }, 20_000);
   });
 }
