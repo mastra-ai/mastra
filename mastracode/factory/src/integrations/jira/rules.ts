@@ -17,7 +17,6 @@ import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../..
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -245,19 +244,4 @@ export class JiraRules {
     }
     return committed.status;
   }
-}
-
-export function attachJiraRules(
-  jira: { readonly rules: JiraEventRules },
-  context: IntegrationContext,
-): ((input: JiraRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.runtime) return undefined;
-  const rules = new JiraRules({
-    projects: context.storage.projects,
-    storage: context.runtime.workItems,
-    configVersion: context.runtime.configVersion,
-    boards: context.runtime.boards,
-    jiraRules: jira.rules,
-  });
-  return input => rules.ingest(input);
 }

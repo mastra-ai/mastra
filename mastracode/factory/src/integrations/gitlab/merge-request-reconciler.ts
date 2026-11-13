@@ -3,7 +3,7 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { PullRequest } from '../../capabilities/version-control.js';
 import type { FactoryProject } from '../../storage/domains/projects/base.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
-import type { Card } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import type { IssueReconcileSummary } from '../issue-reconciler.js';
 import { decodeMergeRequestReference, gitlabConnection, GITLAB_TRUSTED_ACCESS_LEVEL } from './integration.js';
@@ -183,10 +183,17 @@ export function attachGitLabMergeRequestReconciler(
       errors: [],
     };
     for (const project of await context.storage.projects.listAll()) {
-      await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
-      const items = (
-        await context.runtime!.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id })
-      ).filter(item => {
+      let cards: Awaited<ReturnType<WorkItemsStorage['listShared']>>;
+      try {
+        await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
+        cards = await context.runtime!.workItems.listShared({ orgId: project.orgId, factoryProjectId: project.id });
+      } catch (error) {
+        // One project whose boards or cards cannot be read must not end the sweep for the others.
+        summary.failed += 1;
+        summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
+      const items = cards.filter(item => {
         if (item.externalSource?.integrationId !== 'gitlab' || item.externalSource.type !== 'pull-request') {
           return false;
         }

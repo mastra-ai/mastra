@@ -145,7 +145,7 @@ describe('PlatformJiraIntegration discovery', () => {
     ]);
     const jira = integration();
     const reconcile = attachJiraIssueReconciler(jira, {
-      storage: { projects: seeded.projects },
+      storage: { projects: seeded.projects, intake: seeded.intake },
       runtime: {
         configVersion: 'test-v1',
         workItems: seeded.workItems,
