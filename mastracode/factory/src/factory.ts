@@ -97,6 +97,7 @@ import {
   buildConnectToolListRoute,
   buildConnectToolsRoute,
   buildPlatformConnectRoutes,
+  isPlatformConnectProviderSource,
 } from './integrations/platform/connect/routes.js';
 import type { ConnectToolsSetupMissing, ConnectToolsSource } from './integrations/platform/connect/routes.js';
 import {
@@ -253,8 +254,7 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 /** Tools for every Factory session, or a resolver called per run. */
 export type FactoryTools =
-  | IntegrationTools
-  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+  IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -1347,8 +1347,7 @@ export class MastraFactory {
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     ) as GitLabIntegrationBase | undefined;
@@ -2204,7 +2203,13 @@ export class MastraFactory {
               }
             }
             if (integration.agentTools) {
-              mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              try {
+                mergeTools(integration.id, await integration.agentTools({ requestContext }));
+              } catch (error) {
+                console.warn(
+                  `[factory] ${integration.id} tools are unavailable for this run: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
             }
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
@@ -2440,7 +2445,9 @@ export class MastraFactory {
           ...(hasPlatformCredentials()
             ? buildPlatformConnectRoutes({
                 auth: routeAuth,
-                client: createPlatformConnectClient(),
+                providers: integrations.flatMap(integration =>
+                  isPlatformConnectProviderSource(integration) ? integration.platformConnectProviders() : [],
+                ),
               })
             : []),
           buildConnectToolsRoute(routeAuth, connectToolsList),

@@ -1,4 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+
+import { createBoardRegistry } from '../../../boards/index.js';
+import { createTestBoard } from '../../../boards/test-utils.js';
+import { createFactoryStorageForTests } from '../../../storage/test-utils.js';
+import type { IntegrationContext } from '../../base.js';
+import type { IssueReconcileSummary } from '../../issue-reconciler.js';
+import { problem, startFakePlatform } from '../foundation/test-utils.js';
+import type { FakePlatform } from '../foundation/test-utils.js';
 import { PlatformVantaIntegration } from './integration.js';
 
 const projects = [
@@ -9,20 +17,31 @@ const vulnerability = { id: 'vuln-1', name: 'CVE-2026-1' };
 
 type Connection = { id: string; status: 'active' | 'needs_reauth'; resourceId: string | null; accountLabel: null };
 
+function withIntegrationId(connections: Connection[]) {
+  return connections.map(connection => ({ ...connection, integrationId: 'vanta' }));
+}
+
 function createIntegration(
   connections: Connection[],
   pageInfo = { hasNextPage: false, endCursor: null as string | null },
 ) {
   const fetchImpl = vi.fn(async (input: RequestInfo | URL) => {
     const path = new URL(String(input)).pathname;
-    if (path === '/v2/connections') return Response.json({ connections });
+    if (path === '/v2/projects/proj_factory/connections') {
+      return Response.json({ connections: withIntegrationId(connections) });
+    }
     if (path.includes('/proxy/v1/vulnerabilities')) {
       return Response.json({ results: { data: [vulnerability], pageInfo } });
     }
     throw new Error(`Unexpected request ${input}`);
   });
   const integration = new PlatformVantaIntegration({
-    connect: { baseUrl: 'https://integrations.example', accessToken: 'test-token', fetch: fetchImpl as typeof fetch },
+    connect: {
+      baseUrl: 'https://integrations.example',
+      projectId: 'proj_factory',
+      accessToken: 'test-token',
+      fetch: fetchImpl as typeof fetch,
+    },
   });
   return { integration, fetchImpl };
 }
@@ -102,7 +121,7 @@ type Status = 'active' | 'needs_reauth';
 function vantaWith(pages: number, statuses: Status[] = ['active']) {
   const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async input => {
     const url = new URL(String(input));
-    if (url.pathname === '/v2/connections') {
+    if (url.pathname === '/v2/projects/proj_factory/connections') {
       return json({
         connections: statuses.map((status, index) => ({
           id: `conn-${index + 1}`,
@@ -121,7 +140,12 @@ function vantaWith(pages: number, statuses: Status[] = ['active']) {
     });
   });
   return new PlatformVantaIntegration({
-    connect: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-secret', fetch: fetchImpl },
+    connect: {
+      baseUrl: 'https://integrations.example.com',
+      projectId: 'proj_factory',
+      accessToken: 'platform-secret',
+      fetch: fetchImpl,
+    },
   });
 }
 
@@ -143,6 +167,117 @@ describe('PlatformVantaIntegration.listVulnerabilities', () => {
   it("fails instead of leaving out a connection that can't be read", async () => {
     await expect(vantaWith(1, ['active', 'needs_reauth']).listVulnerabilities()).rejects.toThrow(
       /conn-2 is needs_reauth/,
+    );
+  });
+});
+
+/** Runs the integration's reconcile once, as its worker would. */
+class SyncOnce extends PlatformVantaIntegration {
+  async syncOnce(ctx: IntegrationContext): Promise<IssueReconcileSummary> {
+    const reconcile = this.reconcile(ctx);
+    if (!reconcile) throw new Error('Vanta did not attach its sync');
+    return reconcile();
+  }
+}
+
+describe('Vanta sync through the Factory project connections', () => {
+  async function setup(platform: FakePlatform) {
+    const seeded = await createFactoryStorageForTests();
+    const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'acme' } });
+    await seeded.intake.saveConfig({ orgId: 'org-1', config: { vanta: { enabled: true, sourceIds: [] } } });
+    const { item: filed } = await seeded.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'vanta', type: 'vulnerability', externalId: 'vuln-filed' },
+        title: 'lodash: CVE-2026-9',
+        stages: ['intake'],
+        sessions: {},
+        metadata: { state: 'open' },
+      },
+    });
+    const ctx = {
+      storage: { projects: seeded.projects, intake: seeded.intake },
+      runtime: {
+        configVersion: 'factory-config-v1',
+        workItems: seeded.workItems,
+        boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      },
+    } as unknown as IntegrationContext;
+    const commits = vi.spyOn(seeded.workItems, 'commitRuleEvaluation');
+    const vanta = new SyncOnce({ connect: platform.connect() });
+    return { vanta, ctx, commits, filed };
+  }
+
+  function vulnerabilityPages(pages: Array<{ id: string } | 'fail'>) {
+    return (_connectionId: string, path: string, query: URLSearchParams) => {
+      if (path !== '/v1/vulnerabilities') return problem(404, 'not_found');
+      const page = Number(query.get('pageCursor') ?? 0);
+      const entry = pages[page];
+      if (!entry || entry === 'fail') return { status: 502, body: { message: 'Vanta is unavailable' } };
+      return {
+        status: 200,
+        body: {
+          results: {
+            data: [{ id: entry.id, name: entry.id }],
+            pageInfo: { hasNextPage: page + 1 < pages.length, endCursor: String(page + 1) },
+          },
+        },
+      };
+    };
+  }
+
+  it("links the org's Vanta connection to the Factory project at boot, then syncs from it", async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-vanta', integrationId: 'vanta', status: 'active' }];
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-filed' }, { id: 'vuln-new' }]);
+    const { vanta, ctx, commits } = await setup(platform);
+
+    const [worker] = vanta.workers(ctx);
+    expect(worker?.name).toBe('vanta-issue-reconcile');
+    const summary = await vanta.syncOnce(ctx);
+
+    expect(platform.linked.has('conn-vanta')).toBe(true);
+    expect(summary).toMatchObject({ projects: 1, checked: 2, failed: 0 });
+    expect(commits).toHaveBeenCalled();
+  });
+
+  it('closes no cards when the connection could not be linked and none is visible', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-vanta', integrationId: 'vanta', status: 'active' }];
+    platform.linkReplies.set('conn-vanta', problem(403, 'forbidden'));
+    const { vanta, ctx, commits } = await setup(platform);
+
+    vanta.workers(ctx);
+    const summary = await vanta.syncOnce(ctx);
+
+    expect(summary).toMatchObject({ projects: 0, checked: 0, closed: 0 });
+    expect(commits).not.toHaveBeenCalled();
+    expect(vanta.needsLinking).toEqual([
+      { connectionId: 'conn-vanta', reason: expect.stringContaining('integrations:write') },
+    ]);
+    expect(platform.requests.some(request => request.path.includes('/proxy'))).toBe(false);
+  });
+
+  it('closes no cards when Vanta fails partway through the vulnerability pages', async () => {
+    const platform = await startFakePlatform();
+    platform.orgConnections = [{ id: 'conn-vanta', integrationId: 'vanta', status: 'active' }];
+    platform.linked.add('conn-vanta');
+    platform.proxy = vulnerabilityPages([{ id: 'vuln-other' }, 'fail']);
+    const { vanta, ctx, commits } = await setup(platform);
+
+    const summary = await vanta.syncOnce(ctx);
+
+    expect(summary).toMatchObject({ projects: 0, checked: 0, failed: 1 });
+    expect(commits).not.toHaveBeenCalled();
+  });
+
+  it('syncs every 15 minutes unless syncIntervalMs says otherwise', () => {
+    const offline = { baseUrl: 'http://127.0.0.1:9', accessToken: 'platform-secret', projectId: 'proj_factory' };
+    expect(new PlatformVantaIntegration({ connect: offline }).reconcileIntervalMs).toBe(15 * 60_000);
+    expect(new PlatformVantaIntegration({ connect: offline, syncIntervalMs: 5 * 60_000 }).reconcileIntervalMs).toBe(
+      5 * 60_000,
     );
   });
 });

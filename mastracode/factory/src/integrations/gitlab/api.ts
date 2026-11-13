@@ -179,7 +179,8 @@ export interface GitLabApiClientConfig {
 }
 
 export interface PlatformGitLabApiClientConfig {
-  client: ConnectClient;
+  /** Reaches GitLab through the connection proxy: a `ConnectClient`, or a Platform integration's binding. */
+  client: Pick<ConnectClient, 'proxy'>;
   connectionId: string;
 }
 
@@ -649,6 +650,9 @@ export class GitLabApiClient {
         if (error instanceof MastraConnectError && error.status !== undefined) {
           throw new GitLabApiError(error.detail ?? error.message, error.status);
         }
+        // A binding reports a connection that needs reconnecting as an error with an HTTP status.
+        const status = (error as { status?: unknown } | null)?.status;
+        if (error instanceof Error && typeof status === 'number') throw new GitLabApiError(error.message, status);
         throw new GitLabApiError(error instanceof Error ? error.message : String(error), null);
       }
     }
