@@ -258,22 +258,25 @@ describe('PermissionRequest hooks fire at event receipt (#20861)', () => {
     expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
   });
 
-  it('does not dispatch a permission hook for ask_user suspensions', async () => {
+  it('dispatches ask_question for ask_user suspensions while the queue is blocked', async () => {
     const manager = createRecordingManager();
     const { listener, releaseBlocker, handled } = createHarness(manager);
 
-    const blocked = listener({
+    void listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+
+    const suspendPayload = { question: 'Continue?' };
+    void listener({
       type: 'tool_suspended',
       toolCallId: 'call-ask',
       toolName: 'ask_user',
-      suspendPayload: { question: 'Continue?' },
+      suspendPayload,
     });
 
-    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
+    expect(handled).toEqual(['start:blocking_prompt']);
+    expect(manager.runPermissionRequest).toHaveBeenCalledTimes(1);
+    expect(manager.runPermissionRequest).toHaveBeenCalledWith('ask_question', 'call-ask', 'ask_user', suspendPayload);
     releaseBlocker.resolve();
-    await blocked;
-    expect(handled).toEqual(['start:tool_suspended', 'end:tool_suspended']);
-    expect(manager.runPermissionRequest).not.toHaveBeenCalled();
   });
 
   it('does not break event delivery when the hook dispatch rejects', async () => {

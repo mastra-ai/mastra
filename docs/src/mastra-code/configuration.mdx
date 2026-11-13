@@ -479,8 +479,8 @@ Hooks are user-configured shell commands that run at specific lifecycle events. 
 | `Notification` | When the TUI fires a notification | No |
 | `AgentStart` | When an agent run begins | No |
 | `AgentEnd` | When an agent run ends (`complete`, `aborted`, `error`, or `suspended`) | No |
-| `PermissionRequest` | When a tool, sandbox access request, or plan approval requires user permission | No |
-| `PermissionResult` | When a user approves, declines, or dismisses a permission gate | No |
+| `PermissionRequest` | When a tool, sandbox access request, plan approval, or `ask_user` question waits for the user | No |
+| `PermissionResult` | When a user approves, declines, answers, or dismisses a permission gate | No |
 | `Interrupt` | When a running run is aborted by the user, goal judge, or a process signal | No |
 | `SubagentStart` | When a subagent begins a delegated task | No |
 | `SubagentEnd` | When a subagent finishes its delegated task | No |
@@ -524,7 +524,7 @@ Hook processes receive a JSON payload on stdin with context about the event:
 
 During an active agent run, all hook payloads include a `run_id` that identifies the current run. The same `run_id` appears on `AgentStart`, tool hooks, `PermissionRequest`, `PermissionResult`, `Interrupt`, `SubagentStart`, `SubagentEnd`, `AgentEnd`, and `Stop` for that run, so external integrations can correlate events.
 
-A `PermissionRequest` payload includes the permission kind and call context. `permission_kind` can be `tool_approval`, `sandbox_access`, or `plan_approval`. `tool_name` and `tool_input` describe the gated tool call when the request comes from a tool approval, sandbox access request, or plan approval. `PermissionRequest` hooks and the agent-finished `Notification` hook fire as soon as the TUI receives the event, even while an earlier prompt is still waiting for an answer. The `agent_done` notification is emitted only for `agent_end` events with reason `complete` or no reason. Runs that end `aborted` or with an `error` never produce it, and runs that end `suspended` on a prompt do not either; the suspension's own prompt notification covers them.
+A `PermissionRequest` payload includes the permission kind and call context. `permission_kind` can be `tool_approval`, `sandbox_access`, `plan_approval`, or `ask_question` (an `ask_user` question). `tool_name` and `tool_input` describe the gated tool call. The matching `PermissionResult` carries a `decision`: `approved`, `declined`, `dismissed`, `auto_approved`, or `auto_declined` for approval gates, and `answered` or `dismissed` for questions. `PermissionRequest` hooks and the agent-finished `Notification` hook fire as soon as the TUI receives the event, even while an earlier prompt is still waiting for an answer. The `agent_done` notification is emitted only for `agent_end` events with reason `complete` or no reason. Runs that end `aborted` or with an `error` never produce it, and runs that end `suspended` on a prompt do not either; the suspension's own prompt notification covers them.
 
 ```json
 {
