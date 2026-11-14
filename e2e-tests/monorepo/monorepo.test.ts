@@ -417,6 +417,33 @@ export const environmentRoute = registerApiRoute('/environment', {
       expect(stack).toContain(join('src', 'mastra', 'api', 'route', 'stack.ts'));
     });
 
+    // Hard-loading a Studio deep link with a dotted id used to 404 because the
+    // SPA fallback treated any path containing a dot as a static asset. (#30296)
+    it('serves Studio on refresh for routes with dotted ids, and 404s missing assets (#30296)', async () => {
+      const shell = await fetch(`http://localhost:${port}/agents/anything`);
+      expect(shell.status).toBe(200);
+      const shellHtml = await shell.text();
+      const assetPath = shellHtml.match(/(?:src|href)="\.?\/?(assets\/[^"]+\.js)"/)?.[1];
+      expect(assetPath).toBeTruthy();
+
+      // Each refresh must get the Studio shell that loads the Studio bundle.
+      for (const route of ['/agents/lead.agent', '/agents/lead.agent/threads']) {
+        const res = await fetch(`http://localhost:${port}${route}`);
+        expect(res.status, route).toBe(200);
+        expect(res.headers.get('content-type'), route).toContain('text/html');
+        const html = await res.text();
+        expect(html, route).toContain('id="root"');
+        expect(html, route).toContain(assetPath!);
+      }
+
+      const asset = await fetch(`http://localhost:${port}/${assetPath}`);
+      expect(asset.status).toBe(200);
+      expect(asset.headers.get('content-type')).toContain('javascript');
+
+      const missing = await fetch(`http://localhost:${port}/assets/does-not-exist-30296.js`);
+      expect(missing.status).toBe(404);
+    });
+
     it('layers development dotenv files without overriding the shell environment', async () => {
       const res = await fetch(`http://localhost:${port}/environment`);
 
