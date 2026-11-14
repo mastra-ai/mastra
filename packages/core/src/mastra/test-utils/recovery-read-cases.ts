@@ -176,8 +176,8 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
 
       expect(executions).toEqual(['stopped']);
       // All of them for the restarted run: `createRun()` reads the stored run and its status, and
-      // `restart()` loads the snapshot it resumes from.
-      expect(reads.snapshotReads).toEqual(['stopped', 'stopped', 'stopped']);
+      // `restart()` loads the snapshot before and again after it claims the run.
+      expect(reads.snapshotReads).toEqual(['stopped', 'stopped', 'stopped', 'stopped']);
     }, 60_000);
   });
 }
