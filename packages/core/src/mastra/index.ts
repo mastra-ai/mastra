@@ -7,7 +7,7 @@ import {
 import type { ExecutionEngineDefaults } from '../agent/streams/execution-engine';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
-import { isDurableAgentLike } from '../agent/types';
+import { hasDurableExecution, isDurableAgentLike } from '../agent/types';
 import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
@@ -3098,6 +3098,9 @@ export class Mastra<
         });
       }
 
+      // Ownership changes future policy only; existing streams and injected services stay intact.
+      if (!Object.is(underlyingAgent, agent)) underlyingAgent.__ownExecutionEnginePolicy?.();
+
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
@@ -3249,6 +3252,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
         return;
       }
       throw new MastraError({
@@ -5215,7 +5219,7 @@ export class Mastra<
 
     const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && isDurableAgentLike(agent)) {
+      if (agent && hasDurableExecution(agent)) {
         durableAgents.push(agent);
       }
     }
