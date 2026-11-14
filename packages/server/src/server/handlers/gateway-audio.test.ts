@@ -103,6 +103,7 @@ describe('Gateway audio routes', () => {
       headers: {
         cookie: '__Host-wos-session=session-data',
         origin: 'https://other.example',
+        'x-mastra-public-host': 'other.example',
         'sec-fetch-site': 'cross-site',
       },
     });
@@ -120,6 +121,46 @@ describe('Gateway audio routes', () => {
     expect(speech.status).toBe(403);
     expect(transcription.status).toBe(403);
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('accepts same-origin Studio speech and dictation behind the deployment proxy', async () => {
+    enableDeployment();
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith('/gateway/audio/access')) return Response.json({ enabled: true });
+      if (url.endsWith('/v1/audio/speech')) return new Response('audio', { headers: { 'content-type': 'audio/mpeg' } });
+      return Response.json({ text: 'spoken words' });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const headers = {
+      cookie: '__Host-wos-session=session-data',
+      origin: 'https://studio.example',
+      'x-mastra-public-host': 'studio.example',
+      'sec-fetch-site': 'same-origin',
+    };
+
+    const speech = await POST_GATEWAY_AUDIO_SPEECH_ROUTE.handler({
+      request: new Request('https://internal.railway.app/api/system/gateway-audio/speech', {
+        method: 'POST',
+        headers,
+      }),
+      model: 'speak-mp3',
+      input: 'Hello',
+      voice: 'george',
+    } as Parameters<typeof POST_GATEWAY_AUDIO_SPEECH_ROUTE.handler>[0]);
+    const form = new FormData();
+    form.set('model', 'openai/whisper');
+    form.set('file', new File(['audio'], 'dictation.webm', { type: 'audio/webm' }));
+    const transcription = await POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE.handler({
+      request: new Request('https://internal.railway.app/api/system/gateway-audio/transcriptions', {
+        method: 'POST',
+        headers,
+        body: form,
+      }),
+    } as Parameters<typeof POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE.handler>[0]);
+
+    expect(speech.status).toBe(200);
+    expect(transcription.status).toBe(200);
+    expect(await transcription.json()).toEqual({ text: 'spoken words' });
   });
 
   it('forces MP3 output for speech requests', async () => {

@@ -1,6 +1,7 @@
 import { z } from 'zod/v4';
 
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getPublicOrigin } from './auth';
 
 const MAX_AUDIO_BYTES = 8 * 1024 * 1024;
 const gatewayModelSchema = z.object({
@@ -69,7 +70,7 @@ function unavailable() {
 function trustedBrowserRequest(request?: Request): boolean {
   if (!request) return false;
   const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) return false;
+  if (origin && origin !== getPublicOrigin(request)) return false;
   const site = request.headers.get('sec-fetch-site');
   return !site || site === 'same-origin' || site === 'none';
 }
