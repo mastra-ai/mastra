@@ -119,7 +119,7 @@ export class FactoryMetrics {
     else this.#counters.set(key, { name, labels, value: 0, keep: true });
   }
 
-  /** Records a timing, sent per interval as `stat=count|avg|p95|max` on the same series. */
+  /** Records a timing, sent per interval as `stat=avg|p95|max` plus a `<name>_count` series. */
   observe(group: MetricGroup, name: string, value: number, labels: MetricLabels = {}): void {
     if (!this.enabled(group) || !Number.isFinite(value)) return;
     const key = seriesKey(name, labels);
@@ -200,7 +200,7 @@ export class FactoryMetrics {
       for (const observation of this.#observations.values()) {
         const { name, labels, count, sum, max } = observation;
         const sorted = observation.samples.sort((a, b) => a - b);
-        sink.emit(name, count, { ...labels, stat: 'count' });
+        sink.emit(`${name}_count`, count, labels);
         sink.emit(name, sum / count, { ...labels, stat: 'avg' });
         sink.emit(name, percentile(sorted, 0.95), { ...labels, stat: 'p95' });
         sink.emit(name, max, { ...labels, stat: 'max' });

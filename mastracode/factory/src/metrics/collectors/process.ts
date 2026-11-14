@@ -63,8 +63,8 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
       // The histogram records each sampling timer's full wait, so an idle loop reads as the
       // resolution; subtract it to get the delay.
       const delayMs = (ns: number) => Math.max(0, ns / 1e6 - LOOP_RESOLUTION_MS);
-      // Same stat set as the other timings. `count` is the number of delay samples taken.
-      sink.emit('mastra_factory_event_loop_delay_ms', loop.count, { stat: 'count' });
+      // Same shape as the other timings: `stat=avg|p95|max` plus a `_count` series (delay samples taken).
+      sink.emit('mastra_factory_event_loop_delay_ms_count', loop.count);
       sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.mean), { stat: 'avg' });
       sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.percentile(95)), { stat: 'p95' });
       sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.max), { stat: 'max' });
@@ -87,12 +87,12 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
       // above 1; compare it to the limit, not to 1. The main thread's load is event-loop utilization.
       const cpu = process.cpuUsage(lastCpu);
       const now = performance.now();
-      sink.emit('mastra_factory_process_cpu_ratio', (cpu.user + cpu.system) / 1000 / (now - lastAt));
+      sink.emit('mastra_factory_process_cpu_cores', (cpu.user + cpu.system) / 1000 / (now - lastAt));
       lastCpu = process.cpuUsage();
       lastAt = now;
       sink.emit('mastra_factory_process_cpu_limit_cores', cpuLimit);
 
-      sink.emit('mastra_factory_process_uptime_s', process.uptime());
+      sink.emit('mastra_factory_process_uptime_ms', process.uptime() * 1000);
     },
     stop() {
       loop.disable();

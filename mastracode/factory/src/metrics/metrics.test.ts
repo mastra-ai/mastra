@@ -92,7 +92,8 @@ describe('FactoryMetrics', () => {
 
     expect(records).toContainEqual({ name: 'events', value: 50, labels: { source: 'github', service: 'worker' } });
     const phase = Object.fromEntries(records.filter(r => r.name === 'phase_ms').map(r => [r.labels.stat, r.value]));
-    expect(phase).toEqual({ count: 3, avg: 20, p95: 30, max: 30 });
+    expect(phase).toEqual({ avg: 20, p95: 30, max: 30 });
+    expect(records).toContainEqual({ name: 'phase_ms_count', value: 3, labels: { phase: 'setup', service: 'worker' } });
     expect(records).toHaveLength(5);
   });
 
@@ -228,7 +229,8 @@ describe('process collector', () => {
     expect(heap).toBeGreaterThan(0);
     expect(heap).toBeLessThan(1);
     const loopStats = records.filter(r => r.name === 'mastra_factory_event_loop_delay_ms').map(r => r.labels.stat);
-    expect(new Set(loopStats)).toEqual(new Set(['count', 'avg', 'p95', 'max']));
+    expect(new Set(loopStats)).toEqual(new Set(['avg', 'p95', 'max']));
+    expect(records.some(r => r.name === 'mastra_factory_event_loop_delay_ms_count')).toBe(true);
   });
 });
 
@@ -434,13 +436,12 @@ describe('review follow-ups', () => {
     await metrics.tick();
     metrics.stop();
 
-    const stat = (name: string, s: string) => records.find(r => r.name === name && r.labels.stat === s);
-    expect(stat('mastra_factory_session_ready_ms', 'count')).toMatchObject({
+    expect(records.find(r => r.name === 'mastra_factory_session_ready_ms_count')).toMatchObject({
       value: 1,
       labels: { kind: 'first', outcome: 'ok' },
     });
     // Only the first caller other than the eager start counts as waiting.
-    expect(stat('mastra_factory_session_sandbox_wait_ms', 'count')?.value).toBe(1);
+    expect(records.find(r => r.name === 'mastra_factory_session_sandbox_wait_ms_count')?.value).toBe(1);
     expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(0);
     expect(sandbox.calls).toBe(1);
   });
