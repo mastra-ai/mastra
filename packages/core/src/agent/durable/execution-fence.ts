@@ -34,6 +34,7 @@ import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 import { isRunFenceConflictError, matchesRunFence, runOutsideRunFenceScope } from '../../storage/run-fencing';
 import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
 import { PUBSUB_SYMBOL } from '../../workflows/constants';
+import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
@@ -57,12 +58,7 @@ const CLAIM_POLL_INTERVAL_MS = 100;
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, Math.max(0, ms)));
 
-/**
- * Reserved request-context key carrying `Record<runId, DurableExecutionClaim>`.
- * Keyed by runId so a delegated durable sub-agent sharing the parent's
- * RequestContext cannot overwrite the parent's claim.
- */
-export const MASTRA_DURABLE_EXECUTIONS_KEY = 'mastra__durableExecutions';
+export { MASTRA_DURABLE_EXECUTIONS_KEY };
 
 export const EXECUTION_SUPERSEDED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_SUPERSEDED';
 export const EXECUTION_UNVERIFIED_ERROR_ID = 'DURABLE_AGENT_EXECUTION_UNVERIFIED';

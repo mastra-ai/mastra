@@ -13,7 +13,7 @@
 import Nango, { AuthError } from '@nangohq/frontend';
 import type { AuthOptions } from '@nangohq/frontend';
 
-export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab';
+export type PlatformConnectProviderId = 'jira' | 'incident-io' | 'gitlab' | 'vanta';
 
 export const MASTRA_PLATFORM_URL = 'https://projects.mastra.ai';
 
@@ -30,6 +30,7 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<PlatformConnectProviderId, Platf
   jira: { id: 'jira', displayName: 'Jira', authKind: 'oauth' },
   'incident-io': { id: 'incident-io', displayName: 'incident.io', authKind: 'apiKey' },
   gitlab: { id: 'gitlab', displayName: 'GitLab', authKind: 'oauth' },
+  vanta: { id: 'vanta', displayName: 'Vanta', authKind: 'oauth' },
 };
 
 export interface PlatformProviderConnection {
@@ -129,12 +130,23 @@ export function isConnectToolsOffError(error: unknown): boolean {
   return error instanceof Error && 'code' in error && error.code === 'connect_tools_off';
 }
 
-export async function listConnectTools(baseUrl: string): Promise<ConnectToolConnection[]> {
-  const { connections } = await requestJson<{ connections: ConnectToolConnection[] }>(
-    baseUrl,
-    '/web/integrations/platform/connect-tools',
-  );
-  return connections;
+export interface ConnectTools {
+  /** The Platform project whose connections sessions get as tools. */
+  projectId: string;
+  connections: ConnectToolConnection[];
+}
+
+export async function listConnectTools(baseUrl: string): Promise<ConnectTools> {
+  return requestJson<ConnectTools>(baseUrl, '/web/integrations/platform/connect-tools');
+}
+
+/**
+ * The Connect settings page of the Platform project. Without the organization id, Platform's `/org/*` route fills in
+ * the user's current organization.
+ */
+export function platformProjectConnectUrl(projectId: string, organizationId?: string): string {
+  const org = organizationId ? `orgs/${encodeURIComponent(organizationId)}` : 'org';
+  return `${MASTRA_PLATFORM_URL}/${org}/projects/${encodeURIComponent(projectId)}/settings/connect`;
 }
 
 /** Mint a Nango connect session for a new provider connection. */

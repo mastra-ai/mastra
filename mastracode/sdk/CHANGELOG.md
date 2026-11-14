@@ -1,5 +1,16 @@
 # @mastra/code-sdk
 
+## 1.19.1-alpha.0
+
+### Patch Changes
+
+- Mastra Code's Knowledge scopes now use canonical addresses, matching `@mastra/core`'s one-segment scope values. Factory sessions hold their org and project ids encoded (`org:acme%3Aeu` for org `acme:eu`), and the `/knowledge` inspector and Factory Knowledge routes read the same addresses the code agent writes, instead of encoding host scopes a second time. ([#30019](https://github.com/mastra-ai/mastra/pull/30019))
+
+- Updated dependencies [[`be818ec`](https://github.com/mastra-ai/mastra/commit/be818ecb53fbbc6715511d08a8f845a5bd361c4c), [`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`5266060`](https://github.com/mastra-ai/mastra/commit/5266060ccd0766a14b94109dc4bc9c3d29a1b8f5), [`9abbec6`](https://github.com/mastra-ai/mastra/commit/9abbec671ccf0826550241d1f1c2d7ff89e5b95b)]:
+  - @mastra/github-signals@0.5.3-alpha.0
+  - @mastra/core@1.84.0-alpha.0
+  - @mastra/client-js@1.60.1-alpha.0
+
 ## 1.19.0
 
 ### Minor Changes

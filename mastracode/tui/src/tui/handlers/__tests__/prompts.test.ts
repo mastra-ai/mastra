@@ -149,6 +149,47 @@ describe('handleAskQuestion goal mode', () => {
   });
 });
 
+describe('handleAskQuestion PermissionResult hook', () => {
+  it('reports an answered question', async () => {
+    const { ctx, state } = createCtx();
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+    const options = [{ label: 'Yes' }, { label: 'No' }];
+
+    const promise = handleAskQuestion(ctx, 'q1', 'Continue?', options);
+    expect(runPermissionResult).not.toHaveBeenCalled();
+    state.activeInlineQuestion!.handleInput('\r');
+    await promise;
+
+    expect(runPermissionResult).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith('ask_question', 'q1', 'ask_user', 'answered', {
+      question: 'Continue?',
+      options,
+      selectionMode: undefined,
+    });
+  });
+
+  it('reports a skipped question as dismissed', async () => {
+    const { ctx, state } = createCtx();
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    (state as any).hookManager = { runPermissionResult };
+
+    const promise = handleAskQuestion(ctx, 'q1', 'Continue?', [{ label: 'Yes' }, { label: 'No' }]);
+    state.activeInlineQuestion!.handleInput('\x1b');
+    await promise;
+
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'q1', resumeData: '(skipped)' });
+    expect(runPermissionResult).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith(
+      'ask_question',
+      'q1',
+      'ask_user',
+      'dismissed',
+      expect.objectContaining({ question: 'Continue?' }),
+    );
+  });
+});
+
 const PLAN_GOAL = { id: 'goal-123', status: 'active', judgeModelId: 'openai/gpt-5.5', objective: 'plan' };
 
 function createPlanApprovalCtx(projectPath?: string) {

@@ -8,6 +8,7 @@ import { boardFlow, boardForWorkItem, hasPullRequest, pullRequestCardRejection }
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import { isFactoryPrincipalId } from '../storage/domains/projects/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type {
@@ -171,7 +172,7 @@ export function auditActorOf(actor: FactoryRuleActor): { actorId: string; actorT
     case 'gitlab':
       return { actorId: id, actorType: 'human' };
     case 'human':
-      return { actorId: id, actorType: isAgentActor(id) ? 'agent' : 'human' };
+      return { actorId: id, actorType: isAgentActor(id) ? 'agent' : isFactoryPrincipalId(id) ? 'system' : 'human' };
     default:
       return { actorId: id, actorType: actor.type };
   }
@@ -542,6 +543,8 @@ export class FactoryTransitionService {
           const exitTool = fromPhase?.kind === 'working' ? fromPhase.exitTool : undefined;
           if (
             request.actor.type !== 'human' &&
+            // A start lands the card where its run already is; it is not the agent leaving a phase.
+            request.cause !== 'run_start' &&
             !request.eventRoute &&
             exitTool &&
             fromStage !== request.stage &&

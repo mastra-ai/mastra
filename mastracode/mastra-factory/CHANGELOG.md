@@ -1,5 +1,18 @@
 # create-factory
 
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- `create-factory` no longer asks where your Factory project should run. New projects are created in the US region by default. To create the project in the EU instead, pass `--region eu`: ([#30249](https://github.com/mastra-ai/mastra/pull/30249))
+
+  ```bash
+  npx create-factory@latest my-mastra-factory --region eu
+  ```
+
+- Updated dependencies [[`4a3920c`](https://github.com/mastra-ai/mastra/commit/4a3920c7bf8212420879f2b5a8106df470fc1b04), [`f75eb1a`](https://github.com/mastra-ai/mastra/commit/f75eb1a197d7b66bfcb9dee1db06be7bfde55dde), [`338ec03`](https://github.com/mastra-ai/mastra/commit/338ec039256b5babdff8c079671fb87b02db08f5), [`28e243f`](https://github.com/mastra-ai/mastra/commit/28e243f638750d514cc41bc0a052a0b09883f3e2)]:
+  - mastra@1.39.1-alpha.0
+
 ## 0.4.3
 
 ### Patch Changes

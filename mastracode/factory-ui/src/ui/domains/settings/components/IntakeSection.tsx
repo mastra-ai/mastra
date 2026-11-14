@@ -18,6 +18,7 @@ import { AddLinearWorkspaceRow } from './LinearConnectionControls';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { AddPlatformAccountRow } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
+import { useVantaStatusQuery, VantaIntakeSection } from './VantaIntakeSection';
 
 type SourceListing = 'connected' | 'unavailable' | 'available';
 
@@ -45,6 +46,8 @@ export function IntakeSection() {
   const jira = useJiraStatusQuery();
   const incidentio = useIncidentioStatusQuery();
   const incidentioConnections = usePlatformConnectionsQuery('incident-io');
+  const vanta = useVantaStatusQuery();
+  const vantaConnections = usePlatformConnectionsQuery('vanta', Boolean(vanta.data));
 
   if (configQuery.isPending) return <IntakeSkeleton />;
   if (!configQuery.data) {
@@ -98,6 +101,10 @@ export function IntakeSection() {
           incidentioDirect || Boolean(incidentioConnections.data?.length),
           incidentio.isError || incidentioConnections.isError,
         );
+  const vantaListing = sourceListing(
+    Boolean(vantaConnections.data?.length),
+    vantaConnections.isError && isPlatformConnectUnavailableError(vantaConnections.error),
+  );
   // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
   const sources = [
     {
@@ -132,6 +139,22 @@ export function IntakeSection() {
         />
       ),
     },
+    ...(vanta.data
+      ? [
+          {
+            id: 'vanta',
+            listing: vantaListing,
+            content: (
+              <VantaIntakeSection
+                {...props}
+                listed={vantaListing !== 'available'}
+                statusQuery={vanta}
+                connectionsQuery={vantaConnections}
+              />
+            ),
+          },
+        ]
+      : []),
   ];
   const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
   const connectedSources = sourcesListed('connected');
@@ -148,6 +171,7 @@ export function IntakeSection() {
     !incidentioDirect && incidentioConnections.data?.length ? (
       <AddPlatformAccountRow key="incident-io" provider="incident-io" />
     ) : null,
+    vantaConnections.data?.length ? <AddPlatformAccountRow key="vanta" provider="vanta" /> : null,
   ].filter(row => row !== null);
 
   return (

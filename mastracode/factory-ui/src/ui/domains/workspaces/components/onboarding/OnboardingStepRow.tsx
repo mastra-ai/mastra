@@ -67,7 +67,7 @@ export function OnboardingDoneRow({
         disabled={changeDisabled}
         onClick={onChange}
         className={cn(
-          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start before:transition-none disabled:cursor-not-allowed',
+          'state-layer flex min-h-14 w-full cursor-pointer items-center gap-3 px-4 py-3 text-start disabled:cursor-not-allowed',
           ONBOARDING_FRAME_RADIUS,
           focusRingInset,
         )}

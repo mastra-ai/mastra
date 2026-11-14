@@ -9,7 +9,7 @@ import { useCompleteFactorySetup } from '../hooks/useCompleteFactorySetup';
 import type { OnboardingModelLane } from '../hooks/useOnboardingModelLane';
 import { useOnboardingModelSetup } from '../hooks/useOnboardingModelSetup';
 import type { ProviderConnectionMethod } from '../hooks/useProviderConnection';
-import type { WorkSource } from '../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../hooks/useWorkSourceConnections';
 import type { SourceControlRepository } from '../services/github';
 import { connectGithub, manageGithubConnection } from '../services/github';
 import {
@@ -73,7 +73,7 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
   });
   const [openStep, setOpenStep] = useState<OnboardingStep>(() => restoredOnboardingStep(readOnboardingStep(), draft));
   const [githubRedirecting, setGithubRedirecting] = useState(false);
-  const [previewSource, setPreviewSource] = useState<WorkSource>();
+  const [previewSource, setPreviewSource] = useState<BoardSource>();
   const [preview, setPreview] = useState<SectionPreview>({});
   const showVisual = !useIsMobile(900);
   const mainRef = useRef<HTMLElement>(null);
@@ -192,9 +192,17 @@ export function FactoryOnboarding({ local, githubCallback, onDismissGithubCallba
                 onPreviewSource={setPreviewSource}
                 onConnect={connectLinearFromOnboarding}
                 onContinue={() => finish({ workConfirmed: true })}
+                repository={draft.repository}
+                codeHostSync={draft.codeHostSync}
+                onCodeHostSyncChange={codeHostSync => updateDraft({ codeHostSync })}
               />
             ) : (
-              <OnboardingWorkRow confirmed={draft.workConfirmed === true} {...change('project-management')} />
+              <OnboardingWorkRow
+                confirmed={draft.workConfirmed === true}
+                repository={draft.repository}
+                codeHostSync={draft.codeHostSync}
+                {...change('project-management')}
+              />
             )}
           </OnboardingSlot>
           <OnboardingSlot>
