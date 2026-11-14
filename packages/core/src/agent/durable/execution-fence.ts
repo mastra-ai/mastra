@@ -37,6 +37,7 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import { readRunDeadline, syncRunDeadline } from './abort-transport';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
@@ -1356,20 +1357,21 @@ type FenceableStep = { execute: (params: any) => Promise<any> };
 
 /**
  * A cancelled run stops waiting for an ownership read: a local claim's read has no deadline, and the step handles
- * the abort itself, as it does at any other point. Known loss still throws.
+ * the abort itself, as it does at any other point. The read still runs, so a takeover it finds still marks the
+ * fence lost. Known loss still throws.
  */
 async function checkUnlessAborted(guard: ExecutionOwnershipGuard, signal: AbortSignal | undefined): Promise<void> {
-  if (!signal?.aborted) {
-    let onAbort!: () => void;
-    const aborted = new Promise<void>(resolve => {
-      onAbort = resolve;
-      signal?.addEventListener('abort', onAbort, { once: true });
-    });
-    try {
-      await Promise.race([guard.check(), aborted]);
-    } finally {
-      signal?.removeEventListener('abort', onAbort);
-    }
+  let onAbort: (() => void) | undefined;
+  const aborted = signal?.aborted
+    ? Promise.resolve()
+    : new Promise<void>(resolve => {
+        onAbort = resolve;
+        signal?.addEventListener('abort', onAbort, { once: true });
+      });
+  try {
+    await Promise.race([guard.check(), aborted]);
+  } finally {
+    if (onAbort) signal?.removeEventListener('abort', onAbort);
   }
   guard.throwIfLost();
 }
@@ -1396,9 +1398,13 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
       const scope = params.mastra?.__createRunScope(runId) ?? createRunScope();
       const key = createRunScopeKey<ExecutionOwnershipGuard>('durable-step-ownership');
       scope.set(key, guard);
-      const signal = getRunRegistryEntry(runId, params.mastra)?.abortSignal ?? params.abortSignal;
+      // Steps refresh a worker's run controller as they start (`ensureRemoteAbortListener`). Refresh it first, and
+      // read the signal at each check, so a check races the signal the step runs under.
+      const entry = getRunRegistryEntry(runId, params.mastra);
+      if (entry?.abortController) syncRunDeadline(entry, readRunDeadline(params.requestContext));
+      const signal = () => getRunRegistryEntry(runId, params.mastra)?.abortSignal ?? params.abortSignal;
       try {
-        await checkUnlessAborted(guard, signal);
+        await checkUnlessAborted(guard, signal());
         const pubsub = params[PUBSUB_SYMBOL] as PubSub | undefined;
         const output = await execute(
           Object.defineProperties(
@@ -1451,7 +1457,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
             },
           ),
         );
-        await checkUnlessAborted(guard, signal);
+        await checkUnlessAborted(guard, signal());
         return output;
       } catch (error) {
         guard.throwIfLost();

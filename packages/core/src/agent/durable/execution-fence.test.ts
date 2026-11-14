@@ -8,6 +8,7 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
+import { ensureRemoteAbortListener, RUN_DEADLINE_KEY } from './abort-transport';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -638,6 +639,101 @@ describe('storage-backed ExecutionFence', () => {
         live: true,
       });
       expect(await fence.settle(async () => {})).toBe('owned');
+    },
+  );
+
+  describe('a step of an already-cancelled run', () => {
+    async function cancelledStep() {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      const run = new AbortController();
+      run.abort();
+      setRunRegistryEntry(
+        'run-1',
+        { abortController: run, abortSignal: run.signal } as unknown as RunRegistryEntry,
+        undefined,
+      );
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'aborted' });
+      const execute = () =>
+        step.execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        });
+      return { workflowsStore, fence, execute };
+    }
+
+    it('returns its abort output without waiting for the ownership read it started', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      const read = vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementation(() => new Promise(() => {}));
+
+      await expect(execute()).resolves.toBe('aborted');
+      expect(read).toHaveBeenCalled();
+      expect(fence.isLost()).toBe(false);
+    });
+
+    it('notices a takeover from that read, before the next heartbeat', async () => {
+      const { workflowsStore, fence, execute } = await cancelledStep();
+      await workflowsStore.claimRunOwnership({
+        runId: 'run-1',
+        ownerId: 'successor',
+        leaseMs: EXECUTION_LEASE_TTL_MS,
+        force: true,
+        expectedGeneration: fence.generation,
+      });
+
+      await execute().catch(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(fence.isLost()).toBe(true);
+      await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    });
+  });
+
+  it.each(['before', 'during'] as const)(
+    'checks ownership around a resumed step on a worker whose previous segment hit its deadline, taken over %s the step',
+    async takeover => {
+      vi.useFakeTimers();
+      const { workflowsStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      const pubsub = new EventEmitterPubSub();
+      // The previous segment's total deadline stopped this worker's controller while the run was suspended.
+      await ensureRemoteAbortListener(pubsub, 'run-1', undefined, { at: Date.now(), timeoutMs: 1_000 });
+      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+      const deadline = { at: Date.now() + 60_000, timeoutMs: 60_000 };
+      const requestContext = new RequestContext();
+      setExecutionClaim(requestContext, 'run-1', fence.claim);
+      requestContext.set(RUN_DEADLINE_KEY, deadline);
+      const takeOver = () =>
+        workflowsStore.claimRunOwnership({
+          runId: 'run-1',
+          ownerId: 'successor',
+          leaseMs: EXECUTION_LEASE_TTL_MS,
+          force: true,
+          expectedGeneration: fence.generation,
+        });
+      const work = vi.fn(async () => {
+        // Durable steps refresh the run's controller as they start.
+        await ensureRemoteAbortListener(pubsub, 'run-1', undefined, deadline);
+        if (takeover === 'during') await takeOver();
+        return 'output';
+      });
+      if (takeover === 'before') await takeOver();
+
+      await expect(
+        withExecutionFence({ id: 'llm', execute: work }).execute({
+          runId: 'nested-run',
+          requestContext,
+          mastra: undefined,
+          getInitData: () => ({ runId: 'run-1', agentId }),
+        }),
+      ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+      expect(work).toHaveBeenCalledTimes(takeover === 'before' ? 0 : 1);
     },
   );
 
