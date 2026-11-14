@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { basename, join } from 'node:path';
 
 import { CommandsApiProcessManager } from '@internal/workspace';
 import type { CommandsApi, CommandsApiHandle } from '@internal/workspace';
@@ -79,6 +82,7 @@ class HostVm {
 
   run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }, jwt = '') {
     const child = spawn('sh', ['-c', command], {
+      cwd: opts.cwd,
       env: { ...process.env, ...opts.envs },
       stdio: [opts.stdin === false ? 'ignore' : 'pipe', 'pipe', 'pipe'],
     });
@@ -171,7 +175,7 @@ describe('PlatformSandbox.processes', () => {
   function makeSandbox(
     fetchMock: ReturnType<typeof vi.fn>,
     commandsFor: (jwt: string) => CommandsApi = jwt => vm.commandsFor(jwt),
-    options: { timeout?: number } = {},
+    options: { timeout?: number; workingDirectory?: string } = {},
   ) {
     const leases: string[] = [];
     const sandbox = new PlatformSandbox({
@@ -194,6 +198,30 @@ describe('PlatformSandbox.processes', () => {
   const rotateLease = (sandbox: PlatformSandbox) => {
     (sandbox as unknown as { _lease: unknown })._lease = null;
   };
+
+  it('runs a background process from a cwd relative to the working directory, and fails cleanly when it is missing', async () => {
+    const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'workdir-')));
+    // Named after the unique temp dir, so no host directory can shadow the fallback.
+    const repo = basename(workdir);
+    mkdirSync(join(workdir, repo));
+    try {
+      const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease());
+      const { sandbox } = makeSandbox(fetchMock, undefined, { workingDirectory: workdir });
+
+      const inRepo = await sandbox.processes!.spawn('pwd', { cwd: `/${repo}` });
+      await inRepo.wait();
+      expect(inRepo.exitCode).toBe(0);
+      expect(inRepo.stdout.trim()).toBe(join(workdir, repo));
+
+      const missing = await sandbox.processes!.spawn('echo ran', { cwd: 'nope' });
+      await missing.wait();
+      expect(missing.exitCode).toBe(1);
+      expect(missing.stdout).toBe('');
+      expect(missing.stderr.trim()).toBe(`Working directory not found: ${join(workdir, 'nope')}`);
+    } finally {
+      rmSync(workdir, { recursive: true, force: true });
+    }
+  });
 
   it('streams output while a process runs, stops it, and lists what is running', async () => {
     const fetchMock = vi.fn().mockResolvedValueOnce(created()).mockResolvedValueOnce(e2bLease());
