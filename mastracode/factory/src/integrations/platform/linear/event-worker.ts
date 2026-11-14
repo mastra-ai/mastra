@@ -8,7 +8,7 @@ import type { FactoryProjectsStorage } from '../../../storage/domains/projects/b
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import type { IssueReconciler } from '../../issue-reconciler.js';
 import type { LinearIssueIngress, LinearRulesIngress } from '../../linear/rules.js';
-import type { PlatformApiClient} from '../api-client.js';
+import type { PlatformApiClient } from '../api-client.js';
 import { PlatformApiError } from '../api-client.js';
 
 const API_PREFIX = '/v1/server/linear';
@@ -76,8 +76,8 @@ export interface PlatformLinearEventWorkerConfig {
    * already have a work item linked to the incoming Linear issue. Without
    * this scoping, a workspace-scoped event would fan out to every project in
    * every org and materialize a triage card in each — a cross-tenant leak.
-   * First-observation of a Linear issue happens through the user-authenticated
-   * `/web/linear/issues?factoryProjectId=...` intake path instead.
+   * First-observation of a Linear issue happens in the reconcile sweep's
+   * intake discovery, which only lists sources an org bound to its project.
    */
   workItems: Pick<WorkItemsStorage, 'listShared' | 'copyLegacyCards'>;
   /** Called with a single-issue rules ingress derived from an `Issue` webhook. */
@@ -174,7 +174,7 @@ export class PlatformLinearEventWorker extends MastraWorker {
     this.#startedAt = this.#now() - 1;
     this.#settings = normalizeSettings(await this.#storage.settings.get(CURSOR_ORG_ID, CURSOR_USER_ID));
     this.#running = true;
-    this.deps.logger.info('Platform Linear event polling started', {
+    this.deps.logger.debug('Platform Linear event polling started', {
       intervalMs: this.#intervalMs,
       leaseTtlMs: this.#leaseTtlMs,
     });
@@ -406,8 +406,8 @@ export class PlatformLinearEventWorker extends MastraWorker {
     // Issue from org A materializing a triage card in org B via the default
     // `linearIssueObserved` rule), only dispatch to `(orgId, factoryProjectId)`
     // pairs that already have a persisted work item for this Linear issue.
-    // First-observation of a Linear issue happens through the
-    // user-authenticated `/web/linear/issues?factoryProjectId=...` intake path.
+    // First-observation of a Linear issue happens in the reconcile sweep's
+    // intake discovery, which only lists sources an org bound to its project.
     const sourceKey = `linear:${issue.identifier}`;
     let dispatched = 0;
     for (const project of projects) {

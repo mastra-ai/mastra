@@ -6,6 +6,11 @@ on:
       head_sha:
         required: true
         type: string
+      skip_jobs:
+        description: Tier keys (job:<key>) this PR skips; see scripts/test-tiers/select.mjs.
+        required: false
+        type: string
+        default: '[]'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -17,6 +22,7 @@ permissions: {}
 jobs:
   mastracode-e2e:
     name: Mastra Code E2E
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-e2e') }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
@@ -79,6 +85,7 @@ jobs:
 
   mastracode-web-e2e:
     name: Mastra Code web host OM scenarios
+    if: ${{ !contains(fromJSON(inputs.skip_jobs), 'job:mastracode-om') }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:

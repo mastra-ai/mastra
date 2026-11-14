@@ -26,7 +26,6 @@ import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration, LinearProject, LinearTeam } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
-import type { LinearRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -90,7 +89,6 @@ export interface MountLinearRoutesOptions {
    * belonging to no project.
    */
   projects?: { list(input: { orgId: string }): Promise<unknown[]> };
-  ingestFactoryIssues?: (input: LinearRulesIngress) => Promise<unknown>;
   /**
    * Work-item lookup so the detail route can keep serving a card this Factory
    * already holds after the issue's winning source was routed elsewhere. When
@@ -106,10 +104,10 @@ export interface MountLinearRoutesOptions {
  * Factory project.
  *
  * A Linear issue carries no Factory project of its own, so without a binding
- * every board view would ingest every selected source's issues into whichever
+ * every board view would show every selected source's issues in whichever
  * project happened to be on screen. Routing is explicit: a source feeds this
- * project only when it is bound to the project. The project's intake routes
- * then decide where each card lands.
+ * project only when it is bound to the project. The intake discovery sweep
+ * uses the same binding rule when it creates cards.
  */
 async function scopeSourceIdsToProject({
   intake,
@@ -436,9 +434,9 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
 
         // No sources selected means nothing is synced — don't fan out to Linear.
         const selectedIds = selection.sourceIds ?? [];
-        // A board request is also an ingest, so it only ever sees the sources
-        // bound to that Factory project. Sources may be projects or whole
-        // teams; both are keyed by their opaque source id.
+        // A board request only ever sees the sources bound to that Factory
+        // project. Sources may be projects or whole teams; both are keyed by
+        // their opaque source id.
         const boundSourceIds = factoryProjectId
           ? await scopeSourceIdsToProject({
               intake,
@@ -482,14 +480,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
             sourceId: issue.sourceId ?? null,
             projectId: issue.projectId ?? null,
           }));
-          if (factoryProjectId && boundSourceIds && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-            });
-          }
           return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return linearFetchError(loose(c), err);
