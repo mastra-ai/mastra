@@ -100,6 +100,7 @@ function isWorkItemSource(value: unknown): value is WorkItemSource {
     value === 'incidentio-follow-up' ||
     value === 'github-dependabot-alert' ||
     value === 'vanta-vulnerability' ||
+    value === 'detail-finding' ||
     value === 'manual'
   );
 }

@@ -1,6 +1,6 @@
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { LinearIcon } from '@mastra/playground-ui/icons/LinearIcon';
-import { CircleDot, GitPullRequest } from 'lucide-react';
+import { CircleDot, GitPullRequest, ScanSearch } from 'lucide-react';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../ui/icons';
 import type { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
@@ -13,6 +13,7 @@ const SOURCE_MARKS = {
   linear: { Icon: LinearIcon, color: '#5E6AD2' },
   jira: { Icon: JiraIcon, color: '#1868DB' },
   incidentio: { Icon: IncidentIoIcon, color: '#F2555A' },
+  detail: { Icon: ScanSearch, color: 'var(--muted-foreground)' },
   manual: { Icon: CircleDot, color: 'var(--muted-foreground)' },
   'pull-request': { Icon: GitPullRequest, color: 'var(--muted-foreground)' },
 };

@@ -80,6 +80,7 @@ export function boardFilterFields({
     source: BOARD_SOURCE_OPTIONS.filter(
       option =>
         option.value === 'manual' ||
+        option.value === 'detail' ||
         connectedSources?.has(option.value) ||
         (option.value === PULL_REQUEST_SOURCE_FILTER &&
           (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
