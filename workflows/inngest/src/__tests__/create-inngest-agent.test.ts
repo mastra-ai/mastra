@@ -90,6 +90,59 @@ describe('createInngestAgent factory function', () => {
     expect(typeof durableAgent.getDurableWorkflows).toBe('function');
   });
 
+  it.each(
+    (['durable', 'evented'] as const).flatMap(executionEngine =>
+      [false, true].map(registerFirst => ({ executionEngine, registerFirst })),
+    ),
+  )(
+    'isolates inner policy at structural registration: $executionEngine / registered=$registerFirst',
+    async ({ executionEngine, registerFirst }) => {
+      const threadBus = new EventEmitterPubSub();
+      const workflowBus = new EventEmitterPubSub();
+      const agent = new Agent({
+        id: 'policy-inner',
+        name: 'Policy inner',
+        instructions: 'Help.',
+        model: 'openai/gpt-4o',
+      });
+      const host = new Mastra({ logger: false, durable: { executionEngine, cleanupTimeoutMs: 0 } });
+      if (registerFirst) host.addAgent(agent);
+      const wrapped = createInngestAgent({ agent, inngest, pubsub: workflowBus });
+      const registered = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: threadBus,
+        agents: { wrapped },
+        durable: { executionEngine },
+      });
+      expect(registered.getAgent('wrapped')).toBe(wrapped);
+      expect(wrapped.agent).toBe(agent);
+      expect(agent.durable).toEqual({ executionEngine: false });
+      expect(agent.getPubSub()).toBe(registered.pubsub);
+      expect(wrapped.getPubSub()).toBe(registered.pubsub);
+      expect(wrapped.pubsub).toBeInstanceOf(CachingPubSub);
+      expect(wrapped.pubsub).not.toBe(registered.pubsub);
+      // Inngest has no core strategy accessor. Its Proxy must remain on the legacy compatibility path.
+      expect(Reflect.get(wrapped, '__getExecutionEngineStrategy')).toBeUndefined();
+      expect(isDurableAgentLike(wrapped)).toBe(true);
+      host.addAgent(agent);
+      expect(agent.durable).toEqual({ executionEngine: false });
+      await expect(registered.recoverAllDurableAgents()).resolves.toEqual({
+        agents: 1,
+        recovered: 0,
+        succeeded: 0,
+        failed: 0,
+        skipped: 0,
+      });
+      const fork = wrapped.__fork();
+      expect(isInngestAgent(fork)).toBe(true);
+      const forkHost = new Mastra({ logger: false, agents: { fork }, durable: { executionEngine } });
+      expect(forkHost.getAgent('fork')).toBe(fork);
+      expect(fork.agent.durable).toEqual({ executionEngine: false });
+      expect(fork.durableLoopWorkflowName).toBe('inngest:durable-agentic-loop');
+    },
+  );
+
   it('should be detected by isInngestAgent type guard', () => {
     const agent = new Agent({
       id: 'type-guard-test',

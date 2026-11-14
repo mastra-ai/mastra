@@ -910,6 +910,7 @@ export class DurableAgent<
       notifications: agent.__getNotificationConfig(),
     });
 
+    agent.__ownExecutionEnginePolicy();
     this.#wrappedAgent = agent;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
@@ -925,6 +926,11 @@ export class DurableAgent<
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
     this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
+  }
+
+  /** @internal Forced strategy, without resolving host/storage fallback. */
+  __getExecutionEngineStrategy(): 'durable' | 'evented' {
+    return this.workflowEngine === 'evented' ? 'evented' : 'durable';
   }
 
   /** @internal Read one request-context value captured in a suspended durable run snapshot. */

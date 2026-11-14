@@ -4,6 +4,8 @@ import {
   getActiveDurableAgentWorkflowExecutions,
   isDurableAgentExecutionDetached,
 } from '../agent/durable/run-registry';
+import { hasDurableExecution } from '../agent/streams/execution-capability';
+import type { ExecutionEngineDefaults } from '../agent/streams/execution-policy';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -501,6 +503,9 @@ export interface Config<
    * @default EventEmitterPubSub
    */
   pubsub?: PubSub;
+
+  /** Provisional naming/API: registered native-agent policy defaults; execution activation is deferred. */
+  durable?: ExecutionEngineDefaults;
 
   /**
    * Server cache for storing stream events and other temporary data.
@@ -1285,6 +1290,7 @@ export class Mastra<
   #runTracingContexts: Map<string, TracingContext> = new Map();
   // Server cache for temporary persistence and durable agent resumable streams
   #serverCache: MastraServerCache;
+  #durable: ExecutionEngineDefaults | undefined;
   // Cache for stored agents to allow in-memory modifications (like model changes) to persist across requests
   #storedAgentsCache: Map<string, Agent> = new Map();
   // Cache for stored scorers to allow in-memory modifications to persist across requests
@@ -1831,6 +1837,7 @@ export class Mastra<
 
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
+    this.#durable = config?.durable;
 
     // Boot-time recovery policy for durable agent runs. Default is 'off' so
     // that an install can't silently re-run tools/LLM calls on restart; opt-in
@@ -3092,6 +3099,9 @@ export class Mastra<
         });
       }
 
+      // Ownership changes future policy only; existing streams and injected services stay intact.
+      if (!Object.is(underlyingAgent, agent)) underlyingAgent.__ownExecutionEnginePolicy?.();
+
       // Set the Mastra instance on the durable agent for observability
       durableAgent.__setMastra?.(this);
 
@@ -3243,6 +3253,7 @@ export class Mastra<
         (toolLoopInput && this.#toolLoopRegistrations.get(toolLoopInput)?.get(agentKey) === agents[agentKey]) ||
         (agents[agentKey].source === 'stored' && options?.source === 'stored')
       ) {
+        if (agents[agentKey] === mastraAgent) mastraAgent.__registerExecutionEnginePolicy(this.#durable);
         return;
       }
       throw new MastraError({
@@ -3270,6 +3281,7 @@ export class Mastra<
       vectors: this.#vectors,
     });
 
+    mastraAgent.__registerExecutionEnginePolicy(this.#durable);
     agents[agentKey] = mastraAgent;
     if (toolLoopInput) {
       let registrations = this.#toolLoopRegistrations.get(toolLoopInput);
@@ -5208,7 +5220,7 @@ export class Mastra<
 
     const durableAgents: DurableAgentLike[] = [];
     for (const agent of Object.values(this.#agents ?? {})) {
-      if (agent && isDurableAgentLike(agent)) {
+      if (agent && hasDurableExecution(agent)) {
         durableAgents.push(agent);
       }
     }
