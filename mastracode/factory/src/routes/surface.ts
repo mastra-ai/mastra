@@ -168,7 +168,7 @@ export interface FactoryApiRoutesDeps {
   /** Moves a thread with its observation vectors onto another memory resource. */
   moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   /** This process's dispatcher run slots, for the run queue; `undefined` until the dispatcher exists. */
-  runSlots?: () => { inUse: number; cap: number } | undefined;
+  runSlots?: () => { inUse: number; cap: number; interactive: { inUse: number; cap: number } } | undefined;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;

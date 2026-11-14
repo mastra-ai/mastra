@@ -3080,6 +3080,115 @@ describe('GithubRules', () => {
     });
   });
 
+  describe('who wrote a reply on a Factory pull request', () => {
+    // The dispatcher only lets a person's own reply skip the automated run queue.
+    // Trusted is a repository permission, and a review bot can hold one, so the
+    // wake records whether GitHub says a person sent it.
+    async function ingestReply(event: 'issue_comment' | 'pull_request_review', sender: Record<string, unknown>) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createTriageWorkRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const pullRequest = {
+        number: 17,
+        title: 'PR 17',
+        html_url: 'https://github.com/acme/repo/pull/17',
+        state: 'open',
+        merged: false,
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+      };
+      const base = { installation: { id: 7 }, repository: { id: 10, full_name: 'acme/repo' }, sender };
+      const payload =
+        event === 'issue_comment'
+          ? {
+              ...base,
+              action: 'created',
+              comment: {
+                id: 556,
+                body: 'Please rename this flag.',
+                html_url: 'https://github.com/acme/repo/pull/17#issuecomment-556',
+                user: sender,
+              },
+              issue: { ...pullRequest, pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/17' } },
+            }
+          : {
+              ...base,
+              action: 'submitted',
+              review: {
+                id: 100,
+                state: 'changes_requested',
+                body: 'Please rename this flag.',
+                html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-100',
+                user: sender,
+              },
+              pull_request: pullRequest,
+            };
+      await service.ingest({ event, deliveryId: `delivery-${event}-reply`, payload });
+      const [wake] = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        ({ decision }) => decision.type === 'sendMessage',
+      );
+      return wake;
+    }
+
+    it.each(['issue_comment', 'pull_request_review'] as const)(
+      'marks a %s a person sent as human',
+      async event => {
+        const wake = await ingestReply(event, { login: 'maintainer', type: 'User' });
+        expect(wake?.actor).toEqual({
+          type: 'github',
+          login: 'maintainer',
+          trusted: true,
+          factoryAuthored: false,
+          human: true,
+        });
+      },
+    );
+
+    it.each(['issue_comment', 'pull_request_review'] as const)(
+      'does not mark a %s a trusted review bot sent as human',
+      async event => {
+        const wake = await ingestReply(event, { login: 'review-bot[bot]', type: 'Bot' });
+        expect(wake?.actor).toMatchObject({ type: 'github', trusted: true, factoryAuthored: false, human: false });
+      },
+    );
+
+    it('does not mark a sender GitHub gave no type for as human', async () => {
+      const wake = await ingestReply('issue_comment', { login: 'maintainer' });
+      expect(wake?.actor).toMatchObject({ trusted: true, human: false });
+    });
+  });
+
   it('uses verified Factory provenance to link an opened pull request and carry Work through PR review to Done', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({

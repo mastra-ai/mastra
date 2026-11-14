@@ -23,6 +23,7 @@ import {
 import { BUILD_OBJECTIVE } from '../boards/work.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
+import type { RunQueueResponse } from '../routes/contracts.js';
 import { prepareFactoryRuleBinding } from '../routes/surface.js';
 import { fakeRouteAuth, mountApiRoutes } from '../routes/test-utils.js';
 import { WorkItemRoutes } from '../routes/work-items.js';
@@ -1429,7 +1430,7 @@ describe('FactoryDecisionDispatcher', () => {
       }),
       storage,
     });
-    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10 });
+    expect(dispatcher.runSlots()).toEqual({ inUse: 0, cap: 10, interactive: { inUse: 0, cap: 2 } });
   });
 
   it('lists the runs waiting for a slot on the run queue, oldest first, beside the run holding it', async () => {
@@ -1528,7 +1529,7 @@ describe('FactoryDecisionDispatcher', () => {
       const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
       expect(response.status).toBe(200);
       const body = await response.json();
-      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1 });
+      expect(body.slots).toEqual({ scope: 'server', inUse: 1, cap: 1, interactive: { inUse: 0, cap: 2 } });
       expect(body.running).toBe(1);
       expect(body.claimed).toEqual([
         expect.objectContaining({
@@ -1538,9 +1539,11 @@ describe('FactoryDecisionDispatcher', () => {
         }),
       ]);
       expect(body.queuedCount).toBe(2);
+      expect(body.queuedByLane).toEqual({ automated: 2, interactive: 0 });
       expect(body.queued).toEqual([
         expect.objectContaining({
           state: 'waiting',
+          lane: 'automated',
           position: 1,
           type: 'invokeSkill',
           skillName: 'factory-plan',
@@ -1550,6 +1553,7 @@ describe('FactoryDecisionDispatcher', () => {
         }),
         expect.objectContaining({
           state: 'waiting',
+          lane: 'automated',
           position: 2,
           type: 'sendMessage',
           skillName: null,
@@ -1583,6 +1587,265 @@ describe('FactoryDecisionDispatcher', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  describe("a person's reply while automated runs hold every slot", () => {
+    // Triage and builds hold run slots for hours. A maintainer's reply on a
+    // Factory pull request wakes a session the person is waiting on, so it
+    // takes its own small lane instead of the back of the automated queue.
+    const person = { type: 'github', login: 'maintainer', trusted: true, factoryAuthored: false, human: true };
+
+    /** Files a card with a live `work` session and commits `decision` on it as `actor` caused it. */
+    async function queueWake(
+      storage: WorkItemsStorage,
+      sourceKey: string,
+      decision: Record<string, unknown>,
+      actor: Record<string, unknown>,
+      causalChain: Array<{ ingressId: string; decisionType: string }> = [],
+    ) {
+      const item = await createItem(storage, sourceKey);
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: sourceKey },
+            title: 'Fix issue',
+            stages: ['intake'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'work',
+        // One session per card: binding another card to a session moves it off this one.
+        session: { sessionId: `session-${sourceKey}`, branch: `factory/${sourceKey}`, threadId: `thread-${sourceKey}` },
+        resourceId: PROJECT_ID,
+        kickoffKey: `kickoff-${sourceKey}`,
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+      const current = await storage.get({ orgId: 'org-1', id: item.id });
+      const committed = await storage.commitRuleEvaluation({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: `wake-${sourceKey}`, triggerType: 'github.issueCommentCreated' },
+        configVersion: 'rules-v1',
+        expectedRevision: current!.revision,
+        actor,
+        outcome: { status: 'accepted' },
+        decisions: [decision],
+        causalChain,
+        now: new Date(),
+      });
+      expect(committed.status).toBe('committed');
+    }
+
+    async function saturate(options: {
+      maxInFlight: number;
+      maxInteractiveInFlight?: number;
+      holders: number;
+      /** Queued before the dispatcher starts, so claim order alone decides who runs. */
+      queue?: (storage: WorkItemsStorage) => Promise<void>;
+    }) {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const created = new Date();
+      await seed.storage.ops.insertOne('factory_projects', {
+        id: PROJECT_ID,
+        org_id: 'org-1',
+        created_by: 'user-1',
+        name: 'Queue project',
+        description: null,
+        default_model_id: null,
+        model_scope: 'hybrid',
+        created_at: created,
+        updated_at: created,
+      });
+      // Every woken run hangs, so each claimed wake keeps its slot for the test.
+      const { controller, session, sendNotificationSignal } = createSession(new Promise<unknown>(() => {}));
+      controller.getSession.mockImplementation(async () => session);
+      for (let index = 0; index < options.holders; index += 1) {
+        await queueWake(
+          storage,
+          `github-issue:holder-${index}`,
+          { type: 'sendMessage', role: 'work', message: 'Triage.', idempotencyKey: `holder-${index}` },
+          { type: 'system', id: 'rules' },
+        );
+      }
+      await options.queue?.(storage);
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(),
+        transitionService: new FactoryTransitionService({
+          storage,
+          configVersion: 'rules-v1',
+          boards: autoStartingBoards(),
+        }),
+        storage,
+        ownerId: 'worker-1',
+        maxInFlight: options.maxInFlight,
+        maxInteractiveInFlight: options.maxInteractiveInFlight,
+      });
+      dispatcher.start();
+      const status = async (key: string) =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID)).find(d => d.idempotencyKey === key)?.status;
+      // Real time, not fake timers: a claim is a real database round trip on either backend.
+      const settle = (...keys: string[]) =>
+        vi.waitFor(async () => {
+          for (const key of keys) expect(await status(key)).toBe('leased');
+        });
+      for (let index = 0; index < options.holders; index += 1) await settle(`holder-${index}`);
+      const messages = () => sendNotificationSignal.mock.calls.map(([input]) => JSON.stringify(input));
+      const readQueue = async () => {
+        const app = new Hono();
+        app.use('*', async (c, next) => {
+          c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+          await next();
+        });
+        mountApiRoutes(
+          app as never,
+          new WorkItemRoutes({
+            auth: fakeRouteAuth(),
+            audit: { emit: async () => {} },
+            projects: seed.projects,
+            workItems: storage,
+            boardRegistry: autoStartingBoards(),
+            queueHealth: seed.queueHealth,
+            liveSessions: { isRunning: () => false, parked: () => undefined, parkedIn: () => [] },
+            runSlots: () => dispatcher.runSlots(),
+          }).routes(),
+        );
+        const response = await app.request(`/web/factory/projects/${PROJECT_ID}/run-queue`);
+        expect(response.status).toBe(200);
+        return (await response.json()) as RunQueueResponse;
+      };
+      return { storage, dispatcher, status, settle, messages, readQueue };
+    }
+
+    it("wakes the session for a person's reply on its pull request before triage ends", async () => {
+      const { storage, dispatcher, status, settle, messages, readQueue } = await saturate({
+        maxInFlight: 1,
+        holders: 1,
+      });
+
+      const reply = (key: string) => ({
+        type: 'sendMessage',
+        role: 'work',
+        priority: 'high',
+        message: `Reply ${key}.`,
+        idempotencyKey: key,
+      });
+      await queueWake(storage, 'github-issue:automated', reply('automated'), { type: 'system', id: 'rules' });
+      await queueWake(storage, 'github-issue:bot', reply('bot'), { ...person, login: 'review-bot[bot]', human: false });
+      await queueWake(storage, 'github-issue:untrusted', reply('untrusted'), { ...person, trusted: false });
+      await queueWake(storage, 'github-issue:factory', reply('factory'), { ...person, factoryAuthored: true });
+      await queueWake(storage, 'github-issue:untyped', reply('untyped'), { ...person, human: undefined });
+      await queueWake(storage, 'github-issue:moved', reply('moved'), person, [
+        { ingressId: 'move-1', decisionType: 'transition' },
+      ]);
+      await queueWake(storage, 'github-issue:persist', { ...reply('persist'), idleBehavior: 'persist' }, person);
+      await queueWake(storage, 'github-issue:person', reply('person'), person);
+      // A comment on the card's issue reaches its session as activity, not a message.
+      await queueWake(
+        storage,
+        'github-issue:comment',
+        {
+          type: 'signalActivity',
+          event: 'work_item.commented',
+          reference: 'acme/repo#42',
+          url: 'https://github.com/acme/repo/issues/42#issuecomment-1',
+          author: 'maintainer',
+          authorTrusted: true,
+          idempotencyKey: 'comment',
+        },
+        person,
+      );
+      await settle('person', 'comment');
+      await vi.waitFor(() => {
+        expect(messages().some(message => message.includes('Reply person.'))).toBe(true);
+        expect(messages().some(message => message.includes('issuecomment-1'))).toBe(true);
+      });
+      for (const key of ['automated', 'bot', 'untrusted', 'factory', 'untyped', 'moved', 'persist']) {
+        expect({ key, status: await status(key) }).toEqual({ key, status: 'pending' });
+      }
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 2, cap: 2 } });
+
+      const queue = await readQueue();
+      expect(queue.slots).toEqual({ scope: 'server', inUse: 1, cap: 1, interactive: { inUse: 2, cap: 2 } });
+      expect(queue.claimed.map(run => run.lane).sort()).toEqual(['automated', 'interactive', 'interactive']);
+      expect(queue.queuedByLane).toEqual({ automated: 7, interactive: 0 });
+      expect(queue.queued.map(run => [run.lane, run.position])).toEqual(
+        [1, 2, 3, 4, 5, 6, 7].map(position => ['automated', position]),
+      );
+      void dispatcher.stop();
+    });
+
+    it("keeps a person's replies to the interactive reserve once it is full", async () => {
+      const { storage, dispatcher, status, settle, readQueue } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 1,
+        holders: 1,
+      });
+      for (const key of ['first', 'second']) {
+        await queueWake(
+          storage,
+          `github-issue:${key}`,
+          { type: 'sendMessage', role: 'work', message: `Reply ${key}.`, idempotencyKey: key },
+          person,
+        );
+        await new Promise(resolve => setTimeout(resolve, 5));
+      }
+      await settle('first');
+
+      expect(await status('second')).toBe('pending');
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 1, cap: 1 } });
+
+      // A waiting reply is first in its own lane, whatever the automated queue holds.
+      const queue = await readQueue();
+      expect(queue.queuedByLane).toEqual({ automated: 0, interactive: 1 });
+      expect(queue.queued).toEqual([
+        expect.objectContaining({ lane: 'interactive', position: 1, type: 'sendMessage' }),
+      ]);
+      void dispatcher.stop();
+    });
+
+    it("lets a person's reply take a free automated slot once the reserve is full, ahead of automated runs", async () => {
+      const { dispatcher, status, settle } = await saturate({
+        maxInFlight: 1,
+        maxInteractiveInFlight: 1,
+        holders: 0,
+        queue: async storage => {
+          await queueWake(
+            storage,
+            'github-issue:automated',
+            { type: 'sendMessage', role: 'work', message: 'Automated.', idempotencyKey: 'automated' },
+            { type: 'system', id: 'rules' },
+          );
+          for (const key of ['first', 'second']) {
+            await queueWake(
+              storage,
+              `github-issue:${key}`,
+              { type: 'sendMessage', role: 'work', message: `Reply ${key}.`, idempotencyKey: key },
+              person,
+            );
+          }
+        },
+      });
+      await settle('first', 'second');
+
+      expect(await status('automated')).toBe('pending');
+      expect(dispatcher.runSlots()).toEqual({ inUse: 1, cap: 1, interactive: { inUse: 1, cap: 1 } });
+      void dispatcher.stop();
+    });
+
+    it('reserves two interactive slots per server unless configured otherwise', async () => {
+      const { dispatcher } = await saturate({ maxInFlight: 1, holders: 0 });
+      expect(dispatcher.runSlots().interactive).toEqual({ inUse: 0, cap: 2 });
+      void dispatcher.stop();
+    });
   });
 
   it('sends the resolved skill activation as the bound session kickoff prompt', async () => {
@@ -6594,14 +6857,14 @@ describe('FactoryDecisionDispatcher', () => {
       dispatcher.start();
       dispatcher.start();
       await vi.advanceTimersByTimeAsync(0);
-      // One tick claims deferred decisions once per pool (runs, bookkeeping).
-      expect(deferredClaim).toHaveBeenCalledTimes(2);
+      // One tick claims deferred decisions once per pool (people's replies, runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(3);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
 
       await dispatcher.stop();
       await vi.advanceTimersByTimeAsync(5_000);
-      // One tick claims deferred decisions once per pool (runs, bookkeeping).
-      expect(deferredClaim).toHaveBeenCalledTimes(2);
+      // One tick claims deferred decisions once per pool (people's replies, runs, bookkeeping).
+      expect(deferredClaim).toHaveBeenCalledTimes(3);
       expect(pendingClaim).toHaveBeenCalledTimes(1);
     } finally {
       vi.useRealTimers();

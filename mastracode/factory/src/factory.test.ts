@@ -951,7 +951,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('forwards the configured dispatcher concurrency cap to the decision dispatcher', async () => {
-    const prepared = await prepareFactory({ storage: fakeStorage(), dispatcher: { maxInFlight: 7 } });
+    const prepared = await prepareFactory({
+      storage: fakeStorage(),
+      dispatcher: { maxInFlight: 7, maxInteractiveInFlight: 3 },
+    });
     (prepared.buildApiRoutes as (deps: object) => unknown)({ controller: sessionNotifierStub, authStorage: {} });
 
     const onFactoryRuntime = assembleFactoryApiRoutesSpy.mock.calls[0]![0].onFactoryRuntime;
@@ -960,6 +963,7 @@ describe('MastraFactory.prepare', () => {
 
     expect(dispatcherOptions).toHaveLength(1);
     expect(dispatcherOptions[0]?.maxInFlight).toBe(7);
+    expect(dispatcherOptions[0]?.maxInteractiveInFlight).toBe(3);
   });
 
   it('registers and initializes factory domains through the storage lifecycle', async () => {

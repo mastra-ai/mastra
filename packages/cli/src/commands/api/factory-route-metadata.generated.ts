@@ -3874,12 +3874,32 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "integer",
                   "minimum": -9007199254740991,
                   "maximum": 9007199254740991
+                },
+                "interactive": {
+                  "type": "object",
+                  "properties": {
+                    "inUse": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    },
+                    "cap": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "inUse",
+                    "cap"
+                  ]
                 }
               },
               "required": [
                 "scope",
                 "inUse",
-                "cap"
+                "cap",
+                "interactive"
               ]
             },
             {
@@ -3906,23 +3926,27 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": {
                 "$ref": "#/$defs/__schema2"
               },
-              "role": {
+              "lane": {
                 "$ref": "#/$defs/__schema3"
               },
-              "skillName": {
+              "role": {
                 "$ref": "#/$defs/__schema4"
               },
-              "queuedSince": {
+              "skillName": {
                 "$ref": "#/$defs/__schema5"
               },
-              "workItem": {
+              "queuedSince": {
                 "$ref": "#/$defs/__schema6"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema7"
               }
             },
             "required": [
               "decisionId",
               "state",
               "type",
+              "lane",
               "role",
               "skillName",
               "queuedSince",
@@ -3934,6 +3958,25 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "integer",
           "minimum": -9007199254740991,
           "maximum": 9007199254740991
+        },
+        "queuedByLane": {
+          "type": "object",
+          "properties": {
+            "automated": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "interactive": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "automated",
+            "interactive"
+          ]
         },
         "queued": {
           "type": "array",
@@ -3949,17 +3992,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "type": {
                 "$ref": "#/$defs/__schema2"
               },
-              "role": {
+              "lane": {
                 "$ref": "#/$defs/__schema3"
               },
-              "skillName": {
+              "role": {
                 "$ref": "#/$defs/__schema4"
               },
-              "queuedSince": {
+              "skillName": {
                 "$ref": "#/$defs/__schema5"
               },
-              "workItem": {
+              "queuedSince": {
                 "$ref": "#/$defs/__schema6"
+              },
+              "workItem": {
+                "$ref": "#/$defs/__schema7"
               },
               "position": {
                 "type": "integer",
@@ -3971,6 +4017,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "decisionId",
               "state",
               "type",
+              "lane",
               "role",
               "skillName",
               "queuedSince",
@@ -3985,6 +4032,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "running",
         "claimed",
         "queuedCount",
+        "queuedByLane",
         "queued"
       ],
       "$defs": {
@@ -4007,9 +4055,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema3": {
-          "type": [
-            "string",
-            "null"
+          "type": "string",
+          "enum": [
+            "automated",
+            "interactive"
           ]
         },
         "__schema4": {
@@ -4019,9 +4068,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema5": {
-          "type": "string"
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "__schema6": {
+          "type": "string"
+        },
+        "__schema7": {
           "anyOf": [
             {
               "type": "object",
