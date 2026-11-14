@@ -20877,6 +20877,70 @@ export interface GetSystemApiSchema_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /system/gateway-audio/models
+// ============================================================================
+export type GetSystemGatewayAudioModels_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSystemGatewayAudioModels_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: GetSystemGatewayAudioModels_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: POST /system/gateway-audio/speech
+// ============================================================================
+export type PostSystemGatewayAudioSpeech_Body = {
+  model: string;
+  input: string;
+  voice: string;
+};
+
+export type PostSystemGatewayAudioSpeech_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostSystemGatewayAudioSpeech_Body extends never
+      ? {}
+      : {} extends PostSystemGatewayAudioSpeech_Body
+        ? { body?: PostSystemGatewayAudioSpeech_Body }
+        : { body: PostSystemGatewayAudioSpeech_Body })
+>;
+
+export interface PostSystemGatewayAudioSpeech_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostSystemGatewayAudioSpeech_Body;
+  request: PostSystemGatewayAudioSpeech_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
+// Route: POST /system/gateway-audio/transcriptions
+// ============================================================================
+export type PostSystemGatewayAudioTranscriptions_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostSystemGatewayAudioTranscriptions_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: never;
+  request: PostSystemGatewayAudioTranscriptions_Request;
+  response: unknown;
+  responseType: 'datastream-response';
+}
+
+// ============================================================================
 // Route: GET /datasets
 // ============================================================================
 export type GetDatasets_QueryParams = {
@@ -25913,6 +25977,9 @@ export interface RouteTypes {
   'GET /processor-providers/:providerId': GetProcessorProvidersProviderId_RouteContract;
   'GET /system/packages': GetSystemPackages_RouteContract;
   'GET /system/api-schema': GetSystemApiSchema_RouteContract;
+  'GET /system/gateway-audio/models': GetSystemGatewayAudioModels_RouteContract;
+  'POST /system/gateway-audio/speech': PostSystemGatewayAudioSpeech_RouteContract;
+  'POST /system/gateway-audio/transcriptions': PostSystemGatewayAudioTranscriptions_RouteContract;
   'GET /datasets': GetDatasets_RouteContract;
   'POST /datasets': PostDatasets_RouteContract;
   'GET /datasets/:datasetId': GetDatasetsDatasetId_RouteContract;
@@ -27025,6 +27092,15 @@ export interface Client {
   };
   '/system/api-schema': {
     GET: GetSystemApiSchema_RouteContract;
+  };
+  '/system/gateway-audio/models': {
+    GET: GetSystemGatewayAudioModels_RouteContract;
+  };
+  '/system/gateway-audio/speech': {
+    POST: PostSystemGatewayAudioSpeech_RouteContract;
+  };
+  '/system/gateway-audio/transcriptions': {
+    POST: PostSystemGatewayAudioTranscriptions_RouteContract;
   };
   '/system/packages': {
     GET: GetSystemPackages_RouteContract;

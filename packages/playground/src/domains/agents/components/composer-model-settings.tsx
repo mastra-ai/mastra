@@ -10,6 +10,7 @@ import { Slider } from '@mastra/playground-ui/components/Slider';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import type { GatewayAudioModels } from '@mastra/playground-ui/utils/gateway-audio';
 import { useAgent } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
 import { Info, Sliders, Settings2, RotateCcw } from 'lucide-react';
@@ -18,10 +19,17 @@ import { useState } from 'react';
 import { useAgentSettings } from '../context/agent-context';
 import { useSamplingRestriction } from '../hooks/use-sampling-restriction';
 import { AgentAdvancedSettingsBody } from './agent-advanced-settings';
+import { GatewayAudioModelSettings } from './gateway-audio-model-settings';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
+import type { GatewaySpeechSelection } from '@/lib/ai-ui/chat/gateway-audio-composer-actions';
 
 export interface ComposerModelSettingsProps {
   agentId: string;
+  gatewayAudio?: GatewayAudioModels;
+  transcriptionModel?: string;
+  onTranscriptionModelChange?: (modelId: string) => void;
+  speechSelection?: GatewaySpeechSelection;
+  onSpeechSelectionChange?: (selection: GatewaySpeechSelection) => void;
 }
 
 interface NetworkRadioProps {
@@ -92,7 +100,14 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
   );
 };
 
-export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) => {
+export const ComposerModelSettings = ({
+  agentId,
+  gatewayAudio,
+  transcriptionModel,
+  onTranscriptionModelChange,
+  speechSelection,
+  onSpeechSelectionChange,
+}: ComposerModelSettingsProps) => {
   const { data: agent, isLoading } = useAgent({
     agentId: agentId,
     requestContext: useEntityRequestContext('agent', agentId)[0],
@@ -303,6 +318,16 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   </Txt>
                 </div>
               </Entry>
+
+              {gatewayAudio && speechSelection && onSpeechSelectionChange && onTranscriptionModelChange && (
+                <GatewayAudioModelSettings
+                  models={gatewayAudio}
+                  transcriptionModel={transcriptionModel}
+                  onTranscriptionModelChange={onTranscriptionModelChange}
+                  speechSelection={speechSelection}
+                  onSpeechSelectionChange={onSpeechSelectionChange}
+                />
+              )}
 
               <div className="flex items-center justify-between gap-2 pt-1">
                 <Button
