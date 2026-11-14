@@ -345,7 +345,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
       if (contentType.includes('multipart/form-data')) {
         try {
-          const formData = await request.formData();
+          // Parsing must leave the original Request readable for handlers that
+          // forward the uploaded file (for example, Gateway transcription).
+          const formData = await cloneRequest(request.raw).formData();
           body = await this.parseFormData(formData);
         } catch (error) {
           this.mastra.getLogger()?.error('Failed to parse multipart form data', {
