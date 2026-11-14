@@ -1250,6 +1250,97 @@ describe('FactoryDecisionDispatcher', () => {
     expect(stale.sessionId).toBe('session-1');
   });
 
+  it('delivers both notifications when concurrent recovery replaces their shared stale binding', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'First feedback',
+      body: 'Address the first review.',
+      level: 'warning',
+      idempotencyKey: 'notify-race-first',
+    });
+    expect(
+      await commitDecisions(storage, {
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        stage: 'execute',
+        decisions: [
+          {
+            type: 'notify',
+            title: 'Second feedback',
+            body: 'Address the second review.',
+            level: 'warning',
+            idempotencyKey: 'notify-race-second',
+          },
+        ],
+        ingress: 'move-2',
+        configVersion: 'rules-v1',
+      }),
+    ).toMatchObject({ status: 'committed' });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
+    let waiting = 0;
+    let release!: () => void;
+    const bothSelected = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    controller.getSession.mockImplementation(async (sessionId: string) => {
+      if (sessionId === 'session-1') {
+        if (++waiting === 2) release();
+        await bothSelected;
+        return undefined;
+      }
+      return sessionId === 'session-2' ? session : undefined;
+    });
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-2',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        expectedBindingId,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify-race',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(waiting).toBe(2);
+    expect(prepareBinding).toHaveBeenCalled();
+    expect(sendNotificationSignal.mock.calls.map(([signal]) => signal.summary).sort()).toEqual([
+      'First feedback',
+      'Second feedback',
+    ]);
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID)).map(decision => decision.status)).toEqual([
+      'succeeded',
+      'succeeded',
+    ]);
+    expect(stale.sessionId).toBe('session-1');
+  });
+
   it('does not restore a superseded notification binding after a successor takes its session', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {

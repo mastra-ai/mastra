@@ -2592,7 +2592,9 @@ export class FactoryDecisionDispatcher {
     expectedBindingId?: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
-    if (expectedBindingId && binding?.id !== expectedBindingId) throw new FactoryDecisionSuperseded();
+    if (expectedBindingId && binding?.id !== expectedBindingId) {
+      return this.#sameRoleReplacement(record, role, expectedBindingId);
+    }
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
@@ -2607,10 +2609,33 @@ export class FactoryDecisionDispatcher {
     try {
       await this.#prepareBinding({ record, item, role, expectedBindingId });
     } catch (error) {
-      if (error instanceof FactoryRunBindingSupersededError) throw new FactoryDecisionSuperseded();
+      if (error instanceof FactoryRunBindingSupersededError) {
+        if (expectedBindingId) return this.#sameRoleReplacement(record, role, expectedBindingId);
+        throw new FactoryDecisionSuperseded();
+      }
       throw error;
     }
     return this.#requireBinding(record, role);
+  }
+
+  async #sameRoleReplacement(
+    record: FactoryDeferredDecisionRecord,
+    role: string,
+    expectedBindingId: string,
+  ): Promise<FactoryRunBindingRecord> {
+    const replacement = await this.#findBinding(record, role);
+    if (
+      !replacement ||
+      replacement.id === expectedBindingId ||
+      (await this.#roleSuperseded(record, role)) ||
+      (await this.#decisionOvertaken(record, role))
+    ) {
+      throw new FactoryDecisionSuperseded();
+    }
+    if (!(await this.#controller.getSession(replacement.sessionId))) {
+      throw new FactoryDispatchError('session_unavailable', 'Bound Factory session not found.');
+    }
+    return replacement;
   }
 
   async #findSession(
