@@ -91,7 +91,15 @@ export function markEagerSandboxStart(sandbox: object): void {
  * all go through it. `hadSandbox` says whether the session already had a sandbox before this instance.
  */
 export function instrumentSandboxStart(sandbox: object, provider: string, hadSandbox: boolean): void {
-  if (!factoryMetrics().enabled('sandbox')) return;
+  const metrics = factoryMetrics();
+  if (!metrics.enabled('sandbox')) return;
+  // From the first sandbox on, start failures are sent every interval (0 when none).
+  for (const cause of ['timeout', 'error']) {
+    metrics.keepCounter('sandbox', 'mastra_factory_sandbox_start_failures_total', {
+      sandbox_provider: provider,
+      cause,
+    });
+  }
   const target = sandbox as StartableSandbox;
   const original = target._start;
   if (typeof original !== 'function') return;
@@ -171,7 +179,7 @@ export function sessionStartsCollector(): MetricsCollector {
       let oldest = 0;
       for (const start of sessionStarts.values()) oldest = Math.max(oldest, now - start.startedAt);
       sink.emit('mastra_factory_sessions_starting', sessionStarts.size);
-      sink.emit('mastra_factory_session_start_oldest_age_s', oldest / 1000);
+      sink.emit('mastra_factory_session_start_oldest_age_ms', oldest);
     },
   };
 }

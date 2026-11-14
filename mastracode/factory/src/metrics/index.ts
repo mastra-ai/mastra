@@ -4,7 +4,7 @@ import type { PoolLike } from './collectors/postgres.js';
 import { processCollector } from './collectors/process.js';
 import { asMonitorablePubSub, connectMonitor, redisProbeCollector, redisStatsCollector } from './collectors/redis.js';
 import type { RedisMonitorClient } from './collectors/redis.js';
-import { intakeCollector } from './intake.js';
+import { intakeCollector, keepIntakeSource } from './intake.js';
 import type { FactoryMetrics, MetricsCollector, MetricsTargets } from './metrics.js';
 import { sessionStartsCollector } from './sandbox.js';
 
@@ -19,6 +19,8 @@ export interface MetricsSources {
   storage: unknown;
   vector: unknown;
   pubsub: unknown;
+  /** Ids of the configured integrations; GitHub and Linear intake counts are sent as 0 when quiet. */
+  integrationIds?: readonly string[];
 }
 
 /**
@@ -77,6 +79,9 @@ export function startFactoryMetrics(
   }
 
   if (metrics.enabled('intake')) {
+    for (const id of sources.integrationIds ?? []) {
+      if (id === 'github' || id === 'linear') keepIntakeSource(id);
+    }
     collectors.push(intakeCollector());
   }
 

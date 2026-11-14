@@ -63,8 +63,10 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
       // The histogram records each sampling timer's full wait, so an idle loop reads as the
       // resolution; subtract it to get the delay.
       const delayMs = (ns: number) => Math.max(0, ns / 1e6 - LOOP_RESOLUTION_MS);
-      sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.percentile(50)), { stat: 'p50' });
-      sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.percentile(99)), { stat: 'p99' });
+      // Same stat set as the other timings. `count` is the number of delay samples taken.
+      sink.emit('mastra_factory_event_loop_delay_ms', loop.count, { stat: 'count' });
+      sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.mean), { stat: 'avg' });
+      sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.percentile(95)), { stat: 'p95' });
       sink.emit('mastra_factory_event_loop_delay_ms', delayMs(loop.max), { stat: 'max' });
       loop.reset();
 
@@ -76,7 +78,9 @@ export function processCollector(onGcPause?: (kind: string, ms: number) => void)
       const memory = process.memoryUsage();
       sink.emit('mastra_factory_process_memory_bytes', memory.rss, { kind: 'rss' });
       sink.emit('mastra_factory_process_memory_bytes', memory.heapUsed, { kind: 'heap_used' });
-      sink.emit('mastra_factory_process_memory_bytes', getHeapStatistics().heap_size_limit, { kind: 'heap_limit' });
+      const heapLimit = getHeapStatistics().heap_size_limit;
+      sink.emit('mastra_factory_process_memory_bytes', heapLimit, { kind: 'heap_limit' });
+      sink.emit('mastra_factory_process_heap_utilization', memory.heapUsed / heapLimit);
 
       // CPU used by every thread of the process (main thread, GC helpers, the libuv pool, workers)
       // since the last sample, in cores: 1.4 means 1.4 cores' worth, like 140% in top. It can go

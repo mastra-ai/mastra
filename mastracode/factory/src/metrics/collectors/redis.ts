@@ -89,7 +89,11 @@ export function redisStatsCollector(
       const number = (key: string) => Number(fields.get(key));
       sink.emit('mastra_factory_redis_memory_bytes', number('used_memory'), { kind: 'used' });
       const maxMemory = number('maxmemory');
-      if (maxMemory > 0) sink.emit('mastra_factory_redis_memory_bytes', maxMemory, { kind: 'max' });
+      // `maxmemory` is 0 when Redis has no memory limit; then neither the limit nor the ratio is sent.
+      if (maxMemory > 0) {
+        sink.emit('mastra_factory_redis_memory_bytes', maxMemory, { kind: 'max' });
+        sink.emit('mastra_factory_redis_memory_utilization', number('used_memory') / maxMemory);
+      }
       sink.emit('mastra_factory_redis_clients', number('connected_clients'));
       // INFO reports evictions since the Redis server started; send the increase per interval.
       const evicted = number('evicted_keys');

@@ -209,6 +209,9 @@ describe('process collector', () => {
       await metrics.tick();
       expect(records.some(r => r.name === 'mastra_factory_gc_ms')).toBe(true);
     });
+    // Give the delay histogram (20 ms resolution) samples to average.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await metrics.tick();
     await stop();
 
     const utilization = records.find(r => r.name === 'mastra_factory_event_loop_utilization');
@@ -221,6 +224,11 @@ describe('process collector', () => {
     expect(records.some(r => r.name === 'mastra_factory_process_memory_bytes' && r.labels.kind === 'heap_limit')).toBe(
       true,
     );
+    const heap = records.find(r => r.name === 'mastra_factory_process_heap_utilization')?.value;
+    expect(heap).toBeGreaterThan(0);
+    expect(heap).toBeLessThan(1);
+    const loopStats = records.filter(r => r.name === 'mastra_factory_event_loop_delay_ms').map(r => r.labels.stat);
+    expect(new Set(loopStats)).toEqual(new Set(['count', 'avg', 'p95', 'max']));
   });
 });
 
@@ -294,7 +302,7 @@ describe('intake sweep age', () => {
     recordReconcileSweep('github', 'open', { replayed: 0, ok: true });
     await metrics.tick();
     await stop();
-    const kinds = records.filter(r => r.name === 'mastra_factory_intake_last_sweep_age_s').map(r => r.labels.kind);
+    const kinds = records.filter(r => r.name === 'mastra_factory_intake_last_sweep_age_ms').map(r => r.labels.kind);
     expect(kinds.sort()).toEqual(['merge_close', 'open']);
   });
 });
@@ -338,6 +346,11 @@ describe('redis collectors', () => {
       value: 1,
       labels: { component: 'redis_streams', reason: 'error', service: 'all' },
     });
+  });
+
+  it('sends memory utilization against maxmemory', async () => {
+    const records = await collect(fakeRedis(async () => []));
+    expect(records.find(r => r.name === 'mastra_factory_redis_memory_utilization')?.value).toBe(0.1);
   });
 
   it('only runs the probe on a cluster', async () => {
@@ -413,7 +426,7 @@ describe('review follow-ups', () => {
 
     await metrics.tick();
     expect(records.find(r => r.name === 'mastra_factory_sessions_starting')?.value).toBe(1);
-    expect(records.find(r => r.name === 'mastra_factory_session_start_oldest_age_s')!.value).toBeGreaterThan(0);
+    expect(records.find(r => r.name === 'mastra_factory_session_start_oldest_age_ms')!.value).toBeGreaterThan(0);
 
     records.length = 0;
     gate.resolve();
@@ -520,10 +533,49 @@ describe('review follow-ups', () => {
     expect(
       records.some(
         r =>
-          r.name === 'mastra_factory_intake_last_sweep_age_s' &&
+          r.name === 'mastra_factory_intake_last_sweep_age_ms' &&
           r.labels.source === 'gitlab' &&
           r.labels.kind === 'merge_close',
       ),
     ).toBe(true);
+  });
+});
+
+describe('zero counters', () => {
+  it('sends kept counters as 0 on quiet intervals and others only when they changed', async () => {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['intake'] }, {}), 'all');
+    const { records, targets } = capture();
+    metrics.start(targets, []);
+    metrics.keepCounter('intake', 'kept_total', { source: 'github' });
+    metrics.count('intake', 'kept_total', { source: 'github' }, 2);
+    metrics.count('intake', 'other_total');
+    await metrics.tick();
+    const first = records.splice(0);
+    await metrics.tick();
+    metrics.stop();
+    expect(first.map(r => [r.name, r.value])).toEqual([
+      ['kept_total', 2],
+      ['other_total', 1],
+    ]);
+    expect(records.map(r => [r.name, r.value])).toEqual([['kept_total', 0]]);
+  });
+
+  it('sends intake counts for configured GitHub and Linear integrations when quiet', async () => {
+    const metrics = new FactoryMetrics(resolveMetricsConfig({ groups: ['intake'] }, {}), 'all');
+    installFactoryMetrics(metrics);
+    const { records, targets } = capture();
+    const stop = startFactoryMetrics(metrics, targets, {
+      storage: undefined,
+      vector: undefined,
+      pubsub: undefined,
+      integrationIds: ['github', 'slack'],
+    });
+    await metrics.tick();
+    await stop();
+    const events = records.filter(r => r.name === 'mastra_factory_intake_events_total');
+    expect(events.map(r => [r.labels.source, r.labels.outcome, r.value])).toEqual([
+      ['github', 'committed', 0],
+      ['github', 'error', 0],
+    ]);
   });
 });

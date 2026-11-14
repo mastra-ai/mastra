@@ -227,8 +227,7 @@ export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
 /** Tools for every Factory session, or a resolver called per run. */
 export type FactoryTools =
-  | IntegrationTools
-  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+  IntegrationTools | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
 
 export interface MastraFactoryConfig {
   /**
@@ -1242,8 +1241,7 @@ export class MastraFactory {
     }
     const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
-      | GithubIntegration
-      | undefined;
+      GithubIntegration | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
     ) as GitLabIntegrationBase | undefined;
@@ -1848,8 +1846,7 @@ export class MastraFactory {
         planApprovalStartsGoal: false,
         hostInstructions: async ({ requestContext }) => {
           const context = requestContext.get('controller') as
-            | AgentControllerRequestContext<MastraCodeState>
-            | undefined;
+            AgentControllerRequestContext<MastraCodeState> | undefined;
           // The SDK resolves this callback before it loads repository
           // AGENTS.md/CLAUDE.md. A controller recreated after restart has
           // only initialState, and a partially persisted one can keep
@@ -2579,7 +2576,12 @@ export class MastraFactory {
     this.#stopMetrics = startFactoryMetrics(
       this.#metrics,
       { getMetrics: () => getMastra()?.metrics, getLogger: () => getMastra()?.getLogger() },
-      { storage: this.#config.storage.getMastraStorage(), vector: this.#config.vector, pubsub: this.#config.pubsub },
+      {
+        storage: this.#config.storage.getMastraStorage(),
+        vector: this.#config.vector,
+        pubsub: this.#config.pubsub,
+        integrationIds: this.#integrations.map(integration => integration.id),
+      },
     );
   }
 

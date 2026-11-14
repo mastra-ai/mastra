@@ -12,6 +12,17 @@ export function recordIntakeEvent(source: IntakeSource, outcome: string): void {
 const lastSweepAt = new Map<string, { source: IntakeSource; kind: string; at: number }>();
 
 /**
+ * Sends intake event counts for `source` every interval, 0 when quiet, so an idle source reads
+ * as zero instead of looking unreported.
+ */
+export function keepIntakeSource(source: IntakeSource): void {
+  const metrics = factoryMetrics();
+  for (const outcome of ['committed', 'error']) {
+    metrics.keepCounter('intake', 'mastra_factory_intake_events_total', { source, outcome });
+  }
+}
+
+/**
  * One reconcile sweep. `replayed` counts changes the sweep found that live events never
  * delivered: each one is a missed webhook.
  */
@@ -33,7 +44,9 @@ export function recordReconcileSweep(
  * first clean sweep, so a sweep that fails or stalls from boot shows a growing age instead of no series.
  */
 export function recordSweepWorkerStarted(source: IntakeSource, kind: string): void {
-  if (!factoryMetrics().enabled('intake')) return;
+  const metrics = factoryMetrics();
+  if (!metrics.enabled('intake')) return;
+  metrics.keepCounter('intake', 'mastra_factory_intake_sweep_failures_total', { source, kind });
   const key = `${source}:${kind}`;
   if (!lastSweepAt.has(key)) lastSweepAt.set(key, { source, kind, at: Date.now() });
 }
@@ -47,7 +60,7 @@ export function intakeCollector(): MetricsCollector {
     collect(sink) {
       const now = Date.now();
       for (const { source, kind, at } of lastSweepAt.values()) {
-        sink.emit('mastra_factory_intake_last_sweep_age_s', (now - at) / 1000, { source, kind });
+        sink.emit('mastra_factory_intake_last_sweep_age_ms', now - at, { source, kind });
       }
     },
   };

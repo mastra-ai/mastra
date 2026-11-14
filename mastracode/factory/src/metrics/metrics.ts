@@ -47,6 +47,8 @@ interface Counter {
   name: string;
   labels: MetricLabels;
   value: number;
+  /** Sent as 0 on intervals with no events, instead of being left out. */
+  keep?: boolean;
 }
 
 function seriesKey(name: string, labels: MetricLabels): string {
@@ -103,6 +105,18 @@ export class FactoryMetrics {
     const counter = this.#counters.get(key);
     if (counter) counter.value += value;
     else this.#counters.set(key, { name, labels, value });
+  }
+
+  /**
+   * Sends this counter series every interval, as 0 when nothing happened, so a quiet interval
+   * reads as zero instead of looking like the group is off. Keep it to a few series.
+   */
+  keepCounter(group: MetricGroup, name: string, labels: MetricLabels = {}): void {
+    if (!this.enabled(group)) return;
+    const key = seriesKey(name, labels);
+    const counter = this.#counters.get(key);
+    if (counter) counter.keep = true;
+    else this.#counters.set(key, { name, labels, value: 0, keep: true });
   }
 
   /** Records a timing, sent per interval as `stat=count|avg|p95|max` on the same series. */
@@ -178,8 +192,11 @@ export class FactoryMetrics {
       };
 
       // Event counts and timings go first: they are lost if dropped, while gauges are sampled again next tick.
-      for (const counter of this.#counters.values()) sink.emit(counter.name, counter.value, counter.labels);
-      this.#counters.clear();
+      for (const [key, counter] of this.#counters) {
+        sink.emit(counter.name, counter.value, counter.labels);
+        if (counter.keep) counter.value = 0;
+        else this.#counters.delete(key);
+      }
       for (const observation of this.#observations.values()) {
         const { name, labels, count, sum, max } = observation;
         const sorted = observation.samples.sort((a, b) => a - b);
