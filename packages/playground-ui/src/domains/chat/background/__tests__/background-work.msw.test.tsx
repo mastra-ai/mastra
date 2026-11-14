@@ -23,6 +23,7 @@ import {
   eventStream,
   liveDevServerExitNotice,
   processList,
+  reportTaskCompletedStream,
   reportTaskNotice,
   reportTaskStream,
   THREAD_ID,
@@ -312,6 +313,32 @@ describe('a deferred call in the chat', () => {
 
       expect(await screen.findByRole('group', { name: 'Reports slow report' })).not.toBeNull();
       expect(screen.queryByText("Couldn't follow background tasks")).toBeNull();
+    });
+  });
+
+  describe('when the task stream closes after it connected', () => {
+    it('says the dock stopped following tasks and catches up once the reader retries', async () => {
+      const streams = [reportTaskStream, reportTaskCompletedStream];
+      let requests = 0;
+      server.use(
+        http.get(`${API}/background-tasks/stream`, () => {
+          const events = streams[requests] ?? [];
+          requests += 1;
+          return new HttpResponse(eventStream(events), { headers: { 'Content-Type': 'text/event-stream' } });
+        }),
+      );
+      renderWithProviders(
+        <ChatProviders messages={[deferredReportTurn]}>
+          <BackgroundWorkPanel />
+        </ChatProviders>,
+      );
+
+      expect(await screen.findByRole('group', { name: 'Reports slow report' })).not.toBeNull();
+      expect(await screen.findByText('Stopped following background tasks')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      await waitFor(() => expect(screen.queryByRole('group', { name: 'Reports slow report' })).toBeNull());
+      expect(requests).toBe(2);
     });
   });
 

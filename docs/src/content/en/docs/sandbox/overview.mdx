@@ -315,6 +315,8 @@ const workspace = new Workspace({
 
 Set `abortSignal: null` with it. With the default signal, aborting the run kills the process, and that exit sends no notification.
 
+The notification is stored in the thread as a message. If the agent's `defaultOptions`, the agent, or the `Mastra` instance sets a [`transform`](/docs/agents/tools#transform-tool-payloads-for-ui-and-transcripts) for the `transcript` target, the notification leaves out the command and its output, and asks the agent to read the output with `get_process_output`, whose result the transform covers. A `transform` passed to a single `stream()` or `generate()` call doesn't apply to the notification.
+
 If a run is active on the thread, the notification reaches it on its next step. If the thread is idle, the agent wakes and runs a turn to report the result. Mastra doesn't send a notification for a process that was stopped on purpose: with `kill_process`, with the kill route below, by the run's abort signal, or because the sandbox is shutting down.
 
 The notification needs a run with a memory thread and resource, and an agent registered on the `Mastra` instance. Mastra looks the agent up by ID when the process exits. An agent created inside a tool or another agent isn't registered, so its processes don't send notifications.

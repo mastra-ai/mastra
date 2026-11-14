@@ -883,6 +883,7 @@ describe('createMastraCode', () => {
       sendSignalToThread,
       identity: { getResourceId: () => 'project-resource' },
       thread: { getId: () => 'other-thread' },
+      subscribe: vi.fn(),
     };
     controllerGetSessionMock.mockImplementation(async (id: string) =>
       id === 'project-resource' ? session : undefined,
@@ -895,6 +896,57 @@ describe('createMastraCode', () => {
     expect(sendSignalToThread).toHaveBeenCalledWith(
       expect.objectContaining({ contents: expect.stringContaining('BUILD_DONE') }),
       { resourceId: 'project-resource', threadId: 'thread-1' },
+    );
+  });
+
+  it('delivers a shell exit for a thread the session had left once it returns to that thread', async () => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), backgroundTools: { enabled: true } });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext: { get: () => undefined } });
+    const { backgroundProcesses } = getDynamicWorkspaceMock.mock.calls[0]![0];
+    // The local session is registered under its own id, so only the live-session lookup finds it.
+    controllerGetSessionMock.mockResolvedValue(undefined);
+    let currentThreadId = 'other-thread';
+    let onEvent: ((event: { type: string; threadId?: string }) => void) | undefined;
+    const sendSignal = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true, action: 'wake' }) }));
+    const session = {
+      sendSignal,
+      sendSignalToThread: vi.fn(),
+      identity: { getResourceId: () => 'project-resource' },
+      thread: { getId: () => currentThreadId },
+      subscribe: vi.fn((listener: typeof onEvent) => {
+        onEvent = listener;
+        return () => {};
+      }),
+    };
+    const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
+    trackLiveSession(session);
+
+    await backgroundProcesses.onExit({
+      pid: '42',
+      exitCode: 0,
+      stdout: 'BUILD_DONE',
+      stderr: '',
+      toolCallId: 'call-1',
+      runId: 'run-1',
+      threadId: 'thread-1',
+      resourceId: 'project-resource',
+    });
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(session.sendSignalToThread).not.toHaveBeenCalled();
+
+    currentThreadId = 'thread-1';
+    onEvent?.({ type: 'thread_changed', threadId: 'thread-1' });
+
+    await vi.waitFor(() => expect(sendSignal).toHaveBeenCalledOnce());
+    expect(sendSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining('BUILD_DONE') }),
+      {
+        ifIdle: { behavior: 'wake' },
+        requireDelivery: true,
+      },
     );
   });
 
@@ -1009,6 +1061,26 @@ describe('createMastraCode', () => {
     const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
     await workspace({ requestContext });
     expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+  });
+
+  it.each([
+    ['the default workspace', undefined, true],
+    ['a host workspace, which reports no shell exits', { id: 'host-workspace' }, false],
+  ])('gives background shell guidance with %s', async (_case, workspace, backgroundTools) => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), backgroundTools: { enabled: true } });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode(workspace ? { workspace: workspace as any } : {});
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as { instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string> },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    await agentConfig.instructions({ requestContext: { get: () => undefined } });
+
+    expect(getDynamicInstructionsMock).toHaveBeenLastCalledWith(expect.objectContaining({ backgroundTools }));
   });
 
   it('passes configured co-author identity into the agent instruction callback', async () => {

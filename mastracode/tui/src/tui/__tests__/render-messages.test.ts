@@ -1501,14 +1501,34 @@ describe('renderExistingMessages background shells', () => {
 
   async function replay(
     messages: MastraDBMessage[],
-    { backgroundToolsEnabled = true, activities = [] as BackgroundActivity[] } = {},
+    {
+      backgroundToolsEnabled = true,
+      activities = [] as BackgroundActivity[],
+      // What the sandbox reports for PID 42; leaving it out means a remote session.
+      sandboxShell,
+    }: {
+      backgroundToolsEnabled?: boolean;
+      activities?: BackgroundActivity[];
+      sandboxShell?: { exitCode?: number };
+    } = {},
   ) {
     const state = createState();
     state.options.backgroundToolsEnabled = backgroundToolsEnabled;
     for (const activity of activities) state.backgroundActivities.set(activity.taskId, activity);
+    if (sandboxShell) {
+      state.local = {} as TUIState['local'];
+      state.options.backgroundProcesses = {
+        read: vi.fn(async (pid: string) =>
+          pid === '42' ? ({ command: 'pnpm build', stdout: '', stderr: '', ...sandboxShell } as never) : undefined,
+        ),
+        kill: vi.fn(),
+      };
+      state.globalBackgroundNotice = { setActivities: vi.fn() } as unknown as TUIState['globalBackgroundNotice'];
+    }
     state.session = {
       ...state.session,
-      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+      identity: { getResourceId: () => 'resource-1' },
+      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages), getId: () => 'thread-1' },
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     const row = () => stripAnsi(state.chatContainer.children[0]!.render(100).join('\n'));
@@ -1553,6 +1573,32 @@ describe('renderExistingMessages background shells', () => {
 
     expect(row()).not.toMatch(/exit \d|killed/);
     expect(state.backgroundShellRows.has('shell-call')).toBe(true);
+  });
+
+  it('lists a running shell the activity list never saw start', async () => {
+    const { state } = await replay([shellCall], { sandboxShell: {} });
+
+    expect(state.backgroundActivities.get('process:42')).toMatchObject({
+      status: 'accepted',
+      toolCallId: 'shell-call',
+      label: 'Building the app',
+      threadId: 'thread-1',
+    });
+    expect(state.globalBackgroundNotice.setActivities).toHaveBeenCalled();
+  });
+
+  it('leaves out a replayed shell the sandbox no longer runs', async () => {
+    const { state } = await replay([shellCall], { sandboxShell: { exitCode: 0 } });
+
+    expect(state.backgroundActivities.has('process:42')).toBe(false);
+  });
+
+  it('leaves the activity list alone when the shell is already in it', async () => {
+    const listed = shellActivity({ toolCallId: 'older-call', status: 'cancelled', exitCode: 143, completedAt: 2 });
+    const { state } = await replay([shellCall], { activities: [listed], sandboxShell: {} });
+
+    expect(state.backgroundActivities.get('process:42')).toBe(listed);
+    expect(state.options.backgroundProcesses!.read).not.toHaveBeenCalled();
   });
 
   it('registers nothing when background tools are off', async () => {

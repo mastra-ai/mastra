@@ -951,7 +951,7 @@ describe('background processes killed by an aborted run', () => {
       expected: { agentId: undefined, threadId: 'thread-1', resourceId: 'user-1', runId: 'run-1' },
     },
     {
-      when: 'a workflow step',
+      when: 'a direct call with top-level ids',
       context: { runId: 'wf-run-1', threadId: 'thread-2', resourceId: 'user-2' },
       expected: { agentId: undefined, threadId: 'thread-2', resourceId: 'user-2', runId: 'wf-run-1' },
     },

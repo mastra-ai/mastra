@@ -25,7 +25,9 @@ export class BackgroundProcessOutputComponent extends Box implements Focusable {
     this.onClose = options.onClose;
 
     const state = options.exitCode === undefined ? 'running' : `exit ${options.exitCode}`;
-    this.addChild(new Text(theme.bold(theme.fg('accent', `$ ${options.command ?? `PID ${options.pid}`}`)), 0, 0));
+    // The command comes from the model, so it gets the same treatment as the output.
+    const heading = sanitizeProcessOutputForRendering(options.command ?? `PID ${options.pid}`);
+    this.addChild(new Text(theme.bold(theme.fg('accent', `$ ${heading}`)), 0, 0));
     this.addChild(new Text(theme.fg('dim', `${state} · PID ${options.pid}`), 0, 0));
     this.addChild(new Spacer(1));
 
