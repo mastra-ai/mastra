@@ -11,6 +11,7 @@ import {
   classifyPrFailure,
   compareFiles,
   failingFilesFromLog,
+  projectRootsFromConfigs,
   gitDiffFiles,
   jobKeysFor,
   moveOut,
@@ -152,11 +153,85 @@ test('reads failing files from a unit job log', () => {
     '2026-10-31T10:00:03.0000000Z  ✓ unit:packages/core  src/agent/c.test.ts',
     '2026-10-31T10:00:04.0000000Z  FAIL  [ packages/memory/src/d.test.ts ]',
   ].join('\n');
-  assert.deepEqual(failingFilesFromLog(log), [
-    'packages/core/src/agent/a.test.ts',
-    'packages/memory/src/d.test.ts',
-    'stores/pg/src/b.test.ts',
+  assert.deepEqual(
+    failingFilesFromLog(log, [
+      'packages/core/src/agent/a.test.ts',
+      'packages/memory/src/d.test.ts',
+      'stores/pg/src/b.test.ts',
+    ]),
+    ['packages/core/src/agent/a.test.ts', 'packages/memory/src/d.test.ts', 'stores/pg/src/b.test.ts'],
+  );
+});
+
+test('maps a vitest project name that is not a directory to the real test file', () => {
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:packages/core-isolated  src/agent/__tests__/lease.test.ts > lease',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/core:durable-other-storage-version  src/agent/d.test.ts > d',
+    '2026-11-14T10:00:02.0000000Z  FAIL  unit:mastracode-core  src/only-here.test.ts > x',
+    '2026-11-14T10:00:03.0000000Z  FAIL  unit:packages/core  src/agent/gone.test.ts > deleted since',
+    '2026-11-14T10:00:04.0000000Z  FAIL  [ packages/memory/src/gone.test.ts ]',
+  ].join('\n');
+  const tracked = [
+    'packages/core/src/agent/__tests__/lease.test.ts',
+    'packages/core/src/agent/d.test.ts',
+    'packages/memory/src/agent/d.test.ts',
+    'mastracode/sdk/src/only-here.test.ts',
+  ];
+  assert.deepEqual(failingFilesFromLog(log, tracked, new Map()), [
+    'mastracode/sdk/src/only-here.test.ts',
+    'packages/core/src/agent/__tests__/lease.test.ts',
+    'packages/core/src/agent/d.test.ts',
   ]);
+});
+
+test('resolves a project alias through the config that names it, even when the relative path is not unique', () => {
+  const roots = projectRootsFromConfigs([
+    ['mastracode/sdk/vitest.config.ts', "projects: [{ test: { name: 'unit:mastracode-core' } }]"],
+    ['mastracode/factory/vitest.config.ts', "projects: [{ test: { name: 'unit:mastra-factory' } }]"],
+    ['packages/core/vitest.config.ts', "{ name: 'unit:packages/core' }, { name: `unit:${dynamic}` }"],
+  ]);
+  assert.deepEqual([...roots.keys()], ['unit:mastracode-core', 'unit:mastra-factory', 'unit:packages/core']);
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:mastracode-core  src/index.test.ts > x',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:mastra-factory  src/index.test.ts > y',
+  ].join('\n');
+  const tracked = [
+    'mastracode/sdk/src/index.test.ts',
+    'mastracode/factory/src/index.test.ts',
+    'packages/core/src/index.test.ts',
+    'packages/memory/src/index.test.ts',
+  ];
+  assert.deepEqual(failingFilesFromLog(log, tracked, roots), [
+    'mastracode/factory/src/index.test.ts',
+    'mastracode/sdk/src/index.test.ts',
+  ]);
+});
+
+test('a deleted file is dropped, not moved to another package that has the same relative path', () => {
+  const roots = projectRootsFromConfigs([['packages/core/vitest.config.ts', "{ name: 'unit:packages/core' }"]]);
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:packages/core  src/agent/gone.test.ts > x',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/core-isolated  src/agent/gone.test.ts > x',
+    '2026-11-14T10:00:02.0000000Z  FAIL  unit:packages/nope  src/agent/gone.test.ts > x',
+  ].join('\n');
+  const tracked = ['packages/core/src/a.test.ts', 'packages/memory/src/agent/gone.test.ts'];
+  assert.deepEqual(failingFilesFromLog(log, tracked, roots), []);
+  assert.deepEqual(failingFilesFromLog(log, tracked, new Map()), []);
+});
+
+test('a log flooded with FAIL lines resolves without rescanning every tracked file per line', () => {
+  const tracked = Array.from({ length: 6000 }, (_, i) => `packages/p${i % 60}/src/f${i}.test.ts`);
+  const lines = Array.from(
+    { length: 50_000 },
+    (_, i) => `2026-11-14T10:00:00.0000000Z  FAIL  unit:fake-${i}  src/f${i % 6000}.test.ts > x`,
+  );
+  lines.push('2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/p7-isolated  src/f7.test.ts > x');
+  const started = performance.now();
+  const files = failingFilesFromLog(lines.join('\n'), tracked, new Map());
+  const elapsed = performance.now() - started;
+  assert.equal(files.length, 6000);
+  assert.ok(files.includes('packages/p7/src/f7.test.ts'));
+  assert.ok(elapsed < 2000, `took ${Math.round(elapsed)} ms`);
 });
 
 const prFailure = (overrides = {}) => ({
