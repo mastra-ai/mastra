@@ -89,6 +89,44 @@ export function createRunCountWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: each loop iteration starts with retryCount 0 and its own retry budget
+  {
+    const recorder = { retryCounts: [] as number[], thrown: false };
+
+    const body = createStep({
+      id: 'body',
+      inputSchema: z.object({ iteration: z.number() }),
+      outputSchema: z.object({ iteration: z.number() }),
+      retries: 1,
+      execute: async ({ inputData, retryCount }) => {
+        recorder.retryCounts.push(retryCount);
+        const iteration = inputData.iteration + 1;
+        if (iteration === 3 && !recorder.thrown) {
+          recorder.thrown = true;
+          throw new Error('Transient failure in iteration 3');
+        }
+        return { iteration };
+      },
+    });
+
+    const workflow = createWorkflow({
+      id: 'run-count-loop-retry-workflow',
+      inputSchema: z.object({ iteration: z.number() }),
+      outputSchema: z.object({ iteration: z.number() }),
+    });
+
+    workflow.dountil(body, async ({ iterationCount }) => iterationCount >= 4).commit();
+
+    workflows['run-count-loop-retry-workflow'] = {
+      workflow,
+      mocks: { recorder },
+      resetMocks: () => {
+        recorder.retryCounts = [];
+        recorder.thrown = false;
+      },
+    };
+  }
+
   return workflows;
 }
 
@@ -120,5 +158,20 @@ export function createRunCountTests(ctx: WorkflowTestContext, registry?: Workflo
       // step2 continues from 3, loops until count === 10: 3→4→5→6→7→8→9→10 (stops)
       expect(result.steps.step2).toHaveProperty('output', { count: 10 });
     });
+
+    it.skipIf(skipTests.retryCount)(
+      'a loop body that fails once in a later iteration still gets its retry',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['run-count-loop-retry-workflow']!;
+        resetMocks!();
+
+        const result = await execute(workflow, { iteration: 0 });
+
+        // Iteration 3 fails on attempt 0 and succeeds on attempt 1.
+        expect(mocks.recorder.retryCounts).toEqual([0, 0, 0, 1, 0]);
+        expect(result.status).toBe('success');
+        expect(result.steps.body).toHaveProperty('output', { iteration: 4 });
+      },
+    );
   });
 }

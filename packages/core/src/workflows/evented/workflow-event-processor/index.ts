@@ -3877,7 +3877,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           parentWorkflow,
           requestContext,
           actor,
-          retryCount: retryCount + 1,
+          retryCount,
         },
         step,
         stepResult,
