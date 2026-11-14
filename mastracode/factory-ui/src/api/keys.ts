@@ -113,6 +113,9 @@ export const queryKeys = {
   intakeConfig: () => ['intake', 'config'] as const,
   intakeBindings: () => ['intake', 'bindings'] as const,
   intakeRoutes: (factoryProjectId: string | undefined) => ['intake', 'routes', factoryProjectId ?? null] as const,
+  // Under the routes' key: a rule or order change refreshes the counts.
+  intakeDryRun: (factoryProjectId: string | undefined) =>
+    [...queryKeys.intakeRoutes(factoryProjectId), 'dry-run'] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
   // Under the board's key: whatever refreshes or rewrites the board's cards reaches these too.
