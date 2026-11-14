@@ -72,7 +72,7 @@ export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: Gat
         setTranscribing(true);
         void transcribeGatewayAudio(baseUrl, model, audio, format.extension)
           .then(onTranscript)
-          .catch(() => toast.error('Could not transcribe audio.'))
+          .catch(error => toast.error(error instanceof Error ? error.message : 'Could not transcribe audio.'))
           .finally(() => setTranscribing(false));
       };
       recorder.start();

@@ -1,4 +1,4 @@
-import { MastraClient } from '@mastra/client-js';
+import { MastraClient, MastraClientError } from '@mastra/client-js';
 import { z } from 'zod';
 
 const modelSchema = z.object({ id: z.string() });
@@ -27,11 +27,19 @@ export async function transcribeGatewayAudio(
   const form = new FormData();
   form.set('model', model);
   form.set('file', new File([audio], `dictation.${extension}`, { type: audio.type }));
-  const result = await gatewayClient(baseUrl).request<unknown>('/system/gateway-audio/transcriptions', {
-    method: 'POST',
-    body: form,
-  });
-  return z.object({ text: z.string() }).parse(result).text;
+  try {
+    const result = await gatewayClient(baseUrl).request<unknown>('/system/gateway-audio/transcriptions', {
+      method: 'POST',
+      body: form,
+    });
+    return z.object({ text: z.string() }).parse(result).text;
+  } catch (error) {
+    if (error instanceof MastraClientError) {
+      const parsed = z.object({ error: z.string().min(1).max(500) }).safeParse(error.body);
+      if (parsed.success) throw new Error(parsed.data.error);
+    }
+    throw new Error('Could not transcribe audio.');
+  }
 }
 
 export async function speakGatewayAudio(baseUrl: string, model: string, voice: string, input: string): Promise<Blob> {

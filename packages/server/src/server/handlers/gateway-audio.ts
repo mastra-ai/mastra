@@ -75,7 +75,21 @@ function trustedBrowserRequest(request?: Request): boolean {
   return !site || site === 'same-origin' || site === 'none';
 }
 
-function upstreamFailure(response: Response) {
+async function upstreamFailure(response: Response) {
+  if (
+    response.status >= 400 &&
+    response.status < 500 &&
+    response.headers.get('content-type')?.split(';', 1)[0] === 'application/json'
+  ) {
+    try {
+      const parsed = z
+        .object({ error: z.object({ message: z.string().min(1).max(500) }) })
+        .safeParse(await response.json());
+      if (parsed.success) return Response.json({ error: parsed.data.error.message }, { status: response.status });
+    } catch {
+      // Keep a stable error when the Gateway response is not valid JSON.
+    }
+  }
   return Response.json({ error: `Gateway audio request failed (${response.status})` }, { status: response.status });
 }
 

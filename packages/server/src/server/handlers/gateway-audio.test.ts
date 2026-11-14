@@ -215,4 +215,34 @@ describe('Gateway audio routes', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ text: 'spoken words' });
   });
+
+  it('shows a provider audio validation error without exposing provider metadata', async () => {
+    enableDeployment();
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json({ enabled: true }))
+      .mockResolvedValueOnce(
+        Response.json(
+          {
+            error: { message: 'The recording is too short.', metadata: { account: 'private' } },
+            user_id: 'provider-account',
+          },
+          { status: 400 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const form = new FormData();
+    form.set('model', 'assemblyai/universal-3-5-pro');
+    form.set('file', new File(['audio'], 'dictation.ogg', { type: 'audio/ogg' }));
+    const response = await POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE.handler({
+      request: new Request('https://studio.example/api/system/gateway-audio/transcriptions', {
+        method: 'POST',
+        headers: { cookie: '__Host-wos-session=session-data' },
+        body: form,
+      }),
+    } as Parameters<typeof POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE.handler>[0]);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'The recording is too short.' });
+  });
 });
