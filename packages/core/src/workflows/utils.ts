@@ -6,6 +6,7 @@ import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
 import { waitMs } from '../utils/test-waits';
+import { MAX_DRAIN_TIMEOUT_MS as MAX_TIMER_DELAY_MS } from '../worker/drain-timeout';
 import type { ExecutionGraph } from './execution-engine';
 import { withoutNestedRunStartState } from './nested-state';
 import type { Step } from './step';
@@ -226,6 +227,27 @@ export function getResumeLabelsByStepId(
     }, {});
 }
 
+/**
+ * Calls `callback` once `duration` ms have passed and returns a function that cancels it.
+ * Node and Bun fire a `setTimeout` delay above 2^31-1 ms after 1 ms, so a longer duration
+ * is waited out in consecutive timers. A duration that is not positive (including NaN)
+ * fires at once; `Infinity` never fires.
+ * @internal
+ */
+export function setLongTimeout(callback: () => void, duration: number): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  const arm = (remaining: number) => {
+    if (!(remaining > 0)) {
+      timer = setTimeout(callback, 0);
+      return;
+    }
+    const chunk = Math.min(remaining, MAX_TIMER_DELAY_MS);
+    timer = setTimeout(() => (chunk === remaining ? callback() : arm(remaining - chunk)), chunk);
+  };
+  arm(duration);
+  return () => clearTimeout(timer);
+}
+
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
   return new Promise(resolve => {
     if (signal?.aborted) {
@@ -234,16 +256,13 @@ export function abortableSleep(duration: number, signal?: AbortSignal): Promise<
     }
 
     const onAbort = () => {
-      clearTimeout(timeout);
+      cancel();
       resolve();
     };
-    const timeout = setTimeout(
-      () => {
-        signal?.removeEventListener('abort', onAbort);
-        resolve();
-      },
-      Math.max(0, duration),
-    );
+    const cancel = setLongTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, duration);
 
     signal?.addEventListener('abort', onAbort, { once: true });
   });
