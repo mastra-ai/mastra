@@ -526,7 +526,7 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
-      expect(settings.preferences.subagentsEnabled).toBe(false);
+      expect(settings.preferences.subagentsEnabled).toBe(true);
       expect(settings.preferences.previewLines).toBe(2);
       expect(settings.shellPassthrough).toEqual({ mode: 'default' });
     });
@@ -536,17 +536,17 @@ describe('customProviders parsing/persistence', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: true }, storage: {} }),
-        'utf-8',
-      );
-      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(true);
-
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'true' }, storage: {} }),
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: false }, storage: {} }),
         'utf-8',
       );
       expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(false);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'false' }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(true);
     });
   });
 
@@ -693,7 +693,7 @@ describe('customProviders parsing/persistence', () => {
     });
   });
 
-  it('persists experimental cross-agent signals and defaults them off for old settings files', () => {
+  it('persists experimental cross-agent signals and defaults them on for old settings files', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
@@ -706,14 +706,14 @@ describe('customProviders parsing/persistence', () => {
         }),
         'utf-8',
       );
-      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(false);
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(true);
 
       const settings = loadSettings(filePath);
-      settings.signals.experimentalCrossAgentSignals = true;
+      settings.signals.experimentalCrossAgentSignals = false;
       saveSettings(settings, filePath);
 
-      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(true);
-      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossAgentSignals).toBe(true);
+      expect(loadSettings(filePath).signals.experimentalCrossAgentSignals).toBe(false);
+      expect(JSON.parse(readFileSync(filePath, 'utf-8')).signals.experimentalCrossAgentSignals).toBe(false);
     });
   });
 

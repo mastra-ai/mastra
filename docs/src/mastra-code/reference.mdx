@@ -98,7 +98,7 @@ const {
 | `unixSocketPubSub` | `boolean` | `false` | Use the built-in Unix socket PubSub for local cross-process signal routing |
 | `crossProcessPubSub` | `boolean` | `false` | Mark the configured PubSub as cross-process-safe (skips file thread locks) |
 | `agentConnections` | `AgentConnectionsSignalProviderOptions` | — | Agent connection state and discovery options |
-| `crossAgentSignals` | `boolean` | Global setting (off) | Enable experimental cross-agent communication |
+| `crossAgentSignals` | `boolean` | Global setting (on) | Enable experimental cross-agent communication |
 | `scheduleTools` | `boolean` | Global setting (off) | Enable the experimental schedule tools |
 | `prepareWakeRequestContext` | `(args) => void \| Promise<void>` | — | Prepare request context before a wake runs on an idle thread |
 | `resumeWakeSession` | `(args) => Promise<void>` | — | Bring the session that owns a resource online for a deferred notification |

@@ -853,11 +853,11 @@ You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who 
 
 ## Cross-agent communication
 
-Cross-agent communication is experimental and off by default.
+Cross-agent communication is experimental and on by default.
 
-### Enable cross-agent communication
+### Turn cross-agent communication on or off
 
-Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
+Turn it off in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals` when calling `createMastraCode()` to override the setting. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
 
 ```typescript
 import { createMastraCode } from 'mastracode'

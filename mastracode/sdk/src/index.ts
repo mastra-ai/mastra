@@ -461,7 +461,7 @@ export interface MastraCodeConfig {
   /**
    * Enable experimental cross-agent communication: thread ownership
    * advertisement, peer discovery, and the agent connection tools. Defaults to
-   * the `signals.experimentalCrossAgentSignals` global setting (off). With the
+   * the `signals.experimentalCrossAgentSignals` global setting (on). With the
    * built-in Unix socket PubSub (`unixSocketPubSub`, no `pubsub` injected),
    * peer discovery also reaches agents in other projects on this machine.
    */
@@ -715,11 +715,11 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const sessionId = `mastracode-session-${shortHash(project.resourceId)}`;
   const ownerId = `mastracode-${shortHash(`${hostname()}\0${project.rootPath}`)}`;
 
-  // Cross-agent communication is experimental and opt-in. It gates the agent
+  // Cross-agent communication is experimental and on by default. It gates the agent
   // connections provider/tools and the session thread-ownership lifecycle.
   // On the built-in PubSub it also makes peer discovery reach other projects.
   const useCrossAgentSignals =
-    config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? false;
+    config?.crossAgentSignals ?? globalSettings.signals?.experimentalCrossAgentSignals ?? true;
 
   const configuredPubSub = config?.pubsub;
   const useUnixSocketPubSub =

@@ -522,7 +522,7 @@ const DEFAULTS: GlobalSettings = {
     yolo: null,
     theme: 'auto',
     thinkingLevel: 'off',
-    subagentsEnabled: false,
+    subagentsEnabled: true,
     previewLines: 2,
     webSearchProvider: 'auto',
     mouseDialogs: false,
@@ -549,7 +549,7 @@ const DEFAULTS: GlobalSettings = {
   signals: {
     unixSocketPubSub: false,
     experimentalGithubSignals: false,
-    experimentalCrossAgentSignals: false,
+    experimentalCrossAgentSignals: true,
     experimentalScheduleTools: false,
     experimentalKnowledge: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,

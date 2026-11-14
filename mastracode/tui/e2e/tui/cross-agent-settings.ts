@@ -7,7 +7,7 @@ import type { McE2eScenario } from './types.js';
 
 export const crossAgentSettingsScenario: McE2eScenario = {
   name: 'cross-agent-settings',
-  description: 'Enable experimental cross-agent communication through the real TUI settings overlay.',
+  description: 'Disable experimental cross-agent communication (on by default) through the real TUI settings overlay.',
   testName: 'persists the experimental cross-agent communication setting',
   env({ appDataDir }) {
     return {
@@ -22,14 +22,14 @@ export const crossAgentSettingsScenario: McE2eScenario = {
     ).toBeVisible();
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental cross-agent communication/i, terminal);
+    await runtime.waitForScreenText(/Experimental cross-agent communication\s+On/i, terminal);
 
     await selectMenuRow(terminal, /Experimental cross-agent communication/i);
     await runtime.waitForScreenText(/Enable cross-agent connection tools/i, terminal);
 
-    terminal.write('\x1b[A');
+    terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Experimental cross-agent communication\s+On/i, terminal);
+    await runtime.waitForScreenText(/Experimental cross-agent communication\s+Off/i, terminal);
 
     const runConfig = JSON.parse(process.env.MC_E2E_RUNS_JSON ?? '[]').find(
       (config: { scenarioName?: string }) => config.scenarioName === 'cross-agent-settings',
@@ -41,8 +41,8 @@ export const crossAgentSettingsScenario: McE2eScenario = {
     const settings = JSON.parse(readFileSync(settingsPath, 'utf8')) as {
       signals?: { experimentalCrossAgentSignals?: boolean };
     };
-    if (settings.signals?.experimentalCrossAgentSignals !== true) {
-      throw new Error('Expected experimental cross-agent communication to persist as enabled');
+    if (settings.signals?.experimentalCrossAgentSignals !== false) {
+      throw new Error('Expected experimental cross-agent communication to persist as disabled');
     }
   },
 };
