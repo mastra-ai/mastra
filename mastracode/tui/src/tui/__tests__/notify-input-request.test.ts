@@ -76,6 +76,35 @@ beforeEach(() => {
 });
 
 describe('input-request notifications fire at event receipt (#20398)', () => {
+  it.each([
+    ['user_question_request', 'ask_question'],
+    ['plan_approval_request', 'plan_approval'],
+    ['sandbox_access_request', 'sandbox_access'],
+  ])('notifies for %s by kind while the queue is blocked', async (kind, reason) => {
+    const { listener, releaseBlocker } = createHarness();
+    const blocked = listener({ type: 'blocking_prompt' });
+    await Promise.resolve();
+    const pending = listener({
+      type: 'tool_suspended',
+      toolCallId: 'by-kind',
+      toolName: 'renamed_tool',
+      suspendPayload: { kind, question: 'Continue?', path: '/tmp/shared' },
+    });
+    expect(mocks.sendNotification).toHaveBeenCalledWith(reason, expect.any(Object));
+    releaseBlocker.resolve();
+    await Promise.all([blocked, pending]);
+  });
+
+  it('does not notify for an explicit unknown kind on a built-in name', async () => {
+    const { listener } = createHarness();
+    await listener({
+      type: 'tool_suspended',
+      toolCallId: 'custom',
+      toolName: 'ask_user',
+      suspendPayload: { kind: 'custom_interaction' },
+    });
+    expect(mocks.sendNotification).not.toHaveBeenCalled();
+  });
   it('notifies for ask_user while the queue is blocked by a pending prompt', async () => {
     const { listener, releaseBlocker, handled } = createHarness();
 

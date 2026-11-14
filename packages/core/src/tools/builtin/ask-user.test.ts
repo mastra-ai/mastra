@@ -28,6 +28,7 @@ describe('askUserTool (native suspend)', () => {
 
     expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
+      kind: 'user_question_request',
       question: 'Pick one?',
       options: [{ label: 'A' }, { label: 'B' }],
       selectionMode: 'single_select',
@@ -49,6 +50,7 @@ describe('askUserTool (native suspend)', () => {
     );
 
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
+      kind: 'user_question_request',
       question: 'Pick any?',
       options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }],
       selectionMode: 'multi_select',

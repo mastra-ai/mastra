@@ -9,7 +9,7 @@ packages:
 
 A built-in, agent-agnostic tool that submits an implementation plan for user review. The agent writes a plan to a markdown file and passes the file path to this tool. The tool suspends the run until the user approves or rejects the plan.
 
-The tool pauses through the native [tool suspension](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) primitive: it calls `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event. The host reads the plan file and presents it to the user. It then resumes with an approval or rejection.
+The tool pauses through the native [tool suspension](/docs/agents/human-in-the-loop#runtime-suspension-with-suspend) primitive: it calls `suspend()` with the plan path and interaction kind, which makes the agent emit a `tool-call-suspended` event. The host reads the plan file and presents it to the user. It then resumes with an approval or rejection.
 
 When executed outside an agent run (no `suspend` available), the tool returns a readable fallback string containing the file path.
 
@@ -76,10 +76,15 @@ The model calls this tool with the following parameters:
 
 ## Suspend payload
 
-The `tool-call-suspended` event carries a `suspendPayload`:
+The `tool-call-suspended` event carries a `SubmitPlanSuspendPayload`, exported from `@mastra/core/tools`. Its `kind` is `INTERACTIVE_TOOL_SUSPENSION_KINDS.submitPlan` (`'plan_approval_request'`), so consumers can identify the interaction without relying on the tool name:
 
 <PropertiesTable
   content={[
+  {
+    name: 'kind',
+    type: "'plan_approval_request'",
+    description: 'Identifies a plan approval suspension.',
+  },
   {
     name: 'toolId',
     type: "'submit_plan'",

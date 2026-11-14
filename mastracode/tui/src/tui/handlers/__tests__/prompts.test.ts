@@ -16,6 +16,7 @@ vi.mock('../../model-packs/apply.js', () => ({ switchModeWithPack: mocks.switchM
 
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { PlanApprovalInlineComponent } from '../../components/plan-approval-inline.js';
+import { dispatchEvent } from '../../event-dispatch.js';
 import type { TUIState } from '../../state.js';
 import { handleAskQuestion, handlePlanApproval, handleSandboxAccessRequest } from '../prompts.js';
 import type { EventHandlerContext } from '../types.js';
@@ -65,6 +66,8 @@ function createCtx() {
       },
       ui: {
         requestRender: vi.fn(),
+        hasOverlay: vi.fn(() => false),
+        setFocus: vi.fn(),
       },
       chatContainer: {
         addChild: vi.fn(),
@@ -79,10 +82,73 @@ function createCtx() {
     updateStatusLine: vi.fn(),
     notify: vi.fn(),
     addChildBeforeFollowUps: vi.fn(),
+    setGoal: vi.fn().mockResolvedValue(null),
   } as unknown as EventHandlerContext;
 
   return { ctx, state, answerQuestion };
 }
+
+describe('suspension routing by kind', () => {
+  it.each([
+    ['user_question_request', { question: 'Continue?', options: [{ label: 'Yes' }] }, 'Yes'],
+    ['sandbox_access_request', { path: '/tmp/shared', reason: 'Read files' }, 'Yes'],
+  ])('renders and answers %s without relying on the tool name', async (kind, payload, answer) => {
+    const { ctx, state } = createCtx();
+    const pending = dispatchEvent(
+      {
+        type: 'tool_suspended',
+        toolCallId: 'kind-call',
+        toolName: 'renamed_interactive_tool',
+        args: {},
+        suspendPayload: { ...payload, kind },
+      },
+      ctx,
+      state,
+    );
+    expect(state.activeInlineQuestion).toBeDefined();
+    state.activeInlineQuestion!.handleInput('\r');
+    await pending;
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith({ toolCallId: 'kind-call', resumeData: answer });
+  });
+
+  it('renders a plan approval by kind', async () => {
+    const { ctx, state } = createCtx();
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Ship it');
+    state.session.state.get = vi.fn(() => ({ projectPath }));
+    const pending = dispatchEvent(
+      {
+        type: 'tool_suspended',
+        toolCallId: 'kind-plan',
+        toolName: 'renamed_plan_tool',
+        args: {},
+        suspendPayload: { kind: 'plan_approval_request', path: PLAN_PATH },
+      },
+      ctx,
+      state,
+    );
+    await vi.waitFor(() => expect(state.activeInlinePlanApproval).toBeDefined());
+    state.activeInlinePlanApproval!.handleInput('\r');
+    await pending;
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolCallId: 'kind-plan',
+        resumeData: expect.objectContaining({ action: 'approved' }),
+      }),
+    );
+  });
+
+  it.each([{}, { kind: 'custom_interaction' }])('ignores undeclared custom suspensions: %j', async payload => {
+    const { ctx, state } = createCtx();
+    await dispatchEvent(
+      { type: 'tool_suspended', toolCallId: 'custom', toolName: 'plugin_tool', args: {}, suspendPayload: payload },
+      ctx,
+      state,
+    );
+    expect(state.activeInlineQuestion).toBeUndefined();
+    expect(state.activeInlinePlanApproval).toBeUndefined();
+    expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+  });
+});
 
 describe('handleSandboxAccessRequest', () => {
   it('includes the requested path and reason in PermissionResult tool_input', async () => {
