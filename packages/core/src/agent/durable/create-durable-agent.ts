@@ -105,6 +105,12 @@ export interface CreateDurableAgentOptions<
  * execution to an agent. The `durable` option on `AgentConfig` only configures
  * resumable streams and never wraps the agent.
  *
+ * Wrap the Agent before its first run. Wrapping without stream settings preserves
+ * its existing stream bus. If the wrapper supplies pubsub, cache, cleanupTimeoutMs,
+ * or shouldCache, those settings apply to new runs only; runs already in flight
+ * retain their original transport, cache, and cleanup settings. Drain those runs
+ * before wrapping or changing pubsub/cache so observers stay on the same bus.
+ *
  * @param options - Configuration options
  * @returns A DurableAgent instance
  *

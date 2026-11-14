@@ -1801,7 +1801,14 @@ export class Agent<
       ...Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)),
     };
     this.#streamBusUsesSharedRunLog = usesSharedRunLog;
-    this.#streamBus = undefined;
+    if (Object.values(config).some(value => value !== undefined)) {
+      if (this.#publishedRuns.size > 0) {
+        this.logger.warn(
+          `[Agent:${this.id}] Wrapping with ${this.#publishedRuns.size} runs in flight: new stream settings apply to new runs only. Drain runs before wrapping or changing pubsub/cache.`,
+        );
+      }
+      this.#streamBus = undefined;
+    }
   }
 
   /** Whether run frames are published by workers on Mastra's shared log. @internal */
