@@ -1414,7 +1414,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         planApprovalStartsGoal: config?.planApprovalStartsGoal,
         plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
-        backgroundTools: backgroundToolsEnabled,
+        // Only the default workspace runs background shells and reports their exits.
+        backgroundTools: backgroundToolsEnabled && !config?.workspace,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1912,6 +1913,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     liveSessions.add(session);
     // Shell exits that came while no session ran their thread's resource.
     void backgroundNotices?.flush();
+    // A notice for a thread the session had left waits until it comes back.
+    if (backgroundNotices) {
+      session.subscribe(event => {
+        if (event.type === 'thread_changed') void backgroundNotices.flush();
+      });
+    }
   });
   controller.onSessionDeleted(session => {
     liveSessions.delete(session);
