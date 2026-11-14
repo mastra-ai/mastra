@@ -56,7 +56,9 @@ import { createSessionThreadAdvertisement } from './agent-connections/session-ad
 import { AgentConnectionsSignalProvider } from './agent-connections/signal-provider.js';
 import type { AgentConnectionsSignalProviderOptions } from './agent-connections/signal-provider.js';
 import { createBackgroundCompletionEvents } from './agents/background-completion-events.js';
-import { createBackgroundCompletionCallbacks } from './agents/background-completion.js';
+import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './agents/background-completion.js';
+import { createBackgroundProcessNotices } from './agents/background-processes.js';
+import type { BackgroundProcessControls } from './agents/background-processes.js';
 import {
   hasCredentialStoreProvider,
   setCredentialLogger,
@@ -1412,6 +1414,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         planApprovalStartsGoal: config?.planApprovalStartsGoal,
         plansDir: config?.plansDir,
         disabledTools: config?.disabledTools,
+        // Only the default workspace runs background shells and reports their exits.
+        backgroundTools: backgroundToolsEnabled && !config?.workspace,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1797,10 +1801,23 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  const backgroundNotices = backgroundToolsEnabled ? createBackgroundNoticeDelivery(() => sessionRouter) : undefined;
+  // One instance per process: the workspace is registered once per project and
+  // reused, so its exit callback must not close over a single session.
+  const backgroundProcesses = backgroundNotices
+    ? createBackgroundProcessNotices({
+        delivery: backgroundNotices,
+        events: backgroundCompletionEvents,
+        getSession: sessionId => controller.getSession(sessionId),
+      })
+    : undefined;
+  // Hosts get only the controls; the workspace hooks stay internal.
+  const backgroundProcessControls: BackgroundProcessControls | undefined = backgroundProcesses;
   // Used when the host passes no `workspace`. Its plan-mode write guard must
   // allow the same plans directory the prompts tell the agent to write to.
+  // A host-provided workspace gets no background process notices.
   const defaultWorkspace = (args: { requestContext: RequestContext; mastra?: Mastra }) =>
-    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir });
+    getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir, backgroundProcesses });
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1894,6 +1911,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   controller.onSessionCreated(session => {
     liveSessions.add(session);
+    // Shell exits that came while no session ran their thread's resource.
+    void backgroundNotices?.flush();
+    // A notice for a thread the session had left waits until it comes back.
+    if (backgroundNotices) {
+      session.subscribe(event => {
+        if (event.type === 'thread_changed') void backgroundNotices.flush();
+      });
+    }
   });
   controller.onSessionDeleted(session => {
     liveSessions.delete(session);
@@ -1996,6 +2021,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     githubSignals,
     backgroundToolsEnabled,
     backgroundCompletionEvents,
+    /** Reads and kills background shells for the user; a kill posts no exit notice. */
+    backgroundProcesses: backgroundProcessControls,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,

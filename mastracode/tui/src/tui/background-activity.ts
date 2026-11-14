@@ -1,12 +1,25 @@
-import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
+import type {
+  BackgroundProcessExitEvent,
+  BackgroundTaskCompletionEvent,
+} from '@mastra/code-sdk/agents/background-completion-events';
+import { parseBackgroundProcessPid } from '@mastra/code-sdk/agents/background-processes';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
+import type { BackgroundProcessExit } from './components/tool-execution-interface.js';
 
 export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed' | 'cancelled';
 
 export interface BackgroundActivity {
   id: string;
+  /** Task id, or `process:<pid>` for a background shell. Also the activity's key in the map. */
   taskId: string;
+  /** Set for background shells started with `execute_command`; tasks leave it unset. */
+  kind?: 'process';
+  pid?: string;
+  exitCode?: number;
   toolCallId: string;
   toolName: string;
+  /** What the user recognizes a shell by: its description, else its command. */
+  label?: string;
   resourceId: string;
   threadId: string;
   status: BackgroundActivityStatus;
@@ -19,6 +32,25 @@ export interface BackgroundToolContext {
   resourceId: string;
   threadId: string;
   createdAt: number;
+  args?: unknown;
+}
+
+export { parseBackgroundProcessPid };
+
+export function processActivityKey(pid: string): string {
+  return `process:${pid}`;
+}
+
+function firstLine(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const line = value.trim().split('\n')[0]?.trim();
+  return line || undefined;
+}
+
+/** A shell's label in the activity list: its description, else its command. */
+function describeShell(args: unknown): string | undefined {
+  const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
+  return firstLine(record.description) ?? firstLine(record.command);
 }
 
 export function acceptBackgroundActivity(
@@ -44,7 +76,7 @@ export function acceptBackgroundActivity(
 
 export function completeBackgroundActivity(
   activities: Map<string, BackgroundActivity>,
-  event: BackgroundCompletionEvent,
+  event: BackgroundTaskCompletionEvent,
 ): void {
   const existing = activities.get(event.taskId);
   if (existing?.status === 'cancelled' && event.status !== 'cancelled') return;
@@ -58,6 +90,74 @@ export function completeBackgroundActivity(
     status: event.status,
     createdAt: existing?.createdAt ?? Date.now(),
     completedAt: Date.now(),
+  });
+}
+
+/**
+ * How a shell ended, when this process saw it end: its exit can come before its
+ * call's result, and a kill posts no notice. Undefined while it runs, or when
+ * the PID's activity belongs to another call.
+ */
+export function finishedShellExit(
+  activities: Map<string, BackgroundActivity>,
+  pid: string,
+  toolCallId: string,
+): BackgroundProcessExit | undefined {
+  const activity = activities.get(processActivityKey(pid));
+  // An exit code is set only once the shell has ended.
+  if (activity?.toolCallId !== toolCallId || activity.exitCode === undefined) return undefined;
+  return { exitCode: activity.exitCode, killed: activity.status === 'cancelled' };
+}
+
+export function startBackgroundProcessActivity(
+  activities: Map<string, BackgroundActivity>,
+  pid: string,
+  toolCallId: string,
+  context: BackgroundToolContext,
+): void {
+  const key = processActivityKey(pid);
+  // The exit can be reported before the call's result for a command that ends at once.
+  if (activities.get(key)?.toolCallId === toolCallId) return;
+  activities.set(key, {
+    id: key,
+    taskId: key,
+    kind: 'process',
+    pid,
+    toolCallId,
+    toolName: context.toolName,
+    label: describeShell(context.args),
+    resourceId: context.resourceId,
+    threadId: context.threadId,
+    status: 'accepted',
+    createdAt: context.createdAt,
+  });
+}
+
+export function finishBackgroundProcessActivity(
+  activities: Map<string, BackgroundActivity>,
+  event: BackgroundProcessExitEvent,
+): void {
+  const key = processActivityKey(event.pid);
+  const existing = activities.get(key);
+  // A late exit from an older call whose PID a running call now reuses.
+  if (existing?.status === 'accepted' && event.toolCallId && existing.toolCallId !== event.toolCallId) return;
+  const sameProcess = existing && (!event.toolCallId || existing.toolCallId === event.toolCallId);
+  if (!sameProcess && (!event.resourceId || !event.threadId)) return;
+  const now = Date.now();
+  activities.set(key, {
+    id: key,
+    taskId: key,
+    kind: 'process',
+    pid: event.pid,
+    exitCode: event.exitCode,
+    toolCallId: event.toolCallId ?? existing?.toolCallId ?? '',
+    toolName: MC_TOOLS.EXECUTE_COMMAND,
+    label: (sameProcess ? existing.label : undefined) ?? event.command,
+    resourceId: (sameProcess ? existing.resourceId : event.resourceId) ?? '',
+    threadId: (sameProcess ? existing.threadId : event.threadId) ?? '',
+    status: event.killed ? 'cancelled' : event.exitCode === 0 ? 'completed' : 'failed',
+    createdAt: (sameProcess ? existing.createdAt : undefined) ?? now,
+    completedAt: now,
   });
 }
 

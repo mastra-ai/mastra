@@ -37,14 +37,37 @@ describe('BackgroundActivitySelectorComponent', () => {
 
     const output = stripAnsi(component.render(100).join('\n'));
     expect(output).toContain('Background activity');
-    expect(output).toContain('◌ view');
-    expect(output).toContain('✓ search_content');
-    expect(output).toContain('✗ mastra_expert');
-    expect(output).toContain('■ find_files');
+    expect(output).toContain('◌ • view');
+    expect(output).toContain('✓ • search_content');
+    expect(output).toContain('✗ • mastra_expert');
+    expect(output).toContain('■ • find_files');
     expect(output).toContain('running · task task-1');
     expect(output).not.toContain('thread-123456789');
     expect(output).toContain('↑↓ inspect · D abort running · Esc close');
     expect(output).not.toContain('open thread');
+  });
+
+  it('offers no shell actions when the sandbox is out of reach', () => {
+    const onAbort = vi.fn();
+    const onOpen = vi.fn();
+    const shell = activity({ taskId: 'process:1', kind: 'process', pid: '1', toolName: 'execute_command' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [shell],
+      getActivity: () => shell,
+      onCancel: vi.fn(),
+      onAbort,
+      onOpen,
+      canControlProcesses: false,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+    component.handleInput('\r');
+
+    expect(onAbort).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
+    expect(stripAnsi(component.render(100).join('\n'))).toContain('↑↓ inspect · Esc close');
   });
 
   it('aborts only the selected running task', () => {
@@ -80,6 +103,52 @@ describe('BackgroundActivitySelectorComponent', () => {
     component.handleInput('d');
 
     expect(onAbort).not.toHaveBeenCalled();
+  });
+
+  it('opens shell rows only', () => {
+    const onOpen = vi.fn();
+    const shell = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolName: 'execute_command' });
+    const task = activity();
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [task, shell],
+      getActivity: taskId => [task, shell].find(row => row.taskId === taskId),
+      onCancel: vi.fn(),
+      onAbort: vi.fn(),
+      onOpen,
+    });
+    component.focused = true;
+
+    expect(stripAnsi(component.render(100).join('\n'))).not.toContain('Enter open');
+    component.handleInput('\r');
+    expect(onOpen).not.toHaveBeenCalled();
+
+    component.handleInput('\x1b[B');
+    expect(stripAnsi(component.render(100).join('\n'))).toContain('Enter open');
+    component.handleInput('\r');
+    expect(onOpen).toHaveBeenCalledWith(shell);
+  });
+
+  it('leaves a shell alone when a new call reuses the PID of the row shown', () => {
+    const onAbort = vi.fn();
+    const onOpen = vi.fn();
+    const shown = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolCallId: 'call-old' });
+    const reused = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolCallId: 'call-new' });
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [shown],
+      getActivity: () => reused,
+      onCancel: vi.fn(),
+      onAbort,
+      onOpen,
+    });
+    component.focused = true;
+
+    component.handleInput('d');
+    component.handleInput('\r');
+
+    expect(onAbort).not.toHaveBeenCalled();
+    expect(onOpen).not.toHaveBeenCalled();
   });
 
   it('renders current activity details when selection changes after completion', () => {

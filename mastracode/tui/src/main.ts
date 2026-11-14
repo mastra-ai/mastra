@@ -260,6 +260,7 @@ async function bootLocal(
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
+    backgroundProcesses: result.backgroundProcesses,
     exit: exitCode => void shutdownAndExit(exitCode),
     relaunch,
     ...startupMessage,

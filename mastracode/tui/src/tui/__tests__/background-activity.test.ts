@@ -1,4 +1,7 @@
-import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
+import type {
+  BackgroundProcessExitEvent,
+  BackgroundTaskCompletionEvent,
+} from '@mastra/code-sdk/agents/background-completion-events';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -6,12 +9,39 @@ import {
   clearCompletedBackgroundActivitiesForTarget,
   compareBackgroundActivities,
   completeBackgroundActivity,
+  finishBackgroundProcessActivity,
   getBackgroundActivitiesForTarget,
+  processActivityKey,
+  startBackgroundProcessActivity,
 } from '../background-activity.js';
 import type { BackgroundActivity } from '../background-activity.js';
 
-function completion(overrides: Partial<BackgroundCompletionEvent> = {}): BackgroundCompletionEvent {
+function processExit(overrides: Partial<BackgroundProcessExitEvent> = {}): BackgroundProcessExitEvent {
   return {
+    kind: 'process',
+    id: 'background-process:42:call-shell',
+    pid: '42',
+    command: 'pnpm dev',
+    exitCode: 0,
+    killed: false,
+    toolCallId: 'call-shell',
+    resourceId: 'resource-1',
+    threadId: 'thread-1',
+    ...overrides,
+  };
+}
+
+const shellContext = {
+  toolName: 'execute_command',
+  resourceId: 'resource-1',
+  threadId: 'thread-1',
+  createdAt: 10,
+  args: { description: 'Starting the dev server', command: 'pnpm dev' },
+};
+
+function completion(overrides: Partial<BackgroundTaskCompletionEvent> = {}): BackgroundTaskCompletionEvent {
+  return {
+    kind: 'task',
     id: 'background-task:task-1:completed',
     taskId: 'task-1',
     originRunId: 'run-1',
@@ -76,6 +106,71 @@ describe('background activity', () => {
     completeBackgroundActivity(activities, completion({ status: 'completed' }));
 
     expect(activities.get('task-1')).toMatchObject({ status: 'cancelled' });
+  });
+
+  it('keeps the exit of a shell that ended before its call returned the PID', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    finishBackgroundProcessActivity(activities, processExit({ exitCode: 2 }));
+
+    startBackgroundProcessActivity(activities, '42', 'call-shell', shellContext);
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({ status: 'failed', exitCode: 2 });
+  });
+
+  it('shows a killed shell as cancelled rather than by its exit code', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-shell', shellContext);
+
+    finishBackgroundProcessActivity(activities, processExit({ exitCode: 137, killed: true }));
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({
+      status: 'cancelled',
+      label: 'Starting the dev server',
+    });
+  });
+
+  it('ignores the exit of a shell it never saw start when the exit names no thread', () => {
+    const activities = new Map<string, BackgroundActivity>();
+
+    finishBackgroundProcessActivity(activities, processExit({ resourceId: undefined, threadId: undefined }));
+
+    expect(activities.size).toBe(0);
+  });
+
+  it('treats a reused PID from a new call as a new running shell', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-old', shellContext);
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-old' }));
+
+    startBackgroundProcessActivity(activities, '42', 'call-new', shellContext);
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({ status: 'accepted', toolCallId: 'call-new' });
+  });
+
+  it('keeps a running shell when a late exit from an older call with the same PID arrives', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-old', shellContext);
+    startBackgroundProcessActivity(activities, '42', 'call-new', shellContext);
+
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-old', exitCode: 1 }));
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({ status: 'accepted', toolCallId: 'call-new' });
+  });
+
+  it('records the exit of a new call over a finished older call with the same PID', () => {
+    const activities = new Map<string, BackgroundActivity>();
+    startBackgroundProcessActivity(activities, '42', 'call-old', shellContext);
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-old' }));
+
+    // The new command ended before its call returned the PID.
+    finishBackgroundProcessActivity(activities, processExit({ toolCallId: 'call-new', exitCode: 3 }));
+    startBackgroundProcessActivity(activities, '42', 'call-new', shellContext);
+
+    expect(activities.get(processActivityKey('42'))).toMatchObject({
+      status: 'failed',
+      exitCode: 3,
+      toolCallId: 'call-new',
+    });
   });
 
   it('sorts active work before terminal work and newest tasks first within each state', () => {

@@ -1227,6 +1227,29 @@ describe('ToolExecutionComponentEnhanced compact display', () => {
     expect(renderInChat([component]).join('\n')).not.toContain('out 1');
   });
 
+  it.each([
+    [{ exitCode: 1, killed: false }, /✗ exit 1/],
+    [{ exitCode: 0, killed: false }, /exit 0/],
+    [{ exitCode: 143, killed: true }, /■ killed/],
+  ])('shows how an expanded background shell ended (%o)', (exit, status) => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'pnpm build', description: 'Building', background: true },
+      { collapsedByDefault: true, previewLineLimit: 0 },
+      ui,
+    );
+    component.updateResult(
+      { content: [{ type: 'text', text: 'Started background process (PID: 42)' }], isError: false },
+      false,
+    );
+    component.setBackgroundProcessExit(exit);
+
+    component.setExpanded(true);
+    const expanded = stripAnsi(component.render(80).join('\n'));
+    expect(expanded).toMatch(status);
+    if (exit.exitCode !== 0 && !exit.killed) expect(expanded).not.toMatch(/✓/);
+  });
+
   it('shows the command description in place of the command', () => {
     const command = ["python3 - <<'EOF'", "p = 'file.ts'", 's = open(p).read()', 'EOF'].join('\n');
     const component = new ToolExecutionComponentEnhanced(

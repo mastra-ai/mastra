@@ -1,6 +1,7 @@
 import { Box, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, SelectListTheme, TUI } from '@earendil-works/pi-tui';
 import type { BackgroundActivity } from '../background-activity.js';
+import { formatStatusDuration } from '../status-duration.js';
 import { theme } from '../theme.js';
 import { WrappingSelectList } from './wrapping-select-list.js';
 
@@ -10,6 +11,11 @@ export interface BackgroundActivitySelectorOptions {
   getActivity: (taskId: string) => BackgroundActivity | undefined;
   onCancel: () => void;
   onAbort: (activity: BackgroundActivity) => void;
+  /** Enter on a shell row shows its output. Other rows show no Enter hint. */
+  onOpen?: (activity: BackgroundActivity) => void;
+  /** False when the shell's sandbox is out of reach (a remote session); shells then offer no Enter or D. */
+  canControlProcesses?: boolean;
+  now?: () => number;
 }
 
 export class BackgroundActivitySelectorComponent extends Box {
@@ -17,16 +23,26 @@ export class BackgroundActivitySelectorComponent extends Box {
   private readonly list: WrappingSelectList;
   private readonly getActivity: (taskId: string) => BackgroundActivity | undefined;
   private readonly onAbort: (activity: BackgroundActivity) => void;
+  private readonly canControlProcesses: boolean;
+  /** The activities as the rows show them, by key. */
+  private readonly rows: Map<string, BackgroundActivity>;
 
   constructor(options: BackgroundActivitySelectorOptions) {
     super(4, 2, text => theme.bg('overlayBg', text));
     const byId = new Map(options.activities.map(activity => [activity.taskId, activity]));
+    const now = options.now ?? Date.now;
     this.getActivity = options.getActivity;
     this.onAbort = options.onAbort;
-    const items: SelectItem[] = options.activities.map(activity => ({
-      value: activity.taskId,
-      label: `  ${statusIcon(activity.status)} ${activity.toolName}`,
-    }));
+    this.canControlProcesses = options.canControlProcesses ?? true;
+    const items: SelectItem[] = options.activities.map(activity => {
+      const elapsed = formatStatusDuration((activity.completedAt ?? now()) - activity.createdAt, {
+        includeSeconds: true,
+      });
+      return {
+        value: activity.taskId,
+        label: `  ${statusIcon(activity.status)} ${kindIcon(activity)} ${activity.label ?? activity.toolName}  ${theme.fg('dim', elapsed)}`,
+      };
+    });
     const selectTheme: SelectListTheme = {
       selectedPrefix: value => theme.fg('accent', value),
       selectedText: value => theme.fg('accent', value),
@@ -39,13 +55,28 @@ export class BackgroundActivitySelectorComponent extends Box {
     this.addChild(new Spacer(1));
     this.list = new WrappingSelectList(items, 10, selectTheme);
     const detailText = new Text('', 0, 0);
+    const hintText = new Text('', 0, 0);
+    const canOpen = (activity: BackgroundActivity) =>
+      activity.kind === 'process' && this.canControlProcesses && Boolean(options.onOpen);
     const updateDetail = (activity: BackgroundActivity) => {
-      const state = activity.status === 'accepted' ? 'running' : activity.status;
-      detailText.setText(theme.fg('dim', `${state} · task ${activity.taskId}`));
+      detailText.setText(theme.fg('dim', describeState(activity)));
+      const hint = [
+        '↑↓ inspect',
+        canOpen(activity) ? 'Enter open' : undefined,
+        this.canAbort(activity) ? 'D abort running' : undefined,
+        'Esc close',
+      ]
+        .filter(Boolean)
+        .join(' · ');
+      hintText.setText(theme.fg('dim', hint));
       options.tui.requestRender();
     };
 
-    this.list.onSelect = () => {};
+    this.rows = byId;
+    this.list.onSelect = item => {
+      const activity = this.liveActivity(item.value);
+      if (activity && canOpen(activity)) options.onOpen?.(activity);
+    };
     this.list.onSelectionChange = item => {
       const activity = this.getActivity(item.value) ?? byId.get(item.value);
       if (activity) updateDetail(activity);
@@ -55,22 +86,54 @@ export class BackgroundActivitySelectorComponent extends Box {
     this.addChild(new Spacer(1));
     this.addChild(detailText);
     this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', '↑↓ inspect · D abort running · Esc close'), 0, 0));
+    this.addChild(hintText);
 
     const first = options.activities[0];
     if (first) updateDetail(first);
+  }
+
+  /**
+   * The row's activity as it is now. A shell row is keyed by PID, so once a new
+   * call reuses the PID the row no longer names that call and acts on nothing.
+   */
+  private liveActivity(taskId: string): BackgroundActivity | undefined {
+    const live = this.getActivity(taskId);
+    return live && live.toolCallId === this.rows.get(taskId)?.toolCallId ? live : undefined;
+  }
+
+  private canAbort(activity: BackgroundActivity): boolean {
+    return activity.status === 'accepted' && (activity.kind !== 'process' || this.canControlProcesses);
   }
 
   handleInput(data: string): void {
     if (!this.focused) return;
     if (data.toLowerCase() === 'd') {
       const item = this.list.getSelectedItem();
-      const activity = item ? this.getActivity(item.value) : undefined;
-      if (activity?.status === 'accepted') this.onAbort(activity);
+      const activity = item ? this.liveActivity(item.value) : undefined;
+      if (activity && this.canAbort(activity)) this.onAbort(activity);
       return;
     }
     this.list.handleInput(data);
   }
+}
+
+function describeState(activity: BackgroundActivity): string {
+  if (activity.kind === 'process') {
+    const state =
+      activity.status === 'accepted'
+        ? 'running'
+        : activity.status === 'cancelled'
+          ? 'killed'
+          : `exit ${activity.exitCode ?? '?'}`;
+    return `${state} · PID ${activity.pid}`;
+  }
+  const state = activity.status === 'accepted' ? 'running' : activity.status;
+  return `${state} · task ${activity.taskId}`;
+}
+
+function kindIcon(activity: BackgroundActivity): string {
+  if (activity.kind === 'process') return theme.fg('toolTitle', '$');
+  return theme.fg('muted', '•');
 }
 
 function statusIcon(status: BackgroundActivity['status']): string {

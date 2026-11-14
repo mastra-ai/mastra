@@ -31,6 +31,7 @@ function disposeRemovedComponentReferences(state: TUIState, removed: ReadonlySet
   deleteRemovedMapValues(state.messageComponentsById, removed);
   deleteRemovedMapValues(state.pendingTools, removed);
   deleteRemovedMapValues(state.pendingSubagents, removed);
+  deleteRemovedMapValues(state.backgroundShellRows, removed, row => row as unknown as Component);
   deleteRemovedMapValues(state.pendingAskUserComponents, removed);
   deleteRemovedMapValues(state.pendingSubmitPlanComponents, removed);
   deleteRemovedMapValues(state.pendingSignalMessageComponentsById, removed, pending => pending.component);

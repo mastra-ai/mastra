@@ -50,6 +50,7 @@ function createToolHandlerContext(): EventHandlerContext {
     pendingTaskToolIds: new Set(),
     seenToolCallIds: new Set(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allToolComponents: [],

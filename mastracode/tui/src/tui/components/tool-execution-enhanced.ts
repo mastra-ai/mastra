@@ -36,6 +36,7 @@ import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
 import { statusDot, toolBlock } from './surface.js';
 import type {
+  BackgroundProcessExit,
   CommandExitRecord,
   CompactToolLabelColor,
   IToolExecutionComponent,
@@ -188,6 +189,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private result?: ToolResult;
   private backgroundTaskId?: string;
   private backgroundCancelled = false;
+  private backgroundProcessExit?: BackgroundProcessExit;
   private options: ToolExecutionOptions;
   private startTime = Date.now();
   private streamingOutput = ''; // Buffer for streaming shell output
@@ -288,6 +290,11 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   cancelBackground(): void {
     this.backgroundCancelled = true;
     this.isPartial = false;
+    this.rebuild();
+  }
+
+  setBackgroundProcessExit(exit: BackgroundProcessExit): void {
+    this.backgroundProcessExit = exit;
     this.rebuild();
   }
 
@@ -1521,8 +1528,20 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       return lines;
     };
 
-    const failed = this.getShellFailureLine() !== undefined;
     const output = this.streamingOutput.trim() || this.getFormattedOutput();
+    // A background shell's result only says it started; how it ended comes from its exit.
+    const processExit = this.backgroundProcessExit;
+    if (processExit) {
+      const exitFailed = !processExit.killed && processExit.exitCode !== 0;
+      const status = processExit.killed
+        ? theme.fg('muted', ' ■ killed')
+        : exitFailed
+          ? theme.fg('error', ` ✗ exit ${processExit.exitCode}`)
+          : theme.fg('muted', ` exit ${processExit.exitCode}`);
+      renderShellBlock(status, prepareOutputLines(output), exitFailed);
+      return;
+    }
+    const failed = this.getShellFailureLine() !== undefined;
     renderShellBlock(this.getStatusIndicator(failed), prepareOutputLines(output), failed);
   }
 
@@ -1580,8 +1599,16 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     let mark: string;
     let time: string;
     let errorLine: string | undefined;
-    if (isBackground && (this.backgroundTaskId || !running)) {
-      // Background results arrive later as their own chat entry, so this row never updates again.
+    const processExit = this.backgroundProcessExit;
+    if (isBackground && processExit) {
+      mark = processExit.killed
+        ? theme.fg('muted', '■')
+        : processExit.exitCode === 0
+          ? theme.fg('success', '✓')
+          : theme.fg('error', '✗');
+      time = processExit.killed ? 'killed' : `exit ${processExit.exitCode}`;
+    } else if (isBackground && (this.backgroundTaskId || !running)) {
+      // Task results arrive later as their own chat entry; a shell row updates once its process exits.
       mark = theme.fg('accent', '◷');
       time = 'started';
     } else if (running && this.liveUpdatesStopped) {

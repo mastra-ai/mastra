@@ -33,6 +33,7 @@ import {
   backgroundPlaceholderOptInScenario,
   backgroundPlaceholderOptOutScenario,
 } from './background-placeholder-opt-out.js';
+import { backgroundShellsScenario } from './background-shells.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -294,6 +295,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'background-adoption-failure': backgroundAdoptionFailureScenario,
   'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
+  'background-shells': backgroundShellsScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
   'experimental-agent-durable': experimentalAgentDurableScenario,

@@ -39,6 +39,7 @@ import {
   clearCompletedBackgroundActivitiesForTarget,
   compareBackgroundActivities,
   completeBackgroundActivity,
+  finishBackgroundProcessActivity,
   getBackgroundActivitiesForTarget,
 } from './background-activity.js';
 import type { BackgroundActivity } from './background-activity.js';
@@ -49,6 +50,7 @@ import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
 import { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import { BackgroundActivitySelectorComponent } from './components/background-activity-selector.js';
+import { BackgroundProcessOutputComponent } from './components/background-process-output.js';
 import { LoginDialogComponent } from './components/login-dialog.js';
 import { promptAuthMode } from './components/login-mode-selector.js';
 import { ModelSelectorComponent } from './components/model-selector.js';
@@ -367,13 +369,46 @@ export class MastraTUI {
       getActivity: taskId => this.state.backgroundActivities.get(taskId),
       onCancel: () => this.state.ui.hideOverlay(),
       onAbort: activity => void this.abortBackgroundActivity(activity),
+      onOpen: activity => void this.openBackgroundActivity(activity),
+      // Shells live in this process's sandbox; a remote session cannot reach it.
+      canControlProcesses: Boolean(this.state.local && this.state.options.backgroundProcesses),
     });
     showModalOverlay(this.state.ui, selector, { maxHeight: '80%' });
     selector.focused = true;
   }
 
+  private async openBackgroundActivity(activity: BackgroundActivity): Promise<void> {
+    if (activity.kind !== 'process') return;
+    try {
+      const handle = this.state.local ? await this.state.options.backgroundProcesses?.read(activity.pid!) : undefined;
+      this.state.ui.hideOverlay();
+      if (!handle) {
+        showInfo(this.state, `Process ${activity.pid} is no longer available.`);
+        return;
+      }
+      const overlay = new BackgroundProcessOutputComponent({
+        pid: activity.pid!,
+        command: handle.command,
+        exitCode: handle.exitCode,
+        stdout: handle.stdout,
+        stderr: handle.stderr,
+        onClose: () => this.state.ui.hideOverlay(),
+      });
+      showModalOverlay(this.state.ui, overlay, { widthPercent: 0.9, maxHeight: '80%' });
+      overlay.focused = true;
+    } catch (error) {
+      this.state.ui.hideOverlay();
+      showError(this.state, error instanceof Error ? error.message : 'Failed to read background process output');
+    }
+  }
+
   private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
     try {
+      if (activity.kind === 'process') {
+        const killed = this.state.local ? await this.state.options.backgroundProcesses?.kill(activity.pid!) : false;
+        if (!killed) showError(this.state, `Process ${activity.pid} is not running.`);
+        return;
+      }
       const manager = this.state.local?.controller.getMastra()?.backgroundTaskManager;
       if (!manager) return;
       await manager.cancel(activity.taskId);
@@ -387,7 +422,16 @@ export class MastraTUI {
   private handleBackgroundCompletion(event: BackgroundCompletionEvent): void {
     this.backgroundNoticeQueue = this.backgroundNoticeQueue
       .then(() => {
-        completeBackgroundActivity(this.state.backgroundActivities, event);
+        if (event.kind === 'process') {
+          finishBackgroundProcessActivity(this.state.backgroundActivities, event);
+          if (event.toolCallId) {
+            this.state.backgroundShellRows
+              .get(event.toolCallId)
+              ?.setBackgroundProcessExit?.({ exitCode: event.exitCode, killed: event.killed });
+          }
+        } else {
+          completeBackgroundActivity(this.state.backgroundActivities, event);
+        }
         this.refreshBackgroundActivity();
       })
       .catch(error => {

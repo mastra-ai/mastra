@@ -2,7 +2,7 @@ import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from './background-completion-events.js';
-import { createBackgroundCompletionCallbacks } from './background-completion.js';
+import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './background-completion.js';
 
 function createTask(status: BackgroundTask['status']): BackgroundTask {
   return {
@@ -85,6 +85,7 @@ describe('createBackgroundCompletionCallbacks', () => {
 
     expect(sendSignalToThread).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith({
+      kind: 'task',
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
       originRunId: 'run-1',
@@ -107,6 +108,7 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(sendSignalToThread).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith({
+      kind: 'task',
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
       originRunId: 'run-1',
@@ -189,5 +191,128 @@ describe('createBackgroundCompletionCallbacks', () => {
     await callbacks.onTaskComplete?.(createTask('completed'));
 
     expect(sendSignalToThread).not.toHaveBeenCalled();
+  });
+});
+
+function createSession({ resourceId = 'resource-1', currentThreadId = 'other-thread' } = {}) {
+  const accepted = () => ({ accepted: Promise.resolve({ accepted: true as const }) });
+  const sendSignal = vi.fn(accepted);
+  const sendSignalToThread = vi.fn(accepted);
+  const session = {
+    sendSignal,
+    sendSignalToThread,
+    identity: { getResourceId: () => resourceId },
+    thread: { getId: () => currentThreadId },
+  } as unknown as Session<unknown>;
+  return { session, sendSignal, sendSignalToThread };
+}
+
+describe('createBackgroundNoticeDelivery', () => {
+  const target = { resourceId: 'resource-1', threadId: 'thread-1' };
+  const signal = { id: 'background-process:42:call-1', type: 'notification' as const, contents: 'exited' };
+
+  function createDelivery(session?: Session<unknown>) {
+    const sessions = new Map<string, Session<unknown>>(session ? [['resource-1', session]] : []);
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async id => sessions.get(id) }));
+    return { delivery, sessions };
+  }
+
+  it('wakes the agent when the notice is for the thread the session is on', async () => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+
+    await createDelivery(session).delivery.deliver(target, signal);
+
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+    expect(sendSignal).toHaveBeenCalledWith(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true });
+  });
+
+  it.each([
+    ['the wake could not start', () => Promise.reject(new Error('no model'))],
+    ['the thread refused it', () => Promise.resolve({ accepted: true as const, action: 'blocked' as const })],
+  ])('saves the notice to the thread when %s', async (_case, accepted) => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    sendSignal.mockReturnValueOnce({ accepted: accepted() } as never);
+
+    await createDelivery(session).delivery.deliver(target, signal);
+
+    expect(sendSignal).toHaveBeenCalledOnce();
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
+  });
+
+  it('keeps a notice whose first send failed, and sends it on a later session', async () => {
+    const { session, sendSignalToThread } = createSession();
+    sendSignalToThread.mockReturnValueOnce({ accepted: Promise.reject(new Error('storage not ready')) });
+    const { delivery } = createDelivery(session);
+
+    await expect(delivery.deliver(target, signal)).rejects.toThrow('storage not ready');
+    await delivery.flush();
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds a notice until a session runs its resource, and sends it once', async () => {
+    const { delivery, sessions } = createDelivery();
+
+    await delivery.deliver(target, signal);
+    const { session, sendSignalToThread } = createSession();
+    sendSignalToThread.mockReturnValueOnce({ accepted: Promise.reject(new Error('storage not ready')) });
+    sessions.set('resource-1', session);
+    await delivery.flush();
+    await delivery.flush();
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('createBackgroundNoticeDelivery routing', () => {
+  const target = { resourceId: 'resource-1', threadId: 'thread-1' };
+  const signal = { id: 'n-1', type: 'notification' as const, contents: 'done' };
+
+  it('delivers to the session addressed by the thread id when sessions share a resource', async () => {
+    const { session, sendSignalToThread } = createSession();
+    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'thread-1' ? session : undefined));
+
+    await createBackgroundNoticeDelivery(() => ({ getSession })).deliver(target, signal);
+
+    expect(getSession).toHaveBeenCalledWith('thread-1');
+    expect(sendSignalToThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips a session addressed by the thread id that works on another resource', async () => {
+    const { session, sendSignalToThread } = createSession({ resourceId: 'resource-2' });
+
+    await createBackgroundNoticeDelivery(() => ({ getSession: async () => session })).deliver(target, signal);
+
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+  });
+
+  it('delivers to a live session that switched to the notice resource after it was created', async () => {
+    // Created as 'resource-0', then switched with `/resource`: still registered under 'resource-0'.
+    const { session, sendSignal } = createSession({ currentThreadId: 'thread-1' });
+    const getSession = vi.fn(async (sessionId: string) => (sessionId === 'resource-0' ? session : undefined));
+
+    await createBackgroundNoticeDelivery(() => ({ getSession, listLiveSessions: () => [session] })).deliver(
+      target,
+      signal,
+    );
+
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('never borrows another live session on the shared resource', async () => {
+    const a = createSession({ currentThreadId: 'run-a' });
+    const b = createSession({ currentThreadId: 'run-b' });
+
+    await createBackgroundNoticeDelivery(() => ({
+      getSession: async () => undefined,
+      listLiveSessions: () => [a.session, b.session],
+    })).deliver(target, signal);
+
+    for (const { sendSignal, sendSignalToThread } of [a, b]) {
+      expect(sendSignal).not.toHaveBeenCalled();
+      expect(sendSignalToThread).not.toHaveBeenCalled();
+    }
   });
 });

@@ -13,6 +13,8 @@ interface ToolGuidanceOptions {
   /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
   hasWebExtract?: boolean;
   hasSubagents?: boolean;
+  /** Background shells are on (`backgroundTools.enabled`). */
+  backgroundTools?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
   /** Workspace-relative directory where plan mode can write plans. */
@@ -261,6 +263,13 @@ ${patchToolGuidance}
 **subagent** — Delegate a focused task to a specialized subagent
 - Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
+  }
+
+  if (options.backgroundTools && !denied.has(MC_TOOLS.EXECUTE_COMMAND)) {
+    sections.push(`
+**Background work**
+- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.
+- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`);
   }
 
   return sections.join('\n');

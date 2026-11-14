@@ -5,6 +5,7 @@
  */
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { Component } from '@earendil-works/pi-tui';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { readPlanFile, resolvePlanPath } from '@mastra/code-sdk/utils/plans';
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { parseSubagentMeta } from '@mastra/core/agent-controller';
@@ -13,6 +14,13 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
+import {
+  finishedShellExit,
+  getBackgroundActivitiesForTarget,
+  parseBackgroundProcessPid,
+  processActivityKey,
+  startBackgroundProcessActivity,
+} from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -586,7 +594,12 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
         reconcileChatBoundarySpacers(state.chatContainer);
       }
     }
-    if (backgroundCompletion?.status === 'cancelled') {
+    if (backgroundCompletion?.kind === 'process' && backgroundCompletion.exitCode !== undefined) {
+      state.backgroundShellRows
+        .get(backgroundCompletion.originToolCallId)
+        ?.setBackgroundProcessExit?.({ exitCode: backgroundCompletion.exitCode, killed: false });
+    }
+    if (backgroundCompletion?.taskId && backgroundCompletion.status === 'cancelled') {
       const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
       const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
       toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
@@ -951,14 +964,19 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
+  state.backgroundShellRows.clear();
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
+  const backgroundProcessExits = new Map<string, number>();
+  const unlistedShells: UnlistedShell[] = [];
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
     const completion = getBackgroundCompletionView(message);
-    if (completion) {
+    if (completion?.kind === 'process' && completion.exitCode !== undefined) {
+      backgroundProcessExits.set(completion.originToolCallId, completion.exitCode);
+    } else if (completion?.taskId) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
       if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
     }
@@ -1165,6 +1183,28 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
+          if (toolName === MC_TOOLS.EXECUTE_COMMAND && state.options?.backgroundToolsEnabled && hasResult) {
+            const pid = parseBackgroundProcessPid(resultValue);
+            const processExit = backgroundProcessExits.get(part.toolCallId);
+            const exit =
+              (pid ? finishedShellExit(state.backgroundActivities, pid, part.toolCallId) : undefined) ??
+              (processExit !== undefined ? { exitCode: processExit, killed: false } : undefined);
+            if (exit) {
+              toolComponent.setBackgroundProcessExit(exit);
+            } else if (pid) {
+              // Still running, or its exit notice is yet to arrive.
+              state.backgroundShellRows.set(part.toolCallId, toolComponent);
+              if (!state.backgroundActivities.has(processActivityKey(pid))) {
+                unlistedShells.push({
+                  pid,
+                  toolCallId: part.toolCallId,
+                  args: toolArgs,
+                  createdAt: part.startedAt ?? Date.now(),
+                });
+              }
+            }
+          }
+
           // Successful task transition tools render through the pinned task UI,
           // not as regular tool result boxes.
           let replacedWithInline = false;
@@ -1325,6 +1365,46 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   if (!isCurrent()) return;
   reconcileChatBoundarySpacers(state.chatContainer);
   pruneChatContainer(state);
+  state.ui.requestRender();
+  await listRunningShells(state, unlistedShells, isCurrent);
+}
+
+interface UnlistedShell {
+  pid: string;
+  toolCallId: string;
+  args: unknown;
+  createdAt: number;
+}
+
+/**
+ * Adds replayed shells the activity list never saw start (their result came
+ * while another thread was shown) to Ctrl+G, once the sandbox confirms they
+ * still run.
+ */
+async function listRunningShells(state: TUIState, shells: UnlistedShell[], isCurrent: () => boolean): Promise<void> {
+  // Shells live in this process's sandbox; a remote session cannot reach it.
+  const processes = state.local ? state.options.backgroundProcesses : undefined;
+  if (!processes || shells.length === 0) return;
+  const threadId = state.session.thread.getId();
+  if (!threadId) return;
+  let listed = false;
+  for (const shell of shells) {
+    const handle = await processes.read(shell.pid).catch(() => undefined);
+    if (!isCurrent()) return;
+    if (!handle || handle.exitCode !== undefined) continue;
+    startBackgroundProcessActivity(state.backgroundActivities, shell.pid, shell.toolCallId, {
+      toolName: MC_TOOLS.EXECUTE_COMMAND,
+      resourceId: state.session.identity.getResourceId(),
+      threadId,
+      createdAt: shell.createdAt,
+      args: shell.args,
+    });
+    listed = true;
+  }
+  if (!listed) return;
+  state.globalBackgroundNotice.setActivities(
+    getBackgroundActivitiesForTarget(state.backgroundActivities, state.session.identity.getResourceId(), threadId),
+  );
   state.ui.requestRender();
 }
 

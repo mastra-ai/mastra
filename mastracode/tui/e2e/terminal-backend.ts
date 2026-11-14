@@ -455,6 +455,7 @@ async function startMastraCodeApp(
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
+    backgroundProcesses: result.backgroundProcesses,
     storageMaintenance: result.storageMaintenance,
     knowledgeInspector: result.knowledgeInspector,
     knowledgeInspectorUnavailableReason: result.knowledgeInspectorUnavailableReason,

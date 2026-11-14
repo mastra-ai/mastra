@@ -13,11 +13,28 @@ export interface NotificationOptions {
   status?: string;
   previewLineLimit?: number;
   backgroundCompletion?: {
-    taskId: string;
+    taskId?: string;
+    kind?: 'process';
+    pid?: string;
+    exitCode?: number;
     toolName?: string;
+    /** Set for a shell's exit: `Shell`. */
+    title?: string;
+    /** Set for a shell's exit: its description or command. */
+    summary?: string;
     argsSummary?: string;
     errorSummary?: string;
   };
+}
+
+/** One-line card for a background shell's exit, e.g. `↳ Shell finished · Running tests (exit 1)`. */
+function formatProcessExitLine(completion: NonNullable<NotificationOptions['backgroundCompletion']>): string {
+  const title = completion.title ?? completion.toolName ?? 'Shell';
+  const summary = completion.summary ? theme.fg('muted', ` · ${completion.summary}`) : '';
+  const failed = completion.exitCode !== 0;
+  const exit =
+    completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
+  return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
 }
 
 function normalizePreviewLineLimit(limit: number | undefined): number {
@@ -112,6 +129,11 @@ export class NotificationComponent extends WidthAwareContainer {
     // trimming. Collapsed background completions are already a single line —
     // that is their compact form — and their detail rows only exist once expanded.
     const compact = !this.expanded;
+    if (options.backgroundCompletion?.kind === 'process' && !this.expanded) {
+      const line = formatProcessExitLine(options.backgroundCompletion);
+      this.addChild(new Text(truncateToWidth(line, Math.max(1, width - BOX_INDENT)), BOX_INDENT, 0));
+      return;
+    }
     if (options.backgroundCompletion && !this.expanded) {
       const completion = options.backgroundCompletion;
       const failed = options.status === 'failed';
@@ -142,7 +164,9 @@ export class NotificationComponent extends WidthAwareContainer {
       : [];
     const backgroundDetailLines = options.backgroundCompletion
       ? [
-          `task · ${options.backgroundCompletion.taskId}`,
+          options.backgroundCompletion.taskId
+            ? `task · ${options.backgroundCompletion.taskId}`
+            : `PID · ${options.backgroundCompletion.pid}`,
           options.backgroundCompletion.argsSummary
             ? `invocation · ${options.backgroundCompletion.argsSummary}`
             : undefined,

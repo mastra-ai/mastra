@@ -14,6 +14,7 @@ import type { MastraCodeState } from '../schema.js';
 import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
 
+import type { BackgroundProcessNotices } from './background-processes.js';
 import { createMastraCodeWorkspaceTools, GOAL_JUDGE_READONLY_TOOLS } from './tool-availability.js';
 
 // =============================================================================
@@ -185,6 +186,8 @@ export async function getDynamicWorkspace({
   skillExtension,
   backgroundToolsEnabled = false,
   plansDir,
+  backgroundProcesses,
+  keepToolsConfig = false,
 }: {
   requestContext: RequestContext;
   mastra?: Mastra;
@@ -192,6 +195,14 @@ export async function getDynamicWorkspace({
   backgroundToolsEnabled?: boolean;
   /** Host-configured plans directory the plan-mode write guard allows. */
   plansDir?: string;
+  /** Reports background shell exits back to their thread. Shared by every workspace of the process. */
+  backgroundProcesses?: BackgroundProcessNotices;
+  /**
+   * Leave a registered workspace's tool config as it is. For callers that only
+   * read tools and do not know the agent's settings (the goal judge), which
+   * would otherwise reset the background config the agent's own runs rely on.
+   */
+  keepToolsConfig?: boolean;
 }) {
   const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = ctx?.getState();
@@ -218,7 +229,7 @@ export async function getDynamicWorkspace({
   // All modes share the same workspace tool configuration.  Per-mode tool
   // visibility is enforced at LLM-call time via `availableTools` /
   // `activeTools` on the AgentController, not by mutating workspace capabilities.
-  const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled, plansDir);
+  const workspaceTools = createMastraCodeWorkspaceTools(backgroundToolsEnabled, plansDir, backgroundProcesses);
 
   // Reuse existing workspace if already registered (preserves ProcessManager state)
   let existing: Workspace<LocalFilesystem, LocalSandbox> | undefined;
@@ -230,7 +241,7 @@ export async function getDynamicWorkspace({
 
   if (existing) {
     existing.filesystem.setAllowedPaths(allowedPaths);
-    existing.setToolsConfig(workspaceTools);
+    if (!keepToolsConfig) existing.setToolsConfig(workspaceTools);
     return existing;
   }
 
@@ -286,7 +297,7 @@ export async function getGoalJudgeTools({
 }): Promise<ToolsInput | undefined> {
   let workspace: Workspace;
   try {
-    workspace = await getDynamicWorkspace({ requestContext, mastra });
+    workspace = await getDynamicWorkspace({ requestContext, mastra, keepToolsConfig: true });
   } catch {
     return undefined;
   }

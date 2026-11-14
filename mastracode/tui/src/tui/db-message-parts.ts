@@ -517,10 +517,18 @@ export function getBackgroundWorkLifecycleView(message: MastraDBMessage): Backgr
 
 export interface BackgroundCompletionView {
   eventId?: string;
-  taskId: string;
+  /** Set for background tasks; background shells have a `pid` instead. */
+  taskId?: string;
+  kind?: 'process';
+  pid?: string;
+  exitCode?: number;
   originToolCallId: string;
   toolName?: string;
   status?: string;
+  /** Card title of a shell's exit: `Shell`. */
+  title?: string;
+  /** Card detail of a shell's exit: its description or command. */
+  summary?: string;
   argsSummary?: string;
   errorSummary?: string;
 }
@@ -529,14 +537,19 @@ export function getBackgroundCompletionView(message: MastraDBMessage): Backgroun
   const metadata = asRecord(getSignalView(message).metadata) ?? {};
   const completion = asRecord(metadata.backgroundCompletion);
   const taskId = asString(completion?.taskId);
+  const pid = completion?.kind === 'process' ? asString(completion?.pid) : undefined;
   const originToolCallId = asString(completion?.originToolCallId);
-  if (!taskId || !originToolCallId) return undefined;
+  if ((!taskId && !pid) || !originToolCallId) return undefined;
+  const exitCode = completion?.exitCode;
   return {
     eventId: asString(completion?.eventId),
-    taskId,
+    ...(taskId ? { taskId } : { kind: 'process' as const, pid }),
+    ...(typeof exitCode === 'number' ? { exitCode } : {}),
     originToolCallId,
     toolName: asString(completion?.toolName),
     status: asString(completion?.status),
+    title: asString(completion?.title),
+    summary: asString(completion?.summary),
     argsSummary: asString(completion?.argsSummary),
     errorSummary: asString(completion?.errorSummary),
   };

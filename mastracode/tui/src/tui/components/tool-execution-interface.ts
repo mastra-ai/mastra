@@ -23,6 +23,12 @@ export interface CommandExitRecord {
   executionTimeMs?: number;
 }
 
+export interface BackgroundProcessExit {
+  exitCode: number;
+  /** Killed by the agent, the user or a shutdown rather than exiting on its own. */
+  killed: boolean;
+}
+
 export interface IToolExecutionComponent {
   updateArgs(args: unknown, rebuild?: boolean): void;
   /** The tool and arguments this row shows (an approval for a different target must name its own). */
@@ -35,6 +41,8 @@ export interface IToolExecutionComponent {
   setBackgroundTaskId?(taskId: string): void;
   getBackgroundTaskId?(): string | undefined;
   cancelBackground?(): void;
+  /** Final state of a background shell, reported after the call returned its PID. */
+  setBackgroundProcessExit?(exit: BackgroundProcessExit): void;
   setExpanded(expanded: boolean): void;
   setPreviewLineLimit?(limit: number): void;
   setCompactToolModeColor?(color: string | undefined): void;

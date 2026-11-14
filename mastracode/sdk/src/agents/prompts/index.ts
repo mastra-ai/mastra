@@ -40,6 +40,8 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
   disabledTools?: readonly string[];
+  /** Background shells are on; adds guidance on when to use them. */
+  backgroundTools?: boolean;
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
   submitPlanAvailable?: boolean;
   currentDate: string;
@@ -139,6 +141,7 @@ export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?:
     hasWebSearch,
     hasWebExtract,
     hasSubagents: ctx.hasSubagents,
+    backgroundTools: ctx.backgroundTools,
     deniedTools,
     plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });

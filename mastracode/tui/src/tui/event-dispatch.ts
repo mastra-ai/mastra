@@ -1,6 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type {
   AgentControllerEvent,
@@ -11,7 +12,13 @@ import type {
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import type { AskUserSelectionMode } from '@mastra/core/tools';
 
-import { acceptBackgroundActivity, getBackgroundActivitiesForTarget } from './background-activity.js';
+import {
+  acceptBackgroundActivity,
+  finishedShellExit,
+  getBackgroundActivitiesForTarget,
+  parseBackgroundProcessPid,
+  startBackgroundProcessActivity,
+} from './background-activity.js';
 import { getBackgroundToolMetadata } from './background-tool-result.js';
 import {
   handleAgentStart,
@@ -271,6 +278,7 @@ export async function dispatchEvent(
             resourceId: state.session.identity.getResourceId(),
             threadId,
             createdAt: Date.now(),
+            args: event.args,
           });
         }
       }
@@ -336,8 +344,24 @@ export async function dispatchEvent(
         const background = getBackgroundToolMetadata(event.providerMetadata);
         const taskId = !event.isError && background?.status === 'running' ? background.taskId : undefined;
         const context = state.backgroundToolContexts.get(event.toolCallId);
-        if (taskId && context) {
-          acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
+        // The result names the PID; the exit arrives later as a `process` completion event.
+        const pid =
+          !event.isError && context?.toolName === MC_TOOLS.EXECUTE_COMMAND
+            ? parseBackgroundProcessPid(event.result)
+            : undefined;
+        if (pid && context) {
+          startBackgroundProcessActivity(state.backgroundActivities, pid, event.toolCallId, context);
+          const row = state.pendingTools.get(event.toolCallId);
+          if (row) {
+            // A command that ends at once can report its exit before its result.
+            const exit = finishedShellExit(state.backgroundActivities, pid, event.toolCallId);
+            if (exit) row.setBackgroundProcessExit?.(exit);
+            // Still running, or its exit notice is yet to arrive.
+            else state.backgroundShellRows.set(event.toolCallId, row);
+          }
+        }
+        if ((taskId || pid) && context) {
+          if (taskId) acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
           state.backgroundToolContexts.delete(event.toolCallId);
           state.globalBackgroundNotice.setActivities(
             getBackgroundActivitiesForTarget(

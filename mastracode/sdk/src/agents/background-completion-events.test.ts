@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from './background-completion-events.js';
 
 const event = {
+  kind: 'task' as const,
   id: 'background-task:task-1:completed',
   taskId: 'task-1',
   originRunId: 'run-1',
