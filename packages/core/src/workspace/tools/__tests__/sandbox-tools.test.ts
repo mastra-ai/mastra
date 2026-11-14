@@ -958,7 +958,7 @@ describe('background processes killed by an aborted run', () => {
   ])('tells onStdout and onExit who started the process from $when', async ({ context, expected }) => {
     const outputs: BackgroundProcessMeta[] = [];
     const exits: BackgroundProcessExitMeta[] = [];
-    const { start, cleanup } = await setup({
+    const { start, cleanup, sandbox } = await setup({
       onStdout: (_data, meta) => void outputs.push(meta),
       onExit: meta => void exits.push(meta),
     });
@@ -971,6 +971,9 @@ describe('background processes killed by an aborted run', () => {
         expect(meta).toMatchObject({ pid, ...expected });
         expect(meta.agentId).toBeUndefined();
       }
+      // The spawn metadata hosts list and filter by carries the same owner.
+      const [listed] = await sandbox.processes!.list();
+      expect(listed?.metadata).toMatchObject({ threadId: expected.threadId, resourceId: expected.resourceId });
     } finally {
       await cleanup();
     }

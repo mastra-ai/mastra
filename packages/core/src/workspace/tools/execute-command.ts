@@ -119,7 +119,7 @@ const SANDBOX_TEARDOWN_STATUSES: ReadonlySet<string> = new Set(['stopping', 'sto
 /**
  * Sends the exit of a background process to the agent's thread, with the end of its output:
  * the tool call only returned the PID. The agent must be registered on Mastra to be found
- * (subagents built per call are not), and the run needs a memory thread and resource.
+ * (agents built inside a tool or another agent are not), and the run needs a memory thread and resource.
  */
 async function notifyAgentOfExit(
   meta: BackgroundProcessExitMeta,
