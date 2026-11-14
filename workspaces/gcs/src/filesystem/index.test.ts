@@ -229,6 +229,25 @@ describe('GCSFilesystem', () => {
 
       expect(config.prefix).toBeUndefined();
     });
+
+    it('includes owner if set', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        owner: { uid: 3001, gid: 3002 },
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
+    it('excludes owner if not set', () => {
+      const fs = new GCSFilesystem({ bucket: 'test' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {

@@ -407,6 +407,26 @@ describe('S3Filesystem', () => {
 
       expect(config.prefix).toBeUndefined();
     });
+
+    it('includes owner if set', () => {
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        owner: { uid: 2001, gid: 2002 },
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 2001, gid: 2002 });
+    });
+
+    it('excludes owner if not set', () => {
+      const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {

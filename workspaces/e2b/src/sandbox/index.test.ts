@@ -1860,6 +1860,69 @@ describe('E2BSandbox Mount Configuration', () => {
       ),
     ).toBe(false);
   });
+
+  it('S3 mount uses explicit owner uid/gid and skips the id probe', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-owner',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+        owner: { uid: 2001, gid: 2002 },
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-owner');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-owner') && !call[0].includes('which'),
+    );
+
+    expect(s3fsMountCall).toBeDefined();
+    expect(s3fsMountCall?.[0]).toContain('uid=2001');
+    expect(s3fsMountCall?.[0]).toContain('gid=2002');
+    // The default user's uid/gid probe is skipped when an owner is configured
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(false);
+  });
+
+  it('S3 mount probes the default user uid/gid when no owner is set', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-s3-probe',
+      name: 'S3Filesystem',
+      provider: 's3',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 's3',
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        accessKeyId: 'key',
+        secretAccessKey: 'secret',
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/s3-probe');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const s3fsMountCall = calls.find(
+      (call: any[]) => call[0].includes('s3fs') && call[0].includes('/data/s3-probe') && !call[0].includes('which'),
+    );
+
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(true);
+    expect(s3fsMountCall?.[0]).toContain('uid=1000');
+    expect(s3fsMountCall?.[0]).toContain('gid=1000');
+  });
 });
 
 /**
@@ -2198,6 +2261,65 @@ describe('E2BSandbox GCS Mount Configuration', () => {
     if (gcsfuseCall) {
       expect(gcsfuseCall[0]).toContain('--anonymous-access');
     }
+  });
+
+  it('GCS mount uses explicit owner uid/gid and skips the id probe', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-owner',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'test-bucket',
+        serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+        owner: { uid: 3001, gid: 3002 },
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-owner');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-owner') && !call[0].includes('which'),
+    );
+
+    expect(gcsfuseCall).toBeDefined();
+    expect(gcsfuseCall?.[0]).toContain('--uid=3001');
+    expect(gcsfuseCall?.[0]).toContain('--gid=3002');
+    // The default user's uid/gid probe is skipped when an owner is configured
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(false);
+  });
+
+  it('GCS mount probes the default user uid/gid when no owner is set', async () => {
+    const sandbox = new E2BSandbox();
+    await sandbox._start();
+
+    const mockFilesystem = {
+      id: 'test-gcs-probe',
+      name: 'GCSFilesystem',
+      provider: 'gcs',
+      status: 'ready',
+      getMountConfig: () => ({
+        type: 'gcs',
+        bucket: 'test-bucket',
+        serviceAccountKey: JSON.stringify({ type: 'service_account', project_id: 'test' }),
+      }),
+    } as any;
+
+    await sandbox.mount(mockFilesystem, '/data/gcs-probe');
+
+    const calls = mockSandbox.commands.run.mock.calls;
+    const gcsfuseCall = calls.find(
+      (call: any[]) => call[0].includes('gcsfuse') && call[0].includes('/data/gcs-probe') && !call[0].includes('which'),
+    );
+
+    expect(calls.some((call: any[]) => call[0] === 'id -u && id -g')).toBe(true);
+    expect(gcsfuseCall?.[0]).toContain('--uid=1000');
+    expect(gcsfuseCall?.[0]).toContain('--gid=1000');
   });
 });
 
