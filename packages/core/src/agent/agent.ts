@@ -246,7 +246,11 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
-import { ExecutionEnginePolicy, hasNonJsonContextValue } from './streams/execution-engine';
+import {
+  CONTEXT_INSPECTION_MAX_NODES,
+  ExecutionEnginePolicy,
+  hasNonJsonContextValue,
+} from './streams/execution-engine';
 import type { ExecutionEngineDefaults } from './streams/execution-engine';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
@@ -1813,8 +1817,13 @@ export class Agent<
 
   #beginExecutionPolicy(requestContext?: RequestContext): void {
     this.#executionEnginePolicy.freeze();
-    if (!this.#executionEnginePolicy.inherited || !requestContext) return;
-    const entries = Array.from(requestContext.entries());
+    if (!this.#executionEnginePolicy.inherited || !requestContext || this.#executionPolicyWarnings.has('context'))
+      return;
+    const entries = [];
+    for (const entry of requestContext.entries()) {
+      entries.push(entry);
+      if (entries.length >= CONTEXT_INSPECTION_MAX_NODES) break;
+    }
     if (hasNonJsonContextValue(entries)) {
       this.#warnExecutionPolicy(
         'context',
@@ -10198,10 +10207,10 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
-    this.#beginExecutionPolicy(options?.requestContext);
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy(options?.requestContext);
 
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
@@ -11196,10 +11205,10 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    this.#beginExecutionPolicy(streamOptions?.requestContext);
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
+    this.#beginExecutionPolicy(streamOptions?.requestContext);
 
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);

@@ -74,6 +74,7 @@ export function hasNonJsonContextValue(value: unknown): boolean {
   const active = new WeakSet<object>();
   const completed = new WeakSet<object>();
   let nodes = 0;
+  let properties = 0;
   const inspect = (current: unknown, depth: number): boolean => {
     if (depth > CONTEXT_INSPECTION_MAX_DEPTH || ++nodes > CONTEXT_INSPECTION_MAX_NODES) return false;
     if (typeof current === 'function' || typeof current === 'symbol' || typeof current === 'bigint') return true;
@@ -84,8 +85,13 @@ export function hasNonJsonContextValue(value: unknown): boolean {
       const prototype = Object.getPrototypeOf(current);
       if (!Array.isArray(current) && prototype !== Object.prototype && prototype !== null) return true;
       active.add(current);
-      for (const descriptor of Object.values(Object.getOwnPropertyDescriptors(current))) {
-        if (descriptor.enumerable && 'value' in descriptor && inspect(descriptor.value, depth + 1)) return true;
+      // Enumerate incrementally rather than materializing every descriptor. Proxy
+      // ownKeys traps and the engine's enumeration bookkeeping remain best-effort.
+      for (const key in current) {
+        if (nodes >= CONTEXT_INSPECTION_MAX_NODES || properties >= CONTEXT_INSPECTION_MAX_NODES) break;
+        properties++;
+        const descriptor = Object.getOwnPropertyDescriptor(current, key);
+        if (descriptor?.enumerable && 'value' in descriptor && inspect(descriptor.value, depth + 1)) return true;
       }
       completed.add(current);
       return false;

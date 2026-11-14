@@ -6,8 +6,9 @@ import { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
 import { createDurableAgent, createEventedAgent, DurableAgent, EventedAgent } from '../../durable';
-import { hasDurableExecution, isDurableAgentLike } from '../../types';
+import { isDurableAgentLike } from '../../types';
 import type { AgentDurableOption } from '../../types';
+import { hasDurableExecution } from '../execution-capability';
 import type { ExecutionEngine } from '../execution-engine';
 
 const config = { id: 'policy', name: 'Policy', instructions: 'Help the user.', model: 'openai/gpt-4o' } as const;
@@ -105,6 +106,22 @@ describe('native Agent stored-registration policy', () => {
   });
 
   it.each(['stream', 'generate'] as const)(
+    'a %s rejected during synchronous message processing leaves selection provisional',
+    async method => {
+      const agent = new Agent(config);
+      const messages = [{ role: 'tool' as const, content: [] }];
+      Object.defineProperty(messages[0], 'content', {
+        get() {
+          throw new Error('Unreadable caller messages');
+        },
+      });
+      await expect(agent[method](messages, {})).rejects.toThrow('Unreadable caller messages');
+      new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'evented' } });
+      expect(agent.__getExecutionEnginePolicy()).toBe('evented');
+    },
+  );
+
+  it.each(['stream', 'generate'] as const)(
     'a rejected first %s still fixes the engine before asynchronous validation',
     async method => {
       const agent = new Agent({ ...config, requestContextSchema: z.object({ token: z.string() }) });
@@ -200,6 +217,38 @@ describe('native Agent stored-registration policy', () => {
 
 // COR-1563: wrapping an independently registered Agent must not leave inherited execution policy behind.
 describe('wrapper ownership overrides the whole inner durable field', () => {
+  it('does not restore wrapper-owned defaults from a non-engine host', () => {
+    const inner = new Agent(config);
+    createDurableAgent({ agent: inner });
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    new Mastra({ agents: { inner }, durable: { cleanupTimeoutMs: 999 } });
+    expect(inner.durable).toEqual({ executionEngine: false });
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation'))).toHaveLength(
+      0,
+    );
+  });
+
+  it.each(['unrelated', 'throwing'] as const)('preserves legacy capability with a %s strategy property', kind => {
+    const inner = new Agent(config);
+    const wrapped = createDurableAgent({ agent: inner });
+    const legacy = {
+      id: wrapped.id,
+      name: wrapped.name,
+      agent: inner,
+      stream: wrapped.stream.bind(wrapped),
+      recover: wrapped.recover.bind(wrapped),
+      recoverActiveRuns: wrapped.recoverActiveRuns.bind(wrapped),
+    };
+    Object.defineProperty(legacy, '__getExecutionEngineStrategy', {
+      get() {
+        if (kind === 'throwing') throw new Error('Not a core strategy protocol');
+        return () => 'third-party';
+      },
+    });
+    expect(isDurableAgentLike(legacy)).toBe(true);
+    expect(hasDurableExecution(legacy)).toBe(true);
+  });
+
   const wrappers = [
     { name: 'DurableAgent', engine: 'durable', wrap: (agent: Agent) => new DurableAgent({ agent }) },
     { name: 'EventedAgent', engine: 'evented', wrap: (agent: Agent) => new EventedAgent({ agent }) },

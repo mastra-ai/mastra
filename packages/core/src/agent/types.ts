@@ -1406,15 +1406,6 @@ export function isDurableAgentLike(obj: any): obj is DurableAgentLike {
   );
 }
 
-/** @internal Strategy metadata alone does not grant execution/recovery capability. */
-export function hasDurableExecution(obj: any): obj is DurableAgentLike {
-  if (!isDurableAgentLike(obj)) return false;
-  // Legacy adapters, including Inngest, do not expose a core strategy accessor.
-  if (!('__getExecutionEngineStrategy' in obj) || typeof obj.__getExecutionEngineStrategy !== 'function') return true;
-  const engine = obj.__getExecutionEngineStrategy();
-  return engine === 'durable' || engine === 'evented';
-}
-
 /**
  * Whether runs of `agent` publish on their stream topic, so another reader can
  * follow them with `observe()`. True for durable wrappers and for agents with

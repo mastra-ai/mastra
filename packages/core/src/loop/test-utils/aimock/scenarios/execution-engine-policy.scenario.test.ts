@@ -2,7 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
-import { hasDurableExecution } from '../../../../agent/types';
+import { hasDurableExecution } from '../../../../agent/streams/execution-capability';
 import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';

@@ -138,6 +138,18 @@ describe('best-effort caller context diagnostics', () => {
     expect(hasNonJsonContextValue(nest(CONTEXT_INSPECTION_MAX_DEPTH + 1))).toBe(false);
   });
 
+  it('stops reflecting on a wide context once the inspection budget is exhausted', () => {
+    let descriptors = 0;
+    const wide = new Proxy(Object.fromEntries(Array.from({ length: 10_000 }, (_, index) => [index, null])), {
+      getOwnPropertyDescriptor(target, key) {
+        descriptors++;
+        return Reflect.getOwnPropertyDescriptor(target, key);
+      },
+    });
+    expect(hasNonJsonContextValue(wide)).toBe(false);
+    expect(descriptors).toBeLessThanOrEqual(CONTEXT_INSPECTION_MAX_NODES * 2);
+  });
+
   it('includes the node boundary but stops beyond it', () => {
     expect(hasNonJsonContextValue([...Array(CONTEXT_INSPECTION_MAX_NODES - 2).fill(null), 1n])).toBe(true);
     expect(hasNonJsonContextValue([...Array(CONTEXT_INSPECTION_MAX_NODES - 1).fill(null), 1n])).toBe(false);
