@@ -6,7 +6,7 @@ import { Button } from '../Button';
 
 interface GatewayDictationProps {
   baseUrl: string;
-  models: readonly { id: string }[];
+  model?: string;
   onTranscript: (text: string) => void;
   disabled?: boolean;
 }
@@ -24,14 +24,12 @@ function recordingFormat(): { mimeType: string; extension: string } | undefined 
 }
 
 /** Records one utterance, then inserts its Gateway transcript into the composer. */
-export function GatewayDictation({ baseUrl, models, onTranscript, disabled }: GatewayDictationProps) {
-  const [selectedModel, setSelectedModel] = useState<string>();
+export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: GatewayDictationProps) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
   const [error, setError] = useState<string>();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const model = models.some(item => item.id === selectedModel) ? selectedModel : models[0]?.id;
   const format = recordingFormat();
 
   useEffect(
@@ -90,19 +88,6 @@ export function GatewayDictation({ baseUrl, models, onTranscript, disabled }: Ga
 
   return (
     <div className="flex items-center gap-2">
-      <select
-        aria-label="Transcription model"
-        className="max-w-28"
-        value={model}
-        onChange={event => setSelectedModel(event.target.value)}
-        disabled={disabled || recording || transcribing}
-      >
-        {models.map(item => (
-          <option key={item.id} value={item.id}>
-            {item.id}
-          </option>
-        ))}
-      </select>
       <Button
         type="button"
         variant="ghost"

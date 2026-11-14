@@ -242,7 +242,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       expect(screen.queryByRole('button', { name: 'Start dictation' })).toBeNull();
-      expect(screen.queryByLabelText('Gateway speech settings')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Voice settings' })).toBeNull();
     });
 
     it('hides speech controls when the deployed user is denied access', async () => {
@@ -259,7 +259,7 @@ describe('Thread', () => {
 
       await waitFor(() => expect(accessChecked).toHaveBeenCalledOnce());
       expect(screen.queryByRole('button', { name: 'Start dictation' })).toBeNull();
-      expect(screen.queryByLabelText('Gateway speech settings')).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Voice settings' })).toBeNull();
     });
   });
 
@@ -285,10 +285,12 @@ describe('Thread', () => {
       );
       renderThread([assistantMessage('A reply')]);
 
-      expect(await screen.findByLabelText('Gateway speech settings')).toBeTruthy();
+      const voiceSettings = await screen.findByRole('button', { name: 'Voice settings' });
+      expect(screen.queryByRole('combobox', { name: 'Speech model' })).toBeNull();
+      fireEvent.click(voiceSettings);
       expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Speech model' }).value).toBe('minimax/speech');
-      fireEvent.change(screen.getByRole('textbox', { name: 'Gateway voice ID' }), { target: { value: 'sarah' } });
-      expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Gateway voice ID' }).value).toBe('sarah');
+      fireEvent.change(screen.getByRole('textbox', { name: 'Voice ID' }), { target: { value: 'sarah' } });
+      expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Voice ID' }).value).toBe('sarah');
       fireEvent.click(screen.getByRole('button', { name: 'Start dictation' }));
       fireEvent.click(await screen.findByRole('button', { name: 'Stop dictation' }));
 

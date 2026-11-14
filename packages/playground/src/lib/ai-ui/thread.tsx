@@ -20,7 +20,6 @@ import {
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
-import { GatewayDictation } from '@mastra/playground-ui/components/GatewayDictation';
 import { MessageScrollerItem } from '@mastra/playground-ui/components/MessageScroller';
 import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
 import {
@@ -47,8 +46,8 @@ import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
-import { GatewaySpeechControls } from './chat/gateway-speech-controls';
-import type { GatewaySpeechSelection } from './chat/gateway-speech-controls';
+import { GatewayAudioComposerActions } from './chat/gateway-audio-composer-actions';
+import type { GatewaySpeechSelection } from './chat/gateway-audio-composer-actions';
 import { useGatewayReadAloud } from './chat/use-gateway-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
@@ -617,13 +616,12 @@ const ComposerActionRow = ({
           </>
         )}
         {canExecute && gatewayAudio && (
-          <GatewayDictation baseUrl={gatewayBaseUrl} models={gatewayAudio.transcription} onTranscript={onSetText} />
-        )}
-        {canExecute && gatewayAudio && (
-          <GatewaySpeechControls
-            models={gatewayAudio.speech}
-            selection={speechSelection}
-            onSelectionChange={onSpeechSelectionChange}
+          <GatewayAudioComposerActions
+            baseUrl={gatewayBaseUrl}
+            models={gatewayAudio}
+            onTranscript={onSetText}
+            speechSelection={speechSelection}
+            onSpeechSelectionChange={onSpeechSelectionChange}
             playback={speechPlayback}
           />
         )}
