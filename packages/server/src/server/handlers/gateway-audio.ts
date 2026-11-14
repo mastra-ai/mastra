@@ -99,6 +99,7 @@ export const GET_GATEWAY_AUDIO_MODELS_ROUTE = createRoute({
   responseType: 'datastream-response',
   requiresAuth: true,
   summary: 'List Gateway audio models available to this deployment',
+  description: 'Lists speech and transcription models for deployments with Gateway audio access.',
   tags: ['System', 'Voice'],
   handler: async ({ request }) => {
     const config = gatewayConfig();
@@ -132,6 +133,7 @@ export const POST_GATEWAY_AUDIO_SPEECH_ROUTE = createRoute({
   requiresAuth: true,
   bodySchema: speechBodySchema,
   summary: 'Generate Gateway MP3 speech',
+  description: 'Generates an MP3 recording from text using a Gateway speech model.',
   tags: ['System', 'Voice'],
   handler: async ({ request, model, input, voice }) => {
     if (!trustedBrowserRequest(request)) return unavailable();
@@ -159,6 +161,7 @@ export const POST_GATEWAY_AUDIO_TRANSCRIPTION_ROUTE = createRoute({
   requiresAuth: true,
   maxBodySize: MAX_AUDIO_BYTES + 64 * 1024,
   summary: 'Transcribe recorded audio through Gateway',
+  description: 'Transcribes an uploaded audio recording using a Gateway transcription model.',
   tags: ['System', 'Voice'],
   handler: async ({ request }) => {
     if (!trustedBrowserRequest(request)) return unavailable();

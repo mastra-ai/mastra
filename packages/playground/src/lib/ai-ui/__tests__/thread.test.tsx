@@ -363,25 +363,26 @@ describe('Thread', () => {
   });
 
   describe('when the user edits the composer after dictating', () => {
-    beforeEach(() => installFakeSpeechRecognition());
-    afterEach(() => uninstallFakeSpeechRecognition());
-
     it('keeps the edit', async () => {
-      server.use(...baseHandlers());
+      window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+      installFakeRecorder();
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/system/gateway-audio/models`, () =>
+          HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
+        ),
+        http.post(`${BASE_URL}/api/system/gateway-audio/transcriptions`, () =>
+          HttpResponse.json({ text: 'Accept the newer address.' }),
+        ),
+      );
       await act(async () => {
         renderThread([]);
       });
       fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
       await screen.findByRole('button', { name: 'Stop dictation' });
-      act(() => {
-        lastRecognition?.onresult?.({
-          resultIndex: 0,
-          results: [{ 0: { transcript: 'Accept the newer address.' }, isFinal: true }],
-        });
-      });
       fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
       const composer = screen.getByRole<HTMLTextAreaElement>('textbox');
-      await waitFor(() => expect(composer.value).toBe('Accept the newer address. '));
+      await waitFor(() => expect(composer.value).toBe('Accept the newer address.'));
 
       await act(async () => {
         fireEvent.change(composer, { target: { value: 'Accept the newer address. Thanks' } });
@@ -1023,11 +1024,12 @@ describe('Thread', () => {
         }),
       );
       const read = FileReader.prototype.readAsArrayBuffer;
-      const probe = vi
-        .spyOn(FileReader.prototype, 'readAsArrayBuffer')
-        .mockImplementation(function (this: FileReader, blob) {
-          void pending.then(() => read.call(this, blob));
-        });
+      const probe = vi.spyOn(FileReader.prototype, 'readAsArrayBuffer').mockImplementation(function (
+        this: FileReader,
+        blob,
+      ) {
+        void pending.then(() => read.call(this, blob));
+      });
       try {
         await act(async () => {
           renderThread([]);
