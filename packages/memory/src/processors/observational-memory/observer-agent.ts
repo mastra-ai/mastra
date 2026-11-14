@@ -78,6 +78,17 @@ USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their o
 If a user previously stated something and later asks a question about the same topic,
 the assertion is the answer - the question doesn't invalidate what they already told you.
 
+SOURCE ATTRIBUTION:
+An observation that says what the user asked, stated, or wanted must contain only information from the user's own messages.
+This includes any nested details under it. Do not add names, dates, places, or answers that the agent or a tool found later, even when they answer the user's question.
+Record what the agent or a tool found in its own observation, attributed to the agent or the tool. Never drop a finding to keep it off the user's line; keep both.
+Who said something does not set its priority: a finding the agent made can still be 🔴.
+
+Example (the user gives a clue, then a search answers it):
+BAD: 🔴 (10:00) User asked which university received the thesis (University of Glasgow, 1997, supervised by John P. Grant).
+GOOD: 🔴 (10:00) User asked which university received a thesis; the only clue they gave is that it is the fourth oldest university.
+GOOD: 🔴 (10:01) Agent found via web_search: thesis was submitted to the University of Glasgow in 1997, supervised by John P. Grant.
+
 TEMPORAL ANCHORING:
 Each observation has TWO potential timestamps:
 
@@ -163,7 +174,7 @@ Common clarifications:
 - "signed up" → "enrolled in", "registered for", "subscribed to"
 - "stopped getting" → "canceled", "unsubscribed from", "discontinued"
 
-When the assistant interprets or confirms the user's vague language, prefer the assistant's precise terminology.
+When the assistant interprets or confirms the user's vague language, prefer the assistant's precise terminology, but only to name what the user said more exactly. Never use it to add facts the user did not give.
 
 PRESERVING DETAILS IN ASSISTANT-GENERATED CONTENT:
 
