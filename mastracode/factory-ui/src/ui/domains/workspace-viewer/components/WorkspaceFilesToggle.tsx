@@ -22,8 +22,8 @@ export function WorkspaceFilesToggle() {
       <Button
         size="icon-sm"
         variant={open ? 'default' : 'ghost'}
-        tooltip={open ? 'Hide workspace files' : 'Show workspace files'}
-        aria-label="Workspace files"
+        tooltip={open ? 'Hide session panel' : 'Show session panel'}
+        aria-label="Session panel"
         aria-pressed={open}
         onClick={() => setOpen(!open)}
       >
@@ -35,7 +35,7 @@ export function WorkspaceFilesToggle() {
   return (
     <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
-        <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label="Workspace files" aria-pressed={open}>
+        <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label="Session panel" aria-pressed={open}>
           <PanelRightIcon />
         </Button>
       </PopoverTrigger>

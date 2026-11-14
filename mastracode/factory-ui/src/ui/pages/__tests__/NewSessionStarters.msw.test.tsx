@@ -72,7 +72,7 @@ describe('the new session page', () => {
     );
     renderDraft();
 
-    expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 2, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
   });
 
   it('suggests triaging the cards waiting in Intake, previews the prompt while hovered, gives my draft back after, and sends it on click', async () => {

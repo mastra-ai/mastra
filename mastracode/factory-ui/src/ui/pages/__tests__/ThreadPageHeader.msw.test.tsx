@@ -191,31 +191,28 @@ afterEach(() => {
 });
 
 describe('ThreadPage header', () => {
-  it('keeps the sidebar toggle and the session breadcrumb in a single header', async () => {
+  it('leaves the session and the board to the sidebar, keeping its toggle in a single header', async () => {
     window.localStorage.setItem(SIDEBAR_STATE_KEY, 'collapsed');
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    const header = breadcrumb.closest('header');
-    expect(header).not.toBeNull();
-    expect(screen.getByRole('button', { name: 'Toggle sidebar' }).closest('header')).toBe(header);
+    const header = await findPageHeader();
+    // The stage bar waits on the card, so by now the header has everything it will show.
+    expect(await within(header).findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
+    expect(within(header).queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Toggle sidebar' })).toBeInTheDocument();
     expect(screen.queryByLabelText('Open navigation menu')).not.toBeInTheDocument();
-    expect(within(header!).getByText('Issue #42: Fix the flaky login test')).toBeInTheDocument();
-    expect(within(header!).getByRole('link', { name: 'Work' })).toBeInTheDocument();
+    expect(within(header).queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
   });
 
-  it('shows the user session title in the breadcrumb', async () => {
+  it('titles a user session with its own name', async () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    const header = breadcrumb.closest('header');
-    expect(header).not.toBeNull();
-    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
-    expect(within(breadcrumb).getByText('salut ca va ?')).toBeInTheDocument();
-    expect(within(breadcrumb).queryByRole('link')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace files' }).closest('header')).toBe(header);
+    const header = await findPageHeader();
+    expect(await within(header).findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
+    expect(within(header).queryByText('User sessions')).not.toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
   });
 
   it('shares from the header and restores privacy from the sidebar menu', async () => {
@@ -295,19 +292,16 @@ describe('ThreadPage header', () => {
     });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    await within(breadcrumb).findByText('salut ca va ?');
-    expect(within(breadcrumb).queryByText('New session')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: 'salut ca va ?' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1, name: 'New session' })).not.toBeInTheDocument();
   });
 
-  it('shows the draft breadcrumb on the new session page', async () => {
+  it('titles the new session page', async () => {
     stubThreadRoute();
     renderRoute(`/factories/${FACTORY_ID}/user/new/draft-1`);
 
-    const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
-    expect(breadcrumb.closest('header')).not.toBeNull();
-    expect(within(breadcrumb).getByText('User sessions')).toBeInTheDocument();
-    expect(within(breadcrumb).getByText('New session')).toBeInTheDocument();
+    const header = await findPageHeader();
+    expect(within(header).getByRole('heading', { level: 1, name: 'New session' })).toBeInTheDocument();
   });
 
   it('carries the sidebar toggle while the session resolves', async () => {

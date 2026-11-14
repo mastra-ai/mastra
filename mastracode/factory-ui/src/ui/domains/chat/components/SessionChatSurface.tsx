@@ -24,7 +24,6 @@ interface SessionChatSurfaceProps {
   className?: string;
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
-  stageSurface?: ReactNode;
 }
 
 export function SessionChatSurface({
@@ -36,7 +35,6 @@ export function SessionChatSurface({
   className,
   contentRef,
   contentOverlay,
-  stageSurface,
 }: SessionChatSurfaceProps) {
   const { busy, loadMore, transcript } = useChatTranscript();
   const { historyInitializing, preparing } = useChatMessagePreparation();
@@ -85,7 +83,6 @@ export function SessionChatSurface({
             </ChatShell.Dock>
           </div>
         </ChatShell.Viewport>
-        {stageSurface}
       </ChatShell.Stage>
     </ChatShell>
   );

@@ -1,4 +1,5 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,14 +7,15 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { workBoardCatalog } from '../../../../../e2e/ui/board-catalog';
+import { listedRepository } from '../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render';
 import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards';
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
-import type { BoardCatalogResponse } from '../../../../api/types';
+import type { BoardCatalogResponse, InstalledBoardInfo } from '../../../../api/types';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionPage } from '../components/RelatedFactorySessions';
+import type { FactoryDecisionSummary } from '../services/decisions';
 
 const FACTORY_ID = 'factory-1';
 const REPOSITORY_ID = 'repository-1';
@@ -66,20 +68,8 @@ function workItem(url: string | undefined) {
   };
 }
 
-function linearWorkItem(url: string) {
-  return {
-    ...workItem(url),
-    externalSource: {
-      integrationId: 'linear',
-      type: 'issue',
-      externalId: 'linear-issue:ENG-123',
-      url,
-    },
-    metadata: { identifier: 'ENG-123' },
-  };
-}
-
-function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linearWorkItem>) {
+/** Serves `item` as the session's card; it is sent as wire JSON, so any card shape goes. */
+function stubHeader(item: unknown) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
@@ -90,6 +80,13 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [item] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+      HttpResponse.json({
+        projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [listedRepository(REPOSITORY_ID, 'acme/app')] }],
+      }),
+    ),
+    // The stage bar reads the intake config to pick a repository for a card that leaves for a working phase.
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
   );
 }
 
@@ -108,154 +105,239 @@ function renderHeader() {
           />
         </Routes>
       </SidebarProvider>
+      <Toaster />
     </MemoryRouter>,
   );
 }
 
 describe('FactorySessionPage', () => {
-  describe('when a related work item has a session', () => {
-    it.each([true, false])('links to the session when live=%s, or its board otherwise', async live => {
-      const currentItem = workItem(undefined);
-      const relatedSession = {
-        ...workspaceSession,
-        id: 'related-row',
-        sessionId: 'related-session',
-        branch: 'factory/issue-8',
-      };
-      const relatedItem = {
-        ...workItem(undefined),
-        id: 'related-item',
-        parentWorkItemId: currentItem.id,
-        title: 'Follow-up work',
-        metadata: { number: 8 },
+  describe('while the board is still loading', () => {
+    it("names the session among the card's others before the board arrives", async () => {
+      const card = workItem(undefined);
+      const currentItem = {
+        ...card,
         sessions: {
-          execute: {
-            sessionId: relatedSession.sessionId,
-            branch: relatedSession.branch,
-            threadId: 'related-thread',
+          ...card.sessions,
+          triage: {
+            sessionId: 'triage-session',
+            branch: 'factory/issue-7-triage',
+            threadId: 'triage-thread',
             startedBy: 'user-1',
           },
         },
       };
       stubHeader(currentItem);
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-          HttpResponse.json({ workItems: [currentItem, relatedItem] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-          HttpResponse.json({ sessions: live ? [workspaceSession, relatedSession] : [workspaceSession] }),
-        ),
-      );
+      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [currentItem]));
       renderHeader();
 
-      const link = await screen.findByRole('link', { name: /Open .*Follow-up work/ });
-      expect(link).toHaveAttribute(
-        'href',
-        live
-          ? `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`
-          : `/factories/${FACTORY_ID}/work`,
-      );
+      expect(await screen.findByRole('heading', { level: 1, name: 'Execute session' })).toBeInTheDocument();
     });
   });
 
-  describe('while the board is still loading', () => {
-    it("names the session's card and links its related work", async () => {
-      const currentItem = workItem(undefined);
-      const relatedItem = {
+  it('leaves the session, the board and the card to the sidebar and the panel when the card holds one session', async () => {
+    stubHeader(workItem(undefined));
+    renderHeader();
+
+    expect(await screen.findByRole('group', { name: 'Card stage' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { level: 1 })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Issue #7: Fix sandbox setup')).not.toBeInTheDocument();
+  });
+
+  describe("the stage bar follows the card's own board", () => {
+    const to = (...phases: string[]) => phases.map(phase => ({ outcome: null, to: phase }));
+    /** A board someone drew in the UI: none of Work's phase names, and its own moves. */
+    const launchBoard: InstalledBoardInfo = {
+      id: 'launch',
+      name: 'Launch',
+      title: 'Launch',
+      initialPhase: 'drafting',
+      phases: [
+        { id: 'drafting', name: 'Drafting', title: 'Drafting', kind: 'resting', transitions: to('writing', 'shelved') },
+        {
+          id: 'writing',
+          name: 'Writing',
+          title: 'Writing',
+          kind: 'working',
+          context: 'work',
+          role: 'work',
+          transitions: to('drafting', 'proofing', 'shelved'),
+        },
+        {
+          id: 'proofing',
+          name: 'Proofing',
+          title: 'Proofing',
+          kind: 'working',
+          context: 'review',
+          role: 'review',
+          transitions: to('writing', 'published'),
+        },
+        { id: 'published', name: 'Published', title: 'Published', kind: 'terminal', transitions: [] },
+        { id: 'shelved', name: 'Shelved', title: 'Shelved', kind: 'terminal', transitions: to('drafting') },
+      ],
+    };
+
+    function launchCard(stage: string, revision = 1) {
+      return {
         ...workItem(undefined),
-        id: 'related-item',
-        parentWorkItemId: currentItem.id,
-        title: 'Follow-up work',
-        metadata: { number: 8 },
-        sessions: {},
+        board: 'launch',
+        stages: [stage],
+        stageHistory: [{ stage, enteredAt: new Date(Date.now() - 46 * 60_000).toISOString(), by: 'user-1' }],
+        sessions: {
+          work: { sessionId: SESSION_ID, branch: 'factory/issue-7', threadId: THREAD_ID, startedBy: 'user-1' },
+        },
+        revision,
       };
-      stubHeader(currentItem);
-      server.use(sessionCardsWhileBoardLoads(FACTORY_ID, SESSION_ID, [currentItem, relatedItem]));
-      renderHeader();
+    }
 
-      expect(await screen.findByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /Open .*Follow-up work/ })).toHaveAttribute(
-        'href',
-        `/factories/${FACTORY_ID}/work`,
-      );
-    });
-  });
-
-  describe("the breadcrumb leads to the card's own board", () => {
-    it('names and links Work for a card on Work', async () => {
-      stubHeader(workItem(undefined));
-      renderHeader();
-
-      expect(await screen.findByRole('link', { name: 'Work' })).toHaveAttribute(
-        'href',
-        `/factories/${FACTORY_ID}/work`,
-      );
-    });
-
-    it('names and links an installed board for a card on it', async () => {
-      stubHeader({ ...workItem(undefined), board: 'release' } as ReturnType<typeof workItem>);
+    /** Serves the card as the server holds it, and answers its move with `result`. */
+    function stubLaunchCard(stage: string, result: (body: Record<string, unknown>) => Record<string, unknown>) {
+      let card = launchCard(stage);
+      const moves: Record<string, unknown>[] = [];
+      stubHeader(card);
       server.use(
         http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
-          HttpResponse.json({
-            boards: [
-              {
-                id: 'release',
-                name: 'Release train',
-                title: 'Release train',
-                initialPhase: 'queued',
-                phases: [
-                  { id: 'queued', name: 'Queued', title: 'Queued', kind: 'resting', nextPhases: [], transitions: [] },
-                ],
-              },
-            ],
-          }),
+          HttpResponse.json({ boards: [launchBoard] } satisfies BoardCatalogResponse),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [card] }),
+        ),
+        http.post(
+          `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${card.id}/transition`,
+          async ({ request }) => {
+            const body = (await request.json()) as Record<string, unknown>;
+            moves.push(body);
+            const answer = result(body);
+            if (answer.status === 'accepted') card = launchCard(String(body.stage), Number(answer.revision));
+            return HttpResponse.json({ result: answer });
+          },
+        ),
+      );
+      return moves;
+    }
+
+    it("offers the board's phases around the card's, each saying what the move does", async () => {
+      const user = userEvent.setup();
+      stubLaunchCard('writing', () => ({}));
+      renderHeader();
+
+      const stageBar = await screen.findByRole('group', { name: 'Card stage' });
+      expect(within(stageBar).getByRole('button', { name: 'Move back to Drafting' })).toBeEnabled();
+      expect(within(stageBar).getByRole('button', { name: 'Move to Proofing' })).toBeEnabled();
+      await user.click(within(stageBar).getByRole('button', { name: 'Change stage from Writing' }));
+
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByText('Factory works on it in this session')).toBeInTheDocument();
+      const items = (group: string) =>
+        within(within(menu).getByRole('group', { name: group }))
+          .getAllByRole('menuitem')
+          .map(item => item.getAttribute('aria-label'));
+      expect(items('Forward')).toEqual(['Move to Proofing']);
+      expect(items('Back')).toEqual(['Move to Drafting']);
+      expect(items('Stop')).toEqual(['Move to Shelved']);
+      expect(within(menu).getByRole('menuitem', { name: 'Move to Proofing' })).toHaveTextContent(
+        'Factory works on it in the Proofing session',
+      );
+      expect(within(menu).getByText("Published can't be reached from Writing")).toBeInTheDocument();
+    });
+
+    it('moves the card on to the next phase', async () => {
+      const user = userEvent.setup();
+      const moves = stubLaunchCard('writing', body => ({
+        status: 'accepted',
+        transitionId: 'transition-1',
+        itemId: 'work-item-1',
+        revision: 2,
+        stage: body.stage,
+        decisions: [],
+      }));
+      renderHeader();
+
+      await user.click(await screen.findByRole('button', { name: 'Move to Proofing' }));
+
+      expect(await screen.findByRole('button', { name: 'Change stage from Proofing' })).toBeInTheDocument();
+      expect(moves).toEqual([
+        expect.objectContaining({ board: 'launch', stage: 'proofing', expectedRevision: 1, cause: 'card_action' }),
+      ]);
+      expect(screen.getByRole('button', { name: 'Move to Published' })).toBeEnabled();
+    });
+
+    it('says why the server refused a move and leaves the card where it was', async () => {
+      const user = userEvent.setup();
+      stubLaunchCard('writing', () => ({
+        status: 'rejected',
+        transitionId: 'transition-1',
+        itemId: 'work-item-1',
+        code: 'approval_required',
+        reason: 'Proofing needs an editor to sign off first',
+      }));
+      renderHeader();
+
+      await user.click(await screen.findByRole('button', { name: 'Change stage from Writing' }));
+      await user.click(await screen.findByRole('menuitem', { name: 'Move to Proofing' }));
+
+      expect(await screen.findByText('Proofing needs an editor to sign off first')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Change stage from Writing' })).toBeInTheDocument();
+    });
+
+    it.each([
+      ['writing', 'Writing', 'a phase Factory works in', '46m'],
+      ['drafting', 'Drafting', 'a phase the card waits in', undefined],
+      ['published', 'Published', 'a phase the card ends in', undefined],
+    ])('times the card in %s only when it is %s', async (stage, name, _kind, elapsed) => {
+      stubLaunchCard(stage, () => ({}));
+      renderHeader();
+
+      const current = await screen.findByRole('button', { name: `Change stage from ${name}` });
+      if (elapsed) expect(current).toHaveTextContent(elapsed);
+      else expect(current).toHaveTextContent(new RegExp(`^${name}$`));
+    });
+
+    it('offers no arrow toward a phase the card never enters from its own', async () => {
+      stubLaunchCard('published', () => ({}));
+      renderHeader();
+
+      expect(await screen.findByRole('button', { name: 'Change stage from Published' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Move (back )?to / })).not.toBeInTheDocument();
+    });
+
+    it('holds back moves that would start a run while automation works the card', async () => {
+      const user = userEvent.setup();
+      stubLaunchCard('writing', () => ({}));
+      const runningEffect: FactoryDecisionSummary = {
+        id: 'decision-1',
+        evaluationId: 'evaluation-1',
+        workItemId: 'work-item-1',
+        type: 'invokeSkill',
+        role: 'work',
+        source: null,
+        status: 'leased',
+        attempts: 1,
+        failureOccurrence: 0,
+        failureCode: null,
+        canRetry: false,
+        lastError: null,
+        createdAt: '2026-07-29T00:00:00.000Z',
+        updatedAt: '2026-07-29T00:00:00.000Z',
+        completedAt: null,
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+          HttpResponse.json({ decisions: [runningEffect] }),
         ),
       );
       renderHeader();
 
-      const crumb = await screen.findByRole('link', { name: 'Release train' });
-      expect(crumb).toHaveAttribute('href', `/factories/${FACTORY_ID}/boards/release`);
-      expect(screen.queryByRole('link', { name: 'Work' })).not.toBeInTheDocument();
-    });
-  });
+      const proofing = await screen.findByRole('button', { name: 'Move to Proofing' });
+      await waitFor(() => expect(proofing).toBeDisabled());
+      expect(screen.getByRole('button', { name: 'Move back to Drafting' })).toBeEnabled();
+      await user.click(screen.getByRole('button', { name: 'Change stage from Writing' }));
 
-  describe('when the active work item has an external issue URL', () => {
-    it('renders an issue pill that opens the external issue in a new tab', async () => {
-      const issueUrl = 'https://github.com/acme/app/issues/7';
-      stubHeader(workItem(issueUrl));
-      renderHeader();
-
-      const link = await screen.findByRole('link', { name: 'Open Issue #7' });
-
-      expect(link).toHaveAttribute('href', issueUrl);
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', 'noreferrer');
-      expect(link.querySelector('[data-source="github-issue"]')).toBeInTheDocument();
-    });
-  });
-
-  describe('when the active work item is backed by a Linear issue', () => {
-    it('renders a pill that opens the Linear issue in a new tab', async () => {
-      const issueUrl = 'https://linear.app/acme/issue/ENG-123/fix-sandbox-setup';
-      stubHeader(linearWorkItem(issueUrl));
-      renderHeader();
-
-      const link = await screen.findByRole('link', { name: 'Open ENG-123' });
-
-      expect(link).toHaveAttribute('href', issueUrl);
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', 'noreferrer');
-      expect(link.querySelector('[data-source="linear-issue"]')).toBeInTheDocument();
-    });
-  });
-
-  describe('when the active work item has no external URL', () => {
-    it('does not render an external issue pill', async () => {
-      stubHeader(workItem(undefined));
-      renderHeader();
-
-      expect(await screen.findByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
-      expect(screen.queryByRole('link', { name: 'Open Issue #7' })).not.toBeInTheDocument();
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByRole('menuitem', { name: 'Move to Proofing' })).toHaveAttribute('aria-disabled', 'true');
+      expect(within(menu).getByRole('menuitem', { name: 'Move to Shelved' })).not.toHaveAttribute('aria-disabled');
+      expect(within(menu).getByText("Another run can't start while this card is busy.")).toBeInTheDocument();
     });
   });
 
@@ -268,7 +350,7 @@ describe('FactorySessionPage', () => {
     };
     const workRef = { sessionId: SESSION_ID, branch: 'factory/issue-7', threadId: THREAD_ID, startedBy: 'user-1' };
 
-    const currentCrumb = () => document.querySelector('[aria-current="page"]');
+    const title = () => screen.queryByRole('heading', { level: 1 });
 
     const reviewRef = {
       sessionId: 'review-session',
@@ -322,23 +404,22 @@ describe('FactorySessionPage', () => {
       );
     }
 
-    it("names the session's context and the phase the card moved on to", async () => {
+    it("names the session's context and leads to the session the card moved on to", async () => {
       renderContextHeader('triage-session', 'triage-thread');
 
-      const cardPhase = await screen.findByRole('link', { name: 'card is now in Building' });
-      expect(cardPhase).toHaveAttribute(
+      const workingSession = await screen.findByRole('link', { name: 'Go to Work session' });
+      expect(workingSession).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
       );
-      expect(currentCrumb()).toHaveTextContent(/^Triage$/);
-      expect(screen.getByText('Issue #7: Fix sandbox setup')).toBeInTheDocument();
+      expect(title()).toHaveTextContent(/^Triage session$/);
     });
 
-    it("switches to another of the card's sessions from the context crumb", async () => {
+    it("switches to another of the card's sessions from beside the title", async () => {
       const user = userEvent.setup();
       renderContextHeader('triage-session', 'triage-thread', 'execute', undefined, ['review-session']);
 
-      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Triage$/));
+      await waitFor(() => expect(title()).toHaveTextContent(/^Triage session$/));
       await user.click(screen.getByRole('button', { name: 'Switch session' }));
       const menu = await screen.findByRole('menu');
       await waitFor(() =>
@@ -350,127 +431,22 @@ describe('FactorySessionPage', () => {
       );
 
       await user.click(within(menu).getByRole('menuitem', { name: 'Work, current phase' }));
-      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
-      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
-    });
-
-    it('keeps the context a plain crumb when the card holds one session', async () => {
-      renderContextHeader(SESSION_ID, THREAD_ID, 'execute', { work: workRef });
-
-      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
-      expect(screen.queryByRole('button', { name: 'Switch session' })).not.toBeInTheDocument();
+      await waitFor(() => expect(title()).toHaveTextContent(/^Work session$/));
+      expect(screen.queryByRole('link', { name: /^Go to / })).not.toBeInTheDocument();
     });
 
     it('names only the context when the card still works in it', async () => {
       renderContextHeader(SESSION_ID, THREAD_ID);
 
-      await screen.findByText('Issue #7: Fix sandbox setup');
-      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Work$/));
-      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
+      await waitFor(() => expect(title()).toHaveTextContent(/^Work session$/));
+      expect(screen.queryByRole('link', { name: /^Go to / })).not.toBeInTheDocument();
     });
 
     it("names only the context of self-review's session, which no phase runs in", async () => {
       renderContextHeader('review-session', 'review-thread', 'review');
 
-      await screen.findByText('Issue #7: Fix sandbox setup');
-      await waitFor(() => expect(currentCrumb()).toHaveTextContent(/^Review$/));
-      expect(screen.queryByText(/card is now in/)).not.toBeInTheDocument();
-    });
-  });
-  describe('when the card carries pull requests', () => {
-    const ISSUE_URL = 'https://github.com/acme/app/issues/7';
-
-    function pullRequestSource(number: number, state: 'open' | 'merged'): NonNullable<WorkItemRow['sources']>[number] {
-      return {
-        id: `source-pr-${number}`,
-        workItemId: 'work-item-1',
-        provider: 'github',
-        integrationId: 'github',
-        sourceType: 'pull-request',
-        workspaceId: null,
-        externalId: `pull-request:github-pr:${number}`,
-        sourceKey: `github:pull-request:github-pr:${number}`,
-        key: `acme/app#${number}`,
-        url: `https://github.com/acme/app/pull/${number}`,
-        state: state === 'merged' ? 'closed' : 'open',
-        labels: [],
-        author: 'factory-bot',
-        metadata: { number, state, merged: state === 'merged', factoryAuthored: true },
-        revision: 1,
-        syncedAt: null,
-        createdAt: new Date('2026-07-29T00:00:00.000Z'),
-        updatedAt: new Date('2026-07-29T00:00:00.000Z'),
-      };
-    }
-
-    function cardWithSources(sources: NonNullable<WorkItemRow['sources']>) {
-      const item = workItem(ISSUE_URL);
-      return {
-        ...item,
-        workItem: {
-          provider: 'github' as const,
-          key: 'acme/app#7',
-          url: ISSUE_URL,
-          title: item.title,
-          state: 'open',
-          labels: [],
-          author: 'octocat',
-          metadata: {},
-          sources,
-        },
-      };
-    }
-
-    it('links each pull request next to the issue, the open one first and a merged one marked', async () => {
-      stubHeader(cardWithSources([pullRequestSource(4, 'merged'), pullRequestSource(5, 'open')]));
-      renderHeader();
-
-      expect(await screen.findByRole('link', { name: 'Open Issue #7' })).toHaveAttribute('href', ISSUE_URL);
-      const open = await screen.findByRole('link', { name: 'Open PR #5' });
-      const merged = screen.getByRole('link', { name: 'Open PR #4 merged' });
-      expect(open).toHaveAttribute('href', 'https://github.com/acme/app/pull/5');
-      expect(open.compareDocumentPosition(merged) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    });
-
-    it("leaves a pull request that has its own Review card to that card's link", async () => {
-      const card = cardWithSources([pullRequestSource(5, 'open')]);
-      const reviewCard = {
-        ...workItem('https://github.com/acme/app/pull/5'),
-        id: 'review-card-5',
-        parentWorkItemId: card.id,
-        title: 'Review the fix',
-        externalSource: {
-          integrationId: 'github',
-          type: 'pull-request',
-          externalId: 'github-pr:5',
-          url: 'https://github.com/acme/app/pull/5',
-        },
-        sessions: {},
-        metadata: { number: 5 },
-      };
-      server.use(
-        http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
-          HttpResponse.json({ session: workspaceSession }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
-          HttpResponse.json({ sessions: [workspaceSession] }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-          HttpResponse.json({ workItems: [card, reviewCard] }),
-        ),
-      );
-      renderHeader();
-
-      await screen.findByRole('link', { name: 'Open Review: PR #5: Review the fix' });
-      expect(screen.queryByRole('link', { name: 'Open PR #5' })).not.toBeInTheDocument();
-    });
-
-    it('shows only the issue when the card has no pull request', async () => {
-      stubHeader(cardWithSources([]));
-      renderHeader();
-
-      await screen.findByRole('link', { name: 'Open Issue #7' });
-      expect(screen.queryByRole('link', { name: /^Open (PR|MR) / })).not.toBeInTheDocument();
+      await waitFor(() => expect(title()).toHaveTextContent(/^Review session$/));
+      expect(screen.queryByRole('link', { name: /^Go to / })).not.toBeInTheDocument();
     });
   });
 });
