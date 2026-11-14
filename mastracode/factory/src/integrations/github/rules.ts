@@ -22,6 +22,7 @@ import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
 import type { PullRequest, PullRequestPage, VersionControl } from '../../capabilities/version-control.js';
+import { recordIntakeEvent } from '../../metrics/intake.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type {
@@ -626,6 +627,17 @@ export class GithubRules {
   }
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+    try {
+      const result = await this.#ingest(parsed);
+      recordIntakeEvent('github', result.status);
+      return result;
+    } catch (error) {
+      recordIntakeEvent('github', 'error');
+      throw error;
+    }
+  }
+
+  async #ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const event = eventName(parsed);
     const repository = object(parsed.payload.repository);
     const installationId = number(object(parsed.payload.installation)?.id);
