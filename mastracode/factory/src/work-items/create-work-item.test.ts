@@ -4,7 +4,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { boardRegistryOf, createBoardRegistry, defineBoard } from '../boards/index.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { StoredIntakeRouteInput } from '../storage/domains/boards/base.js';
@@ -122,6 +122,108 @@ describe('createFactoryWorkItem with intake routes', () => {
     expect(await pullRequest('8', false)).toMatchObject({
       status: 'created',
       item: { board: 'work', stages: ['intake'] },
+    });
+  });
+});
+
+/** A board that isn't Work, so nothing can reach it by naming a default. */
+const deskBoard = defineBoard({
+  id: 'desk',
+  name: 'Desk',
+  initialPhase: 'inbox',
+  phases: {
+    inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['triage', 'done'] },
+    triage: { name: 'Triage', kind: 'resting', nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
+  },
+});
+
+describe('createFactoryWorkItem under the intake order evaluator', () => {
+  /** A project with only the Desk board and none of the seeded rules, filing with `evaluator`. */
+  async function setupDesk(
+    routes: StoredIntakeRouteInput[],
+    evaluator: 'intake-order' | 'route-list',
+    { withRules = true }: { withRules?: boolean } = {},
+  ) {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Desk' } });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    for (const seeded of (await seed.boards.listIntakeRoutes(scope)).toReversed()) {
+      await seed.boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
+    }
+    for (const route of routes) await seed.boards.createIntakeRoute(scope, route, 'admin');
+    const boards = boardRegistryOf([deskBoard]);
+    const transitionService = new FactoryTransitionService({ storage: seed.workItems, configVersion: 'v1', boards });
+    const create = (input: CreateWorkItemInput) =>
+      createFactoryWorkItem({
+        workItems: seed.workItems,
+        boards,
+        transitionService,
+        audit: async () => {},
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input,
+        ...(withRules ? { intakeRoutes: seed.boards } : {}),
+        intakeEvaluator: evaluator,
+      });
+    return { create, seed, scope };
+  }
+  const docsToTriage: StoredIntakeRouteInput = {
+    name: 'Docs to triage',
+    when: DOCS,
+    target: { boardKey: 'desk', phaseKey: 'triage' },
+  };
+
+  it("files a card the board's rules match on that board, without any board named Work", async () => {
+    const { create, scope } = await setupDesk([docsToTriage], 'intake-order');
+    const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });
+    expect(created).toMatchObject({ status: 'created', item: { board: 'desk', stages: ['triage'] } });
+  });
+
+  it('refuses a card no board takes, asking the person for the board, and files nothing', async () => {
+    const { create, seed, scope } = await setupDesk([docsToTriage], 'intake-order');
+    const refused = await create({ title: 'Fix the build', metadata: { labels: ['bug'] } });
+    expect(refused).toMatchObject({
+      status: 'refused',
+      code: 'intake_board_required',
+      message: expect.stringContaining('Pick the board'),
+    });
+    expect(await seed.workItems.list(scope)).toEqual([]);
+    // Naming the board files it.
+    expect(await create({ title: 'Fix the build', board: 'desk' })).toMatchObject({
+      status: 'created',
+      item: { board: 'desk', stages: ['inbox'] },
+    });
+  });
+
+  it('lets the rules pick the board of a card that names only its stages', async () => {
+    const { create } = await setupDesk([docsToTriage], 'intake-order');
+    expect(await create({ title: 'Guide', stages: ['inbox'], metadata: { labels: ['docs'] } })).toMatchObject({
+      status: 'created',
+      item: { board: 'desk', stages: ['inbox'] },
+    });
+    expect(await create({ title: 'Bug', stages: ['inbox'] })).toMatchObject({
+      status: 'refused',
+      code: 'intake_board_required',
+    });
+  });
+
+  it('refuses a card without a board while the intake rules are unavailable, rather than guess one', async () => {
+    const { create, seed, scope } = await setupDesk([docsToTriage], 'intake-order', { withRules: false });
+    expect(await create({ title: 'Write the guide', metadata: { labels: ['docs'] } })).toMatchObject({
+      status: 'refused',
+      code: 'intake_board_required',
+    });
+    expect(await seed.workItems.list(scope)).toEqual([]);
+    expect(await create({ title: 'Write the guide', board: 'desk' })).toMatchObject({ status: 'created' });
+  });
+
+  it('keeps filing an unmatched card on the first board under the old evaluator', async () => {
+    const { create } = await setupDesk([docsToTriage], 'route-list');
+    expect(await create({ title: 'Fix the build', metadata: { labels: ['bug'] } })).toMatchObject({
+      status: 'created',
+      item: { board: 'desk', stages: ['inbox'] },
     });
   });
 });

@@ -312,6 +312,22 @@ export const FACTORY_API_ROUTE_METADATA = {
       "listProperty": "thresholds"
     }
   },
+  "GET /web/factory/projects/:id/intake-order": {
+    "contractKey": "intakeOrderGet",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake-order",
+    "description": "The order a Factory project's boards are asked to take a new item, and the evaluator in use",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/intake-routes": {
     "contractKey": "intakeRouteList",
     "method": "GET",
@@ -320,9 +336,11 @@ export const FACTORY_API_ROUTE_METADATA = {
     "pathParams": [
       "id"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "boardKey"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "object-property",
@@ -361,6 +379,25 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "moves"
+    }
+  },
+  "GET /web/factory/projects/:id/intake/not-routed": {
+    "contractKey": "intakeNotRoutedList",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/intake/not-routed",
+    "description": "Items no board's intake rules took, oldest first, a page at a time",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /web/factory/projects/:id/metrics": {
@@ -892,6 +929,7 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "boardKey",
       "ids"
     ],
     "hasQuery": false,
@@ -908,6 +946,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     "description": "Move untouched cards to the start of the board the project's intake routes now file them on",
     "pathParams": [
       "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /web/factory/projects/:id/intake/not-routed/:decisionId/route-again": {
+    "contractKey": "intakeRouteAgain",
+    "method": "POST",
+    "path": "/web/factory/projects/:id/intake/not-routed/:decisionId/route-again",
+    "description": "Run intake again for an item no board took, filing it where the rules now say",
+    "pathParams": [
+      "id",
+      "decisionId"
     ],
     "queryParams": [],
     "bodyParams": [],
@@ -1008,6 +1063,24 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasBody": true,
     "responseShape": {
       "kind": "record"
+    }
+  },
+  "PUT /web/factory/projects/:id/intake-order": {
+    "contractKey": "intakeOrderUpdate",
+    "method": "PUT",
+    "path": "/web/factory/projects/:id/intake-order",
+    "description": "Set the order a Factory project's boards are asked to take a new item",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "boardKeys"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "PUT /web/factory/projects/:id/sandbox-envs/:name": {
@@ -3119,6 +3192,94 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/intake-order": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "boardKey": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "boardKey",
+              "name"
+            ]
+          }
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "derived",
+            "explicit"
+          ]
+        },
+        "evaluator": {
+          "type": "string",
+          "enum": [
+            "route-list",
+            "intake-order"
+          ]
+        },
+        "comparison": {
+          "type": "object",
+          "properties": {
+            "compared": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "differing": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "notRouted": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "compared",
+            "differing",
+            "notRouted"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "boards",
+        "origin",
+        "evaluator",
+        "comparison",
+        "canEdit"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/intake-routes": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3132,6 +3293,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "id"
       ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "boardKey": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "additionalProperties": false
     },
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -3792,6 +3965,131 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "total",
         "moves"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/intake/not-routed": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "cursor": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "additionalProperties": false
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "notRouted": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "outcome": {
+                "type": "string",
+                "enum": [
+                  "placed",
+                  "not_routed"
+                ]
+              },
+              "evaluator": {
+                "type": "string",
+                "enum": [
+                  "route-list",
+                  "intake-order"
+                ]
+              },
+              "boardKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "routeId": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "reason": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "sourceKey": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "title": {
+                "type": "string"
+              },
+              "url": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "decidedAt": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "outcome",
+              "evaluator",
+              "boardKey",
+              "routeId",
+              "reason",
+              "sourceKey",
+              "title",
+              "url",
+              "decidedAt"
+            ]
+          }
+        },
+        "nextCursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "notRouted",
+        "nextCursor",
+        "canEdit"
       ]
     }
   },
@@ -9045,13 +9343,11 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
+        "boardKey": {
+          "$ref": "#/$defs/__schema0"
+        },
         "ids": {
-          "minItems": 1,
-          "maxItems": 100,
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/__schema0"
-          }
+          "$ref": "#/$defs/__schema1"
         }
       },
       "required": [
@@ -9060,6 +9356,19 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": false,
       "$defs": {
         "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "__schema1": {
+          "minItems": 1,
+          "maxItems": 10000,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema2"
+          }
+        },
+        "__schema2": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         }
@@ -9393,6 +9702,55 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "required": [
         "moved",
         "skipped"
+      ]
+    }
+  },
+  "POST /web/factory/projects/:id/intake/not-routed/:decisionId/route-again": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "decisionId": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "id",
+        "decisionId"
+      ],
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "const": "queued"
+        },
+        "boardKey": {
+          "type": "string"
+        },
+        "phaseKey": {
+          "type": "string"
+        },
+        "routeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "boardKey",
+        "phaseKey",
+        "routeId"
       ]
     }
   },
@@ -9971,6 +10329,119 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "additionalProperties": {}
     }
   },
+  "PUT /web/factory/projects/:id/intake-order": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "boardKeys": {
+          "minItems": 1,
+          "maxItems": 10000,
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema0"
+          }
+        }
+      },
+      "required": [
+        "boardKeys"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "boards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "boardKey": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "boardKey",
+              "name"
+            ]
+          }
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "derived",
+            "explicit"
+          ]
+        },
+        "evaluator": {
+          "type": "string",
+          "enum": [
+            "route-list",
+            "intake-order"
+          ]
+        },
+        "comparison": {
+          "type": "object",
+          "properties": {
+            "compared": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "differing": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "notRouted": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "compared",
+            "differing",
+            "notRouted"
+          ]
+        },
+        "canEdit": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "boards",
+        "origin",
+        "evaluator",
+        "comparison",
+        "canEdit"
+      ]
+    }
+  },
   "PUT /web/factory/projects/:id/sandbox-envs/:name": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -10128,9 +10599,11 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "projectEnvironmentBuilds": "GET /web/factory/projects/:id/environment/builds",
   "projectEnvironmentBuildGet": "GET /web/factory/projects/:id/environment/builds/:buildId",
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
+  "intakeOrderGet": "GET /web/factory/projects/:id/intake-order",
   "intakeRouteList": "GET /web/factory/projects/:id/intake-routes",
   "intakeRouteGet": "GET /web/factory/projects/:id/intake-routes/:routeId",
   "intakeRouteReroutePreview": "GET /web/factory/projects/:id/intake-routes/reroute",
+  "intakeNotRoutedList": "GET /web/factory/projects/:id/intake/not-routed",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "runQueue": "GET /web/factory/projects/:id/run-queue",
   "projectSandboxEnvsList": "GET /web/factory/projects/:id/sandbox-envs",
@@ -10160,10 +10633,12 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "intakeRouteCreate": "POST /web/factory/projects/:id/intake-routes",
   "intakeRouteReorder": "POST /web/factory/projects/:id/intake-routes/reorder",
   "intakeRouteRerouteApply": "POST /web/factory/projects/:id/intake-routes/reroute",
+  "intakeRouteAgain": "POST /web/factory/projects/:id/intake/not-routed/:decisionId/route-again",
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
   "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",
+  "intakeOrderUpdate": "PUT /web/factory/projects/:id/intake-order",
   "projectSandboxEnvSet": "PUT /web/factory/projects/:id/sandbox-envs/:name",
   "skillOverrideSave": "PUT /web/factory/projects/:id/skills/:name"
 } as const;

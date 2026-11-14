@@ -7,8 +7,8 @@
 import { randomUUID } from 'node:crypto';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
-
 import { boardForWorkItem } from '../boards/index.js';
+
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -17,9 +17,11 @@ import type { IntegrationTools } from '../integrations/base.js';
 import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
+import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
 import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
 import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemNumber } from '../work-items/card-number.js';
@@ -41,6 +43,8 @@ export interface FactoryWorkItemToolDependencies {
   boards: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a filed card. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a filed card; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -147,7 +151,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
+        "File a new work item on this Factory for the person you are working with, on the board the project's intake rules pick (or the board named). It enters its board's first phase, or the phase an intake rule names, and this session follows it. Check factory_list_work_items for an existing item first. When no intake rule takes it, the call is refused: ask the person which board it belongs on and call again with that board. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -158,20 +162,33 @@ export function createFactoryWorkItemTools(
             .max(8000)
             .describe('What needs doing and why; becomes the card description its runs start from.'),
           repository: repositorySchema.optional(),
+          board: z
+            .string()
+            .trim()
+            .min(1)
+            .max(MAX_BOARD_IDENTIFIER_LENGTH)
+            .optional()
+            .describe("The board's key, when the person picked one; files it in that board's first phase."),
         })
         .strict(),
-      execute: async ({ title, description, repository }) => {
+      execute: async ({ title, description, repository, board }) => {
         if (repository) await requireRepository(repository);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
           boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
           intakeRoutes: deps.intakeRoutes,
+          intakeEvaluator: deps.intakeEvaluator,
           audit,
           ...project,
           userId: scope.userId,
           ...(scope.actorProfile ? { origin: { actorProfile: scope.actorProfile } } : {}),
-          input: { title, description, ...(repository ? { metadata: { repository } } : {}) },
+          input: {
+            title,
+            description,
+            ...(board ? { board } : {}),
+            ...(repository ? { metadata: { repository } } : {}),
+          },
         });
         if (created.status === 'refused') throw new Error(created.message);
         if (created.status === 'rejected') throw new Error(`The board refused the new item: ${created.reason}`);

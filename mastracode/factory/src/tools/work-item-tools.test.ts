@@ -29,8 +29,11 @@ async function setup({
   transition,
   actorProfile,
   interactive = true,
+  intakeOrder = false,
 }: {
   interactive?: boolean;
+  /** Files by intake order over the project's stored rules, which start out empty. */
+  intakeOrder?: boolean;
   transition?: Transition;
   actorProfile?: FactoryToolScope['actorProfile'];
 } = {}) {
@@ -79,9 +82,16 @@ async function setup({
       transitionService,
       auditRecorder,
       sessions: { getSourceControlBySessionId: async () => sourceControl },
+      ...(intakeOrder ? { intakeRoutes: seed.boards, intakeEvaluator: 'intake-order' as const } : {}),
     },
   ) as Record<string, { requireApproval?: boolean; execute: (input: unknown, context: unknown) => Promise<unknown> }>;
   const run = <T>(name: string, input: unknown) => tools[name]!.execute(input, {}) as Promise<T>;
+  if (intakeOrder) {
+    const project = { orgId: 'org-1', factoryProjectId: 'project-1' };
+    for (const route of (await seed.boards.listIntakeRoutes(project)).toReversed()) {
+      await seed.boards.deleteIntakeRoute(project, route.id, { expectedRevision: route.revision });
+    }
+  }
   const fileItem = (factoryProjectId: string, title: string) =>
     seed.workItems.upsert({
       orgId: 'org-1',
@@ -115,6 +125,23 @@ function failedDecision(overrides: Partial<FactoryDeferredDecisionRecord> = {}):
 }
 
 describe('factory_create_work_item', () => {
+  it('files on the board the person names when no intake rule takes the item', async () => {
+    const { run, workItems } = await setup({ intakeOrder: true });
+    await expect(run('factory_create_work_item', { title: 'Odd one', description: 'x' })).rejects.toThrow(
+      /Pick the board/,
+    );
+
+    const created = await run<{ id: string }>('factory_create_work_item', {
+      title: 'Odd one',
+      description: 'x',
+      board: 'work',
+    });
+    expect(await workItems.getForProject('org-1', 'project-1', created.id)).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+    });
+  });
+
   it('stamps the caller’s name and avatar on what it records, so the board can show who filed and moved it', async () => {
     const actorProfile = { name: 'Caleb', avatarUrl: 'https://example.com/caleb.png' };
     const { run, transitionService, auditRecorder } = await setup({ actorProfile });
@@ -192,7 +219,7 @@ describe('factory_create_work_item', () => {
     expect(auditRecorder.record).not.toHaveBeenCalled();
   });
 
-  it('takes no stage or board: every item enters through the first phase', async () => {
+  it('takes no stage, only a board: every item enters through its board’s first phase', async () => {
     const { tools } = await setup();
     const schema = (
       tools.factory_create_work_item as unknown as {
@@ -201,7 +228,7 @@ describe('factory_create_work_item', () => {
     ).inputSchema;
     expect(schema.safeParse({ title: 't', description: 'b' }).success).toBe(true);
     expect(schema.safeParse({ title: 't', description: 'b', stage: 'execute' }).success).toBe(false);
-    expect(schema.safeParse({ title: 't', description: 'b', board: 'review' }).success).toBe(false);
+    expect(schema.safeParse({ title: 't', description: 'b', board: 'review' }).success).toBe(true);
   });
 });
 

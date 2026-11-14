@@ -29,6 +29,7 @@ import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
@@ -88,6 +89,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   boardRegistry?: BoardRegistry | ProjectBoardSource;
   /** The project's intake routes, which place a card filed without a board. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a filed card; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -843,6 +846,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               boards: await this.#boards.load(resolved),
               transitionService,
               intakeRoutes: this.deps.intakeRoutes,
+              intakeEvaluator: this.deps.intakeEvaluator,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,
@@ -855,7 +859,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                 if (created.code === 'factory_transitions_unavailable') return c.json({ error: created.code }, 503);
                 return c.json(
                   { error: created.code, message: created.message },
-                  created.code === 'invalid_board' ? 422 : 409,
+                  created.code === 'invalid_board' || created.code === 'intake_board_required' ? 422 : 409,
                 );
               case 'rejected':
                 return c.json({ status: 'rejected', code: created.code, reason: created.reason }, 422);

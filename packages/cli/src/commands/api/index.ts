@@ -862,7 +862,8 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('intake-route')
     .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
   addAction(factoryIntakeRoute, 'list', FACTORY_API_ROUTE_CATALOG.intakeRouteList, {
-    description: "List a project's intake routes in order, and what applies when none matches",
+    description: "List a project's intake routes in order, or one board's with boardKey",
+    input: 'optional',
     routePlacement: 'origin',
   });
   addAction(factoryIntakeRoute, 'get', FACTORY_API_ROUTE_CATALOG.intakeRouteGet, {
@@ -903,6 +904,36 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Move untouched cards to the board the intake routes now file them on',
     routePlacement: 'origin',
     defaultTimeoutMs: 120_000,
+  });
+  const factoryIntakeOrder = factory
+    .command('intake-order')
+    .description("Read or set the order in which a Factory project's boards are asked to take a new item");
+  addAction(factoryIntakeOrder, 'get', FACTORY_API_ROUTE_CATALOG.intakeOrderGet, {
+    description: 'Get the intake order, the evaluator in use, and how the old and new evaluators compare',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeOrder, 'set', FACTORY_API_ROUTE_CATALOG.intakeOrderUpdate, {
+    description: 'Set the intake order, naming every board once',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Ask the docs board before Work',
+        command: `mastra api factory intake-order set <project-id> '{"boardKeys":["docs","work"]}'`,
+      },
+    ],
+  });
+  const factoryNotRouted = factory
+    .command('not-routed')
+    .description("List and route again the items no board's intake rules took");
+  addAction(factoryNotRouted, 'list', FACTORY_API_ROUTE_CATALOG.intakeNotRoutedList, {
+    description: 'List items no board took, oldest first; pass nextCursor back as cursor for more',
+    input: 'optional',
+    routePlacement: 'origin',
+  });
+  addAction(factoryNotRouted, 'route-again', FACTORY_API_ROUTE_CATALOG.intakeRouteAgain, {
+    description: 'Run intake again for an item no board took, filing it where the rules now say',
+    routePlacement: 'origin',
   });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {

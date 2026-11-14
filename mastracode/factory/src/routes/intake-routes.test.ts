@@ -10,6 +10,8 @@ import { describe, expect, it, onTestFinished } from 'vitest';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
+import { FactoryDecisionDispatcher } from '../rules/dispatcher.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
@@ -80,7 +82,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   type Client = Awaited<ReturnType<typeof client>>;
 
   /** One replica: the intake route and board routes over HTTP, with its own board cache. */
-  function replica(domains: Client, orgId: string, options: { auth?: RouteAuth } = {}) {
+  function replica(
+    domains: Client,
+    orgId: string,
+    options: { auth?: RouteAuth; evaluator?: 'route-list' | 'intake-order' } = {},
+  ) {
     const cache = new ProjectBoardCache({
       codeRegistry: createTriageWorkRegistry(),
       storage: domains.boards,
@@ -105,6 +111,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
+        configVersion: 'intake-routes-test',
+        ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -128,7 +136,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   }
 
   /** Pass `seeded` to keep the default routes every project starts with; tests otherwise start with none. */
-  async function setup({ seeded = false } = {}) {
+  async function setup({
+    seeded = false,
+    evaluator,
+  }: { seeded?: boolean; evaluator?: 'route-list' | 'intake-order' } = {}) {
     let url = ':memory:';
     if (backend === 'libsql') {
       const dir = mkdtempSync(join(tmpdir(), 'factory-intake-routes-'));
@@ -148,7 +159,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         await a.boards.deleteIntakeRoute(scope, route.id, { expectedRevision: route.revision });
       }
     }
-    return { a, b, orgId, scope, projectPath, base, replicaA: replica(a, orgId) };
+    return { a, b, orgId, scope, projectPath, base, replicaA: replica(a, orgId, evaluator ? { evaluator } : {}) };
   }
 
   async function list(send: ReturnType<typeof replica>['send'], base: string, user = ADMIN): Promise<Route[]> {
@@ -598,8 +609,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     ]);
   });
 
-  it('accepts a stored board as a target and reports the route once that board is gone', async () => {
-    const { projectPath, base, replicaA } = await setup();
+  it('accepts a stored board as a target, and deleting the board deletes its rules with an audit entry', async () => {
+    const { a, orgId, projectPath, base, replicaA } = await setup();
     expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
     const route = (
       await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: 'writing' } })
@@ -607,8 +618,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(route.problems).toEqual([]);
 
     expect((await replicaA.send('DELETE', `${projectPath}/boards/docs?expectedRevision=1`)).status).toBe(204);
-    expect(await list(replicaA.send, base)).toEqual([
-      expect.objectContaining({ id: route.id, problems: ['Board "docs" is not installed in this project.'] }),
+    expect(await list(replicaA.send, base)).toEqual([]);
+    const trail = await a.audit.list({ orgId, actions: auditActionsInNamespaces(['intake_route']) });
+    expect(trail.events.filter(event => event.action === 'factory.intake_route.deleted')).toMatchObject([
+      { targets: [{ type: 'intake_route', id: route.id }], metadata: { boardKey: 'docs', cause: 'board_deleted' } },
     ]);
   });
 
@@ -694,5 +707,338 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(results.map(result => result.status)).toEqual([200, 200]);
     const final = (await list(replicaA.send, base)).map(route => route.id);
     expect([forward, ids]).toContainEqual(final);
+  });
+  describe('under intake order', () => {
+    it('refuses moving a rule to another board only under intake order; the old evaluator still allows it', async () => {
+      for (const evaluator of ['intake-order', 'route-list'] as const) {
+        const { projectPath, base, replicaA } = await setup({ evaluator });
+        expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+        const route = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: WORK })).body
+          .intakeRoute as Route;
+        const moved = await replicaA.send('PATCH', `${base}/${route.id}`, {
+          target: { boardKey: 'docs' },
+          expectedRevision: route.revision,
+        });
+        if (evaluator === 'intake-order') {
+          expect(moved).toMatchObject({ status: 422, body: { error: 'intake_route_board_fixed' } });
+          // Its phase on its own board can still change.
+          expect(
+            await replicaA.send('PATCH', `${base}/${route.id}`, { target: TRIAGE, expectedRevision: route.revision }),
+          ).toMatchObject({ status: 200, body: { intakeRoute: { target: TRIAGE } } });
+        } else {
+          expect(moved).toMatchObject({ status: 200, body: { intakeRoute: { target: { boardKey: 'docs' } } } });
+        }
+      }
+    });
+
+    it("lists and reorders one board's rules, leaving the other boards' places alone", async () => {
+      const { projectPath, base, replicaA } = await setup({ evaluator: 'intake-order' });
+      expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      const make = async (name: string, target: unknown) =>
+        ((await replicaA.send('POST', base, { name, when: DOCS, target })).body.intakeRoute as Route).id;
+      const w1 = await make('w1', WORK);
+      const d1 = await make('d1', { boardKey: 'docs' });
+      const w2 = await make('w2', WORK);
+      const d2 = await make('d2', { boardKey: 'docs' });
+
+      const docs = await list(replicaA.send, `${base}?boardKey=docs`);
+      expect(docs.map(route => route.id)).toEqual([d1, d2]);
+      const reordered = await replicaA.send('POST', `${base}/reorder`, { boardKey: 'docs', ids: [d2, d1] });
+      expect(reordered.status).toBe(200);
+      expect(reordered.body.intakeRoutes.map((route: Route) => route.id)).toEqual([d2, d1]);
+      expect((await list(replicaA.send, base)).map(route => route.id)).toEqual([w1, d2, w2, d1]);
+      expect(await replicaA.send('POST', `${base}/reorder`, { boardKey: 'docs', ids: [d2, w1] })).toMatchObject({
+        status: 409,
+        body: { error: 'intake_route_set_mismatch' },
+      });
+    });
+
+    it('reads and sets the intake order, refusing an order that misses a board, with an audit entry', async () => {
+      const { a, orgId, projectPath, replicaA } = await setup({ evaluator: 'intake-order' });
+      expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      const read = await replicaA.send('GET', `${projectPath}/intake-order`);
+      expect(read).toMatchObject({ status: 200, body: { evaluator: 'intake-order', canEdit: true } });
+      expect(read.body.boards.map((board: { boardKey: string }) => board.boardKey).toSorted()).toEqual([
+        'docs',
+        'work',
+      ]);
+
+      expect(await replicaA.send('PUT', `${projectPath}/intake-order`, { boardKeys: ['docs'] })).toMatchObject({
+        status: 409,
+        body: { error: 'intake_order_set_mismatch' },
+      });
+      expect(
+        (await replicaA.send('PUT', `${projectPath}/intake-order`, { boardKeys: ['docs', 'work'] }, MEMBER)).status,
+      ).toBe(403);
+      const set = await replicaA.send('PUT', `${projectPath}/intake-order`, { boardKeys: ['docs', 'work'] });
+      expect(set).toMatchObject({
+        status: 200,
+        body: { boards: [{ boardKey: 'docs', name: 'Docs' }, { boardKey: 'work' }] },
+      });
+      const trail = await a.audit.list({ orgId, actions: auditActionsInNamespaces(['intake_order']) });
+      expect(trail.events).toMatchObject([
+        { action: 'factory.intake_order.updated', metadata: { after: ['docs', 'work'] } },
+      ]);
+    });
+
+    it('routes again by intake order even on a replica still running the old evaluator', async () => {
+      const { a, scope, projectPath, base, replicaA } = await setup({ evaluator: 'route-list' });
+      expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      // The old list sends docs items to Work › Triage; by intake order Docs is asked first and takes them.
+      await replicaA.send('POST', base, { name: 'Docs to Triage', when: DOCS, target: TRIAGE });
+      const docs = (await replicaA.send('POST', base, { name: 'Docs', target: { boardKey: 'docs' } })).body
+        .intakeRoute as Route;
+      expect((await replicaA.send('PUT', `${projectPath}/intake-order`, { boardKeys: ['docs', 'work'] })).status).toBe(
+        200,
+      );
+      const decided = await a.boards.recordIntakeDecision(scope, {
+        idempotencyKey: 'arrival-docs',
+        outcome: 'not_routed',
+        evaluator: 'intake-order',
+        sourceKey: 'github-issue:10',
+        title: 'Docs typo',
+        arrival: {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'arrival-docs',
+          board: 'work',
+          source: 'github-issue',
+          sourceKey: 'github-issue:10',
+          title: 'Docs typo',
+          url: 'https://example.com/10',
+          stage: 'intake',
+          metadata: { labels: ['docs'] },
+        },
+      });
+
+      expect(await replicaA.send('POST', `${projectPath}/intake/not-routed/${decided.id}/route-again`)).toMatchObject({
+        status: 202,
+        body: { boardKey: 'docs', phaseKey: 'inbox', routeId: docs.id },
+      });
+      // A worker still on the old evaluator files it by intake order too, where the response said.
+      const boards = new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: a.boards,
+        recheckMs: 0,
+      });
+      await new FactoryDecisionDispatcher({
+        controller: {} as never,
+        transitionService: new FactoryTransitionService({
+          storage: a.workItems,
+          configVersion: 'intake-routes-test',
+          boards,
+        }),
+        storage: a.workItems,
+        boards,
+        intakeRoutes: a.boards,
+        intakeEvaluator: 'route-list',
+        ownerId: 'worker-route-list',
+      }).runOnce(new Date(Date.now() + 1000));
+      expect(await a.workItems.list(scope)).toMatchObject([{ title: 'Docs typo', board: 'docs', stages: ['inbox'] }]);
+    });
+
+    it('compares the order that is in force, derived or chosen, on every read', async () => {
+      const { a, orgId, scope, projectPath, base } = await setup({ evaluator: 'intake-order' });
+      const { send } = replica(a, orgId, { evaluator: 'intake-order' });
+      expect((await send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
+      await a.workItems.upsert({
+        ...scope,
+        userId: ADMIN,
+        input: { title: 'Docs typo', board: 'docs', stages: ['inbox'], metadata: { labels: ['docs'] } },
+      });
+      const bug = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] };
+      const bugs = (await send('POST', base, { name: 'Bugs', when: bug, target: WORK })).body.intakeRoute as Route;
+      const docs = (await send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).body
+        .intakeRoute as Route;
+      const all = (await send('POST', base, { name: 'Everything', target: WORK })).body.intakeRoute as Route;
+      const read = async () => (await send('GET', `${projectPath}/intake-order`)).body;
+
+      // Work's first rule comes before Docs', so Work is asked first and its catch-all takes the docs card.
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'derived',
+        comparison: { compared: 1, differing: 1, notRouted: 0 },
+      });
+
+      // A rule write moves the derived order, and the comparison with it.
+      expect((await send('POST', `${base}/reorder`, { ids: [docs.id, bugs.id, all.id] })).status).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'docs' }, { boardKey: 'work' }],
+        comparison: { differing: 0 },
+      });
+
+      // The chosen order is what gets compared, and rule writes no longer move it.
+      expect((await send('PUT', `${projectPath}/intake-order`, { boardKeys: ['work', 'docs'] })).status).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'explicit',
+        comparison: { compared: 1, differing: 1 },
+      });
+      expect((await send('POST', `${base}/reorder`, { ids: [bugs.id, docs.id, all.id] })).status).toBe(200);
+      expect(await read()).toMatchObject({ boards: [{ boardKey: 'work' }, { boardKey: 'docs' }] });
+
+      // A rule fix after the order is set shows at once: with Work's catch-all off, Docs takes the card again.
+      const current = (await send('GET', `${base}/${all.id}`)).body.intakeRoute as Route;
+      expect(
+        (await send('PATCH', `${base}/${all.id}`, { enabled: false, expectedRevision: current.revision })).status,
+      ).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'explicit',
+        comparison: { compared: 1, differing: 0, notRouted: 0 },
+      });
+    });
+
+    it('routes again with the closed issue facts the dispatcher tests', async () => {
+      const { a, scope, projectPath, base, replicaA } = await setup({ evaluator: 'intake-order' });
+      const issue = (
+        await a.workItems.upsert({
+          ...scope,
+          userId: ADMIN,
+          input: { title: 'Bug', board: 'work', stages: ['intake'] },
+        })
+      ).item;
+      const closing = {
+        operator: 'AND',
+        conditions: [{ field: 'pullRequest.closesIssue', operator: 'equals', value: true }],
+      };
+      const rule = (await replicaA.send('POST', base, { name: 'Fixes', when: closing, target: WORK })).body
+        .intakeRoute as Route;
+      const decided = await a.boards.recordIntakeDecision(scope, {
+        idempotencyKey: 'arrival-pr',
+        outcome: 'not_routed',
+        evaluator: 'intake-order',
+        sourceKey: 'github-pr:11',
+        title: 'Fix bug',
+        arrival: {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'arrival-pr',
+          board: 'work',
+          source: 'github-pr',
+          sourceKey: 'github-pr:11',
+          title: 'Fix bug',
+          url: 'https://example.com/pull/11',
+          stage: 'intake',
+          closesIssue: { workItemId: issue.id },
+        },
+      });
+      expect(await replicaA.send('POST', `${projectPath}/intake/not-routed/${decided.id}/route-again`)).toMatchObject({
+        status: 202,
+        body: { boardKey: 'work', phaseKey: 'intake', routeId: rule.id },
+      });
+    });
+
+    it('pages the Not routed list oldest first', async () => {
+      const { a, scope, projectPath, replicaA } = await setup({ evaluator: 'intake-order' });
+      for (const [n, day] of [
+        [1, 3],
+        [2, 1],
+        [3, 2],
+      ] as const) {
+        await a.boards.recordIntakeDecision(
+          scope,
+          { idempotencyKey: `k${n}`, outcome: 'not_routed', evaluator: 'intake-order', title: `item ${n}` },
+          new Date(Date.UTC(2026, 10, day)),
+        );
+      }
+      const path = `${projectPath}/intake/not-routed`;
+      const first = await replicaA.send('GET', `${path}?limit=2`);
+      expect(first).toMatchObject({ status: 200, body: { nextCursor: expect.any(String) } });
+      expect(first.body.notRouted.map((item: { title: string }) => item.title)).toEqual(['item 2', 'item 3']);
+      const second = await replicaA.send('GET', `${path}?limit=2&cursor=${encodeURIComponent(first.body.nextCursor)}`);
+      expect(second).toMatchObject({ status: 200, body: { notRouted: [{ title: 'item 1' }], nextCursor: null } });
+
+      expect(await replicaA.send('GET', `${path}?cursor=nonsense`)).toMatchObject({
+        status: 422,
+        body: { error: 'invalid_intake_cursor' },
+      });
+      expect((await replicaA.send('GET', `${path}?limit=101`)).status).toBe(422);
+    });
+
+    it('routes a Not routed item again once a rule takes it, and refuses while none does', async () => {
+      const { a, orgId, scope, projectPath, base, replicaA } = await setup({ evaluator: 'intake-order' });
+      const decided = await a.boards.recordIntakeDecision(scope, {
+        idempotencyKey: 'arrival-1',
+        outcome: 'not_routed',
+        evaluator: 'intake-order',
+        reason: "No board's intake rules match it (checked Work).",
+        sourceKey: 'github-issue:9',
+        title: 'Flaky build',
+        url: 'https://example.com/9',
+        arrival: {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: 'arrival-1',
+          board: 'work',
+          source: 'github-issue',
+          sourceKey: 'github-issue:9',
+          title: 'Flaky build',
+          url: 'https://example.com/9',
+          stage: 'intake',
+          metadata: { labels: ['docs'] },
+        },
+      });
+      const listed = await replicaA.send('GET', `${projectPath}/intake/not-routed`);
+      expect(listed).toMatchObject({
+        status: 200,
+        body: { notRouted: [{ id: decided.id, title: 'Flaky build', reason: expect.any(String) }], canEdit: true },
+      });
+      const again = `${projectPath}/intake/not-routed/${decided.id}/route-again`;
+      expect(await replicaA.send('POST', again)).toMatchObject({ status: 422, body: { error: 'intake_not_routed' } });
+      expect((await replicaA.send('POST', again, undefined, MEMBER)).status).toBe(403);
+
+      const rule = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: TRIAGE })).body
+        .intakeRoute as Route;
+      expect(await replicaA.send('POST', again)).toMatchObject({
+        status: 202,
+        body: { status: 'queued', boardKey: 'work', phaseKey: 'triage', routeId: rule.id },
+      });
+      const queued = await a.workItems.listDeferredDecisions(orgId, scope.factoryProjectId);
+      expect(queued).toMatchObject([
+        {
+          status: 'pending',
+          workItemId: null,
+          decision: {
+            type: 'upsertLinkedWorkItem',
+            sourceKey: 'github-issue:9',
+            idempotencyKey: expect.stringContaining(decided.id),
+          },
+        },
+      ]);
+      const trail = await a.audit.list({ orgId, actions: auditActionsInNamespaces(['intake']) });
+      expect(trail.events).toMatchObject([
+        { action: 'factory.intake.routed_again', targets: [{ type: 'intake_decision', id: decided.id }] },
+      ]);
+      expect((await replicaA.send('POST', `${projectPath}/intake/not-routed/${randomUUID()}/route-again`)).status).toBe(
+        404,
+      );
+
+      // The dispatcher files the queued arrival where the rule says, and the record is resolved.
+      const boards = new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: a.boards,
+        recheckMs: 0,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: {} as never,
+        transitionService: new FactoryTransitionService({
+          storage: a.workItems,
+          configVersion: 'intake-routes-test',
+          boards,
+        }),
+        storage: a.workItems,
+        boards,
+        intakeRoutes: a.boards,
+        intakeEvaluator: 'intake-order',
+        ownerId: 'worker-route-again',
+      });
+      await dispatcher.runOnce(new Date(Date.now() + 1000));
+      const [card, ...others] = await a.workItems.list(scope);
+      expect(others).toEqual([]);
+      expect(card).toMatchObject({ title: 'Flaky build', board: 'work', stages: ['triage'] });
+      expect((await replicaA.send('GET', `${projectPath}/intake/not-routed`)).body.notRouted).toEqual([]);
+      expect(await replicaA.send('POST', again)).toMatchObject({
+        status: 409,
+        body: { error: 'intake_decision_resolved' },
+      });
+    });
   });
 });

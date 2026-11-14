@@ -44,7 +44,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { StateSigner } from '../state-signing.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
-import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import type { IntakeEvaluator, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -161,8 +161,13 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
+  /** Which evaluator places new items; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Stored boards and their cache; mounts the board management routes when present. */
-  storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
+  storedBoards?: {
+    storage: StoredBoardsStorage;
+    cache: ProjectBoardCache;
+  };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -1032,6 +1037,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
+          intakeEvaluator: deps.intakeEvaluator,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
@@ -1057,6 +1063,8 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
+          intakeEvaluator: deps.intakeEvaluator,
+          configVersion: deps.configVersion,
         }).routes()
       : []),
     ...(deps.factoryReady

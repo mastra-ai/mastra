@@ -3,14 +3,13 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
-import { DEFAULT_BOARD_ID } from '../boards/default-board.js';
 import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/intake-routing.js';
+import { INTAKE_ROUTE_METADATA_KEY, resolveIntake } from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
-import { intakeTarget } from '../boards/semantics.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
+import type { IntakeEvaluator } from '../storage/domains/boards/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { CreateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { CARD_NUMBER_METADATA_KEY } from './card-number.js';
@@ -40,7 +39,12 @@ export type CreateFactoryWorkItemResult =
   | { status: 'reused'; item: Card }
   | {
       status: 'refused';
-      code: 'invalid_board' | 'governed_transition_required' | 'factory_transitions_unavailable';
+      code:
+        | 'invalid_board'
+        | 'governed_transition_required'
+        | 'factory_transitions_unavailable'
+        /** No board's intake rules take the card; the person names the board. */
+        | 'intake_board_required';
       message: string;
     }
   /** The first phase's entry rules (or the move to an intake route's phase) refused the card; it was removed again unless a concurrent create had already reused it. */
@@ -58,6 +62,8 @@ export interface CreateFactoryWorkItemArgs {
   input: CreateWorkItemInput;
   /** The project's intake routes; they place a card filed without a board or stages. */
   intakeRoutes?: IntakeRoutesReader;
+  /** Which evaluator places a card filed without a board; the old `route-list` by default. */
+  intakeEvaluator?: IntakeEvaluator;
   /** Where a browser request came from; a session's tool call carries none. */
   origin?: Pick<FactoryTransitionRequest, 'actorProfile' | 'context'>;
 }
@@ -77,24 +83,57 @@ export async function createFactoryWorkItem({
   factoryProjectId,
   input,
   intakeRoutes,
+  intakeEvaluator = 'route-list',
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
-  // A card filed without a board or stages goes where the project's intake routes say; one
-  // that names either went where the person chose.
-  const placement =
-    intakeRoutes && input.board === undefined && input.stages === undefined
-      ? resolveIntakePlacement(
-          await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }),
-          cardRuleFacts({
-            title: input.title,
-            metadata: input.metadata ?? null,
-            externalSource: input.externalSource ?? null,
-          }),
-          boards,
-        )
-      : undefined;
-  // No route took it: Work, else the project's first board (a project with only an app's boards).
-  const boardId = placement?.board ?? input.board ?? intakeTarget(boards)?.board ?? DEFAULT_BOARD_ID;
+  // A card filed without a board goes where intake says; one that names a board went where the
+  // person chose. Under the old evaluator a card naming its stages skips the rules too.
+  let boardId = input.board;
+  let placement: { phase: string; routeId: string } | undefined;
+  if (boardId === undefined && !intakeRoutes && intakeEvaluator === 'intake-order') {
+    return {
+      status: 'refused',
+      code: 'intake_board_required',
+      message: 'Intake rules are unavailable right now. Pick the board to file it on.',
+    };
+  }
+  if (boardId === undefined) {
+    const scope = { orgId, factoryProjectId };
+    const evaluator = intakeRoutes ? intakeEvaluator : 'route-list';
+    const routed = intakeRoutes && (evaluator === 'intake-order' || input.stages === undefined);
+    const [routes, order] = routed
+      ? await Promise.all([
+          intakeRoutes.listIntakeRoutes(scope),
+          evaluator === 'intake-order'
+            ? intakeRoutes.readIntakeOrder(scope, { boards: [...boards.keys()] })
+            : undefined,
+        ])
+      : [[], undefined];
+    const resolution = resolveIntake({
+      evaluator,
+      routes,
+      order: order?.boardKeys ?? [],
+      facts: cardRuleFacts({
+        title: input.title,
+        metadata: input.metadata ?? null,
+        externalSource: input.externalSource ?? null,
+      }),
+      registry: boards,
+    });
+    // No board's rules take it: the person picks the board.
+    if (resolution.outcome === 'not_routed') {
+      return {
+        status: 'refused',
+        code: 'intake_board_required',
+        message: `${resolution.reason} Pick the board to file it on.`,
+      };
+    }
+    boardId = resolution.board;
+    // Named stages keep the card in the board's first phase; the rule only picked the board.
+    if (resolution.routeId !== null && input.stages === undefined) {
+      placement = { phase: resolution.phase, routeId: resolution.routeId };
+    }
+  }
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];
