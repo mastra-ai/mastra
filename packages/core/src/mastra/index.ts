@@ -5,7 +5,7 @@ import {
   isDurableAgentExecutionDetached,
 } from '../agent/durable/run-registry';
 import { hasDurableExecution } from '../agent/streams/execution-capability';
-import type { ExecutionEngineDefaults } from '../agent/streams/execution-engine';
+import type { ExecutionEngineDefaults } from '../agent/streams/execution-policy';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';

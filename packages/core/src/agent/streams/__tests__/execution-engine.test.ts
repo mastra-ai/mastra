@@ -1,11 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import {
-  CONTEXT_INSPECTION_MAX_DEPTH,
-  CONTEXT_INSPECTION_MAX_NODES,
-  ExecutionEnginePolicy,
-  hasNonJsonContextValue,
-} from '../execution-engine';
-import type { ExecutionEngine } from '../execution-engine';
+import { ExecutionEnginePolicy } from '../execution-policy';
+import type { ExecutionEngine } from '../execution-policy';
 import type { AgentStreamsConfig } from '../types';
 
 const values = [
@@ -82,76 +77,5 @@ describe('registered execution policy', () => {
     expect(policy.inherited).toBe(false);
     expect(policy.register({ executionEngine: 'durable' })).toBe('wrapper-owned');
     expect(policy.durable).toEqual({ executionEngine: false });
-  });
-});
-
-describe('best-effort caller context diagnostics', () => {
-  it.each([() => {}, Symbol('closure'), 1n, { nested: { fn: () => {} } }, new Map()])(
-    'finds unsupported values without serializing them',
-    value => {
-      expect(hasNonJsonContextValue(value)).toBe(true);
-    },
-  );
-
-  it('distinguishes shared JSON references from ancestor cycles', () => {
-    const shared = { value: 1 };
-    expect(hasNonJsonContextValue({ a: shared, b: shared })).toBe(false);
-    const cycle: { self?: unknown } = {};
-    cycle.self = cycle;
-    expect(hasNonJsonContextValue(cycle)).toBe(true);
-  });
-
-  it('does not invoke getters or custom serialization and tolerates reflection failure', () => {
-    let calls = 0;
-    const value = Object.defineProperty({}, 'value', {
-      enumerable: true,
-      get() {
-        calls++;
-        throw new Error('getter');
-      },
-    });
-    Object.defineProperty(value, 'toJSON', {
-      get() {
-        calls++;
-        throw new Error('serializer');
-      },
-    });
-    expect(hasNonJsonContextValue(value)).toBe(false);
-    expect(calls).toBe(0);
-    expect(
-      hasNonJsonContextValue(
-        new Proxy(
-          {},
-          {
-            ownKeys() {
-              throw new Error('proxy');
-            },
-          },
-        ),
-      ),
-    ).toBe(false);
-  });
-
-  it('includes the depth boundary but stops beyond it', () => {
-    const nest = (depth: number): unknown => (depth ? { value: nest(depth - 1) } : 1n);
-    expect(hasNonJsonContextValue(nest(CONTEXT_INSPECTION_MAX_DEPTH))).toBe(true);
-    expect(hasNonJsonContextValue(nest(CONTEXT_INSPECTION_MAX_DEPTH + 1))).toBe(false);
-  });
-
-  it('stops reflecting on a wide context once the inspection budget is exhausted', () => {
-    let descriptors = 0;
-    const wide = new Proxy(Object.fromEntries(Array.from({ length: 10_000 }, (_, index) => [index, null])), {
-      getOwnPropertyDescriptor(target, key) {
-        descriptors++;
-        return Reflect.getOwnPropertyDescriptor(target, key);
-      },
-    });
-    expect(hasNonJsonContextValue(wide)).toBe(false);
-    expect(descriptors).toBeLessThanOrEqual(CONTEXT_INSPECTION_MAX_NODES * 2);
-  });
-
-  it('includes the node boundary but stops beyond it', () => {
-    expect(hasNonJsonContextValue([...Array(CONTEXT_INSPECTION_MAX_NODES - 2).fill(null), 1n])).toBe(true);
-    expect(hasNonJsonContextValue([...Array(CONTEXT_INSPECTION_MAX_NODES - 1).fill(null), 1n])).toBe(false);
   });
 });

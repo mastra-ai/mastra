@@ -246,12 +246,8 @@ import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-t
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled } from './streams/config';
 import { AGENT_STREAM_TOPIC } from './streams/constants';
-import {
-  CONTEXT_INSPECTION_MAX_NODES,
-  ExecutionEnginePolicy,
-  hasNonJsonContextValue,
-} from './streams/execution-engine';
-import type { ExecutionEngineDefaults } from './streams/execution-engine';
+import { ExecutionEnginePolicy } from './streams/execution-policy';
+import type { ExecutionEngineDefaults } from './streams/execution-policy';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
@@ -1815,21 +1811,8 @@ export class Agent<
     }
   }
 
-  #beginExecutionPolicy(requestContext?: RequestContext): void {
+  #beginExecutionPolicy(): void {
     this.#executionEnginePolicy.freeze();
-    if (!this.#executionEnginePolicy.inherited || !requestContext || this.#executionPolicyWarnings.has('context'))
-      return;
-    const entries = [];
-    for (const entry of requestContext.entries()) {
-      entries.push(entry);
-      if (entries.length >= CONTEXT_INSPECTION_MAX_NODES) break;
-    }
-    if (hasNonJsonContextValue(entries)) {
-      this.#warnExecutionPolicy(
-        'context',
-        'Mastra-inherited execution engine policy received non-JSON caller request context; durable execution requires serializable values.',
-      );
-    }
   }
 
   /**
@@ -10210,7 +10193,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
-    this.#beginExecutionPolicy(options?.requestContext);
+    this.#beginExecutionPolicy();
 
     // Validate request context if schema is provided
     await this.#validateRequestContext(options?.requestContext);
@@ -11208,7 +11191,7 @@ export class Agent<
     // Extract and forward any client observability data attached to
     // tool-result messages before they reach the loop/model.
     this.#extractClientObservability(messages);
-    this.#beginExecutionPolicy(streamOptions?.requestContext);
+    this.#beginExecutionPolicy();
 
     // Validate request context if schema is provided
     await this.#validateRequestContext(streamOptions?.requestContext);

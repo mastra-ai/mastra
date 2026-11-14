@@ -9,7 +9,7 @@ import { createDurableAgent, createEventedAgent, DurableAgent, EventedAgent } fr
 import { isDurableAgentLike } from '../../types';
 import type { AgentDurableOption } from '../../types';
 import { hasDurableExecution } from '../execution-capability';
-import type { ExecutionEngine } from '../execution-engine';
+import type { ExecutionEngine } from '../execution-policy';
 
 const config = { id: 'policy', name: 'Policy', instructions: 'Help the user.', model: 'openai/gpt-4o' } as const;
 const inputs = [
@@ -168,7 +168,7 @@ describe('native Agent stored-registration policy', () => {
   );
 
   it.each([false, 'durable', 'evented'] as const)(
-    'does not diagnose incompatible defaults or caller closures for explicit policy %s',
+    'does not diagnose incompatible defaults for explicit policy %s',
     async executionEngine => {
       const agent = new Agent({
         ...config,
@@ -179,40 +179,12 @@ describe('native Agent stored-registration policy', () => {
       const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
       new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'evented' } });
       const requestContext = new RequestContext();
-      requestContext.set('closure', () => {});
       await expect(agent.stream('hello', { requestContext })).rejects.toThrow('Request context validation failed');
       expect(
         warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation is deferred')),
       ).toHaveLength(0);
     },
   );
-
-  it('does not diagnose JSON-safe caller context for inherited policy', async () => {
-    const agent = new Agent({ ...config, requestContextSchema: z.object({ token: z.string() }) });
-    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-    new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'durable' } });
-    const requestContext = new RequestContext();
-    requestContext.set('order', { id: 4821, tags: ['shipped'] });
-    await expect(agent.generate('hello', { requestContext })).rejects.toThrow('Request context validation failed');
-    expect(
-      warn.mock.calls.filter(([message]) => String(message).includes('Native execution activation is deferred')),
-    ).toHaveLength(0);
-  });
-
-  it('inspects caller context only on invocation and deduplicates unsupported-value diagnostics', async () => {
-    const agent = new Agent({ ...config, requestContextSchema: z.object({ token: z.string() }) });
-    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-    new Mastra({ agents: { policy: agent }, durable: { executionEngine: 'durable' } });
-    const requestContext = new RequestContext();
-    requestContext.set('closure', () => {});
-    expect(warn).not.toHaveBeenCalled();
-    for (const method of ['stream', 'generate'] as const) {
-      await expect(agent[method]('hello', { requestContext })).rejects.toThrow('Request context validation failed');
-    }
-    expect(
-      warn.mock.calls.filter(([message]) => String(message).includes('non-JSON caller request context')),
-    ).toHaveLength(1);
-  });
 });
 
 // COR-1563: wrapping an independently registered Agent must not leave inherited execution policy behind.
