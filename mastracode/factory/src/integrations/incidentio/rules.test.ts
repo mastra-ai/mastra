@@ -42,6 +42,21 @@ async function setup(overrides?: IncidentioRuleOverrides, boards = createBoardRe
 }
 
 describe('IncidentioRules', () => {
+  it('runs intake again on each change a sync sees to an item with no card, as intake turned it away', async () => {
+    const { project, service, workItems } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    // Nothing changed since: no second look.
+    await ingest(issue);
+    await ingest({ ...issue, assignee: 'bob', updatedAt: '2026-07-03T00:00:00Z' });
+
+    const intakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      record => record.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(intakes).toHaveLength(2);
+  });
+
   it('files an observed follow-up on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
