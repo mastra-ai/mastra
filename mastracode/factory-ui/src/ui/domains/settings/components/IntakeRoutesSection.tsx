@@ -38,7 +38,13 @@ import { queryKeys } from '../../../../api/keys';
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteListResponse } from '../../../../api/types';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { BoardRequestError } from '../../../../hooks/useBoardEditor';
-import { useIntakeRoutesQuery, useIntakeRouteWrites } from '../../../../hooks/useIntakeRoutes';
+import { useApiConfig } from '../../../../api/config';
+import {
+  applyReroute,
+  previewReroute,
+  useIntakeRoutesQuery,
+  useIntakeRouteWrites,
+} from '../../../../hooks/useIntakeRoutes';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
@@ -191,8 +197,10 @@ function JoinIssueCard({ checked, onChange }: { checked: boolean; onChange: (joi
  */
 function useRouteSaves(factoryId: string) {
   const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
   const writes = useIntakeRouteWrites(factoryId);
   const queue = useRef<Promise<void>>(Promise.resolve());
+  const previews = useRef(0);
   const [failures, setFailures] = useState(0);
   const key = queryKeys.intakeRoutes(factoryId);
 
@@ -215,7 +223,47 @@ function useRouteSaves(factoryId: string) {
         },
       );
     queue.current = done.then(() => undefined);
+    void done.then(saved => {
+      if (saved) void warnOfReroute();
+    });
     return done;
+  };
+  /** The routes now file some untouched cards elsewhere: warn, and offer to move them. */
+  const warnOfReroute = async () => {
+    const asked = ++previews.current;
+    const preview = await previewReroute(baseUrl, factoryId).catch(() => undefined);
+    // A later save asked again; only its answer describes the routes as they are now.
+    if (asked !== previews.current || !preview) return;
+    if (preview.total === 0) {
+      toast.dismiss(`reroute-${factoryId}`);
+      return;
+    }
+    const where = preview.moves.map(move => `${move.count} from ${move.fromBoard} to ${move.toBoard}`).join(', ');
+    toast.warning(
+      `${preview.total} untouched card${preview.total === 1 ? '' : 's'} now match${preview.total === 1 ? 'es' : ''} another board (${where}).`,
+      {
+        id: `reroute-${factoryId}`,
+        duration: Infinity,
+        action: {
+          label: 'Move',
+          onClick: () =>
+            void applyReroute(baseUrl, factoryId).then(
+              ({ moved, skipped }) => {
+                const movedText = `Moved ${moved} card${moved === 1 ? '' : 's'} to the start of their new board.`;
+                if (skipped > 0) {
+                  toast.warning(
+                    `${movedText} ${skipped} card${skipped === 1 ? ' was' : 's were'} skipped because ${skipped === 1 ? 'it' : 'they'} changed in the meantime.`,
+                  );
+                } else {
+                  toast.success(movedText);
+                }
+                void queryClient.invalidateQueries();
+              },
+              (error: unknown) => toast.error(saveFailureMessage(error)),
+            ),
+        },
+      },
+    );
   };
   return { latest, show, save, failures };
 }

@@ -1,5 +1,7 @@
 # create-mastra
 
+## 1.39.1-alpha.0
+
 ## 1.39.0
 
 ### Patch Changes

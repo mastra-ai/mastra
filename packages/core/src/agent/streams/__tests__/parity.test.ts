@@ -106,10 +106,14 @@ async function recordBothEngines(getMock: () => any, scenario: Scenario) {
   const durable = await recordRun(getMock, 'durable', scenario);
   const evented = await recordRun(getMock, 'evented', scenario);
   expect(evented).toEqual(durable);
-  // The default loop reports iterations through `onIterationComplete` only;
-  // everything else a plain Agent publishes matches DurableAgent.
+  // The default loop reports iterations through `onIterationComplete` only and
+  // doesn't need the durable replay boundary; all other published events match.
   const plain = await recordRun(getMock, 'plain', scenario);
-  expect(plain).toEqual(durable.filter(label => label !== AgentStreamEventTypes.ITERATION_COMPLETE));
+  expect(plain).toEqual(
+    durable.filter(
+      label => label !== AgentStreamEventTypes.ITERATION_COMPLETE && label !== AgentStreamEventTypes.ITERATION_START,
+    ),
+  );
   return durable;
 }
 
@@ -133,6 +137,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:text-start",
         "chunk:text-delta",
@@ -159,6 +164,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",
@@ -167,6 +173,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
         "chunk:tool-result",
         "chunk:step-finish",
         "iteration-complete",
+        "iteration-start",
         "step-start",
         "chunk:text-start",
         "chunk:text-delta",
@@ -192,6 +199,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",
@@ -215,6 +223,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:error",
         "chunk:step-finish",
@@ -250,6 +259,7 @@ describe('agent stream events: plain Agent vs default and evented engine parity'
     expect(events).toMatchInlineSnapshot(`
       [
         "chunk:start",
+        "iteration-start",
         "step-start",
         "chunk:tool-call-input-streaming-start",
         "chunk:tool-call-delta",

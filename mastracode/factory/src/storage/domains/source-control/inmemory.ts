@@ -33,8 +33,23 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
   sessionsRows: SourceControlSession[] = [];
   sessionRepositoriesRows: SourceControlSessionRepository[] = [];
 
+  readonly #linkedRepositoryListeners = new Set<() => void>();
+
   constructor(integrationId = 'github') {
     this.integrationId = integrationId;
+  }
+
+  onLinkedRepositoriesChanged(listener: () => void): () => void {
+    this.#linkedRepositoryListeners.add(listener);
+    return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  linkedRepositoryChangesShared(): boolean {
+    return true;
+  }
+
+  #linkedRepositoriesChanged(): void {
+    for (const listener of this.#linkedRepositoryListeners) listener();
   }
 
   readonly installations = {
@@ -81,6 +96,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
       const index = this.installationsRows.findIndex(row => row.orgId === orgId && row.id === id);
       if (index < 0) return false;
       this.installationsRows.splice(index, 1);
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };
@@ -180,6 +196,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
           conn.installationId = newInstallationId;
         }
       }
+      this.#linkedRepositoriesChanged();
       return existing;
     },
   };
@@ -239,6 +256,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         createdAt: new Date(),
       };
       this.connectionsRows.push(created);
+      this.#linkedRepositoriesChanged();
       return created;
     },
     delete: async ({ orgId, id }: { orgId: string; id: string }): Promise<boolean> => {
@@ -247,6 +265,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         await this.projectRepositories.unlink({ orgId, id: link.id });
       }
       this.connectionsRows.splice(0, this.connectionsRows.length, ...this.connectionsRows.filter(row => row.id !== id));
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };
@@ -360,6 +379,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         updatedAt: now,
       };
       this.projectRepositoriesRows.push(created);
+      this.#linkedRepositoriesChanged();
       return created;
     },
     update: async ({
@@ -409,6 +429,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         this.projectRepositoriesRows.length,
         ...this.projectRepositoriesRows.filter(row => row.id !== id),
       );
+      this.#linkedRepositoriesChanged();
       return true;
     },
   };

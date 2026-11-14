@@ -332,6 +332,31 @@ beforeEach(() => {
   runEndReports.length = 0;
 });
 
+describe('mounted code agent scorers', () => {
+  it('leaves scorers unset by default', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config).not.toHaveProperty('scorers');
+  });
+
+  it('forwards caller-provided scorers', async () => {
+    const scorers = () => ({});
+    const config = await prepareFactory({ storage: fakeStorage(), scorers });
+
+    expect(config.scorers).toBe(scorers);
+  });
+
+  it('discards score results by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
+  });
+});
+
 /** Serve stored threads by id for the rest of the test. */
 function threadsById(threads: Record<string, { id: string; resourceId: string; metadata: Record<string, unknown> }>) {
   controllerMock.queryThreadById.mockImplementation(
@@ -523,16 +548,6 @@ describe('MastraFactory.prepare', () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.subagents).toEqual([]);
-  });
-
-  it('disables rich score storage by default and allows opting in', async () => {
-    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
-    expect(disabled.disableScoreStorage).toBe(true);
-
-    vi.clearAllMocks();
-
-    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
-    expect(enabled.disableScoreStorage).toBe(false);
   });
 
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
@@ -2208,6 +2223,52 @@ describe('MastraFactory.prepare', () => {
       const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
       const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
       expect(paths).toContain('/web/jira/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('exposes Vanta intake with Platform credentials without explicit registration', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not register Platform Vanta without Platform credentials', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
+    vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+    try {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).not.toContain('/web/vanta/status');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('keeps an explicit Vanta integration instead of registering Platform Vanta', async () => {
+    vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', 'platform-token');
+    try {
+      const config = await prepareFactory({
+        storage: fakeStorage(),
+        integrations: [
+          fakeIntegration({
+            id: 'vanta',
+            routes: () => [{ path: '/web/custom-vanta', method: 'GET', handler: () => new Response() }],
+          }),
+        ],
+      });
+      const buildApiRoutes = config.buildApiRoutes as (deps: object) => Array<{ path: string }>;
+      const paths = buildApiRoutes({ controller: sessionNotifierStub, authStorage: {} }).map(r => r.path);
+      expect(paths).toContain('/web/custom-vanta');
+      expect(paths).not.toContain('/web/vanta/status');
     } finally {
       vi.unstubAllEnvs();
     }

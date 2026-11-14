@@ -190,6 +190,23 @@ describe("a teammate's Factory session", () => {
       expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
     });
 
+    // A card a webhook filed, or an automatic phase picked up, runs in a session no person owns.
+    it('says the session is the Factory’s, with no takeover, when automatic work owns it', async () => {
+      openWardSessionAs('user-caleb', {
+        session: {
+          ...wardSession,
+          userId: `factory-project:${FACTORY_ID}`,
+          owner: { id: `factory-project:${FACTORY_ID}`, name: 'Factory' },
+          branch: 'factory/issue-49',
+          capabilities: { ...wardSession.capabilities, takeOwnership: false },
+        },
+        path: BOARD_THREAD_PATH,
+      });
+
+      expect(await screen.findByText('You’re steering the Factory’s session')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
+    });
+
     it('offers no takeover of a Slack thread, which the server keeps with its owner', async () => {
       openWardSessionAs('user-damien', {
         session: {

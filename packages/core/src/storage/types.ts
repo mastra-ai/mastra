@@ -195,8 +195,13 @@ export type StorageListWorkflowRunsInput = {
   status?: WorkflowRunStatus;
   /**
    * When true, callers only need run metadata. Adapters MAY reduce each run's
-   * snapshot to `{ status, timestamp }` to avoid loading the full snapshot.
-   * Adapters that ignore this return full snapshots.
+   * snapshot to `{ status, timestamp, parentWorkflow?: { workflowId, runId } }`
+   * to avoid loading the full snapshot. A reduced snapshot has no `context` or
+   * any other snapshot field, and leaves out `status` or `timestamp` when the
+   * run has none. `parentWorkflow` is present only when the run's parent has
+   * both IDs, and is never `null`. Every other run field is unchanged.
+   * Adapters that ignore this return full snapshots; every adapter that
+   * supports run fencing reduces them.
    */
   summary?: boolean;
 };
@@ -2358,6 +2363,8 @@ export interface UpdateWorkflowStateOptions {
   resumeClaimedAt?: number;
   /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
   resumeLeasedClaimAt?: number;
+  /** What an agent resume claims this run with. See `WorkflowRunState.resumeClaimIntent`. */
+  resumeClaimIntent?: WorkflowRunState['resumeClaimIntent'];
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a

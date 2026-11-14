@@ -2,11 +2,14 @@ import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Routes, Route } from 'react-router';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { GithubRepo, FactoryProjectPayload } from '../../services/github';
+import { fetchIntakeConfig } from '../../../factory/services/intake';
+import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabProject } from '../../../factory/services/gitlab';
 import {
   ONBOARDING_FACTORY_KEY,
@@ -54,6 +57,7 @@ function renderOnboarding() {
         <Route path="/onboarding" element={<EmptyFactoryState onDismissGithubCallback={() => {}} />} />
         <Route path="/factories/:id" element={<h1>Factory ready</h1>} />
       </Routes>
+      <Toaster />
     </MemoryRouter>,
   );
 }
@@ -171,6 +175,11 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
       }
       return HttpResponse.json({ config: body });
     }),
+    // A GitLab project is routed to the new Factory on its way in, which is what the board reads.
+    http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
+      writes.push({ path: 'routing', body: await request.json() });
+      return HttpResponse.json({ bindings: [] });
+    }),
     http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
       writes.push({ path: 'model', body: await request.json() });
       if (failure === 'model' && !failed) {
@@ -185,6 +194,25 @@ function registerSetup(failure?: 'connection' | 'intake' | 'model') {
     }),
   );
   return writes;
+}
+
+/**
+ * Intake endpoints backed by a config that survives the run, so what setup wrote can be read back
+ * the way Settings › Work Intake reads it.
+ */
+function registerIntake(initial: Record<string, unknown> = {}) {
+  const stored: Record<string, unknown> = { ...initial };
+  const saved: unknown[] = [];
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: stored })),
+    http.put(`${TEST_BASE_URL}/web/intake/config`, async ({ request }) => {
+      const body = z.record(z.string(), z.unknown()).parse(await request.json());
+      saved.push(body);
+      Object.assign(stored, body);
+      return HttpResponse.json({ config: stored });
+    }),
+  );
+  return { saved, stored };
 }
 
 /** Create factory, once the Model section has resolved every required choice. */
@@ -238,7 +266,8 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('radio', { name: 'octo/other' }));
     await user.click(screen.getByRole('button', { name: 'Continue' }));
     const work = await findActiveSection('Work');
-    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
+    // The picked repository is a source on its own, so Work offers Continue without any tracker.
+    await user.click(await work.findByRole('button', { name: 'Continue' }));
 
     const modelSection = await findActiveSection('Model');
     const accounts = await findActiveSection('Accounts');
@@ -246,7 +275,7 @@ describe('Draft Factory onboarding', () => {
     await chooseProvider(user, 'OpenAI', modelSection);
     expect(await modelSection.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
     expect(writes).toEqual([]);
-    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('GitHub')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change codebase' }));
     await user.click(await screen.findByRole('radio', { name: 'GitLab' }));
@@ -277,9 +306,94 @@ describe('Draft Factory onboarding', () => {
       branch: 'develop',
     });
     expect(writes.find(item => item.path === 'model')?.body).toEqual({ defaultModelId: 'anthropic/claude-fable-5' });
+    // A GitLab project only feeds the board once it is routed to the Factory it was picked for.
+    expect(writes.find(item => item.path === 'routing')?.body).toEqual({
+      integrationId: 'gitlab',
+      sourceId: 'gitlab-source',
+      factoryProjectId: 'fp-1',
+    });
     expect(readOnboardingDraft()).toEqual({});
     expect(sessionStorage.getItem(ONBOARDING_FACTORY_KEY)).toBeNull();
   }, 20_000);
+
+  it('selects the codebase repository on the way in when the Work step switch is on', async () => {
+    registerSetup();
+    registerIntake();
+    seedOnboarding('model', { modelScope: 'factory', repository: repo, workConfirmed: true, model });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    // Setup selects the linked repository, which is what feeds the board.
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toEqual(['octo/hello']);
+  });
+
+  it('leaves an already-syncing repository selected when the Work step switch is off', async () => {
+    registerSetup();
+    // The organization's selection before onboarding already holds the repository this setup links.
+    const intake = registerIntake({ github: { enabled: true, sourceIds: ['octo/hello', 'octo/teammate'] } });
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: repo,
+      workConfirmed: true,
+      codeHostSync: false,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    // Switching off only undoes what this setup did, so nothing is written at all: the repository
+    // is never selected and another Factory's or another member's selection is left alone.
+    expect(intake.saved).toEqual([]);
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toEqual(['octo/hello', 'octo/teammate']);
+  });
+
+  it('never starts syncing a repository the Work step switch left off', async () => {
+    registerSetup();
+    // Nothing is selected before onboarding, so "off" must not select the repository either, which
+    // leaves the intake config untouched.
+    const intake = registerIntake();
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: repo,
+      workConfirmed: true,
+      codeHostSync: false,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(intake.saved).toEqual([]);
+    expect((await fetchIntakeConfig(TEST_BASE_URL)).github.sourceIds).toBeNull();
+  });
+
+  it.each([
+    ['GitHub', 'intake'],
+    ['GitLab', 'routing'],
+  ] as const)('finishes setup with a warning when the %s issue source cannot be saved', async (host, failing) => {
+    const writes = registerSetup();
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/intake/${failing === 'intake' ? 'config' : 'bindings'}`, async ({ request }) => {
+        writes.push({ path: failing, body: await request.json() });
+        return HttpResponse.json({ error: 'unavailable' }, { status: 502 });
+      }),
+    );
+    seedOnboarding('model', {
+      modelScope: 'factory',
+      repository: host === 'GitLab' ? gitLabProjectRepository(gitlabProject)! : repo,
+      workConfirmed: true,
+      model,
+    });
+    const user = userEvent.setup();
+    renderOnboarding();
+    await user.click(await enabledCreateButton());
+    // The Factory and its link exist by now, so both hosts finish setup and point to Settings.
+    expect(await screen.findByRole('heading', { name: 'Factory ready' })).toBeInTheDocument();
+    expect(await screen.findByText("Issues won't sync yet")).toBeInTheDocument();
+    expect(writes.some(item => item.path === failing)).toBe(true);
+  });
 
   it('restores repository and model choices after a redirect or reload without writing them', async () => {
     const writes = registerSetup();
@@ -326,11 +440,11 @@ describe('Draft Factory onboarding', () => {
 
     await user.click(modelSummary.getByRole('button', { name: 'Change model' }));
     await findActiveSection('Model');
-    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('Set up later')).toBeInTheDocument();
+    expect(within(screen.getByRole('region', { name: 'Work' })).getByText('GitHub')).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     const work = await findActiveSection('Work');
-    await user.click(await work.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await work.findByRole('button', { name: 'Continue' }));
     await findActiveSection('Model');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create factory' })).toBeEnabled());
     expect(writes).toEqual([]);
@@ -383,7 +497,7 @@ describe('Draft Factory onboarding', () => {
     await user.click(screen.getByRole('button', { name: 'Change work' }));
     expect(await screen.findByRole('heading', { name: 'Work', level: 2 })).toHaveFocus();
 
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     expect(await screen.findByRole('heading', { name: 'Accounts', level: 2 })).toHaveFocus();
   });
 
@@ -461,7 +575,7 @@ describe('Draft Factory onboarding', () => {
     expect(writes.filter(item => item.path === 'create')).toHaveLength(1);
   });
 
-  it.each(['intake', 'model'] as const)(
+  it.each(['model'] as const)(
     'replaces only its own repository link when the codebase changes after a failed %s save',
     async failure => {
       const writes = registerSetup(failure);
@@ -930,7 +1044,7 @@ describe('Account presets', () => {
     seedOnboarding('project-management', { repository: repo });
     const user = userEvent.setup();
     renderOnboarding();
-    await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
+    await user.click(await screen.findByRole('button', { name: 'Continue' }));
     const modelSection = await findActiveSection('Model');
     expect(screen.queryByRole('region', { name: 'Accounts' })).not.toBeInTheDocument();
     expect(modelSection.getByText('Local connection')).toBeInTheDocument();

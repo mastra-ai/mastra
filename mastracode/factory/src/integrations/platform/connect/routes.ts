@@ -42,6 +42,7 @@ export const PLATFORM_CONNECT_PROVIDERS: Record<string, PlatformConnectProvider>
   jira: { integrationId: 'jira', connectionIntegrationIds: ['jira'] },
   'incident-io': { integrationId: 'incident-io', connectionIntegrationIds: ['incident-io'] },
   gitlab: { integrationId: 'gitlab', connectionIntegrationIds: ['gitlab'] },
+  vanta: { integrationId: 'vanta', connectionIntegrationIds: ['vanta'] },
 };
 
 interface PlatformConnectionRow {
@@ -170,7 +171,7 @@ export function buildConnectToolsRoute(auth: RouteAuth, source: ConnectToolsSour
             };
           })
           .sort((a, b) => a.providerName.localeCompare(b.providerName));
-        return c.json({ connections });
+        return c.json({ projectId, connections });
       } catch (err) {
         return platformError(c, err);
       }

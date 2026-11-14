@@ -19,6 +19,7 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
 import type { OpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -435,7 +436,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const model = await this.resolveLanguageModel({
       apiKey: auth.apiKey ?? '',
@@ -443,6 +444,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       headers: mergeHeaders(this.config.headers, auth.headers),
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     if (isLanguageModelV4(model)) {
@@ -480,7 +484,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       };
     }
 
-    const sanitizedOptions = this.stripUnsupportedSamplingParams(options);
+    let sanitizedOptions = this.stripUnsupportedSamplingParams(options);
 
     const { transport, websocket } = getOpenAITransport(
       sanitizedOptions.providerOptions as ProviderOptions | undefined,
@@ -502,6 +506,9 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       responsesWebSocket: websocket,
       ...resolved,
     });
+    if (this.gatewayId === 'mastra' && isOpenRouterModel(model)) {
+      sanitizedOptions = prepareToolsForMastraGateway(sanitizedOptions, this.config.routerId);
+    }
 
     // Handle V2, V3, and V4 models
     const streamTransport = this.#lastStreamTransport;

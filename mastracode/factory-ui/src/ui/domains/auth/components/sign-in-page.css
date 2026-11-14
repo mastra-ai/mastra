@@ -38,13 +38,6 @@
   --factory-stage-color: var(--factory-ship);
 }
 
-.factory-visual-hint::before {
-  width: 1.375rem;
-  height: 1px;
-  background: var(--factory-rail-line);
-  content: '';
-}
-
 @media (width < 31.25rem) {
   .factory-stage-label {
     justify-content: center;
