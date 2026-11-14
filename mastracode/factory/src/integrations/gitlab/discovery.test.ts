@@ -84,6 +84,12 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
       return json({ id: 101, path_with_namespace: PROJECT_PATH, default_branch: 'main' });
     }
     if (url.pathname === '/api/v4/projects/101/merge_requests') return mergeRequests();
+    const single = url.pathname.match(/^\/api\/v4\/projects\/101\/merge_requests\/(\d+)$/);
+    if (single) {
+      const listed = (await mergeRequests().json()) as Array<{ iid: number }>;
+      const found = listed.find(mergeRequest => mergeRequest.iid === Number(single[1]));
+      return found ? json(found) : json({ message: '404 Not found' }, 404);
+    }
     if (url.pathname === '/api/v4/projects/101/issues') {
       return json([
         {
@@ -138,7 +144,7 @@ async function linkedFactory(mergeRequests: () => Response, mode: 'direct' | 'pl
     }));
   /** GitLab member lookups, which every rule evaluation of a listed event pays twice. */
   const memberLookups = () => fetchImpl.mock.calls.filter(([input]) => String(input).includes('/members/all')).length;
-  return { gitlab, context, sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded, memberLookups };
+  return { gitlab, context, sweep: attachGitLabReconciler(gitlab, context)!, filed, seeded, memberLookups, project };
 }
 
 const openMergeRequest = {
@@ -194,20 +200,42 @@ describe('GitLab sweep discovery', () => {
 
     it('asks GitLab for no members and commits nothing, while a new head and a new merge request still go through the rules', async () => {
       let mergeRequests = [pushed('abc', '2030-01-02T00:00:00Z')];
-      const { sweep, filed, seeded, memberLookups } = await linkedFactory(() => json(mergeRequests));
+      const { sweep, filed, seeded, memberLookups, project } = await linkedFactory(() => json(mergeRequests));
+      await sweep();
+      await seeded.workItems.upsert({
+        orgId: project.orgId,
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'gitlab',
+            type: 'pull-request',
+            externalId: `gitlab-pr:${Buffer.from(
+              JSON.stringify({ version: 1, host: HOST, projectId: 101, mergeRequestIid: 5 }),
+              'utf8',
+            ).toString('base64url')}`,
+          },
+          title: 'Unannounced MR',
+          board: 'work',
+          stages: ['pr-review'],
+          sessions: {},
+          metadata: { authorTrusted: true },
+        },
+      });
       await sweep();
       const afterFirstSweep = await filed();
       const commits = vi.spyOn(seeded.workItems, 'commitRuleEvaluation');
 
+      const mergeRequestCardRefreshLookups = 1;
       const lookupsBefore = memberLookups();
       await expect(sweep()).resolves.toMatchObject({ failed: 0 });
-      expect(memberLookups()).toBe(lookupsBefore);
+      expect(memberLookups() - lookupsBefore).toBe(mergeRequestCardRefreshLookups);
       expect(commits).not.toHaveBeenCalled();
       expect(await filed()).toEqual(afterFirstSweep);
 
       mergeRequests = [pushed('def', '2030-01-03T00:00:00Z'), { ...openMergeRequest, id: 9006, iid: 6, title: 'Later MR' }];
       await sweep();
-      expect(memberLookups()).toBeGreaterThan(lookupsBefore);
+      expect(memberLookups() - lookupsBefore).toBeGreaterThan(2 * mergeRequestCardRefreshLookups);
       expect((await filed()).map(decision => decision.title)).toContain('Later MR');
     });
 

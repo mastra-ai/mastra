@@ -658,7 +658,10 @@ export class GitLabRules {
         ownedByCard: trackedItem.id !== attachedItem?.id || cardOwnsBranch(trackedItem, headBranch),
       });
     }
-    return combined(results);
+    const result = combined(results);
+    const headWithoutCard =
+      parsed.deliveryId.startsWith('poll:merge-request-head:') && !reviewItem && !attachedItem;
+    return headWithoutCard ? { ...result, settled: false } : result;
   }
 
   /**
