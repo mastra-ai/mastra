@@ -704,4 +704,84 @@ describe('restart while a resumed foreach item runs', () => {
     if (result.status !== 'suspended') return;
     expect(itemOutputs(result.steps, 'approve').map(o => o.status)).toEqual(['suspended', 'success', 'suspended']);
   });
+
+  it('resumes only the labelled inner item when a sibling nested run suspends while the resumed one validates', async () => {
+    // A foreach of nested workflows, each with its own foreach. Outer items 0 and 1 suspend and
+    // outer item 2 is never reached; inner item 1 of outer item 0 is resumed by label, and the
+    // run crashes once that nested run has claimed its resume. On the restart outer items 0 and 2
+    // run together, and outer item 2 suspends before outer item 0's input validation finishes.
+    const id = 'foreach-of-child-foreach-sibling';
+    const child = `${id}-child`;
+    const runId = 'child-sibling-suspends';
+    const seen: Seen[] = [];
+    const validation = newGate();
+    const parked = newGate();
+    const build = (generation: number) => {
+      const approve = approvalStep(createStep, { id: 'approve', generation, seen, gate: newGate(), blockIn: -1 });
+      const nested = createWorkflow({
+        id: child,
+        // On the restart, outer item 0's validation waits until outer item 2 has suspended.
+        inputSchema: z.array(ITEM).refine(async items => {
+          if (generation === 2 && items[0]?.k === 0) await validation.wait();
+          return true;
+        }),
+        outputSchema: z.any(),
+      })
+        .foreach(approve, { concurrency: 2 })
+        .commit();
+      return createWorkflow({ id, inputSchema: z.array(z.array(ITEM)), outputSchema: z.any() })
+        .foreach(nested, { concurrency: 2 })
+        .commit();
+    };
+
+    // Generation 1 is parked inside the nested run's resume claim, after copying the tables.
+    const storage1 = new MockStore();
+    const first = build(1);
+    new Mastra({ logger: false, storage: storage1, workflows: { [id]: first } });
+    const store1 = (await storage1.getStore('workflows')) as any;
+    let atCrash: RunTables | undefined;
+    let resuming = false;
+    interceptWrites(store1, async (args, write) => {
+      const written = await write(args);
+      if (resuming && !atCrash && args.workflowName === child) {
+        const snapshot = await store1.loadWorkflowSnapshot({ workflowName: child, runId: args.runId });
+        if (snapshot?.status === 'running' && snapshot.context?.approve?.status === 'suspended') {
+          atCrash = copyRunTables(await runTablesOf(storage1));
+          parked.wait();
+          await new Promise(() => {});
+        }
+      }
+      return written;
+    });
+    const run1 = await first.createRun({ runId });
+    const inputData = [
+      [{ k: 0 }, { k: 1 }],
+      [{ k: 2 }, { k: 3 }],
+      [{ k: 4 }, { k: 5 }],
+    ];
+    expect((await run1.start({ inputData })).status).toBe('suspended');
+    resuming = true;
+    void run1.resume({ label: 'item-1', resumeData: APPROVED });
+    await parked.reached;
+    const outer = (await store1.loadWorkflowSnapshot({ workflowName: id, runId }))?.context?.[child];
+    expect(outer).toMatchObject({ status: 'running', resumePayload: APPROVED });
+
+    const storage2 = new MockStore();
+    const second = build(2);
+    new Mastra({ logger: false, storage: storage2, workflows: { [id]: second } });
+    restoreRunTables(await runTablesOf(storage2), atCrash!);
+    const run2 = await second.createRun({ runId });
+    run2.watch(event => {
+      const payload = (event as any).payload;
+      if (event.type === 'workflow-step-progress' && payload?.id === child && payload.currentIndex === 2) {
+        expect(payload.iterationStatus).toBe('suspended');
+        validation.release();
+      }
+    });
+    const result = await run2.restart();
+
+    expect(resumedIn(seen, 1)).toEqual([]);
+    expect(resumedIn(seen, 2)).toEqual([1]);
+    expect(result.status).toBe('suspended');
+  });
 });

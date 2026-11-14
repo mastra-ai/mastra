@@ -502,7 +502,7 @@ export async function executeStep(
           });
           if (snapshot?.status === 'success') {
             // The state the nested run started from, recorded when this run parked on it.
-            const meta = stepResults[step.id]?.suspendPayload?.__workflow_meta;
+            const meta = storedResult?.suspendPayload?.__workflow_meta;
             completedNestedOutput = {
               found: true,
               value: snapshot.result,
@@ -618,11 +618,11 @@ export async function executeStep(
         // In foreach, stepResults[step.id] is shared by all iterations, so also require that
         // this iteration itself suspended; otherwise it would claim a sibling's child run.
         resume:
-          stepResults[step.id]?.status === 'suspended' && (foreachIndex === undefined || nestedIterationSuspendPayload)
+          storedResult?.status === 'suspended' && (foreachIndex === undefined || nestedIterationSuspendPayload)
             ? {
                 steps: resume?.steps?.slice(1) || [],
                 resumePayload: resume?.resumePayload,
-                runId: (nestedIterationSuspendPayload ?? stepResults[step.id]?.suspendPayload)?.__workflow_meta?.runId,
+                runId: (nestedIterationSuspendPayload ?? storedResult?.suspendPayload)?.__workflow_meta?.runId,
                 label: resume?.label,
                 // Inside a foreach the index picked this item; otherwise it picks an item of a
                 // foreach inside the nested run.
