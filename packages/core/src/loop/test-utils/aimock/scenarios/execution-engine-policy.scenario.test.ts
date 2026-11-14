@@ -1,5 +1,9 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
+import { hasDurableExecution } from '../../../../agent/types';
+import { createTool } from '../../../../tools';
 import { Agent } from '../../../../agent/agent';
 import { isDurableAgentLike } from '../../../../agent/types';
 import { ConsoleLogger } from '../../../../logger';
@@ -35,6 +39,61 @@ describe('Configured native engines remain native execution', () => {
       });
     }
   }
+
+  it.each(['durable', 'evented'] as const)(
+    '%s ownership preserves an already-running native tool loop',
+    async executionEngine => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'lookup-order', name: 'lookupOrder', arguments: {} }] },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Your order has shipped.' });
+      const started = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const tool = createTool({
+        id: 'lookupOrder',
+        description: 'Look up the order status.',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ status: z.string() }),
+        execute: async () => {
+          started.resolve();
+          await release.promise;
+          return { status: 'shipped' };
+        },
+      });
+      const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` });
+      const agent = new Agent({
+        id: 'live-order',
+        name: 'Live order',
+        instructions: 'Check order status.',
+        model: openai('gpt-4o'),
+        tools: { lookupOrder: tool },
+      });
+      const mastra = new Mastra({ agents: { agent }, durable: { executionEngine, cleanupTimeoutMs: 0 } });
+      const output = await agent.stream('Where is my order?', { maxSteps: 3 });
+      const text = output.text;
+      try {
+        await started.promise;
+        const bus = agent.__getStreamBus();
+        const wrap = executionEngine === 'evented' ? createEventedAgent : createDurableAgent;
+        const wrapped = wrap({ agent });
+        expect(agent.durable).toEqual({ executionEngine: false });
+        expect(agent.__getStreamBus()).toBe(bus);
+        expect(hasDurableExecution(agent)).toBe(false);
+        expect(hasDurableExecution(wrapped)).toBe(true);
+        expect(mastra.getAgent('agent')).toBe(agent);
+        release.resolve();
+        expect(await text).toBe('Your order has shipped.');
+        expect(await output.finishReason).toBe('stop');
+        expect(llm.getRequests()).toHaveLength(2);
+        expect(JSON.stringify(llm.getRequests()[1]?.body)).toContain('shipped');
+      } finally {
+        release.resolve();
+        await output.consumeStream();
+      }
+    },
+  );
 
   it.each(['stream', 'generate'] as const)(
     '%s inspects already-evaluated dynamic defaults on later calls',

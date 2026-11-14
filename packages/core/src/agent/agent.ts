@@ -1766,6 +1766,11 @@ export class Agent<
     return this.#executionEnginePolicy.durable;
   }
 
+  /** @internal Wrapper ownership overrides future policy, not an existing bus or run. */
+  __ownExecutionEnginePolicy(): void {
+    this.#executionEnginePolicy.ownByWrapper();
+  }
+
   /** @internal Configured policy, not a claim of active durable execution. */
   __getExecutionEnginePolicy() {
     return this.#executionEnginePolicy.engine;

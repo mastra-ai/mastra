@@ -146,8 +146,18 @@ describe('Agent durable resumable streams option', () => {
     const result = await durable.stream('Say hello.');
     await result.output.consumeStream();
     await waitForFinish(pubsub, result.runId);
+    expect(await result.output.text).toBe('Hello there.');
+    expect(pubsub.types(result.runId).filter(type => type === AgentStreamEventTypes.FINISH)).toHaveLength(1);
     expect(durable.cache).toBeNull();
-    expect(agent.__getStreamBus()).toBeUndefined();
+    // Whole-field wrapper ownership overrides the inner stream opt-out, not the wrapper's replay configuration.
+    expect(agent.durable).toEqual({ executionEngine: false });
+    const published = pubsub.published.length;
+    const innerBus = agent.__getStreamBus();
+    expect(innerBus).toBeDefined();
+    expect(innerBus).not.toBe(durable.__getStreamBus());
+    await pubsub.flush();
+    expect(pubsub.published).toHaveLength(published);
+    expect(durable.cache).toBeNull();
   });
 
   it('keeps the run owner while the run is replayable and drops it once the topic is cleared', async () => {

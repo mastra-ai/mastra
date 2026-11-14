@@ -5,6 +5,8 @@ import { ConsoleLogger } from '../../../logger';
 import { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
 import { Agent } from '../../agent';
+import { createDurableAgent, createEventedAgent, DurableAgent, EventedAgent } from '../../durable';
+import { hasDurableExecution, isDurableAgentLike } from '../../types';
 import type { AgentDurableOption } from '../../types';
 import type { ExecutionEngine } from '../execution-engine';
 
@@ -193,5 +195,128 @@ describe('native Agent stored-registration policy', () => {
     expect(
       warn.mock.calls.filter(([message]) => String(message).includes('non-JSON caller request context')),
     ).toHaveLength(1);
+  });
+});
+
+// COR-1563: wrapping an independently registered Agent must not leave inherited execution policy behind.
+describe('wrapper ownership overrides the whole inner durable field', () => {
+  const wrappers = [
+    { name: 'DurableAgent', engine: 'durable', wrap: (agent: Agent) => new DurableAgent({ agent }) },
+    { name: 'EventedAgent', engine: 'evented', wrap: (agent: Agent) => new EventedAgent({ agent }) },
+    { name: 'createDurableAgent', engine: 'durable', wrap: (agent: Agent) => createDurableAgent({ agent }) },
+    { name: 'createEventedAgent', engine: 'evented', wrap: (agent: Agent) => createEventedAgent({ agent }) },
+  ] as const;
+  for (const wrapper of wrappers) {
+    for (const executionEngine of ['durable', 'evented'] as const) {
+      for (const registerFirst of [false, true]) {
+        for (const resolveBus of [false, true]) {
+          it.each(inputs)(
+            `${wrapper.name}/${executionEngine}/registered=${registerFirst}/bus=${resolveBus}: isolates %j`,
+            durable => {
+              const agent = new Agent({ ...config, durable });
+              const shouldCache = () => false;
+              const shouldPersistSnapshot = () => false;
+              const mastra = new Mastra({
+                durable: { executionEngine, shouldCache, cleanupTimeoutMs: 0, shouldPersistSnapshot },
+              });
+              if (registerFirst) mastra.addAgent(agent);
+              const bus = resolveBus ? agent.__getStreamBus() : undefined;
+              const transport = bus?.pubsub;
+              const cache = bus?.cache;
+              const capturedConfig = bus?.forkConfig;
+              const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+              const wrapped = wrapper.wrap(agent);
+              expect(warn).not.toHaveBeenCalled();
+              expect(agent.durable).toEqual({ executionEngine: false });
+              expect(agent.__getExecutionEnginePolicy()).toBe(false);
+              expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
+              expect(hasDurableExecution(wrapped)).toBe(true);
+              expect(isDurableAgentLike(wrapped)).toBe(true);
+              expect(hasDurableExecution(agent)).toBe(false);
+              if (bus) {
+                expect(agent.__getStreamBus()).toBe(bus);
+                expect(bus.pubsub).toBe(transport);
+                expect(bus.cache).toBe(cache);
+                expect(bus.forkConfig).toEqual(capturedConfig);
+              }
+              // A distinct host avoids the existing duplicate-key restriction for replacing a plain registration.
+              const wrapperHost = new Mastra({ agents: { wrapped }, durable: { executionEngine } });
+              expect(wrapperHost.getAgent('wrapped')).toBe(wrapped);
+              for (let attempt = 0; attempt < 2; attempt++) mastra.addAgent(agent);
+              expect(agent.durable).toEqual({ executionEngine: false });
+              expect(wrapped.__getExecutionEngineStrategy()).toBe(wrapper.engine);
+              expect(
+                warn.mock.calls.filter(([message]) =>
+                  String(message).includes('Wrapper-owned inner Agent stays plain'),
+                ),
+              ).toHaveLength(1);
+              warn.mockRestore();
+            },
+          );
+        }
+      }
+    }
+  }
+
+  it.each([false, true])('discards explicit durable transport without reconfiguring an existing bus=%s', resolveBus => {
+    const durableBus = new EventEmitterPubSub();
+    const topLevelBus = new EventEmitterPubSub();
+    const wrapperBus = new EventEmitterPubSub();
+    const shouldCache = () => false;
+    const shouldPersistSnapshot = () => true;
+    const agent = new Agent({
+      ...config,
+      pubsub: topLevelBus,
+      durable: {
+        executionEngine: 'evented',
+        pubsub: durableBus,
+        cache: false,
+        cleanupTimeoutMs: 0,
+        shouldCache,
+        shouldPersistSnapshot,
+      },
+    });
+    const bus = resolveBus ? agent.__getStreamBus() : undefined;
+    const transport = bus?.pubsub;
+    const wrapped = createDurableAgent({
+      agent,
+      pubsub: wrapperBus,
+      cache: false,
+      cleanupTimeoutMs: 0,
+      shouldCache,
+      shouldPersistSnapshot,
+    });
+    expect(agent.durable).toEqual({ executionEngine: false });
+    expect(agent.getPubSub()).toBe(topLevelBus);
+    expect(wrapped.__getStreamBus()?.pubsub).toBe(wrapperBus);
+    const futureBus = agent.__getStreamBus();
+    if (bus) {
+      expect(futureBus).toBe(bus);
+      expect(futureBus?.pubsub).toBe(transport);
+      expect(futureBus?.cache).toBeNull();
+      expect(futureBus?.forkConfig).toMatchObject({
+        pubsub: durableBus,
+        cache: false,
+        cleanupTimeoutMs: 0,
+        shouldCache,
+      });
+    } else {
+      expect(futureBus?.forkConfig.pubsub).toBe(topLevelBus);
+      expect(futureBus?.forkConfig.cache).toBeUndefined();
+      expect(futureBus?.forkConfig.shouldCache).toBeUndefined();
+      expect(futureBus?.forkConfig.cleanupTimeoutMs).toBe(30_000);
+    }
+  });
+
+  it('retains forced evented strategy before host/storage fallback and isolates wrapped forks', () => {
+    const agent = new Agent({ ...config, durable: { executionEngine: 'durable' } });
+    const wrapped = createEventedAgent({ agent });
+    expect(wrapped.__getExecutionEngineStrategy()).toBe('evented');
+    const fork = wrapped.__fork();
+    expect(fork).toBeInstanceOf(EventedAgent);
+    if (!(fork instanceof EventedAgent)) throw new Error('Expected an evented wrapper fork');
+    expect(fork.__getExecutionEngineStrategy()).toBe('evented');
+    expect(fork.agent.durable).toEqual({ executionEngine: false });
+    expect(agent.durable).toEqual({ executionEngine: false });
   });
 });
