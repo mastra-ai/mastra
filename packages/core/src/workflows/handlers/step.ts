@@ -120,6 +120,9 @@ export async function executeStep(
   const journal = engine.getRunJournal(runId);
 
   const stepCallId = globalThis.crypto.randomUUID();
+  // Read before the awaits below: a foreach's items share this record, and a sibling that ends
+  // meanwhile replaces it with its own result.
+  const storedResult = stepResults[step.id];
   const persistedNestedRunId =
     executionContext.foreachIndex !== undefined
       ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]?.metadata
@@ -164,13 +167,13 @@ export async function executeStep(
     resumeDataToUse = resume?.resumePayload;
   } else if (
     restart?.activeStepsPath?.[step.id] &&
-    stepResults[step.id]?.status === 'running' &&
+    storedResult?.status === 'running' &&
     // A foreach item's record is the foreach's own: its payload belongs only to the resumed items.
     (executionContext.foreachIndex === undefined ||
-      takesStoredForeachResume(stepResults[step.id], executionContext.foreachIndex))
+      takesStoredForeachResume(storedResult, executionContext.foreachIndex))
   ) {
     // A resumed step that was in flight when the process died re-runs with its original resume data.
-    resumeDataToUse = (stepResults[step.id] as { resumePayload?: unknown }).resumePayload;
+    resumeDataToUse = (storedResult as { resumePayload?: unknown }).resumePayload;
     restartsResume = true;
   }
 
@@ -187,16 +190,16 @@ export async function executeStep(
         ...(resume.forEachIndex !== undefined ? { forEachIndex: resume.forEachIndex } : {}),
       };
     } else if (restartsResume) {
-      nestedResumeTarget = getNestedResumeTarget(stepResults[step.id]);
+      nestedResumeTarget = getNestedResumeTarget(storedResult);
     }
   }
 
   // Extract suspend data if this step was previously suspended
   // A resumed step re-run after a crash is stored as 'running' but still carries its suspendPayload.
-  const priorStatus = stepResults[step.id]?.status;
+  const priorStatus = storedResult?.status;
   let suspendDataToUse =
     priorStatus === 'suspended' || (priorStatus === 'running' && resumeDataToUse !== undefined)
-      ? stepResults[step.id]?.suspendPayload
+      ? storedResult?.suspendPayload
       : undefined;
 
   // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended

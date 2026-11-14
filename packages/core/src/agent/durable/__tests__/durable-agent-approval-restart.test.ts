@@ -89,6 +89,7 @@ describe('durable agent: restart while an approved tool call runs', () => {
     const recovered = await scenario.restart(await original.checkpoint(), { closeOnSuspend: true });
 
     expect(recovered.streamErrors).toEqual([]);
+    expect(recovered.executionError).toBeUndefined();
     expect(charges.filter(c => c.generation === 2)).toEqual([{ generation: 2, index: 0 }]);
     // The next call asks for its own approval.
     expect(recovered.chunkTypes).toContain('tool-call-approval');
@@ -278,6 +279,7 @@ describe('durable agent: restart while an approved delegation is being resumed',
       const recovered = await scenario.restart(checkpoint, { closeOnSuspend: true });
 
       expect(recovered.streamErrors).toEqual([]);
+      expect(recovered.executionError).toBeUndefined();
       expect(executions).toEqual([{ generation: 2, query: 'alpha' }]);
 
       // Beta's own approval is still pending, and still works.
@@ -303,6 +305,7 @@ describe('durable agent: restart while an approved delegation is being resumed',
       const recovered = await scenario.restart(checkpoint, { closeOnSuspend: true });
 
       expect(recovered.streamErrors).toEqual([]);
+      expect(recovered.executionError).toBeUndefined();
       expect(executions).toEqual([]);
 
       // Both approvals are still pending: approving each again runs it.

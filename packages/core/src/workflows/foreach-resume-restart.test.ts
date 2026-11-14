@@ -633,4 +633,75 @@ describe('restart while a resumed foreach item runs', () => {
       expect(JSON.stringify(events)).not.toContain('foreachResumeTarget');
     });
   });
+
+  it('gives the resumed item its decision when a sibling suspends while it is still validating its input', async () => {
+    // Concurrency 2: items 0 and 1 suspend and item 2 is never reached; item 1 is resumed. On the
+    // restart items 1 and 2 run together, and item 2 suspends before item 1's input validation
+    // finishes. Items share the foreach's record, which item 2's suspension replaces in memory.
+    const id = 'foreach-resume-sibling-suspends';
+    const runId = 'sibling-suspends';
+    const seen: Seen[] = [];
+    const crash = newGate();
+    const validation = newGate();
+    const build = (generation: number) => {
+      const approve = createStep({
+        id: 'approve',
+        // On the restart, item 1's validation waits until item 2 has suspended.
+        inputSchema: ITEM.refine(async ({ k }) => {
+          if (generation === 2 && k === 1) await validation.wait();
+          return true;
+        }),
+        outputSchema: z.object({ k: z.number(), approved: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        suspendSchema: z.object({ ask: z.number() }),
+        execute: async ({ inputData, resumeData, suspendData, suspend }) => {
+          seen.push({ generation, k: inputData.k, resumeData, suspendData });
+          if (resumeData === undefined) return suspend({ ask: inputData.k });
+          if (generation === 1) await crash.wait();
+          return { k: inputData.k, approved: resumeData.approved };
+        },
+      });
+      return createWorkflow({ id, inputSchema: z.array(ITEM), outputSchema: z.any() })
+        .foreach(approve, { concurrency: 2 })
+        .commit();
+    };
+
+    const storage1 = new MockStore();
+    const first = build(1);
+    new Mastra({ logger: false, storage: storage1, workflows: { [id]: first } });
+    const run1 = await first.createRun({ runId });
+    expect((await run1.start({ inputData: ITEMS })).status).toBe('suspended');
+    void run1.resume({ step: 'approve', forEachIndex: 1, resumeData: APPROVED });
+    await crash.reached;
+    const store1 = (await storage1.getStore('workflows'))!;
+    await vi.waitFor(async () => {
+      const snapshot = await store1.loadWorkflowSnapshot({ workflowName: id, runId });
+      expect(snapshot?.context.approve).toMatchObject({ status: 'running', resumePayload: APPROVED });
+    });
+    const atCrash = copyRunTables(await runTablesOf(storage1));
+
+    const storage2 = new MockStore();
+    const second = build(2);
+    new Mastra({ logger: false, storage: storage2, workflows: { [id]: second } });
+    restoreRunTables(await runTablesOf(storage2), atCrash);
+    const run2 = await second.createRun({ runId });
+    run2.watch(event => {
+      const payload = (event as any).payload;
+      if (event.type === 'workflow-step-progress' && payload?.currentIndex === 2) {
+        expect(payload.iterationStatus).toBe('suspended');
+        validation.release();
+      }
+    });
+    const result = await run2.restart();
+
+    expect(seen.filter(s => s.generation === 2).map(s => s.k)).toEqual([2, 1]);
+    expect(resumedIn(seen, 2)).toEqual([1]);
+    expect(seen.find(s => s.generation === 2 && s.k === 1)).toMatchObject({
+      resumeData: APPROVED,
+      suspendData: { ask: 1 },
+    });
+    expect(result.status).toBe('suspended');
+    if (result.status !== 'suspended') return;
+    expect(itemOutputs(result.steps, 'approve').map(o => o.status)).toEqual(['suspended', 'success', 'suspended']);
+  });
 });
