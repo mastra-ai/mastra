@@ -1,5 +1,49 @@
 # @mastra/core
 
+## 1.84.0-alpha.2
+
+### Minor Changes
+
+- Added run metadata to background process callbacks. ([#30161](https://github.com/mastra-ai/mastra/pull/30161))
+
+  `backgroundProcesses` callbacks on `execute_command` now receive, when available, the `agentId`, `threadId`, `resourceId`, and `runId` of the call that started the process, so hosts can route exit notices to the right conversation. `onExit` also receives `killedByAbort`, which is `true` when the abort signal fired (the run's signal by default) and killed the process.
+
+  ```ts
+  backgroundProcesses: {
+    onExit: ({ pid, exitCode, threadId, killedByAbort }) => {
+      if (!killedByAbort) notifyThread(threadId, `Process ${pid} exited with code ${exitCode}`);
+    },
+  },
+  ```
+
+  `truncateOutput` and `DEFAULT_TAIL_LINES` are now exported from `@mastra/core/workspace`, so hosts can trim process output the same way `execute_command` does.
+
+### Patch Changes
+
+- Fixed retries in `dountil` and `dowhile` loops on the evented engine. Each iteration of a loop body now starts at `retryCount` 0 and gets the step's full `retries`, as on the default engine. Before, the count carried over from earlier iterations, so a body that failed once in a later iteration could run out of retries and fail the run. ([#30383](https://github.com/mastra-ai/mastra/pull/30383))
+
+  If your step code reads `retryCount` inside a loop body, it now gets the attempt within the current iteration. The loop condition receives the iteration number as `iterationCount`. To use it inside the body, pass it through the step's output or workflow state.
+
+- Fixed durable agent runs failing with `DURABLE_AGENT_EXECUTION_UNVERIFIED` when an ownership check took longer than the lease TTL (15 seconds by default) while the same process still held the run. These runs used to fail and lose their saved snapshots. They now keep running, and a step stops only when an ownership check fails, the claim can't be renewed before it expires, or another execution takes over the run. ([#30386](https://github.com/mastra-ai/mastra/pull/30386))
+
+- Fixed workflow recovery restarting a run that is still executing, which ran its steps twice. `startAsync()` now takes the run's lease before it saves the first snapshot, so it resolves after the lease is taken and rejects if taking it fails. Runs of workflows whose `shouldPersistSnapshot` saves `waiting` but not `running` now hold a lease too, so recovery no longer restarts them while they execute or sleep. ([#30384](https://github.com/mastra-ai/mastra/pull/30384))
+
+- `processToolResult` now sees and can rewrite a tool's `toModelOutput` result. Previously, when a tool mapped its result with `toModelOutput` (for example a file viewer returning images), output processors only saw and changed the raw result, and the mapped output, images included, still reached the next model call and stored history unchanged. ([#30401](https://github.com/mastra-ai/mastra/pull/30401))
+
+  The hook now receives `modelOutput`. To replace it, commit a `result`-state part that carries the new value in `providerMetadata.mastra.modelOutput`:
+
+  ```ts
+  processToolResult({ messageList, toolCallId, toolName, args, result, modelOutput }) {
+    messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName, args, result },
+      providerMetadata: { mastra: { modelOutput: shrinkImages(modelOutput) } },
+    });
+  }
+  ```
+
+  A processor that replaces only `result`, or edits it in place, now has the new value mapped through `toModelOutput` again, so the model reads the mapping of the processed result rather than of the original. With several processors, each one receives the `modelOutput` the processor before it committed, so a later processor can't bring back an image an earlier one removed. This applies to both regular and durable agents. In durable agents, a `processToolResult` that throws now also keeps the unprocessed mapped output from the model, not only the raw result.
+
 ## 1.84.0-alpha.1
 
 ### Minor Changes

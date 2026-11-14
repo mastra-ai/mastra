@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.41.2-alpha.1
+
+### Patch Changes
+
+- Observational Memory does half as much work per step in long tool runs. Token counting no longer serializes every plain JSON tool result a second time just to check it for images, so each step serializes the earlier tool results twice instead of four times. Token counts are unchanged. ([#30400](https://github.com/mastra-ai/mastra/pull/30400))
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+
 ## 1.41.2-alpha.0
 
 ### Patch Changes
