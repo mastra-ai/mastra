@@ -141,6 +141,7 @@ import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills
 import type { AgentSkillsInput, AgentSkillsResolver, SkillInput } from '../skills/types';
 import { getSnapshotMemoryInfo, InMemoryStore } from '../storage';
 
+import type { WorkflowsStorage } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
 import { matchesRunFence } from '../storage/run-fencing';
 import type { RunFence } from '../storage/run-fencing';
@@ -8208,23 +8209,37 @@ export class Agent<
     return await resolveDynamicArgument(value, { requestContext, mastra: this.#mastra });
   }
 
+  #abortedRunError(runId: string) {
+    return new MastraError({
+      id: 'AGENT_RESUME_ABORTED_RUN',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: `Agent "${this.name}" cannot resume aborted run "${runId}".`,
+      details: { agentName: this.name, runId },
+    });
+  }
+
+  #throwIfRunAborted(runId: string) {
+    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
+      throw this.#abortedRunError(runId);
+    }
+  }
+
+  /**
+   * Another runtime may have aborted this suspended run and left a durable `canceled` record when it
+   * could not delete the snapshot. Never resume that row, whatever this process's resume fence says.
+   */
+  async #throwIfRunCanceledInStorage(runId: string, workflowsStore: WorkflowsStorage | undefined) {
+    if (!workflowsStore) return;
+    const status = await workflowsStore.loadWorkflowRunStatus({ workflowName: AGENTIC_LOOP_WORKFLOW_ID, runId });
+    if (status === 'canceled') throw this.#abortedRunError(runId);
+  }
+
   /**
    * Loads the agentic-loop workflow snapshot for resume, or throws an actionable error.
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  #throwIfRunAborted(runId: string) {
-    if (agentThreadStreamRuntime.isResumeFenced(runId, this.getPubSub())) {
-      throw new MastraError({
-        id: 'AGENT_RESUME_ABORTED_RUN',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: `Agent "${this.name}" cannot resume aborted run "${runId}".`,
-        details: { agentName: this.name, runId },
-      });
-    }
-  }
-
   async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     this.#throwIfRunAborted(runId);
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
@@ -8239,6 +8254,10 @@ export class Agent<
 
     // The run was claimed by another resume while we waited, then finished and was cleaned up.
     if (claimedThenFinished) throw alreadyClaimedResumeError({ agentName: this.name, method, runId });
+
+    // Another runtime aborted this parked run and, unable to delete the snapshot, left a durable
+    // `canceled` record. Treat it exactly like a local abort.
+    if (existingSnapshot?.status === 'canceled') throw this.#abortedRunError(runId);
 
     if (!existingSnapshot) {
       const hasStorage = !!workflowsStore;
@@ -8616,8 +8635,12 @@ export class Agent<
 
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
-    // The run may have been aborted while the snapshot was loading or validating; recheck with no await before claiming.
+    // The run may have been aborted while the snapshot was loading or validating: recheck the
+    // in-process fence synchronously here, before the storage read below.
     this.#throwIfRunAborted(runId);
+    // Another runtime may have aborted the run and left a durable `canceled` record. The guarded
+    // claim below would fail on it anyway, but that surfaces a misleading "already claimed" error.
+    await this.#throwIfRunCanceledInStorage(runId, workflowsStore);
 
     if (!workflowsStore?.supportsConcurrentUpdates()) {
       if (workflowsStore) {
@@ -10682,7 +10705,48 @@ export class Agent<
   }
 
   /**
-   * An aborted suspended run can never be resumed, so drop its workflow
+   * Marks an aborted suspended run `canceled` in shared storage before its snapshots are dropped.
+   *
+   * The resume fence that stops an aborted run from being resumed is per-process, so a peer
+   * runtime would happily claim the surviving snapshot when the delete fails. This status is the
+   * durable tombstone that peer refuses to resume (see `#throwIfRunCanceledInStorage`), the same
+   * one `DurableAgent` writes in its `#cancelParkedRun`. Only the `agentic-loop` row is marked:
+   * that is the row the plain resume path loads, claims and lists.
+   *
+   * Best effort: a failure here must not turn an acknowledged abort into a rejected one. On the
+   * happy path the row is deleted immediately afterwards, so the marker is never observed.
+   */
+  async #markAbortedRunCanceled(runId: string, workflowsStore: WorkflowsStorage | undefined): Promise<void> {
+    if (!workflowsStore) return;
+    const workflowName = AGENTIC_LOOP_WORKFLOW_ID;
+    try {
+      if (workflowsStore.supportsConcurrentUpdates()) {
+        await workflowsStore.updateWorkflowState({
+          workflowName,
+          runId,
+          opts: { status: 'canceled', expectedStatus: 'suspended' },
+        });
+        return;
+      }
+      // Stores without concurrent updates ignore the `expectedStatus` guard, so check first.
+      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+      const snapshot =
+        typeof run?.snapshot === 'string' ? (JSON.parse(run.snapshot) as WorkflowRunState) : run?.snapshot;
+      if (snapshot?.status !== 'suspended') return;
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        resourceId: run?.resourceId,
+        snapshot: { ...snapshot, status: 'canceled' },
+        expectedStatus: 'suspended',
+      });
+    } catch (error) {
+      this.logger.warn(`Failed to mark aborted suspended run ${runId} as canceled`, { runId, error });
+    }
+  }
+
+  /**
+   * An aborted suspended run can never be resumed, so mark it `canceled` and then drop its workflow
    * registration and snapshot rows; otherwise it stays listed as suspended.
    */
   async #deleteAbortedSuspendedRun(runId: string): Promise<boolean> {
@@ -10701,6 +10765,9 @@ export class Agent<
     try {
       mastra.__unregisterInternalWorkflow(AGENTIC_LOOP_WORKFLOW_ID, runId);
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+      // Tombstone before deleting: if a delete fails, the surviving row is what refuses a resume
+      // from another runtime, whose resume fence cannot see this process's abort.
+      await this.#markAbortedRunCanceled(runId, workflowsStore);
       await Promise.all(
         [...workflowNames].map(workflowName =>
           workflowsStore?.deleteWorkflowRunById({ runId, workflowName, storageVersion: 1 }),
