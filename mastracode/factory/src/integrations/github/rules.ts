@@ -1290,8 +1290,11 @@ export class GithubRules {
 
   /**
    * The existing card a pull request opened for the first time belongs with, or undefined when it
-   * gets a card of its own. The card must be open, in this repository, and not a pull request's
-   * own card. In order: the card that authored it (on a board that reviews pull requests), by provenance or session branch,
+   * gets a card of its own. The card must be open and own an issue: a pull request's own card never
+   * takes another, and a card from an integration whose merge requests are its own (GitLab) keeps to
+   * those. A GitHub card must also belong to this repository; a card from another integration (Jira,
+   * Linear, incident.io) carries no repository of its own to match against, so it is taken as it is.
+   * In order: the card that authored it (on a board that reviews pull requests), by provenance or session branch,
    * when the pull request is Factory-authored or its author is trusted; it is filed there. Then,
    * for a trusted author only, the card of the first issue its description says it closes; an
    * intake route decides whether it joins that one. An untrusted author's pull request never
@@ -1324,9 +1327,12 @@ export class GithubRules {
     );
     if (filed) return undefined;
     const eligible = (card: Card) =>
-      card.externalSource?.type !== 'pull-request' &&
+      card.externalSource != null &&
+      card.externalSource.type !== 'pull-request' &&
+      card.externalSource.integrationId !== 'gitlab' &&
       !isTerminalWorkItem(this.#boards(input), card) &&
-      cardBelongsToRepository(card, input.repositoryId, input.repositoryName);
+      (card.externalSource.integrationId !== 'github' ||
+        cardBelongsToRepository(card, input.repositoryId, input.repositoryName));
     if (
       input.matchedItem &&
       eligible(input.matchedItem) &&
