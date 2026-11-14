@@ -142,32 +142,27 @@ describe('OM token counting work in long tool runs (#29851)', () => {
 
   it('still counts image content in tool results as an attachment, and recounts when it changes', async () => {
     const counter = new TokenCounter();
+    const image = (width: number, height: number) => ({
+      type: 'media',
+      mediaType: 'image/png',
+      data: 'iVBORw0KGgo'.repeat(10),
+      providerMetadata: { mastra: { imageDimensions: { width, height } } },
+    });
     const part = toolPart(1);
-    part.toolInvocation.result = {
-      type: 'content',
-      value: [
-        { type: 'text', text: 'screenshot' },
-        { type: 'media', mediaType: 'image/png', data: 'iVBORw0KGgo'.repeat(10) },
-      ],
-    };
+    part.toolInvocation.result = { type: 'content', value: [{ type: 'text', text: 'screenshot' }, image(100, 100)] };
     const message = assistant([part]);
-    const withImage = await counter.countMessageAsync(message);
+    const small = await counter.countMessageAsync(message);
 
-    const textOnly = assistant([
-      {
-        ...toolPart(1),
-        toolInvocation: {
-          ...toolPart(1).toolInvocation,
-          result: { type: 'content', value: [{ type: 'text', text: 'screenshot' }] },
-        },
-      },
-    ]);
-    expect(withImage).not.toBe(await new TokenCounter().countMessageAsync(textOnly));
+    // Default estimator: a 100x100 image is low detail (85 tokens); 2048x2048 is high detail,
+    // scaled to 768x768 = 4 tiles (85 + 4 * 170 = 765). Counted as JSON instead, changing the
+    // dimensions would move the count by a token or two, and a stale cached estimate by none.
+    part.toolInvocation.result.value[1] = image(2048, 2048);
+    const large = await counter.countMessageAsync(message);
+    expect(large - small).toBe(680);
 
-    part.toolInvocation.result.value[1].data = 'iVBORw0KGgo'.repeat(4000);
     const fresh = JSON.parse(JSON.stringify(message));
     delete fresh.content.parts[0].providerMetadata;
-    expect(await counter.countMessageAsync(message)).toBe(await new TokenCounter().countMessageAsync(fresh));
+    expect(large).toBe(await new TokenCounter().countMessageAsync(fresh));
   });
 
   it('refreshes status when a background tool result lands while the step saves', async () => {
