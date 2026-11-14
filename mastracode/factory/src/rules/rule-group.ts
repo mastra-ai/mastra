@@ -179,11 +179,36 @@ function evaluateCondition(condition: RuleCondition, facts: RuleFacts): boolean 
   }
 }
 
+/** A condition a rule group failed on, with the fact it read (`null` when the item has none). */
+export interface FailedRuleCondition extends RuleCondition {
+  actual: unknown;
+}
+
+export interface RuleGroupExplanation {
+  matched: boolean;
+  /** The conditions that made the group fail: every failing one of an AND, every branch of an OR. Empty on a match. */
+  failed: FailedRuleCondition[];
+}
+
+/**
+ * Whether `facts` satisfy `group`, and the conditions it failed on when they don't.
+ * {@link evaluateRuleGroup} is this without the reasons, so anything that explains a rule
+ * decides exactly as the rule does.
+ */
+export function explainRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): RuleGroupExplanation {
+  if (!group) return { matched: true, failed: [] };
+  const results = group.conditions.map(member =>
+    isGroup(member)
+      ? explainRuleGroup(member, facts)
+      : evaluateCondition(member, facts)
+        ? { matched: true, failed: [] }
+        : { matched: false, failed: [{ ...member, actual: facts[member.field] ?? null }] },
+  );
+  const matched = group.operator === 'AND' ? results.every(r => r.matched) : results.some(r => r.matched);
+  return { matched, failed: matched ? [] : results.flatMap(r => r.failed) };
+}
+
 /** True when `facts` satisfy `group`. A `null`/absent group matches everything (an unconditional phase). */
 export function evaluateRuleGroup(group: RuleGroup | null | undefined, facts: RuleFacts): boolean {
-  if (!group) return true;
-  const results = group.conditions.map(member =>
-    isGroup(member) ? evaluateRuleGroup(member, facts) : evaluateCondition(member, facts),
-  );
-  return group.operator === 'AND' ? results.every(Boolean) : results.some(Boolean);
+  return explainRuleGroup(group, facts).matched;
 }
