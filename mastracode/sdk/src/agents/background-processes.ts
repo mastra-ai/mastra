@@ -24,7 +24,7 @@ interface Launch {
 
 interface ToolContextLike {
   agent?: { toolCallId?: string; threadId?: string };
-  /** A run outside an agent puts its thread here, where `execute_command` also reads it for the exit metadata. */
+  /** A direct `execute()` call passes its thread here, where `execute_command` also reads it for the exit metadata. */
   threadId?: string;
   workspace?: { sandbox?: WorkspaceSandbox };
   requestContext?: { get?: (key: string) => unknown };

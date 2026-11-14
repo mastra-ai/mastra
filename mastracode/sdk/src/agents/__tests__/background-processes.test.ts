@@ -274,8 +274,8 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered[0]?.metadata).toMatchObject({ backgroundCompletion: { summary: 'Dev server on thread-a' } });
   });
 
-  // A run outside an agent has its thread at the top of the tool context; the exit carries that thread too.
-  it('matches the exit of a shell started from a run with its thread at the top level', async () => {
+  // A direct `execute()` call passes its thread at the top of the tool context, not under `agent`; the exit carries that thread too.
+  it('matches the exit of a shell started by a direct call with top-level ids', async () => {
     const { delivered, start } = await setup();
 
     const { exit } = await start(node('process.exit(0)'), {
