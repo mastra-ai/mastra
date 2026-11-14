@@ -134,6 +134,32 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     expect(result).toBe(messageList);
   });
 
+  it('keeps the Gateway skip for a model from an older core version', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+    const messageList = new MessageList({ threadId, resourceId });
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    const state: Record<string, unknown> = {};
+
+    await processor.processInputStep({
+      messageList,
+      messages: [],
+      requestContext,
+      stepNumber: 0,
+      state,
+      steps: [],
+      systemMessages: [],
+      model: { gatewayId: 'mastra', modelId: 'openai/gpt-4o', provider: 'mastra' } as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+
+    expect(state.__isGatewayMemoryManaged).toBe(true);
+  });
+
   it('runs local memory and saves messages for a V2 Gateway model', async () => {
     const { MessageList } = await import('@mastra/core/agent');
     const { RequestContext } = await import('@mastra/core/di');

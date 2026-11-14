@@ -92,15 +92,16 @@ const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
 /** Check the resolved key without exposing credentials to the memory package. */
 async function isGatewayMemoryManaged(model: ProcessInputStepArgs['model']): Promise<boolean> {
-  return (
-    typeof model === 'object' &&
-    model !== null &&
-    'gatewayId' in model &&
-    model.gatewayId === 'mastra' &&
-    'isGatewayMemoryManaged' in model &&
-    typeof model.isGatewayMemoryManaged === 'function' &&
-    (await model.isGatewayMemoryManaged()) === true
-  );
+  if (typeof model !== 'object' || model === null || !('gatewayId' in model) || model.gatewayId !== 'mastra') {
+    return false;
+  }
+
+  if ('isGatewayMemoryManaged' in model && typeof model.isGatewayMemoryManaged === 'function') {
+    return (await model.isGatewayMemoryManaged()) === true;
+  }
+
+  // Older @mastra/core versions cannot expose the selected key. Keep their V1 behavior.
+  return true;
 }
 
 function injectObservationContextMessages({
