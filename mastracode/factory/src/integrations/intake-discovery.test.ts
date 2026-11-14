@@ -61,7 +61,7 @@ describe('intake discovery on a reconcile sweep', () => {
   });
 
   it('stops listing a source after five pages', async () => {
-    const { project, sweep, listed } = await setup(() => ({ issues: [{ id: 'issue' }], next: 'more' }));
+    const { project, sweep, listed } = await setup((_, cursor) => ({ issues: [{ id: 'issue' }], next: String(Number(cursor ?? 0) + 1) }));
     await project('org-1', { enabled: true, sourceIds: ['source-1'] });
 
     await expect(sweep()).resolves.toMatchObject({ observed: 5, failed: 0 });
@@ -69,8 +69,8 @@ describe('intake discovery on a reconcile sweep', () => {
   });
 
   it('gives each source its own five pages, so a busy source cannot starve the next', async () => {
-    const { project, sweep, filed } = await setup((_, __, sourceId) =>
-      sourceId === 'busy' ? { issues: [{ id: 'busy-issue' }], next: 'more' } : { issues: [{ id: 'new-issue' }] },
+    const { project, sweep, filed } = await setup((_, cursor, sourceId) =>
+      sourceId === 'busy' ? { issues: [{ id: 'busy-issue' }], next: String(Number(cursor ?? 0) + 1) } : { issues: [{ id: 'new-issue' }] },
     );
     const id = await project('org-1', { enabled: true, sourceIds: ['busy', 'quiet'] });
 
@@ -105,6 +105,24 @@ describe('intake discovery on a reconcile sweep', () => {
 
     await expect(sweep()).resolves.toMatchObject({ observed: 8, failed: 0 });
     expect(listed).toHaveLength(8);
+  });
+
+  it('records a source whose provider hands back a cursor it already gave, and still files the next source', async () => {
+    const { project, sweep, filed, listed } = await setup(
+      (_, cursor, sourceId) =>
+        sourceId === 'looping'
+          ? { issues: [{ id: `looping-${cursor ?? 'start'}` }], next: cursor === 'b' ? 'a' : cursor === 'a' ? 'b' : 'a' }
+          : { issues: [{ id: 'new-issue' }] },
+      Number.POSITIVE_INFINITY,
+    );
+    const id = await project('org-1', { enabled: true, sourceIds: ['looping', 'healthy'] });
+
+    await expect(sweep()).resolves.toMatchObject({
+      failed: 1,
+      errors: [{ projectId: id, error: 'tracker repeated a page cursor' }],
+    });
+    expect(listed.filter(({ sourceId }) => sourceId === 'looping')).toHaveLength(3);
+    expect(filed.get(id)).toContain('new-issue');
   });
 
   it('lists nothing for an org that turned the provider off, saved no selection, or selected no source', async () => {

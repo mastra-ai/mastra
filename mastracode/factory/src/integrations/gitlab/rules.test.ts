@@ -720,6 +720,36 @@ describe('GitLabRules', () => {
       ).resolves.toEqual({ status: 'ignored', settled: true });
     });
 
+    it('keeps a listed head unsettled until a card exists, then records it on that card', async () => {
+      const { seeded, project, service } = await setup();
+      const listed = `poll:merge-request-head:gitlab.example.com:101:17:2030-01-01T02:05:00Z:${pushedHeadSha}`;
+      const listedHead = () =>
+        service.ingest(mergeRequestUpdated(listed, pushedHeadSha, undefined, '2030-01-01 02:05:00 UTC'));
+
+      expect(await listedHead()).toMatchObject({ settled: false });
+
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: { integrationId: 'gitlab', type: 'pull-request', externalId: reviewKey },
+            title: 'MR 17',
+            board: 'review',
+            stages: ['review'],
+            sessions: {},
+            metadata: { authorTrusted: true },
+          },
+        })
+      ).item;
+
+      await listedHead();
+      expect((await seeded.workItems.get({ orgId: 'org-1', id: card.id }))?.metadata).toMatchObject({
+        pullRequestHeadSha: pushedHeadSha,
+      });
+    });
+
     it('ignores a push delivered after a newer one', async () => {
       const { service, workId, reviewId, metadataOf } = await seed({ openPullRequestNumber: 17 });
 

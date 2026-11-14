@@ -59,6 +59,7 @@ export function withIntakeDiscovery<TIssue>(
           // A failing source, such as a revoked connection, must not skip the project's other sources.
           try {
             let cursor: string | undefined;
+            const seenCursors = new Set<string>();
             for (let page = 0; page < (options.maxPages ?? INTAKE_DISCOVERY_MAX_PAGES); page += 1) {
               const { issues, nextCursor } = await listPage(cursor);
               if (issues.length > 0) {
@@ -71,6 +72,8 @@ export function withIntakeDiscovery<TIssue>(
                 summary.observed += issues.length;
               }
               if (!nextCursor) break;
+              if (seenCursors.has(nextCursor)) throw new Error(`${options.integrationId} repeated a page cursor`);
+              seenCursors.add(nextCursor);
               cursor = nextCursor;
             }
           } catch (error) {
