@@ -134,6 +134,12 @@ Token counts are local `tokenx` estimates. The provider's own count is often hig
 
 A provider can reject a request for exceeding its context window before OM's estimate reaches the threshold. When that happens, OM activates any prepared observations, observes everything still pending, and retries the request once with the smaller context. This is on by default; set `observation.observeOnContextOverflow: false` to let the error reach your code instead.
 
+### Gateway models
+
+A [Mastra Gateway](/models/gateways/mastra) model can keep a thread's observations on the gateway instead of your storage adapter. The gateway only does that for a Gateway project key (`msk_...`). An organization key (`msk-gateway-...` or `mskv2_...`) is served by a gateway without the memory API, so OM keeps running locally against the `Memory` you configured.
+
+Keep `Memory` configured with `observationalMemory: true` in both cases. With a project key the gateway owns the thread, which means your storage adapter stays empty and `memory.recall()` doesn't return those messages.
+
 ## Choosing models
 
 The Observer and Reflector are model calls that run beside your agent. By default both use `model: 'auto'`, which resolves each time a role runs:

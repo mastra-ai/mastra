@@ -63,6 +63,8 @@ for await (const chunk of result.textStream) {
 }
 ```
 
+A gateway with a Gateway project key (`msk_...`) stores each thread's observations. A gateway with an organization key (`msk-gateway-...` or `mskv2_...`) is served without the memory API, so it doesn't. Configure [`Memory`](/docs/memory/observational-memory) with `observationalMemory: true` in that case: Observational Memory then runs against your storage adapter instead of the gateway.
+
 ## Configuration
 
 ```bash
