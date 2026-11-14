@@ -802,6 +802,65 @@ export const pluginsLocalReloadFailureScenario: McE2eScenario = {
   },
 };
 
+function writeStartFailurePluginSource(pluginDir: string): void {
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { defineMastraCodePlugin, SignalProvider } from 'mastracode/plugin';
+
+class StartFailureSignalProvider extends SignalProvider<'e2e-start-failure-signals'> {
+  readonly id = 'e2e-start-failure-signals' as const;
+
+  async start(): Promise<void> {
+    throw new Error('e2e provider start broke');
+  }
+}
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E provider start failure tests.',
+  signalProviders: () => [new StartFailureSignalProvider()],
+});
+`,
+  );
+}
+
+export const pluginsSignalProviderStartFailureScenario: McE2eScenario = {
+  name: 'plugins-signal-provider-start-failure',
+  description: 'Shows an error when a plugin signal provider fails to start while Mastra Code boots.',
+  testName: 'shows a plugin signal provider startup failure in the TUI',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    const pluginDir = join(projectDir, 'fixtures', 'plugins', 'start-failure-plugin');
+    writeStartFailurePluginSource(pluginDir);
+    writePluginRegistry(projectDir, pluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    // The provider fails while Mastra Code boots, before the TUI subscribes to plugin errors.
+    await runtime.waitForScreenText(
+      /signal provider "e2e-start-failure-signals" failed to start: e2e provider start broke/i,
+      terminal,
+      10_000,
+    );
+
+    terminal.keyCtrlC();
+  },
+};
+
 function createGithubInstallScenario(
   pnpmMajor: '10' | '11',
   pnpmVersion: string,
