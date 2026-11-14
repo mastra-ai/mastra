@@ -36,6 +36,8 @@ function createState(): TUIState {
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
+    backgroundActivities: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allShellComponents: [],
@@ -566,7 +568,7 @@ describe('addUserMessage', () => {
         contents: 'Background command exited.',
         attributes: {
           source: 'background-work',
-          kind: 'background-process-failed',
+          kind: 'background-process-exited',
           priority: 'high',
           status: 'failed',
         },
@@ -1447,6 +1449,98 @@ describe('renderExistingMessages tools', () => {
       expect(rendered).toContain('▐view▌package.json▌');
     },
   );
+});
+
+describe('renderExistingMessages background shells', () => {
+  const shellCall = assistantToolMessage('assistant-shell', [
+    {
+      id: 'shell-call',
+      name: 'execute_command',
+      args: { command: 'pnpm build', description: 'Building the app', background: true },
+      result: 'Started background process (PID: 42)',
+    },
+  ]);
+  const exitNotice = createSignal({
+    id: 'background-process:42:shell-call',
+    type: 'notification',
+    tagName: 'notification',
+    contents: 'Background command exited with code 3: pnpm build',
+    attributes: { source: 'background-work', kind: 'background-process-exited', priority: 'high', status: 'failed' },
+    metadata: {
+      backgroundCompletion: {
+        eventId: 'background-process:42:shell-call',
+        kind: 'process',
+        pid: '42',
+        originToolCallId: 'shell-call',
+        toolName: 'execute_command',
+        status: 'failed',
+        exitCode: 3,
+        title: 'Shell',
+        summary: 'Building the app',
+      },
+    },
+  }).toDBMessage();
+
+  async function replay(messages: MastraDBMessage[], backgroundToolsEnabled = true) {
+    const state = createState();
+    state.options.backgroundToolsEnabled = backgroundToolsEnabled;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+    } as unknown as TUIState['session'];
+    await renderExistingMessages(state);
+    const row = () => stripAnsi(state.chatContainer.children[0]!.render(100).join('\n'));
+    return { state, row };
+  }
+
+  it('shows how a shell ended when its exit notice is in the history', async () => {
+    const { state, row } = await replay([shellCall, exitNotice]);
+
+    expect(row()).toMatch(/exit 3/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(false);
+  });
+
+  it('keeps a running shell reachable, so its exit updates the row later', async () => {
+    const { state, row } = await replay([shellCall]);
+
+    expect(row()).not.toMatch(/exit \d/);
+    state.backgroundShellRows.get('shell-call')?.setBackgroundProcessExit?.({ exitCode: 3, killed: false });
+    expect(row()).toMatch(/exit 3/);
+  });
+
+  it('shows a shell killed earlier in this process as killed', async () => {
+    const state = createState();
+    state.backgroundActivities.set('process:42', {
+      id: 'process:42',
+      taskId: 'process:42',
+      kind: 'process',
+      pid: '42',
+      exitCode: 143,
+      toolCallId: 'shell-call',
+      toolName: 'execute_command',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      status: 'cancelled',
+      createdAt: 1,
+      completedAt: 2,
+    });
+    state.options.backgroundToolsEnabled = true;
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue([shellCall]) },
+    } as unknown as TUIState['session'];
+
+    await renderExistingMessages(state);
+
+    expect(stripAnsi(state.chatContainer.children[0]!.render(100).join('\n'))).toMatch(/killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(false);
+  });
+
+  it('registers nothing when background tools are off', async () => {
+    const { state } = await replay([shellCall], false);
+
+    expect(state.backgroundShellRows.size).toBe(0);
+  });
 });
 
 describe('renderExistingMessages subagents', () => {

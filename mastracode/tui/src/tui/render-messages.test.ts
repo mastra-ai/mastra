@@ -80,6 +80,8 @@ function createState(): TUIState {
     allToolComponents: [],
     pendingTools: new Map(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
+    backgroundActivities: new Map(),
     allShellComponents: [],
     assistantRenderRegistry: new AssistantRenderRegistry(),
     messageComponentsById: new Map(),

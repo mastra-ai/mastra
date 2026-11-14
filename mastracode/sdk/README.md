@@ -35,10 +35,9 @@ Background shells are off by default. Turn on `backgroundTools.enabled` in `sett
 With the setting on, a command the agent starts with `execute_command` and `background: true` keeps running when the run ends or the user presses Esc. When the command exits, the agent gets a notification with the exit code and the end of its output. If the agent is idle on that thread, the notification starts a new turn. These exits post no notification:
 
 - a kill with `kill_process` or from the TUI
-- a kill when the run that started the command is aborted
 - the sandbox shutting down
 
-`createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it posts no exit notification:
+`createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it doesn't post an exit notification:
 
 ```ts
 const { backgroundProcesses } = await createMastraCode();
@@ -51,7 +50,7 @@ Limits:
 
 - Only the default workspace reports exits. A workspace passed as `config.workspace` does not.
 - A shell started by a subagent, plain or forked, reports to the parent thread. Mastra Code checks the thread when the shell starts: if the user has left the parent thread by then, the agent is not told when the shell exits. For a forked subagent, the exit is not reported to its cloned thread either.
-- Exit notifications that arrive while no session runs the thread's resource wait in memory until a session starts. At most 100 wait at a time, and the oldest are dropped first. They are lost if the process exits first.
+- Exit notifications that arrive while no session runs the thread's resource wait in memory until a session starts. At most 100 wait at a time, and the oldest are dropped first. They are lost if Mastra Code exits first.
 
 ### Plugin background execution
 

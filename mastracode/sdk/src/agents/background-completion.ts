@@ -1,6 +1,6 @@
 import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
-import type { BackgroundCompletionEvents } from './background-completion-events.js';
+import type { BackgroundCompletionEvents, BackgroundTaskCompletionEvent } from './background-completion-events.js';
 
 interface BackgroundCompletionRouter<TState = unknown> {
   getSession(sessionId: string): Promise<Session<TState> | undefined>;
@@ -43,27 +43,18 @@ export async function findSessionForThread<TState>(
 // opens sessions on demand); past this many held notices, the oldest are dropped.
 const MAX_HELD_NOTICES = 100;
 
-export interface BackgroundNoticeDeliveryOptions {
-  /** False to only persist the notice to its thread, never starting a new turn. Default: true. */
-  wake?: boolean;
-}
-
 export interface BackgroundNoticeDelivery {
   /**
    * Wakes the agent when the notice's thread is the session's current thread,
    * and persists it to the thread otherwise. Holds it while no session runs
    * the thread's resource yet.
    */
-  deliver(
-    target: BackgroundNoticeTarget,
-    signal: BackgroundNoticeSignal,
-    options?: BackgroundNoticeDeliveryOptions,
-  ): Promise<void>;
+  deliver(target: BackgroundNoticeTarget, signal: BackgroundNoticeSignal): Promise<void>;
   /** Retries the held notices. Call when a session is created. */
   flush(): Promise<void>;
 }
 
-type HeldNotice = { target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal; wake: boolean };
+type HeldNotice = { target: BackgroundNoticeTarget; signal: BackgroundNoticeSignal };
 
 export function createBackgroundNoticeDelivery(getRouter: () => BackgroundCompletionRouter): BackgroundNoticeDelivery {
   const held: HeldNotice[] = [];
@@ -72,10 +63,10 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
     if (held.length > MAX_HELD_NOTICES) held.shift();
   };
 
-  const send = async ({ target, signal, wake }: HeldNotice): Promise<boolean> => {
+  const send = async ({ target, signal }: HeldNotice): Promise<boolean> => {
     const session = await findSessionForThread(getRouter(), target);
     if (!session) return false;
-    if (wake && session.thread.getId() === target.threadId) {
+    if (session.thread.getId() === target.threadId) {
       const woken = await session
         .sendSignal(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true })
         .accepted.catch(() => undefined);
@@ -88,8 +79,8 @@ export function createBackgroundNoticeDelivery(getRouter: () => BackgroundComple
   };
 
   return {
-    async deliver(target, signal, options) {
-      const notice = { target, signal, wake: options?.wake ?? true };
+    async deliver(target, signal) {
+      const notice = { target, signal };
       let sent: boolean;
       try {
         sent = await send(notice);
@@ -155,7 +146,8 @@ export function createBackgroundCompletionCallbacks(
 ): Pick<BackgroundTaskManagerConfig, 'onTaskComplete' | 'onTaskFailed' | 'onTaskCancelled'> {
   const deliver = async (task: BackgroundTask, status: 'completed' | 'failed' | 'cancelled') => {
     if (!task.resourceId || !task.threadId) return;
-    const event = {
+    const event: BackgroundTaskCompletionEvent = {
+      kind: 'task',
       id: `background-task:${task.id}:${status}`,
       taskId: task.id,
       originRunId: task.runId,

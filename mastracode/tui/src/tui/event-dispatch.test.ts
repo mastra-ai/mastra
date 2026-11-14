@@ -1,3 +1,4 @@
+import { Container } from '@earendil-works/pi-tui';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -533,5 +534,70 @@ describe('dispatchEvent task updates', () => {
     await dispatchEvent({ type: 'task_updated', tasks: [] }, ectx, state);
 
     expect(ectx.renderClearedTasksInline).toHaveBeenCalledWith(previousTasks, expect.anything());
+  });
+});
+
+describe('dispatchEvent background shells', () => {
+  it('shows the exit of a shell that ended before its call returned the PID', async () => {
+    const controller = createMockAgentController();
+    const state = createMockTUIState(controller);
+    const row = { updateResult: vi.fn(), setBackgroundProcessExit: vi.fn() };
+    Object.assign(state, {
+      options: { backgroundToolsEnabled: true },
+      chatContainer: new Container(),
+      pendingTools: new Map([['shell-call', row]]),
+      pendingSubagents: new Map(),
+      pendingAskUserComponents: new Map(),
+      backgroundShellRows: new Map(),
+      backgroundToolContexts: new Map([
+        [
+          'shell-call',
+          {
+            toolName: 'execute_command',
+            resourceId: 'resource-1',
+            threadId: 'current-thread',
+            createdAt: 1,
+            args: { command: 'true', background: true },
+          },
+        ],
+      ]),
+      // The exit event came first: the activity list already has the finished shell.
+      backgroundActivities: new Map([
+        [
+          'process:42',
+          {
+            id: 'process:42',
+            taskId: 'process:42',
+            kind: 'process',
+            pid: '42',
+            exitCode: 2,
+            toolCallId: 'shell-call',
+            toolName: 'execute_command',
+            resourceId: 'resource-1',
+            threadId: 'current-thread',
+            status: 'failed',
+            createdAt: 1,
+            completedAt: 2,
+          },
+        ],
+      ]),
+      globalBackgroundNotice: { setActivities: vi.fn() },
+    });
+    (controller.session as any).identity = { getResourceId: () => 'resource-1' };
+
+    await dispatchEvent(
+      {
+        type: 'tool_end',
+        toolCallId: 'shell-call',
+        result: 'Started background process (PID: 42)',
+        isError: false,
+      } as any,
+      { ...createMockEctx(), state } as EventHandlerContext,
+      state,
+    );
+
+    expect(row.setBackgroundProcessExit).toHaveBeenCalledWith({ exitCode: 2, killed: false });
+    expect(state.backgroundShellRows.get('shell-call')).toBe(row);
+    expect(state.backgroundActivities.get('process:42')).toMatchObject({ status: 'failed', exitCode: 2 });
   });
 });

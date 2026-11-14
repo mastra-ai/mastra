@@ -25,7 +25,7 @@ export interface CommandExitRecord {
 
 export interface BackgroundProcessExit {
   exitCode: number;
-  /** Killed on purpose (agent, user, abort or shutdown) rather than exiting on its own. */
+  /** Killed by the agent, the user or a shutdown rather than exiting on its own. */
   killed: boolean;
 }
 

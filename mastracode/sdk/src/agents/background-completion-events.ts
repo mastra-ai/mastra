@@ -1,5 +1,5 @@
 export interface BackgroundTaskCompletionEvent {
-  kind?: 'task';
+  kind: 'task';
   id: string;
   taskId: string;
   originRunId: string;
@@ -17,7 +17,7 @@ export interface BackgroundProcessExitEvent {
   pid: string;
   command?: string;
   exitCode: number;
-  /** True when the process was killed (by the agent, the user, an abort or shutdown) rather than exiting on its own. */
+  /** True when the process was killed (by the agent, the user or a shutdown) rather than exiting on its own. */
   killed: boolean;
   toolCallId?: string;
   resourceId?: string;

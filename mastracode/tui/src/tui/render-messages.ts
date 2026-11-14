@@ -14,7 +14,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
-import { parseBackgroundProcessPid } from './background-activity.js';
+import { parseBackgroundProcessPid, processActivityKey } from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -590,7 +590,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     }
     if (backgroundCompletion?.kind === 'process' && backgroundCompletion.exitCode !== undefined) {
       state.backgroundShellRows
-        ?.get(backgroundCompletion.originToolCallId)
+        .get(backgroundCompletion.originToolCallId)
         ?.setBackgroundProcessExit?.({ exitCode: backgroundCompletion.exitCode, killed: false });
     }
     if (backgroundCompletion?.taskId && backgroundCompletion.status === 'cancelled') {
@@ -958,7 +958,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
-  state.backgroundShellRows?.clear();
+  state.backgroundShellRows.clear();
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
@@ -1177,12 +1177,23 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           }
 
           if (toolName === MC_TOOLS.EXECUTE_COMMAND && state.options?.backgroundToolsEnabled && hasResult) {
+            const pid = parseBackgroundProcessPid(resultValue);
+            // A kill posts no notice, so a shell killed earlier in this process
+            // is known only to the activity list.
+            const activity = pid ? state.backgroundActivities.get(processActivityKey(pid)) : undefined;
+            const finished =
+              activity?.toolCallId === part.toolCallId && activity.status !== 'accepted' ? activity : undefined;
             const processExit = backgroundProcessExits.get(part.toolCallId);
-            if (processExit !== undefined) {
+            if (finished?.exitCode !== undefined) {
+              toolComponent.setBackgroundProcessExit({
+                exitCode: finished.exitCode,
+                killed: finished.status === 'cancelled',
+              });
+            } else if (processExit !== undefined) {
               toolComponent.setBackgroundProcessExit({ exitCode: processExit, killed: false });
-            } else if (parseBackgroundProcessPid(resultValue)) {
+            } else if (pid) {
               // Still running, or its exit notice is yet to arrive.
-              state.backgroundShellRows?.set(part.toolCallId, toolComponent);
+              state.backgroundShellRows.set(part.toolCallId, toolComponent);
             }
           }
 

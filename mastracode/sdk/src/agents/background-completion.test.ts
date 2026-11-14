@@ -85,6 +85,7 @@ describe('createBackgroundCompletionCallbacks', () => {
 
     expect(sendSignalToThread).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith({
+      kind: 'task',
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
       originRunId: 'run-1',
@@ -107,6 +108,7 @@ describe('createBackgroundCompletionCallbacks', () => {
     expect(sendSignalToThread).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledOnce();
     expect(listener).toHaveBeenCalledWith({
+      kind: 'task',
       id: 'background-task:task-1:completed',
       taskId: 'task-1',
       originRunId: 'run-1',
@@ -222,15 +224,6 @@ describe('createBackgroundNoticeDelivery', () => {
 
     expect(sendSignalToThread).not.toHaveBeenCalled();
     expect(sendSignal).toHaveBeenCalledWith(signal, { ifIdle: { behavior: 'wake' }, requireDelivery: true });
-  });
-
-  it('saves the notice without waking when asked to', async () => {
-    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
-
-    await createDelivery(session).delivery.deliver(target, signal, { wake: false });
-
-    expect(sendSignal).not.toHaveBeenCalled();
-    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
   });
 
   it.each([

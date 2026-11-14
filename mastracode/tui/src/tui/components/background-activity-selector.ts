@@ -11,10 +11,8 @@ export interface BackgroundActivitySelectorOptions {
   getActivity: (taskId: string) => BackgroundActivity | undefined;
   onCancel: () => void;
   onAbort: (activity: BackgroundActivity) => void;
-  /** Enter on a row: a shell shows its output. */
+  /** Enter on a shell row shows its output. Other rows show no Enter hint. */
   onOpen?: (activity: BackgroundActivity) => void;
-  /** Rows Enter does nothing for; they show no Enter hint. */
-  canOpen?: (activity: BackgroundActivity) => boolean;
   /** False when the shell's sandbox is out of reach (a remote session); shells then offer no Enter or D. */
   canControlProcesses?: boolean;
   now?: () => number;
@@ -59,9 +57,7 @@ export class BackgroundActivitySelectorComponent extends Box {
     const detailText = new Text('', 0, 0);
     const hintText = new Text('', 0, 0);
     const canOpen = (activity: BackgroundActivity) =>
-      Boolean(options.onOpen) &&
-      (activity.kind !== 'process' || this.canControlProcesses) &&
-      (options.canOpen?.(activity) ?? true);
+      activity.kind === 'process' && this.canControlProcesses && Boolean(options.onOpen);
     const updateDetail = (activity: BackgroundActivity) => {
       detailText.setText(theme.fg('dim', describeState(activity)));
       const hint = [

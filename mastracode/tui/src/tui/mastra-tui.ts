@@ -370,7 +370,6 @@ export class MastraTUI {
       onCancel: () => this.state.ui.hideOverlay(),
       onAbort: activity => void this.abortBackgroundActivity(activity),
       onOpen: activity => void this.openBackgroundActivity(activity),
-      canOpen: activity => activity.kind === 'process',
       // Shells live in this process's sandbox; a remote session cannot reach it.
       canControlProcesses: Boolean(this.state.local && this.state.options.backgroundProcesses),
     });

@@ -46,11 +46,10 @@ function firstLine(value: unknown): string | undefined {
   return line || undefined;
 }
 
-/** The label a background call shows in the activity list: a shell's description or command. */
-export function describeBackgroundCall(toolName: string, args: unknown): string | undefined {
+/** A shell's label in the activity list: its description, else its command. */
+function describeShell(args: unknown): string | undefined {
   const record = args && typeof args === 'object' ? (args as Record<string, unknown>) : {};
-  if (toolName === MC_TOOLS.EXECUTE_COMMAND) return firstLine(record.description) ?? firstLine(record.command);
-  return undefined;
+  return firstLine(record.description) ?? firstLine(record.command);
 }
 
 export function acceptBackgroundActivity(
@@ -109,7 +108,7 @@ export function startBackgroundProcessActivity(
     pid,
     toolCallId,
     toolName: context.toolName,
-    label: describeBackgroundCall(context.toolName, context.args),
+    label: describeShell(context.args),
     resourceId: context.resourceId,
     threadId: context.threadId,
     status: 'accepted',

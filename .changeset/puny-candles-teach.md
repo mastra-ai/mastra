@@ -10,7 +10,7 @@ Added background shells to Mastra Code. They are off by default and turn on with
 
 - Commands started with `execute_command` and `background: true` keep running when you press Esc. When one exits, the agent gets a notification with the exit code and the end of its output. If the agent is idle on that thread, the notification starts a new turn.
 - `BackgroundCompletionEvent` from `@mastra/code-sdk/agents/background-completion-events` now also covers background shell exits, with `kind: 'process'`. Check `kind` before reading `taskId`.
-- `createMastraCode()` returns `backgroundProcesses`, which reads a background shell's output and kills it without posting an exit notification. `read` still works after the shell exits, until a kill or `get_process_output` releases it:
+- `createMastraCode()` returns `backgroundProcesses`, which reads a background shell's output and kills it. Killing a shell through it doesn't post an exit notification. `read` still works after the shell exits, until a kill or `get_process_output` releases it:
 
 ```ts
 const { backgroundProcesses } = await createMastraCode();
