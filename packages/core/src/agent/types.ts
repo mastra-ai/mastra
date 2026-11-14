@@ -617,7 +617,7 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/** Resumable streams and staged engine policy. Durable execution still requires createDurableAgent(). */
+/** Resumable streams and provisional engine policy naming/API. Durable execution still requires createDurableAgent(). */
 export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
