@@ -194,7 +194,6 @@ export interface IntakeQuery {
   registry: BoardRegistry;
 }
 
-/** The env var naming the evaluator when the Factory's `intake.evaluator` option doesn't. */
 /**
  * What intake rules test of an arrival: its own facts and, for a pull request closing an issue, that
  * issue's card as it is now (a finished card or one of another project counts as none). The
@@ -224,6 +223,7 @@ export async function arrivalRuleFacts(
  */
 export const ROUTE_AGAIN_KEY_PREFIX = 'intake-route-again:';
 
+/** The env var naming the evaluator when the Factory's `intake.evaluator` option doesn't. */
 export const INTAKE_EVALUATOR_ENV = 'FACTORY_INTAKE_EVALUATOR';
 
 /**
@@ -241,6 +241,42 @@ export function intakeEvaluatorFrom(
 /** Where intake sends an arrival, by the evaluator `query` names. Join routes never place here. */
 export function resolveIntake(query: IntakeQuery): IntakeResolution {
   return query.evaluator === 'intake-order' ? resolveByIntakeOrder(query) : resolveByRouteList(query);
+}
+
+/** How many of a project's newest cards {@link compareIntakeOrder} reads. */
+export const INTAKE_ORDER_SAMPLE = 200;
+
+export interface IntakeOrderComparison {
+  /** Cards compared: the project's newest, at most {@link INTAKE_ORDER_SAMPLE}. */
+  compared: number;
+  /** Of those, how many the intake order would place on another board than the route list does. */
+  differing: number;
+  /** Of those, how many no board's rules take under the intake order. */
+  notRouted: number;
+}
+
+/**
+ * Runs both evaluators over `cards` (newest first) as if each arrived now, so an admin sees what
+ * switching to `order` changes before switching.
+ */
+export function compareIntakeOrder(
+  query: Pick<IntakeQuery, 'routes' | 'order' | 'registry'> & { cards: readonly Card[] },
+): IntakeOrderComparison {
+  const sample = query.cards.slice(0, INTAKE_ORDER_SAMPLE);
+  let differing = 0;
+  let notRouted = 0;
+  for (const card of sample) {
+    const base = { routes: query.routes, order: query.order, registry: query.registry, facts: cardRuleFacts(card) };
+    const old = resolveIntake({ ...base, evaluator: 'route-list' });
+    const next = resolveIntake({ ...base, evaluator: 'intake-order' });
+    if (next.outcome === 'not_routed') notRouted += 1;
+    if (placedOn(old) !== placedOn(next)) differing += 1;
+  }
+  return { compared: sample.length, differing, notRouted };
+}
+
+function placedOn(resolution: IntakeResolution): string | null {
+  return resolution.outcome === 'placed' ? resolution.board : null;
 }
 
 /**

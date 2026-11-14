@@ -16,7 +16,7 @@ const factory = new MastraFactory({
 
 **Before you switch**
 
-Factory derives each project's intake order from its current rules and, in the background, compares both evaluators over the newest 200 items. Until you set the order yourself it follows your rule edits and is compared again after each. `GET /web/factory/projects/:id/intake-order` reports how many would land on a different board and how many no board would take, so you can fix rules first.
+Factory derives each project's intake order from its current rules, and follows your rule edits until you set the order yourself. `GET /web/factory/projects/:id/intake-order` runs both evaluators over the newest 200 items against the order in force and reports how many would land on a different board and how many no board would take, so you can fix rules first.
 
 **Also new**
 

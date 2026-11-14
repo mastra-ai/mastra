@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 import { defineBoard } from './define-board.js';
-import { intakeEvaluatorFrom, intakeTargetProblem, resolveIntake, resolveIntakePlacement } from './intake-routing.js';
+import {
+  compareIntakeOrder,
+  INTAKE_ORDER_SAMPLE,
+  intakeEvaluatorFrom,
+  intakeTargetProblem,
+  resolveIntake,
+  resolveIntakePlacement,
+} from './intake-routing.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import { createTestBoard, createTriageWorkRegistry } from './test-utils.js';
 
@@ -139,6 +147,59 @@ describe('resolveIntake', () => {
     expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('intake-order');
     expect(intakeEvaluatorFrom(undefined, { FACTORY_INTAKE_EVALUATOR: 'nonsense' })).toBe('route-list');
     expect(intakeEvaluatorFrom('route-list', { FACTORY_INTAKE_EVALUATOR: 'intake-order' })).toBe('route-list');
+  });
+});
+
+describe('compareIntakeOrder', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work'), simpleBoard('ship')]);
+  const labelled = (id: string, boardKey: string, label: string) =>
+    route({
+      id,
+      target: { boardKey, phaseKey: null },
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: label }] },
+    });
+  const everything = (id: string, boardKey: string) => route({ id, target: { boardKey, phaseKey: null } });
+  /** The facts intake reads of a card: its title, labels and source. */
+  const card = (labels: string[]) =>
+    ({
+      title: 'Card',
+      metadata: { labels },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: '1' },
+    }) as unknown as Card;
+  const compare = (routes: ReturnType<typeof route>[], order: string[], cards: Card[]) =>
+    compareIntakeOrder({ routes, order, registry: twoBoards, cards });
+
+  it('finds no difference where each board’s rules sit together', () => {
+    const routes = [labelled('ship', 'ship', 'ship'), labelled('bug', 'work', 'bug'), everything('all', 'work')];
+    expect(compare(routes, ['ship', 'work'], [card(['ship']), card(['bug']), card([])])).toEqual({
+      compared: 3,
+      differing: 0,
+      notRouted: 0,
+    });
+  });
+
+  it('counts the cards the order would place elsewhere, and those no board takes', () => {
+    // Work is asked first, and its catch-all takes the `ship` cards the old list sent to Ship.
+    const interleaved = [labelled('bug', 'work', 'bug'), labelled('ship', 'ship', 'ship'), everything('all', 'work')];
+    const cards = [card(['ship']), card(['ship', 'x']), card(['bug']), card([])];
+    expect(compare(interleaved, ['work', 'ship'], cards)).toEqual({ compared: 4, differing: 2, notRouted: 0 });
+    // The same rules with Ship asked first route as before.
+    expect(compare(interleaved, ['ship', 'work'], cards)).toMatchObject({ differing: 0 });
+    // The old list filed unmatched cards on Work; now no board takes them.
+    expect(
+      compare([labelled('ship', 'ship', 'ship')], ['ship', 'work'], [card(['ship']), card(['docs']), card([])]),
+    ).toEqual({
+      compared: 3,
+      differing: 2,
+      notRouted: 2,
+    });
+  });
+
+  it('compares only the newest cards', () => {
+    const cards = Array.from({ length: INTAKE_ORDER_SAMPLE + 50 }, () => card([]));
+    expect(compare([everything('all', 'work')], ['work', 'ship'], cards)).toMatchObject({
+      compared: INTAKE_ORDER_SAMPLE,
+    });
   });
 });
 

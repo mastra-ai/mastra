@@ -154,7 +154,6 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
     for (const route of routes) await seed.boards.createIntakeRoute(scope, route, 'admin');
     const boards = boardRegistryOf([deskBoard]);
     const transitionService = new FactoryTransitionService({ storage: seed.workItems, configVersion: 'v1', boards });
-    const started: string[] = [];
     const create = (input: CreateWorkItemInput) =>
       createFactoryWorkItem({
         workItems: seed.workItems,
@@ -167,9 +166,8 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
         input,
         ...(withRules ? { intakeRoutes: seed.boards } : {}),
         intakeEvaluator: evaluator,
-        intakeOrderMeasure: { start: started_ => void started.push(started_.factoryProjectId) },
       });
-    return { create, seed, scope, started };
+    return { create, seed, scope };
   }
   const docsToTriage: StoredIntakeRouteInput = {
     name: 'Docs to triage',
@@ -178,10 +176,9 @@ describe('createFactoryWorkItem under the intake order evaluator', () => {
   };
 
   it("files a card the board's rules match on that board, without any board named Work", async () => {
-    const { create, scope, started } = await setupDesk([docsToTriage], 'intake-order');
+    const { create, scope } = await setupDesk([docsToTriage], 'intake-order');
     const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });
     expect(created).toMatchObject({ status: 'created', item: { board: 'desk', stages: ['triage'] } });
-    expect(started).toEqual([scope.factoryProjectId]);
   });
 
   it('refuses a card no board takes, asking the person for the board, and files nothing', async () => {

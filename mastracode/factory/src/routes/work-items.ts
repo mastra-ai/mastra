@@ -13,7 +13,6 @@ import type { Context } from 'hono';
 
 import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource, StoredBoardDetails } from '../boards/project-boards.js';
@@ -92,8 +91,6 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   intakeRoutes?: IntakeRoutesReader;
   /** Which evaluator places a filed card; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
-  /** Starts the project's one-time intake order measure in the background. */
-  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   /** Per-project queue-health threshold config. */
   queueHealth: QueueHealthStorage;
   /** Governed stage-transition service. Stage moves 503 when absent. */
@@ -850,7 +847,6 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               transitionService,
               intakeRoutes: this.deps.intakeRoutes,
               intakeEvaluator: this.deps.intakeEvaluator,
-              intakeOrderMeasure: this.deps.intakeOrderMeasure,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
               userId: resolved.userId,

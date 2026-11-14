@@ -3,7 +3,6 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { autoStartingBoards, createTriageWorkRegistry } from '../boards/test-utils.js';
 import {
@@ -53,11 +52,6 @@ async function setup(
     withDefaultRoute?: boolean;
     codeRegistry?: BoardRegistry;
     intakeEvaluator?: IntakeEvaluator;
-    /** Builds the project's intake order measure over the test's storage and boards. */
-    intakeOrderMeasure?: (
-      seeded: Awaited<ReturnType<typeof createFactoryStorageForTests>>,
-      boards: ProjectBoardCache,
-    ) => Pick<IntakeOrderMeasure, 'start'>;
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -87,7 +81,6 @@ async function setup(
     boards,
     ...(options.withRoutesReader === false ? {} : { intakeRoutes: seeded.boards }),
     ...(options.intakeEvaluator ? { intakeEvaluator: options.intakeEvaluator } : {}),
-    ...(options.intakeOrderMeasure ? { intakeOrderMeasure: options.intakeOrderMeasure(seeded, boards) } : {}),
     ownerId: 'worker-routes',
   });
   let deliveries = 0;
@@ -1325,34 +1318,5 @@ describe('intake by intake order', () => {
     const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });
     expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
     expect((await seeded.boards.listNotRouted(seeded.scope)).notRouted).toEqual([]);
-  });
-
-  it("files an arrival at once while the project's migration measure has yet to finish", async () => {
-    let release!: () => void;
-    const held = new Promise<void>(resolve => (release = resolve));
-    const seeded = await setup({
-      intakeEvaluator: 'intake-order',
-      // A real measure whose card read waits until released: the arrival must not wait on it.
-      intakeOrderMeasure: (storage, boards) =>
-        new IntakeOrderMeasure({
-          storage: storage.boards,
-          cards: async scope => {
-            await held;
-            return storage.workItems.list(scope);
-          },
-          boards: scope => boards.load(scope),
-          audit: async () => {},
-        }),
-    });
-    await seeded.route(everything);
-
-    const card = await seeded.deliver({ sourceKey: 'github-issue:1', metadata: {} });
-
-    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
-    expect((await seeded.boards.readIntakeOrder(seeded.scope)).migration).toMatchObject({ measuredAt: null });
-    release();
-    await expect
-      .poll(async () => (await seeded.boards.readIntakeOrder(seeded.scope)).migration)
-      .toMatchObject({ measuredAt: expect.any(String), compared: 1, differing: 0 });
   });
 });

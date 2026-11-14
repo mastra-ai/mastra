@@ -199,18 +199,16 @@ const intakeRouteListQuerySchema = z
 const intakeOrderResponseSchema = z.object({
   /** Every board of the project, in the order intake asks them. */
   boards: z.array(z.object({ boardKey: z.string(), name: z.string() })),
+  /** `derived` follows the rule list until an admin sets the order; then it is `explicit`. */
+  origin: z.enum(['derived', 'explicit']),
   /** Which evaluator places new items now: `route-list` (the old one) or `intake-order`. */
   evaluator: z.enum(['route-list', 'intake-order']),
-  /** The one-time comparison of the two evaluators over the newest items; null until it starts. */
-  migration: z
-    .object({
-      startedAt: z.string(),
-      measuredAt: z.string().nullable(),
-      compared: z.number().int(),
-      differing: z.number().int(),
-      notRouted: z.number().int(),
-    })
-    .nullable(),
+  /** Both evaluators run over the project's newest 200 items against this order, worked out on each read. */
+  comparison: z.object({
+    compared: z.number().int(),
+    differing: z.number().int(),
+    notRouted: z.number().int(),
+  }),
   /** Whether the caller may change the order. */
   canEdit: z.boolean(),
 });

@@ -8,7 +8,7 @@ export const AUDIT_ACTIONS = {
   git: ['commit', 'push', 'pr_opened'],
   agent: ['commit', 'push', 'pr_opened', 'signaled'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated', 'routed_again'],
-  intake_order: ['updated', 'migrated'],
+  intake_order: ['updated'],
   session: ['owner_transferred'],
   board: ['created', 'updated', 'deleted', 'reset'],
   skill: ['updated', 'reverted'],

@@ -204,21 +204,9 @@ export type IntakeDecisionOutcome = 'placed' | 'not_routed';
 /** Which evaluator decided where an arrival goes; `route-list` is the old one, behind the flag. */
 export type IntakeEvaluator = 'route-list' | 'intake-order';
 
-/** How the old and new evaluators compared over the project's recent cards when the order was derived. */
-export interface IntakeOrderMigration {
-  startedAt: string;
-  measuredAt: string | null;
-  /** Cards compared. */
-  compared: number;
-  /** Cards the new evaluator would place on a different board than the old one. */
-  differing: number;
-  /** Cards no board's rules take under the new evaluator. */
-  notRouted: number;
-}
-
 /**
- * `derived` while the order still follows the route list: every rule write re-derives it and drops
- * its measure. `explicit` once an admin sets it.
+ * `derived` while the order still follows the route list: every rule write re-derives it. `explicit`
+ * once an admin sets it.
  */
 export type IntakeOrderOrigin = 'derived' | 'explicit';
 
@@ -226,7 +214,6 @@ export interface StoredIntakeOrder {
   /** Board keys in the order intake checks them. */
   boardKeys: string[];
   origin: IntakeOrderOrigin;
-  migration: IntakeOrderMigration | null;
 }
 
 export interface IntakeDecisionInput {
@@ -362,7 +349,6 @@ interface IntakeRouteLockRow extends Record<string, unknown> {
   intake_order: string[] | null;
   /** Null while derived. */
   intake_order_origin: 'explicit' | null;
-  intake_order_migration: IntakeOrderMigration | null;
 }
 
 interface IntakeDecisionRow extends Record<string, unknown> {
@@ -404,9 +390,6 @@ function toIntakeDecisionRecord(row: IntakeDecisionRow): StoredIntakeDecisionRec
     resolvedBy: row.resolved_by,
   };
 }
-
-/** A measure that started this long ago without finishing is taken over by the next one. */
-const MIGRATION_CLAIM_MS = 10 * 60 * 1000;
 
 function seededDefaults(lock: IntakeRouteLockRow): string[] {
   return lock.seeded_defaults ?? ORIGINAL_DEFAULT_KEYS;
@@ -880,60 +863,6 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       });
       const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
       return toIntakeOrder(lock, boardKeys);
-    });
-  }
-
-  /**
-   * Claims the project's intake order measure: the claim's `startedAt` for exactly one caller until
-   * it records its result, or until the claim is old enough that its holder is taken to have died;
-   * null otherwise.
-   */
-  async claimIntakeOrderMigration(scope: StoredBoardScope, now = new Date()): Promise<string | null> {
-    await this.#ensureIntakeRoutes(scope);
-    const unclaimed = (marker: IntakeOrderMigration | null) =>
-      !marker || (!marker.measuredAt && now.getTime() - Date.parse(marker.startedAt) >= MIGRATION_CLAIM_MS);
-    const before = await this.ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope));
-    if (!unclaimed(before!.intake_order_migration)) return null;
-    // Under the route lock, so two replicas reading an unclaimed marker can't both take it.
-    return this.#transact(async ops => {
-      await lockIntakeRoutes(ops, scope);
-      const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
-      if (!unclaimed(lock.intake_order_migration)) return null;
-      const startedAt = now.toISOString();
-      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
-        intake_order_migration: {
-          startedAt,
-          measuredAt: null,
-          compared: 0,
-          differing: 0,
-          notRouted: 0,
-        } satisfies IntakeOrderMigration,
-      });
-      return startedAt;
-    });
-  }
-
-  /**
-   * Records what the intake order measure found. With `claimed`, only while that claim still holds:
-   * null when a rule write re-derived the order since, so the result describes an order that's gone.
-   */
-  async recordIntakeOrderMigration(
-    scope: StoredBoardScope,
-    result: Pick<IntakeOrderMigration, 'compared' | 'differing' | 'notRouted'>,
-    options: { claimed?: string; now?: Date } = {},
-  ): Promise<IntakeOrderMigration | null> {
-    const now = options.now ?? new Date();
-    return this.#transact(async ops => {
-      await lockIntakeRoutes(ops, scope);
-      const lock = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
-      if (options.claimed !== undefined && lock.intake_order_migration?.startedAt !== options.claimed) return null;
-      const marker: IntakeOrderMigration = {
-        startedAt: lock.intake_order_migration?.startedAt ?? now.toISOString(),
-        measuredAt: now.toISOString(),
-        ...result,
-      };
-      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), { intake_order_migration: marker });
-      return marker;
     });
   }
 
@@ -1432,19 +1361,15 @@ function decodeDecisionCursor(cursor: string): { decidedAt: Date; id: string } {
 }
 
 function toIntakeOrder(lock: IntakeRouteLockRow, boardKeys: string[]): StoredIntakeOrder {
-  return { boardKeys, origin: lock.intake_order_origin ?? 'derived', migration: lock.intake_order_migration };
+  return { boardKeys, origin: lock.intake_order_origin ?? 'derived' };
 }
 
 /**
- * A rule write changes what a derived order would be: drop it and its measure, so the next read
- * derives it afresh and the measure runs again. An order an admin set stays.
+ * A rule write changes what a derived order would be: drop it, so the next read derives it afresh.
+ * An order an admin set stays.
  */
 async function forgetDerivedIntakeOrder(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
-  await ops.updateMany(
-    INTAKE_ROUTE_LOCKS,
-    { ...scopeWhere(scope), intake_order_origin: null },
-    { intake_order: null, intake_order_migration: null },
-  );
+  await ops.updateMany(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), intake_order_origin: null }, { intake_order: null });
 }
 
 function sameKeys(left: readonly string[], right: readonly string[]): boolean {

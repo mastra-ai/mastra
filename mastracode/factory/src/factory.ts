@@ -64,7 +64,6 @@ import {
   REVIEW_CONTEXT,
 } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
-import { IntakeOrderMeasure } from './boards/intake-order-migration.js';
 import { intakeEvaluatorFrom } from './boards/intake-routing.js';
 import { occupiedPhasesOf, ownReviewBoard, ProjectBoardCache, toBoardSource } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
@@ -596,7 +595,6 @@ export class MastraFactory {
   /** Which evaluator places new items; see `MastraFactoryConfig.intake`. */
   readonly #intakeEvaluator: IntakeEvaluator;
   /** Each project's one-time intake order measure; undefined until `prepare()` or when the boards domain is down. */
-  #intakeOrderMeasure: IntakeOrderMeasure | undefined;
   /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
   #boardStore:
     | { writes: BoardWrites; boards: ProjectBoardCache; projects: FactoryProjectsStorage; audit: AuditDomain }
@@ -1067,33 +1065,11 @@ export class MastraFactory {
           : {}),
       });
       this.#projectBoards = projectBoards;
-      this.#intakeOrderMeasure = new IntakeOrderMeasure({
-        storage: storedBoardsStorage,
-        cards: scope => workItemsStorage.list(scope),
-        boards: scope => projectBoards.load(scope),
-        audit: async (scope, migration) => {
-          const recorded = await auditDomain.record({
-            // One entry per measured order: a derived order is measured again after each rule write.
-            idempotencyKey: `intake-order-migrated:${scope.orgId}:${scope.factoryProjectId}:${migration.startedAt}`,
-            orgId: scope.orgId,
-            factoryProjectId: scope.factoryProjectId,
-            actorId: 'factory',
-            actorType: 'system',
-            action: 'factory.intake_order.migrated',
-            targets: [{ type: 'factory_project', id: scope.factoryProjectId }],
-            metadata: { ...migration },
-          });
-          if (!recorded) throw new Error('The intake order migration audit event was not recorded.');
-        },
-        warn: (message, error) =>
-          console.warn(`[factory] ${message}: ${error instanceof Error ? error.message : error}`),
-      });
       this.#boardStore = {
         writes: new BoardWrites({
           storage: storedBoardsStorage,
           boards: projectBoards,
           workItems: workItemsStorage,
-          ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
         }),
         boards: projectBoards,
         projects: factoryProjectsStorage,
@@ -1482,7 +1458,6 @@ export class MastraFactory {
       ...(this.#projectBoards
         ? {
             intakeRoutes: storedBoardsStorage,
-            ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
           }
         : {}),
       transitionService,
@@ -2240,7 +2215,6 @@ export class MastraFactory {
                   storedBoards: {
                     storage: storedBoardsStorage,
                     cache: this.#projectBoards,
-                    ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
                   },
                 }
               : {}),
@@ -2259,7 +2233,6 @@ export class MastraFactory {
                 ...(this.#projectBoards
                   ? {
                       intakeRoutes: storedBoardsStorage,
-                      ...(this.#intakeOrderMeasure ? { intakeOrderMeasure: this.#intakeOrderMeasure } : {}),
                     }
                   : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,

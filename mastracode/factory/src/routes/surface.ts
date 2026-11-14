@@ -16,7 +16,6 @@ import {
   reviewedChangeRequest,
 } from '../boards/index.js';
 import type { BoardRegistry, InstalledBoard } from '../boards/index.js';
-import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardCache, ProjectBoardSource } from '../boards/project-boards.js';
@@ -168,7 +167,6 @@ export interface FactoryApiRoutesDeps {
   storedBoards?: {
     storage: StoredBoardsStorage;
     cache: ProjectBoardCache;
-    intakeOrderMeasure?: IntakeOrderMeasure;
   };
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
@@ -1040,7 +1038,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boardRegistry: deps.boardRegistry,
           intakeRoutes: deps.storedBoards?.storage,
           intakeEvaluator: deps.intakeEvaluator,
-          intakeOrderMeasure: deps.storedBoards?.intakeOrderMeasure,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,
@@ -1056,7 +1053,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           workItems: deps.domains.workItems,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
-          intakeOrderMeasure: deps.storedBoards.intakeOrderMeasure,
         }).routes()
       : []),
     ...(deps.factoryReady && deps.storedBoards
@@ -1069,7 +1065,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boards: deps.storedBoards.cache,
           intakeEvaluator: deps.intakeEvaluator,
           configVersion: deps.configVersion,
-          intakeOrderMeasure: deps.storedBoards.intakeOrderMeasure,
         }).routes()
       : []),
     ...(deps.factoryReady

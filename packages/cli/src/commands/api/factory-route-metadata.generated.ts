@@ -3228,6 +3228,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "derived",
+            "explicit"
+          ]
+        },
         "evaluator": {
           "type": "string",
           "enum": [
@@ -3235,47 +3242,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "intake-order"
           ]
         },
-        "migration": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "startedAt": {
-                  "type": "string"
-                },
-                "measuredAt": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "compared": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                "differing": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                "notRouted": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "startedAt",
-                "measuredAt",
-                "compared",
-                "differing",
-                "notRouted"
-              ]
+        "comparison": {
+          "type": "object",
+          "properties": {
+            "compared": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             },
-            {
-              "type": "null"
+            "differing": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "notRouted": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             }
+          },
+          "required": [
+            "compared",
+            "differing",
+            "notRouted"
           ]
         },
         "canEdit": {
@@ -3284,8 +3273,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "boards",
+        "origin",
         "evaluator",
-        "migration",
+        "comparison",
         "canEdit"
       ]
     }
@@ -10400,6 +10390,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             ]
           }
         },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "derived",
+            "explicit"
+          ]
+        },
         "evaluator": {
           "type": "string",
           "enum": [
@@ -10407,47 +10404,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "intake-order"
           ]
         },
-        "migration": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "startedAt": {
-                  "type": "string"
-                },
-                "measuredAt": {
-                  "type": [
-                    "string",
-                    "null"
-                  ]
-                },
-                "compared": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                "differing": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                },
-                "notRouted": {
-                  "type": "integer",
-                  "minimum": -9007199254740991,
-                  "maximum": 9007199254740991
-                }
-              },
-              "required": [
-                "startedAt",
-                "measuredAt",
-                "compared",
-                "differing",
-                "notRouted"
-              ]
+        "comparison": {
+          "type": "object",
+          "properties": {
+            "compared": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             },
-            {
-              "type": "null"
+            "differing": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "notRouted": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
             }
+          },
+          "required": [
+            "compared",
+            "differing",
+            "notRouted"
           ]
         },
         "canEdit": {
@@ -10456,8 +10435,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "boards",
+        "origin",
         "evaluator",
-        "migration",
+        "comparison",
         "canEdit"
       ]
     }

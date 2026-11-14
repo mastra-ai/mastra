@@ -21,7 +21,6 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import {
   arrivalRuleFacts,
   closedIssueRuleFacts,
@@ -502,8 +501,6 @@ export interface FactoryDecisionDispatcherOptions {
   intakeRoutes?: IntakeRoutesReader;
   /** Which evaluator places arrivals; the old `route-list` until every replica runs `intake-order`. */
   intakeEvaluator?: IntakeEvaluator;
-  /** Starts each project's one-time intake order measure in the background on its first arrival. */
-  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   ownerId?: string;
   reconcileToolResults?: () => Promise<void>;
   reconcileRunBinding?: (binding: FactoryRunBindingRecord) => Promise<void>;
@@ -718,7 +715,6 @@ export class FactoryDecisionDispatcher {
   readonly #boards: ProjectBoardSource;
   readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #intakeEvaluator: IntakeEvaluator;
-  readonly #intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #autoApproving = new Set<string>();
@@ -779,7 +775,6 @@ export class FactoryDecisionDispatcher {
     this.#boards = toBoardSource(options.boards);
     this.#intakeRoutes = options.intakeRoutes;
     this.#intakeEvaluator = options.intakeEvaluator ?? 'route-list';
-    this.#intakeOrderMeasure = options.intakeOrderMeasure;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#reconcileToolResults = options.reconcileToolResults;
@@ -2208,8 +2203,6 @@ export class FactoryDecisionDispatcher {
       return decision;
     }
     const scope = { orgId: record.orgId, factoryProjectId: record.factoryProjectId };
-    // The project's one-time intake order measure runs beside the arrival, never ahead of it.
-    this.#intakeOrderMeasure?.start(scope);
     const evaluator = decision.idempotencyKey.startsWith(ROUTE_AGAIN_KEY_PREFIX)
       ? 'intake-order'
       : this.#intakeEvaluator;

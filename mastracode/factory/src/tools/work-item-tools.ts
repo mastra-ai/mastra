@@ -10,7 +10,6 @@ import { z } from 'zod';
 import { boardForWorkItem } from '../boards/index.js';
 
 import type { BoardRegistry } from '../boards/index.js';
-import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -46,8 +45,6 @@ export interface FactoryWorkItemToolDependencies {
   intakeRoutes?: IntakeRoutesReader;
   /** Which evaluator places a filed card; the old `route-list` by default. */
   intakeEvaluator?: IntakeEvaluator;
-  /** Starts the project's one-time intake order measure in the background. */
-  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'start'>;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -182,7 +179,6 @@ export function createFactoryWorkItemTools(
           transitionService: deps.transitionService,
           intakeRoutes: deps.intakeRoutes,
           intakeEvaluator: deps.intakeEvaluator,
-          intakeOrderMeasure: deps.intakeOrderMeasure,
           audit,
           ...project,
           userId: scope.userId,

@@ -7,7 +7,6 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
-import { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 
 import { createTriageWorkRegistry } from '../boards/test-utils.js';
@@ -86,7 +85,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   function replica(
     domains: Client,
     orgId: string,
-    options: { auth?: RouteAuth; evaluator?: 'route-list' | 'intake-order'; measure?: IntakeOrderMeasure } = {},
+    options: { auth?: RouteAuth; evaluator?: 'route-list' | 'intake-order' } = {},
   ) {
     const cache = new ProjectBoardCache({
       codeRegistry: createTriageWorkRegistry(),
@@ -114,7 +113,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         boards: cache,
         configVersion: 'intake-routes-test',
         ...(options.evaluator ? { intakeEvaluator: options.evaluator } : {}),
-        ...(options.measure ? { intakeOrderMeasure: options.measure } : {}),
       }).routes(),
       ...new BoardRoutes({
         auth,
@@ -123,7 +121,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
         workItems: domains.workItems,
         storage: domains.boards,
         boards: cache,
-        ...(options.measure ? { intakeOrderMeasure: options.measure } : {}),
       }).routes(),
     ]);
     async function send(method: string, path: string, body?: unknown, user = ADMIN) {
@@ -839,57 +836,56 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       expect(await a.workItems.list(scope)).toMatchObject([{ title: 'Docs typo', board: 'docs', stages: ['inbox'] }]);
     });
 
-    it('measures a derived order again after every rule write, until an admin sets the order', async () => {
+    it('compares the order that is in force, derived or chosen, on every read', async () => {
       const { a, orgId, scope, projectPath, base } = await setup({ evaluator: 'intake-order' });
-      const cache = new ProjectBoardCache({
-        codeRegistry: createTriageWorkRegistry(),
-        storage: a.boards,
-        recheckMs: 0,
-      });
-      const measure = new IntakeOrderMeasure({
-        storage: a.boards,
-        cards: scope => a.workItems.list(scope),
-        boards: scope => cache.load(scope),
-        audit: async () => {},
-      });
-      const { send } = replica(a, orgId, { evaluator: 'intake-order', measure });
+      const { send } = replica(a, orgId, { evaluator: 'intake-order' });
       expect((await send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
       await a.workItems.upsert({
         ...scope,
         userId: ADMIN,
-        input: { title: 'Docs typo', board: 'work', stages: ['intake'], metadata: { labels: ['docs'] } },
+        input: { title: 'Docs typo', board: 'docs', stages: ['inbox'], metadata: { labels: ['docs'] } },
       });
+      const bug = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] };
+      const bugs = (await send('POST', base, { name: 'Bugs', when: bug, target: WORK })).body.intakeRoute as Route;
       const docs = (await send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } })).body
         .intakeRoute as Route;
       const all = (await send('POST', base, { name: 'Everything', target: WORK })).body.intakeRoute as Route;
-      const measured = async () => {
-        await expect
-          .poll(async () => (await a.boards.readIntakeOrder(scope)).migration?.measuredAt ?? null)
-          .not.toBeNull();
-        return a.boards.readIntakeOrder(scope);
-      };
-      expect(await measured()).toMatchObject({ boardKeys: ['docs', 'work'], migration: { compared: 1, differing: 0 } });
+      const read = async () => (await send('GET', `${projectPath}/intake-order`)).body;
 
-      // Work's catch-all now comes first in the list, so the derived order follows and is measured again.
-      expect((await send('POST', `${base}/reorder`, { ids: [all.id, docs.id] })).status).toBe(200);
-      expect(await measured()).toMatchObject({ boardKeys: ['work', 'docs'], migration: { compared: 1, differing: 0 } });
+      // Work's first rule comes before Docs', so Work is asked first and its catch-all takes the docs card.
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'derived',
+        comparison: { compared: 1, differing: 1, notRouted: 0 },
+      });
 
-      expect((await send('PUT', `${projectPath}/intake-order`, { boardKeys: ['docs', 'work'] })).status).toBe(200);
-      const set = await a.boards.readIntakeOrder(scope);
-      expect((await send('POST', `${base}/reorder`, { ids: [docs.id, all.id] })).status).toBe(200);
-      expect(await a.boards.readIntakeOrder(scope)).toEqual(set);
-    });
+      // A rule write moves the derived order, and the comparison with it.
+      expect((await send('POST', `${base}/reorder`, { ids: [docs.id, bugs.id, all.id] })).status).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'docs' }, { boardKey: 'work' }],
+        comparison: { differing: 0 },
+      });
 
-    it('measures a derived order again when deleting a board deletes its rules', async () => {
-      const { a, orgId, scope, projectPath, base } = await setup({ evaluator: 'intake-order' });
-      const restarted: string[] = [];
-      const measure = { restart: async (s: { factoryProjectId: string }) => void restarted.push(s.factoryProjectId) };
-      const { send } = replica(a, orgId, { evaluator: 'intake-order', measure: measure as never });
-      expect((await send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);
-      await send('POST', base, { name: 'Docs', when: DOCS, target: { boardKey: 'docs' } });
-      restarted.length = 0;
-      expect((await send('DELETE', `${projectPath}/boards/docs?expectedRevision=1`)).status).toBe(204);
-      expect(restarted).toEqual([scope.factoryProjectId]);
+      // The chosen order is what gets compared, and rule writes no longer move it.
+      expect((await send('PUT', `${projectPath}/intake-order`, { boardKeys: ['work', 'docs'] })).status).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'explicit',
+        comparison: { compared: 1, differing: 1 },
+      });
+      expect((await send('POST', `${base}/reorder`, { ids: [bugs.id, docs.id, all.id] })).status).toBe(200);
+      expect(await read()).toMatchObject({ boards: [{ boardKey: 'work' }, { boardKey: 'docs' }] });
+
+      // A rule fix after the order is set shows at once: with Work's catch-all off, Docs takes the card again.
+      const current = (await send('GET', `${base}/${all.id}`)).body.intakeRoute as Route;
+      expect(
+        (await send('PATCH', `${base}/${all.id}`, { enabled: false, expectedRevision: current.revision })).status,
+      ).toBe(200);
+      expect(await read()).toMatchObject({
+        boards: [{ boardKey: 'work' }, { boardKey: 'docs' }],
+        origin: 'explicit',
+        comparison: { compared: 1, differing: 0, notRouted: 0 },
+      });
     });
 
     it('routes again with the closed issue facts the dispatcher tests', async () => {

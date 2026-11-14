@@ -15,9 +15,9 @@ import type { z } from 'zod';
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
 
 import type { StatusEvent } from '../boards/board-events.js';
-import type { IntakeOrderMeasure } from '../boards/intake-order-migration.js';
 import {
   arrivalRuleFacts,
+  compareIntakeOrder,
   intakeTargetProblem,
   resolveIntake,
   ROUTE_AGAIN_KEY_PREFIX,
@@ -56,8 +56,6 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   intakeEvaluator?: IntakeEvaluator;
   /** The rule set a Route again commits under. */
   configVersion?: string;
-  /** Measured again after each rule write, which re-derives an order nobody set. */
-  intakeOrderMeasure?: Pick<IntakeOrderMeasure, 'restart'>;
 }
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -156,10 +154,6 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
   }
 
-  #rulesChanged(scope: Resolved): void {
-    void this.deps.intakeOrderMeasure?.restart({ orgId: scope.orgId, factoryProjectId: scope.factoryProjectId });
-  }
-
   get #evaluator(): IntakeEvaluator {
     return this.deps.intakeEvaluator ?? 'route-list';
   }
@@ -199,13 +193,19 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   /** The project's boards in intake order: the stored order, with any board it lacks slotted in as a new one is. */
   async #intakeOrder(c: Context, scope: Resolved) {
     const registry = await this.#registry(scope);
-    const stored = await this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] });
+    const [stored, routes, cards] = await Promise.all([
+      this.deps.storage.readIntakeOrder(scope, { boards: [...registry.keys()] }),
+      this.deps.storage.listIntakeRoutes(scope),
+      this.deps.workItems.listShared(scope),
+    ]);
     const listed = stored.boardKeys.filter(key => registry.has(key));
     const order = [...listed, ...[...registry.keys()].filter(key => !listed.includes(key))];
     return c.json({
       boards: order.map(boardKey => ({ boardKey, name: registry.get(boardKey)!.name })),
+      origin: stored.origin,
       evaluator: this.#evaluator,
-      migration: stored.migration,
+      // Worked out on every read, so it always describes the order in force and today's rules.
+      comparison: compareIntakeOrder({ routes, order, registry, cards }),
       canEdit: await this.#canEdit(c, scope),
     });
   }
@@ -439,7 +439,6 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           boardKey === undefined ? {} : { boardKey },
         );
         await this.#audit(c, scope, 'reordered', routes);
-        this.#rulesChanged(scope);
         return this.#list(c, scope, routes);
       }),
 
@@ -457,7 +456,6 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         await this.#checkTarget(scope, { target: input.target, on: input.on ?? DEFAULT_ROUTE_EVENTS });
         const route = await storage.createIntakeRoute(scope, input, scope.userId);
         await this.#audit(c, scope, 'created', [route]);
-        this.#rulesChanged(scope);
         return this.#respond(c, scope, route, 201);
       }),
 
@@ -481,7 +479,6 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         }
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
         await this.#audit(c, scope, 'updated', [route]);
-        this.#rulesChanged(scope);
         return this.#respond(c, scope, route);
       }),
 
@@ -499,7 +496,6 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         if (!route) throw new Refusal(404, { error: 'intake_route_not_found' });
         await storage.deleteIntakeRoute(scope, id, { expectedRevision: parsed.data.expectedRevision });
         await this.#audit(c, scope, 'deleted', [route]);
-        this.#rulesChanged(scope);
         return c.body(null, 204);
       }),
     ];

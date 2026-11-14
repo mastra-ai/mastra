@@ -1,7 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
@@ -49,19 +46,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
 
   /** A project with boards `keys` (sidebar order) and no routes. */
   async function setup(keys: string[]) {
-    let url = ':memory:';
-    if (backend === 'libsql') {
-      const dir = mkdtempSync(join(tmpdir(), 'factory-intake-order-'));
-      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
-      url = `file:${join(dir, 'order.db')}`;
-    }
-    const boards = await open(url);
+    const boards = await open(':memory:');
     const scope: StoredBoardScope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'project-1' };
     for (const seeded of (await boards.listIntakeRoutes(scope)).reverse()) {
       await boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
     }
     for (const key of keys) await boards.create(scope, board(key), 'admin');
-    return { boards, scope, secondClient: () => open(url) };
+    return { boards, scope };
   }
 
   it('derives the order once from each board’s first placing route, then boards with none in sidebar order', async () => {
@@ -77,70 +68,41 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     });
   });
 
-  it('re-derives a derived order, and drops its measure, on every rule write until someone sets the order', async () => {
+  it('re-derives a derived order on every rule write until someone sets the order', async () => {
     const { boards, scope } = await setup(['work', 'ship']);
     const ship = await boards.createIntakeRoute(scope, labelled('ship', 'ship'), 'admin');
     const work = await boards.createIntakeRoute(scope, catchAll('work'), 'admin');
     expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work']);
-    expect(await boards.claimIntakeOrderMigration(scope)).not.toBeNull();
-    await boards.recordIntakeOrderMigration(scope, { compared: 5, differing: 0, notRouted: 0 });
 
     // Moving work's rules first in the old list moves work first in a derived order.
     await boards.reorderIntakeRoutes(scope, [work.id, ship.id], 'admin');
-    expect(await boards.readIntakeOrder(scope)).toEqual({
-      boardKeys: ['work', 'ship'],
-      origin: 'derived',
-      migration: null,
-    });
+    expect(await boards.readIntakeOrder(scope)).toEqual({ boardKeys: ['work', 'ship'], origin: 'derived' });
 
-    // Create, update and delete re-derive too.
-    await boards.recordIntakeOrderMigration(scope, { compared: 5, differing: 1, notRouted: 0 });
-    const [, current] = await boards.listIntakeRoutes(scope);
+    // An update re-derives too: with its only rule off, ship has no placing rule and follows in sidebar order.
+    await boards.reorderIntakeRoutes(scope, [ship.id, work.id], 'admin');
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['ship', 'work']);
+    const [current] = await boards.listIntakeRoutes(scope, { boardKey: 'ship' });
     await boards.updateIntakeRoute(
       scope,
       current!.id,
-      { name: 'ship it' },
+      { enabled: false },
       { expectedRevision: current!.revision, actor: 'admin' },
     );
-    expect((await boards.readIntakeOrder(scope)).migration).toBeNull();
-    await boards.recordIntakeOrderMigration(scope, { compared: 5, differing: 1, notRouted: 0 });
-    const extra = await boards.createIntakeRoute(scope, labelled('ship', 'x'), 'admin');
-    expect((await boards.readIntakeOrder(scope)).migration).toBeNull();
-    await boards.recordIntakeOrderMigration(scope, { compared: 5, differing: 1, notRouted: 0 });
-    await boards.deleteIntakeRoute(scope, extra.id, { expectedRevision: extra.revision });
-    expect((await boards.readIntakeOrder(scope)).migration).toBeNull();
+    expect((await boards.readIntakeOrder(scope)).boardKeys).toEqual(['work', 'ship']);
 
-    // Once set, the order is the admin's: rule writes leave it and its measure alone.
-    expect(await boards.setIntakeOrder(scope, ['ship', 'work'])).toMatchObject({ origin: 'explicit' });
-    await boards.recordIntakeOrderMigration(scope, { compared: 5, differing: 1, notRouted: 0 });
+    // Once set, the order is the admin's: rule writes leave it alone.
+    expect(await boards.setIntakeOrder(scope, ['ship', 'work'])).toEqual({
+      boardKeys: ['ship', 'work'],
+      origin: 'explicit',
+    });
     const routes = await boards.listIntakeRoutes(scope);
     await boards.reorderIntakeRoutes(
       scope,
       [...routes].reverse().map(route => route.id),
       'admin',
     );
-    expect(await boards.readIntakeOrder(scope)).toMatchObject({
-      boardKeys: ['ship', 'work'],
-      origin: 'explicit',
-      migration: { compared: 5, differing: 1 },
-    });
-  });
-
-  it('drops the result of a measure whose order was re-derived while it ran', async () => {
-    const { boards, scope } = await setup(['work']);
-    await boards.createIntakeRoute(scope, catchAll('work'), 'admin');
-    const claimed = await boards.claimIntakeOrderMigration(scope);
-    expect(claimed).toEqual(expect.any(String));
-    await boards.createIntakeRoute(scope, labelled('work', 'bug'), 'admin');
-
-    expect(
-      await boards.recordIntakeOrderMigration(
-        scope,
-        { compared: 1, differing: 0, notRouted: 0 },
-        { claimed: claimed! },
-      ),
-    ).toBeNull();
-    expect((await boards.readIntakeOrder(scope)).migration).toBeNull();
+    await boards.createIntakeRoute(scope, labelled('work', 'x'), 'admin');
+    expect(await boards.readIntakeOrder(scope)).toEqual({ boardKeys: ['ship', 'work'], origin: 'explicit' });
   });
 
   it('puts a new board just above the first board ending in a catch-all, and last when none does', async () => {
@@ -217,26 +179,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
     await expect(
       boards.reorderIntakeRoutes(scope, [b.id, a.id, s.id], 'admin', { boardKey: 'work' }),
     ).rejects.toMatchObject({ code: 'intake_route_set_mismatch' });
-  });
-
-  it('lets exactly one replica claim the migration measure, and keeps what it found', async () => {
-    const { boards, scope, secondClient } = await setup(['work']);
-    const other = await secondClient();
-    const claims = await Promise.all([boards.claimIntakeOrderMigration(scope), other.claimIntakeOrderMigration(scope)]);
-    expect(claims.filter(claim => claim !== null)).toHaveLength(1);
-
-    await boards.recordIntakeOrderMigration(scope, { compared: 200, differing: 3, notRouted: 1 });
-    expect(await other.claimIntakeOrderMigration(scope)).toBeNull();
-    expect((await other.readIntakeOrder(scope)).migration).toMatchObject({ compared: 200, differing: 3, notRouted: 1 });
-  });
-
-  it('takes over a claim whose holder never finished', async () => {
-    const { boards, scope } = await setup(['work']);
-    const start = new Date('2026-11-01T00:00:00Z');
-    expect(await boards.claimIntakeOrderMigration(scope, start)).toBe(start.toISOString());
-    expect(await boards.claimIntakeOrderMigration(scope, new Date(start.getTime() + 60_000))).toBeNull();
-    const later = new Date(start.getTime() + 11 * 60_000);
-    expect(await boards.claimIntakeOrderMigration(scope, later)).toBe(later.toISOString());
   });
 
   it('logs one decision per arrival, lists unresolved Not routed items, and resolves them when a card is filed', async () => {

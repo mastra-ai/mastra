@@ -109,9 +109,6 @@ export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
     // 'explicit' once an admin set the order; null while it is derived from the route list, which
     // re-derives it on every rule write.
     intake_order_origin: { type: 'text', nullable: true },
-    // The one-time intake order migration: when the order was derived, and how the old and new
-    // evaluators compared over the project's recent cards. Null until it ran.
-    intake_order_migration: { type: 'json', nullable: true },
   },
   uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
 };
