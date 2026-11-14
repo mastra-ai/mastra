@@ -682,15 +682,9 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       return { pubsub, a, busy, onA, task };
     }
 
-    async function peer(pubsub: EventEmitterPubSub, config: Omit<BackgroundTaskManagerConfig, 'enabled'> = {}) {
+    async function peer(pubsub: EventEmitterPubSub) {
       const b = await makeManager(
-        {
-          globalConcurrency: 10,
-          perAgentConcurrency: 10,
-          leaseDurationMs: 3_000,
-          recoverStaleTasksOnStart: true,
-          ...config,
-        },
+        { globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000, recoverStaleTasksOnStart: true },
         pubsub,
       );
       const onB = vi.fn(async () => 'from-b');
@@ -755,8 +749,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     it('fails a pinned row with no retries once its owner dies, without running it on a peer', async () => {
       const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(0);
       await crash(a, pubsub);
-      const onTaskFailed = vi.fn();
-      const { b, onB } = await peer(pubsub, { onTaskFailed });
+      const { b, onB } = await peer(pubsub);
 
       await vi.waitFor(async () => expect((await b.getTask(task.id))?.status).toBe('failed'), {
         timeout: 8_000,
@@ -766,14 +759,10 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       expect(failed?.error?.message).toBe('Worker process terminated before task completed');
       expect(failed!.ownerId).toBeUndefined();
       expect(failed!.leaseExpiresAt).toBeUndefined();
-      // Give any stray dispatch or duplicate failure event a chance to run.
+      // Give any stray dispatch a chance to run.
       await new Promise(resolve => setTimeout(resolve, 300));
       expect(onB).not.toHaveBeenCalled();
       expect(onA).not.toHaveBeenCalled();
-      // A's crash also strands its running blocker, which B fails too.
-      const pinnedFailures = onTaskFailed.mock.calls.filter(([failedTask]) => failedTask.id === task.id);
-      expect(pinnedFailures).toHaveLength(1);
-      expect(pinnedFailures[0]![0]).toMatchObject({ status: 'failed' });
       busy.release();
     }, 15_000);
 

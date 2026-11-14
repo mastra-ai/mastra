@@ -135,8 +135,6 @@ The `_background` override only _modifies_ tools the developer has already opted
 
 When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
-A `timeoutMs` of `0` at any layer means the task has no timeout. Use it for work that should run until it finishes or is cancelled.
-
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
 ## Background tasks related stream chunks
@@ -429,8 +427,6 @@ export const mastra = new Mastra({
   },
 })
 ```
-
-Failure callbacks also fire when recovery fails a task because its worker stopped before the task finished, with the error `Worker process terminated before task completed`. After a restart, the tool-level and agent-level callbacks were lost with the old process, so only the manager-level `onTaskFailed` fires.
 
 ## Streaming
 

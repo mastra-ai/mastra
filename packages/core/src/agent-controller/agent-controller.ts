@@ -2523,7 +2523,6 @@ export class AgentController<TState = {}> {
       builtInTools.subagent = createSubagentTool({
         subagents: this.config.subagents,
         resolveModel: this.config.resolveSubagentModel ?? ((modelId: string) => modelId),
-        background: this.config.subagentBackground,
         mastra: this.getMastra(),
         controllerTools: resolvedControllerTools,
         fallbackModelId: currentMode?.defaultModelId,
