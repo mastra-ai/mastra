@@ -990,6 +990,16 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     return row !== null;
   }
 
+  /** The newest `limit` items no board took and nobody has filed since, newest first. */
+  async listRecentNotRouted(scope: StoredBoardScope, limit: number): Promise<StoredIntakeDecisionRecord[]> {
+    const rows = await this.ops.findMany<IntakeDecisionRow>(
+      INTAKE_DECISIONS,
+      { ...scopeWhere(scope), outcome: 'not_routed', resolved_at: null },
+      { orderBy: NEWEST_DECISION_ORDER, limit },
+    );
+    return rows.map(toIntakeDecisionRecord);
+  }
+
   /**
    * How many items each intake rule placed since `since`, keyed by rule id. Reads placed rows
    * newest first, a page at a time, and stops at the first one older than `since`.
