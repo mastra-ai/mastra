@@ -1518,21 +1518,21 @@ describe('PlatformLinearIntegration', () => {
     ]);
   });
 
-  it('keeps event polling active when issue reconciliation is disabled', () => {
+  it('keeps sweeping on a server that still sets the old off switches', () => {
+    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
     vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
 
-    const config = integration.workers(workerContext)[0]?.config;
-    expect(config?.pollEventsEnabled).toBe(true);
-    expect(config).not.toHaveProperty('reconcileFactoryState');
+    expect(integration.workers(workerContext)[0]?.config).toMatchObject({
+      pollEventsEnabled: true,
+      reconcileFactoryState: expect.any(Function),
+    });
   });
 
   it('registers only issue reconciliation when event polling is disabled', () => {
     vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_RECONCILE_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'true');
     const integration = new PlatformLinearIntegration() as unknown as {
       workers(ctx: unknown): Array<{ config: { pollEventsEnabled: boolean; reconcileFactoryState?: unknown } }>;
     };
@@ -1541,15 +1541,5 @@ describe('PlatformLinearIntegration', () => {
       pollEventsEnabled: false,
       reconcileFactoryState: expect.any(Function),
     });
-  });
-
-  it('does not register when polling and issue reconciliation are disabled', () => {
-    vi.stubEnv('MASTRACODE_PLATFORM_LINEAR_POLLING_ENABLED', 'false');
-    vi.stubEnv('MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED', 'false');
-    const integration = new PlatformLinearIntegration() as unknown as {
-      workers(ctx: unknown): Array<{ name: string }>;
-    };
-
-    expect(integration.workers(workerContext)).toEqual([]);
   });
 });

@@ -1,10 +1,9 @@
 /**
  * One Jira project feeding several factories, split by label (FACT-440), end
- * to end on both Jira paths: real bindings storage, the real route and
+ * to end on both Jira paths: real bindings storage, the real routes, sweep and
  * integration code, and real card filing, with only Jira itself faked at the
  * HTTP edge (it evaluates the JQL each factory sends).
  */
-import type { ApiRoute } from '@mastra/core/server';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,13 +14,10 @@ import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
+import type { IntegrationContext } from '../base.js';
 import { encodeIssueReference, encodeSourceId, PlatformJiraIntegration } from '../platform/jira/integration.js';
-import { buildPlatformJiraRoutes } from '../platform/jira/routes.js';
-import { resolveJiraRules } from './default-rules.js';
 import { JiraIntegration } from './integration.js';
-import { buildJiraRoutes } from './routes.js';
-import { JiraRules } from './rules.js';
-import type { JiraRulesIngress } from './rules.js';
+import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraIssuePayload, matchesJql } from './test-utils.js';
 import type { FakeJiraIssue } from './test-utils.js';
 
@@ -69,7 +65,7 @@ interface JiraPath {
   sourceId: string;
   /** The `issueRef` the board passes to the single-issue route. */
   issueRef(key: string): string;
-  routes(seed: FactoryStorageTestSeed, ingest: (input: JiraRulesIngress) => Promise<unknown>): ApiRoute[];
+  integration(): JiraIntegration | PlatformJiraIntegration;
 }
 
 const paths: JiraPath[] = [
@@ -77,7 +73,7 @@ const paths: JiraPath[] = [
     name: 'direct Jira',
     sourceId: OPS.projectId,
     issueRef: key => key,
-    routes(seed, ingest) {
+    integration() {
       vi.stubGlobal(
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
@@ -86,17 +82,10 @@ const paths: JiraPath[] = [
           return response;
         }),
       );
-      const jira = new JiraIntegration({
+      return new JiraIntegration({
         baseUrl: 'https://acme.atlassian.net',
         email: 'ops@acme.test',
         apiToken: 't',
-      });
-      return buildJiraRoutes({
-        jira,
-        auth: fakeRouteAuth(),
-        intake: seed.intake,
-        workItems: seed.workItems,
-        ingestFactoryIssues: ingest,
       });
     },
   },
@@ -104,7 +93,7 @@ const paths: JiraPath[] = [
     name: 'Platform Jira',
     sourceId: encodeSourceId('a1b_acme', OPS.projectId),
     issueRef: key => encodeIssueReference({ connectionId: 'a1b_acme', issueId: key, projectId: OPS.projectId }),
-    routes(seed, ingest) {
+    integration() {
       vi.stubGlobal(
         'fetch',
         vi.fn(async (input: URL | string, init?: RequestInit) => {
@@ -127,16 +116,8 @@ const paths: JiraPath[] = [
           return response;
         }),
       );
-      const jira = new PlatformJiraIntegration({
+      return new PlatformJiraIntegration({
         clientConfig: { baseUrl: 'https://integrations.example.com', accessToken: 'platform-token' },
-      });
-      return buildPlatformJiraRoutes({
-        jira,
-        auth: fakeRouteAuth(),
-        intake: seed.intake,
-        workItems: seed.workItems,
-        appDbConfigured: true,
-        ingestFactoryIssues: ingest,
       });
     },
   },
@@ -152,26 +133,30 @@ afterEach(() => {
 describe.each(paths)('Jira project shared by label — $name', path => {
   let seed: FactoryStorageTestSeed;
   let app: Hono;
+  /** The 5-minute reconcile sweep, the only thing that files a card for a Jira issue. */
+  let sweep: () => Promise<unknown>;
   let factories: Record<'platform' | 'payments' | 'mobile', string>;
 
   beforeEach(async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-01-05T09:00:00.000Z'));
     seed = await createFactoryStorageForTests();
-    const rules = new JiraRules({
-      projects: seed.projects,
-      storage: seed.workItems,
-      configVersion: 'factory-config-v1',
-      boards: createBoardRegistry(),
-      jiraRules: resolveJiraRules(),
-    });
+    const jira = path.integration();
+    const context = {
+      auth: fakeRouteAuth(),
+      factoryStorage: seed.storage,
+      storage: { projects: seed.projects, intake: seed.intake },
+      runtime: { configVersion: 'factory-config-v1', workItems: seed.workItems, boards: createBoardRegistry() },
+    } as unknown as IntegrationContext;
+    const reconcile = attachJiraIssueReconciler(jira, context);
+    sweep = async () => expect(await reconcile?.()).toMatchObject({ failed: 0 });
     app = new Hono();
     app.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org1' } as never);
       await next();
     });
     mountApiRoutes(app, [
-      ...path.routes(seed, input => rules.ingest(input)),
+      ...jira.routes(context),
       ...new ProjectRoutes({
         auth: fakeRouteAuth(),
         projects: seed.projects,
@@ -229,7 +214,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     (await seed.projects.get({ orgId, id: factoryProjectId })) !== null;
   const fileProposedCards = async (factoryProjectExists = projectExists) => {
     const boards = createBoardRegistry();
-    await new FactoryDecisionDispatcher({
+    const dispatcher = new FactoryDecisionDispatcher({
       controller: {} as never,
       storage: seed.workItems,
       boards,
@@ -240,23 +225,45 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       }),
       factoryProjectExists,
       ownerId: 'label-routing-test',
-    }).runOnce(new Date(Date.now() + 1_000));
+    });
+    // A sweep proposes cards for every factory at once, more than one dispatcher pass files.
+    for (let pass = 0; pass < 2; pass += 1) await dispatcher.runOnce(new Date(Date.now() + 1_000));
   };
 
-  it.each([
-    { order: ['platform', 'payments', 'mobile'] as const },
-    { order: ['mobile', 'payments', 'platform'] as const },
-  ])('files every issue in exactly one factory when they poll in order $order', async ({ order }) => {
-    const seen: Record<string, string[]> = {};
-    for (const name of order) seen[name] = await poll(factories[name]);
+  const names = ['platform', 'payments', 'mobile'] as const;
+  const slice = (name: string) =>
+    Object.keys(expectedFactory)
+      .filter(key => expectedFactory[key] === name)
+      .sort();
 
-    for (const name of ['platform', 'payments', 'mobile'] as const) {
-      const expected = Object.keys(expectedFactory)
-        .filter(key => expectedFactory[key] === name)
-        .sort();
-      expect([...seen[name]!].sort()).toEqual(expected);
-      expect(await filed(factories[name])).toEqual(expected);
+  it('files every issue in exactly one factory on a sweep, never while a board reads its list', async () => {
+    for (const name of names) {
+      expect((await poll(factories[name])).sort()).toEqual(slice(name));
+      expect(await filed(factories[name])).toEqual([]);
     }
+
+    await sweep();
+    await sweep();
+    for (const name of names) expect(await filed(factories[name])).toEqual(slice(name));
+  });
+
+  it('writes nothing when a sweep sees only issues that already have their card', async () => {
+    await sweep();
+    await fileProposedCards();
+    await sweep();
+    const stored = async () =>
+      Promise.all(
+        names.map(async name => [
+          await seed.workItems.list({ orgId: 'org1', factoryProjectId: factories[name] }),
+          await seed.workItems.listDeferredDecisions('org1', factories[name]),
+        ]),
+      );
+    const before = await stored();
+    expect(before.flatMap(([cards]) => cards)).toHaveLength(issues.length);
+
+    nextMinute();
+    await sweep();
+    expect(await stored()).toEqual(before);
   });
 
   it('leaves labels with the all-issues factory until a label factory binds them, then both hold a card', async () => {
@@ -275,6 +282,8 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       );
 
     expect(await poll(factories.platform)).toContain('OPS-2');
+    await sweep();
+    expect(await filed(triage)).toEqual([]);
     await fileProposedCards();
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
 
@@ -283,6 +292,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
+    await sweep();
     expect(await filed(triage)).toEqual(['OPS-2']);
     await fileProposedCards();
     for (const factoryProjectId of [factories.platform, triage]) {
@@ -292,12 +302,13 @@ describe.each(paths)('Jira project shared by label — $name', path => {
   });
 
   it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
-    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    await sweep();
     await fileProposedCards();
     expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
     const growth = await takeOverWithGrowth();
 
     expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await sweep();
     expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();
 
@@ -308,12 +319,13 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     ]);
   });
 
-  it('files issues in the factory that takes over a Jira project when the deleted factory polled them but never filed them', async () => {
-    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+  it('files issues in the factory that takes over a Jira project when the deleted factory proposed them but never filed them', async () => {
+    await sweep();
+    expect(await filed(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
     expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
     const growth = await takeOverWithGrowth();
 
-    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await sweep();
     await fileProposedCards();
 
     expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: factories.platform })).toEqual([]);
@@ -325,7 +337,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
   });
 
   it('files issues in the factory that takes over a Jira project when the deleted factory files them mid-takeover', async () => {
-    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    await sweep();
     let takeover: Promise<string> | undefined;
     await fileProposedCards(async tenant => {
       if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
@@ -334,7 +346,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
           (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
         ).toBe(204);
         const growth = await takeOverWithGrowth();
-        expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+        await sweep();
         return growth;
       })();
       await takeover;
