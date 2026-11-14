@@ -13,6 +13,7 @@ describe('multipart handler request body', () => {
       method: 'POST',
       path: '/upload',
       responseType: 'json',
+      maxBodySize: 8 * 1024 * 1024 + 64 * 1024,
       handler: async ({ request }) => {
         const form = await request.formData();
         const file = form.get('file');
