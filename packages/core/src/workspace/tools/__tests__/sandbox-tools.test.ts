@@ -27,6 +27,7 @@ import {
   sandboxToModelOutput,
   DEFAULT_TAIL_LINES,
 } from '../output-helpers';
+import type { BackgroundProcessExitMeta, BackgroundProcessMeta } from '../types';
 
 // ---------------------------------------------------------------------------
 // Mock Helpers
@@ -787,17 +788,42 @@ describe('background processes killed by an aborted run', () => {
   const abortNote =
     'Process aborted: the run that started or was waiting on this process was cancelled (by the user or system), so it was killed before it finished.';
 
-  async function setup() {
+  async function setup(
+    opts: {
+      onExit?: (meta: BackgroundProcessExitMeta) => void;
+      onStdout?: (data: string, meta: BackgroundProcessMeta) => void;
+    } = {},
+  ) {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'bg-abort-'));
     const sandbox = new LocalSandbox({ workingDirectory: dir });
-    const workspace = new Workspace({ sandbox });
+    const workspace = new Workspace({
+      sandbox,
+      tools:
+        opts.onExit || opts.onStdout
+          ? {
+              [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+                backgroundProcesses: { onExit: opts.onExit, onStdout: opts.onStdout },
+              },
+            }
+          : undefined,
+    });
     await workspace.init();
     // Capture handles from spawn(): `get()` would prune a process that already exited.
     const spawn = vi.spyOn(sandbox.processes!, 'spawn');
-    const start = async (command: string, abortSignal?: AbortSignal) => {
+    const start = async (command: string, abortSignal?: AbortSignal, context?: Record<string, unknown>) => {
       const started = await executeCommandWithBackgroundTool.execute!({ command, background: true }, {
         workspace,
         abortSignal,
+        ...(context ?? {
+          runId: 'run-1',
+          agent: {
+            agentId: 'agent-1',
+            toolCallId: 'call-1',
+            threadId: 'thread-1',
+            resourceId: 'user-1',
+            messages: [],
+          },
+        }),
       } as any);
       const pid = String(started).match(/PID: (.+)\)/)![1]!;
       const handle = await spawn.mock.results.at(-1)!.value;
@@ -881,6 +907,100 @@ describe('background processes killed by an aborted run', () => {
       controller.abort();
 
       expect(await read(pid)).toBe('done\n\n\nExit code: 3');
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // `node -e` instead of shell syntax so these run under both sh and cmd.exe.
+  const longRunning = `node -e "console.log('started'); setInterval(() => {}, 1000)"`;
+
+  it('tells onExit which run started the process and that the abort killed it', async () => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(longRunning, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      controller.abort();
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+
+      expect(exits[0]).toMatchObject({
+        pid,
+        toolCallId: 'call-1',
+        agentId: 'agent-1',
+        threadId: 'thread-1',
+        resourceId: 'user-1',
+        runId: 'run-1',
+        killedByAbort: true,
+      });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    {
+      when: 'an agent without an id',
+      context: {
+        runId: 'run-1',
+        agent: { agentId: '', toolCallId: 'call-1', threadId: 'thread-1', resourceId: 'user-1', messages: [] },
+      },
+      expected: { agentId: undefined, threadId: 'thread-1', resourceId: 'user-1', runId: 'run-1' },
+    },
+    {
+      when: 'a direct call with top-level ids',
+      context: { runId: 'wf-run-1', threadId: 'thread-2', resourceId: 'user-2' },
+      expected: { agentId: undefined, threadId: 'thread-2', resourceId: 'user-2', runId: 'wf-run-1' },
+    },
+  ])('tells onStdout and onExit who started the process from $when', async ({ context, expected }) => {
+    const outputs: BackgroundProcessMeta[] = [];
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup } = await setup({
+      onStdout: (_data, meta) => void outputs.push(meta),
+      onExit: meta => void exits.push(meta),
+    });
+    try {
+      const { pid } = await start(`node -e "console.log('started')"`, undefined, context);
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+
+      expect(outputs.length).toBeGreaterThan(0);
+      for (const meta of [outputs[0]!, exits[0]!]) {
+        expect(meta).toMatchObject({ pid, ...expected });
+        expect(meta.agentId).toBeUndefined();
+      }
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it.each([
+    {
+      when: 'exits on its own',
+      command: `node -e "console.log('started'); setTimeout(() => process.exit(3), 100)"`,
+      stop: async () => {},
+    },
+    {
+      when: 'is stopped with kill_process',
+      command: longRunning,
+      stop: async (pid: string, workspace: Workspace) => {
+        await killProcessTool.execute!({ pid }, { workspace } as any);
+      },
+    },
+  ])('does not report an abort to onExit when the process $when', async ({ command, stop }) => {
+    const exits: BackgroundProcessExitMeta[] = [];
+    const { start, cleanup, workspace } = await setup({ onExit: meta => void exits.push(meta) });
+    try {
+      const controller = new AbortController();
+      const { pid, handle } = await start(command, controller.signal);
+      await vi.waitFor(() => expect(handle.stdout).toContain('started'), { timeout: 5000 });
+
+      await stop(pid, workspace);
+      await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
+      controller.abort();
+
+      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false });
     } finally {
       await cleanup();
     }

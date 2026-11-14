@@ -81,6 +81,8 @@ export {
   requireWorkspace,
   requireFilesystem,
   requireSandbox,
+  truncateOutput,
+  DEFAULT_TAIL_LINES,
 } from './tools';
 
 // Lifecycle

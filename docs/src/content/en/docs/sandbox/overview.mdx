@@ -290,6 +290,8 @@ const workspace = new Workspace({
 
 These callbacks fire for all background processes started by the agent through `execute_command`.
 
+Each callback receives the process `pid` and, when available, the `toolCallId`, `agentId`, `threadId`, `resourceId`, and `runId` of the call that started it, so you can route an exit notice back to the right conversation. `onExit` also gets `killedByAbort`, which is `true` when the abort signal fired (the run's signal by default) and stopped the process, and `false` when it exited on its own or was stopped with `kill_process`.
+
 By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 
 For the full `SandboxProcessManager` API, including programmatic process spawning, output, and standard input, see the [`SandboxProcessManager` reference](/reference/workspace/process-manager).
