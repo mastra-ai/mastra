@@ -26,4 +26,17 @@ describe('DevLogger.ready', () => {
     expect(deployIndex).toBe(apiIndex + 1);
     expect(output[deployIndex]?.indexOf('mastra deploy')).toBe(output[studioIndex]?.indexOf('http'));
   });
+
+  it('labels the root URL as the Factory UI under mastra factory dev', () => {
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+    const logger = new DevLogger();
+
+    logger.ready('localhost', 4111, '/studio', '/api', undefined, undefined, true);
+
+    const output = infoSpy.mock.calls.map(([message]) => stripVTControlCharacters(String(message)));
+    expect(output).toContain('│ Factory UI: http://localhost:4111');
+    expect(output).toContain('│ API:        http://localhost:4111/api');
+    expect(output).toContain('│ Deploy:     mastra deploy');
+    expect(output.some(line => line.includes('Studio:'))).toBe(false);
+  });
 });

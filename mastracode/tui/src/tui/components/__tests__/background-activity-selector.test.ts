@@ -105,6 +105,30 @@ describe('BackgroundActivitySelectorComponent', () => {
     expect(onAbort).not.toHaveBeenCalled();
   });
 
+  it('opens shell rows only', () => {
+    const onOpen = vi.fn();
+    const shell = activity({ taskId: 'process:42', kind: 'process', pid: '42', toolName: 'execute_command' });
+    const task = activity();
+    const component = new BackgroundActivitySelectorComponent({
+      tui: { requestRender: vi.fn() } as unknown as TUI,
+      activities: [task, shell],
+      getActivity: taskId => [task, shell].find(row => row.taskId === taskId),
+      onCancel: vi.fn(),
+      onAbort: vi.fn(),
+      onOpen,
+    });
+    component.focused = true;
+
+    expect(stripAnsi(component.render(100).join('\n'))).not.toContain('Enter open');
+    component.handleInput('\r');
+    expect(onOpen).not.toHaveBeenCalled();
+
+    component.handleInput('\x1b[B');
+    expect(stripAnsi(component.render(100).join('\n'))).toContain('Enter open');
+    component.handleInput('\r');
+    expect(onOpen).toHaveBeenCalledWith(shell);
+  });
+
   it('leaves a shell alone when a new call reuses the PID of the row shown', () => {
     const onAbort = vi.fn();
     const onOpen = vi.fn();

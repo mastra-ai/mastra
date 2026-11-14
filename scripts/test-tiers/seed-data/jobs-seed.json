@@ -1,0 +1,338 @@
+{
+  "job:e2e/client-js": {
+    "last_failure": "2026-09-30",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:e2e/commonjs": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/create-mastra": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/deployers": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/experiments": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/kitchen-sink": {
+    "last_failure": "2026-10-31",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/mcp-compat": {
+    "last_failure": "2026-10-26",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/monorepo": {
+    "last_failure": "2026-11-01",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/no-bundling": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:e2e/type-check": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:mastracode-e2e": {
+    "last_failure": "2026-10-31",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:mastracode-om": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:memory": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/astra": {
+    "last_failure": "2026-09-02",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/azure-ai-search": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/chroma": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/clickhouse": {
+    "last_failure": "2026-10-31",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/cloudflare": {
+    "last_failure": "2026-09-18",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/cloudflare-d1": {
+    "last_failure": "2026-09-30",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/convex": {
+    "last_failure": "2026-10-13",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/couchbase": {
+    "last_failure": "2026-10-13",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/dsql": {
+    "last_failure": "2026-10-14",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/duckdb": {
+    "last_failure": "2026-10-27",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/dynamodb": {
+    "last_failure": "2026-10-28",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/elasticsearch": {
+    "last_failure": "2026-09-18",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/lance": {
+    "last_failure": "2026-10-14",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/libsql": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/mongodb": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/mssql": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/mysql": {
+    "last_failure": "2026-10-31",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/opensearch": {
+    "last_failure": "2026-10-09",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/oracledb": {
+    "last_failure": "2026-10-13",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/pg": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/pinecone": {
+    "last_failure": "2026-09-08",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:store/qdrant": {
+    "last_failure": "2026-10-15",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/redis": {
+    "last_failure": "2026-10-17",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/s3vectors": {
+    "last_failure": "2026-10-13",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/spanner": {
+    "last_failure": "2026-10-29",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/turbopuffer": {
+    "last_failure": "2026-10-13",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/turso": {
+    "last_failure": "2026-10-14",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/upstash": {
+    "last_failure": "2026-10-09",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/valkey": {
+    "last_failure": "2026-10-09",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:store/weaviate": {
+    "last_failure": "2026-10-31",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-docker/azure": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-docker/s3": {
+    "last_failure": "2026-09-18",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/agentcore": {
+    "last_failure": "2026-09-02",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/azure": {
+    "last_failure": "2026-10-28",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-unit/blaxel": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/daytona": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/e2b": {
+    "last_failure": "2026-09-02",
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/e2b-desktop": {
+    "last_failure": "2026-10-30",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-unit/modal": {
+    "last_failure": "2026-10-05",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-unit/platform-workspace": {
+    "last_failure": "2026-10-08",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-unit/railway": {
+    "last_failure": "2026-10-23",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  },
+  "job:workspace-unit/s3": {
+    "last_failure": null,
+    "reason": "seed-30d-nofail",
+    "since": "2026-11-01",
+    "tier": "out"
+  },
+  "job:workspace-unit/sprites": {
+    "last_failure": "2026-10-14",
+    "reason": "failed-last-30d",
+    "since": "2026-11-01",
+    "tier": "in"
+  }
+}

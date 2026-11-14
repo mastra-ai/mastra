@@ -23,7 +23,6 @@ const WORKER_GROUP = 'background-task-workers';
 const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
 const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
-const WORKER_TERMINATED_MESSAGE = 'Worker process terminated before task completed';
 
 function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
   if (result.error !== undefined) return result.error;
@@ -42,6 +41,12 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
 
 /** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
 const PIN_SWEEP_PAGE_SIZE = 100;
+
+/** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
+function minLeaseOverride(): number | undefined {
+  const value = Number(process.env.MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS);
+  return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
+}
 
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
@@ -106,6 +111,8 @@ export class BackgroundTaskManager {
   // workers leave them alone until this manager claims them or dies.
   private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
+  // Shortest heartbeat / stale-recovery delay: 1s, unless a test lowered the lease minimum.
+  readonly #timingFloorMs: number;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
   // is still valid is left alone by a recovery scan, so if its owner died just
@@ -156,9 +163,15 @@ export class BackgroundTaskManager {
     // The heartbeat renews at `leaseDurationMs / 3`, floored to 1s. A lease
     // shorter than 3s therefore expires before it can be renewed, so reject it
     // rather than silently letting every task's lease lapse mid-run.
-    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 3_000) {
+    //
+    // Internal, for tests that prove lease expiry: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS
+    // lowers that 3s minimum, and the 1s timing floor scales down with it, so
+    // those tests wait milliseconds instead of seconds. Not a supported setting.
+    const minLeaseMs = minLeaseOverride() ?? 3_000;
+    this.#timingFloorMs = minLeaseMs / 3;
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < minLeaseMs) {
       throw new Error(
-        `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
+        `BackgroundTaskManager leaseDurationMs must be a finite number of at least ${minLeaseMs}ms (received: ${leaseDurationMs})`,
       );
     }
     for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
@@ -300,6 +313,13 @@ export class BackgroundTaskManager {
         ]);
         return;
       }
+
+      if (this.config.recoverStaleTasksOnStart) {
+        // Recover stale tasks from a previous process — only workers should
+        // attempt recovery since they own execution.
+        await this.recoverStaleTasks();
+        this.#startPinSweep();
+      }
     }
 
     await this.pubsub.subscribe(TOPIC_RESULT, this.resultCallback);
@@ -314,15 +334,6 @@ export class BackgroundTaskManager {
       lateSubscriptions.push([TOPIC_RESULT, this.resultCallback]);
       await this.#releaseLateInitSubscriptions(lateSubscriptions);
       return;
-    }
-
-    if (!isProducerOnly && this.config.recoverStaleTasksOnStart) {
-      // Recover stale tasks from a previous process. Only workers attempt
-      // recovery because they own execution. This runs after the result
-      // subscription so this process receives the `task.failed` events that
-      // recovery publishes and fires `onTaskFailed` for them.
-      await this.recoverStaleTasks();
-      this.#startPinSweep();
     }
 
     // Start periodic cleanup if configured
@@ -2116,7 +2127,7 @@ export class BackgroundTaskManager {
 
   #startLeaseHeartbeat(): void {
     if (this.heartbeatInterval) return;
-    const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
+    const intervalMs = Math.max(this.#timingFloorMs, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
       // Storage-wide admission can be freed by another process, which never
@@ -2292,18 +2303,17 @@ export class BackgroundTaskManager {
             fence,
           );
         } else {
-          const failed = await storage.updateTask(
+          await storage.updateTask(
             task.id,
             {
               status: 'failed',
-              error: { message: WORKER_TERMINATED_MESSAGE },
+              error: { message: 'Worker process terminated before task completed' },
               completedAt: new Date(),
               ownerId: undefined,
               leaseExpiresAt: undefined,
             },
             fence,
           );
-          if (failed) await this.#announceRecoveredFailure(storage, task.id);
         }
       }
 
@@ -2365,7 +2375,7 @@ export class BackgroundTaskManager {
           task.id,
           {
             status: 'failed',
-            error: { message: WORKER_TERMINATED_MESSAGE },
+            error: { message: 'Worker process terminated before task completed' },
             completedAt: new Date(),
             ownerId: undefined,
             leaseExpiresAt: undefined,
@@ -2382,29 +2392,8 @@ export class BackgroundTaskManager {
             retry ? 'Retrying it on another worker.' : 'Marking it failed.'
           }`,
         );
-      if (!retry) await this.#announceRecoveredFailure(storage, task.id);
     }
     return retry && recovered;
-  }
-
-  /**
-   * Recovery fails tasks with a direct storage write, so run the same hooks
-   * and publish the same `task.failed` event a failed attempt would. Per-task
-   * hooks only exist when the task was dispatched from this process; after a
-   * restart only the global `onTaskFailed` fires (from `handleResult`).
-   */
-  async #announceRecoveredFailure(
-    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
-    taskId: string,
-  ): Promise<void> {
-    try {
-      const failedTask = await storage.getTask(taskId);
-      if (!failedTask) return;
-      await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error });
-      await this.publishLifecycleEvent('task.failed', failedTask);
-    } catch (error) {
-      this.#mastra?.getLogger?.()?.warn(`background-task recovery failure event failed for ${taskId}:`, error as any);
-    }
   }
 
   /**
@@ -2496,9 +2485,10 @@ export class BackgroundTaskManager {
 
     // Wait just past the lease expiry (clocks drift between workers), but bound
     // the delay so a stray far-future lease cannot park recovery indefinitely.
+    const floor = this.#timingFloorMs;
     const delay = Math.min(
-      Math.max(nextSweepAt - Date.now() + 1_000, 1_000),
-      Math.max(this.config.leaseDurationMs, 1_000),
+      Math.max(nextSweepAt - Date.now() + floor, floor),
+      Math.max(this.config.leaseDurationMs, floor),
     );
     this.staleRecoveryTimeout = setTimeout(() => {
       this.staleRecoveryTimeout = undefined;

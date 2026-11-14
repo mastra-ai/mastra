@@ -1,4 +1,4 @@
-import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { SIDEBAR_WIDTHS, Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { Outlet } from 'react-router';
@@ -13,7 +13,7 @@ import { PwaInstallBanner } from '../lib/pwa';
 import { AppSidebar } from '../AppSidebar';
 import { ServerProblemBanner } from './ServerProblemBanner';
 
-const DEFAULT_MIN_WIDTH = 200;
+// The board editor needs more room than the sidebar's default minimum. Dragging still collapses it at that default.
 const BOARD_CONFIG_MIN_WIDTH = 288;
 
 /** `[` toggles the sidebar, as the trigger's tooltip says. Needs the `Sidebar.Provider` context. */
@@ -55,8 +55,8 @@ export function AppLayout() {
         <Sidebar.Provider
           storageKey="mastracode-web"
           collapsedWidth={0}
-          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : DEFAULT_MIN_WIDTH}
-          collapseBelow={DEFAULT_MIN_WIDTH}
+          minWidth={configuringBoard ? BOARD_CONFIG_MIN_WIDTH : undefined}
+          collapseBelow={SIDEBAR_WIDTHS.min}
         >
           <SidebarShortcuts />
           <OverlaysProvider>

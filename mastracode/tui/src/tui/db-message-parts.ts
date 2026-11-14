@@ -525,12 +525,10 @@ export interface BackgroundCompletionView {
   originToolCallId: string;
   toolName?: string;
   status?: string;
-  /** Card title, e.g. the subagent's name or `Shell`. */
+  /** Card title of a shell's exit: `Shell`. */
   title?: string;
-  /** Card detail, e.g. the subagent's task or the shell's description. */
+  /** Card detail of a shell's exit: its description or command. */
   summary?: string;
-  /** The task ended because the process running it stopped: after a crash (`restart`) or on quit (`shutdown`). */
-  interrupted?: 'restart' | 'shutdown';
   argsSummary?: string;
   errorSummary?: string;
 }
@@ -552,9 +550,6 @@ export function getBackgroundCompletionView(message: MastraDBMessage): Backgroun
     status: asString(completion?.status),
     title: asString(completion?.title),
     summary: asString(completion?.summary),
-    ...(completion?.interrupted === 'restart' || completion?.interrupted === 'shutdown'
-      ? { interrupted: completion.interrupted }
-      : {}),
     argsSummary: asString(completion?.argsSummary),
     errorSummary: asString(completion?.errorSummary),
   };

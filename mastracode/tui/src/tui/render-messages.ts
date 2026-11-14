@@ -14,7 +14,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
-import { parseBackgroundProcessPid } from './background-activity.js';
+import { finishedShellExit, parseBackgroundProcessPid } from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -54,13 +54,8 @@ import {
   getUserSignalView,
   isSignalMessage,
 } from './db-message-parts.js';
-import type { AssistantRenderPart, BackgroundCompletionView } from './db-message-parts.js';
-import {
-  forgetPluginSubagentCall,
-  formatToolResult,
-  isLivePluginSubagentCall,
-  isTaskMutationTool,
-} from './handlers/tool.js';
+import type { AssistantRenderPart } from './db-message-parts.js';
+import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
@@ -595,15 +590,10 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
     }
     if (backgroundCompletion?.kind === 'process' && backgroundCompletion.exitCode !== undefined) {
       state.backgroundShellRows
-        ?.get(backgroundCompletion.originToolCallId)
+        .get(backgroundCompletion.originToolCallId)
         ?.setBackgroundProcessExit?.({ exitCode: backgroundCompletion.exitCode, killed: false });
     }
-    // A shutdown's notice is also `cancelled`; an interruption is settled, not shown as a user cancel.
-    if (
-      backgroundCompletion?.taskId &&
-      backgroundCompletion.status === 'cancelled' &&
-      !backgroundCompletion.interrupted
-    ) {
+    if (backgroundCompletion?.taskId && backgroundCompletion.status === 'cancelled') {
       const toolComponent = state.pendingTools.get(backgroundCompletion.originToolCallId);
       const subagentComponent = state.pendingSubagents.get(backgroundCompletion.originToolCallId);
       toolComponent?.setBackgroundTaskId?.(backgroundCompletion.taskId);
@@ -617,8 +607,6 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       subagentComponent?.setBackgroundTaskId(backgroundCompletion.taskId);
       subagentComponent?.cancel();
       state.pendingSubagents.delete(backgroundCompletion.originToolCallId);
-    } else if (backgroundCompletion?.taskId) {
-      settleBackgroundCall(state, { ...backgroundCompletion, taskId: backgroundCompletion.taskId });
     }
     const component = new NotificationComponent({
       message: notification.message,
@@ -951,69 +939,6 @@ function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefi
 }
 
 /**
- * Ends a call still shown as running when its task's finished, failed or
- * interrupted notice arrives and nothing else will end it: a box replayed from history
- * gets no `subagent_end`, and no result reaches a call a restart or a
- * shutdown cut off. A live plugin subagent's box and a live tool row still
- * get their result in `tool_end`.
- */
-function settleBackgroundCall(state: TUIState, completion: BackgroundCompletionView & { taskId: string }): void {
-  const toolCallId = completion.originToolCallId;
-  // A shutdown cancels the tasks it cuts off; either interruption is a failure here.
-  const failed = completion.status === 'failed' || !!completion.interrupted;
-  const subagentComponent = state.pendingSubagents.get(toolCallId);
-  if (subagentComponent && (completion.interrupted || !isLivePluginSubagentCall(toolCallId))) {
-    subagentComponent.setBackgroundTaskId(completion.taskId);
-    // The completion card next to the box says what happened; the box shows
-    // no result rather than repeating it.
-    subagentComponent.finish(failed, undefined);
-    state.pendingSubagents.delete(toolCallId);
-    forgetPluginSubagentCall(toolCallId);
-  }
-  const toolComponent = completion.interrupted ? state.pendingTools.get(toolCallId) : undefined;
-  if (toolComponent) {
-    toolComponent.setBackgroundTaskId?.(completion.taskId);
-    // A row leaves its running state only with a result, so it gets a short one.
-    const text = `Background execution interrupted by a ${completion.interrupted}.`;
-    toolComponent.updateResult({ content: [{ type: 'text', text }], isError: failed }, false);
-    state.pendingTools.delete(toolCallId);
-    state.pendingTaskToolIds?.delete(toolCallId);
-  }
-}
-
-/**
- * Leaves a replayed subagent box as the live handlers would: cancelled,
- * finished, or still waiting on its background task, where live events, a
- * cancel signal and Ctrl+G can reach it.
- */
-function restoreReplayedSubagent(
-  state: TUIState,
-  toolCallId: string,
-  component: SubagentExecutionComponent,
-  replay: {
-    taskId?: string;
-    cancelled: boolean;
-    running: boolean;
-    isError: boolean;
-    durationMs: number;
-    result?: string;
-  },
-): void {
-  if (replay.taskId) {
-    component.setBackgroundTaskId(replay.taskId);
-    // Ctrl+G opens the box of any background call, finished or not.
-    state.backgroundSubagentCalls?.set(toolCallId, { taskId: replay.taskId, component });
-  }
-  if (replay.cancelled) {
-    component.cancel();
-  } else if (replay.running) {
-    state.pendingSubagents.set(toolCallId, component);
-  } else {
-    component.finish(replay.isError, replay.durationMs, replay.result);
-  }
-}
-
-/**
  * Re-render all existing messages from the controller thread into the chat container.
  * Called on thread switch and initial load.
  */
@@ -1033,30 +958,20 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   state.messageComponentsById.clear();
   state.pendingSignalMessageComponentsById.clear();
   state.allShellComponents = [];
-  state.backgroundShellRows?.clear();
-  state.backgroundSubagentCalls?.clear();
+  state.backgroundShellRows.clear();
 
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
-  // A restart or shutdown leaves the stored call holding its placeholder. Kept
-  // out of `backgroundTasksByToolCallId` so the placeholder check still sees the
-  // call as running; its notice, later in this replay, ends it.
-  const interruptedTasksByToolCallId = new Map<string, string>();
   const backgroundProcessExits = new Map<string, number>();
   const cancelledBackgroundToolCalls = new Set<string>();
-  // The notice says how a task ended even when the stored call still reads as a success.
-  const failedBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
     const completion = getBackgroundCompletionView(message);
     if (completion?.kind === 'process' && completion.exitCode !== undefined) {
       backgroundProcessExits.set(completion.originToolCallId, completion.exitCode);
-    } else if (completion?.taskId && completion.interrupted) {
-      interruptedTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
     } else if (completion?.taskId) {
       backgroundTasksByToolCallId.set(completion.originToolCallId, completion.taskId);
       if (completion.status === 'cancelled') cancelledBackgroundToolCalls.add(completion.originToolCallId);
-      if (completion.status === 'failed') failedBackgroundToolCalls.add(completion.originToolCallId);
     }
   }
 
@@ -1102,18 +1017,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             !resultIsError &&
             part.backgroundTask?.status === 'running' &&
             !backgroundTasksByToolCallId.has(part.toolCallId);
-          const backgroundTaskId =
-            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
-              ? part.backgroundTask?.taskId
-              : undefined) ??
-            backgroundTasksByToolCallId.get(part.toolCallId) ??
-            interruptedTasksByToolCallId.get(part.toolCallId);
-          const isCancelledBackground = cancelledBackgroundToolCalls.has(part.toolCallId);
-          const isFailedBackground = failedBackgroundToolCalls.has(part.toolCallId);
-          // An awaited call a restart or shutdown cut off has no result; it also waits for its notice.
-          const awaitsInterruptedNotice =
-            !!state.options?.backgroundToolsEnabled && !hasResult && interruptedTasksByToolCallId.has(part.toolCallId);
-          const replaysRunning = isBackgroundPlaceholder || awaitsInterruptedNotice;
 
           // Render subagent tool calls with dedicated component
           if (toolName === 'subagent') {
@@ -1140,12 +1043,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              {
-                collapseOnComplete: false,
-                expandOnComplete: true,
-                forked: subArgs?.forked,
-                isToolOutputExpanded: () => state.toolOutputExpanded,
-              },
+              { collapseOnComplete: false, expandOnComplete: true, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -1154,14 +1052,8 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 subComponent.addToolEnd(tc.name, '', tc.isError);
               }
             }
-            restoreReplayedSubagent(state, part.toolCallId, subComponent, {
-              taskId: state.options?.backgroundToolsEnabled ? backgroundTaskId : undefined,
-              cancelled: isCancelledBackground,
-              running: replaysRunning,
-              isError: (isErr ?? false) || isFailedBackground,
-              durationMs,
-              result: resultText,
-            });
+            // Mark as finished with result
+            subComponent.finish(isErr ?? false, durationMs, resultText);
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1198,7 +1090,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               {
                 collapseOnComplete: false,
                 expandOnComplete: true,
-                isToolOutputExpanded: () => state.toolOutputExpanded,
                 forked: pluginRenderConfig.forked,
                 label: pluginRenderConfig.label,
                 maxActivityLines: pluginRenderConfig.maxActivityLines,
@@ -1207,14 +1098,20 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 icons: pluginRenderConfig.icons,
               },
             );
-            restoreReplayedSubagent(state, part.toolCallId, subComponent, {
-              taskId: backgroundTaskId,
-              cancelled: isCancelledBackground,
-              running: replaysRunning,
-              isError: (isErr ?? false) || isFailedBackground,
-              durationMs: 0,
-              result: rawResult,
-            });
+            const backgroundTaskId =
+              (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+                ? part.backgroundTask?.taskId
+                : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
+            if (backgroundTaskId) {
+              subComponent.setBackgroundTaskId(backgroundTaskId);
+            }
+            if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
+              subComponent.cancel();
+            } else if (isBackgroundPlaceholder) {
+              state.pendingSubagents.set(part.toolCallId, subComponent);
+            } else {
+              subComponent.finish(isErr ?? false, 0, rawResult);
+            }
             insertChatComponentWithBoundarySpacing(state.chatContainer, subComponent);
             state.allToolComponents.push(subComponent as any);
             continue;
@@ -1231,6 +1128,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             },
             state.ui,
           );
+          const backgroundTaskId =
+            (isBackgroundPlaceholder || part.backgroundTask?.status !== 'running'
+              ? part.backgroundTask?.taskId
+              : undefined) ?? backgroundTasksByToolCallId.get(part.toolCallId);
           if (backgroundTaskId) {
             toolComponent.setBackgroundTaskId(backgroundTaskId);
           }
@@ -1244,7 +1145,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                     text: isBackgroundPlaceholder ? 'Running in background…' : formatToolResult(resultValue),
                   },
                 ],
-                isError: resultIsError || isFailedBackground,
+                isError: resultIsError,
               },
               isBackgroundPlaceholder,
             );
@@ -1265,23 +1166,27 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             toolComponent.stopLiveUpdates();
           }
 
-          if (isCancelledBackground) {
+          if (cancelledBackgroundToolCalls.has(part.toolCallId)) {
             toolComponent.updateResult(
               { content: [{ type: 'text', text: 'Background execution cancelled.' }], isError: true },
               true,
             );
             toolComponent.cancelBackground();
-          } else if (replaysRunning) {
+          } else if (isBackgroundPlaceholder) {
             state.pendingTools.set(part.toolCallId, toolComponent);
           }
 
           if (toolName === MC_TOOLS.EXECUTE_COMMAND && state.options?.backgroundToolsEnabled && hasResult) {
+            const pid = parseBackgroundProcessPid(resultValue);
             const processExit = backgroundProcessExits.get(part.toolCallId);
-            if (processExit !== undefined) {
-              toolComponent.setBackgroundProcessExit({ exitCode: processExit, killed: false });
-            } else if (parseBackgroundProcessPid(resultValue)) {
+            const exit =
+              (pid ? finishedShellExit(state.backgroundActivities, pid, part.toolCallId) : undefined) ??
+              (processExit !== undefined ? { exitCode: processExit, killed: false } : undefined);
+            if (exit) {
+              toolComponent.setBackgroundProcessExit(exit);
+            } else if (pid) {
               // Still running, or its exit notice is yet to arrive.
-              state.backgroundShellRows?.set(part.toolCallId, toolComponent);
+              state.backgroundShellRows.set(part.toolCallId, toolComponent);
             }
           }
 

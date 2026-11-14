@@ -1,9 +1,9 @@
 /**
  * Browser-side helpers for the Factory pages (Intake / Review).
  *
- * Reads a linked repository's open issues and open (non-draft) pull requests
- * through the server's `/web/github/projects/:projectRepositoryId/*` routes, which are behind
- * the WorkOS auth gate and scoped to the caller's organization. Tokens never
+ * Reads one issue or pull request of a linked repository through the server's
+ * `/web/github/projects/:projectRepositoryId/*` routes, which are behind the
+ * WorkOS auth gate and scoped to the caller's organization. Tokens never
  * reach the browser — the server talks to GitHub with its installation token.
  */
 
@@ -46,17 +46,6 @@ export interface GithubPullRequestDetail extends GithubPullRequest {
   description: string | null;
 }
 
-export interface GithubIssuePage {
-  issues: GithubIssue[];
-  /** Next 1-based page to request, or `null` on the last page. */
-  nextPage: number | null;
-}
-
-export interface GithubPullRequestPage {
-  pullRequests: GithubPullRequest[];
-  nextPage: number | null;
-}
-
 /** GET helper for the read-only per-repository GitHub endpoints. */
 async function getRepositoryResource<T>(
   baseUrl: string,
@@ -86,25 +75,6 @@ async function getRepositoryResource<T>(
     throw new Error(message);
   }
   return (await res.json()) as T;
-}
-
-/** List one page of a connected repository's open GitHub issues (PRs excluded server-side). */
-export async function listRepositoryIssues(
-  baseUrl: string,
-  githubProjectId: string,
-  page: number,
-  label?: string,
-): Promise<GithubIssuePage> {
-  return getRepositoryResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', { page: String(page), label });
-}
-
-/** List one page of a connected repository's open pull requests (drafts excluded server-side). */
-export async function listRepositoryPullRequests(
-  baseUrl: string,
-  githubProjectId: string,
-  page: number,
-): Promise<GithubPullRequestPage> {
-  return getRepositoryResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', { page: String(page) });
 }
 
 export async function getRepositoryIssue(

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 
 import type { ProcessAPIErrorArgs, Processor, StreamErrorRetryProcessorOptions } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const providerRegistryMock: Record<string, unknown> = {};
@@ -124,6 +125,7 @@ const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
 const controllerGetSessionMock = vi.fn();
+const controllerResolveToolApprovalMock = vi.fn((_toolName: string, _scope?: unknown) => 'ask');
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -262,6 +264,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         getWorkspace: () => undefined,
         getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
+        resolveToolApproval: (toolName: string, scope?: unknown) => controllerResolveToolApprovalMock(toolName, scope),
         state: {
           get: () => controllerStateMock,
           set: (state: unknown) => controllerSetStateMock(state),
@@ -498,7 +501,9 @@ vi.mock('../utils/project.js', () => ({
   getResourceIdOverride: getResourceIdOverrideMock,
 }));
 
-const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({ storage: {} }));
+const createStorageMock = vi.fn((): { storage: unknown; backend?: string } => ({
+  storage: new InMemoryStore({ id: 'code-sdk-test' }),
+}));
 const createVectorStoreMock = vi.fn(() => ({}));
 
 vi.mock('../utils/storage-factory.js', () => ({
@@ -653,7 +658,7 @@ describe('createMastraCode', () => {
     mastraCodeGatewayMock.getApiKey.mockClear();
     mastraCodeGatewayMock.resolveLanguageModel.mockClear();
     createStorageMock.mockReset();
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'memory' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-test' }), backend: 'memory' });
     createVectorStoreMock.mockReset();
     createVectorStoreMock.mockReturnValue({});
     getDynamicMemoryMock.mockReset();
@@ -692,6 +697,8 @@ describe('createMastraCode', () => {
     });
     controllerStateMock = { cavemanObservations: false };
     controllerThreadMetadataMock = undefined;
+    controllerResolveToolApprovalMock.mockReset();
+    controllerResolveToolApprovalMock.mockImplementation(() => 'ask');
     controllerModeMock = 'build';
     controllerModelMock = 'anthropic/claude-opus-4-6';
     loadSettingsMock.mockReset();
@@ -839,7 +846,6 @@ describe('createMastraCode', () => {
 
     const disabled = await createMastraCode();
     expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks).toBeUndefined();
-    expect(controllerConstructorMock.mock.calls[0]![0].subagentBackground).toBeUndefined();
     expect(disabled.backgroundCompletionEvents).toBeUndefined();
 
     controllerConstructorMock.mockClear();
@@ -849,52 +855,45 @@ describe('createMastraCode', () => {
     });
 
     const enabled = await createMastraCode();
-    const controllerConfig = controllerConstructorMock.mock.calls[0]![0];
-    expect(controllerConfig.backgroundTasks).toMatchObject({ enabled: true, recoverStaleTasksOnStart: true });
-    // Background subagents run until they finish: no timeout and no retry of a half-done task.
-    expect(controllerConfig.subagentBackground).toMatchObject({ enabled: true, timeoutMs: 0, maxRetries: 0 });
+    expect(controllerConstructorMock.mock.calls[0]![0].backgroundTasks.enabled).toBe(true);
     expect(enabled.backgroundCompletionEvents).toBeDefined();
   });
 
-  it('delivers a background notice held before any session existed once a session is created', async () => {
+  it('delivers a shell exit that came while no session ran its resource once a session is created', async () => {
     loadSettingsMock.mockReturnValue({ ...createMockSettings(), backgroundTools: { enabled: true } });
     const { createMastraCode } = await import('../index.js');
     await createMastraCode();
-    const { backgroundTasks } = controllerConstructorMock.mock.calls[0]![0];
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext: { get: () => undefined } });
+    const { backgroundProcesses } = getDynamicWorkspaceMock.mock.calls[0]![0];
     controllerGetSessionMock.mockResolvedValue(undefined);
 
-    // Startup recovery reports an orphaned task before the TUI's session exists.
-    await backgroundTasks.onTaskFailed({
-      id: 'task-1',
-      status: 'failed',
-      toolName: 'subagent',
+    await backgroundProcesses.onExit({
+      pid: '42',
+      exitCode: 0,
+      stdout: 'BUILD_DONE',
+      stderr: '',
       toolCallId: 'call-1',
-      args: { agentType: 'explore', task: 'Audit' },
-      error: { message: 'Worker process terminated before task completed' },
-      agentId: 'code-agent',
       runId: 'run-1',
       threadId: 'thread-1',
       resourceId: 'project-resource',
-      retryCount: 0,
-      maxRetries: 0,
-      timeoutMs: 0,
-      createdAt: new Date(),
     });
     const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
     const session = {
       sendSignalToThread,
       identity: { getResourceId: () => 'project-resource' },
-      thread: { getId: () => 'thread-1' },
+      thread: { getId: () => 'other-thread' },
     };
     controllerGetSessionMock.mockImplementation(async (id: string) =>
       id === 'project-resource' ? session : undefined,
     );
+    expect(sendSignalToThread).not.toHaveBeenCalled();
     const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
     trackLiveSession(session);
 
     await vi.waitFor(() => expect(sendSignalToThread).toHaveBeenCalledOnce());
     expect(sendSignalToThread).toHaveBeenCalledWith(
-      expect.objectContaining({ contents: expect.stringContaining('interrupted by a restart') }),
+      expect.objectContaining({ contents: expect.stringContaining('BUILD_DONE') }),
       { resourceId: 'project-resource', threadId: 'thread-1' },
     );
   });
@@ -955,7 +954,7 @@ describe('createMastraCode', () => {
     expect(enabled.mastraArgs.backgroundTasks).toEqual(
       expect.objectContaining({
         enabled: true,
-        recoverStaleTasksOnStart: true,
+        recoverStaleTasksOnStart: false,
         onTaskComplete: expect.any(Function),
         onTaskFailed: expect.any(Function),
         onTaskCancelled: expect.any(Function),
@@ -1397,7 +1396,7 @@ describe('createMastraCode', () => {
   // even though the instance is a real store. Detection must be structural.
   describe('injected storage from a foreign @mastra/core copy', () => {
     class ForeignCompositeStore {
-      stores = {};
+      stores = new InMemoryStore({ id: 'foreign-code-sdk-test' }).stores;
       async init() {}
       __registerMastra() {}
     }
@@ -1514,7 +1513,7 @@ describe('createMastraCode', () => {
       getPluginSignalProviders: vi.fn(() => []),
     };
 
-    createStorageMock.mockReturnValue({ storage: {}, backend: 'pg' });
+    createStorageMock.mockReturnValue({ storage: new InMemoryStore({ id: 'code-sdk-plugin-test' }), backend: 'pg' });
     const built = await createMastraCode({ pluginManager: pluginManager as any });
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as
@@ -2600,10 +2599,12 @@ describe('createMastraCode', () => {
       modelRoute: { entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }] },
       yolo: false,
       sandboxAllowedPaths: ['/active-only'],
+      permissionRules: { categories: { edit: 'allow' }, tools: {} },
     };
     controllerThreadMetadataMock = {
       currentModelId: 'openai/gpt-5.6-sol',
       modeModelId_build: 'anthropic/claude-fable-5-1',
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
       modelRoute: {
         entries: [
           { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5-1' },
@@ -2659,9 +2660,18 @@ describe('createMastraCode', () => {
       },
       yolo: false,
       sandboxAllowedPaths: [],
+      // The woken thread's own rules, not the open thread's.
+      permissionRules: { categories: { edit: 'ask' }, tools: { view: 'allow' } },
     });
     expect(controllerContext.getSubagentModelId({ agentType: 'explore' })).toBe('openai/gpt-5.6-mini');
-    expect(decision.streamOptions.requireToolApproval).toBe(true);
+    // Only calls the woken thread's policy does not allow pause for approval.
+    const requireToolApproval = decision.streamOptions.requireToolApproval;
+    expect(requireToolApproval).toBeTypeOf('function');
+    controllerResolveToolApprovalMock.mockImplementation(toolName => (toolName === 'view' ? 'allow' : 'ask'));
+    expect(requireToolApproval({ toolName: 'view' })).toBe(false);
+    expect(requireToolApproval({ toolName: 'write_file' })).toBe(true);
+    expect(controllerResolveToolApprovalMock).toHaveBeenCalledWith('view', decision.streamOptions.requestContext);
+    expect(decision.streamOptions.toolCallConcurrency).toEqual({ strategy: 'called' });
     controllerSetStateMock.mockClear();
 
     const pendingFallback = {

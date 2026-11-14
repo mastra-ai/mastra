@@ -24,23 +24,20 @@ const { mastra, controller } = await mountAgentControllerOnMastra({
 });
 ```
 
-### Background shells and subagents
+### Background shells
 
-Background shells and subagents are off by default. Turn on `backgroundTools.enabled` for background shells, and also `preferences.subagentsEnabled` for background subagents, in `settings.json` or `/settings`:
+Background shells are off by default. Turn on `backgroundTools.enabled` in `settings.json` or `/settings`:
 
 ```json
-{ "backgroundTools": { "enabled": true }, "preferences": { "subagentsEnabled": true } }
+{ "backgroundTools": { "enabled": true } }
 ```
 
 With the setting on, a command the agent starts with `execute_command` and `background: true` keeps running when the run ends or the user presses Esc. When the command exits, the agent gets a notification with the exit code and the end of its output. If the agent is idle on that thread, the notification starts a new turn. These exits post no notification:
 
 - a kill with `kill_process` or from the TUI
-- a kill when the run that started the command is aborted
 - the sandbox shutting down
 
-The `subagent` tool can run as a background task. It runs until it finishes, without a timeout or retries. When it ends, the agent gets a notification, and the result is in the original tool call. Like a shell exit, the notification for a finished or failed background task wakes an idle agent on the current thread. Notifications for tasks the user cancelled, and for tasks a crash or a shutdown interrupted, are saved to the thread without starting a turn.
-
-`createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it posts no exit notification:
+`createMastraCode()` returns `backgroundProcesses` so a host can show and stop background shells. `read` keeps working after the shell exits, until its output is released: by a kill, or when the agent reads it with `get_process_output`. Killing a shell through it doesn't post an exit notification:
 
 ```ts
 const { backgroundProcesses } = await createMastraCode();
@@ -53,7 +50,7 @@ Limits:
 
 - Only the default workspace reports exits. A workspace passed as `config.workspace` does not.
 - A shell started by a subagent, plain or forked, reports to the parent thread. Mastra Code checks the thread when the shell starts: if the user has left the parent thread by then, the agent is not told when the shell exits. For a forked subagent, the exit is not reported to its cloned thread either.
-- Notifications that arrive before any session exists, such as tasks a crash left unfinished, wait in memory until a session starts. At most 100 wait at a time, and the oldest are dropped first. They are lost if the process exits first.
+- Exit notifications that arrive while no session runs the thread's resource wait in memory until a session starts. At most 100 wait at a time, and the oldest are dropped first. They are lost if Mastra Code exits first.
 
 ### Plugin background execution
 
