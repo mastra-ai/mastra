@@ -2530,6 +2530,21 @@ export class Workflow<
     return this as any;
   }
 
+  // Sleep ids are recorded in snapshots, so a restart or time travel in another
+  // process must derive the same id: use the ordinal of this entry among the
+  // workflow's sleeps (`sleep` and `sleepUntil` share the prefix, so they share
+  // one count), as `map()` does, unless a custom id generator is configured.
+  #defaultSleepId(stepType: 'sleep' | 'sleep-until'): string {
+    if (this.#mastra?.getIdGenerator()) {
+      return `sleep_${this.#mastra.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType })}`;
+    }
+    let ordinal = this.stepFlow.filter(entry => entry.type === 'sleep' || entry.type === 'sleepUntil').length;
+    while (`sleep_${this.id}_${ordinal}` in this.steps) {
+      ordinal++;
+    }
+    return `sleep_${this.id}_${ordinal}`;
+  }
+
   /**
    * Adds a sleep step to the workflow
    * @param duration The duration to sleep for
@@ -2540,9 +2555,7 @@ export class Workflow<
     duration: number | ExecuteFunction<TState, TPrevSchema, number, any, any, TEngineType>,
     options?: StepFlowEntryOptions,
   ) {
-    const id =
-      options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep' }) || globalThis.crypto.randomUUID()}`;
+    const id = options?.id || this.#defaultSleepId('sleep');
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
@@ -2591,9 +2604,7 @@ export class Workflow<
     date: Date | ExecuteFunction<TState, TPrevSchema, Date, any, any, TEngineType>,
     options?: StepFlowEntryOptions,
   ) {
-    const id =
-      options?.id ||
-      `sleep_${this.#mastra?.generateId({ idType: 'step', source: 'workflow', entityId: this.id, stepType: 'sleep-until' }) || globalThis.crypto.randomUUID()}`;
+    const id = options?.id || this.#defaultSleepId('sleep-until');
     // Only the display fields: `id` is spelled explicitly from the normalized
     // value above, so a falsy caller id can never override the generated one.
     const displayFields = toEntryOptionFields({ description: options?.description, metadata: options?.metadata });
