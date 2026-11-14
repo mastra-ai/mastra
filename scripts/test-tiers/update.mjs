@@ -320,8 +320,9 @@ export const gitDiffFiles = (base, head, cwd) => {
  * resolved against the tracked test files and dropped when it matches none.
  */
 export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repoProjectRoots()) {
-  const known = new Set(tracked);
+  const { known, bySuffix } = trackedIndex(tracked);
   const files = new Set();
+  const resolved = new Map();
   const keep = file => {
     if (known.has(file)) files.add(file);
   };
@@ -335,7 +336,9 @@ export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repo
     }
     m = /FAIL +(\S+) +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
     if (m) {
-      const file = projectFile(m[1], m[2], known, roots);
+      const pair = `${m[1]}\0${m[2]}`;
+      if (!resolved.has(pair)) resolved.set(pair, projectFile(m[1], m[2], known, bySuffix, roots));
+      const file = resolved.get(pair);
       if (file) files.add(file);
       continue;
     }
@@ -350,18 +353,39 @@ export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repo
 // under the project name read as a directory, else the longest package directory the
 // name starts with (packages/core-isolated → packages/core), else the only tracked
 // file with that relative path.
-function projectFile(name, rel, known, roots) {
+function projectFile(name, rel, known, bySuffix, roots) {
   for (const root of roots.get(name) ?? []) {
     if (known.has(`${root}/${rel}`)) return `${root}/${rel}`;
   }
   const project = name.split(':').slice(1).join(':') || name;
   if (known.has(`${project}/${rel}`)) return `${project}/${rel}`;
-  const matches = [...known].filter(f => f.endsWith(`/${rel}`));
+  const matches = bySuffix.get(rel) ?? [];
   const prefixed = matches
     .filter(f => project.startsWith(f.slice(0, -rel.length - 1)))
     .sort((a, b) => b.length - a.length);
   if (prefixed.length) return prefixed[0];
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+// The tracked files as a set, and by every path tail after a "/" (src/a.test.ts →
+// [packages/core/src/a.test.ts, …]), built once per file list so a log with many
+// FAIL lines costs a lookup per line rather than a scan of every tracked file.
+const trackedIndexes = new WeakMap();
+function trackedIndex(tracked) {
+  let index = trackedIndexes.get(tracked);
+  if (index) return index;
+  const known = new Set(tracked);
+  const bySuffix = new Map();
+  for (const file of known) {
+    for (let i = file.indexOf('/'); i !== -1; i = file.indexOf('/', i + 1)) {
+      const tail = file.slice(i + 1);
+      if (!bySuffix.has(tail)) bySuffix.set(tail, []);
+      bySuffix.get(tail).push(file);
+    }
+  }
+  index = { known, bySuffix };
+  trackedIndexes.set(tracked, index);
+  return index;
 }
 
 /** Vitest project name → directories of the tracked configs that declare it. */

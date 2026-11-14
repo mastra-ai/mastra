@@ -207,6 +207,21 @@ test('resolves a project alias through the config that names it, even when the r
   ]);
 });
 
+test('a log flooded with FAIL lines resolves without rescanning every tracked file per line', () => {
+  const tracked = Array.from({ length: 6000 }, (_, i) => `packages/p${i % 60}/src/f${i}.test.ts`);
+  const lines = Array.from(
+    { length: 50_000 },
+    (_, i) => `2026-11-14T10:00:00.0000000Z  FAIL  unit:fake-${i}  src/f${i % 6000}.test.ts > x`,
+  );
+  lines.push('2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/p7-isolated  src/f7.test.ts > x');
+  const started = performance.now();
+  const files = failingFilesFromLog(lines.join('\n'), tracked, new Map());
+  const elapsed = performance.now() - started;
+  assert.equal(files.length, 6000);
+  assert.ok(files.includes('packages/p7/src/f7.test.ts'));
+  assert.ok(elapsed < 2000, `took ${Math.round(elapsed)} ms`);
+});
+
 const prFailure = (overrides = {}) => ({
   file: 'packages/core/src/a.test.ts',
   jobId: '101',
