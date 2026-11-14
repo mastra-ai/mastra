@@ -319,7 +319,7 @@ export const gitDiffFiles = (base, head, cwd) => {
  * (unit:packages/core-isolated runs files from packages/core), so each file is
  * resolved against the tracked test files and dropped when it matches none.
  */
-export function failingFilesFromLog(log, tracked = repoTestFiles()) {
+export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repoProjectRoots()) {
   const known = new Set(tracked);
   const files = new Set();
   const keep = file => {
@@ -335,7 +335,7 @@ export function failingFilesFromLog(log, tracked = repoTestFiles()) {
     }
     m = /FAIL +(\S+) +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
     if (m) {
-      const file = projectFile(m[1].split(':').slice(1).join(':') || m[1], m[2], known);
+      const file = projectFile(m[1], m[2], known, roots);
       if (file) files.add(file);
       continue;
     }
@@ -345,11 +345,16 @@ export function failingFilesFromLog(log, tracked = repoTestFiles()) {
   return [...files].filter(f => TEST_FILE.test(f)).sort();
 }
 
-// The tracked file a project-relative path belongs to: the project directory itself,
-// else the longest package directory the project name starts with
-// (packages/core-isolated, packages/core:durable-… → packages/core),
-// else the only tracked file with that relative path.
-function projectFile(project, rel, known) {
+// The tracked file a project-relative path belongs to: under the directory of the
+// vitest config that names the project (unit:mastracode-core → mastracode/sdk), else
+// under the project name read as a directory, else the longest package directory the
+// name starts with (packages/core-isolated → packages/core), else the only tracked
+// file with that relative path.
+function projectFile(name, rel, known, roots) {
+  for (const root of roots.get(name) ?? []) {
+    if (known.has(`${root}/${rel}`)) return `${root}/${rel}`;
+  }
+  const project = name.split(':').slice(1).join(':') || name;
   if (known.has(`${project}/${rel}`)) return `${project}/${rel}`;
   const matches = [...known].filter(f => f.endsWith(`/${rel}`));
   const prefixed = matches
@@ -357,6 +362,30 @@ function projectFile(project, rel, known) {
     .sort((a, b) => b.length - a.length);
   if (prefixed.length) return prefixed[0];
   return matches.length === 1 ? matches[0] : undefined;
+}
+
+/** Vitest project name → directories of the tracked configs that declare it. */
+export function projectRootsFromConfigs(configs) {
+  const roots = new Map();
+  for (const [file, source] of configs) {
+    const dir = path.posix.dirname(file);
+    for (const [, name] of source.matchAll(/\bname:\s*['"`]([^'"`$]+)['"`]/g)) {
+      if (!roots.has(name)) roots.set(name, []);
+      if (!roots.get(name).includes(dir)) roots.get(name).push(dir);
+    }
+  }
+  return roots;
+}
+
+let projectRoots;
+function repoProjectRoots() {
+  projectRoots ??= projectRootsFromConfigs(
+    execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+      .split('\n')
+      .filter(f => /(^|\/)vitest[^/]*\.config\.[cm]?[jt]s$/.test(f) && !f.includes('node_modules/'))
+      .map(f => [f, fs.readFileSync(f, 'utf8')]),
+  );
+  return projectRoots;
 }
 
 const runJobs = runId =>

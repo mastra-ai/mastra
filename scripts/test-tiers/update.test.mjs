@@ -11,6 +11,7 @@ import {
   classifyPrFailure,
   compareFiles,
   failingFilesFromLog,
+  projectRootsFromConfigs,
   gitDiffFiles,
   jobKeysFor,
   moveOut,
@@ -176,10 +177,33 @@ test('maps a vitest project name that is not a directory to the real test file',
     'packages/memory/src/agent/d.test.ts',
     'mastracode/sdk/src/only-here.test.ts',
   ];
-  assert.deepEqual(failingFilesFromLog(log, tracked), [
+  assert.deepEqual(failingFilesFromLog(log, tracked, new Map()), [
     'mastracode/sdk/src/only-here.test.ts',
     'packages/core/src/agent/__tests__/lease.test.ts',
     'packages/core/src/agent/d.test.ts',
+  ]);
+});
+
+test('resolves a project alias through the config that names it, even when the relative path is not unique', () => {
+  const roots = projectRootsFromConfigs([
+    ['mastracode/sdk/vitest.config.ts', "projects: [{ test: { name: 'unit:mastracode-core' } }]"],
+    ['mastracode/factory/vitest.config.ts', "projects: [{ test: { name: 'unit:mastra-factory' } }]"],
+    ['packages/core/vitest.config.ts', "{ name: 'unit:packages/core' }, { name: `unit:${dynamic}` }"],
+  ]);
+  assert.deepEqual([...roots.keys()], ['unit:mastracode-core', 'unit:mastra-factory', 'unit:packages/core']);
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:mastracode-core  src/index.test.ts > x',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:mastra-factory  src/index.test.ts > y',
+  ].join('\n');
+  const tracked = [
+    'mastracode/sdk/src/index.test.ts',
+    'mastracode/factory/src/index.test.ts',
+    'packages/core/src/index.test.ts',
+    'packages/memory/src/index.test.ts',
+  ];
+  assert.deepEqual(failingFilesFromLog(log, tracked, roots), [
+    'mastracode/factory/src/index.test.ts',
+    'mastracode/sdk/src/index.test.ts',
   ]);
 });
 
