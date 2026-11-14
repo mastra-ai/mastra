@@ -290,14 +290,26 @@ const ghJson = (...args) =>
     .filter(Boolean)
     .map(line => JSON.parse(line));
 
-/** Files changed between two commits (three-dot, like compare), fetched without blobs. */
-const gitDiffFiles = (base, head) => {
-  execFileSync('git', ['fetch', '--quiet', '--no-tags', '--filter=blob:none', 'origin', base, head]);
-  return execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...${head}`], {
-    encoding: 'utf8',
-    maxBuffer: 1 << 28,
-  })
-    .split('\n')
+/**
+ * Files changed between two commits (three-dot, like compare), fetched without blobs. The workflow
+ * checks out at depth 1, and a head rebased onto that checkout stops fetching at its boundary while
+ * the merge base lies below it, so a shallow clone is unshallowed first. -z keeps paths literal.
+ */
+export const gitDiffFiles = (base, head, cwd) => {
+  const git = args => execFileSync('git', args, { cwd, encoding: 'utf8', maxBuffer: 1 << 28 });
+  const shallow = git(['rev-parse', '--is-shallow-repository']).trim() === 'true';
+  git([
+    'fetch',
+    '--quiet',
+    '--no-tags',
+    '--filter=blob:none',
+    ...(shallow ? ['--unshallow'] : []),
+    'origin',
+    base,
+    head,
+  ]);
+  return git(['diff', '--name-only', '-z', '--no-renames', `${base}...${head}`])
+    .split('\0')
     .filter(Boolean);
 };
 

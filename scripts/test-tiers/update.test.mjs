@@ -1,4 +1,8 @@
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 import {
   addJobKeys,
@@ -7,6 +11,7 @@ import {
   classifyPrFailure,
   compareFiles,
   failingFilesFromLog,
+  gitDiffFiles,
   jobKeysFor,
   moveOut,
   nextGreenRun,
@@ -387,4 +392,45 @@ test('compare files: a list cut at the 300-file cap is not trusted', () => {
   const capped = Array.from({ length: 300 }, (_, i) => `packages/core/src/f${i}.ts`);
   assert.equal(compareFiles([page(capped), page(null, 21)]), null);
   assert.equal(compareFiles([page(capped.slice(1))]).length, 299);
+});
+
+// The daily workflow checks main out at depth 1. A PR head rebased onto that main descends from
+// the shallow boundary, while an older PR head forks below it, so their merge base is not local.
+test('git diff fallback: finds the merge base below the shallow checkout, with literal paths', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tiers-git-'));
+  const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
+  const commit = (cwd, file) => {
+    fs.mkdirSync(path.dirname(path.join(cwd, file)), { recursive: true });
+    fs.writeFileSync(path.join(cwd, file), file);
+    git(cwd, 'add', '-A');
+    git(cwd, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', file);
+    return git(cwd, 'rev-parse', 'HEAD');
+  };
+  try {
+    const origin = path.join(dir, 'origin');
+    fs.mkdirSync(origin);
+    git(origin, 'init', '-q', '-b', 'main');
+    git(origin, 'config', 'uploadpack.allowFilter', 'true');
+    commit(origin, 'README.md');
+    git(origin, 'checkout', '-q', '-b', 'old-pr');
+    const base = commit(origin, 'packages/core/src/old.ts');
+    git(origin, 'checkout', '-q', 'main');
+    commit(origin, 'packages/core/src/a.ts');
+    commit(origin, 'packages/core/src/b.ts');
+    git(origin, 'checkout', '-q', '-b', 'new-pr');
+    const head = commit(origin, 'packages/core/src/é.ts');
+    git(origin, 'checkout', '-q', 'main');
+
+    const clone = path.join(dir, 'clone');
+    execFileSync('git', ['clone', '-q', '--depth=1', '--filter=blob:none', `file://${origin}`, clone]);
+    assert.equal(git(clone, 'rev-parse', '--is-shallow-repository'), 'true');
+
+    assert.deepEqual(gitDiffFiles(base, head, clone).sort(), [
+      'packages/core/src/a.ts',
+      'packages/core/src/b.ts',
+      'packages/core/src/é.ts',
+    ]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 });
