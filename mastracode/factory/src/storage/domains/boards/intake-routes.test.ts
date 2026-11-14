@@ -524,6 +524,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     await boards.createIntakeRoute(scope, route('ship', { target: { boardKey: 'ship' } }), 'admin');
     expect(await boards.listIntakeRoutes(scope)).toHaveLength(MAX_INTAKE_ROUTES_PER_BOARD + 1);
     expect(await boards.listIntakeRoutes(scope, { boardKey: 'ship' })).toHaveLength(1);
+
+    // Moving a rule onto a full board counts too; a change within the board doesn't.
+    const [ship] = await boards.listIntakeRoutes(scope, { boardKey: 'ship' });
+    await expect(
+      boards.updateIntakeRoute(
+        scope,
+        ship!.id,
+        { target: { boardKey: 'work' } },
+        { expectedRevision: ship!.revision, actor: 'admin' },
+      ),
+    ).rejects.toMatchObject({ code: 'intake_route_limit' });
+    expect(await boards.listIntakeRoutes(scope, { boardKey: 'work' })).toHaveLength(MAX_INTAKE_ROUTES_PER_BOARD);
+    const [first] = await boards.listIntakeRoutes(scope, { boardKey: 'work' });
+    await boards.updateIntakeRoute(
+      scope,
+      first!.id,
+      { target: { boardKey: 'work', phaseKey: 'triage' } },
+      { expectedRevision: first!.revision, actor: 'admin' },
+    );
   });
 
   it('keeps a board-only target without a phase', async () => {

@@ -1074,9 +1074,21 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   ): Promise<StoredIntakeRouteRecord> {
     await this.#transact(async ops => {
       // Lock first, as every route write does, so it can't deadlock against a reorder.
-      const row = (await lockIntakeRoutes(ops, scope)).find(route => route.id === id);
+      const rows = await lockIntakeRoutes(ops, scope);
+      const row = rows.find(route => route.id === id);
       if (!row) throw intakeRouteNotFound(id);
       checkIntakeRouteRevision(row, options.expectedRevision);
+      const boardKey = patch.target?.boardKey;
+      if (
+        boardKey !== undefined &&
+        boardKey !== row.board_key &&
+        boardRouteCount(rows, boardKey) >= MAX_INTAKE_ROUTES_PER_BOARD
+      ) {
+        throw new StoredBoardError(
+          'intake_route_limit',
+          `A board can have at most ${MAX_INTAKE_ROUTES_PER_BOARD} intake rules; delete one first.`,
+        );
+      }
       checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
         ...(patch.on !== undefined && { on_events: patch.on }),
