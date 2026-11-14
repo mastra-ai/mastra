@@ -94,10 +94,11 @@ describe('Composer voice dictation', () => {
     );
     const user = userEvent.setup();
     const message = await composerReady();
-    const source = await screen.findByRole('combobox', { name: 'Voice input source' });
-
-    expect(source).toHaveValue('openai/whisper');
-    await user.selectOptions(source, 'mistral/voxtral');
+    const settings = await screen.findByRole('button', { name: 'Voice input settings' });
+    expect(screen.queryByRole('radio', { name: 'Mastra Gateway: openai/whisper' })).not.toBeInTheDocument();
+    await user.click(settings);
+    expect(screen.getByRole('radio', { name: 'Mastra Gateway: openai/whisper' })).toBeChecked();
+    await user.click(screen.getByRole('radio', { name: 'Mastra Gateway: mistral/voxtral' }));
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
 
@@ -118,7 +119,8 @@ describe('Composer voice dictation', () => {
     const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'Provider dictation' }));
     const user = userEvent.setup();
     const message = await composerReady();
-    await user.selectOptions(await screen.findByRole('combobox', { name: 'Voice input source' }), 'configured');
+    await user.click(await screen.findByRole('button', { name: 'Voice input settings' }));
+    await user.click(screen.getByRole('radio', { name: 'Configured provider' }));
 
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
@@ -134,7 +136,7 @@ describe('Composer voice dictation', () => {
     await composerReady();
 
     await waitFor(() => expect(checked).toHaveBeenCalledOnce());
-    expect(screen.queryByRole('combobox', { name: 'Voice input source' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
   });
 
   it('explains a blocked microphone without sending a recording', async () => {

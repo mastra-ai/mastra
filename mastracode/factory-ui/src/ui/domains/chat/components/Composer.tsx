@@ -351,15 +351,15 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
                   disabled={attachDisabled}
                   label="Attach images"
                 />
+              </ComposerActionsStart>
+              <ComposerActionsEnd role="group" aria-label="Composer actions">
+                <ModelPicker />
                 <GatewayVoiceSource
                   models={gatewayModels}
                   value={gatewayModel ?? CONFIGURED_VOICE_SOURCE}
                   onChange={setVoiceSource}
                   disabled={dictating || textareaDisabled}
                 />
-              </ComposerActionsStart>
-              <ComposerActionsEnd role="group" aria-label="Composer actions">
-                <ModelPicker />
                 {factoryId && (
                   <ComposerVoiceButton
                     factoryId={factoryId}
