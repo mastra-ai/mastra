@@ -203,6 +203,18 @@ describe('AgentController.listAvailableModels', () => {
     const status = await controller.getCurrentModelAuthStatus(session);
     expect(status.hasAuth).toBe(false);
   });
+
+  it('getModelAuthStatus resolves auth for a model that is not selected or listed', async () => {
+    const gateway = createFakeGateway({
+      resolveAuth: () => ({ apiKey: 'oauth-key', source: 'gateway' }),
+    });
+    gateway.fetchProviders.mockRejectedValue(new Error('catalog unavailable'));
+    const controller = createController(gateway, 'test-gateway/acme/sonic-fast');
+    await controller.init();
+
+    expect(await controller.listAvailableModels()).toEqual([]);
+    expect(await controller.getModelAuthStatus('test-gateway/acme/sonic-next')).toEqual({ hasAuth: true });
+  });
 });
 
 describe('AgentController.listAvailableModels catalog refresh', () => {

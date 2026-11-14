@@ -758,6 +758,16 @@ const status = await controller.getCurrentModelAuthStatus(session)
 
 Returns: `Promise<ModelAuthStatus>`
 
+#### `getModelAuthStatus(modelId)`
+
+Return authentication status for any model ID, without a session or the model catalog.
+
+```typescript
+const { hasAuth, apiKeyEnvVar } = await controller.getModelAuthStatus('anthropic/claude-sonnet-5-5')
+```
+
+Returns: `Promise<ModelAuthStatus>`
+
 #### `listAvailableModels()`
 
 List models from the configured and built-in gateways. Each model's `useCount` comes from `modelUseCountProvider` when you configure one.
