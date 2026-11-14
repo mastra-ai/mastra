@@ -189,9 +189,6 @@ export interface MastraTUIBaseOptions {
   /** Whether native background work and its TUI controls are enabled. */
   backgroundToolsEnabled?: boolean;
 
-  /** Whether the controller was started with subagents, which the prompt's subagent guidance follows. */
-  subagentsEnabled?: boolean;
-
   /** Process-local background completion events used for cross-thread discovery. */
   backgroundCompletionEvents?: BackgroundCompletionEvents;
 
@@ -260,15 +257,6 @@ export interface TUIState {
   backgroundToolContexts: Map<string, BackgroundToolContext>;
   /** Background shell rows by tool call id, updated when the process exits. */
   backgroundShellRows: Map<string, IToolExecutionComponent>;
-  /**
-   * Background subagent calls by tool call id. A deferred subagent's
-   * `subagent_start` can arrive after its placeholder result, so the task id and
-   * the chat position are kept until its box exists.
-   */
-  backgroundSubagentCalls: Map<
-    string,
-    { taskId: string; insertBefore?: Component; insertAfter?: Component; component?: SubagentExecutionComponent }
-  >;
   voiceController?: VoiceController;
 
   // ── Agent / streaming ─────────────────────────────────────────────────
@@ -507,7 +495,6 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     backgroundActivities: new Map(),
     backgroundToolContexts: new Map(),
     backgroundShellRows: new Map(),
-    backgroundSubagentCalls: new Map(),
 
     // Agent / streaming
     isInitialized: false,

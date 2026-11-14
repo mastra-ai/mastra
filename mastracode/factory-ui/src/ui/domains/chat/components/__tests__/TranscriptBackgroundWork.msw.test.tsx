@@ -213,4 +213,29 @@ describe('Transcript background commands', () => {
     expect(command).toHaveTextContent('Start the dev server');
     expect(within(command).queryByText(/ended|Background/)).not.toBeInTheDocument();
   });
+
+  it('lists a running background task in the panel next to a command, with no way to stop the task', async () => {
+    server.use(http.get(PROCESSES_URL, () => HttpResponse.json({ processes: [running('4242', 'dev')] })));
+    const search: MessagePart = {
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'search',
+        toolName: 'web_search',
+        args: { query: 'release notes' },
+        result: 'Background task started',
+      },
+      providerMetadata: { mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } } },
+    };
+    const entries = createInitialTranscript({ messages: [assistant('turn', [devServer, search])] }).entries;
+    renderChat(entries, <BackgroundWorkPanel />);
+
+    const panel = await screen.findByRole('region', { name: 'Background work' });
+    // The task comes from the transcript at once; the command once the sandbox's list is read.
+    await waitFor(() => expect(within(panel).getAllByRole('listitem')).toHaveLength(2));
+    const [task, command] = within(panel).getAllByRole('listitem') as [HTMLElement, HTMLElement];
+    expect(within(command).getByRole('button', { name: 'Stop command' })).toBeVisible();
+    expect(task).toHaveTextContent(/search/i);
+    expect(within(task).queryAllByRole('button')).toEqual([]);
+  });
 });

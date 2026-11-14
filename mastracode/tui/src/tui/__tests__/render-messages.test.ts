@@ -4,6 +4,7 @@ import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry } from '../assistant-render-registry.js';
+import type { BackgroundActivity } from '../background-activity.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
@@ -16,8 +17,6 @@ import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
-import { handleSubagentEnd, handleSubagentStart } from '../handlers/subagent.js';
-import type { EventHandlerContext } from '../handlers/types.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
 import type { TUIState } from '../state.js';
 
@@ -38,6 +37,8 @@ function createState(): TUIState {
     pendingTools: new Map(),
     pendingTaskToolIds: new Set(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
+    backgroundActivities: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allShellComponents: [],
@@ -544,7 +545,7 @@ describe('addUserMessage', () => {
     const component = state.messageComponentsById.get('completion-compact') as NotificationComponent;
     const collapsed = component.render(100).map(line => stripAnsi(line));
     expect(collapsed).toHaveLength(1);
-    expect(collapsed[0]).toContain('↳ mastra_expert failed');
+    expect(collapsed[0]).toContain('mastra_expert failed in background');
 
     // Expanding is a request to see everything: the full message and the detail rows, untrimmed.
     component.setExpanded(true);
@@ -556,33 +557,7 @@ describe('addUserMessage', () => {
     expect(expanded).not.toContain('…');
   });
 
-  it.each([
-    [
-      'a background subagent',
-      { taskId: 'task-s', toolName: 'subagent', title: 'Explore', summary: 'Find the auth middleware' },
-      'completed',
-      '↳ Explore finished · Find the auth middleware',
-    ],
-    [
-      'a subagent orphaned by a restart',
-      { taskId: 'task-r', toolName: 'subagent', title: 'Explore', interrupted: 'restart' },
-      'failed',
-      '↳ Explore interrupted by a restart',
-    ],
-    [
-      'a background shell',
-      {
-        kind: 'process',
-        pid: '4242',
-        exitCode: 1,
-        toolName: 'execute_command',
-        title: 'Shell',
-        summary: 'Running tests',
-      },
-      'failed',
-      '↳ Shell finished · Running tests (exit 1)',
-    ],
-  ])('names %s on its one-line completion card', (_case, completion, status, line) => {
+  it('names a background shell on its one-line exit card', () => {
     const state = createState();
 
     addUserMessage(
@@ -591,16 +566,33 @@ describe('addUserMessage', () => {
         id: 'completion-card',
         type: 'notification',
         tagName: 'notification',
-        contents: 'Background work ended.',
-        attributes: { source: 'background-work', kind: 'background-task-completed', priority: 'low', status },
+        contents: 'Background command exited.',
+        attributes: {
+          source: 'background-work',
+          kind: 'background-process-exited',
+          priority: 'high',
+          status: 'failed',
+        },
         metadata: {
-          backgroundCompletion: { eventId: 'event-1', originToolCallId: 'call-1', status, ...completion },
+          backgroundCompletion: {
+            eventId: 'event-1',
+            originToolCallId: 'call-1',
+            status: 'failed',
+            kind: 'process',
+            pid: '4242',
+            exitCode: 1,
+            toolName: 'execute_command',
+            title: 'Shell',
+            summary: 'Running tests',
+          },
         },
       }).toDBMessage(),
     );
 
     const component = state.messageComponentsById.get('completion-card') as NotificationComponent;
-    expect(component.render(100).map(rendered => stripAnsi(rendered).trim())).toEqual([line]);
+    expect(component.render(100).map(rendered => stripAnsi(rendered).trim())).toEqual([
+      '↳ Shell finished · Running tests (exit 1)',
+    ]);
   });
 
   it.each(['work-deferred', 'work-awaited'] as const)(
@@ -1393,7 +1385,7 @@ describe('renderExistingMessages tools', () => {
     // The compact search row counts the authoritative result rather than a placeholder.
     expect(rendered).toContain('backgroundCompletion (1 results)');
     expect(rendered).toContain('✓ background · task-result-1');
-    expect(rendered).toContain('↳ search_content finished');
+    expect(rendered).toContain('search_content completed in background');
     expect(state.pendingTools.has('tool-background-result-1')).toBe(false);
     expect(state.chatContainer.children.filter(child => child instanceof NotificationComponent)).toHaveLength(1);
   });
@@ -1460,6 +1452,116 @@ describe('renderExistingMessages tools', () => {
   );
 });
 
+describe('renderExistingMessages background shells', () => {
+  const shellCall = assistantToolMessage('assistant-shell', [
+    {
+      id: 'shell-call',
+      name: 'execute_command',
+      args: { command: 'pnpm build', description: 'Building the app', background: true },
+      result: 'Started background process (PID: 42)',
+    },
+  ]);
+  const exitNotice = createSignal({
+    id: 'background-process:42:shell-call',
+    type: 'notification',
+    tagName: 'notification',
+    contents: 'Background command exited with code 3: pnpm build',
+    attributes: { source: 'background-work', kind: 'background-process-exited', priority: 'high', status: 'failed' },
+    metadata: {
+      backgroundCompletion: {
+        eventId: 'background-process:42:shell-call',
+        kind: 'process',
+        pid: '42',
+        originToolCallId: 'shell-call',
+        toolName: 'execute_command',
+        status: 'failed',
+        exitCode: 3,
+        title: 'Shell',
+        summary: 'Building the app',
+      },
+    },
+  }).toDBMessage();
+
+  /** The PID's activity as this process last saw it. */
+  function shellActivity(overrides: Partial<BackgroundActivity> = {}): BackgroundActivity {
+    return {
+      id: 'process:42',
+      taskId: 'process:42',
+      kind: 'process',
+      pid: '42',
+      toolCallId: 'shell-call',
+      toolName: 'execute_command',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      status: 'accepted',
+      createdAt: 1,
+      ...overrides,
+    };
+  }
+
+  async function replay(
+    messages: MastraDBMessage[],
+    { backgroundToolsEnabled = true, activities = [] as BackgroundActivity[] } = {},
+  ) {
+    const state = createState();
+    state.options.backgroundToolsEnabled = backgroundToolsEnabled;
+    for (const activity of activities) state.backgroundActivities.set(activity.taskId, activity);
+    state.session = {
+      ...state.session,
+      thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
+    } as unknown as TUIState['session'];
+    await renderExistingMessages(state);
+    const row = () => stripAnsi(state.chatContainer.children[0]!.render(100).join('\n'));
+    return { state, row };
+  }
+
+  it('shows how a shell ended when its exit notice is in the history', async () => {
+    const { state, row } = await replay([shellCall, exitNotice]);
+
+    expect(row()).toMatch(/exit 3/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(false);
+  });
+
+  it('keeps a running shell reachable, so its exit updates the row later', async () => {
+    const { state, row } = await replay([shellCall]);
+
+    expect(row()).not.toMatch(/exit \d/);
+    state.backgroundShellRows.get('shell-call')?.setBackgroundProcessExit?.({ exitCode: 3, killed: false });
+    expect(row()).toMatch(/exit 3/);
+  });
+
+  it('shows a shell killed earlier in this process as killed', async () => {
+    const { state, row } = await replay([shellCall], {
+      activities: [shellActivity({ status: 'cancelled', exitCode: 143, completedAt: 2 })],
+    });
+
+    expect(row()).toMatch(/killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(false);
+  });
+
+  it('ignores a killed shell of another call that had the same PID', async () => {
+    const { state, row } = await replay([shellCall], {
+      activities: [shellActivity({ toolCallId: 'older-call', status: 'cancelled', exitCode: 143, completedAt: 2 })],
+    });
+
+    expect(row()).not.toMatch(/killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(true);
+  });
+
+  it('keeps a shell the activity list still shows running reachable', async () => {
+    const { state, row } = await replay([shellCall], { activities: [shellActivity()] });
+
+    expect(row()).not.toMatch(/exit \d|killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(true);
+  });
+
+  it('registers nothing when background tools are off', async () => {
+    const { state } = await replay([shellCall], { backgroundToolsEnabled: false });
+
+    expect(state.backgroundShellRows.size).toBe(0);
+  });
+});
+
 describe('renderExistingMessages subagents', () => {
   it('replays legacy persisted tool-call/tool-result parts', async () => {
     const message = legacyAssistantToolMessage('assistant-legacy-tool', {
@@ -1507,7 +1609,9 @@ describe('renderExistingMessages subagents', () => {
     } as unknown as TUIState['session'];
     await renderExistingMessages(state);
     expect(state.pendingSubagents.has('plugin-call')).toBe(enabled === true);
-    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('◌ background')).toBe(enabled === true);
+    expect(stripAnsi(state.chatContainer.render(120).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
   });
 
   it('uses static plugin renderer config when replaying persisted plugin tool calls', async () => {
@@ -1592,9 +1696,9 @@ describe('renderExistingMessages subagents', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(collapsed).toContain('✓ background');
-    // Background work replays compact, like it finished live; Ctrl+E shows the result.
-    expect(collapsed).not.toContain('Authoritative Alexandria audit');
+    expect(collapsed).toContain('background · task-plugin-1');
+    // Completed subagents replay expanded, so the authoritative result is visible.
+    expect(collapsed).toContain('Authoritative Alexandria audit');
 
     subagent.setExpanded(true);
     const expanded = subagent
@@ -1652,39 +1756,6 @@ describe('renderExistingMessages subagents', () => {
     },
   );
 
-  // A call cancelled over HTTP has no notice; only its stored status says it was cancelled.
-  it.each([undefined, false, true])(
-    'replays a call stored as cancelled with no notice as cancelled with background enabled %s',
-    async enabled => {
-      const state = createState();
-      state.options.backgroundToolsEnabled = enabled;
-      const message = assistantToolMessage('stored-cancelled-message', [
-        {
-          id: 'stored-cancelled-call',
-          name: 'view',
-          args: {},
-          result: 'Background task started. Task ID: stored-cancelled-task',
-          isError: false,
-          providerMetadata: { mastra: { backgroundTask: { taskId: 'stored-cancelled-task', status: 'cancelled' } } },
-        },
-      ]);
-      state.session = {
-        ...state.session,
-        thread: { listActiveMessages: vi.fn().mockResolvedValue([message]) },
-      } as unknown as TUIState['session'];
-      state.controller = { session: state.session } as unknown as TUIState['controller'];
-      await renderExistingMessages(state);
-      const rendered = state.chatContainer
-        .render(120)
-        .join('\n')
-        .replace(/\x1b\[[0-9;]*m/g, '');
-      expect(rendered).toContain('Background execution cancelled.');
-      expect(rendered).toContain('■ background · stored-cancelled-task');
-      expect(rendered).not.toContain('Running in background');
-      expect(state.pendingTools.has('stored-cancelled-call')).toBe(false);
-    },
-  );
-
   it('replays a cancelled background plugin subagent as terminal', async () => {
     const toolMessage = assistantToolMessage('assistant-plugin-background-cancelled', [
       {
@@ -1731,267 +1802,11 @@ describe('renderExistingMessages subagents', () => {
       .render(120)
       .join('\n')
       .replace(/\x1b\[[0-9;]*m/g, '');
-    expect(rendered).toContain('■ background');
+    expect(rendered).toContain('■ background · task-plugin-cancelled');
     expect(rendered).not.toContain('◌ background');
     expect(state.pendingTools.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingTaskToolIds.has('tool-background-plugin-cancelled')).toBe(false);
     expect(state.pendingSubagents.has('tool-background-plugin-cancelled')).toBe(false);
-  });
-
-  /**
-   * The notice posted for a task cut off by a restart or a shutdown. Recovery
-   * after a restart fails the task; a shutdown usually cancels it, but a task
-   * that fails while the shutdown aborts it is reported as failed.
-   */
-  function interruption(
-    toolCallId: string,
-    toolName: string,
-    taskId: string,
-    reason: 'restart' | 'shutdown' = 'restart',
-    status: 'failed' | 'cancelled' = reason === 'shutdown' ? 'cancelled' : 'failed',
-  ): MastraDBMessage {
-    return createSignal({
-      id: `background-task:${taskId}:${status}`,
-      type: 'notification',
-      tagName: 'notification',
-      contents: `Background ${toolName} call was interrupted by a ${reason} before it finished. See the original ${toolName} call (${toolCallId}).`,
-      attributes: { source: 'background-work', status },
-      metadata: {
-        backgroundCompletion: {
-          eventId: `background-task:${taskId}:${status}`,
-          taskId,
-          originRunId: 'run-1',
-          originToolCallId: toolCallId,
-          toolName,
-          status,
-          interrupted: reason,
-        },
-      },
-    }).toDBMessage();
-  }
-  const interruptions = [
-    ['restart', 'failed'],
-    ['shutdown', 'cancelled'],
-    ['shutdown', 'failed'],
-  ] as const;
-
-  describe('background tool rows', () => {
-    const viewCall = assistantToolMessage('assistant-background-view', [
-      {
-        id: 'view-call',
-        name: 'view',
-        args: { path: 'package.json' },
-        result: 'Background task started. Task ID: task-view-1',
-        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-view-1', status: 'running' } } },
-      },
-    ]);
-
-    async function replay(messages: MastraDBMessage[]) {
-      const state = createState();
-      state.options.backgroundToolsEnabled = true;
-      // Expanded, so the row shows its result.
-      state.toolOutputExpanded = true;
-      state.session = {
-        ...state.session,
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
-      } as unknown as TUIState['session'];
-      await renderExistingMessages(state);
-      return { state, rendered: () => stripAnsi(state.chatContainer.render(120).join('\n')) };
-    }
-
-    it.each(interruptions)('ends a replayed running one when a %s is reported live (%s)', async (reason, status) => {
-      const { state, rendered } = await replay([viewCall]);
-      expect(state.pendingTools.has('view-call')).toBe(true);
-
-      addUserMessage(state, interruption('view-call', 'view', 'task-view-1', reason, status));
-
-      expect(state.pendingTools.has('view-call')).toBe(false);
-      expect(rendered()).not.toContain('◌ background');
-      expect(rendered()).toContain('✗ background');
-      expect(rendered()).toContain(`Background execution interrupted by a ${reason}.`);
-      expect(rendered()).not.toContain('Background execution cancelled.');
-      expect(rendered()).toContain(`↳ view interrupted by a ${reason}`);
-    });
-
-    it.each(interruptions)('replays one cut off by a %s as failed (%s)', async (reason, status) => {
-      const { state, rendered } = await replay([
-        viewCall,
-        interruption('view-call', 'view', 'task-view-1', reason, status),
-      ]);
-
-      expect(state.pendingTools.has('view-call')).toBe(false);
-      expect(rendered()).not.toContain('◌ background');
-      expect(rendered()).toContain('✗ background');
-      expect(rendered()).not.toContain('✓ background');
-      expect(rendered()).not.toContain('■ background');
-      expect(rendered()).toContain(`Background execution interrupted by a ${reason}.`);
-      expect(rendered()).toContain(`↳ view interrupted by a ${reason}`);
-    });
-
-    it('replays an awaited one a restart cut off before it returned as failed', async () => {
-      const awaitedCall = assistantToolMessage('assistant-awaited-view', [
-        { id: 'view-call', name: 'view', args: { path: 'package.json' } },
-      ]);
-
-      const { state, rendered } = await replay([awaitedCall, interruption('view-call', 'view', 'task-view-1')]);
-
-      expect(state.pendingTools.has('view-call')).toBe(false);
-      expect(rendered()).toContain('Background execution interrupted by a restart.');
-    });
-  });
-
-  describe('background subagent calls', () => {
-    const placeholder = 'Background task started. Task ID: task-sub-1';
-    const subagentCall = assistantToolMessage('assistant-background-subagent', [
-      {
-        id: 'sub-call',
-        name: 'subagent',
-        args: { agentType: 'explore', task: 'Find the auth middleware' },
-        result: placeholder,
-        providerMetadata: { mastra: { backgroundTask: { taskId: 'task-sub-1', status: 'running' } } },
-        isError: false,
-      },
-    ]);
-    const cancellation = createSignal({
-      id: 'background-task:task-sub-1:cancelled',
-      type: 'notification',
-      tagName: 'notification',
-      contents: 'Background Explore subagent was cancelled. See the original subagent call (sub-call).',
-      attributes: { source: 'background-work', status: 'cancelled' },
-      metadata: {
-        backgroundCompletion: {
-          eventId: 'background-task:task-sub-1:cancelled',
-          taskId: 'task-sub-1',
-          originRunId: 'run-1',
-          originToolCallId: 'sub-call',
-          toolName: 'subagent',
-          status: 'cancelled',
-        },
-      },
-    }).toDBMessage();
-
-    async function replay(messages: MastraDBMessage[]) {
-      const state = createState();
-      state.options.backgroundToolsEnabled = true;
-      state.backgroundSubagentCalls = new Map();
-      state.session = {
-        ...state.session,
-        thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
-        model: { get: () => undefined },
-      } as unknown as TUIState['session'];
-      await renderExistingMessages(state);
-      const box = state.chatContainer.children.find(
-        child => child instanceof SubagentExecutionComponent,
-      ) as SubagentExecutionComponent;
-      return { state, box, rendered: () => stripAnsi(box.render(120).join('\n')) };
-    }
-
-    it('replays a running one as running, where its live end reaches it', async () => {
-      const { state, box, rendered } = await replay([subagentCall]);
-
-      expect(rendered()).toContain('◌ background');
-      expect(rendered()).not.toContain(placeholder);
-      expect(state.backgroundSubagentCalls.get('sub-call')).toEqual({ taskId: 'task-sub-1', component: box });
-
-      handleSubagentEnd({ state } as unknown as EventHandlerContext, 'sub-call', false, 1000, 'MIDDLEWARE_FOUND');
-
-      expect(rendered()).toContain('✓ background');
-      expect(state.pendingSubagents.has('sub-call')).toBe(false);
-    });
-
-    it('reuses the replayed box when a deferred subagent starts after the replay', async () => {
-      const { state, box } = await replay([subagentCall]);
-
-      handleSubagentStart(
-        { state } as unknown as EventHandlerContext,
-        'sub-call',
-        'explore',
-        'Find the auth middleware',
-        'openai/gpt-5.5',
-      );
-
-      expect(state.chatContainer.children.filter(child => child instanceof SubagentExecutionComponent)).toEqual([box]);
-      expect(state.pendingSubagents.get('sub-call')).toBe(box);
-      expect(stripAnsi(box.render(120).join('\n'))).toContain('openai/gpt-5.5');
-    });
-
-    it.each(interruptions)('ends a replayed running one when a %s is reported live (%s)', async (reason, status) => {
-      const { state, rendered } = await replay([subagentCall]);
-
-      addUserMessage(state, interruption('sub-call', 'subagent', 'task-sub-1', reason, status));
-
-      expect(rendered()).not.toContain('◌');
-      expect(rendered()).toContain('✗ background');
-      expect(rendered()).not.toContain('■');
-      expect(state.pendingSubagents.has('sub-call')).toBe(false);
-    });
-
-    it.each(interruptions)('replays one cut off by a %s as failed (%s)', async (reason, status) => {
-      const { state, box, rendered } = await replay([
-        subagentCall,
-        interruption('sub-call', 'subagent', 'task-sub-1', reason, status),
-      ]);
-
-      expect(rendered()).not.toContain('◌');
-      expect(rendered()).toContain('✗ background');
-      expect(rendered()).not.toContain('■');
-      box.setExpanded(true);
-      // The card says what happened; the box neither repeats it nor shows the placeholder.
-      expect(rendered()).not.toContain(placeholder);
-      expect(rendered()).not.toContain('interrupted by a');
-      expect(state.pendingSubagents.has('sub-call')).toBe(false);
-    });
-
-    it('replays a cancelled one as cancelled', async () => {
-      const { state, rendered } = await replay([subagentCall, cancellation]);
-
-      expect(rendered()).toContain('■ background');
-      expect(rendered()).not.toContain('✓');
-      expect(state.pendingSubagents.has('sub-call')).toBe(false);
-    });
-
-    it('replays a failed one as failed, still reachable from Ctrl+G', async () => {
-      const failure = createSignal({
-        id: 'background-task:task-sub-1:failed',
-        type: 'notification',
-        tagName: 'notification',
-        contents: 'Background Explore subagent failed. The error is in the original subagent call (sub-call).',
-        attributes: { source: 'background-work', status: 'failed' },
-        metadata: {
-          backgroundCompletion: {
-            eventId: 'background-task:task-sub-1:failed',
-            taskId: 'task-sub-1',
-            originRunId: 'run-1',
-            originToolCallId: 'sub-call',
-            toolName: 'subagent',
-            status: 'failed',
-          },
-        },
-      }).toDBMessage();
-
-      const { state, box, rendered } = await replay([subagentCall, failure]);
-
-      expect(rendered()).toContain('✗ background');
-      expect(state.backgroundSubagentCalls.get('sub-call')).toEqual({ taskId: 'task-sub-1', component: box });
-    });
-
-    it.each(interruptions)(
-      'replays an awaited one a %s cut off before it returned as failed (%s)',
-      async (reason, status) => {
-        const awaitedCall = assistantToolMessage('assistant-awaited-subagent', [
-          { id: 'sub-call', name: 'subagent', args: { agentType: 'explore', task: 'Find the auth middleware' } },
-        ]);
-
-        const { state, rendered } = await replay([
-          awaitedCall,
-          interruption('sub-call', 'subagent', 'task-sub-1', reason, status),
-        ]);
-
-        expect(rendered()).not.toContain('◌');
-        expect(rendered()).toContain('✗ background');
-        expect(state.pendingSubagents.has('sub-call')).toBe(false);
-      },
-    );
   });
 
   it('uses the current model id for persisted forked subagents when no metadata tag is present', async () => {

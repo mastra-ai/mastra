@@ -330,44 +330,6 @@ describe('createSubagentTool requestContext forwarding', () => {
     );
   });
 
-  it('says so when the subagent hits the default step limit without writing any text', async () => {
-    mockStream.mockResolvedValue({
-      fullStream: createMockFullStream([]),
-      getFullOutput: vi.fn().mockResolvedValue({
-        text: '',
-        finishReason: 'tool-calls',
-        steps: Array.from({ length: 50 }, () => ({})),
-      }),
-    });
-    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
-
-    const result = await (tool as any).execute(
-      { agentType: 'explore', task: 'Read everything' },
-      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-step-limit' } },
-    );
-
-    expect(result).toEqual({ content: '[Stopped at the 50-step limit before a final answer]', isError: false });
-  });
-
-  it('does not claim a step limit when stopWhen ended the run on tool calls', async () => {
-    mockStream.mockResolvedValue({
-      fullStream: createMockFullStream([]),
-      getFullOutput: vi.fn().mockResolvedValue({ text: '', finishReason: 'tool-calls', steps: [{}, {}] }),
-    });
-    const tool = createSubagentTool({
-      subagents: [{ ...subagents[0]!, stopWhen: vi.fn() as any }],
-      resolveModel,
-      fallbackModelId: 'test-model',
-    });
-
-    const result = await (tool as any).execute(
-      { agentType: 'explore', task: 'Read everything' },
-      { requestContext: new RequestContext(), agent: { toolCallId: 'tc-stop-when' } },
-    );
-
-    expect(result).toEqual({ content: '', isError: false });
-  });
-
   it('does not default maxSteps when stopWhen is configured', async () => {
     const stopFn = vi.fn().mockReturnValue({ continue: true });
     mockStream.mockResolvedValue(createMockStreamResponse('done'));

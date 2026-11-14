@@ -1,5 +1,85 @@
 # @mastra/factory
 
+## 0.29.0-alpha.0
+
+### Minor Changes
+
+- Intake rules can now set a description on the cards they create, so cards from integrations show the item's details instead of an empty description. ([#30253](https://github.com/mastra-ai/mastra/pull/30253))
+
+  ```ts
+  return {
+    type: 'upsertLinkedWorkItem',
+    board: context.intake.board,
+    source: 'github-dependabot-alert',
+    sourceKey: alert.id,
+    title: alert.title,
+    description: alert.description,
+    url: alert.url,
+    stage: context.intake.initialPhase,
+    // ...
+  };
+  ```
+
+- Added Vanta vulnerabilities as a Factory intake source through MastraConnect. Once you connect Vanta and enable it in intake settings, each active vulnerability becomes a card labeled `security` with its severity, package, and remediation date in the description. ([#30255](https://github.com/mastra-ai/mastra/pull/30255))
+
+- Intake integrations are now off until you turn them on. A newly connected integration no longer starts pulling items onto your boards until you enable it in the intake settings. ([#30251](https://github.com/mastra-ai/mastra/pull/30251))
+
+- Added two reads that serve a Factory board without sending every card. `GET /web/factory/projects/:id/boards/:boardKey/phases` returns, for each phase of the board, how many cards it holds and the first of them in the order asked, after the search and filters given. `GET /web/factory/projects/:id/work-items/filter-options` returns the labels and people the board can be filtered by. `item=<card id>` also answers for one card and its place in each phase, however deep it lies, without listing the phase down to it. Each card is named with a `version` of its body, which `?workItemId=` also sends, so a reader keeps the bodies it holds and reads only the ones that changed. ([#30177](https://github.com/mastra-ai/mastra/pull/30177))
+
+  ```ts
+  const res = await fetch(`/web/factory/projects/${projectId}/boards/work/phases?label=bug&limit=10&cards=true`);
+  const { phases, matchingTotal, boardTotal, workItems } = await res.json();
+  // phases: [{ phase: "intake", total: 42, cards: [{ id, version }, …] }, …]
+  ```
+
+- Added Dependabot alerts as a Factory intake source. Turn on **Sync alerts** under GitHub in intake settings and pick repositories, or `PUT /web/intake/config` with `{ "dependabot": { "enabled": true, "sourceIds": ["owner/repo"] } }`. Open alerts in those repositories become cards labeled `security` with the advisory details as the description, and they close automatically when the alert is fixed or dismissed. ([#30254](https://github.com/mastra-ai/mastra/pull/30254))
+
+- Changing an intake route now warns you when cards already on your boards match a different board, and offers to move those untouched cards to the start of their new board. ([#30252](https://github.com/mastra-ai/mastra/pull/30252))
+
+### Patch Changes
+
+- Fixed who owns the sessions a Factory card runs in, and who can approve what they wait on. ([#30146](https://github.com/mastra-ai/mastra/pull/30146))
+
+  **Who owns a card's phase session**
+
+  - In a Factory that runs card work on the organization's model keys (the `factory` and `hybrid` credential settings), every new phase session now belongs to the Factory itself and uses the organization's keys and the Factory's default model. That holds whoever moved the card: a person, an agent, a webhook or a rule. Before, it ran as whoever connected the repository, or as the person who approved the move.
+  - The person who moved or approved the card stays on record as the one who did it. When they move a card from their own session, that session follows the card, so it hears when the phase waits on someone and can answer from there.
+  - If the organization has neither a model key nor a provider of its own, the run stops with a clear "add an organization key or provider" message and is not tried again on its own. Add one, then press Retry on the card.
+  - In a Factory on personal credentials there are no organization keys, so a phase runs as the person who moved or approved the card (or whose session's agent moved it), and otherwise as the person who created the Factory.
+
+  Sessions that already exist keep their owner.
+
+  **Approving a waiting tool call**
+
+  - The person who asked for the work, and anyone whose session follows the card, can approve or decline any tool call the phase session is waiting on, a plan or any other tool that asks first. They can do it from their own session in the sidebar, with `factory_answer_approval`, or over HTTP:
+
+    ```http
+    POST /web/user-sessions/:sessionId/parked-approval
+    { "decision": "approve" }
+    ```
+
+    Add `toolCallId` when the session waits on more than one approval. Questions that need a typed answer are still answered in the session.
+
+  - A session following the card is told when the phase session waits on a yes or no, for a plan or any other tool, with the call to answer it. In the chat that notice now has Approve and Decline buttons and a link to open the waiting session; a notice about a question that needs a typed answer has the link only.
+  - Nobody is asked to approve what a phase approves itself: when a phase's `exitTool` has `autoApprove` and the card matches `autoApproveWhen`, the run carries on without a notice. This now works for any exit tool that pauses for a yes or no, not only `submit_plan`.
+  - When two people answer the same call at once, one answer is used and the other is told the call was already answered.
+  - The run then carries on as the phase session's owner. Before, it carried on as whoever answered, and could fail with "the request has no authenticated user".
+  - Following moves with a session: after a hand-over, the session's new owner can answer and the old one cannot.
+
+  **Sidebar**
+
+  A card's phase sessions now show under the session that asked for the work when child sessions are revealed, marked "run by Factory" when the Factory owns them, and that session shows "waiting on you", with Approve and Decline in its menu, while one of them waits on the viewer.
+
+- Mastra Code's Knowledge scopes now use canonical addresses, matching `@mastra/core`'s one-segment scope values. Factory sessions hold their org and project ids encoded (`org:acme%3Aeu` for org `acme:eu`), and the `/knowledge` inspector and Factory Knowledge routes read the same addresses the code agent writes, instead of encoding host scopes a second time. ([#30019](https://github.com/mastra-ai/mastra/pull/30019))
+
+- Sandboxes in a Factory with more than ten repositories can now reach all of them with `git` and `gh`. The Factory mints each sandbox token for at most ten repositories, so the sandbox now gets one token per group of ten (`GH_TOKEN`, `GH_TOKEN_2`, …). Each checkout's git credential helper uses the token that covers it, `github_refresh_token` refreshes every group, and the environment note tells the agent which variable to use for `gh` in each repository, for example `GH_TOKEN=$GH_TOKEN_2 gh pr list -R owner/repo`. Before, a Factory over ten repositories fell back to a token for the session repository only. ([#30121](https://github.com/mastra-ai/mastra/pull/30121))
+
+- Fixed GitHub pull request cards losing their labels, so intake routes that match on labels (for example `security`) now route pull requests too. ([#30250](https://github.com/mastra-ai/mastra/pull/30250))
+
+- Updated dependencies [[`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`5266060`](https://github.com/mastra-ai/mastra/commit/5266060ccd0766a14b94109dc4bc9c3d29a1b8f5), [`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`9abbec6`](https://github.com/mastra-ai/mastra/commit/9abbec671ccf0826550241d1f1c2d7ff89e5b95b)]:
+  - @mastra/core@1.84.0-alpha.0
+  - @mastra/code-sdk@1.19.1-alpha.0
+
 ## 0.28.0
 
 ### Minor Changes

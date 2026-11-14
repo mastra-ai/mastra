@@ -45,12 +45,12 @@ export function createFactoryBackgroundNoticeDelivery({
     },
   );
   return {
-    async deliver(target, signal, options) {
+    async deliver(target, signal) {
       // A command's exit names the resource its thread had when the command started. Sharing a session or
       // making it private moves its threads, so the stored thread says where the notice goes now.
       const thread = await getController()?.queryThreadById({ threadId: target.threadId });
       const current = thread?.resourceId ? { ...target, resourceId: thread.resourceId } : target;
-      return delivery.deliver(current, signal, options);
+      return delivery.deliver(current, signal);
     },
     flush: () => delivery.flush(),
   };

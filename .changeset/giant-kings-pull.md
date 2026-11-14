@@ -2,15 +2,13 @@
 '@mastra/server': minor
 ---
 
-Added HTTP routes to stop background tasks and to inspect or kill background processes in a workspace sandbox.
+Added HTTP routes to inspect or kill background processes in a workspace sandbox.
 
-- `POST /api/background-tasks/:backgroundTaskId/cancel` cancels a pending, running or suspended task and returns it. A finished task is returned unchanged.
 - `GET /api/workspaces/:workspaceId/sandbox/processes` lists the sandbox's background processes.
 - `GET /api/workspaces/:workspaceId/sandbox/processes/:pid` returns a process's status and output without releasing an exited process, so the agent can still read it with `get_process_output`. Pass `tail` to get only the last N lines.
 - `POST /api/workspaces/:workspaceId/sandbox/processes/:pid/kill` stops a process.
 
 ```bash
-curl -X POST http://localhost:4111/api/background-tasks/$TASK_ID/cancel
 curl "http://localhost:4111/api/workspaces/my-workspace/sandbox/processes?threadId=thread-1"
 curl "http://localhost:4111/api/workspaces/my-workspace/sandbox/processes/$PID?threadId=thread-1&tail=50"
 curl -X POST "http://localhost:4111/api/workspaces/my-workspace/sandbox/processes/$PID/kill?threadId=thread-1"

@@ -29,6 +29,18 @@ export function factoryProjectSettingsUserId(factoryProjectId: string): string {
   return `factory-project:${factoryProjectId}`;
 }
 
+/**
+ * The Factory as the owner of work nobody started: the `user_id` of a phase session a
+ * webhook, an automatic phase or a rule opened, and the user its runs authenticate as.
+ * It is the settings sentinel, so such a run reads the Factory's own settings rows and,
+ * having no personal rows, only ever resolves the organization's model keys.
+ */
+export const factoryPrincipalId = factoryProjectSettingsUserId;
+
+export function isFactoryPrincipalId(userId: string | null | undefined): boolean {
+  return userId?.startsWith('factory-project:') === true;
+}
+
 export interface FactoryProject {
   id: string;
   orgId: string;
@@ -234,8 +246,16 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
 }
 
 export class FactoryProjectsStorage extends FactoryStorageDomain {
+  readonly #deletedListeners = new Set<(project: FactoryProject) => void>();
+
   constructor() {
     super('projects');
+  }
+
+  /** Fires after a project's deletion committed. Returns a function that removes the listener. */
+  onDeleted(listener: (project: FactoryProject) => void): () => void {
+    this.#deletedListeners.add(listener);
+    return () => this.#deletedListeners.delete(listener);
   }
 
   async init(): Promise<void> {
@@ -557,7 +577,7 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
     { orgId, id }: { orgId: string; id: string },
     release?: (ops: FactoryStorageOps) => Promise<void>,
   ): Promise<FactoryProject | null> {
-    return this.storage.withTransaction(
+    const deleted = await this.storage.withTransaction(
       async ops => {
         const row = await ops.findOne<FactoryProjectDbRow>('factory_projects', { org_id: orgId, id });
         if (!row) return null;
@@ -567,5 +587,15 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
       },
       { isolationLevel: 'serializable' },
     );
+    if (deleted) {
+      for (const listener of this.#deletedListeners) {
+        try {
+          listener(deleted);
+        } catch (error) {
+          console.error('[factory] project deletion listener failed', error instanceof Error ? error.message : error);
+        }
+      }
+    }
+    return deleted;
   }
 }

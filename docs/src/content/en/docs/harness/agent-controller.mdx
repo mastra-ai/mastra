@@ -284,6 +284,8 @@ const controller = new AgentController({
 })
 ```
 
+Calls to tools the rules allow don't pause the run. On a regular `Agent`, tool calls in one step run concurrently when none of them needs approval or can suspend. Durable agents run them one at a time unless the session's `yolo` state is on.
+
 Configure category policies with [`session.permissions.setForCategory()`](/reference/agent-controller/session#sessionpermissionssetforcategory-category-policy-) and tool policies with [`session.permissions.setForTool()`](/reference/agent-controller/session#sessionpermissionssetfortool-toolname-policy-):
 
 ```typescript
@@ -373,45 +375,6 @@ const reviewerModel = session.subagents.model.get({
 ```
 
 These selections are written to thread settings. An agent-type selection takes precedence over the Session's default subagent model.
-
-A subagent that reaches its step limit while still calling tools hasn't given a final answer. Its result starts with `[Stopped at the <n>-step limit before a final answer]`, and any text it wrote before it stopped follows under `Partial output:`. A regular subagent's limit is the definition's `maxSteps`, or 50 when neither `maxSteps` nor `stopWhen` is set. A forked subagent always runs with a limit of 1000 steps and ignores the definition's `maxSteps`.
-
-### Run subagents in the background
-
-Set `subagentBackground` to let the parent agent run `subagent` calls as [background tasks](/docs/harness/background-tasks). The parent gets a placeholder result and keeps working while the subagent runs. When the subagent finishes, its answer replaces the placeholder in the original tool call. The controller needs `backgroundTasks.enabled` and storage:
-
-```typescript
-const controller = new AgentController({
-  id: 'assistant-controller',
-  agent,
-  storage: new LibSQLStore({
-    id: 'agent-controller-storage',
-    url: 'file:./mastra.db',
-  }),
-  modes: [{ id: 'build', name: 'Build', default: true }],
-  backgroundTasks: { enabled: true },
-  subagents: [
-    {
-      id: 'code-reviewer',
-      name: 'Code reviewer',
-      description: 'Review a change for correctness and regressions.',
-      instructions: 'Inspect the change and report actionable findings.',
-      defaultModelId: '__GATEWAY_OPENAI_MODEL_LUNA__',
-    },
-  ],
-  subagentBackground: {
-    enabled: true,
-    defaultDisposition: 'foreground',
-    timeoutMs: 0,
-  },
-})
-```
-
-`subagentBackground` takes the same options as a [tool's `background` config](/docs/harness/background-tasks#tool-level). Without it, subagent calls always run in the foreground. With `defaultDisposition: 'foreground'`, calls still run inline unless the model asks for a background run with the `_background` argument. `timeoutMs: 0` removes the default task timeout.
-
-A deferred subagent keeps running after the parent run ends or is aborted, and stops only when its task is cancelled or times out. The task then ends as `cancelled` or `timed_out`. An awaited subagent holds the parent run, so it also stops when the parent run is aborted, and its task ends as `cancelled`. A regular subagent running in the background runs its own tools in the foreground. A forked subagent reuses the parent agent. Its background-eligible tools keep their own settings.
-
-A background subagent that fails ends its task as `failed`, and `onTaskFailed` fires. The parent model gets the failure message as the tool result.
 
 ## Connect chat channels
 

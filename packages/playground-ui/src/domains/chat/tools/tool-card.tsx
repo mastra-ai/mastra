@@ -9,7 +9,6 @@ import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge
 import { DeferredMcpInputRequest, ForegroundMcpInputRequest } from './badges/mcp-input-request-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
-import { useBackgroundTaskStatus } from './badges/use-background-task-status';
 import { useDeferredInputRequest } from './badges/use-deferred-input-request';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
 import { suspendedMcpInputRequest } from './mcp-input-request';
@@ -32,7 +31,6 @@ import {
   codeModeCall,
   isAgentCall,
   isDeferredCall,
-  isStoppedBackgroundCall,
   isSettledState,
   isWorkflowCall,
   toolCardKind,
@@ -87,7 +85,7 @@ export const ToolCardInner = ({
   output,
   modelOutput,
   backgroundTaskId,
-  backgroundTaskStatus: partBackgroundTaskStatus,
+  backgroundTaskStatus,
   toolCallId,
   state,
   errorText,
@@ -96,7 +94,6 @@ export const ToolCardInner = ({
   readOnly = false,
 }: ToolCardProps) => {
   const { data: mcpAppTools } = useMcpAppTools();
-  const backgroundTaskStatus = useBackgroundTaskStatus(backgroundTaskId, partBackgroundTaskStatus);
   const backgroundWork = useChatBackgroundWork();
   const threadId = useChatThreadId();
   const send = useChatSend();
@@ -124,10 +121,6 @@ export const ToolCardInner = ({
     toolName,
     toolCallId,
   );
-  // A stopped call's task can't be resumed, though its suspension may outlive it in the metadata.
-  const suspendPayload = isStoppedBackgroundCall(backgroundTaskId, backgroundTaskStatus)
-    ? undefined
-    : suspendedToolMetadata?.suspendPayload;
   const status = badgeStatus({ toolName, toolCallId, state }, dataParts, isRunning);
   // Any deferred call, whatever its output looks like: live it holds the MCP task's progress records,
   // after a reload the "Background task started" placeholder.
@@ -232,7 +225,7 @@ export const ToolCardInner = ({
               metadata={metadata}
               toolCallId={toolCallId}
               toolApprovalMetadata={toolApprovalMetadata}
-              suspendPayload={suspendPayload}
+              suspendPayload={suspendedToolMetadata?.suspendPayload}
               isNetwork={isNetwork}
               toolCalled={toolCalled}
               withoutArgs={isAgent || isWorkflow}
@@ -381,7 +374,7 @@ export const ToolCardInner = ({
           metadata={metadata}
           toolCallId={toolCallId}
           toolApprovalMetadata={toolApprovalMetadata}
-          suspendPayload={suspendPayload}
+          suspendPayload={suspendedToolMetadata?.suspendPayload}
           isNetwork={isNetwork}
           toolCalled={toolCalled}
           status={status}

@@ -39,6 +39,7 @@ function createShellOutputContext() {
       pendingTools: new Map([['call-1', component]]),
       pendingTaskToolIds: new Set(),
       pendingSubagents: new Map(),
+      backgroundShellRows: new Map(),
       pendingAskUserComponents: new Map(),
       pendingSubmitPlanComponents: new Map(),
       chatContainer: new Container(),
@@ -160,6 +161,7 @@ describe('tool event handlers', () => {
         pendingTools: new Map([['call-1', component]]),
         pendingTaskToolIds: new Set(['call-1']),
         pendingSubagents: new Map(),
+        backgroundShellRows: new Map(),
         pendingAskUserComponents: new Map(),
         pendingSubmitPlanComponents: new Map(),
         allToolComponents: [],
@@ -283,6 +285,7 @@ describe('tool event handlers', () => {
         },
         pendingTools: new Map(),
         pendingSubagents: new Map(),
+        backgroundShellRows: new Map(),
         pendingAskUserComponents: new Map(),
         pendingSubmitPlanComponents: new Map(),
         allToolComponents: [],
@@ -340,7 +343,7 @@ describe('tool event handlers', () => {
       stripVTControlCharacters(
         ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
       ),
-    ).toContain('◌ background');
+    ).toContain('background · task-1');
 
     handleToolEnd(ctx, 'call-1', 'Authoritative Alexandria result', false);
 

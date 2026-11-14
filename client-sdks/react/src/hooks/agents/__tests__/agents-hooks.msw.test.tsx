@@ -2,14 +2,14 @@
 import type { BackgroundTaskResponse, GetAgentPlanResponse } from '@mastra/client-js';
 import type { AgentChunkType } from '@mastra/core/stream';
 import { ChunkFrom } from '@mastra/core/stream';
-import { act, cleanup, waitFor } from '@testing-library/react';
+import { cleanup, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../test/render';
 import { useAgentPlan } from '../use-agent-plan';
-import { useBackgroundTaskStream, useCancelBackgroundTask, useGetBackgroundTaskById } from '../use-background-tasks';
+import { useBackgroundTaskStream, useGetBackgroundTaskById } from '../use-background-tasks';
 import { useBrowserSessionProbe } from '../use-browser-session-probe';
 
 const API = `${TEST_BASE_URL}/api`;
@@ -161,45 +161,6 @@ describe('useBackgroundTaskStream', () => {
         'two',
         'three',
       ]);
-    });
-  });
-});
-
-describe('useCancelBackgroundTask', () => {
-  describe('when the task is running', () => {
-    it('cancels it and the cached task reads as cancelled', async () => {
-      const task: BackgroundTaskResponse = {
-        id: 'task-1',
-        status: 'running',
-        toolName: 'research',
-        toolCallId: 'call-1',
-        args: {},
-        agentId: 'agent-1',
-        runId: 'run-1',
-        createdAt: '2026-11-12T10:00:00.000Z',
-        retryCount: 0,
-        maxRetries: 0,
-        timeoutMs: 0,
-      };
-      const cancelled: string[] = [];
-      server.use(
-        http.get(`${API}/background-tasks/task-1`, () => HttpResponse.json(task)),
-        http.post(`${API}/background-tasks/:id/cancel`, ({ params }) => {
-          cancelled.push(params.id as string);
-          return HttpResponse.json({ ...task, status: 'cancelled', completedAt: '2026-11-12T10:01:00.000Z' });
-        }),
-      );
-
-      const { result } = renderHookWithProviders(() => ({
-        task: useGetBackgroundTaskById({ backgroundTaskId: 'task-1' }),
-        cancel: useCancelBackgroundTask(),
-      }));
-      await waitFor(() => expect(result.current.task.data?.status).toBe('running'));
-
-      await act(() => result.current.cancel.mutateAsync('task-1'));
-
-      expect(cancelled).toEqual(['task-1']);
-      await waitFor(() => expect(result.current.task.data?.status).toBe('cancelled'));
     });
   });
 });

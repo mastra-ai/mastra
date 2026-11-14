@@ -266,12 +266,12 @@ const bgTaskFailedChunk = (toolCallId: string, taskId: string, error: string): C
     payload: { toolCallId, taskId, error, completedAt: new Date() },
   }) as unknown as ChunkType;
 
-const bgTaskCancelledChunk = (toolCallId: string, taskId: string, completedAt = new Date()): ChunkType =>
+const bgTaskCancelledChunk = (toolCallId: string, taskId: string): ChunkType =>
   ({
     type: 'background-task-cancelled',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, taskId, completedAt },
+    payload: { toolCallId, taskId },
   }) as unknown as ChunkType;
 
 const bgTaskOutputChunk = (toolCallId: string, output: unknown): ChunkType =>
@@ -1306,66 +1306,9 @@ describe('accumulateChunk - background tasks', () => {
     expect(toolPart.toolInvocation).toMatchObject({ state: 'output-error', errorText: 'task failed' });
   });
 
-  it('background-task-cancelled stops a deferred call reading as running', () => {
-    const placeholder = {
-      type: 'tool-result',
-      runId: RUN_ID,
-      from: 'AGENT',
-      payload: {
-        toolCallId: 'tc-1',
-        result: 'Background task started',
-        providerMetadata: { mastra: { backgroundTask: { taskId: 'bg-1', status: 'running' } } },
-      },
-    } as unknown as ChunkType;
-    const completedAt = new Date('2024-01-01T00:01:00Z');
-    const out = reduce([
-      startChunk(),
-      toolCallChunk('tc-1', 'longRun', {}),
-      placeholder,
-      bgTaskRunningChunk('tc-1', 'bg-1', new Date('2024-01-01T00:00:00Z')),
-      bgTaskProgressChunk(1),
-      bgTaskCancelledChunk('tc-1', 'bg-1', completedAt),
-    ]);
-
-    const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
-    expect(toolPart.providerMetadata).toEqual({ mastra: { backgroundTask: { taskId: 'bg-1', status: 'cancelled' } } });
-    expect((toolPart.toolInvocation as { result: unknown }).result).toBe('Background task started');
-    const meta = out[0].content.metadata as MastraDBMessageMetadata;
-    expect(meta.backgroundTasks?.['tc-1']).toMatchObject({ taskId: 'bg-1', completedAt });
-    expect(meta.runningBackgroundTasksCount).toBeUndefined();
-  });
-
-  // Providers reuse tool-call ids across turns, so the newest call with the id can be a later one.
-  it("background-task-cancelled marks the cancelled task's call when a later call reused its id", () => {
-    const placeholder = (taskId: string) =>
-      ({
-        type: 'tool-result',
-        runId: RUN_ID,
-        from: 'AGENT',
-        payload: {
-          toolCallId: 'tc-1',
-          result: `Background task started. Task ID: ${taskId}`,
-          providerMetadata: { mastra: { backgroundTask: { taskId, status: 'running' } } },
-        },
-      }) as unknown as ChunkType;
-    // Two turns loaded from history, each holding a call `tc-1` that ran its own task.
-    const turn = (messageId: string, taskId: string) =>
-      reduce([startChunk(messageId), toolCallChunk('tc-1', 'longRun', {}), placeholder(taskId)]);
-    const history = [...turn('asst-1', 'bg-1'), ...turn('asst-2', 'bg-2')];
-
-    const out = reduce([bgTaskCancelledChunk('tc-1', 'bg-1')], streamMeta(), history);
-
-    const statusOf = (messageIndex: number) =>
-      (out[messageIndex]!.content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart)
-        .providerMetadata?.mastra;
-    expect(out).toHaveLength(2);
-    expect(statusOf(0)).toEqual({ backgroundTask: { taskId: 'bg-1', status: 'cancelled' } });
-    expect(statusOf(1)).toEqual({ backgroundTask: { taskId: 'bg-2', status: 'running' } });
-  });
-
-  it("background-task-cancelled for a call this conversation doesn't hold changes nothing", () => {
-    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'longRun', {}), bgTaskProgressChunk(1)]);
-    const out = reduce([bgTaskCancelledChunk('tc-other', 'bg-other')], streamMeta(), initial);
+  it('background-task-cancelled is a no-op (lifecycle marker)', () => {
+    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'longRun', {})]);
+    const out = reduce([bgTaskCancelledChunk('tc-1', 'bg-1')], streamMeta(), initial);
     expect(out).toEqual(initial);
   });
 

@@ -9,9 +9,9 @@ export function BackgroundTaskRows({ threadId }: { threadId: string }) {
   return (
     <>
       {runningTasks.map(task => (
-        <BackgroundTaskRow key={task.taskId} task={task} threadId={threadId} />
+        <BackgroundTaskRow key={task.taskId} task={task} />
       ))}
-      {/* The stream doesn't reconnect by itself, and without it the tasks can't be seen or cancelled. */}
+      {/* The stream doesn't reconnect by itself, and without it the tasks can't be seen. */}
       {error && (
         <li className="flex items-center justify-between gap-2 px-1.5 py-1">
           <Txt as="span" variant="caption" tone="muted">

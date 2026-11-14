@@ -135,8 +135,6 @@ The `_background` override only _modifies_ tools the developer has already opted
 
 When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
-A `timeoutMs` of `0` at any layer means the task has no timeout. Use it for work that should run until it finishes or is cancelled.
-
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
 ## Background tasks related stream chunks
@@ -205,7 +203,7 @@ export const mastra = new Mastra({
 
 When a deferred task finishes and no `untilIdle` stream is open for its thread, Mastra sends the agent a `notification` signal with the tag `background-task`. The signal names the tool call and task, and tells the agent the result is now on the tool call. It doesn't copy the result into the prompt. This covers a `stream()` call without `untilIdle`, a client that disconnected, and a task resumed after it [suspended](#suspending-and-resuming).
 
-- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome. The woken run uses the request context of the run that dispatched the task, so a model, instructions, or memory resolved from that context resolve the same way.
+- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome. The woken run uses the request context of the run that dispatched the task, so a model, instructions, or memory resolved from that context resolve the same way. This also holds when the agent that claimed the thread runs on another server: the context is sent along with the signal, minus the auth token, the signed-in user, and any values that can't be sent as JSON or are too large to serialize. That server's run keeps its own auth token and user.
 - If a run is already active on the thread, including the run that dispatched the task, the signal is delivered to that run's next model request. If that run ends without making another request, the signal runs as its own turn.
 - If another agent's run holds the thread, for example while it waits for a tool approval, the signal waits and wakes the agent once that run ends.
 - If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
@@ -405,25 +403,6 @@ The manager keeps tool executors in process memory. If the process restarts whil
 
 `manager.cancel(taskId)` works against suspended tasks the same way it works for running ones. The row changes to `cancelled` and the workflow snapshot is cleaned up. A `task.cancelled` event then fires.
 
-## Cancel a task from a client
-
-To cancel a pending, running, or suspended task over HTTP, call `POST /api/background-tasks/:backgroundTaskId/cancel`. The running tool's abort signal fires and the route returns the task with `status: 'cancelled'`. A task that already finished is returned unchanged. The route returns `404` when the task doesn't exist or belongs to another resource, and requires the `background-tasks:execute` permission.
-
-The [client SDK](/reference/client-js/mastra-client) wraps the route as `cancelBackgroundTask()`:
-
-```typescript title="src/client/cancel-task.ts"
-import { MastraClient } from '@mastra/client-js'
-
-const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
-
-const task = await client.cancelBackgroundTask(taskId)
-console.log(task.status) // 'cancelled'
-```
-
-In React, `useCancelBackgroundTask()` from `@mastra/react/hooks/agents` wraps the same call.
-
-A cancelled task doesn't write a result into the thread, and the agent isn't notified. The tool call keeps the placeholder it returned when the task started, and its `providerMetadata.mastra.backgroundTask.status` becomes `cancelled`, so a chat that reloads the thread doesn't show it as running. A task that a shutdown stops keeps `status: 'running'` on its tool call, the same as after a crash.
-
 ## Lifecycle callbacks
 
 Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their outcomes:
@@ -449,13 +428,11 @@ export const mastra = new Mastra({
 })
 ```
 
-Failure callbacks also fire when recovery fails a task because its worker stopped before the task finished, with the error `Worker process terminated before task completed`. After a restart, the tool-level and agent-level callbacks were lost with the old process, so only the manager-level `onTaskFailed` fires.
-
 ## Streaming
 
 ### Subscribe to all task events
 
-Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of the tasks that are running (as `background-task-running`) or suspended (as `background-task-suspended`), then forwards live events as they happen.
+Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts" oxfmt:false
 const bgManager = mastra.backgroundTaskManager;

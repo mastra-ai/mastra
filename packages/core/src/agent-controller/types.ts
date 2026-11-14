@@ -1,7 +1,7 @@
 import type { Agent } from '../agent';
 import type { MastraDBMessage, MastraMessagePart } from '../agent/message-list/state/types';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
-import type { BackgroundTaskManagerConfig, ToolBackgroundConfig } from '../background-tasks';
+import type { BackgroundTaskManagerConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { AgentControllerChannelsConfig } from '../channels/agent-controller-channels';
 import type { PubSub } from '../events/pubsub';
@@ -351,15 +351,6 @@ export interface AgentControllerConfig<TState = {}> {
    * depends on the request (tenant credentials, request-scoped custom providers).
    */
   resolveSubagentModel?: (modelId: string, options: { requestContext?: RequestContext }) => MastraModelConfig;
-
-  /**
-   * Makes the `subagent` tool eligible to run as a background task. Off by
-   * default: without it, subagent calls always run in the foreground. A
-   * backgrounded non-forked subagent runs its own tools in the foreground; a
-   * forked one reuses the parent agent, whose eligible tools keep their own
-   * background settings.
-   */
-  subagentBackground?: ToolBackgroundConfig;
 
   /**
    * Model gateways registered on AgentController' internal Mastra instance.

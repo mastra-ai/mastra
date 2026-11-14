@@ -18,36 +18,23 @@ export interface NotificationOptions {
     pid?: string;
     exitCode?: number;
     toolName?: string;
+    /** Set for a shell's exit: `Shell`. */
     title?: string;
+    /** Set for a shell's exit: its description or command. */
     summary?: string;
-    interrupted?: 'restart' | 'shutdown';
     argsSummary?: string;
     errorSummary?: string;
   };
 }
 
-/** One-line card for finished background work, e.g. `↳ Shell finished · Running tests (exit 1)`. */
-function formatBackgroundCompletionLine(
-  completion: NonNullable<NotificationOptions['backgroundCompletion']>,
-  status: string | undefined,
-): string {
-  const title = completion.title ?? completion.toolName ?? 'Background task';
+/** One-line card for a background shell's exit, e.g. `↳ Shell finished · Running tests (exit 1)`. */
+function formatProcessExitLine(completion: NonNullable<NotificationOptions['backgroundCompletion']>): string {
+  const title = completion.title ?? completion.toolName ?? 'Shell';
   const summary = completion.summary ? theme.fg('muted', ` · ${completion.summary}`) : '';
-  if (completion.kind === 'process') {
-    const failed = completion.exitCode !== 0;
-    const exit =
-      completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
-    return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
-  }
-  const verb = completion.interrupted
-    ? `interrupted by a ${completion.interrupted}`
-    : status === 'cancelled'
-      ? 'cancelled'
-      : status === 'failed'
-        ? 'failed'
-        : 'finished';
-  const arrowColor = status === 'cancelled' ? 'muted' : status === 'failed' ? 'error' : 'success';
-  return `${theme.fg(arrowColor, '↳')} ${theme.fg('toolTitle', title)} ${verb}${summary}`;
+  const failed = completion.exitCode !== 0;
+  const exit =
+    completion.exitCode === undefined ? '' : theme.fg(failed ? 'error' : 'muted', ` (exit ${completion.exitCode})`);
+  return `${theme.fg(failed ? 'error' : 'success', '↳')} ${theme.fg('toolTitle', title)} finished${summary}${exit}`;
 }
 
 function normalizePreviewLineLimit(limit: number | undefined): number {
@@ -142,9 +129,24 @@ export class NotificationComponent extends WidthAwareContainer {
     // trimming. Collapsed background completions are already a single line —
     // that is their compact form — and their detail rows only exist once expanded.
     const compact = !this.expanded;
-    if (options.backgroundCompletion && !this.expanded) {
-      const line = formatBackgroundCompletionLine(options.backgroundCompletion, options.status);
+    if (options.backgroundCompletion?.kind === 'process' && !this.expanded) {
+      const line = formatProcessExitLine(options.backgroundCompletion);
       this.addChild(new Text(truncateToWidth(line, Math.max(1, width - BOX_INDENT)), BOX_INDENT, 0));
+      return;
+    }
+    if (options.backgroundCompletion && !this.expanded) {
+      const completion = options.backgroundCompletion;
+      const failed = options.status === 'failed';
+      const cancelled = options.status === 'cancelled';
+      const icon = cancelled ? theme.fg('muted', '■') : failed ? theme.fg('error', '✗') : theme.fg('success', '✓');
+      const toolName = theme.fg('toolTitle', completion.toolName ?? 'background task');
+      const status = cancelled
+        ? 'cancelled in background'
+        : failed
+          ? 'failed in background'
+          : 'completed in background';
+      const taskId = theme.fg('muted', ` · ${completion.taskId}`);
+      this.addChild(new Text(`${icon} ${toolName} ${status}${taskId}`, BOX_INDENT, 0));
       return;
     }
     const titleText = options.source ? `notification from ${options.source}` : 'notification';

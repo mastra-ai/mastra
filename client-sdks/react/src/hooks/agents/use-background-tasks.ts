@@ -2,10 +2,10 @@ import type { MastraClient, StreamBackgroundTasksParams } from '@mastra/client-j
 import type { BackgroundTaskStatus } from '@mastra/core/background-tasks';
 import type { AgentChunkType } from '@mastra/core/stream';
 import type { UseQueryResult } from '@tanstack/react-query';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import type { MastraMutationOptions, MastraQueryOptions } from '../shared/query-options';
+import type { MastraQueryOptions } from '../shared/query-options';
 
 type BackgroundTaskStreamReader = ReturnType<Awaited<ReturnType<MastraClient['streamBackgroundTasks']>>['getReader']>;
 
@@ -277,22 +277,6 @@ export const useGetBackgroundTaskById = <TData = BackgroundTaskResponse>({
   return useQuery({
     queryKey: ['background-task', backgroundTaskId],
     queryFn: () => client.getBackgroundTask(backgroundTaskId),
-    ...queryOptions,
-  });
-};
-
-/**
- * Cancels a background task by id. A task that already finished is returned unchanged.
- * `useBackgroundTaskStream` sees the cancellation as a `cancelled` event.
- */
-export const useCancelBackgroundTask = ({
-  queryOptions,
-}: { queryOptions?: MastraMutationOptions<BackgroundTaskResponse, string> } = {}) => {
-  const client = useMastraClient();
-  const queryClient = useQueryClient();
-  return useMutation<BackgroundTaskResponse, Error, string>({
-    mutationFn: backgroundTaskId => client.cancelBackgroundTask(backgroundTaskId),
-    onSuccess: task => queryClient.setQueryData(['background-task', task.id], task),
     ...queryOptions,
   });
 };

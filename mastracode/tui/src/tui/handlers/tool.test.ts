@@ -1,14 +1,10 @@
-import { Container, Text } from '@earendil-works/pi-tui';
-import { createSignal } from '@mastra/core/signals';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Container } from '@earendil-works/pi-tui';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
-import { SubagentExecutionComponent } from '../components/subagent-execution.js';
 
-import { addUserMessage } from '../render-messages.js';
 import { DEFAULT_RENDER_COALESCE_MS } from '../render-scheduler.js';
 import type { TUIState } from '../state.js';
-import { handleSubagentStart, markBackgroundSubagent } from './subagent.js';
 import {
   clearToolInputParsers,
   handleCommandExit,
@@ -27,6 +23,10 @@ async function flushParser(): Promise<void> {
   await Promise.resolve();
   // Streamed args are applied by the render scheduler's coalesce timer, so the
   // wait must exceed it (`handlers/__tests__/tool.test.ts` does the same).
+  if (vi.isFakeTimers()) {
+    await vi.advanceTimersByTimeAsync(DEFAULT_RENDER_COALESCE_MS + 20);
+    return;
+  }
   await new Promise(resolve => setTimeout(resolve, DEFAULT_RENDER_COALESCE_MS + 20));
 }
 
@@ -50,6 +50,7 @@ function createToolHandlerContext(): EventHandlerContext {
     pendingTaskToolIds: new Set(),
     seenToolCallIds: new Set(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     allToolComponents: [],
@@ -70,11 +71,7 @@ function createToolHandlerContext(): EventHandlerContext {
 }
 
 describe('background placeholder opt-in', () => {
-  it.each([
-    // Tool rows name the task; subagent boxes leave the id out of their title.
-    ['view', /✓ background · trusted-task/],
-    ['mastra_expert', /subagent alexandria \d+ms ✓ background(?! ·)/],
-  ])('reconciles trusted background metadata for %s', (toolName, title) => {
+  it.each(['view', 'mastra_expert'])('reconciles trusted background metadata for %s', toolName => {
     const ctx = createToolHandlerContext();
     ctx.state.options.backgroundToolsEnabled = true;
     if (toolName === 'mastra_expert') {
@@ -94,50 +91,7 @@ describe('background placeholder opt-in', () => {
     });
     expect(ctx.state.pendingTools.has('background-call')).toBe(false);
     expect(ctx.state.pendingSubagents.has('background-call')).toBe(false);
-    const rendered = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
-    expect(rendered).toMatch(title);
-    if (toolName === 'mastra_expert') expect(rendered).not.toContain('trusted-task');
-  });
-
-  it('leaves a live plugin subagent box to its result when the completion notice comes first', () => {
-    const ctx = createToolHandlerContext();
-    ctx.state.options.backgroundToolsEnabled = true;
-    Object.assign(ctx.state, { messageComponentsById: new Map(), followUpComponents: [] });
-    ctx.state.pluginManager = {
-      getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),
-    } as unknown as TUIState['pluginManager'];
-    handleToolStart(ctx, 'plugin-call', 'mastra_expert', { question: 'demo' });
-    handleToolEnd(ctx, 'plugin-call', 'Waiting', false, {
-      mastra: { backgroundTask: { taskId: 'plugin-task', status: 'running' } },
-    });
-
-    addUserMessage(
-      ctx.state,
-      createSignal({
-        type: 'notification',
-        tagName: 'notification',
-        contents:
-          'Background mastra_expert call finished. Its result is in the original mastra_expert call (plugin-call).',
-        attributes: { source: 'background-work', status: 'completed' },
-        metadata: {
-          backgroundCompletion: {
-            eventId: 'background-task:plugin-task:completed',
-            taskId: 'plugin-task',
-            originToolCallId: 'plugin-call',
-            toolName: 'mastra_expert',
-            status: 'completed',
-          },
-        },
-      }).toDBMessage(),
-    );
-    expect(ctx.state.pendingSubagents.has('plugin-call')).toBe(true);
-
-    handleToolEnd(ctx, 'plugin-call', 'AUTHORITATIVE_RESULT', false, {
-      mastra: { backgroundTask: { taskId: 'plugin-task', status: 'completed' } },
-    });
-    const box = ctx.state.chatContainer.children.find(child => child instanceof SubagentExecutionComponent)!;
-    (box as SubagentExecutionComponent).setExpanded(true);
-    expect(stripAnsi(box.render(100).join('\n'))).toContain('AUTHORITATIVE_RESULT');
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n'))).toContain('✓ background · trusted-task');
   });
 
   it.each(['execute_command', 'mastra_expert'])(
@@ -183,7 +137,9 @@ describe('background placeholder opt-in', () => {
       mastra: { backgroundTask: { taskId: 'visible-demo-123', status: 'running' } },
     });
     expect(ctx.state.pendingSubagents.has('collision')).toBe(enabled === true);
-    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('◌ background')).toBe(enabled === true);
+    expect(stripAnsi(ctx.state.chatContainer.render(100).join('\n')).includes('background · visible-demo-123')).toBe(
+      enabled === true,
+    );
   });
 });
 
@@ -390,6 +346,8 @@ describe('compact shell description streaming', () => {
   });
 
   it('only ever adds lines as compact shell calls stream in, run, and finish', async () => {
+    vi.useFakeTimers();
+    onTestFinished(() => vi.useRealTimers());
     const ctx = createToolHandlerContext();
     ctx.state.previewLines = 2;
     const buffers = new Map<string, { toolName: string; text: string }>();
@@ -546,51 +504,5 @@ describe('inline tool approval', () => {
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('Allow mcp_search?');
     expect(output).toContain('query: release notes');
-  });
-});
-
-describe('deferred background subagent', () => {
-  // A deferred subagent starts as a background task: its placeholder result and
-  // even the end of the parent run can arrive before its `subagent_start`.
-  it('shows the box where the call was made, as background work, when it starts after the run ended', () => {
-    const ctx = createToolHandlerContext();
-    ctx.state.options.backgroundToolsEnabled = true;
-    ctx.state.backgroundSubagentCalls = new Map();
-
-    handleToolInputStart(ctx, 'sub-1', 'subagent');
-    handleToolStart(ctx, 'sub-1', 'subagent', { agentType: 'explore', task: 'Find the auth middleware' });
-    handleToolEnd(ctx, 'sub-1', 'Background task started.', false, {
-      mastra: { backgroundTask: { taskId: 'task-1', status: 'running' } },
-    });
-    markBackgroundSubagent(ctx, 'sub-1', 'task-1');
-    const later = new Text('LATER_OUTPUT', 0, 0);
-    ctx.addChildBeforeFollowUps(later);
-    ctx.state.streamingComponent = undefined;
-
-    handleSubagentStart(ctx, 'sub-1', 'explore', 'Find the auth middleware');
-
-    const children = visibleChildren(ctx);
-    const box = ctx.state.pendingSubagents.get('sub-1')!;
-    expect(children.indexOf(box)).toBeLessThan(children.indexOf(later));
-    expect(stripAnsi(box.render(100).join('\n'))).toContain('◌ background');
-  });
-
-  it('places the box after what the chat showed at the placeholder result when nothing was streaming', () => {
-    const ctx = createToolHandlerContext();
-    ctx.state.options.backgroundToolsEnabled = true;
-    ctx.state.backgroundSubagentCalls = new Map();
-    const before = new Text('BEFORE_CALL', 0, 0);
-    ctx.addChildBeforeFollowUps(before);
-    ctx.state.streamingComponent = undefined;
-
-    markBackgroundSubagent(ctx, 'sub-2', 'task-2');
-    const later = new Text('LATER_OUTPUT', 0, 0);
-    ctx.addChildBeforeFollowUps(later);
-    handleSubagentStart(ctx, 'sub-2', 'explore', 'Find the auth middleware');
-
-    const children = visibleChildren(ctx);
-    const box = ctx.state.pendingSubagents.get('sub-2')!;
-    expect(children.indexOf(box)).toBe(children.indexOf(before) + 1);
-    expect(children.indexOf(box)).toBeLessThan(children.indexOf(later));
   });
 });

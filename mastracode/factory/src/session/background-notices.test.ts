@@ -138,7 +138,7 @@ describe('Factory background notices', () => {
   it('holds a notice for a session that is offline, and drops the ones no session owns so they cannot crowd it out', async () => {
     const { project, controller, session, delivery, woken, saved } = await setup();
     const offline = { resourceId: project.id, threadId: 'session-b' };
-    await delivery.deliver(offline, signal, { wake: false });
+    await delivery.deliver(offline, signal);
     // Someone else's thread, on their own resource, stamped with this session's id.
     const attacker = await controller.createSession({ id: 'attacker', resourceId: 'user-attacker' });
     const forged = await attacker.thread.create();
@@ -149,11 +149,18 @@ describe('Factory background notices', () => {
     expect(woken).not.toHaveBeenCalled();
     expect(saved).not.toHaveBeenCalled();
 
+    // The session comes back on the notice's thread, so the held notice wakes it, as its owner.
     const back = await controller.createSession({ id: 'session-b', resourceId: project.id, threadId: 'session-b' });
-    const delivered = vi.spyOn(back, 'sendSignalToThread');
+    const backWoken = vi.spyOn(back, 'sendSignal').mockReturnValue({
+      id: signal.id,
+      type: 'notification',
+      accepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
     await delivery.flush();
 
-    expect(delivered).toHaveBeenCalledTimes(1);
-    expect(delivered).toHaveBeenCalledWith(signal, offline);
+    expect(backWoken).toHaveBeenCalledTimes(1);
+    expect(backWoken).toHaveBeenCalledWith(signal, expect.objectContaining({ ifIdle: { behavior: 'wake' } }));
+    const { requestContext } = backWoken.mock.calls[0]![1] as { requestContext: RequestContext };
+    expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 });

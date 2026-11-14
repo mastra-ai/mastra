@@ -13,7 +13,7 @@ interface ToolGuidanceOptions {
   /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
   hasWebExtract?: boolean;
   hasSubagents?: boolean;
-  /** Background shells and subagents are on (`backgroundTools.enabled`). */
+  /** Background shells are on (`backgroundTools.enabled`). */
   backgroundTools?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
@@ -259,28 +259,25 @@ ${patchToolGuidance}
   // --- Subagent tool (all modes) ---
 
   if (options.hasSubagents !== false && !denied.has('subagent')) {
-    const when = options.backgroundTools
-      ? `- Run a subagent in the background (\`_background: { disposition: "deferred" }\`) when its task is independent of what you do next, and keep working. Run it in the foreground when you need its answer before you can continue. For a small task, do it yourself.`
-      : `- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.`;
     sections.push(`
 **subagent** — Delegate a focused task to a specialized subagent
-${when}
+- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself.
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
   }
 
-  if (options.backgroundTools) sections.push(`\n${backgroundWorkGuidance(denied)}`);
+  const background = options.backgroundTools ? backgroundWorkGuidance(denied) : undefined;
+  if (background) sections.push(`\n${background}`);
 
   return sections.join('\n');
 }
 
 /**
  * When to run shells in the background, and the no-polling rule. Part of the tool guidance when background
- * tools are on; exported for hosts that turn them on per session.
+ * tools are on; exported for hosts that turn them on per session. Undefined when `execute_command` is denied.
  */
-export function backgroundWorkGuidance(deniedTools: ReadonlySet<string> = new Set()): string {
-  const shellLine = deniedTools.has(MC_TOOLS.EXECUTE_COMMAND)
-    ? ''
-    : `\n- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.`;
-  return `**Background work**${shellLine}
-- You get a notification when a background command exits or a background task finishes. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
+export function backgroundWorkGuidance(deniedTools: ReadonlySet<string> = new Set()): string | undefined {
+  if (deniedTools.has(MC_TOOLS.EXECUTE_COMMAND)) return undefined;
+  return `**Background work**
+- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.
+- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
 }

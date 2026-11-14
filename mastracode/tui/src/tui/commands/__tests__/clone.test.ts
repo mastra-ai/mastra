@@ -20,6 +20,7 @@ describe('resetUIAfterClone', () => {
       pendingTools: new Map(),
       pendingTaskToolIds: new Set(),
       pendingSubagents: new Map(),
+      backgroundShellRows: new Map(),
       pendingSignalMessageComponentsById: new Map(),
       followUpComponents: [{}],
       allToolComponents: [{}],

@@ -63,16 +63,6 @@ function reconcileToolBoundaries(ctx: EventHandlerContext): void {
 
 const pluginSubagentToolCallIds = new Set<string>();
 
-/** Whether a live plugin subagent call's box is still waiting for its result in `tool_end`. */
-export function isLivePluginSubagentCall(toolCallId: string): boolean {
-  return pluginSubagentToolCallIds.has(toolCallId);
-}
-
-/** Forgets a live plugin subagent call whose box was finished some other way. */
-export function forgetPluginSubagentCall(toolCallId: string): void {
-  pluginSubagentToolCallIds.delete(toolCallId);
-}
-
 interface PendingShellOutput {
   output: string;
   timer: ReturnType<typeof setTimeout>;
@@ -237,7 +227,6 @@ export function createStaticSubagentComponent(
     {
       collapseOnComplete: false,
       expandOnComplete: true,
-      isToolOutputExpanded: () => state.toolOutputExpanded,
       forked: renderConfig.forked,
       label: renderConfig.label,
       maxActivityLines: renderConfig.maxActivityLines,

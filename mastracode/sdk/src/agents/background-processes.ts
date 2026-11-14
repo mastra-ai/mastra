@@ -188,6 +188,8 @@ export function createBackgroundProcessNotices(options: {
       if (shuttingDown) sandboxes.delete(meta.pid);
       else if (launch?.sandbox) sandboxes.set(meta.pid, launch.sandbox);
       const killedOnPurpose = killMarks(launch?.sandbox).delete(meta.pid);
+      // Mastra Code's own workspace passes `abortSignal: null`, so `killedByAbort` is
+      // never set there; kept for hosts whose workspace ties shells to the run.
       // `killedOnRequest` covers kills that bypass this dispatcher, such as a host's HTTP kill route.
       const wasKilled = killedOnPurpose || meta.killedByAbort === true || meta.killedOnRequest === true || shuttingDown;
       const ownTarget =

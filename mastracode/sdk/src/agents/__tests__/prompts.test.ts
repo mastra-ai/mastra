@@ -114,32 +114,6 @@ describe('buildFullPrompt', () => {
     expect(prompt).not.toContain('subagent may be used on its own');
   });
 
-  it.each([
-    { backgroundTools: false, hasSubagents: true },
-    { backgroundTools: true, hasSubagents: true },
-    { backgroundTools: true, hasSubagents: false },
-    { backgroundTools: false, hasSubagents: false },
-  ])('keeps the parallel-only subagent rule only without background subagents (%o)', options => {
-    const prompt = buildFullPrompt({
-      projectPath: '/tmp/project',
-      projectName: 'test-project',
-      gitBranch: 'main',
-      platform: 'darwin',
-      date: '2026-03-23',
-      mode: 'build',
-      activePlan: null,
-      modeId: 'build',
-      currentDate: '2026-03-23',
-      workingDir: '/tmp/project',
-      state: { permissionRules: { tools: {} } },
-      ...options,
-    });
-
-    const backgroundSubagents = options.backgroundTools && options.hasSubagents;
-    expect(prompt.includes('multiple subagents in parallel')).toBe(options.hasSubagents && !backgroundSubagents);
-    expect(prompt.includes('Run a subagent in the background')).toBe(backgroundSubagents);
-  });
-
   it('describes goal mode and goal-ready plan expectations in the base prompt', () => {
     const prompt = buildFullPrompt({
       projectPath: '/tmp/project',

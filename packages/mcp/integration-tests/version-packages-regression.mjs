@@ -6,7 +6,8 @@
 //
 // This puts the checkout in that state for real: it adds a patch changeset for each of core's
 // workspace dependencies, runs the same `pnpm changeset-cli version` as the version-packages
-// workflow, checks that the bumped dependency versions are not on npmjs, then runs compat.sh.
+// workflow (again while a bumped version is already on npmjs, as on a branch behind the latest
+// release), then runs compat.sh.
 //
 // It rewrites package.json files, changelogs and .changeset/ in place, so it only runs in GitHub
 // Actions or with --force in a disposable checkout (e.g. `git worktree add`).
@@ -43,25 +44,49 @@ if (workspaceDeps.length === 0) {
 }
 
 const before = Object.fromEntries([...workspaceDeps, '@mastra/core'].map(name => [name, versionOf(name)]));
-// A unique name: in pre mode, .changeset/pre.json records consumed changesets by name and skips them.
-writeFileSync(
-  join(root, `.changeset/mcp-compat-version-packages-regression-${Date.now()}.md`),
-  `---\n${workspaceDeps.map(name => `'${name}': patch`).join('\n')}\n---\n\nMCP compat regression check: simulate a version-packages PR.\n`,
-);
-execFileSync('pnpm', ['changeset-cli', 'version'], { cwd: root, stdio: 'inherit' });
 
-for (const name of workspaceDeps) {
-  const version = versionOf(name);
-  if (version === before[name]) {
-    throw new Error(`changeset version did not bump ${name} (still ${version})`);
-  }
+const isOnNpm = async (name, version) => {
   const response = await fetch(`https://registry.npmjs.org/${name}/${version}`);
-  if (response.status !== 404) {
+  if (response.status === 404) return false;
+  if (response.ok) return true;
+  throw new Error(`Could not check ${name}@${version} on npmjs (HTTP ${response.status})`);
+};
+
+// A branch that is behind main's latest release bumps to versions main already published
+// (e.g. alpha.1 -> alpha.2 after alpha.2 shipped). Version again until every bumped
+// dependency is unpublished, as it is on a real version-packages PR.
+const MAX_ROUNDS = 10;
+let published = workspaceDeps;
+for (let round = 1; published.length > 0; round++) {
+  if (round > MAX_ROUNDS) {
     throw new Error(
-      `${name}@${version} is not an unpublished version on npmjs (HTTP ${response.status}), so this does not reproduce a version-packages PR`,
+      `Still on npmjs after ${MAX_ROUNDS} version rounds: ${published.map(name => `${name}@${versionOf(name)}`).join(', ')}`,
     );
   }
-  console.log(`${name}: ${before[name]} -> ${version} (not on npmjs)`);
+  // A unique name: in pre mode, .changeset/pre.json records consumed changesets by name and skips them.
+  writeFileSync(
+    join(root, `.changeset/mcp-compat-version-packages-regression-${Date.now()}-${round}.md`),
+    `---\n${published.map(name => `'${name}': patch`).join('\n')}\n---\n\nMCP compat regression check: simulate a version-packages PR.\n`,
+  );
+  const previous = Object.fromEntries(published.map(name => [name, versionOf(name)]));
+  execFileSync('pnpm', ['changeset-cli', 'version'], { cwd: root, stdio: 'inherit' });
+
+  const stillPublished = [];
+  for (const name of published) {
+    const version = versionOf(name);
+    if (version === previous[name]) {
+      throw new Error(`changeset version did not bump ${name} (still ${version})`);
+    }
+    if (await isOnNpm(name, version)) {
+      console.log(`${name}@${version} is already on npmjs; versioning again`);
+      stillPublished.push(name);
+    }
+  }
+  published = stillPublished;
+}
+
+for (const name of workspaceDeps) {
+  console.log(`${name}: ${before[name]} -> ${versionOf(name)} (not on npmjs)`);
 }
 console.log(`@mastra/core: ${before['@mastra/core']} -> ${versionOf('@mastra/core')}`);
 
