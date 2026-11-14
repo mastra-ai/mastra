@@ -3751,7 +3751,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         activeStepsPath,
         requestContext,
         actor,
-        perStep,
         state: updatedState,
         outputOptions,
       });

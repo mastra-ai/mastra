@@ -517,6 +517,9 @@ export type SkippableTest =
   | 'perStepContinue'
   | 'perStepRetry'
   | 'perStepLoop'
+  | 'perStepBail'
+  | 'perStepBailRetry'
+  | 'perStepCancel'
   // Tracing tests
   | 'tracingContext'
   | 'tracingMultistep'
