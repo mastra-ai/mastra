@@ -302,6 +302,20 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
     }
   }
 
+  /** @internal Whether the selected Mastra Gateway key uses V1's server-side memory. */
+  async isGatewayMemoryManaged(): Promise<boolean> {
+    if (this.gatewayId !== 'mastra') return false;
+
+    try {
+      const { providerId, modelId } = this.#manager.resolveModelId(this.config.routerId);
+      const auth = await this.resolveAuth(providerId, modelId);
+      return auth.apiKey?.startsWith('msk_') ?? false;
+    } catch {
+      // Model invocation reports authentication errors. Do not suppress local memory on an unknown key.
+      return false;
+    }
+  }
+
   /** @internal */
   _getStreamTransport(): StreamTransport | undefined {
     return this.#lastStreamTransport;

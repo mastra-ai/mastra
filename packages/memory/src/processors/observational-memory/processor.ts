@@ -84,15 +84,24 @@ function getOmObservabilityContext(
   };
 }
 
-/** Key used to store gateway detection result in per-processor state. */
-const GATEWAY_STATE_KEY = '__isGatewayModel';
+/** Key used to store server-side memory detection in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayMemoryManaged';
 
 /** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
 const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
-/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
-function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
-  return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
+/** Check the resolved key without exposing credentials to the memory package. */
+async function isGatewayMemoryManaged(model: ProcessInputStepArgs['model']): Promise<boolean> {
+  if (typeof model !== 'object' || model === null || !('gatewayId' in model) || model.gatewayId !== 'mastra') {
+    return false;
+  }
+
+  if ('isGatewayMemoryManaged' in model && typeof model.isGatewayMemoryManaged === 'function') {
+    return (await model.isGatewayMemoryManaged()) === true;
+  }
+
+  // Older @mastra/core versions cannot expose the selected key. Keep their V1 behavior.
+  return true;
 }
 
 function injectObservationContextMessages({
@@ -215,16 +224,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       return messageList;
     }
 
-    // When the agent is using a Mastra gateway model, the gateway handles OM
-    // (observation, reflection, context injection) server-side. Running it
-    // locally would double-process messages and cause history duplication.
-    // We detect this from the model directly (not requestContext) so that
-    // the flag doesn't leak to child agents in delegation scenarios.
-    if (isMastraGatewayModel(model)) {
+    // V1 Gateway handles OM server-side. V2 Gateway does not, so it must use
+    // the local memory path. Keep this per model rather than in RequestContext
+    // so the decision cannot leak to child agents during delegation.
+    if (await isGatewayMemoryManaged(model)) {
       state[GATEWAY_STATE_KEY] = true;
-      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
+      omDebug(`[OM:processInputStep:GATEWAY] V1 gateway handles OM — skipping local processing`);
       return messageList;
     }
+
+    state[GATEWAY_STATE_KEY] = false;
 
     const { threadId, resourceId } = context;
     const memoryContext = parseMemoryRequestContext(requestContext);
@@ -354,8 +363,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                 );
                 if (!previous || previous.toolInvocation.state !== 'result') return true;
                 const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
-                  | { status?: string }
-                  | undefined;
+                  { status?: string } | undefined;
                 const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
                 return (
                   previousTask?.status === 'running' &&
@@ -513,7 +521,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
 
-    // Gateway handles OM — skip local output processing (see processInputStep).
+    // V1 Gateway handles OM — skip local output processing (see processInputStep).
     if (state[GATEWAY_STATE_KEY]) return messageList;
 
     const observabilityContext = getOmObservabilityContext(args);
