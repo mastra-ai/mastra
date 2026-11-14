@@ -190,6 +190,77 @@ await worker.run()
 
 1. Monitor execution in the Temporal UI under **Workflows** to see step-by-step activity progress and retry history.
 
+### Suspending and resuming a workflow
+
+A step can suspend a workflow while it waits for external input. Define `suspendSchema` and `resumeSchema` on the step, then call `suspend()` from its `execute` function. When the run resumes, the step executes again with `resumeData`.
+
+```ts title="src/mastra/workflows/approval.ts"
+const approvalStep = createStep({
+  id: 'approval-step',
+  inputSchema: z.object({ value: z.number() }),
+  suspendSchema: z.object({
+    reason: z.string(),
+    value: z.number(),
+  }),
+  resumeSchema: z.object({
+    approved: z.boolean(),
+    approver: z.string(),
+  }),
+  outputSchema: z.object({
+    value: z.number(),
+    approved: z.boolean(),
+    approver: z.string(),
+  }),
+  execute: async ({ inputData, resumeData, suspend }) => {
+    if (!resumeData) {
+      await suspend({ reason: 'needs approval', value: inputData.value })
+    }
+
+    return { value: inputData.value, ...resumeData! }
+  },
+})
+```
+
+Start the workflow asynchronously so the caller can continue while the Temporal execution remains suspended. Resume it by targeting the suspended step and providing data that matches its `resumeSchema`:
+
+```ts title="scripts/approve.ts"
+const run = await mastra.getWorkflow('approvalWorkflow').createRun({
+  runId: 'approval-123',
+})
+
+await run.startAsync({ inputData: { value: 5 } })
+
+const result = await run.resume({
+  step: 'approval-step',
+  resumeData: { approved: true, approver: 'reviewer@example.com' },
+})
+```
+
+Use `resumeAsync()` when the caller only needs to submit the resume and doesn't need to wait for the terminal result. A run with one suspended step can be resumed without `step` or `label`; otherwise, provide a target to disambiguate the suspension.
+
+Temporal keeps the underlying workflow execution open while Mastra reports the run as `suspended`. Resume and time-travel requests are coordinated so only one operation can advance or replace a suspended execution.
+
+### Replaying from a step with time travel
+
+Use `timeTravel()` to create a replacement Temporal execution that reuses successful results before a target step and re-executes the target and subsequent steps. The Mastra run ID and Temporal workflow ID stay the same, while Temporal assigns the replacement a new run ID.
+
+```ts title="scripts/replay.ts"
+const run = await mastra.getWorkflow('incrementWorkflow').createRun({
+  runId: 'increment-123',
+})
+
+await run.start({ inputData: { value: 5 } })
+
+const result = await run.timeTravel({
+  step: 'increment',
+  inputData: { value: 10 },
+})
+```
+
+Time travel currently supports top-level sequential step targets. Nested workflow, `foreach`, loop, parallel, and conditional branch targets aren't supported. The source run must be terminal or suspended; an actively running workflow can't be replayed. When replaying a suspended source, Mastra atomically claims the source before replacing it so a competing resume or replay fails without advancing discarded work.
+
+If the replacement reaches another suspension, resume it through the original run object. Request context from the source execution is restored for the replacement, caller-provided values override stored values, and stored authentication tokens aren't reused.
+
 ### Running in production
 
 For production, use [Temporal Cloud](https://temporal.io/cloud) or a self-hosted Temporal cluster. Configure the client and worker connections through environment variables read by `@temporalio/envconfig`:
