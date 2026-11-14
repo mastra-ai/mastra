@@ -42,8 +42,9 @@ function oneStep(id: string, engine: 'default' | 'evented', executions: string[]
 async function countReads(storage: MastraStorage) {
   const store = (await storage.getStore('workflows'))!;
   const snapshotReads: string[] = [];
-  const listings: { workflowName?: string; summary?: boolean; snapshots: unknown[] }[] = [];
+  const listings: { workflowName?: string; status?: string; summary?: boolean; snapshots: unknown[] }[] = [];
   const ownershipReads: string[][] = [];
+  const listingsInFlight = { now: 0, max: 0 };
 
   const load = store.loadWorkflowSnapshot.bind(store);
   vi.spyOn(store, 'loadWorkflowSnapshot').mockImplementation(async args => {
@@ -57,9 +58,16 @@ async function countReads(storage: MastraStorage) {
   });
   const list = store.listWorkflowRuns.bind(store);
   vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
-    const listed = await list(args);
+    listingsInFlight.max = Math.max(listingsInFlight.max, ++listingsInFlight.now);
+    let listed: Awaited<ReturnType<typeof list>>;
+    try {
+      listed = await list(args);
+    } finally {
+      listingsInFlight.now--;
+    }
     listings.push({
       workflowName: args.workflowName,
+      status: args.status,
       summary: args.summary,
       snapshots: listed.runs.map(run => run.snapshot),
     });
@@ -71,7 +79,7 @@ async function countReads(storage: MastraStorage) {
     return owners(args);
   });
 
-  return { snapshotReads, listings, ownershipReads };
+  return { snapshotReads, listings, ownershipReads, listingsInFlight };
 }
 
 /** `getStorage` is the store the test writes and the recovering instance reads, cleared before each case. */
@@ -179,5 +187,74 @@ export function describeRecoveryReadCases({ getStorage }: { getStorage: () => Ma
       // `restart()` loads the snapshot it resumes from.
       expect(reads.snapshotReads).toEqual(['stopped', 'stopped', 'stopped']);
     }, 60_000);
+
+    /**
+     * A recovering instance with `count` default-engine workflows `wf-<i>`, each with one stopped run `run-<i>`,
+     * and the evented workflows `evented` names, each with one stopped run `<name>-run`.
+     */
+    async function manyWorkflows(count: number, executions: string[], evented: string[] = []) {
+      const store = (await getStorage().getStore('workflows'))!;
+      await store.dangerouslyClearAll();
+      const names = Array.from({ length: count }, (_, i) => `wf-${i}`);
+      const mastra = new Mastra({
+        logger: false,
+        storage: getStorage(),
+        workflows: Object.fromEntries([
+          ...names.map(name => [name, oneStep(name, 'default', executions)]),
+          ...evented.map(name => [name, oneStep(name, 'evented', executions)]),
+        ]),
+        recovery: { workflowGraceMs: 0 },
+      });
+      instances.push(mastra);
+      for (const [i, name] of names.entries()) {
+        await persistRun(name, `run-${i}`, { status: i % 2 === 0 ? 'running' : 'waiting' });
+      }
+      for (const name of evented) {
+        await persistRun(name, `${name}-run`);
+      }
+
+      return { mastra, names };
+    }
+
+    // Listing every workflow at once fills the store's connection pool on the leader and delays its other
+    // reads, such as the ownership checks of the durable steps it follows.
+    it('lists the active runs of at most five workflows at a time and still lists and restarts every one', async () => {
+      const executions: string[] = [];
+      const { mastra, names } = await manyWorkflows(12, executions, ['evented-0']);
+      const reads = await countReads(getStorage());
+
+      // The default pubsub doesn't redeliver, so the evented pass lists too, at the same time as the default one.
+      await mastra.restartAllActiveWorkflowRuns();
+
+      const listed = [...names, 'evented-0'];
+      expect(
+        reads.listings
+          .filter(({ workflowName }) => listed.includes(workflowName!))
+          .map(({ workflowName, status }) => `${workflowName}:${status}`)
+          .sort(),
+      ).toEqual(listed.flatMap(name => [`${name}:running`, `${name}:waiting`]).sort());
+      expect(reads.listingsInFlight.max).toBeLessThanOrEqual(5);
+      expect(executions.filter(runId => runId.startsWith('run-')).sort()).toEqual(
+        names.map((_, i) => `run-${i}`).sort(),
+      );
+    });
+
+    it('restarts the runs of the other workflows when listing one workflow fails', async () => {
+      const executions: string[] = [];
+      const { mastra, names } = await manyWorkflows(6, executions);
+      const store = (await getStorage().getStore('workflows'))!;
+      const list = store.listWorkflowRuns.bind(store);
+      vi.spyOn(store, 'listWorkflowRuns').mockImplementation(async (args = {}) => {
+        if (args.workflowName === 'wf-0') {
+          throw new Error('connection reset');
+        }
+
+        return list(args);
+      });
+
+      await mastra.restartAllActiveWorkflowRuns();
+
+      expect([...executions].sort()).toEqual(names.slice(1).map((_, i) => `run-${i + 1}`));
+    });
   });
 }
