@@ -161,27 +161,27 @@ export function createAgentStreamPublisher({
     if (!record || role === 'producer') return;
     await assertOwnership?.();
     const { cache, key, ...owner } = record;
-    if (owner.resourceId === undefined || owner.threadId === undefined) {
-      const current = await readAgentRunRecord(cache, owner.agentId, runId, key);
-      if (current?.publisherId === publisherId) {
-        owner.resourceId ??= current.resourceId;
-        owner.threadId ??= current.threadId;
+    try {
+      if (owner.resourceId === undefined || owner.threadId === undefined) {
+        const current = await readAgentRunRecord(cache, owner.agentId, runId, key);
+        if (current?.publisherId === publisherId) {
+          owner.resourceId ??= current.resourceId;
+          owner.threadId ??= current.threadId;
+        }
+      }
+      await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }, key);
+    } catch (error) {
+      logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
+      if (status === 'running' && !ended && !runningRetryTimer) {
+        runningRetryTimer = setTimeout(() => {
+          runningRetryTimer = undefined;
+          void enqueue(async () => {
+            if (!ended) await writeRecord('running')();
+          });
+        }, 1000);
+        runningRetryTimer.unref?.();
       }
     }
-    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }, key).catch(
-      error => {
-        logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
-        if (status === 'running' && !ended && !runningRetryTimer) {
-          runningRetryTimer = setTimeout(() => {
-            runningRetryTimer = undefined;
-            void enqueue(async () => {
-              if (!ended) await writeRecord('running')();
-            });
-          }, 1000);
-          runningRetryTimer.unref?.();
-        }
-      },
-    );
   };
 
   // The record goes first, so a reader that sees any event can authorize.
