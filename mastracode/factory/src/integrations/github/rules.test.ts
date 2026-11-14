@@ -7362,6 +7362,113 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it.each([
+      ['the outsider', 'execute', 'read'],
+      ['the outsider', 'pr-review', 'read'],
+      ['a maintainer', 'execute', 'write'],
+      ['a maintainer', 'intake', 'write'],
+      ['a maintainer', 'pr-review', 'write'],
+    ])(
+      "tells the card's session nothing and moves nothing when %s comments on, reviews, pushes to or requests review of an outsider's linked pull request, in %s",
+      async (_who, stage, permission) => {
+        const h = await harness('read');
+        const issue = await h.issueCard(42, stage, {
+          work: { sessionId: 'session-work', branch: 'factory/42', threadId: 'thread-work' },
+        });
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        const before = (await h.decisions()).length;
+        vi.mocked(h.github.getRepositoryCollaboratorPermission).mockResolvedValue(permission);
+        const sender = { login: permission === 'write' ? 'maintainer' : 'contributor' };
+        const pullRequest = openedPullRequest(17, 'Fixes #42').payload.pull_request;
+        const base = { installation: { id: 7 }, repository: { id: 10, full_name: 'acme/repo' }, sender };
+
+        for (const delivery of [
+          {
+            event: 'issue_comment',
+            deliveryId: 'comment',
+            payload: {
+              ...base,
+              action: 'created',
+              comment: { id: 1, body: 'Please fix', html_url: `${pullRequest.html_url}#c1`, user: sender },
+              issue: { ...pullRequest, pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/17' } },
+            },
+          },
+          {
+            event: 'pull_request_review',
+            deliveryId: 'review',
+            payload: {
+              ...base,
+              action: 'submitted',
+              review: { id: 2, state: 'changes_requested', body: 'Not yet', html_url: `${pullRequest.html_url}#r2`, user: sender },
+              pull_request: pullRequest,
+            },
+          },
+          {
+            event: 'pull_request',
+            deliveryId: 'push',
+            payload: { ...base, action: 'synchronize', pull_request: { ...pullRequest, head: { ref: 'feature-17', sha: 'b'.repeat(40) } } },
+          },
+          {
+            event: 'pull_request',
+            deliveryId: 'review-request',
+            payload: { ...base, action: 'review_requested', requested_reviewer: { login: 'factory-app[bot]' }, pull_request: pullRequest },
+          },
+        ]) {
+          await h.service.ingest(delivery as never);
+          await h.dispatch();
+        }
+
+        const after = (await h.decisions()).slice(before);
+        expect(after.filter(entry => entry.workItemId === issue.id).map(entry => entry.decision.type)).toEqual([]);
+        const [card] = await h.cards();
+        expect(card).toMatchObject({ id: issue.id, stages: [stage] });
+        expect(card!.metadata.pullRequestHeadSha).toBeUndefined();
+      },
+    );
+
+    it("reviews an outsider's linked pull request once a person makes it the card's working one", async () => {
+      const h = await harness('read');
+      const issue = await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.workItems.update({
+        orgId: 'org-1',
+        id: issue.id,
+        userId: 'user-1',
+        patch: { metadata: { openPullRequestNumber: 17 } },
+      });
+      vi.mocked(h.github.getRepositoryCollaboratorPermission).mockResolvedValue('write');
+
+      await h.ingest({
+        event: 'pull_request',
+        deliveryId: 'review-request',
+        payload: {
+          action: 'review_requested',
+          installation: { id: 7 },
+          repository: { id: 10, full_name: 'acme/repo' },
+          sender: { login: 'maintainer' },
+          requested_reviewer: { login: 'factory-app[bot]' },
+          pull_request: openedPullRequest(17, 'Fixes #42').payload.pull_request,
+        },
+      } as never);
+
+      const [card] = await h.cards();
+      expect(card).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+      expect(await reviewsStarted(h, issue.id)).toEqual([
+        expect.objectContaining({ decision: expect.objectContaining({ role: 'review' }) }),
+      ]);
+    });
+
+    it("still finishes the issue's card when a maintainer merges an outsider's linked pull request", async () => {
+      const h = await harness('read');
+      const issue = await h.issueCard(42, 'intake');
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+      vi.mocked(h.github.getRepositoryCollaboratorPermission).mockResolvedValue('write');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-merge-17', 'closed', true));
+
+      expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['done'] });
+    });
+
     it('gives a pull request that names no issue on the board its own card in PR review', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'intake');

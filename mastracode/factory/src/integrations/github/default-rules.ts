@@ -6,6 +6,7 @@ import {
   pullRequestSources,
   reviewedPullRequest,
   reviewsPullRequest,
+  trustedPullRequestSource,
 } from '../../boards/index.js';
 import { hasRecordedVerdict } from '../../boards/semantics.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
@@ -80,6 +81,19 @@ function isEventPullRequest(context: FactoryGithubRuleContext, source: WorkItemS
     context.pullRequest !== undefined &&
     isRepositoryPullRequest(source, context.repository.id, context.repository.fullName, context.pullRequest.number)
   );
+}
+
+/**
+ * Whether the event's pull request is an outside author's, linked to the card, that no person
+ * has made the card's working pull request: nothing on the card may run its code.
+ */
+function unpickedOutsiderPullRequest(context: FactoryGithubRuleContext): boolean {
+  const { item } = context;
+  if (!item || !attachedPullRequest(context) || context.pullRequest?.factoryAuthored) return false;
+  const source = pullRequestSources(item).find(candidate => isEventPullRequest(context, candidate))!;
+  if (trustedPullRequestSource(item, source)) return false;
+  const working = workingPullRequest(item);
+  return working === undefined || !isEventPullRequest(context, working);
 }
 
 /** Whether the card's PR review covers the event's pull request: its own, or the attached one it reviews. */
@@ -456,6 +470,9 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
   // out and executes PR code, the same bar pullRequestOpened applies to auto-review.
   if (!trustedGithubActor(context)) return;
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
+  // A maintainer vouches for an outsider's pull request on an issue's card by making it the card's
+  // working pull request ("Use this pull request"); a review request alone does not.
+  if (unpickedOutsiderPullRequest(context)) return;
   if (!context.item) {
     // On this path the actor is the *requester*, so the materialized
     // `authorTrusted` stamp records their trust (always true past the gate

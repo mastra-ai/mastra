@@ -1939,6 +1939,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
+    it("starts nothing on the issue's card when an outsider pushes to their linked merge request in PR review", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('pr-review');
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
+      const before = (await h.decisions()).length;
+
+      const pushed = mergeRequest(17, 'Closes #42', { author: 'external-author', action: 'update', deliveryId: 'd-push-17' });
+      await h.ingest({
+        ...pushed,
+        payload: { ...pushed.payload, object_attributes: { ...pushed.payload.object_attributes, oldrev: 'a'.repeat(40) } },
+      });
+
+      expect((await h.decisions()).slice(before).filter(entry => entry.workItemId === issue.id)).toEqual([]);
+      expect((await h.cards())[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+    });
+
     it('gives a merge request that closes no issue on the board its own card', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');
