@@ -92,19 +92,32 @@ describe('VoiceInputSettings', () => {
     delete window.MASTRA_PLATFORM_PROJECT_ID;
   });
 
-  it('presents connected Mastra Gateway as the preferred speech path', async () => {
+  it('offers Gateway models in the existing voice model setting', async () => {
     window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
-    stubSettings(settings({ effective: null, keys: keys([]) }));
+    const { saved } = stubSettings(settings({ effective: null, keys: keys([]) }), body =>
+      settings({
+        effective: null,
+        keys: keys([]),
+        selected: body.provider ? { provider: body.provider, model: body.model } : null,
+      }),
+    );
     server.use(
       http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
-        HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
+        HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }, { id: 'mistral/voxtral' }] }),
       ),
     );
     renderVoiceSettings();
-
-    expect(await screen.findByText('Preferred speech-to-text connection for this deployment')).toBeInTheDocument();
-    expect(screen.getByText('Connected. Choose a Gateway model beside the composer microphone.')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Gateway by default in the composer')).toBeInTheDocument();
+    const user = userEvent.setup();
+    const picker = await screen.findByRole('combobox', { name: 'Your voice model' });
+    expect(
+      screen.queryByText('Connected. Choose a Gateway model beside the composer microphone.'),
+    ).not.toBeInTheDocument();
+    await user.click(picker);
+    await user.click(await screen.findByRole('option', { name: 'Mastra Gateway: mistral/voxtral' }));
+    await waitFor(() =>
+      expect(saved).toEqual([{ factoryId: FACTORY_ID, provider: 'mastra-gateway', model: 'mistral/voxtral' }]),
+    );
+    expect(picker).toHaveTextContent('Mastra Gateway: mistral/voxtral');
   });
 
   it('lets an admin of a factory-scoped Factory pick the Factory model from models with an organization key', async () => {

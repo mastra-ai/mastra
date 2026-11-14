@@ -32,6 +32,7 @@ import {
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
+import { GATEWAY_VOICE_PROVIDER, useVoiceSettings } from '../../../../hooks/use-voice-settings';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { useChatConnection } from '../context/useChatConnection';
@@ -47,7 +48,6 @@ import { commandRequiresReadySession, isSlashCommand } from '../services/command
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { mergeDictation } from '../services/dictation';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
-import { CONFIGURED_VOICE_SOURCE, GatewayVoiceSource } from './GatewayVoiceSource';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
 import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { ComposerVoiceButton } from './ComposerVoiceButton';
@@ -89,12 +89,13 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
   const { data: gatewayAudio } = useGatewayAudioModels(baseUrl, Boolean(window.MASTRA_PLATFORM_PROJECT_ID));
-  const [voiceSource, setVoiceSource] = useState<string>();
+  const { data: voiceSettings } = useVoiceSettings(factoryId ?? '');
   const gatewayModels = gatewayAudio?.transcription ?? [];
+  const selectedVoice = voiceSettings?.selected;
   const gatewayModel =
-    voiceSource === CONFIGURED_VOICE_SOURCE
+    !voiceSettings || (selectedVoice && selectedVoice.provider !== GATEWAY_VOICE_PROVIDER)
       ? undefined
-      : (gatewayModels.find(model => model.id === voiceSource)?.id ?? gatewayModels[0]?.id);
+      : (gatewayModels.find(model => model.id === selectedVoice?.model)?.id ?? gatewayModels[0]?.id);
   const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
@@ -354,12 +355,6 @@ export function Composer({ variant = 'inline', statusLead }: ComposerProps) {
               </ComposerActionsStart>
               <ComposerActionsEnd role="group" aria-label="Composer actions">
                 <ModelPicker />
-                <GatewayVoiceSource
-                  models={gatewayModels}
-                  value={gatewayModel ?? CONFIGURED_VOICE_SOURCE}
-                  onChange={setVoiceSource}
-                  disabled={dictating || textareaDisabled}
-                />
                 {factoryId && (
                   <ComposerVoiceButton
                     factoryId={factoryId}

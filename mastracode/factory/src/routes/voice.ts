@@ -9,7 +9,7 @@ import { z } from 'zod';
 
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
+import type { VoiceSettingsRecord, VoiceSettingsStorage } from '../storage/domains/voice-settings/base.js';
 import { voiceRateLimiter } from '../voice/rate-limit.js';
 import { keyCannotTranscribe, mintRealtimeSession } from '../voice/realtime.js';
 import type { RealtimeSession } from '../voice/realtime.js';
@@ -29,11 +29,19 @@ import { loose, Route } from './route.js';
 import type { RouteDependencies } from './route.js';
 
 const factoryIdSchema = z.string().min(1).optional();
+const GATEWAY_STT_PROVIDER = 'mastra-gateway';
 
 const settingsBodySchema = z.union([
   z
     .object({ factoryId: factoryIdSchema, provider: z.null() })
     .transform(({ factoryId }) => ({ factoryId, entry: null })),
+  z
+    .object({
+      factoryId: factoryIdSchema,
+      provider: z.literal(GATEWAY_STT_PROVIDER),
+      model: z.string().min(1).max(256),
+    })
+    .transform(({ factoryId, provider, model }) => ({ factoryId, entry: { provider, model } })),
   z
     .object({ factoryId: factoryIdSchema, provider: z.string().min(1), model: z.string().min(1) })
     .transform(({ factoryId, provider, model }, ctx) => {
@@ -83,14 +91,16 @@ export type LiveSessionResponse = { mode: 'batch' } | ({ mode: 'live' } & Realti
 function settingsResponse(
   request: VoiceRequest,
   policy: VoicePolicy,
-  saved: STTModel | undefined,
+  stored: VoiceSettingsRecord | null,
   canEdit: boolean,
   authStorage: AuthStorage | undefined,
 ): VoiceSettingsResponse {
+  const saved = stored ? findSTTModel(stored.provider, stored.model) : undefined;
   const effective = chooseSTTModel(policy, saved);
   return {
     scope: policy.scope,
-    selected: choice(saved),
+    selected:
+      stored?.provider === GATEWAY_STT_PROVIDER ? { provider: stored.provider, model: stored.model } : choice(saved),
     canEdit,
     effective: 'error' in effective ? null : choice(effective.entry),
     models: STT_MODELS.map(m => ({ provider: m.provider, model: m.model, label: m.label })),
@@ -187,7 +197,7 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           const storage = await this.#voiceSettings(c);
           if ('response' in storage) return storage.response;
           const policy = voicePolicy(request.caller, request.factory);
-          const saved = await savedSTTModel(storage, policy.settingsKey);
+          const saved = await storage.get(policy.settingsKey);
           return c.json(
             settingsResponse(request, policy, saved, await this.#canEdit(c, request, policy), this.deps.authStorage),
           );
@@ -214,7 +224,9 @@ export class VoiceRoutes extends Route<VoiceRoutesDeps> {
           if ('response' in storage) return storage.response;
           if (entry) await storage.set({ ...policy.settingsKey, provider: entry.provider, model: entry.model });
           else await storage.clear(policy.settingsKey);
-          return c.json(settingsResponse(request, policy, entry ?? undefined, canEdit, this.deps.authStorage));
+          return c.json(
+            settingsResponse(request, policy, await storage.get(policy.settingsKey), canEdit, this.deps.authStorage),
+          );
         },
       }),
       registerApiRoute('/web/voice/transcribe', {

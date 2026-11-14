@@ -32,10 +32,13 @@ export function answerLiveSession(reply: () => Response) {
   server.use(http.post(`${TEST_BASE_URL}/web/voice/live-session`, reply));
 }
 
-export function stubVoiceSettings(effective: VoiceSettingsResponse['effective']) {
+export function stubVoiceSettings(
+  effective: VoiceSettingsResponse['effective'],
+  selected: VoiceSettingsResponse['selected'] = null,
+) {
   const response: VoiceSettingsResponse = {
     scope: 'user',
-    selected: null,
+    selected,
     canEdit: true,
     effective,
     models: [],

@@ -77,7 +77,7 @@ describe('Composer voice dictation', () => {
 
   it('uses the preferred Gateway model through the existing microphone when access is enabled', async () => {
     window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
-    stubVoiceSettings(null);
+    stubVoiceSettings(null, { provider: 'mastra-gateway', model: 'mistral/voxtral' });
     const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
     const liveSession = vi.fn(() => HttpResponse.json(recordedClipMode));
     answerLiveSession(liveSession);
@@ -94,11 +94,7 @@ describe('Composer voice dictation', () => {
     );
     const user = userEvent.setup();
     const message = await composerReady();
-    const settings = await screen.findByRole('button', { name: 'Voice input settings' });
-    expect(screen.queryByRole('radio', { name: 'Mastra Gateway: openai/whisper' })).not.toBeInTheDocument();
-    await user.click(settings);
-    expect(screen.getByRole('radio', { name: 'Mastra Gateway: openai/whisper' })).toBeChecked();
-    await user.click(screen.getByRole('radio', { name: 'Mastra Gateway: mistral/voxtral' }));
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
 
@@ -111,6 +107,7 @@ describe('Composer voice dictation', () => {
 
   it('keeps the configured voice provider available when Gateway is enabled', async () => {
     window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    stubVoiceSettings({ provider: 'openai', model: 'whisper-1' }, { provider: 'openai', model: 'whisper-1' });
     server.use(
       http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
         HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
@@ -119,8 +116,7 @@ describe('Composer voice dictation', () => {
     const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'Provider dictation' }));
     const user = userEvent.setup();
     const message = await composerReady();
-    await user.click(await screen.findByRole('button', { name: 'Voice input settings' }));
-    await user.click(screen.getByRole('radio', { name: 'Configured provider' }));
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Dictate' }));
     await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));

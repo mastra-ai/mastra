@@ -212,6 +212,19 @@ function putSettings(app: Hono, body: Record<string, unknown>) {
 }
 
 describe('/web/voice/settings', () => {
+  it('remembers a Gateway transcription model in the existing voice setting', async () => {
+    const app = await mount({ authStorage: localAuthStorage({}) });
+
+    const updated = await putSettings(app, { provider: 'mastra-gateway', model: 'mistral/voxtral' });
+    const readBack = await app.request('/web/voice/settings');
+
+    expect(updated.status).toBe(200);
+    expect(readBack.status).toBe(200);
+    expect(await readBack.json()).toMatchObject({
+      selected: { provider: 'mastra-gateway', model: 'mistral/voxtral' },
+    });
+  });
+
   it('lists every registry model, reports which providers have a key, and starts on auto', async () => {
     const seed = await createFactoryStorageForTests();
     const app = await mount({
