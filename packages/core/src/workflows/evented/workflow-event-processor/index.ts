@@ -2754,8 +2754,12 @@ export class WorkflowEventProcessor extends EventProcessor {
         nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
         // Time travel reuses the recorded child run, or creates one if absent.
+        // A foreach's `nestedRunId` names only its last-started iteration, so iterations use their own id.
         nestedDispatch = 'time-travel';
-        nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+        nestedRunId =
+          (step.type === 'foreach'
+            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
+            : stepResults[leafId]?.metadata?.nestedRunId) ?? globalThis.crypto.randomUUID();
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
         // Restart reuses the iteration's or step's child run, if recorded.
         nestedDispatch = 'restart';
