@@ -713,6 +713,16 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
 
       const stored = await workflow.getWorkflowRunById(runId);
       expect(stored?.status).toBe('paused');
+
+      // The bail ended the nested run; only the parent pauses.
+      const workflowsStore = await ctx.getStorage?.()?.getStore('workflows');
+      if (workflowsStore) {
+        const { runs } = await workflowsStore.listWorkflowRuns({ workflowName: 'perstep-nested-bail-inner' });
+        const childStatuses = runs.map(
+          run => (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot)?.status,
+        );
+        expect(childStatuses).toEqual(['success']);
+      }
     });
 
     it.skipIf(skipTests.perStepCancel)('should end canceled when a step aborts the run', async () => {

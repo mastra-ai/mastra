@@ -6,8 +6,8 @@ import type { SingleStepEntry } from '../../types';
 import { isSingleStepEntry } from '../../utils';
 
 /**
- * Whether a `workflow.end` paused the run. `workflowStatus` is the run status `endWorkflow`
- * stored; an event published by a process that predates it falls back to that process's own rule.
+ * Whether a `workflow.end` paused the run. `workflowStatus` is the status `endWorkflow` ended
+ * the run with; an event published by a process that predates it falls back to that process's own rule.
  */
 export function endedPaused(
   endData: { workflowStatus?: string; perStep?: boolean; prevResult?: { status?: string } },
