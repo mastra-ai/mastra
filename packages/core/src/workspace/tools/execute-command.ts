@@ -191,8 +191,8 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     // Lets hosts route exit notices to the run and thread that started the process.
     // Empty ids count as missing: the tool builder passes `agentId: ''` when
-    // there is no agent id. Workflow tool calls carry the thread and resource
-    // at the top level instead of under `agent`.
+    // there is no agent id. Direct `execute()` calls pass the thread and
+    // resource at the top level instead of under `agent`.
     const owner = {
       agentId: context?.agent?.agentId || undefined,
       threadId: context?.agent?.threadId || context?.threadId || undefined,
