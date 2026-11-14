@@ -27869,9 +27869,9 @@
     },
     "server-adapters/elysia/src/__tests__/stream-disconnect.test.ts": {
       "tier": "in",
-      "since": "2026-10-31",
-      "last_failure": "2026-10-31",
-      "reason": "pr-fail"
+      "since": "2026-11-14",
+      "last_failure": "2026-11-14",
+      "reason": "versioning-fail"
     },
     "server-adapters/elysia/src/__tests__/validation-error-hook.test.ts": {
       "tier": "out",
