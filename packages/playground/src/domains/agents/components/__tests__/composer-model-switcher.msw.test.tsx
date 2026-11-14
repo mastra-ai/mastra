@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { PlaygroundModelProvider } from '../../context/playground-model-context';
 import { ComposerModelSwitcher } from '../composer-model-switcher';
-import { gatewayProviders, openAiProviders } from './fixtures/composer-model-switcher';
+import { gatewayProviders, openAiProviders, prefixedGatewayProviders } from './fixtures/composer-model-switcher';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -112,6 +112,21 @@ describe('ComposerModelSwitcher', () => {
       expect(await screen.findByRole('button', { name: /Model:.*GPT-4o Mini/ })).not.toBeNull();
     });
   });
+  describe('when the agent runs on a model routed through a prefixed custom gateway', () => {
+    // The agent endpoint reports `private/ollama/gpt-oss:20b` as provider `private` and model
+    // `ollama/gpt-oss:20b`, while the providers list has provider `private/ollama`.
+    it("shows the agent's model and marks it as the default", async () => {
+      mockProviderRequests(Promise.resolve(), prefixedGatewayProviders);
+      renderSwitcher({ provider: 'private', model: 'ollama/gpt-oss:20b' });
+
+      fireEvent.click(await screen.findByRole('button', { name: /Model:.*gpt-oss:20b/i }));
+      const list = await screen.findByRole('listbox');
+
+      const option = within(list).getByRole('option', { name: /gpt-oss:20b/i });
+      expect(within(option).getByText('Default')).not.toBeNull();
+    });
+  });
+
   describe('when the agent runs on a gateway provider stored without its gateway prefix', () => {
     const openPicker = async () => {
       mockProviderRequests(Promise.resolve(), gatewayProviders);

@@ -12,7 +12,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useModelReset } from '../../context/model-reset-context';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { LLMProviders, LLMModels, findProviderById } from '@/domains/llm';
+import { LLMProviders, LLMModels, findProviderById, resolveProviderModel } from '@/domains/llm';
 
 export interface AgentMetadataModelSwitcherProps {
   defaultProvider: string;
@@ -51,14 +51,17 @@ export const AgentMetadataModelSwitcher = ({
     setSelectedProvider(defaultProvider || '');
   }, [defaultModel, defaultProvider]);
 
-  const currentModelProvider = cleanProviderId(selectedProvider);
-
-  // Resolve the full provider ID (handles gateway prefix, e.g., 'custom' -> 'acme/custom')
-  const resolvedProvider = findProviderById(providers, currentModelProvider);
-  const fullProviderId = resolvedProvider?.id || currentModelProvider;
+  // Match the providers list ids, e.g. 'custom' -> 'acme/custom', or 'acme' + 'custom/gpt-4o' -> 'acme/custom' + 'gpt-4o'
+  const { provider: currentModelProvider, model: currentModel } = resolveProviderModel(
+    providers,
+    selectedProvider,
+    selectedModel,
+  );
+  const fullProviderId = currentModelProvider;
 
   // Auto-save when model changes
   const handleModelSelect = async (modelId: string) => {
+    setSelectedProvider(fullProviderId);
     setSelectedModel(modelId);
 
     if (modelId && fullProviderId) {
@@ -82,13 +85,12 @@ export const AgentMetadataModelSwitcher = ({
   // Handle provider selection
   const handleProviderSelect = (providerId: string) => {
     const cleanedId = cleanProviderId(providerId);
-    setSelectedProvider(cleanedId);
+    // Keep the current model when the same provider is picked again
+    if (cleanedId === currentModelProvider) return;
 
-    // Only clear model selection and open model combobox when switching to a different provider
-    if (cleanedId !== currentModelProvider) {
-      setSelectedModel('');
-      setModelOpen(true);
-    }
+    setSelectedProvider(cleanedId);
+    setSelectedModel('');
+    setModelOpen(true);
   };
 
   // Get the model reset context
@@ -102,22 +104,22 @@ export const AgentMetadataModelSwitcher = ({
         return;
       }
 
+      const original = resolveProviderModel(providers, originalProvider, originalModel);
+
       // Check if provider changed but no model selected
-      const providerChanged = currentModelProvider && currentModelProvider !== originalProvider;
+      const providerChanged = currentModelProvider && currentModelProvider !== original.provider;
       const modelEmpty = !selectedModel || selectedModel === '';
 
       if (providerChanged && modelEmpty) {
         // Reset to original values
-        setSelectedProvider(cleanProviderId(originalProvider));
+        setSelectedProvider(originalProvider);
         setSelectedModel(originalModel);
 
-        // Update back to original configuration - resolve full provider ID
-        const resolvedOriginalProvider = findProviderById(providers, originalProvider);
-        const fullOriginalProviderId = resolvedOriginalProvider?.id || originalProvider;
-        if (fullOriginalProviderId && originalModel) {
+        // Update back to original configuration
+        if (original.provider && original.model) {
           updateModel({
-            provider: fullOriginalProviderId,
-            modelId: originalModel,
+            provider: original.provider,
+            modelId: original.model,
           }).catch(error => {
             console.error('Failed to reset model:', error);
           });
@@ -201,10 +203,10 @@ export const AgentMetadataModelSwitcher = ({
   }
 
   const stale =
-    Boolean(currentModelProvider && selectedModel) &&
+    Boolean(currentModelProvider && currentModel) &&
     policy.active &&
     policy.allowed !== undefined &&
-    !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === selectedModel);
+    !allowedModels.some(m => cleanProviderId(m.provider) === currentModelProvider && m.model === currentModel);
 
   return (
     <div className="@container">
@@ -221,7 +223,7 @@ export const AgentMetadataModelSwitcher = ({
         <div className="w-full @xs:w-3/5">
           <LLMModels
             llmId={currentModelProvider}
-            value={selectedModel}
+            value={currentModel}
             onValueChange={handleModelSelect}
             open={modelOpen}
             onOpenChange={setModelOpen}

@@ -23,3 +23,15 @@ export const gatewayProviders = {
     },
   ],
 } satisfies ListAgentsModelProvidersResponse;
+
+export const prefixedGatewayProviders = {
+  providers: [
+    {
+      id: 'private/ollama',
+      name: 'Ollama',
+      envVar: 'PRIVATE_API_KEY',
+      connected: true,
+      models: ['gpt-oss:20b', 'llama3:8b'],
+    },
+  ],
+} satisfies ListAgentsModelProvidersResponse;
