@@ -226,5 +226,15 @@ export const reportTaskStream: TaskStreamEvent[] = [
   },
 ];
 
+/** The same stream once the report task finished: the replay sends its end. */
+export const reportTaskCompletedStream: Extract<AgentChunkType, { type: 'background-task-completed' }>[] = [
+  {
+    type: 'background-task-completed',
+    runId: 'run-1',
+    from: ChunkFrom.AGENT,
+    payload: { ...taskIds, result: 'Q3 report ready', completedAt: new Date('2026-10-27T12:00:42.000Z') },
+  },
+];
+
 export const eventStream = (events: readonly unknown[]) =>
   events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('');
