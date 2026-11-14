@@ -10,7 +10,7 @@ const createClientMock = vi.hoisted(() =>
   })),
 );
 
-vi.mock('@libsql/client', () => ({
+vi.mock('../shared/create-client', () => ({
   createClient: createClientMock,
 }));
 
