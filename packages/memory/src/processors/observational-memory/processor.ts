@@ -84,14 +84,30 @@ function getOmObservabilityContext(
   };
 }
 
-/** Key used to store gateway detection result in per-processor state. */
-const GATEWAY_STATE_KEY = '__isGatewayModel';
+/** Key used to store whether the gateway manages memory for the current step in per-processor state. */
+const GATEWAY_STATE_KEY = '__isGatewayMemoryManaged';
 
 /** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
 const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
 
-/** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
-function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
+/**
+ * Whether the Mastra gateway serves Observational Memory for this step's model.
+ *
+ * Gateway models only get memory from the gateway when the credential is a Gateway project
+ * key. Organization keys (`msk-gateway-…`, `mskv2_…`) are served by a gateway without the
+ * memory API, so memory has to stay local. Newer `@mastra/core` exposes that decision on the
+ * router model; when it is absent (older core, or a plain model) fall back to the historical
+ * `mastra/` prefix check so gateway-side memory is never double-processed.
+ */
+async function isGatewayMemoryManaged(model: ProcessInputStepArgs['model']): Promise<boolean> {
+  if (typeof model === 'object' && model !== null && typeof (model as any).isGatewayMemoryManaged === 'function') {
+    try {
+      // A credential we can't resolve is not proof the gateway serves memory — stay local.
+      return Boolean(await (model as any).isGatewayMemoryManaged());
+    } catch {
+      return false;
+    }
+  }
   return typeof model === 'object' && model !== null && 'gatewayId' in model && (model as any).gatewayId === 'mastra';
 }
 
@@ -188,6 +204,24 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     this.temporalMarkers = options?.temporalMarkers ?? false;
   }
 
+  /**
+   * End any locally started turn without leaving it dangling.
+   *
+   * A gateway-managed step short-circuits both processor phases, so a turn started on an
+   * earlier step of the same run — a delegation run whose model changed, or a run whose key
+   * changed — would otherwise never be ended and its messages never persisted. `end()` with
+   * no arguments flushes what the turn already tracked; finalization passes the accepted
+   * terminal list for the same reason the regular output path does.
+   */
+  private async endActiveTurn(state: Record<string, unknown>, messageList?: MessageList): Promise<void> {
+    const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+    if (activeTurn && !activeTurn.ended) {
+      await (messageList ? activeTurn.end(messageList) : activeTurn.end()).catch(() => {});
+    }
+    this.turn = undefined;
+    state.__omTurn = undefined;
+  }
+
   // ─── Processor lifecycle hooks ──────────────────────────────────────────
 
   async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | MastraDBMessage[]> {
@@ -215,14 +249,20 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       return messageList;
     }
 
-    // When the agent is using a Mastra gateway model, the gateway handles OM
-    // (observation, reflection, context injection) server-side. Running it
-    // locally would double-process messages and cause history duplication.
-    // We detect this from the model directly (not requestContext) so that
-    // the flag doesn't leak to child agents in delegation scenarios.
-    if (isMastraGatewayModel(model)) {
-      state[GATEWAY_STATE_KEY] = true;
-      omDebug(`[OM:processInputStep:GATEWAY] gateway handles OM — skipping local processing`);
+    // When the gateway serves Observational Memory for this model it handles OM
+    // (observation, reflection, context injection) server-side, so running it locally would
+    // double-process messages and cause history duplication. We ask the model itself (not
+    // requestContext) so the answer stays per-step: a delegation run can move from a
+    // gateway-managed model to a directly-configured one, and the flag must not stay sticky.
+    // Gateway organization keys resolve to `false` here — the gateway has no memory API for
+    // them, so memory stays local.
+    const gatewayMemoryManaged = await isGatewayMemoryManaged(model);
+    state[GATEWAY_STATE_KEY] = gatewayMemoryManaged;
+    if (gatewayMemoryManaged) {
+      // A turn started on an earlier step of this run would otherwise never end, because
+      // processOutputResult short-circuits on the same flag — flush it before skipping.
+      await this.endActiveTurn(state);
+      omDebug(`[OM:processInputStep:GATEWAY] gateway manages memory — skipping local processing`);
       return messageList;
     }
 
@@ -513,8 +553,15 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const context = this.engine.getThreadContext(requestContext, messageList);
     if (!context) return messageList;
 
-    // Gateway handles OM — skip local output processing (see processInputStep).
-    if (state[GATEWAY_STATE_KEY]) return messageList;
+    // Gateway manages memory for the current step — skip local output processing (see
+    // processInputStep). Never leave an open local turn behind on the way out: a turn started
+    // on an earlier, locally-managed step of the same run would otherwise never be ended and
+    // its messages would never persist. Persist from the accepted terminal list, exactly like
+    // the regular finalization path below.
+    if (state[GATEWAY_STATE_KEY]) {
+      await this.endActiveTurn(state, messageList.cloneForPersistence());
+      return messageList;
+    }
 
     const observabilityContext = getOmObservabilityContext(args);
     state.__omObservabilityContext = observabilityContext;
@@ -567,6 +614,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const { error, messageList, requestContext, stepNumber, state } = args;
 
     if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
+    // Gateway-served memory means the gateway owns the prompt and its compaction.
     if (state[GATEWAY_STATE_KEY]) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
