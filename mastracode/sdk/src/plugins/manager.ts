@@ -121,7 +121,14 @@ export class PluginManager {
       console.warn(event.message);
       return;
     }
-    for (const listener of this.pluginErrorListeners) listener(event);
+    // A listener that throws must not stop the others, nor the reload or lane cleanup reporting through here.
+    for (const listener of this.pluginErrorListeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        console.warn(`Plugin error listener failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
   }
 
   /**

@@ -32,6 +32,17 @@
     },
     {
       "match": {
+        "hasToolResult": true,
+        "toolCallId": "call_reload_failure_after",
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat"
+      },
+      "response": {
+        "content": "Reload failure plugin follow-up complete."
+      }
+    },
+    {
+      "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat"
       },
@@ -45,17 +56,6 @@
             }
           }
         ]
-      }
-    },
-    {
-      "match": {
-        "hasToolResult": true,
-        "toolCallId": "call_reload_failure_after",
-        "model": "gpt-5.4-mini",
-        "endpoint": "chat"
-      },
-      "response": {
-        "content": "Reload failure plugin follow-up complete."
       }
     }
   ]
