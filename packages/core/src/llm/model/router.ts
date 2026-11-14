@@ -19,6 +19,7 @@ import type {
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
 import { GatewayManager } from './gateways/index.js';
+import { gatewayServesObservationalMemory } from './gateways/mastra.js';
 import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
 
 import { createOpenAIWebSocketFetch } from './openai-websocket-fetch.js';
@@ -299,6 +300,27 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
       return model.provider;
     } catch {
       return undefined;
+    }
+  }
+
+  /**
+   * Whether the Mastra gateway serves Observational Memory for this model's resolved credential.
+   *
+   * Gateway models do not all get memory from the gateway: only a Gateway project key routes
+   * through the memory-aware gateway, while organization keys (`msk-gateway-…`, `mskv2_…`) are
+   * served by a gateway without the memory API. Callers that would otherwise skip local memory
+   * processing for gateway models (the Observational Memory processor) use this to tell the two
+   * apart. Returns `false` for non-gateway models and whenever the credential can't be resolved,
+   * so memory is only treated as gateway-owned when the resolved key says so.
+   */
+  async isGatewayMemoryManaged(): Promise<boolean> {
+    if (this.gatewayId !== 'mastra') return false;
+    try {
+      const resolved = this.#manager.resolveModelId(this.config.routerId);
+      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+      return gatewayServesObservationalMemory(auth.apiKey);
+    } catch {
+      return false;
     }
   }
 
