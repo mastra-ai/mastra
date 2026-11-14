@@ -49,10 +49,10 @@ import {
   getExecutionClaim,
   resolveLeaseProvider,
 } from '../execution-fence';
+import { getExecutionStreamPublisher } from '../execution-stream-publisher';
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
-import { getDurableStreamPublisher } from '../stream-publisher';
 import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
@@ -551,7 +551,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const stream = collect(result.fullStream);
         const fence = ExecutionFence.getLocalActive(runId)!;
         const foreign = foreignOwnership(backend, storage, pubsub);
-        const originalPublisher = getDurableStreamPublisher({
+        const originalPublisher = getExecutionStreamPublisher({
           runId,
           agentId: agent.id,
           mastra,
@@ -570,7 +570,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
               backend === 'storage'
                 ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
                 : undefined;
-            const replacement = getDurableStreamPublisher({
+            const replacement = getExecutionStreamPublisher({
               runId,
               agentId: agent.id,
               mastra,
@@ -644,7 +644,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const result = await agent.stream('Answer me.', { runId });
       const stream = collect(result.fullStream);
       const fence = ExecutionFence.getLocalActive(runId)!;
-      const publisher = getDurableStreamPublisher({
+      const publisher = getExecutionStreamPublisher({
         runId,
         agentId: agent.id,
         mastra,

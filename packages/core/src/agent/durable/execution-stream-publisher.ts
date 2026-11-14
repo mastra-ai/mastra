@@ -19,10 +19,10 @@ import type { DurableExecutionClaim } from './execution-fence';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
-const publishersKey = createRunScopeKey<Map<string, AgentStreamPublisher>>('durable-stream-publishers');
+const publishersKey = createRunScopeKey<Map<string, AgentStreamPublisher>>('execution-stream-publishers');
 
-/** Attach local producers to the current execution, without giving them lifecycle ownership. */
-export function getDurableStreamPublisher({
+/** Attach the shared publisher to an execution with explicit producer or lifecycle authority. */
+export function getExecutionStreamPublisher({
   runId,
   agentId,
   mastra,
@@ -118,7 +118,7 @@ export function getDurableStreamPublisher({
 }
 
 /** Preserve durable event shaping and the workflow's existing publish-after-persist boundary. */
-export function withDurableStreamPublisher(
+export function withExecutionStreamPublisher(
   pubsub: PubSub,
   options: { runId: string; agentId: string; mastra?: Mastra; claim?: DurableExecutionClaim },
 ): PubSub {
@@ -131,7 +131,7 @@ export function withDurableStreamPublisher(
           publishOptions?: { localOnly?: boolean },
         ) => {
           if (topic === AGENT_STREAM_TOPIC(options.runId)) {
-            const publisher = getDurableStreamPublisher({ ...options, role: 'producer' });
+            const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' });
             if (publisher) {
               try {
                 return await publisher.publishEvent(event);

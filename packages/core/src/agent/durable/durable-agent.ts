@@ -100,6 +100,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
+import { getExecutionStreamPublisher, withExecutionStreamPublisher } from './execution-stream-publisher';
 import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
@@ -128,7 +129,6 @@ import type {
   DurableAgentStreamOptions as DurableStreamAdapterOptions,
   DurableAgentStreamResult as DurableStreamAdapterResult,
 } from './stream-adapter';
-import { getDurableStreamPublisher, withDurableStreamPublisher } from './stream-publisher';
 import { toLiveStructuredOutputSchema } from './structured-output-null-transform';
 import type {
   AgentAbortEventData,
@@ -1030,7 +1030,7 @@ export class DurableAgent<
    */
   async #attachStreamPublisher(runId: string, owner: { resourceId?: string; threadId?: string }): Promise<void> {
     const claim = getRunRegistryEntry(runId, this.#mastra)?.executionFence?.claim;
-    const publisher = getDurableStreamPublisher({
+    const publisher = getExecutionStreamPublisher({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
@@ -1053,7 +1053,7 @@ export class DurableAgent<
   }
 
   #owningReaderTerminal(runId: string, executionFence: ExecutionFence) {
-    const publisher = getDurableStreamPublisher({
+    const publisher = getExecutionStreamPublisher({
       runId,
       agentId: this.id,
       mastra: this.#mastra,
@@ -2763,7 +2763,7 @@ export class DurableAgent<
     pubsub: PubSub = this.pubsub,
   ): PubSub {
     if (executionFence) {
-      pubsub = withDurableStreamPublisher(pubsub, {
+      pubsub = withExecutionStreamPublisher(pubsub, {
         runId: executionFence.runId,
         agentId: this.id,
         mastra: this.#mastra,
@@ -6119,7 +6119,7 @@ export class DurableAgent<
    * which reschedules deletion on that run's terminal end.
    */
   #clearPubsubTopic(runId: string, entry = getRunRegistryEntry(runId, this.#mastra)): void {
-    const publisher = getDurableStreamPublisher({
+    const publisher = getExecutionStreamPublisher({
       runId,
       agentId: this.id,
       mastra: this.#mastra,

@@ -37,8 +37,8 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
+import { withExecutionStreamPublisher } from './execution-stream-publisher';
 import { runInRunFenceScope } from './run-fence-scope';
-import { withDurableStreamPublisher } from './stream-publisher';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -1414,7 +1414,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
                 value:
                   pubsub &&
                   fencePubSub(
-                    withDurableStreamPublisher(pubsub, { runId, agentId, mastra: params.mastra, claim }),
+                    withExecutionStreamPublisher(pubsub, { runId, agentId, mastra: params.mastra, claim }),
                     guard,
                   ),
               },

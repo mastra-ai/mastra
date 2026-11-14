@@ -33,9 +33,9 @@ import {
   watchExecutionLoss,
   withExecutionFence,
 } from '../execution-fence';
+import { withExecutionStreamPublisher } from '../execution-stream-publisher';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
-import { withDurableStreamPublisher } from '../stream-publisher';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -330,7 +330,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       drainPendingSignals: registryEntry?.drainPendingSignals,
       pubsub:
         pubsub &&
-        withDurableStreamPublisher(pubsub, {
+        withExecutionStreamPublisher(pubsub, {
           runId,
           agentId,
           mastra,
@@ -1108,7 +1108,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const runPubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
             const pubsub =
               runPubsub &&
-              withDurableStreamPublisher(runPubsub, {
+              withExecutionStreamPublisher(runPubsub, {
                 runId: state.runId,
                 agentId: state.agentId,
                 mastra,
