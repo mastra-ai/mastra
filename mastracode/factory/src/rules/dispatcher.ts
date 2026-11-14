@@ -52,6 +52,7 @@ import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
+  FactoryRunBindingSupersededError,
   WorkItemSourceConflictError,
   WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
@@ -462,6 +463,7 @@ export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
   item: Card;
   role: string;
+  expectedBindingId?: string;
 }
 
 export type FactoryReviewStatusPhase = 'queued' | 'reviewing' | 'retrying' | 'completed' | 'failed' | 'cancelled';
@@ -1758,7 +1760,13 @@ export class FactoryDecisionDispatcher {
       }
       case 'notify': {
         const selected = await this.#requireBinding(record);
-        const binding = await this.#requireOrPrepareBinding(record, selected.role);
+        if (
+          (await this.#roleSuperseded(record, selected.role)) ||
+          (await this.#decisionOvertaken(record, selected.role))
+        ) {
+          throw new FactoryDecisionSuperseded();
+        }
+        const binding = await this.#requireOrPrepareBinding(record, selected.role, selected.id);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
@@ -2581,8 +2589,10 @@ export class FactoryDecisionDispatcher {
   async #requireOrPrepareBinding(
     record: FactoryDeferredDecisionRecord,
     role: string,
+    expectedBindingId?: string,
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
+    if (expectedBindingId && binding?.id !== expectedBindingId) throw new FactoryDecisionSuperseded();
     if (binding) {
       const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
@@ -2594,7 +2604,12 @@ export class FactoryDecisionDispatcher {
       );
     }
     const item = await this.#requireItem(record);
-    await this.#prepareBinding({ record, item, role });
+    try {
+      await this.#prepareBinding({ record, item, role, expectedBindingId });
+    } catch (error) {
+      if (error instanceof FactoryRunBindingSupersededError) throw new FactoryDecisionSuperseded();
+      throw error;
+    }
     return this.#requireBinding(record, role);
   }
 

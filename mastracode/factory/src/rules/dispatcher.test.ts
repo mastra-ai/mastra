@@ -1186,14 +1186,17 @@ describe('FactoryDecisionDispatcher', () => {
     });
     const stale = await bindWorkRun(storage, item.id);
     const { controller, session, sendNotificationSignal } = createSession();
+    session.identity.getId.mockReturnValue('session-2');
+    session.identity.getOwnerId.mockReturnValue('user-2');
     controller.getSession.mockImplementation(async (sessionId: string) =>
       sessionId === 'session-2' ? session : undefined,
     );
-    const prepareBinding = vi.fn(async ({ role }: FactoryBindingPreparationInput) => {
+    const prepareBinding = vi.fn(async ({ role, expectedBindingId }: FactoryBindingPreparationInput) => {
       expect(role).toBe('work');
+      expect(expectedBindingId).toBe(stale.id);
       const prepared = await storage.prepareRunStart({
         orgId: 'org-1',
-        userId: 'user-1',
+        userId: 'user-2',
         factoryProjectId: PROJECT_ID,
         workItem: {
           id: item.id,
@@ -1206,6 +1209,7 @@ describe('FactoryDecisionDispatcher', () => {
           },
         },
         role,
+        expectedBindingId,
         session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
         resourceId: PROJECT_ID,
         kickoffKey: 'recovered-notify',
@@ -1229,8 +1233,12 @@ describe('FactoryDecisionDispatcher', () => {
       { requestContext: expect.anything() },
     );
     expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('user')).toEqual({
-      workosId: 'user-1',
+      workosId: 'user-2',
       organizationId: 'org-1',
+    });
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('controller')).toMatchObject({
+      sessionId: 'session-2',
+      session: { id: 'session-2', ownerId: 'user-2' },
     });
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
     expect(
@@ -1240,6 +1248,84 @@ describe('FactoryDecisionDispatcher', () => {
       role: 'work',
     });
     expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('does not restore a superseded notification binding after a successor takes its session', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-superseded-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const prepareBinding = vi.fn(async ({ expectedBindingId }: FactoryBindingPreparationInput) => {
+      expect(expectedBindingId).toBe(stale.id);
+      const successor = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'successor-review',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(successor.binding.id, 'sent');
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role: 'work',
+        expectedBindingId,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-after-handoff',
+        kickoffMessage: null,
+      });
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'superseded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).filter(binding => binding.status === 'active'),
+    ).toMatchObject([{ id: expect.any(String), role: 'review', sessionId: 'session-1' }]);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.sessions.review).toMatchObject({
+      sessionId: 'session-1',
+    });
   });
 
   it('does not create an unrelated session for a stale notification binding without a preparer', async () => {
