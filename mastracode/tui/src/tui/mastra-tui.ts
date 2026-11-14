@@ -791,12 +791,6 @@ export class MastraTUI {
       });
     }
 
-    if (this.state.pluginManager && !this.cleanupPluginErrorListener) {
-      this.cleanupPluginErrorListener = this.state.pluginManager.onPluginError(event => {
-        showError(this.state, event.message);
-      });
-    }
-
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
 
@@ -893,6 +887,15 @@ export class MastraTUI {
     await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
     await renderExistingTasks(this.state);
+
+    // Subscribed only once the thread is on screen, which would otherwise clear the
+    // notices: errors reported earlier, such as a plugin signal provider failing to
+    // start while Mastra Code boots, are held by the manager and handed over here.
+    if (this.state.pluginManager && !this.cleanupPluginErrorListener) {
+      this.cleanupPluginErrorListener = this.state.pluginManager.onPluginError(event => {
+        showError(this.state, event.message);
+      });
+    }
 
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
