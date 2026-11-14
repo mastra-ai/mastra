@@ -16,6 +16,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import { InMemoryStore } from '../storage/mock';
 import { createStep, createWorkflow } from '../workflows';
+import type { ShouldPersistSnapshotFn } from '../workflows';
 import { createStep as createEventedStep, createWorkflow as createEventedWorkflow } from '../workflows/evented';
 import { persistActiveRun, sleep } from './test-utils/active-runs';
 import { sharedBroker } from './test-utils/shared-broker';
@@ -196,16 +197,27 @@ describe('workflow recovery rule (#28712)', () => {
   /**
    * A replica whose default-engine `recovered-wf` records each run it runs, and holds the `blocked` runs
    * until `release`. `started` resolves once one of them runs. `order` gets `'step-done'` once a held step
-   * resumes.
+   * resumes. With `sleepMs`, the workflow sleeps that long before its step.
    */
-  function startBlockingReplica(storage: InMemoryStore, blocked: string | string[], recovery: MastraRecoveryConfig) {
+  function startBlockingReplica(
+    storage: InMemoryStore,
+    blocked: string | string[],
+    recovery: MastraRecoveryConfig,
+    { shouldPersistSnapshot, sleepMs }: { shouldPersistSnapshot?: ShouldPersistSnapshotFn; sleepMs?: number } = {},
+  ) {
     const executions: string[] = [];
     const order: string[] = [];
     // `start:<runId>` and `done:<runId>` per step execution, in the order they happened.
     const steps: string[] = [];
     const started = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
-    const workflow = createWorkflow({ id: 'recovered-wf', inputSchema: schema, outputSchema: schema })
+    const created = createWorkflow({
+      id: 'recovered-wf',
+      inputSchema: schema,
+      outputSchema: schema,
+      options: { shouldPersistSnapshot },
+    });
+    const workflow = (sleepMs ? created.sleep(sleepMs) : created)
       .then(
         createStep({
           id: 'work',
@@ -305,6 +317,64 @@ describe('workflow recovery rule (#28712)', () => {
     expect(b.order).toEqual(['step-done', 'shutdown']);
     expect(await statusOf(storage, 'run-1')).toBe('success');
   }, 10_000);
+
+  it('does not restart a startAsync run whose run lease is still being claimed', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const a = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 });
+    const b = startBlockingReplica(storage, [], { workflowGraceMs: 0 });
+    // A slow store: A's claim reaches it, and commits only once `commit` resolves.
+    const claim = store.claimRunOwnership.bind(store);
+    const claimEntered = Promise.withResolvers<void>();
+    const commit = Promise.withResolvers<void>();
+    vi.spyOn(store, 'claimRunOwnership').mockImplementationOnce(async args => {
+      claimEntered.resolve();
+      await commit.promise;
+      return claim(args);
+    });
+
+    const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+    const startAsync = run.startAsync({ inputData: {} });
+    await claimEntered.promise;
+    await b.mastra.restartAllActiveWorkflowRuns();
+    commit.resolve();
+    await startAsync;
+    await a.started;
+
+    expect([...a.executions, ...b.executions]).toEqual(['run-1']);
+    a.release();
+    await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('success'));
+  });
+
+  // These workflows persist `waiting` (a start through startAsync, a sleep) but never `running`.
+  it.each([
+    { name: 'started with startAsync', startAsync: true, sleepMs: undefined },
+    { name: 'that sleeps', startAsync: false, sleepMs: 1 },
+  ])(
+    'does not restart a live run $name of a workflow that does not persist running',
+    async ({ startAsync, sleepMs }) => {
+      const storage = new InMemoryStore();
+      const shouldPersistSnapshot: ShouldPersistSnapshotFn = ({ workflowStatus }) => workflowStatus !== 'running';
+      const options = { shouldPersistSnapshot, sleepMs };
+      const a = startBlockingReplica(storage, 'run-1', { workflowGraceMs: 0 }, options);
+      const b = startBlockingReplica(storage, [], { workflowGraceMs: 0 }, options);
+
+      const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+      if (startAsync) {
+        await run.startAsync({ inputData: {} });
+        await a.started;
+      } else {
+        void run.start({ inputData: {} });
+        await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('waiting'));
+      }
+      await b.mastra.restartAllActiveWorkflowRuns();
+      await a.started;
+
+      expect([...a.executions, ...b.executions]).toEqual(['run-1']);
+      a.release();
+      await vi.waitFor(async () => expect(await statusOf(storage, 'run-1')).toBe('success'));
+    },
+  );
 
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();

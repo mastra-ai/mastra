@@ -4641,7 +4641,10 @@ export class Run<
     });
     if (this.parentWorkflow) this.startedFromState = toJsonState(initialStateToUse);
 
+    let held: WorkflowRunOwnership | { owner: RunOwnershipRecord | null } | undefined;
     if (onDispatched) {
+      // Recovery can list the run from its first snapshot on, so the lease has to be live by then.
+      held = await this.#claimOwnership(true);
       const shouldPersistSnapshot =
         this.executionEngine.getRunPersistenceOverride(this.runId) ??
         this.executionEngine.options.shouldPersistSnapshot;
@@ -4671,6 +4674,7 @@ export class Run<
             this.resourceId,
           );
         } catch (error) {
+          if ('release' in held) await held.release();
           workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
@@ -4679,30 +4683,32 @@ export class Run<
       onDispatched();
     }
 
-    const result = await this.#executeOwned(() =>
-      this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
-        workflowId: this.workflowId,
-        runId: this.runId,
-        parentWorkflow: this.parentWorkflow,
-        resourceId: this.resourceId,
-        disableScorers: this.disableScorers,
-        graph: this.executionGraph,
-        serializedStepGraph: this.serializedStepGraph,
-        input: inputDataToUse,
-        initialState: initialStateToUse,
-        pubsub: this.pubsub,
-        retryConfig: this.retryConfig,
-        requestContext: (requestContext ?? new RequestContext()) as RequestContext,
-        actor,
-        abortController: this.abortController,
-        outputWriter,
-        workflowSpan,
-        format,
-        outputOptions,
-        perStep,
-        storageVersion: this.storageVersion,
-        inheritedState,
-      }),
+    const result = await this.#executeOwned(
+      () =>
+        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>>({
+          workflowId: this.workflowId,
+          runId: this.runId,
+          parentWorkflow: this.parentWorkflow,
+          resourceId: this.resourceId,
+          disableScorers: this.disableScorers,
+          graph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          input: inputDataToUse,
+          initialState: initialStateToUse,
+          pubsub: this.pubsub,
+          retryConfig: this.retryConfig,
+          requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+          actor,
+          abortController: this.abortController,
+          outputWriter,
+          workflowSpan,
+          format,
+          outputOptions,
+          perStep,
+          storageVersion: this.storageVersion,
+          inheritedState,
+        }),
+      held,
     );
 
     this.workflowRunStatus = result.status;
@@ -5396,10 +5402,11 @@ export class Run<
   }
 
   /**
-   * Takes the storage ownership lease for runs the boot-time recovery sweep could restart, so a
-   * sweep on another replica skips this run while this process drives it. Nested runs are covered
-   * by their parent's lease unless `nested` is set, and runs that never persist a `running`
-   * snapshot are never swept.
+   * Takes the storage ownership lease for runs the recovery sweep could restart, so a sweep on
+   * another replica skips this run while this process drives it. Nested runs are covered by their
+   * parent's lease unless `nested` is set. The sweep lists `running` and `waiting` runs of registered
+   * workflows, so a run that persists neither is never swept. Internal workflows aren't registered,
+   * so persisting `waiting` alone doesn't make their runs claim.
    */
   async #claimOwnership(
     force: boolean,
@@ -5407,11 +5414,10 @@ export class Run<
   ): Promise<WorkflowRunOwnership | { owner: RunOwnershipRecord | null }> {
     const shouldPersistSnapshot =
       this.executionEngine.getRunPersistenceOverride(this.runId) ?? this.executionEngine.options.shouldPersistSnapshot;
-    if (
-      !this.#recoverable ||
-      (this.parentWorkflow && !nested) ||
-      !shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} })
-    ) {
+    const swept =
+      shouldPersistSnapshot({ workflowStatus: 'running', stepResults: {} }) ||
+      (!this.isInternalWorkflow && shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} }));
+    if (!this.#recoverable || (this.parentWorkflow && !nested) || !swept) {
       return { release: async () => {} };
     }
     return claimWorkflowRunOwnership({
@@ -5423,7 +5429,10 @@ export class Run<
   }
 
   /** Runs `execute` under the run's lease: `held`, when the caller hands one over, or a new claim. */
-  async #executeOwned<T>(execute: () => Promise<T>, held?: WorkflowRunOwnership): Promise<T> {
+  async #executeOwned<T>(
+    execute: () => Promise<T>,
+    held?: WorkflowRunOwnership | { owner: RunOwnershipRecord | null },
+  ): Promise<T> {
     const ownership = held ?? (await this.#claimOwnership(true));
     if (!('release' in ownership)) {
       return execute();
