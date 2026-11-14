@@ -20,7 +20,7 @@ export async function resumeThreadOnStartup(
   isCurrent: () => boolean = () => true,
 ): Promise<StartupResumeIssue | undefined> {
   const local = state.local;
-  if (!local) return resumeFactoryThread(state);
+  if (!local) return resumeFactoryThread(state, isCurrent);
   const { session, controller } = local;
 
   const currentPath = state.projectInfo.rootPath;
@@ -78,9 +78,10 @@ export async function resumeThreadOnStartup(
 }
 
 /** Factory sessions own their threads, so local project-path tagging and resource IDs don't apply. */
-async function resumeFactoryThread(state: TUIState): Promise<undefined> {
+async function resumeFactoryThread(state: TUIState, isCurrent: () => boolean): Promise<undefined> {
   if (state.session.thread.getId()) return;
   const [latest] = (await state.session.thread.list()).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  if (!isCurrent()) return;
   if (latest) await state.session.thread.switch({ threadId: latest.id });
   else state.pendingNewThread = true;
 }

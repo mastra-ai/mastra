@@ -431,6 +431,7 @@ export class MastraTUI {
         await this.submitUserInput(this.state.options.initialMessage);
       }
     }
+    if (this.stopped) return;
 
     // Main interactive loop — never blocks on streaming,
     // so the editor stays responsive for queued follow-ups.
