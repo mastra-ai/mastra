@@ -26,6 +26,8 @@ const conversationModelSettings = z.strictObject({ maxRetries: z.number().int().
 const conversationStreamOptions = z.strictObject({
   maxSteps: z.number().int().min(1).max(32).optional(),
   modelSettings: conversationModelSettings.optional(),
+  // Studio echoes the server's tool-compatible model default. Other provider overrides stay closed.
+  providerOptions: z.strictObject({ openai: z.strictObject({ reasoningEffort: z.literal('none') }) }).optional(),
   tracingOptions: z.strictObject({}).optional(),
   requestContext: z.strictObject({}).optional(),
 });

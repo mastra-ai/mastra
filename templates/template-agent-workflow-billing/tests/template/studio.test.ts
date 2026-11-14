@@ -527,16 +527,37 @@ it('Studio chat persists history and returns one billed agent result through nat
     resourceId: 'default',
     message: { contents: 'Hello Studio', metadata: { clientMessageId: 'client-set-native-greeting' } },
     ifIdle: {
-      streamOptions: { maxSteps: 8, modelSettings: { maxRetries: 2 }, tracingOptions: {}, requestContext: {} },
+      streamOptions: {
+        maxSteps: 8,
+        modelSettings: { maxRetries: 2 },
+        providerOptions: { openai: { reasoningEffort: 'none' } },
+        tracingOptions: {},
+        requestContext: {},
+      },
     },
   });
   expect(greeting.status, JSON.stringify(greeting.body)).toBe(200);
   await waitForHistory(server, threadId, 'Saved conversation result.');
+  const conversationCalls = f.boundary.models.length;
+  for (const providerOptions of [
+    { openai: { reasoningEffort: 'high' } },
+    { openai: { reasoningEffort: 'none', store: true } },
+    { other: { reasoningEffort: 'none' } },
+  ]) {
+    const denied = await server.call(`${chatAgent}/send-message`, {
+      threadId,
+      resourceId: 'default',
+      message: 'Do not accept untrusted provider overrides.',
+      ifIdle: { streamOptions: { providerOptions } },
+    });
+    expect(denied.status).toBe(403);
+  }
+  expect(f.boundary.models).toHaveLength(conversationCalls);
   expect(await query(f.root, 'SELECT * FROM billing_executions')).toHaveLength(0);
   const generated = await server.call(`${chatAgent}/send-message`, {
     threadId,
     resourceId: 'default',
-    message: 'CALL image {"action":"execute","prompt":"A blue bird in a quiet forest"}',
+    message: 'CALL image {"action":"execute","prompt":"A blue bird in a quiet forest","operationId":null}',
   });
   expect(generated.status).toBe(200);
   const history = await waitForHistory(server, threadId, 'billedUnits');
@@ -545,6 +566,25 @@ it('Studio chat persists history and returns one billed agent result through nat
   expect(await query(f.root, 'SELECT units FROM billing_ledger')).toMatchObject([{ units: 1 }]);
   expect(f.boundary.images).toHaveLength(1);
   expect(await query(f.root, 'SELECT execution_id FROM billing_studio_operations')).toHaveLength(1);
+  const invalidInputs = [
+    { input: { action: 'execute' }, error: 'Execution requires a prompt.' },
+    { input: { action: 'execute', prompt: null }, error: 'Execution requires a prompt.' },
+    {
+      input: { action: 'execute', prompt: 'Do not generate', operationId: 'existing-operation' },
+      error: 'Execution cannot select an existing operation.',
+    },
+    { input: { action: 'query', prompt: 'Do not generate' }, error: 'Queries cannot include a prompt.' },
+  ];
+  for (const [index, invalid] of invalidInputs.entries()) {
+    const invalidThread = `native-invalid-image-${index}`;
+    await sendTool(server, invalidThread, 'image', invalid.input);
+    await waitForHistory(server, invalidThread, invalid.error);
+  }
+  await sendTool(server, threadId, 'image', { action: 'query', prompt: null, operationId: null });
+  await waitForHistory(server, threadId, '"operations":[');
+  expect(await query(f.root, 'SELECT units FROM billing_ledger')).toMatchObject([{ units: 1 }]);
+  expect(await query(f.root, 'SELECT execution_id FROM billing_studio_operations')).toHaveLength(1);
+  expect(f.boundary.images).toHaveLength(1);
 }, 180000);
 
 const toolResults = (history: any) =>

@@ -51,6 +51,28 @@ export async function imageBoundary() {
     const body = JSON.parse(Buffer.concat(chunks).toString());
     if (request.url === '/v1/chat/completions') {
       models.push({ path: request.url!, body });
+      // OpenAI rejects the entire request before dispatch when any function lacks an object root.
+      const invalidTool = body.tools?.find((tool: any) => tool.function?.parameters?.type !== 'object');
+      if (invalidTool) {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            error: {
+              message: `Invalid schema for function '${invalidTool.function?.name}': schema must have type object.`,
+              type: 'invalid_request_error',
+              code: 'invalid_function_parameters',
+            },
+          }),
+        );
+        return;
+      }
+      if (body.model === 'gpt-6-luna' && body.tools?.length && body.reasoning_effort !== 'none') {
+        response.writeHead(400, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({ error: { message: 'Function tools require reasoning_effort none for this chat model.' } }),
+        );
+        return;
+      }
       const lastUser = body.messages.findLastIndex((message: any) => message.role === 'user');
       const userText = JSON.stringify(body.messages[lastUser]?.content ?? '');
       const instruction = /CALL ([-a-zA-Z0-9_]+) (\{.*\})/.exec(JSON.parse(userText));

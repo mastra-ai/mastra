@@ -28,7 +28,7 @@ const originalInput = <T>(schema: PublicSchema<T>) => {
   };
 };
 const reference = z.strictObject({ operationId: identifierSchema });
-const queryReference = reference.partial();
+const queryReference = z.strictObject({ operationId: identifierSchema.nullish() });
 const root = <T>(work: () => T) => outsideParentExecution(() => outsideExecution(work));
 const state = (operation: ConversationOperation, response: unknown) => ({
   operationId: operation.id,
@@ -201,30 +201,44 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
         id: `${id}-operation`,
         description: `Execute the registered ${id} business agent, or query an earlier operation. Omit operationId on query to recover the latest twenty operations in this conversation after a lost response or Stop. Execution uses its billing policy.`,
         inputSchema: originalInput(
-          z.discriminatedUnion('action', [
-            z.strictObject({
-              action: z.literal('execute'),
-              prompt: resource.promptSchema ?? z.string().min(1).max(8192),
+          z
+            .strictObject({
+              action: z.enum(['execute', 'query']),
+              prompt: (resource.promptSchema ?? z.string().min(1).max(8192)).nullish(),
+              operationId: identifierSchema.nullish(),
+            })
+            .superRefine((input, context) => {
+              if (input.action === 'execute') {
+                if (input.prompt == null)
+                  context.addIssue({ code: 'custom', path: ['prompt'], message: 'Execution requires a prompt.' });
+                if (input.operationId != null)
+                  context.addIssue({
+                    code: 'custom',
+                    path: ['operationId'],
+                    message: 'Execution cannot select an existing operation.',
+                  });
+              } else if (input.prompt != null)
+                context.addIssue({ code: 'custom', path: ['prompt'], message: 'Queries cannot include a prompt.' });
             }),
-            queryReference.extend({ action: z.literal('query') }),
-          ]),
         ),
         execute: (input, context) =>
           safe(async () => {
             if (input.action === 'query') {
               const conversation = runtime.current();
-              return query(conversation, id, input.operationId);
+              return query(conversation, id, input.operationId ?? undefined);
             }
+            const prompt = input.prompt!;
+            // Native parsing can retain absent query fields as undefined, which is not durable JSON.
             const { conversation, operation } = await invocation(
               id,
               'generate',
-              input,
+              { action: input.action, prompt },
               context.agent!.toolCallId,
               context,
             );
             if (!operation.claimed) return read(conversation, operation);
             const response = await root(() =>
-              integration.execution.generate(id, input.prompt, conversation.billing, operation.requestKey),
+              integration.execution.generate(id, prompt, conversation.billing, operation.requestKey),
             );
             await integration.conversations.bindExecution(
               conversation.billing,
@@ -296,7 +310,7 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
         execute: input =>
           safe(async () => {
             const conversation = runtime.current();
-            return query(conversation, id, input.operationId);
+            return query(conversation, id, input.operationId ?? undefined);
           }),
       });
       const envelope = toStandardSchema(
@@ -307,16 +321,18 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
           ...envelope['~standard'],
           jsonSchema: {
             input: (options: Parameters<(typeof envelope)['~standard']['jsonSchema']['input']>[0]) => ({
-              oneOf: settings.approvalSteps.map(step => ({
-                type: 'object',
-                additionalProperties: false,
-                required: ['operationId', 'step', 'approvalData'],
-                properties: {
-                  operationId: { type: 'string', minLength: 1, maxLength: 128 },
-                  step: { const: step },
-                  approvalData: resource.native.steps[step].resumeSchema!['~standard'].jsonSchema.input(options),
+              type: 'object',
+              additionalProperties: false,
+              required: ['operationId', 'step', 'approvalData'],
+              properties: {
+                operationId: { type: 'string', minLength: 1, maxLength: 128 },
+                step: { type: 'string', enum: settings.approvalSteps },
+                approvalData: {
+                  anyOf: settings.approvalSteps.map(step =>
+                    resource.native.steps[step].resumeSchema!['~standard'].jsonSchema.input(options),
+                  ),
                 },
-              })),
+              },
             }),
             output: (options: Parameters<(typeof envelope)['~standard']['jsonSchema']['output']>[0]) =>
               envelope['~standard'].jsonSchema.output(options),

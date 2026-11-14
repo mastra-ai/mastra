@@ -16,7 +16,7 @@ export function createStudioAssistantAgent(tools: ToolsInput, environment: NodeJ
       apiKey: environment.OPENAI_API_KEY,
     },
     maxRetries: 0,
-    defaultOptions: { maxSteps: 8 },
+    defaultOptions: { maxSteps: 8, providerOptions: { openai: { reasoningEffort: 'none' } } },
     memory: new Memory({
       options: { lastMessages: 40, semanticRecall: false, workingMemory: { enabled: false }, generateTitle: false },
     }),
