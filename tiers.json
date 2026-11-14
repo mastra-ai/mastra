@@ -34142,6 +34142,12 @@
       "since": "2026-11-14",
       "last_failure": null,
       "reason": "new"
+    },
+    "packages/core-isolated/src/agent/__tests__/thread-lease-loss-abort.test.ts": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": "2026-11-14",
+      "reason": "versioning-fail"
     }
   }
 }
