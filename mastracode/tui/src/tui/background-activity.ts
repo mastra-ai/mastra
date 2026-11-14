@@ -4,6 +4,7 @@ import type {
 } from '@mastra/code-sdk/agents/background-completion-events';
 import { parseBackgroundProcessPid } from '@mastra/code-sdk/agents/background-processes';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
+import type { BackgroundProcessExit } from './components/tool-execution-interface.js';
 
 export type BackgroundActivityStatus = 'accepted' | 'completed' | 'failed' | 'cancelled';
 
@@ -90,6 +91,22 @@ export function completeBackgroundActivity(
     createdAt: existing?.createdAt ?? Date.now(),
     completedAt: Date.now(),
   });
+}
+
+/**
+ * How a shell ended, when this process saw it end: its exit can come before its
+ * call's result, and a kill posts no notice. Undefined while it runs, or when
+ * the PID's activity belongs to another call.
+ */
+export function finishedShellExit(
+  activities: Map<string, BackgroundActivity>,
+  pid: string,
+  toolCallId: string,
+): BackgroundProcessExit | undefined {
+  const activity = activities.get(processActivityKey(pid));
+  // An exit code is set only once the shell has ended.
+  if (activity?.toolCallId !== toolCallId || activity.exitCode === undefined) return undefined;
+  return { exitCode: activity.exitCode, killed: activity.status === 'cancelled' };
 }
 
 export function startBackgroundProcessActivity(

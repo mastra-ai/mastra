@@ -4,6 +4,7 @@ import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
 import { AssistantRenderRegistry } from '../assistant-render-registry.js';
+import type { BackgroundActivity } from '../background-activity.js';
 import { AssistantMessageComponent } from '../components/assistant-message.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 import { JudgeDisplayComponent } from '../components/judge-display.js';
@@ -1481,9 +1482,30 @@ describe('renderExistingMessages background shells', () => {
     },
   }).toDBMessage();
 
-  async function replay(messages: MastraDBMessage[], backgroundToolsEnabled = true) {
+  /** The PID's activity as this process last saw it. */
+  function shellActivity(overrides: Partial<BackgroundActivity> = {}): BackgroundActivity {
+    return {
+      id: 'process:42',
+      taskId: 'process:42',
+      kind: 'process',
+      pid: '42',
+      toolCallId: 'shell-call',
+      toolName: 'execute_command',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      status: 'accepted',
+      createdAt: 1,
+      ...overrides,
+    };
+  }
+
+  async function replay(
+    messages: MastraDBMessage[],
+    { backgroundToolsEnabled = true, activities = [] as BackgroundActivity[] } = {},
+  ) {
     const state = createState();
     state.options.backgroundToolsEnabled = backgroundToolsEnabled;
+    for (const activity of activities) state.backgroundActivities.set(activity.taskId, activity);
     state.session = {
       ...state.session,
       thread: { listActiveMessages: vi.fn().mockResolvedValue(messages) },
@@ -1509,35 +1531,32 @@ describe('renderExistingMessages background shells', () => {
   });
 
   it('shows a shell killed earlier in this process as killed', async () => {
-    const state = createState();
-    state.backgroundActivities.set('process:42', {
-      id: 'process:42',
-      taskId: 'process:42',
-      kind: 'process',
-      pid: '42',
-      exitCode: 143,
-      toolCallId: 'shell-call',
-      toolName: 'execute_command',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      status: 'cancelled',
-      createdAt: 1,
-      completedAt: 2,
+    const { state, row } = await replay([shellCall], {
+      activities: [shellActivity({ status: 'cancelled', exitCode: 143, completedAt: 2 })],
     });
-    state.options.backgroundToolsEnabled = true;
-    state.session = {
-      ...state.session,
-      thread: { listActiveMessages: vi.fn().mockResolvedValue([shellCall]) },
-    } as unknown as TUIState['session'];
 
-    await renderExistingMessages(state);
-
-    expect(stripAnsi(state.chatContainer.children[0]!.render(100).join('\n'))).toMatch(/killed/);
+    expect(row()).toMatch(/killed/);
     expect(state.backgroundShellRows.has('shell-call')).toBe(false);
   });
 
+  it('ignores a killed shell of another call that had the same PID', async () => {
+    const { state, row } = await replay([shellCall], {
+      activities: [shellActivity({ toolCallId: 'older-call', status: 'cancelled', exitCode: 143, completedAt: 2 })],
+    });
+
+    expect(row()).not.toMatch(/killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(true);
+  });
+
+  it('keeps a shell the activity list still shows running reachable', async () => {
+    const { state, row } = await replay([shellCall], { activities: [shellActivity()] });
+
+    expect(row()).not.toMatch(/exit \d|killed/);
+    expect(state.backgroundShellRows.has('shell-call')).toBe(true);
+  });
+
   it('registers nothing when background tools are off', async () => {
-    const { state } = await replay([shellCall], false);
+    const { state } = await replay([shellCall], { backgroundToolsEnabled: false });
 
     expect(state.backgroundShellRows.size).toBe(0);
   });

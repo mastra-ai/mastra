@@ -14,9 +14,9 @@ import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import {
   acceptBackgroundActivity,
+  finishedShellExit,
   getBackgroundActivitiesForTarget,
   parseBackgroundProcessPid,
-  processActivityKey,
   startBackgroundProcessActivity,
 } from './background-activity.js';
 import { getBackgroundToolMetadata } from './background-tool-result.js';
@@ -353,12 +353,11 @@ export async function dispatchEvent(
           startBackgroundProcessActivity(state.backgroundActivities, pid, event.toolCallId, context);
           const row = state.pendingTools.get(event.toolCallId);
           if (row) {
-            state.backgroundShellRows.set(event.toolCallId, row);
             // A command that ends at once can report its exit before its result.
-            const activity = state.backgroundActivities.get(processActivityKey(pid));
-            if (activity && activity.status !== 'accepted' && activity.exitCode !== undefined) {
-              row.setBackgroundProcessExit?.({ exitCode: activity.exitCode, killed: activity.status === 'cancelled' });
-            }
+            const exit = finishedShellExit(state.backgroundActivities, pid, event.toolCallId);
+            if (exit) row.setBackgroundProcessExit?.(exit);
+            // Still running, or its exit notice is yet to arrive.
+            else state.backgroundShellRows.set(event.toolCallId, row);
           }
         }
         if ((taskId || pid) && context) {

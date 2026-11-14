@@ -14,7 +14,7 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
-import { parseBackgroundProcessPid, processActivityKey } from './background-activity.js';
+import { finishedShellExit, parseBackgroundProcessPid } from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -1178,19 +1178,12 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
           if (toolName === MC_TOOLS.EXECUTE_COMMAND && state.options?.backgroundToolsEnabled && hasResult) {
             const pid = parseBackgroundProcessPid(resultValue);
-            // A kill posts no notice, so a shell killed earlier in this process
-            // is known only to the activity list.
-            const activity = pid ? state.backgroundActivities.get(processActivityKey(pid)) : undefined;
-            const finished =
-              activity?.toolCallId === part.toolCallId && activity.status !== 'accepted' ? activity : undefined;
             const processExit = backgroundProcessExits.get(part.toolCallId);
-            if (finished?.exitCode !== undefined) {
-              toolComponent.setBackgroundProcessExit({
-                exitCode: finished.exitCode,
-                killed: finished.status === 'cancelled',
-              });
-            } else if (processExit !== undefined) {
-              toolComponent.setBackgroundProcessExit({ exitCode: processExit, killed: false });
+            const exit =
+              (pid ? finishedShellExit(state.backgroundActivities, pid, part.toolCallId) : undefined) ??
+              (processExit !== undefined ? { exitCode: processExit, killed: false } : undefined);
+            if (exit) {
+              toolComponent.setBackgroundProcessExit(exit);
             } else if (pid) {
               // Still running, or its exit notice is yet to arrive.
               state.backgroundShellRows.set(part.toolCallId, toolComponent);
