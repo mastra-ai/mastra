@@ -4,7 +4,12 @@ import { Mastra } from '../../mastra';
 import { Agent } from '../index';
 import type { AgentDurableOption, AgentStreamsConfig } from '../index';
 
-const config = { id: 'migration-agent', name: 'Migration Agent', model: 'openai/gpt-4o' } as const;
+const config = {
+  id: 'migration-agent',
+  name: 'Migration Agent',
+  instructions: 'Help the user.',
+  model: 'openai/gpt-4o',
+} as const;
 
 describe('plain Agent durable migration', () => {
   it('keeps addAgent registration resumable without enabling checkpoint recovery', async () => {
@@ -25,10 +30,9 @@ describe('plain Agent durable migration', () => {
 
   it.each([
     { maxSteps: 50 },
-    { shouldPersistSnapshot: () => true },
     { id: 'legacy-id' },
     { name: 'legacy-name' },
-    { maxSteps: 50, id: 'legacy-id', name: 'legacy-name', shouldPersistSnapshot: () => true },
+    { maxSteps: 50, id: 'legacy-id', name: 'legacy-name' },
   ])('warns once about ignored JavaScript durable execution options %j', legacy => {
     const mastra = new Mastra();
     const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
@@ -47,17 +51,21 @@ describe('plain Agent durable migration', () => {
     }
   });
 
-  it.each([undefined, true, false, { cleanupTimeoutMs: 0 }, { cache: false }])(
-    'does not warn for supported durable configuration %j',
-    durable => {
-      const mastra = new Mastra();
-      const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
-      try {
-        mastra.addAgent(new Agent({ ...config, mastra, durable }));
-        expect(warn).not.toHaveBeenCalled();
-      } finally {
-        warn.mockRestore();
-      }
-    },
-  );
+  it.each([
+    undefined,
+    true,
+    false,
+    { cleanupTimeoutMs: 0 },
+    { cache: false },
+    { shouldPersistSnapshot: () => true },
+  ] satisfies (AgentDurableOption | undefined)[])('does not warn for supported durable configuration %j', durable => {
+    const mastra = new Mastra();
+    const warn = vi.spyOn(ConsoleLogger.prototype, 'warn');
+    try {
+      mastra.addAgent(new Agent({ ...config, mastra, durable }));
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

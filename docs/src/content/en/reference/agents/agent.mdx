@@ -1118,10 +1118,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'durable',
-    type: 'boolean | { pubsub?: PubSub; cache?: MastraServerCache | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number }',
+    type: "boolean | { executionEngine?: 'durable' | 'evented' | false; shouldPersistSnapshot?: ShouldPersistSnapshotFn; pubsub?: PubSub; cache?: MastraServerCache | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number }",
     isOptional: true,
     description:
-      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent is registered on Mastra and off for standalone agents. On a plain agent, pass false to stop publishing. This controls resumable streams only, not checkpoint execution. For durable execution, wrap the agent explicitly with createDurableAgent(). See [Resumable streams](/docs/agents/resumable-streams).',
+      'Publishes each run on its stream topic so another reader can follow it with observe() or reconnect after a disconnect. Omit to turn streams on when the agent has a Mastra host and off for standalone agents. Pass false to stop publishing and opt out of inherited engine policy. executionEngine and shouldPersistSnapshot are accepted as staged policy only: native execution, return values, and recovery capability remain unchanged. For checkpoint execution, use createDurableAgent(). See [Execution engine policy](#execution-engine-policy) and [Resumable streams](/docs/agents/resumable-streams).',
   },
   {
     name: 'editor',
@@ -1132,6 +1132,25 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
 ]}
 />
+
+## Execution engine policy
+
+`durable.executionEngine` accepts `'durable'`, `'evented'`, or `false`. **This is staged configuration, not native execution activation.** A configured native `Agent` still uses plain execution and its existing return values. Recovery methods still require an explicit durable wrapper. `durable.shouldPersistSnapshot` accepts the workflow `ShouldPersistSnapshotFn` callback but isn't applied to native execution yet.
+
+| Agent `durable` | Mastra engine absent or `false` | Mastra engine `'durable'` or `'evented'` |
+| - | - | - |
+| Omitted | Plain policy; streams on with a host | Inherit host engine |
+| `true` | Plain policy; streams on | Inherit host engine |
+| Stream options only | Plain policy; streams on | Inherit host engine and missing defaults |
+| `{ executionEngine: 'durable' }` or `{ executionEngine: 'evented' }` | Explicit agent policy | Explicit agent policy wins |
+| `{ executionEngine: false }` | Plain policy; streams on | Plain policy; streams on |
+| `false` | Plain policy; streams off | Plain policy; streams off |
+
+[Mastra defaults](/reference/configuration#durable) apply only through stored registration: constructor `agents` or `mastra.addAgent()`. Attaching a host through `new Agent({ mastra })` or passing it to a sub-agent doesn't inherit engine policy. Each missing field inherits its default while preserving explicit `false`, timeout `0`, and callbacks. Top-level PubSub and cache configuration is unchanged.
+
+Reading an agent's configuration leaves engine selection provisional until stored registration or the first native `stream()` or `generate()` invocation, including calls that reject. Once selected, the engine and first registered stream defaults survive later registrations, with a warning on the first conflicting engine. To choose a different engine, create a new agent instance. Wrappers continue to own execution, with inner-agent isolation added by the staged wrapper integration.
+
+When an inherited durable policy encounters explicitly enabled `defaultOptions.eagerToolExecution`, it warns once without changing execution. An inherited evented policy also warns for supplied `stopWhen`. Dynamic defaults are checked after evaluation on real calls, allowing later incompatible values to trigger a warning. Caller request-context diagnostics flag non-JSON values through bounded, best-effort inspection rather than serialization validation, and explicit agent policies are excluded from these inheritance warnings.
 
 ## `generate()` memory options
 
