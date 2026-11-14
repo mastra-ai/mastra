@@ -2159,6 +2159,25 @@ describe('MDocument', () => {
         expect(chunks.length).toBeGreaterThan(0);
         expect(chunks.map(chunk => JSON.parse(chunk)[key]).join('')).toBe(value);
       });
+
+      it('chunks a very large string in roughly linear time (#30405)', async () => {
+        const value = 'x'.repeat(1_000_000);
+        const doc = MDocument.fromJSON(JSON.stringify({ text: value }));
+
+        const started = performance.now();
+        await doc.chunk({ strategy: 'json', maxSize: 500 });
+        const elapsed = performance.now() - started;
+
+        const chunks = doc.getText();
+        expect(chunks.map(chunk => JSON.parse(chunk).text).join('')).toBe(value);
+        chunks.forEach(chunk => {
+          expect(chunk.length).toBeLessThanOrEqual(500);
+        });
+        // Each piece must search only within maxSize. Searching the whole
+        // remaining value makes this input take seconds instead of tens of
+        // milliseconds.
+        expect(elapsed).toBeLessThan(1000);
+      });
     });
 
     describe('Unicode handling', () => {

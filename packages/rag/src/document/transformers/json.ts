@@ -333,7 +333,10 @@ export class RecursiveJsonTransformer {
 
     while (remaining.length > 0) {
       let low = 0;
-      let high = remaining.length;
+      // Serialization never shortens a string, so a prefix that fits cannot be
+      // longer than maxSize. Bounding the search there keeps each piece's work
+      // proportional to maxSize instead of the whole remaining value.
+      let high = Math.min(remaining.length, this.maxSize);
 
       while (low < high) {
         const mid = Math.ceil((low + high) / 2);
