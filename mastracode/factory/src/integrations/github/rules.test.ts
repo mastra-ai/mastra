@@ -4054,9 +4054,10 @@ describe('GithubRules issue labels', () => {
     };
   }
 
-  async function setupRoutes() {
+  async function setupRoutes(extra: Partial<ConstructorParameters<typeof GithubRules>[0]> = {}) {
     const base = await setup('write');
     const service = new GithubRules({
+      ...extra,
       github: base.github,
       sourceControl: base.sourceControl,
       integrationStorage: base.integrationStorage,
@@ -4217,6 +4218,34 @@ describe('GithubRules issue labels', () => {
       entry => entry.decision.type === 'routeEvent',
     );
     expect(update?.decision.event).toEqual({ type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } });
+  });
+
+  it('runs intake again when an issue intake turned away (Not routed) is labelled, and only then', async () => {
+    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, key: string) => key === 'github-issue:42') };
+    const { service, workItems, project } = await setupRoutes({ notRouted });
+    await service.ingest(issueLabels('labeled', ['ship'], 'not-routed-label'));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({
+        type: 'upsertLinkedWorkItem',
+        board: 'work',
+        metadata: expect.objectContaining({ githubIssueNumber: 42, labels: ['ship'] }),
+      }),
+    ]);
+    expect(notRouted.isNotRouted).toHaveBeenCalledWith(
+      { orgId: 'org-1', factoryProjectId: project.id },
+      'github-issue:42',
+    );
+  });
+
+  it('leaves a labelled issue with no card alone when intake never turned it away', async () => {
+    const notRouted = { isNotRouted: vi.fn(async () => false) };
+    const { service, workItems, project } = await setupRoutes({ notRouted });
+    await expect(service.ingest(issueLabels('labeled', ['ship'], 'never-seen'))).resolves.toEqual({
+      status: 'ignored',
+    });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it('files a reopened issue with no card the way a new one is filed', async () => {

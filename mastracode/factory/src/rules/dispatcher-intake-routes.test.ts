@@ -1157,6 +1157,12 @@ describe('intake routes moving existing cards when labels or assignees change', 
     expect(moved).toMatchObject({ stages: ['done'] });
     expect(moved!.stageHistory.at(-1)).toMatchObject({ stage: 'done', by: `intake-route:${shipping.id}` });
     expect(await routeDecisions(card.id)).toEqual(['succeeded']);
+    // The rule's move changed the card, not its source: it queues no update of its own.
+    await dispatcher.runOnce(new Date('2030-01-01T00:11:00Z'));
+    const updates = (await workItems.listDeferredDecisions('org-1', card.factoryProjectId, { workItemId: card.id }))
+      .map(entry => entry.decision as { type: string; event?: { type: string } })
+      .filter(decision => decision.event?.type === 'work_item.updated');
+    expect(updates).toHaveLength(1);
   });
 
   it('combines a burst of changes into one event carrying the net change', async () => {

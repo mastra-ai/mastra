@@ -278,21 +278,6 @@ export interface NotRoutedLookup {
   isNotRouted(scope: { orgId: string; factoryProjectId: string }, sourceKey: string): Promise<boolean>;
 }
 
-/**
- * Whether an update to an item with no card runs intake for it again: only for an item intake
- * turned away (Not routed), never for one that was never seen. Without a lookup (no Not routed
- * records yet) nothing runs.
- */
-export async function updateRunsIntake(
-  context: { item?: unknown; boardEvent?: BoardEventFacts },
-  sourceKey: string,
-  scope: { orgId: string; factoryProjectId: string },
-  notRouted: NotRoutedLookup | undefined,
-): Promise<boolean> {
-  if (context.item || context.boardEvent?.type !== 'work_item.updated' || !notRouted) return false;
-  return notRouted.isNotRouted(scope, sourceKey);
-}
-
 /** A pull or merge request's own card on a board with no pull request loop: Factory doesn't review it there. */
 export function unreviewedPullRequestCard(context: {
   item?: { readonly source: string };

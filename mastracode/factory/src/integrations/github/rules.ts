@@ -30,6 +30,7 @@ import {
   selectEventRule,
   withoutRouteEvent,
 } from '../../rules/event-rules.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -464,6 +465,11 @@ export interface GithubRulesOptions {
   boards: BoardRegistry | ProjectBoardSource;
   /** Hands a push to a linked repository off for an environment build. */
   onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
+  /**
+   * Tells which items intake turned away (Not routed). A label or assignee change to one of them
+   * runs intake again; without it, a change to an issue with no card does nothing.
+   */
+  notRouted?: NotRoutedLookup;
 }
 
 /** Identity under which label and assignee syncs are recorded. */
@@ -476,7 +482,7 @@ type IssueActionHandler = (
   repositoryId: number,
   repositoryName: string,
   project: ExternalRepositoryProjectTarget,
-) => Promise<{ status: 'ignored' | 'committed' }>;
+) => Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }>;
 
 /**
  * Whether a login is Factory itself. Prefers the resolved identity, which is
@@ -531,7 +537,7 @@ export class GithubRules {
     repositoryId: number,
     repositoryName: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'ignored' | 'committed' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const issue = object(parsed.payload.issue);
     const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
     if (!issueNumber) return { status: 'ignored' };
@@ -545,7 +551,8 @@ export class GithubRules {
       undefined,
       null,
     );
-    if (!found || found.externalSource?.type !== 'issue') return { status: 'ignored' };
+    if (!found) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, issueNumber);
+    if (found.externalSource?.type !== 'issue') return { status: 'ignored' };
     const labels = labelNames(issue?.labels);
     const before = cardLabels(found);
     if (sameLabels(before, labels)) return { status: 'ignored' };
@@ -627,7 +634,7 @@ export class GithubRules {
     repositoryId: number,
     repositoryName: string,
     project: ExternalRepositoryProjectTarget,
-  ): Promise<{ status: 'ignored' | 'committed' }> {
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
     const issue = object(parsed.payload.issue);
     const issueNumber = issue?.pull_request === undefined ? number(issue?.number) : undefined;
     if (!issueNumber) return { status: 'ignored' };
@@ -641,7 +648,8 @@ export class GithubRules {
       undefined,
       null,
     );
-    if (!item || item.externalSource?.type !== 'issue') return { status: 'ignored' };
+    if (!item) return this.#intakeIfNotRouted(parsed, repositoryId, repositoryName, project, issueNumber);
+    if (item.externalSource?.type !== 'issue') return { status: 'ignored' };
     const assignees = actorLogins(issue?.assignees);
     // GitHub can deliver webhooks out of order; drop payloads older than the last applied one.
     // Timestamps have one-second resolution, so equal timestamps still apply.
@@ -741,6 +749,31 @@ export class GithubRules {
       default:
         return undefined;
     }
+  }
+
+  /**
+   * An issue with no card changed labels or assignees. If intake turned it away (Not routed), it
+   * runs intake again the way a new issue does, so a rule naming the label can now take it.
+   */
+  async #intakeIfNotRouted(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+    issueNumber: number,
+  ): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {
+    const installationId = number(object(parsed.payload.installation)?.id);
+    const login = string(object(parsed.payload.sender)?.login);
+    const scope = { orgId: project.orgId, factoryProjectId: project.factoryProjectId };
+    if (
+      !installationId ||
+      !login ||
+      !(await this.options.notRouted?.isNotRouted(scope, canonicalSourceKey('issue', issueNumber)))
+    ) {
+      return { status: 'ignored' };
+    }
+    const intake = { ...parsed, deliveryId: `${parsed.deliveryId}:intake`, payload: { ...parsed.payload, action: 'opened' } };
+    return this.#ingestProject(intake, 'issueOpened', installationId, repositoryId, repositoryName, login, project);
   }
 
   async ingest(parsed: ParsedGithubWebhook): Promise<{ status: 'ignored' | 'committed' | 'replayed' | 'missing' }> {

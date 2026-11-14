@@ -7,6 +7,8 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { resolveIntakeRoute } from '../../../boards/intake-routing.js';
+import { createTriageWorkRegistry } from '../../../boards/test-utils.js';
 import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import {
   CATCH_ALL_INTAKE_ROUTE,
@@ -761,7 +763,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       updated_at: new Date(),
     });
 
-    expect(await boards.getIntakeRoute(scope, id)).toMatchObject({ on: ['work_item.opened', 'work_item.closed'] });
+    const stored = (await boards.getIntakeRoute(scope, id))!;
+    expect(stored).toMatchObject({ on: ['work_item.opened', 'work_item.closed'] });
+    // It keeps filing new items.
+    expect(resolveIntakeRoute([stored], {}, createTriageWorkRegistry())).toMatchObject({
+      type: 'place',
+      board: 'work',
+      routeId: id,
+    });
     // Still a catch-all for new cards: a new placing route goes ahead of it.
     const placed = await boards.createIntakeRoute(scope, { name: 'Bugs', target: { boardKey: 'work' } }, 'u');
     const order = (await boards.listIntakeRoutes(scope)).map(route => route.id);
