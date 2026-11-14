@@ -29,11 +29,13 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
       );
       llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'The answer is 42.' });
       const store = new PostgresStore({ id: 'publisher-test', connectionString, schemaName });
-      await store.init();
       const redis = createClient({ url: REDIS_URL });
-      await redis.connect();
       const processes: ReturnType<typeof spawnFixture>[] = [];
+      let storeInitialized = false;
       try {
+        await store.init();
+        storeInitialized = true;
+        await redis.connect();
         const ports: number[] = [];
         for (let i = 0; i < 2; i++) {
           const child = spawnFixture({
@@ -201,12 +203,25 @@ describe.each(['durable', 'evented'])('%s shared publisher across servers (COR-1
         throw error;
       } finally {
         await Promise.all(processes.map(child => killProcess(child)));
-        await llm.stop();
-        const keys = await redis.keys(`${prefix}*`);
-        if (keys.length) await redis.del(keys);
-        await redis.quit();
-        await store.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
-        await store.close();
+        await Promise.all([
+          llm.stop(),
+          (async () => {
+            if (!redis.isOpen) return;
+            try {
+              const keys = await redis.keys(`${prefix}*`);
+              if (keys.length) await redis.del(keys);
+            } finally {
+              await redis.quit();
+            }
+          })(),
+          (async () => {
+            try {
+              if (storeInitialized) await store.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
+            } finally {
+              await store.close();
+            }
+          })(),
+        ]);
       }
     }, 120_000);
   }
