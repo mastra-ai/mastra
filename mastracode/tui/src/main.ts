@@ -259,7 +259,6 @@ async function bootLocal(
     ...(resumeThreadId ? { resumeThreadId } : {}),
     githubSignals: result.githubSignals,
     backgroundToolsEnabled: result.backgroundToolsEnabled,
-    subagentsEnabled: settings.preferences.subagentsEnabled,
     backgroundCompletionEvents: result.backgroundCompletionEvents,
     backgroundProcesses: result.backgroundProcesses,
     exit: exitCode => void shutdownAndExit(exitCode),

@@ -340,7 +340,7 @@ describe('tool event handlers', () => {
       stripVTControlCharacters(
         ctx.state.chatContainer.children.map((child: any) => child.render?.(120)?.join('\n') ?? '').join('\n'),
       ),
-    ).toContain('◌ background');
+    ).toContain('background · task-1');
 
     handleToolEnd(ctx, 'call-1', 'Authoritative Alexandria result', false);
 

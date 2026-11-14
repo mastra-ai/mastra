@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import { MC_TOOLS, SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type {
   AgentControllerEvent,
@@ -44,8 +44,6 @@ import {
   handleSubagentToolStart,
   handleSubagentToolEnd,
   handleSubagentEnd,
-  markBackgroundSubagent,
-  subagentDisplayName,
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
@@ -363,10 +361,6 @@ export async function dispatchEvent(
             }
           }
         }
-        if (taskId && context?.toolName === SUBAGENT_TOOL_NAME) {
-          markBackgroundSubagent(ectx, event.toolCallId, taskId);
-          context.subagentName = subagentDisplayName(state, event.toolCallId);
-        }
         if ((taskId || pid) && context) {
           if (taskId) acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
           state.backgroundToolContexts.delete(event.toolCallId);
@@ -410,7 +404,6 @@ export async function dispatchEvent(
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
-      state.backgroundSubagentCalls?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       if (!(await clearThreadState(state, isCurrent))) break;
@@ -459,7 +452,6 @@ export async function dispatchEvent(
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
-      state.backgroundSubagentCalls?.clear();
       // Update current thread title for status line display
       setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(

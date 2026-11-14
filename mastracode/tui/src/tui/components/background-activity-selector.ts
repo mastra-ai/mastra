@@ -1,6 +1,5 @@
 import { Box, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem, SelectListTheme, TUI } from '@earendil-works/pi-tui';
-import { SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
 import type { BackgroundActivity } from '../background-activity.js';
 import { formatStatusDuration } from '../status-duration.js';
 import { theme } from '../theme.js';
@@ -12,7 +11,7 @@ export interface BackgroundActivitySelectorOptions {
   getActivity: (taskId: string) => BackgroundActivity | undefined;
   onCancel: () => void;
   onAbort: (activity: BackgroundActivity) => void;
-  /** Enter on a row: a shell shows its output, a subagent toggles its box. */
+  /** Enter on a row: a shell shows its output. */
   onOpen?: (activity: BackgroundActivity) => void;
   /** Rows Enter does nothing for; they show no Enter hint. */
   canOpen?: (activity: BackgroundActivity) => boolean;
@@ -138,7 +137,6 @@ function describeState(activity: BackgroundActivity): string {
 
 function kindIcon(activity: BackgroundActivity): string {
   if (activity.kind === 'process') return theme.fg('toolTitle', '$');
-  if (activity.toolName === SUBAGENT_TOOL_NAME) return theme.fg('accent', '◆');
   return theme.fg('muted', '•');
 }
 

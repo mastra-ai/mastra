@@ -1811,13 +1811,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     : undefined;
   // Hosts get only the controls; the workspace hooks stay internal.
   const backgroundProcessControls: BackgroundProcessControls | undefined = backgroundProcesses;
-  const backgroundTaskCallbacks = backgroundNotices
-    ? createBackgroundCompletionCallbacks(backgroundNotices, backgroundCompletionEvents, {
-        subagents,
-        // Clean shutdown cancels running tasks; that must not wake an agent mid-teardown.
-        isShuttingDown: () => controller.getMastra()?.backgroundTaskManager?.isShuttingDown() ?? false,
-      })
-    : undefined;
   // Used when the host passes no `workspace`. Its plan-mode write guard must
   // allow the same plans directory the prompts tell the agent to write to.
   // A host-provided workspace gets no background process notices.
@@ -1828,18 +1821,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     id: 'mastra-code',
     resourceId: project.resourceId,
     storage,
-    ...(backgroundTaskCallbacks
+    ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {
             enabled: true,
-            // Subagents orphaned by a crash end as failed and say so in their thread.
-            recoverStaleTasksOnStart: true,
+            recoverStaleTasksOnStart: false,
             // The completion callbacks signal the task's session; core's own signal would run outside it.
             notifyAgentOnFinish: false,
-            ...backgroundTaskCallbacks,
+            ...createBackgroundCompletionCallbacks(() => sessionRouter, backgroundCompletionEvents),
           },
-          // Background subagents have no time limit, like background shells.
-          subagentBackground: { enabled: true, defaultDisposition: 'foreground', timeoutMs: 0, maxRetries: 0 },
         }
       : {}),
     observability,
@@ -1919,7 +1909,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   controller.onSessionCreated(session => {
     liveSessions.add(session);
-    // Notices from startup recovery arrive before any session exists.
+    // Shell exits that came while no session ran their thread's resource.
     void backgroundNotices?.flush();
   });
   controller.onSessionDeleted(session => {
@@ -2025,11 +2015,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     backgroundCompletionEvents,
     /** Reads and kills background shells for the user; a kill posts no exit notice. */
     backgroundProcesses: backgroundProcessControls,
-    /**
-     * Background task completion callbacks, shared by the controller and a server-owned Mastra.
-     * @internal
-     */
-    backgroundTaskCallbacks,
     // Identity for the single local session (Case 3). Servers ignore these and
     // mint per-request sessions with client-supplied resourceIds instead.
     sessionId,
@@ -2342,7 +2327,16 @@ export async function prepareAgentControllerMount(
   finalize: () => Promise<void>;
 }> {
   const base = await createMastraCodeAgentController(config);
-  const { controller, storage, authStorage, projectPath, codeAgent, mcpManager, backgroundTaskCallbacks } = base;
+  const {
+    controller,
+    storage,
+    authStorage,
+    projectPath,
+    codeAgent,
+    mcpManager,
+    backgroundToolsEnabled,
+    backgroundCompletionEvents,
+  } = base;
   const controllerId = config?.controllerId ?? controller.id;
   const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
   const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
@@ -2360,14 +2354,14 @@ export async function prepareAgentControllerMount(
     // Only hand over an Observability that exports somewhere. A disabled one would
     // stop the host from wiring its own, e.g. the platform deploy's exporter.
     ...(base.observabilityExports ? { observability: base.observability } : {}),
-    ...(backgroundTaskCallbacks
+    ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {
             enabled: true,
-            recoverStaleTasksOnStart: true,
+            recoverStaleTasksOnStart: false,
             // The completion callbacks signal the task's session; core's own signal would run outside it.
             notifyAgentOnFinish: false,
-            ...backgroundTaskCallbacks,
+            ...createBackgroundCompletionCallbacks(() => controller, backgroundCompletionEvents),
           },
         }
       : {}),

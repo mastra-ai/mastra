@@ -42,13 +42,18 @@ describe('buildToolGuidance task tools', () => {
 });
 
 describe('buildToolGuidance background work', () => {
-  it.each([false, true])('describes background shells and subagents only when they are on (%s)', backgroundTools => {
+  it.each([false, true])('describes background shells only when they are on (%s)', backgroundTools => {
     const guidance = buildToolGuidance('build', { backgroundTools });
 
     expect(guidance.includes('**Background work**')).toBe(backgroundTools);
     expect(guidance.includes('Do not poll')).toBe(backgroundTools);
-    // The parallel-only rule would forbid the single backgrounded subagent the background guidance suggests.
-    expect(guidance.includes('multiple subagents in parallel')).toBe(!backgroundTools);
+    expect(guidance).toContain('multiple subagents in parallel');
+  });
+
+  it('leaves out background shell guidance when execute_command is denied', () => {
+    const guidance = buildToolGuidance('build', { backgroundTools: true, deniedTools: new Set(['execute_command']) });
+
+    expect(guidance).not.toContain('**Background work**');
   });
 });
 

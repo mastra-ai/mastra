@@ -37,7 +37,6 @@ export type ScenarioName =
   | 'background-placeholder-opt-in'
   | 'background-placeholder-opt-out'
   | 'background-shells'
-  | 'background-subagent-deferred'
   | 'background-subagents'
   | 'background-tools-settings'
   | 'browser-active-pending-status'
