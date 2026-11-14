@@ -1,9 +1,9 @@
 import type { ListStoredAgentsParams, StoredSkillResponse } from '@mastra/client-js';
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { PageHeader } from '@mastra/playground-ui/components/PageHeader';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
@@ -166,10 +166,11 @@ export default function AgentBuilderFavoritePage() {
                   </div>
                 )}
                 <div className="max-w-120 flex-1">
-                  <ListSearch
-                    onSearch={setSearch}
-                    label="Filter favorites"
-                    placeholder="Filter by name or description"
+                  <SearchInput
+                    {...listSearchProps}
+                    onValueChange={setSearch}
+                    label="Search favorites"
+                    placeholder="Search by name or description"
                   />
                 </div>
               </ActionRow.Start>

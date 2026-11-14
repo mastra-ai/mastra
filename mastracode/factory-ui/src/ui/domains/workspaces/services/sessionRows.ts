@@ -13,7 +13,12 @@ import type { PullRequestStatus } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
-import { getFactorySessionSource, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
+import {
+  getFactorySessionSource,
+  getSessionOwnerDetails,
+  getUserSessionLabel,
+  isFactoryOwnedSession,
+} from './sessionPresentation';
 import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
@@ -90,6 +95,10 @@ export interface SessionListRow {
   cardStatus?: SessionActivityStatus;
   /** What a child row is named in the sidebar: the phase its session ran in. */
   phaseLabel?: string;
+  /** Listed under a person's session, but the Factory owns and runs it. */
+  runByFactory?: boolean;
+  /** A followed card's phase session that waits on a person, answerable from this row. */
+  waitingSessionId?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -263,6 +272,50 @@ function orderCardRows(
   return cardRows
     .toSorted((a, b) => rank(a) - rank(b))
     .map((row, index) => (index === 0 ? row : { ...row, phaseLabel: phaseLabel(row) }));
+}
+
+/**
+ * Ties each session to the phase sessions of the cards it follows. Those sessions stay the
+ * card's: the row links to them and lists them under itself when child sessions are revealed.
+ * While one is parked the row reads "waiting on you", but only for a viewer who can answer:
+ * the row is their session, or a session of theirs follows the same card.
+ */
+export function linkFollowedCards(
+  rows: readonly SessionListRow[],
+  cardRows: readonly SessionListRow[],
+  parkedSessions: ReadonlySet<string>,
+  { revealChildSessions = false }: OneRowPerCardOptions = {},
+): SessionListRow[] {
+  const viewerFollows = new Set(
+    rows.flatMap(row => (row.ownedByViewer ? (row.session.followedWorkItemIds ?? []) : [])),
+  );
+  const waitsOnViewer = (cardRow: SessionListRow) =>
+    parkedSessions.has(cardRow.session.sessionId) && cardRow.itemId !== undefined && viewerFollows.has(cardRow.itemId);
+  return rows.map(row => {
+    const followed = new Set(row.session.followedWorkItemIds);
+    if (followed.size === 0) return row;
+    const linked = cardRows.filter(
+      cardRow =>
+        cardRow.itemId !== undefined &&
+        followed.has(cardRow.itemId) &&
+        cardRow.session.sessionId !== row.session.sessionId,
+    );
+    if (linked.length === 0) return row;
+    const waiting = linked.find(waitsOnViewer);
+    return {
+      ...row,
+      ...(waiting ? { status: 'waiting' as const, waitingSessionId: waiting.session.sessionId } : {}),
+      ...(revealChildSessions
+        ? {
+            childRows: linked.map(cardRow => ({
+              ...cardRow,
+              ...(waitsOnViewer(cardRow) ? { waitingSessionId: cardRow.session.sessionId } : {}),
+              ...(isFactoryOwnedSession(cardRow.session) ? { runByFactory: true } : {}),
+            })),
+          }
+        : {}),
+    };
+  });
 }
 
 export interface OneRowPerCardOptions {

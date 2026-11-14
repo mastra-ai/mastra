@@ -17,7 +17,6 @@ import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../..
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
-import type { IntegrationContext } from '../base.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -112,10 +111,15 @@ export class JiraRules {
     // The shared list is the cache itself: only the card handed on to rules is cloned.
     const items = await this.options.storage.listShared({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
+    // A card filed by hand from Settings › Intake holds the issue key, while the
+    // sweep names the issue by its id. Its browse URL names both the site and the key.
+    const itemsByUrl = new Map(
+      items.flatMap(item => (item.externalSource?.url ? [[item.externalSource.url, item] as const] : [])),
+    );
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Jira issue per project; other projects may file their own.
-      const relatedItem = itemsBySourceKey.get(issue.id);
+      const relatedItem = itemsBySourceKey.get(issue.id) ?? itemsByUrl.get(issue.url);
       statuses.push(await this.#ingestIssue(input, issue, relatedItem && structuredClone(relatedItem)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
@@ -245,19 +249,4 @@ export class JiraRules {
     }
     return committed.status;
   }
-}
-
-export function attachJiraRules(
-  jira: { readonly rules: JiraEventRules },
-  context: IntegrationContext,
-): ((input: JiraRulesIngress) => Promise<unknown>) | undefined {
-  if (!context.runtime) return undefined;
-  const rules = new JiraRules({
-    projects: context.storage.projects,
-    storage: context.runtime.workItems,
-    configVersion: context.runtime.configVersion,
-    boards: context.runtime.boards,
-    jiraRules: jira.rules,
-  });
-  return input => rules.ingest(input);
 }

@@ -1,5 +1,33 @@
 # mastra
 
+## 1.39.1-alpha.0
+
+### Patch Changes
+
+- Added `factory intake-route reroute-preview` and `factory intake-route reroute` to `mastra api`, for listing and moving untouched cards whose intake route now points at a different board. ([#30252](https://github.com/mastra-ai/mastra/pull/30252))
+
+  ```sh
+  mastra api factory intake-route reroute-preview <factoryProjectId>
+  mastra api factory intake-route reroute <factoryProjectId>
+  ```
+
+- Improved the Factory board on large projects. The board now loads the first cards of each phase, then more as you scroll. It no longer downloads every card of the project. ([#30191](https://github.com/mastra-ai/mastra/pull/30191))
+
+  Search, filters and sorting now run on the server. Search matches cards that contain every word typed, in any order. It also finds a card by its number or source id.
+
+- Fixed the checkmark on a finished Factory onboarding step sitting 12px right of the step numbers below it. ([#30248](https://github.com/mastra-ai/mastra/pull/30248))
+
+- Added `mastra api factory board phases` and `mastra api factory work-item filter-options`, which read the first cards under each phase of a Factory board and the labels and people it can be filtered by. ([#30177](https://github.com/mastra-ai/mastra/pull/30177))
+
+  ```bash
+  mastra api factory board phases <project-id> work '{"label":["bug"],"limit":10}'
+  mastra api factory work-item filter-options <project-id>
+  ```
+
+- Updated dependencies [[`175b4b5`](https://github.com/mastra-ai/mastra/commit/175b4b5194bd74d82a79c2567aec44ef0cfafa80), [`5266060`](https://github.com/mastra-ai/mastra/commit/5266060ccd0766a14b94109dc4bc9c3d29a1b8f5), [`9abbec6`](https://github.com/mastra-ai/mastra/commit/9abbec671ccf0826550241d1f1c2d7ff89e5b95b)]:
+  - @mastra/core@1.84.0-alpha.0
+  - @mastra/deployer@1.84.0-alpha.0
+
 ## 1.39.0
 
 ### Minor Changes

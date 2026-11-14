@@ -29,6 +29,7 @@ const platformIcons = {
   gitlab: 'gitlab',
   jira: 'jira',
   'incident-io': 'incidentio',
+  vanta: 'vanta',
 } as const satisfies Record<PlatformConnectProviderId, string>;
 
 export function connectionName(connection: PlatformProviderConnection): string {

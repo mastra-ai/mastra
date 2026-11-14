@@ -211,6 +211,31 @@ describe("toolCallConcurrency strategy: 'called'", () => {
     expect(policy).toHaveBeenCalledTimes(2);
     expect(tracker.peak).toBe(2);
   });
+
+  it.each([
+    { label: 'a number', defaultLimit: 1 },
+    { label: 'an object', defaultLimit: { limit: 1 } },
+  ])(
+    "keeps a default toolCallConcurrency limit given as $label when a call passes { strategy: 'called' }",
+    async ({ defaultLimit }) => {
+      const tracker: ConcurrencyTracker = { running: 0, peak: 0 };
+      const agent = new Agent({
+        id: 'called-keeps-default-limit',
+        name: 'called-keeps-default-limit',
+        instructions: 'x',
+        model: twoParallelToolCalls(['tool-1', 'tool-2']),
+        tools: {
+          'tool-1': trackedTool('tool-1', tracker),
+          'tool-2': trackedTool('tool-2', tracker),
+        },
+        defaultOptions: { toolCallConcurrency: defaultLimit },
+      });
+
+      await drain(await agent.stream('go', { maxSteps: 1, toolCallConcurrency: { strategy: 'called' } }));
+
+      expect(tracker.peak).toBe(1);
+    },
+  );
 });
 
 describe("toolCallConcurrency default 'available' strategy with function approval policies (#24232)", () => {

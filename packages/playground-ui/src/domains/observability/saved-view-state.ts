@@ -113,6 +113,17 @@ const acceptsWith =
 const operatorsByField = (fields: readonly { id: string; operators?: string[] }[]) =>
   new Map(fields.map(field => [field.id, field.operators]));
 
+const searchOptions = {
+  readOptions: (params: URLSearchParams) => {
+    const textSearch = params.get('textSearch');
+    return textSearch ? { textSearch } : {};
+  },
+  writeOptions: (params: URLSearchParams, options: Record<string, unknown>) => {
+    if (typeof options.textSearch === 'string' && options.textSearch) params.set('textSearch', options.textSearch);
+    else params.delete('textSearch');
+  },
+};
+
 const noOptions = {
   readOptions: () => ({}),
   writeOptions: () => {},
@@ -191,9 +202,13 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
     columns: 'traces',
     readOptions: params => {
       const listMode = params.get(TRACE_LIST_MODE_PARAM);
-      return listMode && TRACE_LIST_MODE_VALUES.has(listMode as TraceListMode) ? { listMode } : {};
+      return {
+        ...searchOptions.readOptions(params),
+        ...(listMode && TRACE_LIST_MODE_VALUES.has(listMode as TraceListMode) ? { listMode } : {}),
+      };
     },
     writeOptions: (params, options) => {
+      searchOptions.writeOptions(params, options);
       const { listMode } = options;
       if (typeof listMode === 'string' && TRACE_LIST_MODE_VALUES.has(listMode as TraceListMode)) {
         params.set(TRACE_LIST_MODE_PARAM, listMode);
@@ -204,7 +219,7 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
   },
   spans: {
     ...observabilityListFilters,
-    ...noOptions,
+    ...searchOptions,
     sortFields: SPAN_LIST_SORT_FIELDS,
     acceptsToken: acceptsWith(
       fieldId => SPAN_FIELD_IDS.has(fieldId),
