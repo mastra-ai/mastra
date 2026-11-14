@@ -212,14 +212,15 @@ export class StepExecutor extends MastraBase {
       params.stepResults[stepId]?.status === 'suspended' ? params.stepResults[stepId]?.suspendPayload : undefined;
 
     // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
-    // iteration's payload. When resuming a specific iteration, use that iteration's own payload
-    // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
-    // (e.g. another tool call's suspended run id).
+    // iteration's payload. A foreach item reads only its own record, so it never sees a sibling's
+    // data (e.g. another tool call's suspended run id); an item that never suspended gets none.
+    // Records suspended by earlier versions have no `foreachOutput`; the item's own output slot
+    // holds the same record there.
     if (suspendDataToUse && typeof params.foreachIdx === 'number') {
-      const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx];
-      if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
-        suspendDataToUse = iterationResult.suspendPayload;
-      }
+      const iterationResult =
+        suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx] ??
+        (params.stepResults[stepId] as { output?: any[] } | undefined)?.output?.[params.foreachIdx];
+      suspendDataToUse = iterationResult?.status === 'suspended' ? iterationResult.suspendPayload : undefined;
     }
 
     // Filter out internal workflow metadata before exposing to step code

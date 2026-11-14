@@ -652,6 +652,8 @@ export type SkippableTest =
   | 'resumeForeachPartial'
   // Foreach suspend/resume with partial concurrency and index
   | 'resumeForeachPartialIndex'
+  // Foreach resume hands each item its own suspend data
+  | 'resumeForeachSuspendData'
   // Branching - nested else/if-branch
   | 'branchingNestedConditions'
   // Foreach state batch and bail tests
