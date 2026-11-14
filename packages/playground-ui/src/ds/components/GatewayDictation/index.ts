@@ -1,0 +1,1 @@
+export { GatewayDictation } from './GatewayDictation';

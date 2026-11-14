@@ -514,6 +514,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // experimentId. The generic test context does not seed dataset storage;
       // deletion behavior is covered by datasets.test.ts.
       '/experiments/:experimentId',
+      // Gateway audio requires a deployment key and a signed-in user's feature flag.
+      // The generic adapter context has neither; the route handlers are covered by gateway-audio.test.ts.
+      '/system/gateway-audio/models',
+      '/system/gateway-audio/speech',
+      '/system/gateway-audio/transcriptions',
     ];
     // Routes under these prefixes are excluded (e.g. /datasets needs a datasets storage domain)
     const excludedPrefixes = [

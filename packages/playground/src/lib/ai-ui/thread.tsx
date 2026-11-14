@@ -34,18 +34,21 @@ import { SaveFullConversationAction } from '@mastra/playground-ui/domains/chat';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
+import { useGatewayAudioModels } from '@mastra/playground-ui/hooks/use-gateway-audio-models';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { useSpeechRecognition } from '@mastra/react';
-import { useReadAloud } from '@mastra/react/hooks/voice';
+import type { GatewayAudioModels } from '@mastra/playground-ui/utils/gateway-audio';
+import { useMastraClient } from '@mastra/react';
 import type { MessageFactoryPart } from '@mastra/react/ui';
-import { ArrowUp, Mic } from 'lucide-react';
+import { ArrowUp } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-import { toast } from 'sonner';
 import { AttachFileMenu } from './attachments/attach-file-menu';
 import { ComposerAttachments as ChatComposerAttachments } from './attachments/attachment';
 import { ComposerAttachmentsProvider, useComposerAttachments } from './attachments/composer-attachments';
 import { ComposerFileDrop } from './attachments/composer-file-drop';
+import { GatewayAudioComposerActions } from './chat/gateway-audio-composer-actions';
+import type { GatewaySpeechSelection } from './chat/gateway-audio-composer-actions';
+import { useGatewayReadAloud } from './chat/use-gateway-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import { useComposerAutofocus } from './hooks/use-composer-autofocus';
 import { SuggestedPromptList } from './suggested-prompt-list';
@@ -62,6 +65,19 @@ import type { VoiceCallControls } from '@/domains/voice';
 import { startViewTransition } from '@/lib/routing';
 
 const EMPTY_SUGGESTED_PROMPTS: string[] = [];
+
+function latestAssistantText(messages: MastraDBMessage[]): string {
+  for (let index = messages.length - 1; index >= 0; index--) {
+    const message = messages[index];
+    if (message?.role !== 'assistant') continue;
+    const text = message.content.parts
+      .filter(part => part.type === 'text')
+      .map(part => part.text)
+      .join('\n');
+    if (text.trim()) return text;
+  }
+  return '';
+}
 
 /**
  * Detects whether the last assistant message has a part that is actively
@@ -142,13 +158,30 @@ const ThreadContent = ({
   const messages = useChatMessages();
   const { isRunning } = useChatRunning();
   const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const {
-    isSpeaking,
-    readAloud,
-    stop: stopSpeaking,
-  } = useReadAloud(agentId, requestContext, {
-    onError: error => toast.error(error instanceof Error ? error.message : 'Voice generation failed.'),
-  });
+  const client = useMastraClient();
+  const baseUrl = client.options.baseUrl || '';
+  const { data: gatewayAudio } = useGatewayAudioModels(baseUrl, Boolean(window.MASTRA_PLATFORM_PROJECT_ID));
+  const [transcriptionModelId, setTranscriptionModelId] = useState('');
+  const transcriptionModel =
+    gatewayAudio?.transcription.find(model => model.id === transcriptionModelId)?.id ??
+    gatewayAudio?.transcription[0]?.id;
+  const [speechSelection, setSpeechSelection] = useState<GatewaySpeechSelection>({ modelId: '', voiceId: '' });
+  const selectedSpeechModel =
+    gatewayAudio?.speech.find(model => model.id === speechSelection.modelId) ?? gatewayAudio?.speech[0];
+  const selectedVoiceId = selectedSpeechModel
+    ? speechSelection.modelId === selectedSpeechModel.id
+      ? speechSelection.voiceId || selectedSpeechModel.voices[0] || ''
+      : selectedSpeechModel.voices[0] || ''
+    : '';
+  const gatewaySpeech = useMemo(
+    () =>
+      selectedSpeechModel && selectedVoiceId
+        ? { baseUrl, model: selectedSpeechModel.id, voice: selectedVoiceId }
+        : undefined,
+    [baseUrl, selectedSpeechModel, selectedVoiceId],
+  );
+  const { isSpeaking, readAloud, stop: stopSpeaking } = useGatewayReadAloud(agentId, requestContext, gatewaySpeech);
+  const lastReply = latestAssistantText(messages);
 
   const { hasSession, viewMode } = useBrowserSession();
   const showThumbnailInChat = hasSession && (viewMode === 'collapsed' || viewMode === 'expanded');
@@ -300,6 +333,18 @@ const ThreadContent = ({
                     hideModelSwitcher={hideModelSwitcher}
                     runOptionsSlot={runOptionsSlot}
                     refreshThreadList={refreshThreadList}
+                    gatewayAudio={gatewayAudio}
+                    transcriptionModel={transcriptionModel}
+                    onTranscriptionModelChange={setTranscriptionModelId}
+                    speechSelection={speechSelection}
+                    onSpeechSelectionChange={setSpeechSelection}
+                    speechPlayback={{
+                      hasText: Boolean(lastReply) && !isRunning,
+                      isSpeaking,
+                      read: () => void readAloud(lastReply),
+                      stop: stopSpeaking,
+                    }}
+                    gatewayBaseUrl={baseUrl}
                   />
                 </div>
                 {landingShown ? <SuggestedPromptList prompts={suggestedPrompts ?? EMPTY_SUGGESTED_PROMPTS} /> : null}
@@ -343,6 +388,13 @@ interface AgentComposerProps {
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
   refreshThreadList?: () => Promise<void> | void;
+  gatewayAudio?: GatewayAudioModels;
+  transcriptionModel?: string;
+  onTranscriptionModelChange: (modelId: string) => void;
+  speechSelection: GatewaySpeechSelection;
+  onSpeechSelectionChange: (selection: GatewaySpeechSelection) => void;
+  speechPlayback: { hasText: boolean; isSpeaking: boolean; read: () => void; stop: () => void };
+  gatewayBaseUrl: string;
 }
 
 const AgentComposer = ({
@@ -352,6 +404,13 @@ const AgentComposer = ({
   hideModelSwitcher,
   runOptionsSlot,
   refreshThreadList,
+  gatewayAudio,
+  transcriptionModel,
+  onTranscriptionModelChange,
+  speechSelection,
+  onSpeechSelectionChange,
+  speechPlayback,
+  gatewayBaseUrl,
 }: AgentComposerProps) => {
   const { threadInput: text, setThreadInput, updateDraft, draftStatus } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -500,9 +559,16 @@ const AgentComposer = ({
                   canSendWhileStreaming={canSendWhileStreaming}
                   onCancel={() => void cancelRun()}
                   onSetText={value => {
-                    setThreadInput(value);
+                    setThreadInput(current => [current.trim(), value.trim()].filter(Boolean).join(' '));
                   }}
                   voiceCall={voiceCall}
+                  gatewayAudio={gatewayAudio}
+                  transcriptionModel={transcriptionModel}
+                  onTranscriptionModelChange={onTranscriptionModelChange}
+                  speechSelection={speechSelection}
+                  onSpeechSelectionChange={onSpeechSelectionChange}
+                  speechPlayback={speechPlayback}
+                  gatewayBaseUrl={gatewayBaseUrl}
                 />
               </ComposerActions>
             </ComposerBox>
@@ -510,23 +576,6 @@ const AgentComposer = ({
         </Composer>
       </ComposerFileDrop>
     </div>
-  );
-};
-
-const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript: (text: string) => void }) => {
-  const [requestContext] = useEntityRequestContext('agent', agentId ?? '');
-  const { start, stop, isListening } = useSpeechRecognition({ agentId, requestContext });
-
-  return (
-    <Button
-      variant="ghost"
-      size="icon-md"
-      type="button"
-      tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
-      onClick={() => (isListening ? stop() : start(onTranscript))}
-    >
-      {isListening ? <CircleStopIcon /> : <Mic />}
-    </Button>
   );
 };
 
@@ -541,6 +590,13 @@ interface ComposerActionRowProps {
   onCancel: () => void;
   onSetText: (text: string) => void;
   voiceCall?: VoiceCallControls;
+  gatewayAudio?: GatewayAudioModels;
+  transcriptionModel?: string;
+  onTranscriptionModelChange: (modelId: string) => void;
+  speechSelection: GatewaySpeechSelection;
+  onSpeechSelectionChange: (selection: GatewaySpeechSelection) => void;
+  speechPlayback: { hasText: boolean; isSpeaking: boolean; read: () => void; stop: () => void };
+  gatewayBaseUrl: string;
 }
 
 const ComposerActionRow = ({
@@ -554,6 +610,13 @@ const ComposerActionRow = ({
   onCancel,
   onSetText,
   voiceCall,
+  gatewayAudio,
+  transcriptionModel,
+  onTranscriptionModelChange,
+  speechSelection,
+  onSpeechSelectionChange,
+  speechPlayback,
+  gatewayBaseUrl,
 }: ComposerActionRowProps) => {
   return (
     <>
@@ -562,13 +625,27 @@ const ComposerActionRow = ({
         {runOptionsSlot}
       </ComposerActionsStart>
       <ComposerActionsEnd>
-        {showModelSwitcher && agentId && (
-          <>
-            <ComposerModelSwitcher />
-            <ComposerModelSettings agentId={agentId} />
-          </>
+        {showModelSwitcher && agentId && <ComposerModelSwitcher />}
+        {agentId && (showModelSwitcher || (canExecute && gatewayAudio)) && (
+          <ComposerModelSettings
+            agentId={agentId}
+            gatewayAudio={canExecute ? gatewayAudio : undefined}
+            transcriptionModel={transcriptionModel}
+            onTranscriptionModelChange={onTranscriptionModelChange}
+            speechSelection={speechSelection}
+            onSpeechSelectionChange={onSpeechSelectionChange}
+          />
         )}
-        {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+        {canExecute && gatewayAudio && (
+          <GatewayAudioComposerActions
+            baseUrl={gatewayBaseUrl}
+            models={gatewayAudio}
+            onTranscript={onSetText}
+            transcriptionModel={transcriptionModel}
+            speechSelection={speechSelection}
+            playback={speechPlayback}
+          />
+        )}
         {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         <ComposerSendButton
           canExecute={canExecute}
