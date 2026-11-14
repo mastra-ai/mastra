@@ -86,6 +86,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
     commands: {
       run: createDefaultRunMock(),
       list: vi.fn().mockResolvedValue([]),
+      kill: vi.fn().mockResolvedValue(true),
       sendStdin: vi.fn().mockResolvedValue(undefined),
     },
     files: {
@@ -171,6 +172,7 @@ const { mockSandbox, createMockSandboxApi, resetMockDefaults, createMockCommandH
       return Promise.resolve(result);
     });
     mockSandbox.commands.list.mockResolvedValue([]);
+    mockSandbox.commands.kill.mockResolvedValue(true);
     mockSandbox.commands.sendStdin.mockResolvedValue(undefined);
     mockSandbox.files.write.mockResolvedValue(undefined);
     mockSandbox.files.read.mockResolvedValue('');
@@ -1411,6 +1413,32 @@ describe('E2BSandbox', () => {
       const [, runOpts] = mockSandbox.commands.run.mock.calls.at(-1)!;
       expect(runOpts.cwd).toBeUndefined();
       expect(sandbox.workingDirectory).toBeUndefined();
+    });
+
+    it('runs commands as the configured user', async () => {
+      const sandbox = new E2BSandbox({ user: 'agent' });
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+
+      // Background processes run as the same user, and so does the kill script
+      // that takes their tree down (another user could not signal them).
+      const handle = await sandbox.processes.spawn('node server.js');
+      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+
+      await handle.kill();
+      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+    });
+
+    it('leaves the user unset so the template default applies', async () => {
+      const sandbox = new E2BSandbox();
+      await sandbox._start();
+
+      await sandbox.executeCommand('pwd');
+
+      const [, runOpts] = mockSandbox.commands.run.mock.calls.at(-1)!;
+      expect(runOpts).not.toHaveProperty('user');
     });
   });
 });
