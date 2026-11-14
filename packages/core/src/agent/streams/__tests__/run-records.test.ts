@@ -17,6 +17,9 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
+import { createDurableAgent } from '../../durable/create-durable-agent';
+import { createEventedAgent } from '../../durable/create-evented-agent';
+import { durableReplayOwnerKey } from '../../durable/replay-owners';
 import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 import { AGENT_RUN_RECORD_TTL_MS, agentRunRecordKey } from '../run-records';
@@ -255,6 +258,54 @@ describe('Agent run records', () => {
       releaseTool();
       releaseWrite();
       await mastra.shutdown();
+    }
+  });
+
+  it.each([
+    ['durable', createDurableAgent],
+    ['evented', createEventedAgent],
+  ] as const)('%s publishes and cleans up full run records at its existing durable key', async (_engine, create) => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Hello there.' });
+    const cache = new InMemoryServerCache();
+    const pubsub = new EventEmitterPubSub();
+    const agent = create({ agent: makeAgent(), cleanupTimeoutMs: 0 });
+    const observer = create({ agent: makeAgent(), cleanupTimeoutMs: 0 });
+    const producerMastra = new Mastra({
+      agents: { agent },
+      pubsub,
+      cache,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    const observerMastra = new Mastra({
+      agents: { agent: observer },
+      pubsub,
+      cache,
+      storage: new InMemoryStore(),
+      logger: false,
+    });
+    try {
+      const output = await agent.stream('Say hello.', { requestContext: owner() });
+      expect(await output.output.text).toBe('Hello there.');
+      const key = durableReplayOwnerKey('records-agent', output.runId);
+      await vi.waitFor(async () =>
+        expect(await observer.__getRunRecord(output.runId)).toMatchObject({
+          agentId: 'records-agent',
+          runId: output.runId,
+          resourceId: 'user-1',
+          threadId: 'thread-1',
+          status: 'finished',
+          publisherId: expect.any(String),
+        }),
+      );
+      expect(await cache.get(key)).toEqual(await observer.__getRunRecord(output.runId));
+      expect(await cache.get(agentRunRecordKey('records-agent', output.runId))).toBeUndefined();
+
+      await output.cleanup();
+      await vi.waitFor(async () => expect(await cache.get(key)).toBeUndefined());
+      await expect(observer.__getRunRecord(output.runId)).resolves.toBeUndefined();
+    } finally {
+      await Promise.all([producerMastra.shutdown(), observerMastra.shutdown()]);
     }
   });
 

@@ -113,49 +113,64 @@ describe.each(['durable', 'evented'] as const)('finished run replay across serve
     };
     const a = await start();
     const b = await start();
-    return { a, b, storage };
+    return { a, b, storage, cache };
   }
 
-  it('lets the owner observe the finished run from any server until cleanup, and nobody else', async () => {
-    llm.on({ endpoint: 'chat' }, { content: 'retained replay proof' });
-    const { a, b, storage } = await startServers();
-    const runId = `replay-across-servers-${kind}`;
+  it.each(['current', 'legacy'] as const)(
+    'lets the owner observe the finished run with a %s record from any server until cleanup, and nobody else',
+    async recordShape => {
+      llm.on({ endpoint: 'chat' }, { content: 'retained replay proof' });
+      const { a, b, storage, cache } = await startServers();
+      const runId = `replay-across-servers-${kind}-${recordShape}`;
 
-    const streamed = await a('stream', 'alice', {
-      messages: 'Say done',
-      runId,
-      memory: { thread: 'alice-thread', resource: 'alice' },
-    });
-    expect(streamed.status).toBe(200);
-    expect(streamed.body).toContain('retained replay proof');
+      const streamed = await a('stream', 'alice', {
+        messages: 'Say done',
+        runId,
+        memory: { thread: 'alice-thread', resource: 'alice' },
+      });
+      expect(streamed.status).toBe(200);
+      expect(streamed.body).toContain('retained replay proof');
 
-    // Barrier: the run has finished and its workflow rows are gone, so only the
-    // retained replay history and its owner remain.
-    const workflows = await storage.getStore('workflows');
-    await vi.waitFor(async () => {
-      const { runs } = await workflows!.listWorkflowRuns({});
-      expect(runs.filter(run => run.runId === runId)).toEqual([]);
-    });
+      // Barrier: the run has finished and its workflow rows are gone, so only the
+      // retained replay history and its owner remain.
+      const workflows = await storage.getStore('workflows');
+      await vi.waitFor(async () => {
+        const { runs } = await workflows!.listWorkflowRuns({});
+        expect(runs.filter(run => run.runId === runId)).toEqual([]);
+      });
 
-    for (const observe of [a, b]) {
-      const replay = await observe('observe', 'alice', { runId });
-      expect(replay.status).toBe(200);
-      expect(replay.body).toContain('retained replay proof');
-      expect(replay.body).toContain('"type":"finish"');
-    }
-    for (const observe of [a, b]) {
-      expect((await observe('observe', 'bob', { runId })).status).toBe(403);
-      expect((await observe('observe', 'alice-no-read', { runId })).status).toBe(403);
-      expect((await observe('observe', undefined, { runId })).status).toBe(401);
-    }
-    // Replay ownership grants reading only: the finished run is not reported stopped.
-    expect(await b(`runs/${runId}/abort`, 'alice', {})).toEqual({ status: 200, body: '{"aborted":false}' });
+      if (recordShape === 'legacy') {
+        // A pre-upgrade worker retained only these identity fields at this key.
+        await cache.set(
+          `agent.durable.replay-owner.agent.${runId}`,
+          { agentId: 'agent', runId, resourceId: 'alice', threadId: 'alice-thread' },
+          { ttlMs: 60_000 },
+        );
+        for (const { mastra } of instances) {
+          expect(await mastra.getAgent('agent').__getRunRecord(runId)).toBeUndefined();
+        }
+      }
 
-    await new Promise(resolve => setTimeout(resolve, CLEANUP_MS + 500));
-    for (const observe of [a, b]) {
-      expect((await observe('observe', 'alice', { runId })).status).toBe(404);
-    }
-  });
+      for (const observe of [a, b]) {
+        const replay = await observe('observe', 'alice', { runId });
+        expect(replay.status).toBe(200);
+        expect(replay.body).toContain('retained replay proof');
+        expect(replay.body).toContain('"type":"finish"');
+      }
+      for (const observe of [a, b]) {
+        expect((await observe('observe', 'bob', { runId })).status).toBe(403);
+        expect((await observe('observe', 'alice-no-read', { runId })).status).toBe(403);
+        expect((await observe('observe', undefined, { runId })).status).toBe(401);
+      }
+      // Replay ownership grants reading only: the finished run is not reported stopped.
+      expect(await b(`runs/${runId}/abort`, 'alice', {})).toEqual({ status: 200, body: '{"aborted":false}' });
+
+      await new Promise(resolve => setTimeout(resolve, CLEANUP_MS + 500));
+      for (const observe of [a, b]) {
+        expect((await observe('observe', 'alice', { runId })).status).toBe(404);
+      }
+    },
+  );
 
   it('never lets a caller observe a run unknown to every server', async () => {
     const { a, b } = await startServers();

@@ -16,6 +16,7 @@ import {
   setExecutionClaim,
 } from './execution-fence';
 import type { DurableExecutionClaim } from './execution-fence';
+import { durableReplayOwnerKey } from './replay-owners';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
@@ -110,6 +111,7 @@ export function getExecutionStreamPublisher({
     },
     record: {
       cache: bus.runRecordCache,
+      key: durableReplayOwnerKey(agentId, runId),
       agentId,
       resourceId: executionClaim.resourceId ?? memoryInfo?.resourceId,
       threadId: executionClaim.threadId ?? memoryInfo?.threadId,

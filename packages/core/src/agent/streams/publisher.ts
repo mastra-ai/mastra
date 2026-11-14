@@ -160,26 +160,28 @@ export function createAgentStreamPublisher({
   const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
     if (!record || role === 'producer') return;
     await assertOwnership?.();
-    const { cache, ...owner } = record;
+    const { cache, key, ...owner } = record;
     if (owner.resourceId === undefined || owner.threadId === undefined) {
-      const current = await readAgentRunRecord(cache, owner.agentId, runId);
+      const current = await readAgentRunRecord(cache, owner.agentId, runId, key);
       if (current?.publisherId === publisherId) {
         owner.resourceId ??= current.resourceId;
         owner.threadId ??= current.threadId;
       }
     }
-    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }).catch(error => {
-      logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
-      if (status === 'running' && !ended && !runningRetryTimer) {
-        runningRetryTimer = setTimeout(() => {
-          runningRetryTimer = undefined;
-          void enqueue(async () => {
-            if (!ended) await writeRecord('running')();
-          });
-        }, 1000);
-        runningRetryTimer.unref?.();
-      }
-    });
+    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now(), publisherId }, key).catch(
+      error => {
+        logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
+        if (status === 'running' && !ended && !runningRetryTimer) {
+          runningRetryTimer = setTimeout(() => {
+            runningRetryTimer = undefined;
+            void enqueue(async () => {
+              if (!ended) await writeRecord('running')();
+            });
+          }, 1000);
+          runningRetryTimer.unref?.();
+        }
+      },
+    );
   };
 
   // The record goes first, so a reader that sees any event can authorize.
@@ -242,7 +244,7 @@ export function createAgentStreamPublisher({
       await assertCleanupOwnership?.();
       // As with plain runs, a later publisher's record prevents old cleanup.
       if (record) {
-        const current = await readAgentRunRecord(record.cache, record.agentId, runId);
+        const current = await readAgentRunRecord(record.cache, record.agentId, runId, record.key);
         if (current && current.publisherId !== publisherId) return;
       }
     } catch {
@@ -252,7 +254,7 @@ export function createAgentStreamPublisher({
     for (const topic of [AGENT_STREAM_TOPIC(runId), AGENT_CONTROL_TOPIC(runId), abortAckTopic(runId)]) {
       void pubsub.clearTopic(topic).catch(() => {});
     }
-    if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
+    if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId, record.key).catch(() => {});
   };
 
   const scheduleCleanup = () => {

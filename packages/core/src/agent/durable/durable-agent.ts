@@ -68,6 +68,8 @@ import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import type { AgentStreamBus } from '../streams/bus';
 import { replayResponseMessages, withRebuiltResponseMessages } from '../streams/response-messages';
 import type { ResponseMessagesReplay } from '../streams/response-messages';
+import { readAgentRunRecord } from '../streams/run-records';
+import type { AgentRunRecord } from '../streams/run-records';
 import type { AgentStreamsConfig } from '../streams/types';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
@@ -106,6 +108,7 @@ import { detachFullStreamOnEnd } from './observe-full-stream';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationOptions, PreparationResult } from './preparation';
+import { durableReplayOwnerKey, readDurableReplayOwner } from './replay-owners';
 import { createRunAbortController } from './run-abort';
 import { createRunCleanup } from './run-cleanup';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -1012,16 +1015,22 @@ export class DurableAgent<
     return { ...this.#runRegistry.getMemoryInfo(runId) };
   }
 
+  override async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
+    const bus = this.__getStreamBus();
+    return readAgentRunRecord(bus.runRecordCache, this.id, runId, durableReplayOwnerKey(this.id, runId));
+  }
+
   /**
    * Owner of a run whose replay history is still retained: the local owner,
-   * else the shared run record. Undefined once the run's topic is cleared.
+   * else the shared record, including legacy records without stream status.
+   * Undefined once the run's topic is cleared. Only used for replay access.
    * Rejects when the shared cache cannot be read.
    * @internal
    */
   async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
     const local = this.__getRunOwner(runId);
     if (local) return local;
-    const shared = await this.__getRunRecord(runId);
+    const shared = await readDurableReplayOwner(this.__getStreamBus().runRecordCache, this.id, runId);
     if (!shared) return undefined;
     return { resourceId: shared.resourceId, threadId: shared.threadId };
   }
