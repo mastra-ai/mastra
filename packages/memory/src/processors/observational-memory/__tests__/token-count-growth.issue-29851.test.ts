@@ -182,6 +182,90 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
+  it('refreshes status when a background tool result lands while the step saves', async () => {
+    const f = await setup();
+    f.messageList.add({ ...assistant([{ type: 'text', text: 'first result' }]), id: 'assistant' }, 'response');
+    const persist = f.om.persistMessages.bind(f.om);
+    let inserted = false;
+    vi.spyOn(f.om, 'persistMessages').mockImplementation(async (...args) => {
+      await persist(...args);
+      if (inserted) return;
+      inserted = true;
+      f.messageList.add(
+        {
+          id: 'background',
+          role: 'assistant',
+          threadId: 't',
+          resourceId: 'r',
+          createdAt: new Date(),
+          content: {
+            format: 2,
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'background',
+                  toolName: 'read_file',
+                  args: {},
+                  result: 'new data '.repeat(5000),
+                },
+              },
+            ],
+          },
+        },
+        'response',
+      );
+    });
+
+    const context = await f.turn.step(1).prepare();
+    const current = await f.om.getStatus({
+      threadId: 't',
+      resourceId: 'r',
+      record: f.turn.record,
+      messages: f.messageList.get.all.db(),
+    });
+
+    expect(inserted).toBe(true);
+    expect(context.observed).toBe(false);
+    expect(context.buffered).toBe(false);
+    expect(context.status.pendingTokens).toBe(current.pendingTokens);
+  });
+
+  it('refreshes status when a pending tool call resolves in place while the step saves', async () => {
+    const f = await setup();
+    const call = toolPart(1);
+    call.toolInvocation = { state: 'call', toolCallId: 'call-1', toolName: 'read_file', args: { path: 'file-1' } };
+    f.messageList.add(assistant([call]), 'response');
+    const persist = f.om.persistMessages.bind(f.om);
+    let resolved = false;
+    vi.spyOn(f.om, 'persistMessages').mockImplementation(async (...args) => {
+      await persist(...args);
+      if (resolved) return;
+      resolved = f.messageList.updateToolInvocation({
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'call-1',
+          toolName: 'read_file',
+          args: { path: 'file-1' },
+          result: 'resolved data '.repeat(5000),
+        },
+      });
+    });
+
+    const context = await f.turn.step(1).prepare();
+    const current = await f.om.getStatus({
+      threadId: 't',
+      resourceId: 'r',
+      record: f.turn.record,
+      messages: f.messageList.get.all.db(),
+    });
+
+    expect(resolved).toBe(true);
+    expect(context.status.pendingTokens).toBe(current.pendingTokens);
+  });
+
   it('still refreshes status after a step that started buffering', async () => {
     const f = await setup({ messageTokens: 100_000, bufferTokens: 500, bufferActivation: 0.5 });
     f.messageList.add(assistant([toolPart(1)]), 'response');

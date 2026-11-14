@@ -158,11 +158,13 @@ export class ObservationStep {
     );
 
     // ── Check thresholds + buffer trigger (all steps) ──────────
+    let countedMessages = getObservableMessages(messageList);
+    let countedBeforeSave = countedInputsShape(countedMessages);
     let statusSnapshot = await om.getStatus({
       threadId,
       resourceId,
       record: this.turn.record,
-      messages: getObservableMessages(messageList),
+      messages: countedMessages,
     });
 
     if (statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate && !hasIncompleteToolCalls) {
@@ -170,11 +172,13 @@ export class ObservationStep {
       // may have persisted its chunk since the record was cached; refresh once so a ready
       // chunk is activated instead of lingering behind a newly started buffer op.
       await this.turn.refreshRecord();
+      countedMessages = getObservableMessages(messageList);
+      countedBeforeSave = countedInputsShape(countedMessages);
       statusSnapshot = await om.getStatus({
         threadId,
         resourceId,
         record: this.turn.record,
-        messages: getObservableMessages(messageList),
+        messages: countedMessages,
       });
     }
 
@@ -409,11 +413,15 @@ export class ObservationStep {
         }
       }
 
-      // Re-fetch status after observation/cleanup or buffering for the snapshot. On a step where
-      // neither ran, the record and counted messages are unchanged (the step > 0 save only moves
-      // messages between buckets), so the first snapshot still holds and a recount would only
-      // re-walk the whole accumulated context again.
-      if (willObserveNow || buffered) {
+      // Re-fetch status after observation/cleanup or buffering for the snapshot. Otherwise the record
+      // is unchanged and the first snapshot still holds — unless something landed in the counted
+      // messages while the step saved (e.g. a background tool result merged in during the await).
+      // Recounting a step where nothing changed would only re-walk the whole accumulated context.
+      if (
+        willObserveNow ||
+        buffered ||
+        countedInputsChanged(countedBeforeSave, countedInputsShape(getObservableMessages(messageList)))
+      ) {
         statusSnapshot = await om.getStatus({
           threadId,
           resourceId,
@@ -752,6 +760,35 @@ function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessa
  * so a result merged in place into an existing tool-invocation part yields a new key. Bookkeeping
  * fields that change when a part is re-stamped are not part of the identity.
  */
+/**
+ * A cheap shape of the messages a status snapshot counted: which messages and parts, by reference,
+ * and the fields that change when content lands in place (a tool call resolving, a merged result,
+ * streamed text). It walks the parts without serializing them, so comparing two shapes costs far
+ * less than recounting tokens. The parts array itself is left out: saving rebuilds it around the
+ * same part objects.
+ */
+export function countedInputsShape(messages: MastraDBMessage[]): unknown[] {
+  const shape: unknown[] = [];
+  for (const msg of messages) {
+    const parts = msg.content?.parts ?? [];
+    shape.push(msg, msg.content, parts.length);
+    for (const part of parts) {
+      shape.push(part);
+      if (part.type === 'tool-invocation') {
+        const invocation = part.toolInvocation as { state?: unknown; args?: unknown; result?: unknown };
+        shape.push(invocation, invocation.state, invocation.args, invocation.result);
+      } else if ('text' in part) {
+        shape.push((part as { text?: unknown }).text);
+      }
+    }
+  }
+  return shape;
+}
+
+export function countedInputsChanged(before: unknown[], after: unknown[]): boolean {
+  return before.length !== after.length || before.some((value, i) => value !== after[i]);
+}
+
 export function getPartKeys(msg: MastraDBMessage): string[] {
   const seen = new Map<string, number>();
   return (msg.content.parts ?? []).flatMap(part => {
