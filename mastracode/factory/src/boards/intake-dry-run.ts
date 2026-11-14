@@ -128,7 +128,7 @@ export interface IntakeDryRunResult {
   boards: IntakeDryRunBoard[];
   /** Keys of the items no board would take. */
   notRouted: string[];
-  /** With a baseline: how many items land somewhere other than today's rules put them. */
+  /** With a baseline: how many items land on another board or phase than today's rules put them. */
   changed?: number;
   items: IntakeDryRunItem[];
 }
@@ -150,8 +150,9 @@ function placementOf(trace: IntakeTrace): IntakeDryRunPlacement | null {
   return { boardKey: resolution.board, routeId: resolution.routeId, phase: resolution.phase };
 }
 
-function samePlacement(left: IntakeDryRunPlacement | null, right: IntakeDryRunPlacement | null): boolean {
-  return left?.boardKey === right?.boardKey && left?.routeId === right?.routeId && left?.phase === right?.phase;
+/** Whether both land in the same place; which rule put it there doesn't matter. */
+function sameLanding(left: IntakeDryRunPlacement | null, right: IntakeDryRunPlacement | null): boolean {
+  return left?.boardKey === right?.boardKey && left?.phase === right?.phase;
 }
 
 function pushKey(groups: { boardKey: string; keys: string[] }[], boardKey: string, key: string) {
@@ -229,7 +230,7 @@ export function dryRunIntake(query: IntakeDryRunQuery): IntakeDryRunResult {
         traceIntakeOrder({ routes: baseline.routes, order: baseline.order, facts: item.facts, registry }),
       );
       entry.before = before;
-      if (!samePlacement(before, placement)) changed += 1;
+      if (!sameLanding(before, placement)) changed += 1;
     }
     decided.push(entry);
   }
