@@ -2,6 +2,7 @@ import { MastraClient } from '@mastra/client-js';
 import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -275,20 +276,24 @@ describe('Thread', () => {
         http.get(`${BASE_URL}/api/system/gateway-audio/models`, () =>
           HttpResponse.json({
             speech: [{ id: 'minimax/speech', voices: ['george'] }],
-            transcription: [{ id: 'openai/whisper' }],
+            transcription: [{ id: 'openai/whisper' }, { id: 'mistral/voxtral' }],
           }),
         ),
         http.post(`${BASE_URL}/api/system/gateway-audio/transcriptions`, async ({ request }) => {
-          expect(await request.text()).toContain('openai/whisper');
+          expect(await request.text()).toContain('mistral/voxtral');
           return HttpResponse.json({ text: 'spoken words' });
         }),
       );
       renderThread([assistantMessage('A reply')]);
 
-      const voiceSettings = await screen.findByRole('button', { name: 'Voice settings' });
+      const modelSettings = await screen.findByRole('button', { name: 'Model settings' });
+      expect(screen.queryByRole('button', { name: 'Voice settings' })).toBeNull();
       expect(screen.queryByRole('combobox', { name: 'Speech model' })).toBeNull();
-      fireEvent.click(voiceSettings);
+      fireEvent.click(modelSettings);
       expect(screen.getByRole<HTMLSelectElement>('combobox', { name: 'Speech model' }).value).toBe('minimax/speech');
+      fireEvent.change(screen.getByRole('combobox', { name: 'Transcription model' }), {
+        target: { value: 'mistral/voxtral' },
+      });
       fireEvent.change(screen.getByRole('textbox', { name: 'Voice ID' }), { target: { value: 'sarah' } });
       expect(screen.getByRole<HTMLInputElement>('textbox', { name: 'Voice ID' }).value).toBe('sarah');
       fireEvent.click(screen.getByRole('button', { name: 'Start dictation' }));
@@ -297,6 +302,26 @@ describe('Thread', () => {
       await waitFor(() =>
         expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('spoken words'),
       );
+    });
+
+    it('reports transcription failure as a toast outside the composer', async () => {
+      server.use(
+        ...baseHandlers(),
+        http.get(`${BASE_URL}/api/system/gateway-audio/models`, () =>
+          HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
+        ),
+        http.post(
+          `${BASE_URL}/api/system/gateway-audio/transcriptions`,
+          () => new HttpResponse('<html>502 Bad Gateway</html>', { status: 502 }),
+        ),
+      );
+      render(<Toaster />);
+      const { container } = renderThread([]);
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Stop dictation' }));
+
+      await screen.findByText('Could not transcribe audio.');
+      expect(container.querySelector('form[data-slot="composer"] [role="alert"]')).toBeNull();
     });
 
     it('does not play speech that arrives after playback is stopped', async () => {

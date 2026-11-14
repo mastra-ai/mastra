@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 
 import { transcribeGatewayAudio } from '../../../utils/gateway-audio';
 import { Button } from '../Button';
+import { toast } from '../Toaster';
 
 interface GatewayDictationProps {
   baseUrl: string;
@@ -27,7 +28,6 @@ function recordingFormat(): { mimeType: string; extension: string } | undefined 
 export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: GatewayDictationProps) {
   const [recording, setRecording] = useState(false);
   const [transcribing, setTranscribing] = useState(false);
-  const [error, setError] = useState<string>();
   const recorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const format = recordingFormat();
@@ -51,7 +51,6 @@ export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: Gat
       setRecording(false);
       return;
     }
-    setError(undefined);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
@@ -67,13 +66,13 @@ export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: Gat
         streamRef.current = null;
         const audio = new Blob(chunks, { type: format.mimeType });
         if (!audio.size) {
-          setError('No audio was recorded.');
+          toast.error('No audio was recorded.');
           return;
         }
         setTranscribing(true);
         void transcribeGatewayAudio(baseUrl, model, audio, format.extension)
           .then(onTranscript)
-          .catch(() => setError('Could not transcribe audio.'))
+          .catch(() => toast.error('Could not transcribe audio.'))
           .finally(() => setTranscribing(false));
       };
       recorder.start();
@@ -82,23 +81,20 @@ export function GatewayDictation({ baseUrl, model, onTranscript, disabled }: Gat
       streamRef.current?.getTracks().forEach(track => track.stop());
       streamRef.current = null;
       recorderRef.current = null;
-      setError('Microphone access is unavailable.');
+      toast.error('Microphone access is unavailable.');
     }
   };
 
   return (
-    <div className="flex items-center gap-2">
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-md"
-        aria-label={recording ? 'Stop dictation' : 'Start dictation'}
-        disabled={disabled || transcribing}
-        onClick={() => void toggle()}
-      >
-        {recording ? <Square size={16} /> : <Mic size={16} />}
-      </Button>
-      {error && <span role="alert">{error}</span>}
-    </div>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-md"
+      aria-label={recording ? 'Stop dictation' : 'Start dictation'}
+      disabled={disabled || transcribing}
+      onClick={() => void toggle()}
+    >
+      {recording ? <Square size={16} /> : <Mic size={16} />}
+    </Button>
   );
 }

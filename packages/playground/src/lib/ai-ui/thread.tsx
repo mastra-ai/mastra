@@ -161,6 +161,10 @@ const ThreadContent = ({
   const client = useMastraClient();
   const baseUrl = client.options.baseUrl || '';
   const { data: gatewayAudio } = useGatewayAudioModels(baseUrl, Boolean(window.MASTRA_PLATFORM_PROJECT_ID));
+  const [transcriptionModelId, setTranscriptionModelId] = useState('');
+  const transcriptionModel =
+    gatewayAudio?.transcription.find(model => model.id === transcriptionModelId)?.id ??
+    gatewayAudio?.transcription[0]?.id;
   const [speechSelection, setSpeechSelection] = useState<GatewaySpeechSelection>({ modelId: '', voiceId: '' });
   const selectedSpeechModel =
     gatewayAudio?.speech.find(model => model.id === speechSelection.modelId) ?? gatewayAudio?.speech[0];
@@ -330,6 +334,8 @@ const ThreadContent = ({
                     runOptionsSlot={runOptionsSlot}
                     refreshThreadList={refreshThreadList}
                     gatewayAudio={gatewayAudio}
+                    transcriptionModel={transcriptionModel}
+                    onTranscriptionModelChange={setTranscriptionModelId}
                     speechSelection={speechSelection}
                     onSpeechSelectionChange={setSpeechSelection}
                     speechPlayback={{
@@ -383,6 +389,8 @@ interface AgentComposerProps {
   runOptionsSlot?: React.ReactNode;
   refreshThreadList?: () => Promise<void> | void;
   gatewayAudio?: GatewayAudioModels;
+  transcriptionModel?: string;
+  onTranscriptionModelChange: (modelId: string) => void;
   speechSelection: GatewaySpeechSelection;
   onSpeechSelectionChange: (selection: GatewaySpeechSelection) => void;
   speechPlayback: { hasText: boolean; isSpeaking: boolean; read: () => void; stop: () => void };
@@ -397,6 +405,8 @@ const AgentComposer = ({
   runOptionsSlot,
   refreshThreadList,
   gatewayAudio,
+  transcriptionModel,
+  onTranscriptionModelChange,
   speechSelection,
   onSpeechSelectionChange,
   speechPlayback,
@@ -553,6 +563,8 @@ const AgentComposer = ({
                   }}
                   voiceCall={voiceCall}
                   gatewayAudio={gatewayAudio}
+                  transcriptionModel={transcriptionModel}
+                  onTranscriptionModelChange={onTranscriptionModelChange}
                   speechSelection={speechSelection}
                   onSpeechSelectionChange={onSpeechSelectionChange}
                   speechPlayback={speechPlayback}
@@ -579,6 +591,8 @@ interface ComposerActionRowProps {
   onSetText: (text: string) => void;
   voiceCall?: VoiceCallControls;
   gatewayAudio?: GatewayAudioModels;
+  transcriptionModel?: string;
+  onTranscriptionModelChange: (modelId: string) => void;
   speechSelection: GatewaySpeechSelection;
   onSpeechSelectionChange: (selection: GatewaySpeechSelection) => void;
   speechPlayback: { hasText: boolean; isSpeaking: boolean; read: () => void; stop: () => void };
@@ -597,6 +611,8 @@ const ComposerActionRow = ({
   onSetText,
   voiceCall,
   gatewayAudio,
+  transcriptionModel,
+  onTranscriptionModelChange,
   speechSelection,
   onSpeechSelectionChange,
   speechPlayback,
@@ -609,19 +625,24 @@ const ComposerActionRow = ({
         {runOptionsSlot}
       </ComposerActionsStart>
       <ComposerActionsEnd>
-        {showModelSwitcher && agentId && (
-          <>
-            <ComposerModelSwitcher />
-            <ComposerModelSettings agentId={agentId} />
-          </>
+        {showModelSwitcher && agentId && <ComposerModelSwitcher />}
+        {agentId && (showModelSwitcher || (canExecute && gatewayAudio)) && (
+          <ComposerModelSettings
+            agentId={agentId}
+            gatewayAudio={canExecute ? gatewayAudio : undefined}
+            transcriptionModel={transcriptionModel}
+            onTranscriptionModelChange={onTranscriptionModelChange}
+            speechSelection={speechSelection}
+            onSpeechSelectionChange={onSpeechSelectionChange}
+          />
         )}
         {canExecute && gatewayAudio && (
           <GatewayAudioComposerActions
             baseUrl={gatewayBaseUrl}
             models={gatewayAudio}
             onTranscript={onSetText}
+            transcriptionModel={transcriptionModel}
             speechSelection={speechSelection}
-            onSpeechSelectionChange={onSpeechSelectionChange}
             playback={speechPlayback}
           />
         )}
