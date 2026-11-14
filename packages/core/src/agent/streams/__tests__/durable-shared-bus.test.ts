@@ -15,20 +15,25 @@ import type { PubSub } from '../../../events/pubsub';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { DurableAgent } from '../../durable';
 import { createDurableAgent } from '../../durable/create-durable-agent';
+import { createEventedAgent } from '../../durable/create-evented-agent';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
 
 describe('DurableAgent default engine on the shared Mastra bus', () => {
   const getMock = useLoopScenarioAimock();
 
   const setup = ({
     resolveBeforeRegistering = false,
+    standalone = false,
     agentPubsub,
     streamPubsub,
   }: {
     resolveBeforeRegistering?: boolean;
+    standalone?: boolean;
     agentPubsub?: PubSub;
     streamPubsub?: PubSub;
   } = {}) => {
@@ -70,6 +75,15 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     const serverCache = new InMemoryServerCache();
     // Reading the bus before registration resolves it against the agent's own default bus.
     const agentA = createDurableAgent({ agent: makeAgent(), pubsub: streamPubsub });
+    if (standalone) {
+      return {
+        a: agentA,
+        b: agentA,
+        pubsub: agentA.pubsub instanceof CachingPubSub ? agentA.pubsub.getInner() : agentA.pubsub,
+        started,
+        release,
+      };
+    }
     if (resolveBeforeRegistering) void (agentA as DurableAgent).pubsub;
     const mastraA = new Mastra({ agents: { agent: agentA }, pubsub, cache: serverCache, logger: false });
     const mastraB = new Mastra({
@@ -88,15 +102,20 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
   };
 
   it.each([
-    ['registered before first use', false],
-    ['bus read before registration', true],
+    { resolveBeforeRegistering: false, fork: false, standalone: false },
+    { resolveBeforeRegistering: true, fork: false, standalone: false },
+    { resolveBeforeRegistering: false, fork: true, standalone: false },
+    { resolveBeforeRegistering: true, fork: true, standalone: false },
+    { resolveBeforeRegistering: false, fork: true, standalone: true },
   ])(
-    'publishes on mastra.pubsub so another instance observes replay plus live tail (%s)',
+    'observes replay plus live tail on the inherited bus (resolveBeforeRegistering=$resolveBeforeRegistering, fork=$fork, standalone=$standalone)',
     { timeout: 15_000 },
-    async (_, resolveBeforeRegistering) => {
-      const { a, b, pubsub, started, release } = setup({ resolveBeforeRegistering });
+    async ({ resolveBeforeRegistering, fork, standalone }) => {
+      const { a, b, pubsub, started, release } = setup({ resolveBeforeRegistering, standalone });
+      const runner = fork ? (a.__fork() as unknown as DurableAgent) : a;
+      const publish = vi.spyOn(pubsub, 'publish');
 
-      const run = await a.stream('Look it up then answer.', { maxSteps: 3 });
+      const run = await runner.stream('Look it up then answer.', { maxSteps: 3 });
       const consumed = run.output.consumeStream();
       await started;
       await pubsub.flush();
@@ -111,14 +130,21 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       await consumed;
       await reading;
 
-      // Replay: frames published before the observer subscribed.
-      expect(types.slice(0, 1)).toEqual(['start']);
-      expect(types).toContain('tool-call');
+      // Registered replicas share replay storage; standalone forks only inherit the transport.
+      if (!standalone) {
+        expect(types.slice(0, 1)).toEqual(['start']);
+        expect(types).toContain('tool-call');
+      }
       // Live tail: the second turn ran after the observer subscribed.
       expect(types).toContain('tool-result');
       expect(types).toContain('text-delta');
       expect(types.at(-1)).toBe('finish');
       expect(await observed.output.text).toBe('The answer is FOUND.');
+      expect(
+        publish.mock.calls.some(
+          ([topic, event]) => topic === AGENT_STREAM_TOPIC(run.runId) && event.type === AgentStreamEventTypes.FINISH,
+        ),
+      ).toBe(true);
     },
   );
 
@@ -137,7 +163,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         agentPubsub: custom,
         streamPubsub: sharedFrames ? custom : undefined,
       });
-      const runner = fork ? a.__fork() : a;
+      const runner = fork ? (a.__fork() as unknown as DurableAgent) : a;
       const threadId = `custom-thread-${fork}`;
       const resourceId = 'custom-resource';
       const subscription = await b.subscribeToThread({ threadId, resourceId });
@@ -156,18 +182,28 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         expect(await custom.getLeaseOwner(`${resourceId}\u0000${threadId}`)).toContain(run.runId);
         expect(b.listActiveThreadRuns().map(run => run.runId)).toContain(run.runId);
         await vi.waitFor(() => expect(events).toContain('tool-call'));
-        if (sharedFrames) expect(await b.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).toBe(true);
+        // Agent-level pubsub must carry run frames even without a separate durable pubsub option.
+        const observed = await b.observe(run.runId);
+        const observedTypes: string[] = [];
+        const observing = (async () => {
+          for await (const chunk of observed.fullStream) observedTypes.push(chunk.type);
+        })();
+        expect(await b.__abortThreadStreamAcrossProcesses({ threadId, resourceId })).toBe(true);
+        release();
+        await observing;
+        expect(observedTypes).toContain('tool-call');
+        expect(observedTypes.at(-1)).toBe('finish');
       } finally {
         release();
         await consumed;
         subscription.unsubscribe();
         await reading;
       }
-      expect(await run.output.finishReason).toBe(sharedFrames ? 'aborted' : 'stop');
+      expect(await run.output.finishReason).toBe('aborted');
       await vi.waitFor(async () =>
         expect(await custom.getLeaseOwner(`${resourceId}\u0000${threadId}`)).toBeUndefined(),
       );
-      expect(getMock().getRequests()).toHaveLength(sharedFrames ? 1 : 2);
+      expect(getMock().getRequests()).toHaveLength(1);
     },
   );
 
@@ -201,6 +237,71 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     },
   );
 
+  it.each(['plain', 'durable', 'evented'] as const)(
+    'routes %s run frames with agent configuration taking precedence except on the evented engine',
+    async engine => {
+      getMock().on({ endpoint: 'chat' }, { content: 'Shared transport works.' });
+      const custom = new EventEmitterPubSub();
+      const shared = new EventEmitterPubSub();
+      const inner = new Agent({
+        id: `precedence-${engine}`,
+        name: 'precedence',
+        instructions: 'Answer briefly.',
+        model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+        pubsub: custom,
+      });
+      const agent =
+        engine === 'plain'
+          ? inner
+          : engine === 'evented'
+            ? createEventedAgent({ agent: inner })
+            : createDurableAgent({ agent: inner });
+      new Mastra({
+        agents: { agent },
+        pubsub: shared,
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+      const customPublish = vi.spyOn(custom, 'publish');
+      const sharedPublish = vi.spyOn(shared, 'publish');
+      expect(agent.__getStreamBus()).toBe(inner.__getStreamBus());
+      for (const candidate of [agent, agent.__fork()]) {
+        const run = await candidate.stream('Say something.');
+        await ('output' in run ? run.output : run).consumeStream();
+        const topic = AGENT_STREAM_TOPIC(run.runId);
+        const transport = engine === 'evented' ? sharedPublish : customPublish;
+        const other = engine === 'evented' ? customPublish : sharedPublish;
+        await vi.waitFor(() =>
+          expect(
+            transport.mock.calls.some(([name, event]) => name === topic && event.type === AgentStreamEventTypes.FINISH),
+          ).toBe(true),
+        );
+        expect(other.mock.calls.some(([name]) => name === topic)).toBe(false);
+        const observed = await candidate.observe(run.runId);
+        await observed.output.consumeStream();
+        expect(await observed.output.text).toBe('Shared transport works.');
+      }
+    },
+  );
+
+  it('streams and replays an unregistered durable agent with streams disabled on the wrapped Agent', async () => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Standalone transport works.' });
+    const inner = new Agent({
+      id: 'standalone-streams',
+      name: 'standalone',
+      instructions: 'Answer briefly.',
+      model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+      durable: false,
+    });
+    const agent = createDurableAgent({ agent: inner });
+    expect(agent.__getStreamBus()).toBe(inner.__getStreamBus());
+    const run = await agent.stream('Say something.');
+    await run.output.consumeStream();
+    const observed = await agent.observe(run.runId);
+    await observed.output.consumeStream();
+    expect(await observed.output.text).toBe('Standalone transport works.');
+  });
+
   it('keeps a user-provided agent pubsub on the default engine and the private bus while unregistered', () => {
     const makeAgent = () =>
       new Agent({
@@ -218,8 +319,6 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     const custom = new EventEmitterPubSub();
     const withCustom = createDurableAgent({ agent: makeAgent(), pubsub: custom });
     const mastra = new Mastra({ agents: { agent: withCustom }, pubsub: shared, logger: false });
-    const warn = vi.spyOn(withCustom.logger, 'warn');
     expect(raw((mastra.getAgent('agent') as unknown as DurableAgent).pubsub)).toBe(custom.__rawBus());
-    expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('Evented run frames'));
   });
 });

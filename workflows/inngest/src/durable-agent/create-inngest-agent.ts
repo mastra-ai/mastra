@@ -539,6 +539,9 @@ export interface InngestAgent<TOutput = undefined> {
    */
   readonly pubsub: PubSub;
 
+  /** Runs publish independently of the HTTP reader, even when the wrapped Agent has streams off. */
+  hasResumableStreams(): boolean;
+
   /**
    * Stream a response using Inngest's durable execution.
    */
@@ -1370,6 +1373,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'inngest'
     | 'cache'
     | 'pubsub'
+    | 'hasResumableStreams'
     | 'stream'
     | 'resume'
     | 'prepare'
@@ -1422,6 +1426,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     get pubsub() {
       return getPubsub();
+    },
+
+    hasResumableStreams() {
+      return true;
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {

@@ -59,10 +59,10 @@ export class AgentStreamBus {
   /** Record cache for an unregistered agent with replay off. */
   #localRecordCache: MastraServerCache | undefined;
 
-  constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks) {
+  constructor(config: AgentStreamsConfig, hooks: AgentStreamBusHooks, defaultPubsub?: PubSub) {
     this.#hooks = hooks;
     this.#hasCustomPubsub = !!config.pubsub;
-    this.#innerPubsub = config.pubsub ?? new EventEmitterPubSub();
+    this.#innerPubsub = config.pubsub ?? defaultPubsub ?? new EventEmitterPubSub();
     this.#cacheConfig = config.cache;
     this.#shouldCache = config.shouldCache;
     this.#cleanupTimeoutMs = config.cleanupTimeoutMs ?? DEFAULT_STREAM_CLEANUP_TIMEOUT_MS;
@@ -101,25 +101,6 @@ export class AgentStreamBus {
   /** Runs `cleanup` once the grace period passes. Returns no timer when cleanup is disabled. */
   scheduleCleanup(cleanup: () => void): ReturnType<typeof setTimeout> | undefined {
     return scheduleStreamCleanup(this.#cleanupTimeoutMs, cleanup);
-  }
-
-  /**
-   * The config a fork of the owner is built with. The pubsub is only passed
-   * when the user provided it; a wired Mastra bus is carried over with
-   * {@link AgentStreamBus.adoptInnerPubsub} instead.
-   */
-  get forkConfig(): AgentStreamsConfig {
-    return {
-      pubsub: this.#hasCustomPubsub ? this.#innerPubsub : undefined,
-      cache: this.#cacheConfig,
-      cleanupTimeoutMs: this.#cleanupTimeoutMs,
-      shouldCache: this.#shouldCache,
-    };
-  }
-
-  /** Carry the inner pubsub wired on `source` (e.g. mastra.pubsub) over to this bus. */
-  adoptInnerPubsub(source: AgentStreamBus): void {
-    this.#innerPubsub = source.#innerPubsub;
   }
 
   /**
