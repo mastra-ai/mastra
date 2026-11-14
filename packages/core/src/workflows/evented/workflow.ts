@@ -18,6 +18,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraScorers } from '../../evals';
 import type { Event } from '../../events';
 import { RegisteredLogger } from '../../logger';
+import { latestProcessedModelOutput } from '../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../mastra';
 import {
   EntityType,
@@ -1646,7 +1647,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
-                modelOutput,
+                // The mapping an earlier processor committed, not the original.
+                modelOutput: latestProcessedModelOutput(passThrough.messageList, toolCallId ?? '', modelOutput),
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],

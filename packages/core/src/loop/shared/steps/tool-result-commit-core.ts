@@ -1,6 +1,7 @@
 import type { MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { EntityType, SpanType } from '../../../observability';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { ProviderMetadata } from '../../../stream/types';
 import { normalizeModelOutput } from '../normalize-model-output';
 
@@ -84,6 +85,46 @@ export function readModelOutput(providerMetadata: Record<string, unknown> | unde
   return (providerMetadata as { mastra?: { modelOutput?: unknown } } | undefined)?.mastra?.modelOutput;
 }
 
+/** Whether any output processor (or processor workflow) can run `processToolResult`. */
+export function hasToolResultProcessor(processors: readonly unknown[] | undefined): boolean {
+  return (
+    processors?.some(
+      processor =>
+        isProcessorWorkflow(processor) ||
+        typeof (processor as { processToolResult?: unknown } | null)?.processToolResult === 'function',
+    ) ?? false
+  );
+}
+
+/**
+ * A content snapshot of a tool result taken before `processToolResult` runs, so a
+ * processor that edits the result in place (same object, new contents) is still
+ * seen as having changed it. Undefined when the result can't be serialized; then
+ * only a replaced object counts as a change.
+ */
+export function snapshotToolResult(result: unknown): string | undefined {
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * The mapped output the next `processToolResult` should see: the one an earlier
+ * processor committed in `providerMetadata.mastra.modelOutput` (undefined when it
+ * cleared it), otherwise `fallback`, the output mapped before the hook.
+ */
+export function latestProcessedModelOutput(messageList: MessageList, toolCallId: string, fallback: unknown): unknown {
+  const mastra = (
+    findCommittedToolInvocationPart(messageList, toolCallId)?.providerMetadata as
+      | { mastra?: Record<string, unknown> }
+      | undefined
+  )?.mastra;
+  if (!mastra || !('modelOutput' in mastra)) return fallback;
+  return normalizeModelOutput(mastra.modelOutput) ?? undefined;
+}
+
 /**
  * Resolve the model output after `processToolResult` ran.
  *
@@ -93,7 +134,9 @@ export function readModelOutput(providerMetadata: Record<string, unknown> | unde
  * then replaces the mapped output. A processor that only replaces the raw
  * `result` gets it re-mapped through `toModelOutput`, so the model never sees
  * the mapping of the value the processor replaced. Without either, the output
- * mapped before the hook stands and `toModelOutput` is not called again.
+ * mapped before the hook stands and `toModelOutput` is not called again. A
+ * result edited in place counts as replaced when its contents differ from
+ * `resultSnapshotBeforeProcessors`.
  */
 export async function resolveModelOutputAfterToolResultProcessors(deps: {
   messageList: MessageList;
@@ -102,14 +145,15 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
   toolCallId: string;
   /** The result the processors were given. */
   resultBeforeProcessors: unknown;
+  /** `snapshotToolResult(resultBeforeProcessors)`, taken before the processors ran. */
+  resultSnapshotBeforeProcessors?: string;
   /** Metadata computed before the processors ran, including the mapped output. */
   providerMetadata: Record<string, unknown> | undefined;
   parentSpan?: ToolMappingParentSpan;
 }): Promise<Record<string, unknown> | undefined> {
   const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
-  if (!part) return deps.providerMetadata;
 
-  const processorMastra = (part.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  const processorMastra = (part?.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
   const { mastra: previousMastra, ...otherNamespaces } = deps.providerMetadata ?? {};
   const { modelOutput: _previous, ...mastraWithoutModelOutput } = (previousMastra as Record<string, unknown>) ?? {};
   const withoutModelOutput: Record<string, unknown> = Object.keys(mastraWithoutModelOutput).length
@@ -127,7 +171,13 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
     return { ...withoutModelOutput, mastra: { ...mastraWithoutModelOutput, modelOutput } };
   }
 
-  if (part.toolInvocation.result === deps.resultBeforeProcessors || !deps.tool?.toModelOutput) {
+  // Without a committed part, a processor can only have edited the result in place.
+  const resultAfterProcessors = part ? part.toolInvocation.result : deps.resultBeforeProcessors;
+  const resultChanged =
+    resultAfterProcessors !== deps.resultBeforeProcessors ||
+    (deps.resultSnapshotBeforeProcessors !== undefined &&
+      snapshotToolResult(resultAfterProcessors) !== deps.resultSnapshotBeforeProcessors);
+  if (!resultChanged || !deps.tool?.toModelOutput) {
     return deps.providerMetadata;
   }
 
@@ -135,7 +185,7 @@ export async function resolveModelOutputAfterToolResultProcessors(deps: {
     tool: deps.tool,
     toolName: deps.toolName,
     toolCallId: deps.toolCallId,
-    result: part.toolInvocation.result,
+    result: resultAfterProcessors,
     existingProviderMetadata: Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined,
     parentSpan: deps.parentSpan,
   });

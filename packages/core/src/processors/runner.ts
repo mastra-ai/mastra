@@ -11,6 +11,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import { latestProcessedModelOutput } from '../loop/shared/steps/tool-result-commit-core';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
@@ -2654,6 +2655,8 @@ export class ProcessorRunner {
 
     // Run through all output processors that have processToolResult
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      // Each processor sees the mapping an earlier processor committed, not the original.
+      const currentModelOutput = latestProcessedModelOutput(messageList, toolCallId, modelOutput);
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
@@ -2674,7 +2677,7 @@ export class ProcessorRunner {
             // Carry the tool return value via toolResultValue to avoid colliding
             // with the OutputResult `result` field used by outputResult phase.
             toolResultValue: result,
-            modelOutput,
+            modelOutput: currentModelOutput,
             providerExecuted,
             systemMessages: currentSystemMessages,
             steps,
@@ -2738,7 +2741,7 @@ export class ProcessorRunner {
           toolCallId,
           args: toolArgs,
           result,
-          modelOutput,
+          modelOutput: currentModelOutput,
           providerExecuted,
           systemMessages: currentSystemMessages,
           steps,

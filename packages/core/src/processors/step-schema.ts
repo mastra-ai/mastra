@@ -187,6 +187,8 @@ export type ProcessorToolResultPhaseType = {
   toolCallId: string;
   args?: unknown;
   result?: unknown;
+  /** The tool's `toModelOutput` mapping of the result, which the next model call reads. */
+  modelOutput?: unknown;
   providerExecuted?: boolean;
   systemMessages?: CoreMessageType[];
   steps?: Array<StepResult<ToolSet>>;

@@ -25,6 +25,8 @@ import {
   computeModelOutputProviderMetadata,
   readModelOutput,
   resolveModelOutputAfterToolResultProcessors,
+  snapshotToolResult,
+  hasToolResultProcessor,
 } from '../../shared/steps/tool-result-commit-core';
 import { TOOL_CALL_TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
@@ -255,6 +257,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       > {
         const payload = (chunk as { payload: { result?: unknown; providerMetadata?: unknown } }).payload;
         const resultBeforeProcessors = payload.result;
+        const mappingTool = resolveMappingTool(toolCall.toolName);
+        const resultSnapshotBeforeProcessors =
+          mappingTool?.toModelOutput && hasToolResultProcessor(rest.outputProcessors)
+            ? snapshotToolResult(resultBeforeProcessors)
+            : undefined;
         const trResult = await runToolResultProcessors({
           chunk: chunk as ChunkType<OUTPUT> & {
             payload: {
@@ -274,10 +281,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
         const resolved = await resolveModelOutputAfterToolResultProcessors({
           messageList: rest.messageList,
-          tool: resolveMappingTool(toolCall.toolName),
+          tool: mappingTool,
           toolName: toolCall.toolName,
           toolCallId: toolCall.toolCallId,
           resultBeforeProcessors,
+          resultSnapshotBeforeProcessors,
           providerMetadata,
           parentSpan: observabilityContext?.tracingContext?.currentSpan,
         });

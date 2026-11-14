@@ -19,6 +19,8 @@ import {
   computeModelOutputProviderMetadata,
   readModelOutput,
   resolveModelOutputAfterToolResultProcessors,
+  snapshotToolResult,
+  hasToolResultProcessor,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { ToolResultCommitOutcome } from '../../../../loop/shared/steps/tool-result-commit-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -2367,6 +2369,10 @@ export function createDurableToolCallStep() {
             processorStates: registryEntry.processorStates,
           });
           const resultBeforeProcessors = result;
+          const resultSnapshotBeforeProcessors =
+            mappingTool?.toModelOutput && hasToolResultProcessor(registryEntry.outputProcessors)
+              ? snapshotToolResult(resultBeforeProcessors)
+              : undefined;
           let processorsSucceeded = false;
           try {
             await resultProcessorRunner.runProcessToolResult({
@@ -2474,6 +2480,7 @@ export function createDurableToolCallStep() {
                 toolName,
                 toolCallId,
                 resultBeforeProcessors,
+                resultSnapshotBeforeProcessors,
                 providerMetadata,
                 parentSpan: stepSpan,
               })) as typeof providerMetadata;

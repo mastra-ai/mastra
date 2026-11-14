@@ -158,7 +158,7 @@ describe.each(engines)('processToolResult sees and rewrites toModelOutput (%s en
     await pubsub.close?.();
   });
 
-  async function run(processor: Processor, thread: string) {
+  async function run(processor: Processor | Processor[], thread: string) {
     const prompts: unknown[] = [];
     const mapCalls: unknown[] = [];
     const id = `model-output-${engine}-${thread}`;
@@ -169,7 +169,7 @@ describe.each(engines)('processToolResult sees and rewrites toModelOutput (%s en
       model: createToolCallingModel(prompts) as LanguageModelV2,
       tools: { view: createViewTool(mapCalls) },
       memory,
-      outputProcessors: [processor],
+      outputProcessors: Array.isArray(processor) ? processor : [processor],
     });
     const agent = engine === 'durable' ? createDurableAgent({ agent: baseAgent, pubsub }) : baseAgent;
     new Mastra({ agents: { [id]: agent as any }, logger: false, storage: new InMemoryStore(), pubsub });
@@ -213,7 +213,9 @@ describe.each(engines)('processToolResult sees and rewrites toModelOutput (%s en
 
       // Streaming clients see the same model output.
       const toolResult = chunks.find(c => c.type === 'tool-result');
-      expect(JSON.stringify(toolResult?.payload?.providerMetadata?.mastra?.modelOutput)).not.toContain(ORIGINAL);
+      const streamedModelOutput = JSON.stringify(toolResult?.payload?.providerMetadata?.mastra?.modelOutput);
+      for (const expected of expectInPrompt) expect(streamedModelOutput).toContain(expected);
+      expect(streamedModelOutput).not.toContain(ORIGINAL);
     },
   );
 
@@ -224,6 +226,52 @@ describe.each(engines)('processToolResult sees and rewrites toModelOutput (%s en
     expect(nextToolMessage).toContain(TILE_1);
     expect(nextToolMessage).not.toContain(ORIGINAL);
     expect(mapCalls).toHaveLength(2);
+  });
+
+  it('remaps a result a processor edited in place, committed or not', async () => {
+    for (const commit of [false, true]) {
+      const { prompts, mapCalls } = await run(
+        {
+          id: 'in-place-editor',
+          processToolResult: ({ messageList, toolCallId, toolName, args, result }: ProcessToolResultArgs) => {
+            (result as { image: string }).image = TILE_1;
+            if (commit) {
+              messageList.updateToolInvocation({
+                type: 'tool-invocation',
+                toolInvocation: { state: 'result', toolCallId, toolName, args, result },
+              });
+            }
+          },
+        },
+        `thread-in-place-${commit}`,
+      );
+
+      const nextToolMessage = toolMessage(prompts[1]);
+      expect(nextToolMessage).toContain(TILE_1);
+      expect(nextToolMessage).not.toContain(ORIGINAL);
+      expect(mapCalls).toHaveLength(2);
+    }
+  });
+
+  it('gives each processor the mapping the processor before it committed', async () => {
+    const tiler = new ModelOutputRewriter(rewriteCases[0]!.rewrite);
+    const next = new ModelOutputRewriter(modelOutput => modelOutput);
+    const { prompts } = await run([tiler, next], 'thread-chain');
+
+    expect(JSON.stringify(tiler.seen[0])).toContain(ORIGINAL);
+    expect(JSON.stringify(next.seen[0])).toContain(TILE_1);
+    expect(JSON.stringify(next.seen[0])).not.toContain(ORIGINAL);
+    expect(toolMessage(prompts[1])).not.toContain(ORIGINAL);
+  });
+
+  it('gives the next processor no mapping once an earlier processor clears it', async () => {
+    const clearer = new ModelOutputRewriter(() => null);
+    const next = new ModelOutputRewriter(modelOutput => modelOutput);
+    const { prompts } = await run([clearer, next], 'thread-chain-clear');
+
+    expect(JSON.stringify(clearer.seen[0])).toContain(ORIGINAL);
+    expect(next.seen[0]).toBeUndefined();
+    expect(prompts).toHaveLength(2);
   });
 
   it('maps once and keeps the mapped output when a processor changes nothing', async () => {

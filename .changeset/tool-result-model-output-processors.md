@@ -16,4 +16,4 @@ processToolResult({ messageList, toolCallId, toolName, args, result, modelOutput
 }
 ```
 
-A processor that replaces only `result` now has the new value mapped through `toModelOutput` again, so the model reads the mapping of the processed result rather than of the original. This applies to both regular and durable agents. In durable agents, a `processToolResult` that throws now also keeps the unprocessed mapped output from the model, not only the raw result.
+A processor that replaces only `result`, or edits it in place, now has the new value mapped through `toModelOutput` again, so the model reads the mapping of the processed result rather than of the original. With several processors, each one receives the `modelOutput` the processor before it committed, so a later processor can't bring back an image an earlier one removed. This applies to both regular and durable agents. In durable agents, a `processToolResult` that throws now also keeps the unprocessed mapped output from the model, not only the raw result.
