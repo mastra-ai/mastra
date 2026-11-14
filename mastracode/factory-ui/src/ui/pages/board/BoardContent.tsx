@@ -269,7 +269,7 @@ export function BoardContent({
           loading={loading}
           taskCount={taskCount}
           intakeSetup={intakeSetup}
-          intakeFailure={isInitialPhase ? intake.routesFailure : undefined}
+          intakeFailure={isInitialPhase ? intake.failure : undefined}
           filtersExcludeAll={filtersExcludeAll}
           emptyStateActions={
             showEmptyStateActions && (
