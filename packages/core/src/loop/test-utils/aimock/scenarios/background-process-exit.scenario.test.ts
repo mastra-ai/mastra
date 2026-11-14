@@ -8,6 +8,7 @@ import { WORKSPACE_TOOLS } from '../../../../workspace/constants';
 import { LocalSandbox } from '../../../../workspace/sandbox';
 import { Workspace } from '../../../../workspace/workspace';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import type { RunLoopScenarioOptions } from '../types';
 
 /**
  * Regression class: with `backgroundProcesses.notifyAgent`, a background command
@@ -52,7 +53,13 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   });
 
-  async function startInBackground(threadId: string, prompt: string, command: string, report: string) {
+  async function startInBackground(
+    threadId: string,
+    prompt: string,
+    command: string,
+    report: string,
+    defaultOptions?: RunLoopScenarioOptions['defaultOptions'],
+  ) {
     const memory = new MockMemory();
     const thread = { threadId, resourceId: 'bg-process-user' };
     const { llm } = await runLoopScenario({
@@ -62,6 +69,7 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
       workspace,
       memory,
       ...thread,
+      ...(defaultOptions ? { defaultOptions } : {}),
       stopWhen: stepCountIs(3),
       fixtures: mock => {
         mock.on(
@@ -121,6 +129,29 @@ describeForAllEngines('AIMock loop scenario: background process exit notices', e
     expect(notice).toContain('exited with code 3');
     expect(notice).toContain('tests passed: 12, failed: 1');
     expect(exits).toHaveLength(1);
+  }, 30_000);
+
+  it('leaves the command and output out of the notice when the agent rewrites tool payloads for the transcript', async () => {
+    const prompt = 'Run the secret job in the background';
+    const { llm, storedText } = await startInBackground(
+      'bg-process-transcript',
+      prompt,
+      gatedCommand('secret-token-123', 0),
+      'The job finished.',
+      { transform: { targets: ['transcript'], transformToolPayload: () => '[redacted]' } },
+    );
+
+    await fs.writeFile(path.join(dir, 'go'), '');
+
+    await vi.waitFor(async () => expect(await storedText()).toContain('The job finished.'), {
+      timeout: 15_000,
+      interval: 50,
+    });
+    const notice = JSON.stringify(requestsFor(llm, prompt)[2]!.body);
+    expect(await storedText()).not.toContain('secret-token-123');
+    expect(notice).not.toContain('secret-token-123');
+    expect(notice).toContain('exited with code 0.');
+    expect(notice).toContain('get_process_output');
   }, 30_000);
 
   it.each([

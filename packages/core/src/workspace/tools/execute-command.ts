@@ -3,7 +3,9 @@ import type { Agent } from '../../agent';
 import { browserCliHandler } from '../../browser/cli-handler';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
+import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import {
@@ -117,6 +119,20 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
 const SANDBOX_TEARDOWN_STATUSES: ReadonlySet<string> = new Set(['stopping', 'stopped', 'destroying', 'destroyed']);
 
 /**
+ * Whether the run the notice wakes rewrites tool payloads for the transcript. Resolved like that
+ * run does (default options, then the agent, then Mastra): a `transform` passed to the call that
+ * started the process doesn't carry over to it.
+ */
+async function hasTranscriptTransform(agent: Agent, mastra: Mastra | undefined, requestContext?: RequestContext) {
+  const defaults = await agent.getDefaultOptions?.({ requestContext });
+  const policy =
+    normalizeToolPayloadTransformPolicy(defaults?.transform) ??
+    agent.getToolPayloadTransform?.() ??
+    normalizeToolPayloadTransformPolicy(mastra?.getToolPayloadTransform?.());
+  return Boolean(policy?.transformToolPayload && (!policy.targets || policy.targets.includes('transcript')));
+}
+
+/**
  * Sends the exit of a background process to the agent's thread, with the end of its output:
  * the tool call only returned the PID. The agent must be registered on Mastra to be found
  * (agents built inside a tool or another agent are not), and the run needs a memory thread and resource.
@@ -142,23 +158,34 @@ async function notifyAgentOfExit(
   }
 
   try {
-    const tail = (output: string) => truncateOutput(output, DEFAULT_TAIL_LINES, tokenLimit, 'sandwich');
-    const output = formatCommandOutput(
-      noteDroppedOutput(await tail(meta.stdout), meta.stdoutDroppedBytes, 'stdout'),
-      noteDroppedOutput(await tail(meta.stderr), meta.stderrDroppedBytes, 'stderr'),
-    ).join('\n');
     const outputTool =
       workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.name ??
       WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT;
+    let contents: string[];
+    if (await hasTranscriptTransform(agent, mastra, context?.requestContext)) {
+      // The notice is stored as a message, which transcript transforms don't rewrite. Leave the
+      // command and its output to the output tool, whose result the transform does cover.
+      contents = [
+        `Background process ${pid} exited with code ${exitCode}.`,
+        `Read its output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+      ];
+    } else {
+      const tail = (output: string) => truncateOutput(output, DEFAULT_TAIL_LINES, tokenLimit, 'sandwich');
+      const output = formatCommandOutput(
+        noteDroppedOutput(await tail(meta.stdout), meta.stdoutDroppedBytes, 'stdout'),
+        noteDroppedOutput(await tail(meta.stderr), meta.stderrDroppedBytes, 'stderr'),
+      ).join('\n');
+      contents = [
+        `Background process ${pid} exited with code ${exitCode}: ${command}`,
+        output || '(no output)',
+        `Read the rest of its retained output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+      ];
+    }
     await agent.__sendThreadNotice(
       {
         type: 'notification',
         tagName: 'background-process',
-        contents: [
-          `Background process ${pid} exited with code ${exitCode}: ${command}`,
-          output || '(no output)',
-          `Read the rest of its retained output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
-        ].join('\n\n'),
+        contents: contents.join('\n\n'),
         attributes: { pid, exitCode, ...(meta.toolCallId ? { toolCallId: meta.toolCallId } : {}) },
       },
       { threadId, resourceId, requestContext: context?.requestContext },
