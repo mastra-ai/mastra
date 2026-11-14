@@ -229,6 +229,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
       cursor = page.nextCursor ?? undefined;
     } while (cursor);
     expect(titles).toEqual([['item 1', 'item 2'], ['item 3', 'item 4'], ['item 5']]);
+    expect((await boards.listRecentNotRouted(scope, 2)).map(item => item.title)).toEqual(['item 5', 'item 4']);
     await expect(boards.listNotRouted(scope, { cursor: 'nonsense' })).rejects.toMatchObject({
       code: 'invalid_intake_cursor',
     });
