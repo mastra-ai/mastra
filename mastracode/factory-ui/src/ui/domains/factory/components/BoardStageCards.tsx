@@ -1,12 +1,11 @@
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
-import type { IntakeFeed, IntakeSource } from '../boardCandidates';
 import type { BoardLayout } from '../boardLayout';
 import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import type { IntakeSetup } from './BoardColumnEmptyState';
-import { IntakeColumnExtras } from './IntakeColumnExtras';
-import { IntakeFeedNotice } from './IntakeFeedNotice';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 
 export function BoardStageCards({
@@ -15,11 +14,9 @@ export function BoardStageCards({
   layout,
   loading,
   taskCount,
-  feed,
-  intakeSource,
   intakeSetup,
+  intakeFailure,
   filtersExcludeAll,
-  alreadyMaterialized,
   composer,
   emptyStateActions,
   children,
@@ -29,16 +26,15 @@ export function BoardStageCards({
   layout: BoardLayout;
   loading: boolean;
   taskCount: number;
-  feed?: IntakeFeed;
-  intakeSource?: IntakeSource;
   intakeSetup?: IntakeSetup;
+  /** Why the column cannot tell what files onto it, shown instead of its empty state. */
+  intakeFailure?: { message: string; retry: () => void };
   filtersExcludeAll: boolean;
-  alreadyMaterialized: number;
   composer?: ReactNode;
   emptyStateActions?: ReactNode;
   children: ReactNode;
 }) {
-  const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
+  const showEmptyState = !loading && !composer && taskCount === 0 && !intakeFailure;
   return (
     <>
       {composer}
@@ -50,13 +46,20 @@ export function BoardStageCards({
           isInitialPhase={isInitialPhase}
           intakeSetup={intakeSetup}
           filtersExcludeAll={filtersExcludeAll}
-          alreadyMaterialized={alreadyMaterialized}
           layout={layout}
           actionSlot={emptyStateActions}
         />
       )}
-      {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}
-      {feed && <IntakeColumnExtras feed={feed} currentColumnLength={taskCount} layout={layout} />}
+      {intakeFailure && (
+        <div className="flex flex-col items-start gap-2 p-1">
+          <Txt as="p" role="alert" variant="meta" className="text-destructive-foreground m-0">
+            {intakeFailure.message}
+          </Txt>
+          <Button size="sm" onClick={intakeFailure.retry}>
+            Retry
+          </Button>
+        </div>
+      )}
     </>
   );
 }

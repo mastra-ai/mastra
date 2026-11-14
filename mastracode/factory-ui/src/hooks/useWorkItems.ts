@@ -247,25 +247,6 @@ export function workItemFilterOptionsQueryOptions(baseUrl: string, factoryProjec
   });
 }
 
-/** Which cards are filed from `sources`, with the sources the answer covers. */
-export interface FiledFromAnswer extends BoardSnapshot {
-  sources: readonly string[];
-}
-
-/** The cards filed from any of `sources`: source ids or URLs, at most a hundred. */
-export function filedFromQueryOptions(baseUrl: string, factoryProjectId: string | undefined, sources: string[]) {
-  return queryOptions({
-    queryKey: queryKeys.workItemsFiledFrom(factoryProjectId, sources),
-    queryFn:
-      factoryProjectId && sources.length > 0
-        ? async ({ signal }): Promise<FiledFromAnswer> => ({
-            ...(await listWorkItems(baseUrl, factoryProjectId, signal, { source: sources })),
-            sources,
-          })
-        : skipToken,
-  });
-}
-
 /** What the draft page's starter buttons count: the server counts, so the page never loads the board for them. */
 export function workItemStartersQueryOptions(baseUrl: string, factoryProjectId: string) {
   return queryOptions({
@@ -418,15 +399,6 @@ export function useUpsertWorkItemMutation(factoryProjectId: string | undefined) 
         queryKey: boardKey,
         predicate: query => !isUnnarrowedBoardView(query.queryKey),
       });
-      // Whoever asked which cards are filed from this one's source learns of it without asking again.
-      queryClient.setQueriesData<FiledFromAnswer>(
-        { queryKey: queryKeys.workItemsFiledFromAny(factoryProjectId) },
-        answer => {
-          const filedFromAsked = answer?.sources.some(source => source === item.sourceKey || source === item.url);
-          if (!answer || !filedFromAsked || answer.workItems.some(card => card.id === item.id)) return answer;
-          return { ...answer, workItems: [item, ...answer.workItems] };
-        },
-      );
     },
   });
 }

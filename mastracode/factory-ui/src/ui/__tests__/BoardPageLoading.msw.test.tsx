@@ -38,7 +38,6 @@ function deferred() {
  */
 function stubBoardEndpoints() {
   const workItemsGate = deferred();
-  const issuesGate = deferred();
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -73,16 +72,11 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
     ),
-    // Serves both the intake feed (no label) and the triage feed (status: auto-triaged label).
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, async () => {
-      await issuesGate.promise;
-      return HttpResponse.json({ issues: [], nextPage: null });
-    }),
     // Ambient workspace plumbing kicked off alongside the board queries.
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
 
-  return { workItemsGate, issuesGate };
+  return { workItemsGate };
 }
 
 function renderWorkBoard() {
@@ -91,8 +85,8 @@ function renderWorkBoard() {
 }
 
 describe('Board loading states', () => {
-  it('shows every group with its own skeleton through both loading phases, then settles', async () => {
-    const { workItemsGate, issuesGate } = stubBoardEndpoints();
+  it('shows every group with its own skeleton until the cards answer, then settles', async () => {
+    const { workItemsGate } = stubBoardEndpoints();
     renderWorkBoard();
 
     // Phase 1: work items unresolved — the full column layout is already
@@ -106,27 +100,20 @@ describe('Board loading states', () => {
     // The task badge would announce a false "0 of 0" while data resolves.
     expect(screen.queryByLabelText(/visible board tasks in Planning/)).not.toBeInTheDocument();
 
-    // Phase 2: work items resolved, intake/triage feeds still resolving —
-    // settled empty workflow groups remain expandable while intake keeps loading.
+    // Settled: the cards answered, and every group, Intake included, shows what it holds. The
+    // board reads no provider's list, so nothing else keeps a column loading.
     workItemsGate.resolve();
-    const planning = screen.getByTestId('board-column-planning');
-    await waitFor(() => expect(within(planning).queryByRole('status')).not.toBeInTheDocument());
-    expect(planning).toHaveAccessibleName('Planning');
-    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'true');
-    expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument();
-    const intake = screen.getByTestId('board-column-intake');
-    within(intake).getByRole('status', { name: 'Loading Intake column' });
-    const triage = screen.getByTestId('board-column-triage');
-    within(triage).getByRole('status', { name: 'Loading Triage column' });
-
-    // Settled: all feeds resolved — no loading regions remain in any column.
-    issuesGate.resolve();
     await waitFor(() => {
       for (const column of WORK_COLUMNS) {
         const lane = screen.getByTestId(`board-column-${column.id}`);
         expect(within(lane).queryByRole('status')).not.toBeInTheDocument();
       }
     });
+    const planning = screen.getByTestId('board-column-planning');
+    expect(planning).toHaveAccessibleName('Planning');
+    expect(stageToggle('Planning', planning)).toHaveAttribute('aria-expanded', 'true');
+    expect(within(planning).getByText('Nothing in planning')).toBeInTheDocument();
+    const intake = screen.getByTestId('board-column-intake');
     expect(within(intake).getByText('Intake is clear')).toBeInTheDocument();
   });
 });

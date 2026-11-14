@@ -18,7 +18,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import type { FactoryTransitionResult } from '../domains/factory/services/workItems';
 import { createAppRoutes } from '../router';
-import { reviewCandidate, reviewItem } from './fixtures/reviewCard';
+import { reviewItem } from './fixtures/reviewCard';
 
 const FACTORY_ID = reviewItem.factoryProjectId;
 const projectUrl = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`;
@@ -66,7 +66,7 @@ const plainIssue: Card = {
   metadata: {},
 };
 
-function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCandidate)[] } = {}) {
+function stubBoards({ items = [] as Card[] } = {}) {
   const data = { items };
   const created: Array<Record<string, unknown>> = [];
   const transitions: Array<Record<string, unknown>> = [];
@@ -94,12 +94,6 @@ function stubBoards({ items = [] as Card[], candidates = [] as (typeof reviewCan
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
     http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
       HttpResponse.json({ enabled: false, connected: false, workspace: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues`, () =>
-      HttpResponse.json({ issues: [], nextPage: null }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/prs`, () =>
-      HttpResponse.json({ pullRequests: candidates, nextPage: null }),
     ),
     http.get(`${projectUrl}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
@@ -165,20 +159,6 @@ describe('Pull requests on the Work board', () => {
     expect(transitions).toEqual([
       expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action', expectedRevision: 1 }),
     ]);
-  });
-
-  it('files a pull request from the feed onto Work and starts its review there', async () => {
-    const { created, transitions } = stubBoards({ candidates: [reviewCandidate] });
-    const user = userEvent.setup();
-    const { client } = renderBoard('work');
-
-    const intake = await screen.findByRole('region', { name: 'Intake' });
-    await within(intake).findByText(reviewCandidate.title);
-    await user.click(within(intake).getByRole('button', { name: 'Review' }));
-    await waitForMutationsIdle(client);
-
-    expect(created).toEqual([expect.objectContaining({ board: 'work', title: reviewCandidate.title })]);
-    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review' })]);
   });
 
   it('shows a card stored on the retired Review board in PR review on Work', async () => {
@@ -257,5 +237,17 @@ describe('Pull requests on the Work board', () => {
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByRole('img', { name: 'Open pull request' })).toBeInTheDocument();
     expect(screen.queryByText(plainIssue.title)).toBeNull();
+  });
+
+  it("keeps an issue row's attached pull request icon on one line with its source icon", async () => {
+    stubBoards({ items: [issueWithPullRequest] });
+    renderBoard('work');
+
+    const card = (await screen.findByText(issueWithPullRequest.title)).closest('[data-testid="work-item-card"]');
+    const pullRequestIcon = within(card as HTMLElement).getByRole('img', { name: 'Open pull request' });
+    // The list row's icon cell is a grid, so the pair needs its own flex row or each icon takes a grid row.
+    const pair = pullRequestIcon.parentElement as HTMLElement;
+    expect(pair).toHaveClass('flex');
+    expect(pair.querySelector('[data-source="github-issue"]')).not.toBeNull();
   });
 });

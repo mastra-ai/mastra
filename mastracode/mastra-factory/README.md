@@ -31,12 +31,18 @@ pnpm create factory@latest
 
 ## Usage
 
-The interactive setup asks where to create the project and helps configure your Mastra Factory project.
+The interactive setup asks where to create the project and helps configure your Mastra Factory project. When you run it in an empty directory, the name prompt defaults to that directory: press Enter to set up the project there.
 
 By default, the setup wizard scaffolds the [platform template](https://github.com/mastra-ai/template-factory) and provisions Mastra platform resources during setup, enabling you to fully run Mastra Factory on platform or locally with cloud-backed capabilities. If you prefer to [self-host](https://factory.mastra.ai/deployment#self-host) Mastra Factory, run the setup with the `--no-platform` flag. It scaffolds the [self-hosted template](https://github.com/mastra-ai/template-factory-self-hosted) instead, which uses PostgreSQL, WorkOS, a GitHub App, and local sandboxes. Either way, the setup writes a freshly generated `FACTORY_CREDENTIAL_ENCRYPTION_KEY` to `.env` when the template uses one, so stored credentials are encrypted from the first start.
 
 ```bash
 npx create-factory@latest my-mastra-factory --no-platform
+```
+
+All input can be passed as command-line args instead:
+
+```bash
+npx create-factory@latest acme-factory --org my-org --region eu
 ```
 
 Pass `--help` to see all options:

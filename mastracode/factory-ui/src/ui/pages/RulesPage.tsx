@@ -190,6 +190,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
               hasNextPage={decisionsQuery.hasNextPage}
               isFetchingNextPage={decisionsQuery.isFetchingNextPage}
               onLoadMore={() => void decisionsQuery.fetchNextPage()}
+              loaded={decisions.length}
               label="Load more effects"
             />
           </div>

@@ -306,4 +306,52 @@ describe('persistedSourceKeys', () => {
       }),
     ).toBe(true);
   });
+
+  it("counts a pull request attached to an issue card as filed, so Intake doesn't offer it again", () => {
+    const pullRequest = {
+      id: 'source-pr',
+      workItemId: 'work-1',
+      provider: 'github' as const,
+      integrationId: 'github',
+      sourceType: 'pull-request',
+      workspaceId: null,
+      externalId: 'pull-request:github:10:pull-request:2',
+      sourceKey: 'github:pull-request:github:10:pull-request:2',
+      key: null,
+      url: 'https://github.com/acme/repo/pull/2',
+      state: 'open',
+      labels: [],
+      author: null,
+      metadata: { githubPullRequestNumber: 2 },
+      revision: 1,
+      syncedAt: null,
+      createdAt: new Date('2026-09-02T12:00:00.000Z'),
+      updatedAt: new Date('2026-09-02T12:00:00.000Z'),
+    };
+    const issueCard = workItem({
+      source: 'github-issue',
+      sourceKey: 'github:10:issue:1',
+      url: 'https://github.com/acme/repo/issues/1',
+      metadata: { githubIssueNumber: 1, githubRepositoryId: 10 },
+      workItem: {
+        provider: 'github',
+        key: null,
+        url: 'https://github.com/acme/repo/issues/1',
+        title: 'init repo',
+        state: 'open',
+        labels: [],
+        author: null,
+        metadata: {},
+        sources: [pullRequest],
+      },
+    });
+
+    const keys = persistedSourceKeys([issueCard]);
+
+    expect(isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:2', url: '' })).toBe(true);
+    expect(isPersistedCandidate(keys, { sourceKey: 'none', url: 'https://github.com/acme/repo/pull/2' })).toBe(true);
+    expect(
+      isPersistedCandidate(keys, { sourceKey: 'github:10:pull-request:3', url: 'https://github.com/acme/repo/pull/3' }),
+    ).toBe(false);
+  });
 });

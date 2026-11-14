@@ -14,6 +14,17 @@ import type { Context } from 'hono';
  */
 export const factoryTimingEnabled = /^(1|true|yes)$/i.test(process.env.FACTORY_TIMING ?? '');
 
+/**
+ * Boot diagnostics (phase timings, integration config) are on by default so
+ * slow or misconfigured deployed boots stay visible. `mastra factory dev`
+ * (`MASTRA_FACTORY_DEV=true`) keeps first boot quiet unless run with
+ * `--debug` (`MASTRA_FACTORY_DEBUG=true`) or `FACTORY_TIMING` is set.
+ */
+export const bootDiagnosticsEnabled =
+  factoryTimingEnabled ||
+  process.env.MASTRA_FACTORY_DEV !== 'true' ||
+  /^(1|true)$/i.test(process.env.MASTRA_FACTORY_DEBUG ?? '');
+
 export function logTiming(line: string): void {
   process.stderr.write(`[factory:timing] ${line}\n`);
 }
@@ -114,8 +125,9 @@ export function instrumentAsyncMethods<T extends object>(target: T, label: strin
   });
 }
 
-/** Run `fn`, always logging its duration under `phase`. Boot-phase use. */
+/** Run `fn`, logging its duration under `phase` when `bootDiagnosticsEnabled`. Boot-phase use. */
 export async function timedPhase<T>(phase: string, fn: () => Promise<T>): Promise<T> {
+  if (!bootDiagnosticsEnabled) return fn();
   const start = performance.now();
   try {
     return await fn();

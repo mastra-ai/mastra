@@ -142,6 +142,19 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     isOptional: true,
   },
   {
+    name: 'scorers',
+    type: 'AgentConfig["scorers"]',
+    description: 'Scorers to run for the code agent. No scorers are registered by default.',
+    isOptional: true,
+  },
+  {
+    name: 'disableScoreStorage',
+    type: 'boolean',
+    description: 'Discard rich scorer results instead of saving them to configured storage.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
     name: 'storageBackend',
     type: "'libsql' | 'pg'",
     description:
