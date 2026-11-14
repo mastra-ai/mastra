@@ -165,7 +165,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(rest.at(-1)).toMatchObject({
       name: CATCH_ALL_INTAKE_ROUTE.name,
       position: 11,
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'intake' },
       createdBy: 'factory',
@@ -424,7 +424,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     const route = created.body.intakeRoute as Route;
     const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
-    expect(bare).toMatchObject({ on: ['work_item.created'] });
+    expect(bare).toMatchObject({ on: ['work_item.opened'] });
 
     const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
       on: ['work_item.reopened'],
@@ -441,7 +441,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('POST', base, {
         name: 'Both',
-        on: ['work_item.created', 'work_item.closed'],
+        on: ['work_item.opened', 'work_item.closed'],
         target: { boardKey: 'work', phaseKey: 'done' },
       }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
@@ -451,7 +451,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect(done.status).toBe(200);
     expect(
-      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 3 }),
+      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.opened'], expectedRevision: 3 }),
     ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
   });
 
@@ -489,12 +489,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(
       await replicaA.send('POST', base, {
         name: 'On both',
-        on: ['work_item.created', 'work_item.reopened'],
+        on: ['work_item.opened', 'work_item.reopened'],
         target: joins,
       }),
     ).toMatchObject(refused);
     const created = await replicaA.send('POST', base, { name: 'Joins', target: joins });
-    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.created'], problems: [] } } });
+    expect(created).toMatchObject({ status: 201, body: { intakeRoute: { on: ['work_item.opened'], problems: [] } } });
     const route = created.body.intakeRoute as Route;
     expect(
       await replicaA.send('PATCH', `${base}/${route.id}`, {

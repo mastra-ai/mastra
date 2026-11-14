@@ -178,10 +178,34 @@ async function setup(
     (await seeded.audit.list({ orgId: 'org-1' })).events
       .filter(event => event.targets.some(target => target.id === cardId))
       .map(event => ({ action: event.action, actorId: event.actorId, metadata: event.metadata }));
+  /** Commits an update on a card at `at`, as an integration does, without dispatching it. */
+  const commitUpdate = async (
+    cardId: string,
+    event: BoardEventFacts,
+    at: string,
+    options: { fromCardSession?: true } = {},
+  ) => {
+    deliveries += 1;
+    const card = await workItems.get({ orgId: 'org-1', id: cardId });
+    await workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: cardId,
+      ingress: { identity: `update-${deliveries}`, triggerType: 'github.issueUpdated' },
+      configVersion,
+      expectedRevision: card!.revision,
+      actor: { type: 'system', id: 'rules' },
+      outcome: { status: 'accepted' },
+      decisions: [{ type: 'routeEvent', idempotencyKey: `update-${deliveries}:event-route`, event, ...options }],
+      causalChain: [],
+      now: new Date(at),
+    });
+  };
   return {
     ...seeded,
     scope,
     project,
+    dispatcher,
+    commitUpdate,
     defaultRoute: defaultRoute!,
     route,
     deliver,
@@ -1088,6 +1112,130 @@ describe('intake routes moving existing cards on status events', () => {
     expect((await deliverEvent(card.id, { type: 'work_item.closed', reason: 'completed' })).card).toMatchObject({
       stages: ['intake'],
     });
+  });
+});
+
+describe('intake routes moving existing cards when labels or assignees change', () => {
+  const ADDED = (label: string) => ({
+    operator: 'AND' as const,
+    conditions: [{ field: 'event.labels.added', operator: 'contains' as const, value: label }],
+  });
+  const labels = (added: string[], removed: string[] = []) => ({
+    type: 'work_item.updated' as const,
+    labels: { added, removed },
+  });
+
+  async function shipRoute(options: { from?: string } = {}) {
+    const harness = await setup();
+    const shipping = await harness.route({
+      name: 'Ship it',
+      on: ['work_item.updated'],
+      when: options.from
+        ? {
+            operator: 'AND',
+            conditions: [...ADDED('ship').conditions, { field: 'card.phase', operator: 'equals', value: options.from }],
+          }
+        : ADDED('ship'),
+      target: { boardKey: 'work', phaseKey: 'done' },
+    });
+    const card = (await harness.deliver({ sourceKey: 'github-issue:1' }))!;
+    const card2 = await harness.workItems.get({ orgId: 'org-1', id: card.id });
+    return { ...harness, shipping, card: card2! };
+  }
+
+  it("moves the card when a person adds the route's label, once the burst window has passed", async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions, shipping } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    // Within the burst window nothing moves yet, and the wait isn't an attempt.
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:01Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+    expect(await routeDecisions(card.id)).toEqual(['pending']);
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:05Z'));
+    const moved = await workItems.get({ orgId: 'org-1', id: card.id });
+    expect(moved).toMatchObject({ stages: ['done'] });
+    expect(moved!.stageHistory.at(-1)).toMatchObject({ stage: 'done', by: `intake-route:${shipping.id}` });
+    expect(await routeDecisions(card.id)).toEqual(['succeeded']);
+    // The rule's move changed the card, not its source: it queues no update of its own.
+    await dispatcher.runOnce(new Date('2030-01-01T00:11:00Z'));
+    const updates = (await workItems.listDeferredDecisions('org-1', card.factoryProjectId, { workItemId: card.id }))
+      .map(entry => entry.decision as { type: string; event?: { type: string } })
+      .filter(decision => decision.event?.type === 'work_item.updated');
+    expect(updates).toHaveLength(1);
+  });
+
+  it('combines a burst of changes into one event carrying the net change', async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:10:01Z');
+    await commitUpdate(card.id, labels([], ['bug']), '2030-01-01T00:10:02Z');
+    // The newest update is still in its window: nothing moves, the older ones give way to it.
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:04Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:08Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    expect(await routeDecisions(card.id)).toEqual(['superseded', 'superseded', 'succeeded']);
+  });
+
+  it('moves nothing when the burst nets out: a label added then removed is no change', async () => {
+    const { card, commitUpdate, dispatcher, workItems, routeDecisions } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await commitUpdate(card.id, labels([], ['ship']), '2030-01-01T00:10:01Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+    expect(await routeDecisions(card.id)).toEqual(['superseded', 'succeeded']);
+  });
+
+  it('starts a new event after the group last moved: an earlier, already applied change is not counted again', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+    await putAt(card.id, 'intake');
+
+    await commitUpdate(card.id, labels(['bug']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:20:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+  });
+
+  it('moves only from the phase a card.phase filter names', async () => {
+    const { card, commitUpdate, dispatcher, workItems, putAt } = await shipRoute({ from: 'triage' });
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['intake'] });
+
+    await putAt(card.id, 'triage');
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:20:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:20:10Z'));
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'] });
+  });
+
+  it("never cancels a close: an update queued after it doesn't overtake it", async () => {
+    const { card, commitUpdate, deliverEvent, route, workItems } = await shipRoute();
+    await route({ name: 'Closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: 'canceled' } });
+
+    await commitUpdate(card.id, labels(['wontfix']), '2030-01-01T00:00:00Z');
+    await deliverEvent(card.id, { type: 'work_item.closed', reason: 'canceled' });
+
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['canceled'] });
+  });
+
+  it('commits no update when a route moves the card: the move changes the card, not its source', async () => {
+    const { card, commitUpdate, dispatcher, workItems } = await shipRoute();
+
+    await commitUpdate(card.id, labels(['ship']), '2030-01-01T00:10:00Z');
+    await dispatcher.runOnce(new Date('2030-01-01T00:10:10Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:30:00Z'));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', card.factoryProjectId, { workItemId: card.id });
+    expect(decisions.filter(entry => entry.decision.type === 'routeEvent')).toHaveLength(1);
   });
 });
 

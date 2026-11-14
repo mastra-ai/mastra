@@ -157,7 +157,7 @@ function destinationLabelFor(scope: RouteScope, joining: boolean): string {
  * every card it matches is a pull request that closes an issue.
  */
 function canJoinIssueCard(on: IntakeRouteInfo['on'], when: RuleGroup | null): boolean {
-  if (on.length !== 1 || on[0] !== 'work_item.created' || when?.operator !== 'AND') return false;
+  if (on.length !== 1 || on[0] !== 'work_item.opened' || when?.operator !== 'AND') return false;
   const requires = (field: string, value: unknown) =>
     when.conditions.some(
       condition =>
@@ -695,7 +695,7 @@ function NewRoute({
 }) {
   const [name, setName] = useState('');
   const [on, setOn] = useState<IntakeRouteInfo['on']>(
-    scope.kind === 'moves' ? ['work_item.closed'] : ['work_item.created'],
+    scope.kind === 'moves' ? ['work_item.closed'] : ['work_item.opened'],
   );
   const [when, setWhen] = useState<RuleGroup | null>(null);
   const [incomplete, setIncomplete] = useState(false);

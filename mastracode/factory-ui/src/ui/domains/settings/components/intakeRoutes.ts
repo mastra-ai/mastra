@@ -12,9 +12,7 @@ const MAX_ROUTE_NAME = 120;
 
 /** Whether `route` places every new card that reaches it, like the default "Everything else" route. */
 export function catchesEveryArrival(route: IntakeRouteInfo): boolean {
-  return (
-    route.enabled && route.when === null && route.on.includes('work_item.created') && !route.target.joinClosedIssue
-  );
+  return route.enabled && route.when === null && route.on.includes('work_item.opened') && !route.target.joinClosedIssue;
 }
 
 export function phaseName(board: InstalledBoardInfo | undefined, phaseKey: string | null): string | undefined {
@@ -45,7 +43,7 @@ export function phaseOptions(board: InstalledBoardInfo | undefined): Record<stri
 }
 
 const TRIGGER_TEXT: Record<string, string> = {
-  'work_item.created': 'a new card arrives',
+  'work_item.opened': 'a new card arrives',
   'work_item.closed': 'a card is closed',
   'work_item.reopened': 'a card is reopened',
   'pull_request.opened': 'a pull request opens',
@@ -56,7 +54,7 @@ const TRIGGER_TEXT: Record<string, string> = {
 };
 
 /** The events that move a card already on a board, in the order a card meets them. */
-export const MOVE_EVENTS = STATUS_EVENTS.filter(event => event !== 'work_item.created');
+export const MOVE_EVENTS = STATUS_EVENTS.filter(event => event !== 'work_item.opened');
 
 /** Events as a choice in a list: "A card is closed", or "A card is closed or a card is reopened". */
 export function triggerLabel(events: readonly string[]): string {
@@ -69,7 +67,7 @@ export function triggerLabel(events: readonly string[]): string {
  * belongs to that board's settings, not the factory's.
  */
 export function placesNewCards(route: Pick<IntakeRouteInfo, 'on'>): boolean {
-  return route.on.includes('work_item.created');
+  return route.on.includes('work_item.opened');
 }
 
 /**
@@ -150,7 +148,7 @@ export function sendNewCardsTo(
 
   if (from && from.id !== to.id) {
     for (const route of routes) {
-      if (route.target.boardKey !== from.id || route.on.includes('work_item.created') || route.target.joinClosedIssue)
+      if (route.target.boardKey !== from.id || route.on.includes('work_item.opened') || route.target.joinClosedIssue)
         continue;
       const phaseKey = matchingPhase(from, to, route.target.phaseKey);
       if (phaseKey === undefined) continue;

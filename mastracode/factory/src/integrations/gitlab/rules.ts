@@ -1,4 +1,4 @@
-import { closeReason } from '../../boards/board-events.js';
+import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
 import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
@@ -17,7 +17,15 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { deploymentOwnsEvent, hasExplicitRuleOverride, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import {
+  cardUpdateDecision,
+  deploymentOwnsEvent,
+  hasExplicitRuleOverride,
+  routeEventDecision,
+  selectEventRule,
+  withoutRouteEvent,
+} from '../../rules/event-rules.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -140,7 +148,7 @@ export function activitySignalFor(
 export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
-      return { type: 'work_item.created' };
+      return { type: 'work_item.opened' };
     case 'issueReopened':
       return { type: 'work_item.reopened' };
     case 'issueClosed':
@@ -148,6 +156,28 @@ export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>):
     default:
       return undefined;
   }
+}
+
+/**
+ * The label or assignee change an issue or merge request update reports, from the hook's
+ * `changes`. A merge request that is the card's own source reports `work_item.updated`; one
+ * attached to an issue card reports `pull_request.updated`. Other edits report nothing.
+ */
+export function updateEventFor(
+  context: Pick<FactoryGitLabRuleContext, 'event' | 'item'>,
+  changes: Record<string, unknown> | undefined,
+): BoardEventFacts | undefined {
+  if (!context.item || (context.event !== 'issueUpdated' && context.event !== 'mergeRequestUpdated')) return undefined;
+  const type =
+    context.event === 'mergeRequestUpdated' && context.item.source !== 'gitlab-pr'
+      ? 'pull_request.updated'
+      : 'work_item.updated';
+  const labels = object(changes?.labels);
+  const assignees = object(changes?.assignees);
+  return updateEventFacts(type, {
+    ...(labels ? { labels: listChange(labelNames(labels.previous), labelNames(labels.current)) } : {}),
+    ...(assignees ? { assignees: listChange(usernames(assignees.previous), usernames(assignees.current)) } : {}),
+  });
 }
 
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
@@ -252,6 +282,11 @@ interface GitLabRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /**
+   * Tells which items intake turned away (Not routed). A label or assignee change to one of them
+   * runs intake again; without it, a change to an issue with no card does nothing.
+   */
+  notRouted?: NotRoutedLookup;
 }
 
 interface ProjectTarget {
@@ -394,6 +429,28 @@ export class GitLabRules {
           ),
         )
       : undefined;
+    // An issue intake turned away (Not routed) changed labels or assignees: run intake again.
+    const changes = object(parsed.payload.changes);
+    if (
+      event === 'issueUpdated' &&
+      !issueItem &&
+      issueSourceKey &&
+      (changes?.labels !== undefined || changes?.assignees !== undefined) &&
+      (await this.options.notRouted?.isNotRouted(
+        { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
+        issueSourceKey,
+      ))
+    ) {
+      return this.#ingestProject(
+        { ...parsed, deliveryId: `${parsed.deliveryId}:intake` },
+        'issueOpened',
+        projectId,
+        projectPath,
+        host,
+        username,
+        target,
+      );
+    }
     const reviewItem = mergeRequestKey
       ? own(
           items.find(
@@ -919,6 +976,17 @@ export class GitLabRules {
           noteEdited: string(object(input.parsed.payload.object_attributes)?.action)?.toLowerCase() === 'update',
         });
       if (routed) decisions = [{ ...routed }];
+    }
+    // A label or assignee change goes to the card's routes whatever else the delivery decided.
+    const update =
+      !ownedByDeployment && outcome.status === 'accepted'
+        ? updateEventFor(context, object(input.parsed.payload.changes))
+        : undefined;
+    if (update) {
+      decisions = [
+        ...decisions,
+        { ...cardUpdateDecision(input.ingressIdentity, update, input.actor.type === 'gitlab' && input.actor.factoryAuthored) },
+      ];
     }
 
     const committed = await this.options.storage.commitRuleEvaluation({

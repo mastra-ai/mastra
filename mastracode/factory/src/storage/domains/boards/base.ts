@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
-import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
+import { canonicalStatusEvent, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
 import type { StatusEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
@@ -160,7 +160,7 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
-  /** The status events the route handles; unset handles new cards (`work_item.created`). */
+  /** The status events the route handles; unset handles new cards (`work_item.opened`). */
   on?: StatusEvent[];
 }
 
@@ -699,7 +699,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       }
       const position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       await insertIntakeRoute(ops, scope, { id, input, position, actor });
-      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created')
+      const ahead = (input.on ?? DEFAULT_ROUTE_EVENTS).includes('work_item.opened')
         ? rows.findIndex(catchesEveryNewCard)
         : -1;
       if (ahead >= 0) {
@@ -1001,8 +1001,9 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
+/** Rows written before the rename name `work_item.created`; they read as `work_item.opened`. */
 function routeEvents(row: IntakeRouteRow): StatusEvent[] {
-  return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
+  return row.on_events ? row.on_events.map(event => canonicalStatusEvent(event)) : [...DEFAULT_ROUTE_EVENTS];
 }
 
 function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
@@ -1034,7 +1035,7 @@ function catchesEveryNewCard(row: IntakeRouteRow): boolean {
   return (
     row.enabled &&
     row.when_condition === null &&
-    (row.on_events ?? DEFAULT_ROUTE_EVENTS).includes('work_item.created') &&
+    routeEvents(row).includes('work_item.opened') &&
     !row.join_closed_issue
   );
 }

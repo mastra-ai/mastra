@@ -3745,7 +3745,7 @@ describe('audit events', () => {
     return (await res.json()).workItem;
   }
 
-  it('records work_item.created on POST with actor, project, and target', async () => {
+  it('records work_item.opened on POST with actor, project, and target', async () => {
     const item = await createItem();
     expect(auditRecorded).toHaveLength(1);
     expect(auditRecorded[0]).toMatchObject({

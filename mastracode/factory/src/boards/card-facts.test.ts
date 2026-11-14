@@ -219,6 +219,40 @@ describe('item.pullRequest', () => {
   });
 });
 
+describe('item.hasPullRequest and item.hasIssue', () => {
+  const source = (sourceType: string, state: string, metadata: Record<string, unknown> = {}) =>
+    ({ sourceType, state, metadata }) as unknown as Card['workItem']['sources'][number];
+  const card = (kind: 'github issue' | 'github pull request', sources: Card['workItem']['sources']) => ({
+    title: 'Fix',
+    externalSource: SOURCES[kind]!,
+    metadata: {},
+    workItem: { labels: [], author: null, sources },
+  });
+  const openPullRequest = source('pull-request', 'open', { githubPullRequestNumber: 7 });
+
+  it('says yes for an issue with an open pull request attached, no once it closed or merged', () => {
+    expect(cardRuleFacts(card('github issue', [source('issue', 'open'), openPullRequest]))).toMatchObject({
+      'item.hasPullRequest': true,
+      'item.hasIssue': true,
+    });
+    const settled = cardRuleFacts(
+      card('github issue', [source('issue', 'open'), source('pull-request', 'merged', { githubPullRequestNumber: 7 })]),
+    );
+    expect(settled['item.hasPullRequest']).toBe(false);
+    expect(cardRuleFacts(card('github issue', [source('issue', 'open')]))).toMatchObject({
+      'item.hasPullRequest': false,
+      'item.hasIssue': false,
+    });
+  });
+
+  it('says no issue for a pull request on its own card, yes once it links one', () => {
+    expect(cardRuleFacts(card('github pull request', [openPullRequest]))['item.hasIssue']).toBe(false);
+    expect(
+      cardRuleFacts(card('github pull request', [openPullRequest, source('issue', 'open')]))['item.hasIssue'],
+    ).toBe(true);
+  });
+});
+
 describe('author.trusted', () => {
   it.each([
     ['authorTrusted true', true],

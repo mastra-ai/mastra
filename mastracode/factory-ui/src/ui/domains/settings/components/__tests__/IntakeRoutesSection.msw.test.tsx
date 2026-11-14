@@ -30,7 +30,7 @@ function seededRoutes(): IntakeRouteInfo[] {
       phaseKey: route.target.phaseKey ?? null,
       joinClosedIssue: route.target.joinClosedIssue ?? false,
     },
-    on: [...(route.on ?? ['work_item.created'])],
+    on: [...(route.on ?? ['work_item.opened'])],
     revision: 1,
     createdBy: 'factory',
     createdAt: '2026-11-01T00:00:00.000Z',
@@ -67,12 +67,12 @@ function serveRoutes({ canEdit = true, routes = seededRoutes() } = {}) {
         name: body.name,
         when: body.when ?? null,
         target: { boardKey: body.target.boardKey, phaseKey: body.target.phaseKey ?? null, joinClosedIssue: false },
-        on: body.on ?? ['work_item.created'],
+        on: body.on ?? ['work_item.opened'],
         createdBy: 'admin',
       };
       // A route that places new cards goes ahead of the first route taking every new card. Each
       // route that moves down a slot is a write to it, so its revision goes up, as in storage.
-      const ahead = route.on.includes('work_item.created') ? state.routes.findIndex(catchesEveryArrival) : -1;
+      const ahead = route.on.includes('work_item.opened') ? state.routes.findIndex(catchesEveryArrival) : -1;
       state.routes = (ahead < 0 ? [...state.routes, route] : state.routes.toSpliced(ahead, 0, route)).map(
         (entry, position) =>
           entry === route
@@ -417,9 +417,9 @@ describe('IntakeRoutesSection', () => {
     await screen.findByRole('list', { name: 'Intake routes' });
     // Routes that only move cards already on a board are on that board's Card moves page.
     expect(routeNames()).toEqual(
-      DEFAULT_INTAKE_ROUTES.filter(({ route }) =>
-        (route.on ?? ['work_item.created']).includes('work_item.created'),
-      ).map(({ route }) => route.name),
+      DEFAULT_INTAKE_ROUTES.filter(({ route }) => (route.on ?? ['work_item.opened']).includes('work_item.opened')).map(
+        ({ route }) => route.name,
+      ),
     );
     expect(routeNames()).not.toContain('Closed issues go to Done');
     const last = within(screen.getByRole('list', { name: 'Intake routes' }))
@@ -1031,7 +1031,7 @@ describe('NewCardsHere', () => {
       name: id,
       when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'issue' }] },
       target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       ...extra,
     });
     serveRoutes({

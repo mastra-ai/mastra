@@ -5,7 +5,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import type { GoalObjectiveRecord } from '@mastra/core/storage';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { eventMovesCard, isPullRequestEvent } from '../boards/board-events.js';
+import { combineUpdates, eventMovesCard, isPullRequestEvent, isUpdateEvent } from '../boards/board-events.js';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardFlow,
@@ -133,7 +133,19 @@ const RECONCILE_INTERVAL_MS = 30_000;
 class FactoryDecisionSuperseded extends Error {}
 
 /** The decision cannot act yet and did nothing: it goes back to the queue and is claimed again later. */
-class FactoryDecisionPostponed extends Error {}
+class FactoryDecisionPostponed extends Error {
+  constructor(readonly availableAt?: Date) {
+    super();
+  }
+}
+
+/**
+ * How long an update waits for more updates to the same card before its routes run: a burst of
+ * label or assignee changes within this window becomes one event.
+ */
+export const UPDATE_BURST_MS = 5_000;
+
+const FOLDABLE_UPDATE_STATUSES = new Set(['pending', 'retry', 'leased', 'superseded']);
 
 // How often a decision that cannot act yet (a route move waiting on the card's run) is tried again.
 const POSTPONE_MS = 10_000;
@@ -1077,7 +1089,7 @@ export class FactoryDecisionDispatcher {
       await this.#withLease(
         async leaseExpiresAt =>
           this.#storage.renewDeferredDecisionLease(leaseIdentity(record, this.#ownerId), leaseExpiresAt),
-        async () => this.#executeDecision(record, decision),
+        async () => this.#executeDecision(record, decision, now),
       );
       executionCompleted = true;
       const completed = await this.#storage.completeDeferredDecision(leaseIdentity(record, this.#ownerId), new Date());
@@ -1100,7 +1112,7 @@ export class FactoryDecisionDispatcher {
       if (error instanceof FactoryDecisionPostponed) {
         await this.#storage.postponeDeferredDecision(
           leaseIdentity(record, this.#ownerId),
-          new Date(now.getTime() + POSTPONE_MS),
+          error.availableAt ?? new Date(now.getTime() + POSTPONE_MS),
           new Date(),
         );
         return;
@@ -1405,7 +1417,11 @@ export class FactoryDecisionDispatcher {
     return !startsInAutoPhase(boards, item, decision);
   }
 
-  async #executeDecision(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<void> {
+  async #executeDecision(
+    record: FactoryDeferredDecisionRecord,
+    decision: FactoryCommitDecision,
+    now: Date,
+  ): Promise<void> {
     const nextChain: FactoryRuleCausalEntry[] = [
       ...(record.causalChain as FactoryRuleCausalEntry[]),
       { ingressId: record.idempotencyKey, decisionType: decision.type },
@@ -1419,6 +1435,11 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'routeEvent': {
+        if (isUpdateEvent(decision.event.type)) {
+          const combined = await this.#foldUpdates(record, decision, now);
+          if (combined) await this.#routeEvent(record, combined, nextChain);
+          return;
+        }
         await this.#routeEvent(record, decision.event, nextChain);
         return;
       }
@@ -2354,7 +2375,8 @@ export class FactoryDecisionDispatcher {
         ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
         : [];
       if (!routesHandleEvent(routes, event, board)) return { item, board, fallback: true as const };
-      const route = resolveEventRoute(routes, event, cardRuleFacts(item), board, hasPullRequest(item));
+      const facts = { ...cardRuleFacts(item), ...(stage !== undefined ? { 'card.phase': stage } : {}) };
+      const route = resolveEventRoute(routes, event, facts, board, hasPullRequest(item));
       // A pull request event the rules already decided keeps that decision when no enabled route
       // takes the card: disabling or narrowing a route must not strand a merged card in review.
       if (!route)
@@ -2373,17 +2395,9 @@ export class FactoryDecisionDispatcher {
       if (fallback) await this.#applyTransition(record, fallback, causalChain);
       return;
     }
-    if (!first.board.isTerminal(first.route.phase)) {
-      const binding = await this.#findBinding(record);
-      // A binding with no recorded owner never started a run, so it has none in flight.
-      const startedBy = binding ? first.item.sessions[binding.role]?.startedBy : undefined;
-      if (startedBy) await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
-      const session =
-        binding && startedBy ? await this.#findSession(binding, { userId: startedBy, orgId: record.orgId }) : undefined;
-      // Checked again on the next claim: the card may have moved, or the routes changed, by then.
-      if (binding && session && (await this.#hasRunInFlight(session, binding))) {
-        throw new FactoryDecisionPostponed();
-      }
+    // Checked again on the next claim: the card may have moved, or the routes changed, by then.
+    if (!first.board.isTerminal(first.route.phase) && (await this.#cardRunInFlight(record, first.item))) {
+      throw new FactoryDecisionPostponed();
     }
     const { item, board, route } = first;
     const result = await this.#transitionService.transition({
@@ -2401,6 +2415,73 @@ export class FactoryDecisionDispatcher {
     });
     // A refusal is the card's answer (recorded on it); only a lost revision race is worth a retry.
     if (result.status === 'rejected' && result.code === 'stale') throw new Error(`${result.code}: ${result.reason}`);
+  }
+
+  /**
+   * Whether the card's session has a run in flight. A binding with no recorded owner never
+   * started a run, so it has none.
+   */
+  async #cardRunInFlight(record: FactoryDeferredDecisionRecord, item: Pick<Card, 'sessions'>): Promise<boolean> {
+    const binding = await this.#findBinding(record);
+    const startedBy = binding ? item.sessions[binding.role]?.startedBy : undefined;
+    if (!binding || !startedBy) return false;
+    await this.#primeCredentials?.({ orgId: record.orgId, userId: startedBy });
+    const session = await this.#findSession(binding, { userId: startedBy, orgId: record.orgId });
+    return session !== undefined && (await this.#hasRunInFlight(session, binding));
+  }
+
+  /**
+   * The one update event an update decision stands for, or undefined when it has nothing to do.
+   * Updates to the same card of the same kind (work item or pull request, the card's own session
+   * or anyone else) fold into the newest one: an older one gives way to it, and the newest carries
+   * the net change of every one since the group last moved the card, so a label added then removed
+   * nets out. The newest waits until no update has arrived for {@link UPDATE_BURST_MS}, and one
+   * from the card's own session also until the session's run ends.
+   */
+  async #foldUpdates(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'routeEvent' }>,
+    now: Date,
+  ): Promise<BoardEventFacts | undefined> {
+    if (!record.workItemId) return undefined;
+    const sameGroup = (other: FactoryDeferredDecisionRecord) => {
+      const candidate = other.decision as { type?: unknown; event?: BoardEventFacts; fromCardSession?: unknown };
+      return (
+        candidate.type === 'routeEvent' &&
+        candidate.event?.type === decision.event.type &&
+        (candidate.fromCardSession === true) === (decision.fromCardSession === true)
+      );
+    };
+    const group = (
+      await this.#storage.listDeferredDecisions(record.orgId, record.factoryProjectId, {
+        workItemId: record.workItemId,
+      })
+    )
+      .filter(sameGroup)
+      .toSorted((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id));
+    const index = group.findIndex(other => other.id === record.id);
+    // A newer update not given up on carries this one's change: it folded it, or will.
+    if (group.slice(index + 1).some(other => other.status !== 'failed' && other.status !== 'dismissed')) {
+      throw new FactoryDecisionSuperseded();
+    }
+    const earlier = group.slice(0, index);
+    const since = earlier.slice(earlier.findLastIndex(other => other.status === 'succeeded') + 1);
+    // An older one claimed before this one existed may be moving the card right now; one claimed
+    // since sees this one and gives way.
+    if (since.some(other => other.status === 'leased' && other.updatedAt.getTime() < record.createdAt.getTime())) {
+      throw new FactoryDecisionPostponed();
+    }
+    const quietAt = record.createdAt.getTime() + UPDATE_BURST_MS;
+    if (now.getTime() < quietAt) throw new FactoryDecisionPostponed(new Date(quietAt));
+    if (decision.fromCardSession) {
+      const item = await this.#requireItem(record);
+      if (await this.#cardRunInFlight(record, item)) throw new FactoryDecisionPostponed();
+    }
+    const folded = since.filter(other => FOLDABLE_UPDATE_STATUSES.has(other.status));
+    return combineUpdates([
+      ...folded.map(other => (other.decision as { event: BoardEventFacts }).event),
+      decision.event,
+    ]);
   }
 
   /**

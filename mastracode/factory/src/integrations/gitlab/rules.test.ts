@@ -5,6 +5,7 @@ import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../.
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
@@ -12,7 +13,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
-import { GitLabRules } from './rules.js';
+import { GitLabRules, updateEventFor } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
 
 const PROJECT_ID = '101';
@@ -119,6 +120,7 @@ async function setup(
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
+    notRouted?: NotRoutedLookup;
   } = {},
 ) {
   const seeded = options.storage
@@ -200,6 +202,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
+    ...(options.notRouted ? { notRouted: options.notRouted } : {}),
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -1454,7 +1457,7 @@ describe('GitLab board events', () => {
       await service.ingest(issueHook(`board-event-${action}`, action));
     }
     expect(seen).toEqual([
-      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueOpened', boardEvent: { type: 'work_item.opened' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
       { event: 'issueUpdated', boardEvent: undefined },
@@ -1581,9 +1584,92 @@ describe('GitLab activity signals', () => {
         reference: `${PROJECT_PATH}#42`,
         idleBehavior: 'persist',
       }),
+      // A label change is no activity: it goes to the card's routes as an update.
+      {
+        type: 'routeEvent',
+        idempotencyKey: 'gitlab:101:activity-labels:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      },
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
+  });
+});
+
+describe('GitLab updates to an issue intake turned away', () => {
+  function labelled(deliveryId: string, changes: Record<string, unknown>) {
+    const delivery = issueOpened(deliveryId);
+    return {
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes,
+      },
+    };
+  }
+  const ADD_SHIP = { labels: { previous: [{ title: 'bug' }], current: [{ title: 'bug' }, { title: 'ship' }] } };
+
+  it('runs intake again when an issue with no card that intake turned away changes labels or assignees', async () => {
+    const notRouted = { isNotRouted: vi.fn(async () => true) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(labelled('label-not-routed', ADD_SHIP));
+
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue', board: 'work' }),
+    ]);
+    expect(notRouted.isNotRouted).toHaveBeenCalledWith(
+      { orgId: 'org-1', factoryProjectId: project.id },
+      encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+    );
+  });
+
+  it('leaves it alone when intake never turned it away, or only its title changed', async () => {
+    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, _key: string) => false) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(labelled('label-never-seen', ADD_SHIP));
+    notRouted.isNotRouted.mockResolvedValue(true);
+    await service.ingest(labelled('title-only', { title: { previous: 'Old', current: 'New' } }));
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+});
+
+describe('GitLab update events', () => {
+  const issueCard = { source: 'gitlab-issue' } as never;
+  const mergeRequestCard = { source: 'gitlab-pr' } as never;
+
+  it('reports only label and assignee changes, as what was added and removed', () => {
+    expect(
+      updateEventFor(
+        { event: 'issueUpdated', item: issueCard },
+        {
+          labels: { previous: [{ title: 'bug' }], current: [{ title: 'Ship' }] },
+          assignees: { previous: [], current: [{ username: 'ada' }] },
+          title: { previous: 'Old', current: 'New' },
+        },
+      ),
+    ).toEqual({
+      type: 'work_item.updated',
+      labels: { added: ['Ship'], removed: ['bug'] },
+      assignees: { added: ['ada'], removed: [] },
+    });
+    expect(
+      updateEventFor({ event: 'issueUpdated', item: issueCard }, { title: { previous: 'Old', current: 'New' } }),
+    ).toBeUndefined();
+    expect(
+      updateEventFor({ event: 'issueUpdated', item: undefined }, { labels: { previous: [], current: [{ title: 'x' }] } }),
+    ).toBeUndefined();
+  });
+
+  it("reports a merge request's change as the card's own update on its card, a pull request update on an issue card", () => {
+    const changes = { labels: { previous: [], current: [{ title: 'ready' }] } };
+    expect(updateEventFor({ event: 'mergeRequestUpdated', item: mergeRequestCard }, changes)?.type).toBe(
+      'work_item.updated',
+    );
+    expect(updateEventFor({ event: 'mergeRequestUpdated', item: issueCard }, changes)?.type).toBe(
+      'pull_request.updated',
+    );
   });
 });
 

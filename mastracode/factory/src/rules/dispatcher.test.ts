@@ -2588,6 +2588,134 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  describe("label changes while the card's run is in flight", () => {
+    async function runningCard() {
+      const seed = await createFactoryStorageForTests();
+      const storage = seed.workItems;
+      const item = await createItem(storage);
+      const binding = await bindWorkRun(storage, item.id);
+      const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+      for (const seeded of (await seed.boards.listIntakeRoutes(scope)).reverse()) {
+        await seed.boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
+      }
+      // Ship only what was added and not taken back: a route reading just the newest delta would see bug.
+      await seed.boards.createIntakeRoute(
+        scope,
+        {
+          name: 'Ship it',
+          on: ['work_item.updated'],
+          when: {
+            operator: 'AND',
+            conditions: [
+              { field: 'event.labels.added', operator: 'contains', value: 'ship' },
+              { field: 'event.labels.added', operator: 'not_contains', value: 'bug' },
+              { field: 'event.labels.removed', operator: 'not_exists' },
+            ],
+          },
+          // A terminal phase: a route move there never waits for the run on its own.
+          target: { boardKey: 'work', phaseKey: 'done' },
+        },
+        'admin',
+      );
+      const { controller, session, emitAgentEnd } = createSession(undefined, { streamActive: true });
+      await session.thread.setSetting({
+        key: FACTORY_OPEN_RUNS_SETTING,
+        value: [
+          {
+            kickoffId: 'running-kickoff',
+            bindingId: binding.id,
+            role: binding.role,
+            startedBy: 'factory-rule-dispatcher',
+            orgId: binding.orgId,
+            factoryProjectId: binding.factoryProjectId,
+            workItemId: binding.workItemId,
+            sessionId: binding.sessionId,
+            threadId: binding.threadId,
+            branch: binding.branch,
+          },
+        ],
+      });
+      controller.listActiveThreadRuns.mockReturnValue([{ runId: 'run-1', threadId: binding.threadId }]);
+      observeSessionRunEnd(session, { audit: seed.audit });
+      let deliveries = 0;
+      const update = async (added: string[], removed: string[], at: string, fromCardSession: boolean) => {
+        deliveries += 1;
+        const current = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+        await storage.commitRuleEvaluation({
+          ...scope,
+          workItemId: item.id,
+          ingress: { identity: `labeled-${deliveries}`, triggerType: 'github.issueUpdated' },
+          configVersion: 'rules-v1',
+          expectedRevision: current.revision,
+          actor: { type: 'system', id: 'rules' },
+          outcome: { status: 'accepted' },
+          decisions: [
+            {
+              type: 'routeEvent',
+              idempotencyKey: `labeled-${deliveries}:event-route`,
+              event: { type: 'work_item.updated', labels: { added, removed } },
+              ...(fromCardSession ? { fromCardSession: true as const } : {}),
+            },
+          ],
+          causalChain: [],
+          now: new Date(at),
+        });
+      };
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        boards: autoStartingBoards(createTriageWorkRegistry()),
+        transitionService: new FactoryTransitionService({
+          storage,
+          configVersion: 'rules-v1',
+          boards: createTriageWorkRegistry(),
+        }),
+        storage,
+        intakeRoutes: seed.boards,
+        ownerId: 'worker-1',
+      });
+      const stages = async () => (await storage.get({ orgId: 'org-1', id: item.id }))!.stages;
+      const updates = async () =>
+        (await storage.listDeferredDecisions('org-1', PROJECT_ID, { workItemId: item.id }))
+          .filter(entry => entry.decision.type === 'routeEvent')
+          .map(entry => entry.status);
+      return { item, dispatcher, controller, emitAgentEnd, update, stages, updates };
+    }
+
+    it("holds the session's own changes until its run ends, then routes them as one event with the net change", async () => {
+      const { dispatcher, controller, emitAgentEnd, update, stages, updates } = await runningCard();
+      const before = await stages();
+
+      // The session adds four labels during its run, and takes one back.
+      await update(['ship'], [], '2030-01-01T00:00:00Z', true);
+      await update(['bug'], [], '2030-01-01T00:00:01Z', true);
+      await update(['p1'], [], '2030-01-01T00:00:30Z', true);
+      await update(['docs'], [], '2030-01-01T00:00:31Z', true);
+      await update([], ['bug'], '2030-01-01T00:00:32Z', true);
+      // Well past the burst window, the run is still going: nothing moves.
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      await dispatcher.runOnce(new Date('2030-01-01T00:02:00Z'));
+      expect(await stages()).toEqual(before);
+      expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'pending']);
+
+      controller.listActiveThreadRuns.mockReturnValue([]);
+      emitAgentEnd('complete');
+      await dispatcher.runOnce(new Date('2030-01-01T00:03:00Z'));
+
+      expect(await stages()).toEqual(['done']);
+      expect(await updates()).toEqual(['superseded', 'superseded', 'superseded', 'superseded', 'succeeded']);
+    });
+
+    it("routes a person's change during the run without waiting for it, about five seconds later", async () => {
+      const { dispatcher, update, stages, updates } = await runningCard();
+
+      await update(['ship'], [], '2030-01-01T00:00:00Z', false);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:06Z'));
+
+      expect(await stages()).toEqual(['done']);
+      expect(await updates()).toEqual(['succeeded']);
+    });
+  });
+
   describe('open-run ledger across dispatchers', () => {
     async function setUpOpenBinding(entry: Record<string, unknown>) {
       const seed = await createFactoryStorageForTests();

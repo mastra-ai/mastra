@@ -3,7 +3,12 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
-import { INTAKE_ROUTE_RULE_FIELDS, routeEventsProblem, STATUS_EVENTS } from '../boards/board-events.js';
+import {
+  canonicalStatusEvent,
+  INTAKE_ROUTE_RULE_FIELDS,
+  routeEventsProblem,
+  STATUS_EVENTS,
+} from '../boards/board-events.js';
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema, ruleGroupSchema } from '../rules/rule-group.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -112,9 +117,18 @@ const intakeRouteFields = {
   when: intakeRouteWhenSchema.nullable(),
   /** Where matching cards land. */
   target: intakeRouteTargetSchema,
-  /** The status events the route handles. `work_item.created` places new cards; the others move existing ones. */
+  /**
+   * The status events the route handles. `work_item.opened` places new cards; the others move
+   * existing ones. `work_item.created`, its old name, is accepted for one release and saved as
+   * `work_item.opened`.
+   */
   on: z
-    .array(z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }))
+    .array(
+      z.preprocess(
+        event => (typeof event === 'string' ? canonicalStatusEvent(event) : event),
+        z.enum(STATUS_EVENTS, { error: issue => routeEventsProblem([String(issue.input)], null) ?? undefined }),
+      ),
+    )
     .superRefine((on, ctx) => {
       const problem = routeEventsProblem(on, null);
       if (problem) ctx.addIssue({ code: 'custom', message: problem });
