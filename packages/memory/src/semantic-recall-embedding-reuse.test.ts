@@ -167,6 +167,38 @@ describe('semantic recall embedding reuse across saves', () => {
     expect(rows()).toHaveLength(1);
   });
 
+  it('does not reuse an embedder response with the wrong number of embeddings', async () => {
+    const { memory, embedder, stats, rows, make } = await setup();
+    const doEmbed = embedder.doEmbed;
+    embedder.doEmbed = async () => ({ embeddings: [], usage: { tokens: 0 } });
+
+    await expect(memory.saveMessages({ messages: [make(randomUUID(), 'short response')] })).rejects.toThrow(
+      /returned 0 embeddings for 1 chunks/,
+    );
+    embedder.doEmbed = doEmbed;
+    await memory.saveMessages({ messages: [make(randomUUID(), 'short response')] });
+
+    expect(stats.inputs).toEqual(['short response']);
+    expect(rows()).toHaveLength(1);
+  });
+
+  it('embeds again after the embedder options change', async () => {
+    const { memory, embedder, make } = await setup();
+    const headers: (string | undefined)[] = [];
+    const doEmbed = embedder.doEmbed;
+    embedder.doEmbed = async (args: { values: string[]; headers?: Record<string, string | undefined> }) => {
+      headers.push(args.headers?.['x-variant']);
+      return doEmbed(args);
+    };
+
+    memory.setEmbedder(embedder as any, { headers: { 'x-variant': 'a' } });
+    await memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });
+    memory.setEmbedder(embedder as any, { headers: { 'x-variant': 'b' } });
+    await memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });
+
+    expect(headers).toEqual(['a', 'b']);
+  });
+
   it('embeds again after the embedder changes', async () => {
     const { memory, stats, rows, make } = await setup();
     await memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });

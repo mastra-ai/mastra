@@ -1504,30 +1504,36 @@ ${workingMemory}`;
 
   // Message writes reuse the vectors of chunks they already embedded, so a repeated text (the same
   // reply in another thread, a re-saved message) isn't sent to the embedder again. Keyed by the
-  // exact chunks, so a different chunk size is a miss, and emptied when the embedder changes.
-  // Holds only vectors: each message still gets its own row id and metadata.
+  // exact chunks, so a different chunk size is a miss, and emptied when the embedder or its options
+  // change. Holds only vectors: each message still gets its own row id and metadata.
   private chunkEmbeddingCache = new LRUCache<bigint, Promise<number[][]>>({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
-  private chunkEmbeddingCacheEmbedder: MastraMemory['embedder'];
+  private chunkEmbeddingCacheOwner: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = {};
 
   /**
    * Embeds one message's chunks, reusing vectors already produced for the same chunks. Usage is
    * returned only for a call that reached the embedder.
    */
   private async embedMessageChunks(chunks: string[]) {
-    if (this.chunkEmbeddingCacheEmbedder !== this.embedder) {
+    const owner = this.chunkEmbeddingCacheOwner;
+    if (owner.embedder !== this.embedder || owner.embedderOptions !== this.embedderOptions) {
       this.chunkEmbeddingCache.clear();
-      this.chunkEmbeddingCacheEmbedder = this.embedder;
+      this.chunkEmbeddingCacheOwner = { embedder: this.embedder, embedderOptions: this.embedderOptions };
     }
     const key = (await this.hasher).h64(JSON.stringify(chunks));
     const cached = this.chunkEmbeddingCache.get(key);
     if (cached) return { embeddings: await cached };
 
     const result = this.embedValues(chunks);
-    const embeddings = result.then(({ embeddings }) => embeddings);
-    // Concurrent writers of the same chunks share this call; a failed call is not kept.
-    embeddings.catch(() => {
-      if (this.chunkEmbeddingCache.get(key) === embeddings) this.chunkEmbeddingCache.delete(key);
+    // Concurrent writers of the same chunks share this call. A failed call, or one without exactly
+    // one embedding per chunk, is not kept, so the next write asks the embedder again.
+    const embeddings = result.then(({ embeddings }) => {
+      if (embeddings.length !== chunks.length) evict();
+      return embeddings;
     });
+    const evict = () => {
+      if (this.chunkEmbeddingCache.get(key) === embeddings) this.chunkEmbeddingCache.delete(key);
+    };
+    embeddings.catch(evict);
     this.chunkEmbeddingCache.set(key, embeddings);
     return result;
   }
