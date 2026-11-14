@@ -422,7 +422,9 @@ export class MastraTUI {
     // submitted exactly like typed input, so slash commands and skills work too.
     if (this.state.options.initialMessage) {
       const { resumeSkipNotice } = this.state.options;
-      if (resumeSkipNotice && (await this.resumedConversation())) {
+      const resumed = resumeSkipNotice ? await this.resumedConversation() : false;
+      if (this.stopped) return;
+      if (resumeSkipNotice && resumed) {
         showInfo(this.state, resumeSkipNotice);
       } else {
         await this.submitUserInput(this.state.options.initialMessage);
@@ -776,6 +778,7 @@ export class MastraTUI {
     const local = this.state.local;
     if (local) {
       await local.controller.init();
+      if (this.stopped) return;
       await local.controller.getMastra()?.startWorkers();
     }
     if (this.stopped) return;
@@ -849,8 +852,9 @@ export class MastraTUI {
       activateModePackInSettings(settings, packId);
       saveSettings(settings);
       await applyCurrentThreadPack({ state: this.state }, { packId });
+      if (this.stopped) return;
     }
-    await this.syncThreadActivePackMetadata();
+    await this.syncThreadActivePackMetadata(undefined, () => !this.stopped);
     if (this.stopped) return;
 
     // Subscribe to controller events
@@ -870,6 +874,7 @@ export class MastraTUI {
     // thread selection fired before we were listening).
     // This emits om_status → display_state_changed → updateStatusLine.
     await this.state.local?.controller.loadOMProgress(this.state.local.session);
+    if (this.stopped) return;
 
     // Sync current thread metadata — the thread_changed event from
     // Initial thread setup ran before we subscribed above.
@@ -901,6 +906,7 @@ export class MastraTUI {
 
     // Render existing messages
     await this.renderExistingMessagesAndSeedIdleCounter();
+    if (this.stopped) return;
     // Render existing tasks if any
     await renderExistingTasks(this.state);
     if (this.stopped) return;
