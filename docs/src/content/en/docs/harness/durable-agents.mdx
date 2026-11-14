@@ -415,7 +415,7 @@ A lease only coordinates the processes that share it. `EventEmitterPubSub`, the 
 
 ### Stop work after ownership loss
 
-Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. If ownership checks keep failing or stop responding, the step stops trusting its claim after one lease TTL, 15 seconds by default.
+Durable and evented agents request cancellation of in-flight tool and model calls when their step detects that it no longer owns the run. Evented workers in another process check ownership at the claim renewal interval without renewing the original execution's claim. By default that's every 5 seconds, a third of `MASTRA_AGENT_THREAD_LEASE_TTL_MS`. Detection depends on backend response time. A step in the process that holds the claim stops when an ownership check fails, or when the claim can't be renewed before it expires. A step that only observes another process's claim also stops when no check succeeds within one lease TTL (15 seconds by default).
 
 Cancellation is cooperative. Use the tool execution context's `abortSignal` for cancellable operations, and check it before starting another side effect. A tool that ignores the signal can keep running. Work already completed outside Mastra isn't rolled back.
 

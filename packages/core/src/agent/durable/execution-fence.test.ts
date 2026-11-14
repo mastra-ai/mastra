@@ -550,6 +550,39 @@ describe('storage-backed ExecutionFence', () => {
     expect(await fence.settle(async () => {})).toBe('owned');
   });
 
+  it('finishes a step whose ownership read outlasts the lease TTL while the claim keeps renewing', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    const read = workflowsStore.getRunOwnership.bind(workflowsStore);
+    vi.spyOn(workflowsStore, 'getRunOwnership').mockImplementationOnce(async args => {
+      await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_TTL_MS + 1_000));
+      return read(args);
+    });
+    const step = withExecutionFence({ id: 'llm', execute: async (_params: unknown) => 'output' });
+
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .catch(error => error);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + 1_000);
+
+    expect(await settled).toBe('output');
+    expect(fence.isLost()).toBe(false);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      generation: fence.generation,
+      live: true,
+    });
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
   it('marks the fence lost when a storage renewal never returns, so a recovered execution is not split-brain', async () => {
     vi.useFakeTimers();
     const { workflowsStore } = await stores();
