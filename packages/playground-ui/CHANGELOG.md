@@ -1,5 +1,49 @@
 # @mastra/playground-ui
 
+## 69.1.0-alpha.2
+
+### Patch Changes
+
+- Connect providers that use OAuth client credentials (`OAUTH2_CC`) or no authentication (`NONE`) without leaving Studio. Client-credential providers ask for a client ID and secret in the connect dialog; providers with no authentication connect immediately instead of opening an OAuth popup. ([#30336](https://github.com/mastra-ai/mastra/pull/30336))
+
+  Providers whose catalog lists only connection settings (for example a subdomain) now also ask for their API key, username and password, or client ID and secret. Previously the dialog showed only the settings, and the connection failed.
+
+  The headless connect helpers in `@mastra/playground-ui/domains/connect` now return a fully resolved `HeadlessAuthField` and support conditional fields (`visibleWhen`), so other apps can import them instead of keeping their own copy.
+
+  ```ts
+  import {
+    headlessAuthFieldKey,
+    headlessAuthFields,
+    isHeadlessAuthFieldVisible,
+    splitHeadlessAuthValues,
+    startHeadlessAuth,
+  } from '@mastra/playground-ui/domains/connect';
+
+  // Every field comes back fully resolved: label, target, required, and so on are always set.
+  const fields = headlessAuthFields(provider);
+
+  // Render only the fields whose `visibleWhen` condition matches the current values.
+  const visible = fields.filter(field => isHeadlessAuthFieldVisible(fields, field, values));
+  const missingRequired = visible.some(field => field.required && !values[headlessAuthFieldKey(field)]);
+
+  // On submit, values for hidden fields are dropped.
+  const { credentials, params } = splitHeadlessAuthValues(fields, values);
+  await startHeadlessAuth({
+    sessionToken,
+    integrationId: provider.id,
+    authType: provider.authType,
+    credentials,
+    params,
+  }).result;
+  ```
+
+- Updated dependencies [[`7277766`](https://github.com/mastra-ai/mastra/commit/7277766d6c967c475675d58ff2d0e5c6d7be7c84), [`9eae968`](https://github.com/mastra-ai/mastra/commit/9eae9680d2be2c9596156c1426998c173f80618f), [`951a18b`](https://github.com/mastra-ai/mastra/commit/951a18b08571b87eae318bcd0f5970b8e70ca3c8), [`f4458ee`](https://github.com/mastra-ai/mastra/commit/f4458eea7f221a5b741a4846bba9b95139a8aef8), [`a3b4ef9`](https://github.com/mastra-ai/mastra/commit/a3b4ef9ecda76f961cb9992a2c8787d37d8ce1b3), [`547600d`](https://github.com/mastra-ai/mastra/commit/547600d004e08ecb8b08c84312b535ae5b016c92)]:
+  - @mastra/core@1.84.0-alpha.2
+  - @mastra/memory@1.41.2-alpha.1
+  - @mastra/client-js@1.60.1-alpha.2
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.2
+
 ## 69.1.0-alpha.1
 
 ### Minor Changes
