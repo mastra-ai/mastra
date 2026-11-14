@@ -734,37 +734,6 @@ describe('BackgroundTaskManager', () => {
       expect(result?.status).toBe('timed_out');
       expect(result?.error?.message).toContain('timed out');
     });
-
-    it('never times out a task with timeoutMs 0', async () => {
-      let release!: () => void;
-      const gate = new Promise<void>(resolve => (release = resolve));
-      const executeFn = vi.fn(
-        (_args: any, opts: { abortSignal: AbortSignal }) =>
-          new Promise((resolve, reject) => {
-            opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
-            void gate.then(() => resolve('done'));
-          }),
-      );
-
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      try {
-        const { task } = await manager.enqueue(
-          { toolName: 'long-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
-          ctx(executeFn),
-        );
-        await vi.waitFor(() => expect(executeFn).toHaveBeenCalled());
-
-        // Well past both this manager's default (5s) and the global one (300s).
-        await vi.advanceTimersByTimeAsync(600_000);
-        release();
-
-        await vi.waitFor(async () =>
-          expect(await manager.getTask(task.id)).toMatchObject({ status: 'completed', result: 'done' }),
-        );
-      } finally {
-        vi.useRealTimers();
-      }
-    });
   });
 
   describe('retry', () => {
@@ -1554,56 +1523,6 @@ describe('BackgroundTaskManager', () => {
         const completed = await mgr.getTask('stale-1');
         expect(completed?.status).toBe('completed');
         expect(completed?.result).toBe('recovered');
-      } finally {
-        await local.backgroundTaskManager?.shutdown();
-        await local.stopWorkers();
-      }
-    });
-
-    it('calls onTaskFailed once per task that a restart fails, even when the callback throws', async () => {
-      const seedStorage = new MockStore();
-      const onTaskFailed = vi.fn(async () => {
-        throw new Error('callback boom');
-      });
-      const local = new Mastra({
-        logger: false,
-        storage: seedStorage,
-        backgroundTasks: { enabled: true, onTaskFailed },
-      });
-
-      const bgStore = await seedStorage.getStore('backgroundTasks');
-      for (const id of ['crashed-1', 'crashed-2']) {
-        await bgStore!.createTask({
-          id,
-          status: 'running',
-          toolName: 't',
-          toolCallId: id,
-          args: {},
-          agentId: 'a',
-          runId: 'r',
-          retryCount: 0,
-          maxRetries: 0,
-          timeoutMs: 5000,
-          createdAt: new Date(),
-          startedAt: new Date(Date.now() - 60_000),
-        });
-      }
-      await local.startWorkers();
-
-      try {
-        await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(2));
-        // Give a duplicate failure event a chance to arrive.
-        await new Promise(resolve => setTimeout(resolve, 300));
-        expect(onTaskFailed).toHaveBeenCalledTimes(2);
-
-        const failedIds = onTaskFailed.mock.calls.map(([task]: any[]) => task.id).sort();
-        expect(failedIds).toEqual(['crashed-1', 'crashed-2']);
-        for (const [task] of onTaskFailed.mock.calls as any[]) {
-          expect(task).toMatchObject({
-            status: 'failed',
-            error: { message: 'Worker process terminated before task completed' },
-          });
-        }
       } finally {
         await local.backgroundTaskManager?.shutdown();
         await local.stopWorkers();

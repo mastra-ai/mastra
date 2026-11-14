@@ -158,7 +158,7 @@ export async function dispatchBackgroundTool(deps: {
   }
 
   const placeholder = (verb: 'started' | 'resumed' | 'restarted' | 'reattached' | 'reconciled', taskId: string) =>
-    `Background task ${verb}. Task ID: ${taskId}. The tool "${toolName}" is running in the background. You will be notified when it completes. Do not poll or wait for it. Continue with independent work, or end your turn.`;
+    `Background task ${verb}. Task ID: ${taskId}. The tool "${toolName}" is running in the background. You will be notified when it completes.`;
 
   let failClosed = false;
   try {

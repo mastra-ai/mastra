@@ -441,6 +441,59 @@ describe('factory_transition_work_item', () => {
     );
   });
 
+  // The move can start a phase session the Factory owns; following is how this session hears it wait.
+  it('follows the card it moved, so the session hears from the run the move starts', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+
+    await run('factory_transition_work_item', { workItem: item.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', userId: 'user-1', reason: 'moved' }),
+    ]);
+  });
+
+  it('still reports the move when following the card fails, so the agent does not move it twice', async () => {
+    const { run, fileItem, workItems } = await setup();
+    const { item } = await fileItem('project-1', 'Move me');
+    vi.spyOn(workItems, 'subscribeToWorkItem').mockRejectedValue(new Error('storage is away'));
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).resolves.toEqual({
+      workItemId: item.id,
+      stage: 'triage',
+      revision: item.revision + 1,
+      warnings: ['This session does not follow it yet: storage is away'],
+    });
+  });
+
+  it('keeps "created" when a session moves a card it filed', async () => {
+    const { run, workItems } = await setup();
+    const created = await run<{ id: string }>('factory_create_work_item', { title: 'Mine', description: 'b' });
+
+    await run('factory_transition_work_item', { workItem: created.id, stage: 'triage' });
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: created.id })).toEqual([
+      expect.objectContaining({ sessionId: 'session-1', reason: 'created' }),
+    ]);
+  });
+
+  it('does not follow a card whose move the board refused', async () => {
+    const { run, fileItem, workItems } = await setup({
+      transition: async request => ({
+        status: 'rejected',
+        transitionId: 't',
+        itemId: request.workItemId,
+        code: 'stale',
+        reason: 'The item changed.',
+      }),
+    });
+    const { item } = await fileItem('project-1', 'Stale');
+
+    await expect(run('factory_transition_work_item', { workItem: item.id, stage: 'triage' })).rejects.toThrow();
+
+    expect(await workItems.listWorkItemSubscribers({ orgId: 'org-1', workItemId: item.id })).toEqual([]);
+  });
+
   it("returns the board's refusal as an error", async () => {
     const { run, fileItem } = await setup({
       transition: async request => ({

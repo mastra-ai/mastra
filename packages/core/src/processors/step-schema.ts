@@ -722,6 +722,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
 
   // Output step fields
   finishReason: z.string().optional(),
+  providerMetadata: z.record(z.string(), z.unknown()).optional(),
   toolCalls: z.array(toolCallSchema).optional(),
   text: z.string().optional(),
   usage: z.record(z.string(), z.unknown()).optional(),

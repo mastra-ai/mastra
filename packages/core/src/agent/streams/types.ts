@@ -6,6 +6,7 @@ import type { PubSub } from '../../events/pubsub';
  */
 export type AgentStreamEventType =
   | 'chunk'
+  | 'iteration-start'
   | 'step-start'
   | 'step-finish'
   | 'finish'
@@ -29,6 +30,8 @@ export interface AgentStreamEvent<T = unknown> {
   producedAt?: number;
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
+  /** Persisted model iteration for an iteration-start or step-start event. */
+  stepIndex?: number;
   /**
    * Position of this event in its run topic's log. Only present on events read
    * back from the topic; it is stripped before an event reaches an `observe()`

@@ -278,13 +278,6 @@ A message lifecycle starts with the initial message in `message_start`. Compact 
     isOptional: true,
   },
   {
-    name: 'subagentBackground',
-    type: 'ToolBackgroundConfig',
-    description:
-      "Lets the built-in `subagent` tool run as a background task. Takes the same options as a tool's `background` config. When unset, subagent calls always run in the foreground. See [Run subagents in the background](/docs/harness/agent-controller#run-subagents-in-the-background).",
-    isOptional: true,
-  },
-  {
     name: 'gateways',
     type: 'MastraModelGatewayInterface[]',
     description: 'Custom model gateways merged with the built-in gateways.',

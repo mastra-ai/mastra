@@ -22,7 +22,7 @@ export const backgroundOverrideJsonSchema = {
     },
     timeoutMs: {
       type: 'number' as const,
-      description: 'Override timeout in milliseconds for this call. 0 means no timeout.',
+      description: 'Override timeout in milliseconds for this call.',
     },
     maxRetries: {
       type: 'number' as const,
@@ -39,7 +39,7 @@ export const backgroundOverrideZodSchema = z
       .enum(['foreground', 'deferred', 'awaited'])
       .optional()
       .describe('Choose foreground, deferred, or awaited execution for this call.'),
-    timeoutMs: z.number().optional().describe('Override timeout in milliseconds for this call. 0 means no timeout.'),
+    timeoutMs: z.number().optional().describe('Override timeout in milliseconds for this call.'),
     maxRetries: z.number().optional().describe('Override maximum retry attempts for this call.'),
   })
   .optional()

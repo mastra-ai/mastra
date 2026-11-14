@@ -189,6 +189,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
+import { providerSafetyRejectionScenario } from './provider-safety-rejection.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -435,6 +436,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
+  'provider-safety-rejection': providerSafetyRejectionScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'profile-command': profileCommandScenario,

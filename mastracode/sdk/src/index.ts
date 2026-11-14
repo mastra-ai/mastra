@@ -99,7 +99,6 @@ import {
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
-import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
 import {
   resolveAgentStreamsOff,
   resolveExperimentalAgent,
@@ -364,6 +363,8 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Scorers for the code agent. None run by default. */
+  scorers?: Parameters<typeof createCodingAgent>[0]['scorers'];
   /** Disable persistence of rich scorer results. Default: true. */
   disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
@@ -961,10 +962,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
   const pluginTools = pluginManager?.getPluginTools() ?? {};
 
-  // Scorers (live evaluation with sampling)
-  const outcomeScorer = createOutcomeScorer();
-  const efficiencyScorer = createEfficiencyScorer();
-
   // Notification delivery. Every local Mastra Code process shares one database,
   // so one notification store and one dispatch schedule, and whichever process
   // wins a scheduled fire cannot run another project's thread. When Mastra Code
@@ -1089,6 +1086,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const value = metadata?.[key];
       if (value !== undefined) (baseState as Record<string, unknown>)[key] = value;
     }
+    // Permission rules belong to each thread. A woken thread the session isn't
+    // holding is judged by its own saved rules. Without saved rules it uses the
+    // initial rules, as core does for a thread it opens.
+    if (session.thread.getId() !== threadId) {
+      baseState.permissionRules = (metadata?.permissionRules as MastraCodeState['permissionRules'] | undefined) ??
+        config?.initialState?.permissionRules ?? { categories: {}, tools: {} };
+    }
     let notificationState = baseState;
     const getNotificationState = () => ({ ...notificationState });
     const setNotificationState = async (updates: Partial<MastraCodeState>) => {
@@ -1148,7 +1152,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       requestContext,
       maxSteps: 1000,
       savePerStep: false,
-      requireToolApproval: notificationState.yolo !== true,
+      // Same policy as a turn the controller starts: only calls the thread's
+      // rules don't allow pause for approval, and the rest run in parallel.
+      requireToolApproval:
+        notificationState.yolo === true
+          ? false
+          : ({ toolName }: { toolName: string }) => session.resolveToolApproval(toolName, requestContext) !== 'allow',
+      toolCallConcurrency: { strategy: 'called' as const },
       modelSettings: { temperature: 1 },
     };
   };
@@ -1483,16 +1493,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       scheduleTools,
     ),
     hooks: createToolHooks(hookManager, config?.postToolObserver),
-    scorers: {
-      outcome: {
-        scorer: outcomeScorer,
-        sampling: { type: 'none' },
-      },
-      efficiency: {
-        scorer: efficiencyScorer,
-        sampling: { type: 'ratio', rate: 0.3 },
-      },
-    },
+    ...(config?.scorers ? { scorers: config.scorers } : {}),
     // TaskSignalProvider bundles the task tools + TaskStateProcessor: it merges
     // the tools into the toolset and registers the task state-signal processor,
     // so the task list persists across turns and survives OM truncation.

@@ -2834,6 +2834,26 @@ describe('run activity on the work-item listing', () => {
 
       expect(await listedIds(await buildApp(orgUser).request(sourcePath('github:7:issue:404')))).toEqual([]);
     });
+
+    it('lists the issue card a pull request is attached to, by its id or its URL', async () => {
+      const issue = await createCard('github:7:issue:1');
+      await seed.workItems.attachSource({
+        orgId: 'org1',
+        id: issue.id,
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github:7:pull-request:2',
+          url: 'https://github.com/acme/app/pull/2',
+        },
+        metadata: { githubPullRequestNumber: 2 },
+      });
+
+      const app = buildApp(orgUser);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('https://github.com/acme/app/pull/2')))).toEqual([issue.id]);
+      expect(await listedIds(await app.request(sourcePath('github:7:pull-request:3')))).toEqual([]);
+    });
   });
 
   describe('the cards named by their ids (?workItemId=)', () => {

@@ -8,12 +8,14 @@ import { server } from './ui/msw-server';
 const [base] = largeBoard(1);
 
 function workItem(id: string, overrides: Record<string, unknown>) {
-  return { ...base, id, stages: ['review'], ...overrides };
+  const card = { ...base, id, stages: ['review'], ...overrides };
+  // Rows render the work item's own title, so keep it in step with the card's.
+  return { ...card, workItem: { ...card.workItem, title: card.title } };
 }
 
 // A GitHub issue in Review: a linked PR, labels, an author avatar and a long self-review verdict all compete for
 // the same row, which is where the verdict badge used to run over the avatar and the timestamp.
-const githubIssue = (number: number, title: string, labels: string[]) =>
+const githubIssue = (number: number, title: string, labels: string[], attachedPullRequest?: number) =>
   workItem(`issue-${number}`, {
     title,
     externalSource: {
@@ -22,12 +24,41 @@ const githubIssue = (number: number, title: string, labels: string[]) =>
       externalId: `github-issue:${number}`,
       url: `https://github.com/acme/app/issues/${number}`,
     },
+    ...(attachedPullRequest && {
+      workItem: {
+        ...base.workItem,
+        id: `work-issue-${number}`,
+        sources: [
+          {
+            id: `source-pr-${attachedPullRequest}`,
+            workItemId: `work-issue-${number}`,
+            provider: 'github',
+            integrationId: 'github',
+            sourceType: 'pull-request',
+            workspaceId: null,
+            externalId: `pull-request:github-pr:${attachedPullRequest}`,
+            sourceKey: `github:pull-request:github-pr:${attachedPullRequest}`,
+            key: `acme/app#${attachedPullRequest}`,
+            url: `https://github.com/acme/app/pull/${attachedPullRequest}`,
+            state: 'open',
+            labels: [],
+            author: 'octocat',
+            metadata: { number: attachedPullRequest, state: 'open' },
+            revision: 1,
+            syncedAt: null,
+            createdAt: base.createdAt,
+            updatedAt: base.updatedAt,
+          },
+        ],
+      },
+    }),
     metadata: {
       number,
       author: 'octocat',
       labels,
       selfReviewVerdict: 'approve',
       selfReviewRounds: 1,
+      ...(attachedPullRequest && { openPullRequestNumber: attachedPullRequest }),
     },
   });
 
@@ -63,6 +94,7 @@ const workItems = [
     28310,
     "[BUG] Durable agents: a thread abort sent to a server that didn't start the run does nothing; aborting by run id works",
     ['bug', 'Agents'],
+    28311,
   ),
   pullRequest(28325, 'issue-28324'),
   pullRequest(28311, 'issue-28310'),
@@ -89,6 +121,7 @@ test.describe('Factory board list row layout', () => {
       ),
       http.get('*/web/factory/projects/fp-1/work-items', () => HttpResponse.json({ workItems })),
       http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions: [] })),
+      http.get('*/web/factory/projects/fp-1/feed-events', () => new HttpResponse(null, { status: 404 })),
       http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
       http.get('*/web/github/projects/repo-1/prs', () => HttpResponse.json({ pullRequests: [], nextPage: null })),
       http.get('*/web/intake/config', () =>
@@ -223,6 +256,20 @@ test.describe('Factory board list row layout', () => {
           }),
         );
         expect(collisions).toEqual([]);
+      });
+
+      test('lines up keys and titles whether or not a row carries an attached pull request icon', async ({ page }) => {
+        await page.goto('/factories/fp-1/work');
+        const rows = page.getByTestId('work-item-card');
+        const withPullRequest = rows.filter({ hasText: 'thread abort' });
+        await expect(withPullRequest.getByRole('img', { name: 'Open pull request' })).toBeVisible();
+
+        const keyOffsets = await rows.evaluateAll(elements =>
+          elements.map(row =>
+            Math.round(row.children[1].getBoundingClientRect().left - row.getBoundingClientRect().left),
+          ),
+        );
+        expect(new Set(keyOffsets).size).toBe(1);
       });
     });
   }

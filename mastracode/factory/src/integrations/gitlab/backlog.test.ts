@@ -45,11 +45,17 @@ describe('GitLab linked repository backlog', () => {
     expect(ingest).toHaveBeenCalledTimes(2);
     expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
       event: 'Merge Request Hook', deliveryId: expect.stringMatching(/^poll:merge-request:/),
-      payload: expect.objectContaining({ object_attributes: expect.objectContaining({ iid: 5, action: 'open' }) }),
+      payload: expect.objectContaining({
+        object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
+      }),
     }));
     expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
       event: 'Issue Hook', deliveryId: expect.stringMatching(/^poll:issue:/),
       payload: expect.objectContaining({ object_attributes: expect.objectContaining({ iid: 42, action: 'open' }) }),
     }));
+    // A display name is not a GitLab username, and assignees are not part of the listed event.
+    const listedIssue = ingest.mock.calls.find(([event]) => event.event === 'Issue Hook')?.[0];
+    expect(listedIssue.payload.object_attributes).not.toHaveProperty('assignees');
+    expect(listedIssue.payload.object_attributes.author).toBeUndefined();
   });
 });

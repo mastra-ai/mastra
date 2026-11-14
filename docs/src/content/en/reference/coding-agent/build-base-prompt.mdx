@@ -104,14 +104,6 @@ const prompt = buildBasePrompt({
     description: 'Tool-usage guidance section appended to the prompt.',
   },
   {
-    name: 'backgroundSubagents',
-    type: 'boolean',
-    description:
-      'Set to `true` when subagents can run in the background. The prompt then leaves out the rule to use subagents only for parallel work, so you can add your own subagent guidance.',
-    isOptional: true,
-    defaultValue: 'false',
-  },
-  {
     name: 'productName',
     type: 'string',
     description: 'Display name used in the prompt header.',
