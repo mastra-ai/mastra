@@ -410,6 +410,7 @@ export class MastraTUI {
    */
   async run(): Promise<void> {
     await this.init();
+    if (this.stopped) return;
 
     // Run SessionStart hooks (fire and forget)
     const hookMgr = this.state.hookManager;
@@ -764,6 +765,10 @@ export class MastraTUI {
   // Initialization
   // ===========================================================================
 
+  // Every await below can end with the TUI stopped (Ctrl+C sends SIGINT before the
+  // TUI owns the keyboard; a double Ctrl+C works at startup prompts after it). The
+  // `stopped` checks keep a stopped TUI from subscribing, taking the terminal back,
+  // or starting anything after shutdown has begun.
   private async init(): Promise<void> {
     if (this.state.isInitialized) return;
 
@@ -773,6 +778,7 @@ export class MastraTUI {
       await local.controller.init();
       await local.controller.getMastra()?.startWorkers();
     }
+    if (this.stopped) return;
 
     if (this.state.pluginManager && !this.cleanupPluginReloadListener) {
       this.cleanupPluginReloadListener = this.state.pluginManager.onReload(plugins =>
@@ -799,6 +805,7 @@ export class MastraTUI {
 
     // Load custom slash commands
     await loadCustomSlashCommands(this.state);
+    if (this.stopped) return;
 
     // Install autocomplete immediately; refresh once the workspace resolves.
     setupAutocomplete(this.state);
@@ -822,6 +829,7 @@ export class MastraTUI {
 
     // Resume the latest unlocked thread for this directory.
     const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    if (this.stopped) return;
     // A --pack startup applies to whatever thread startup selected, including a
     // resumed one — it overrides the thread's sticky pack for this session.
     // Validation happens here, after the resume, because a resumed thread
@@ -843,6 +851,7 @@ export class MastraTUI {
       await applyCurrentThreadPack({ state: this.state }, { packId });
     }
     await this.syncThreadActivePackMetadata();
+    if (this.stopped) return;
 
     // Subscribe to controller events
     subscribeToAgentController(this.state, event => this.handleEvent(event));
@@ -865,6 +874,7 @@ export class MastraTUI {
     // Sync current thread metadata — the thread_changed event from
     // Initial thread setup ran before we subscribed above.
     await syncInitialThreadState(this.state);
+    if (this.stopped) return;
 
     this.state.isInitialized = true;
 
@@ -893,9 +903,11 @@ export class MastraTUI {
     await this.renderExistingMessagesAndSeedIdleCounter();
     // Render existing tasks if any
     await renderExistingTasks(this.state);
+    if (this.stopped) return;
 
     if (this.shouldShowOnboarding()) {
       await this.showOnboarding();
+      if (this.stopped) return;
     }
 
     if (startupResumeIssue?.kind === 'missing') {
