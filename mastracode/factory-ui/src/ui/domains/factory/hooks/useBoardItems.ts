@@ -6,12 +6,10 @@ import {
   useDeleteWorkItemMutation,
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
-  useUpsertWorkItemMutation,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { itemBoard, pullRequestMayEnter } from '../boardStages';
 import type { BoardKind } from '../boardStages';
-import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
@@ -31,22 +29,17 @@ export function useBoardItems({
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
-  /**
-   * The cards to act on: the ones the caller shows, and the ones holding a session, which a
-   * dropped pull request finds its issue among.
-   */
+  /** The cards to act on: the ones the caller shows, and the ones holding a session. */
   items: readonly WorkItem[];
   currentUserId?: string;
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
   const catalog = useBoardCatalog(factoryProjectId);
-  const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
   const transition = useTransitionWorkItemMutation(factoryProjectId, currentUserId);
   const remove = useDeleteWorkItemMutation(factoryProjectId);
   const [transitionReasons, setTransitionReasons] = useState<Record<string, string>>({});
-  const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
@@ -113,45 +106,13 @@ export function useBoardItems({
   };
 
   const handleDrop = (payload: DragPayload, toStage: BoardStageId, cause = 'board_drag') => {
-    if (payload.kind === 'work-item') {
-      const item = all.find(candidate => candidate.id === payload.id);
-      if (!item || itemBoard(item) !== kind || payload.fromStage === toStage) return;
-      move(payload.id, toStage, { cause });
-      return;
-    }
-    setDropError(undefined);
-    // A dropped candidate files onto this board and enters at its initial phase.
-    // With the catalog unresolved, `stages` is left out so the server picks it
-    // rather than guessing a phase the board may not declare.
-    const initialPhase = catalog.data?.find(board => board.id === kind)?.initialPhase;
-    const { source, sourceKey, title, url, metadata, customPrompt } = payload.candidate;
-    const parentWorkItemId =
-      source === 'github-pr' || source === 'gitlab-pr' ? inferredParentWorkItemId(metadata, all) : undefined;
-    void (async () => {
-      const item = await upsert.mutateAsync({
-        board: kind,
-        source,
-        sourceKey,
-        parentWorkItemId,
-        title,
-        url,
-        ...(initialPhase ? { stages: [initialPhase] } : {}),
-        metadata,
-        // Kickoffs carry the card description, so typed guidance reaches the run through it.
-        ...(customPrompt ? { description: customPrompt } : {}),
-      });
-      if (!item.stages.includes(toStage) && pullRequestMayEnter(boardOf(catalog.data, item), item, toStage)) {
-        requestTransition(item, toStage, { cause });
-      }
-    })().catch(error => {
-      const failure = error instanceof Error ? error : new Error('The card could not be filed.');
-      setDropError(failure);
-      onFailure?.(failure.message);
-    });
+    const item = all.find(candidate => candidate.id === payload.id);
+    if (!item || itemBoard(item) !== kind || payload.fromStage === toStage) return;
+    move(payload.id, toStage, { cause });
   };
 
   return {
-    mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
+    mutationError: [transition, remove].find(mutation => mutation.isError)?.error,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
     move,

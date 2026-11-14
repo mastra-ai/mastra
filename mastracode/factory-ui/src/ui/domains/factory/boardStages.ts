@@ -21,24 +21,20 @@ export function boardLoadingStages({
   stages,
   itemsPending,
   intakePending,
-  triagePending,
   board,
 }: {
   stages: ReadonlyArray<BoardStage>;
   itemsPending: boolean;
   intakePending: boolean;
-  triagePending: boolean;
-  /** The board on show; its rest and triage phases wait on the intake feed. */
+  /** The board on show; its initial phase waits on the intake setup. */
   board?: BoardInfo;
 }): ReadonlySet<BoardStageId> {
   const loading = new Set<BoardStageId>();
   if (itemsPending) {
     for (const stage of stages) loading.add(stage.id);
   }
-  const loop = boardLoop(board);
   const rest = board?.initialPhase ?? stages[0]?.id;
   if (intakePending && rest !== undefined) loading.add(rest);
-  if (triagePending && loop?.triage) loading.add(loop.triage.phase);
   return loading;
 }
 
