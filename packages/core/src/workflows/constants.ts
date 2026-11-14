@@ -13,6 +13,11 @@ export const PARENT_STATE_SYMBOL = Symbol('parent_state');
 // the state its changes are relative to, so they're applied to the parent's state then.
 export const HAND_BACK_STATE_SYMBOL = Symbol('hand_back_state');
 
+// Symbol used to give a nested workflow step, restarted while it was being resumed, what that
+// resume targeted inside the nested run (step path, label, foreach item), for a restart that
+// resumes the nested run.
+export const RESTART_RESUME_SYMBOL = Symbol('restart_resume');
+
 // Abort reason used when workflow code explicitly cancels a run.
 export const WORKFLOW_CANCELLED_SYMBOL = Symbol('workflow_cancelled');
 

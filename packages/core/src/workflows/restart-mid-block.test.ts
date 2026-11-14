@@ -21,6 +21,8 @@ import { Mastra } from '../mastra';
 import { cloneRunData } from '../storage/domains/workflows/inmemory';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import { copyRunTables, interceptWrites, restoreRunTables, runTablesOf } from './test-utils/run-tables';
+import type { RunTables } from './test-utils/run-tables';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -45,20 +47,6 @@ const nextTick = () => new Promise(resolve => setTimeout(resolve, 0));
 /** Finished foreach items recorded on a checkpoint. */
 function progressCount(snapshot: WorkflowRunState | undefined, stepId: string) {
   return Object.keys((snapshot?.context?.[stepId] as any)?.metadata?.foreachProgress ?? {}).length;
-}
-
-/**
- * Replaces every workflows-store write with `intercept`, which makes the write by calling `write`.
- * Covers the writes of both storage versions.
- */
-function interceptWrites(
-  store: any,
-  intercept: (args: any, write: (args: any) => Promise<unknown>) => Promise<unknown>,
-) {
-  for (const method of WRITE_METHODS) {
-    const write = store[method].bind(store);
-    vi.spyOn(store, method).mockImplementation((args: any) => intercept(args, write));
-  }
 }
 
 /** The run's snapshot as storage holds it, rebuilt from the journal on storage v2. */
@@ -255,9 +243,12 @@ describe.each([1, 2] as const)(
         expect(restarted.status).toBe('success');
         expect(restarted.result).toEqual(original.result);
         expect(restarted.steps.item.output).toEqual(original.steps.item.output);
-        // Per-item progress is a crash-recovery record only; it must not survive into results.
+        // Per-item progress and the resume target are crash-recovery records only; they must not
+        // survive into results.
         expect(JSON.stringify(restarted)).not.toContain('foreachProgress');
         expect(JSON.stringify(stored)).not.toContain('foreachProgress');
+        expect(JSON.stringify(restarted)).not.toContain('foreachResumeTarget');
+        expect(JSON.stringify(stored)).not.toContain('foreachResumeTarget');
       },
     );
 
@@ -534,36 +525,6 @@ describe.each([1, 2] as const)(
     });
   },
 );
-
-const RUN_TABLES = ['workflows', 'workflowRunHeaders', 'workflowRunEntries'] as const;
-const WRITE_METHODS = [
-  'persistWorkflowSnapshot',
-  'updateWorkflowResults',
-  'updateWorkflowState',
-  'updateWorkflowRunHeader',
-  'writeWorkflowRunCheckpoint',
-  'appendWorkflowRunEntries',
-  'appendWorkflowRunStateDraft',
-  'deleteWorkflowRunById',
-] as const;
-
-type RunTables = Record<(typeof RUN_TABLES)[number], Map<string, any>>;
-
-async function runTablesOf(storage: InstanceType<typeof MockStore>): Promise<RunTables> {
-  return ((await storage.getStore('workflows')) as any).db;
-}
-
-function copyRunTables(tables: RunTables): RunTables {
-  return Object.fromEntries(RUN_TABLES.map(table => [table, cloneRunData(tables[table])])) as RunTables;
-}
-
-/** Makes `tables` hold exactly what `copy` holds. */
-function restoreRunTables(tables: RunTables, copy: RunTables) {
-  for (const table of RUN_TABLES) {
-    tables[table].clear();
-    for (const [key, value] of copy[table]) tables[table].set(key, value);
-  }
-}
 
 function seeded(seed: number) {
   return () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;

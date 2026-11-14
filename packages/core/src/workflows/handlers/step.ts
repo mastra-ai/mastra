@@ -21,6 +21,7 @@ import {
   HAND_BACK_STATE_SYMBOL,
   PARENT_STATE_SYMBOL,
   PUBSUB_SYMBOL,
+  RESTART_RESUME_SYMBOL,
   STREAM_FORMAT_SYMBOL,
   WORKFLOW_CANCELLED_SYMBOL,
 } from '../constants';
@@ -49,7 +50,8 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
-import { omitForeachProgress } from './foreach-progress';
+import { getNestedResumeTarget, omitForeachProgress, takesStoredForeachResume } from './foreach-progress';
+import type { NestedResumeTarget } from './foreach-progress';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
@@ -118,6 +120,9 @@ export async function executeStep(
   const journal = engine.getRunJournal(runId);
 
   const stepCallId = globalThis.crypto.randomUUID();
+  // Read before the awaits below: a foreach's items share this record, and a sibling that ends
+  // meanwhile replaces it with its own result.
+  const storedResult = stepResults[step.id];
   const persistedNestedRunId =
     executionContext.foreachIndex !== undefined
       ? stepResults[step.id]?.suspendPayload?.__workflow_meta?.foreachOutput?.[executionContext.foreachIndex]?.metadata
@@ -150,6 +155,7 @@ export async function executeStep(
     });
 
   let resumeDataToUse: unknown;
+  let restartsResume = false;
   if (timeTravelResumeData !== undefined && !timeTravelResumeValidationError) {
     resumeDataToUse = timeTravelResumeData;
   } else if (timeTravelResumeData !== undefined && timeTravelResumeValidationError) {
@@ -159,17 +165,41 @@ export async function executeStep(
     });
   } else if (resume?.steps[0] === step.id) {
     resumeDataToUse = resume?.resumePayload;
-  } else if (restart?.activeStepsPath?.[step.id] && stepResults[step.id]?.status === 'running') {
+  } else if (
+    restart?.activeStepsPath?.[step.id] &&
+    storedResult?.status === 'running' &&
+    // A foreach item's record is the foreach's own: its payload belongs only to the resumed items.
+    (executionContext.foreachIndex === undefined ||
+      takesStoredForeachResume(storedResult, executionContext.foreachIndex))
+  ) {
     // A resumed step that was in flight when the process died re-runs with its original resume data.
-    resumeDataToUse = (stepResults[step.id] as { resumePayload?: unknown }).resumePayload;
+    resumeDataToUse = (storedResult as { resumePayload?: unknown }).resumePayload;
+    restartsResume = true;
+  }
+
+  // What a resumed nested workflow's resume targeted inside the nested run, kept on its running
+  // record: a restart that finds the nested run still suspended, or only claimed, resumes it
+  // again, and without the target it would resume every suspended step there. A foreach item's
+  // record is the foreach's own, which stores the target for its items.
+  let nestedResumeTarget: NestedResumeTarget | undefined;
+  if (step.component === 'WORKFLOW') {
+    if (resume?.steps[0] === step.id && executionContext.foreachIndex === undefined) {
+      nestedResumeTarget = {
+        steps: resume.steps.slice(1),
+        ...(resume.label ? { label: resume.label } : {}),
+        ...(resume.forEachIndex !== undefined ? { forEachIndex: resume.forEachIndex } : {}),
+      };
+    } else if (restartsResume) {
+      nestedResumeTarget = getNestedResumeTarget(storedResult);
+    }
   }
 
   // Extract suspend data if this step was previously suspended
   // A resumed step re-run after a crash is stored as 'running' but still carries its suspendPayload.
-  const priorStatus = stepResults[step.id]?.status;
+  const priorStatus = storedResult?.status;
   let suspendDataToUse =
     priorStatus === 'suspended' || (priorStatus === 'running' && resumeDataToUse !== undefined)
-      ? stepResults[step.id]?.suspendPayload
+      ? storedResult?.suspendPayload
       : undefined;
 
   // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
@@ -261,7 +291,10 @@ export async function executeStep(
       serializedStepGraph,
       stepResults: {
         ...stepResults,
-        [step.id]: stepInfo,
+        [step.id]:
+          nestedResumeTarget && executionContext.foreachIndex === undefined
+            ? { ...stepInfo, metadata: { ...stepInfo.metadata, nestedResumeTarget } }
+            : stepInfo,
       } as Record<string, StepResult<any, any, any, any>>,
       executionContext,
       workflowStatus: 'running',
@@ -591,7 +624,9 @@ export async function executeStep(
                 resumePayload: resume?.resumePayload,
                 runId: (nestedIterationSuspendPayload ?? stepResults[step.id]?.suspendPayload)?.__workflow_meta?.runId,
                 label: resume?.label,
-                forEachIndex: resume?.forEachIndex,
+                // Inside a foreach the index picked this item; otherwise it picks an item of a
+                // foreach inside the nested run.
+                forEachIndex: foreachIndex === undefined ? resume?.forEachIndex : undefined,
               }
             : undefined,
         // Only pass restart data if this step is part of activeStepsPath
@@ -615,6 +650,10 @@ export async function executeStep(
             ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
             : undefined,
         [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
+        // `null` tells the nested workflow the restarted resume's target is unknown (a record stored
+        // before targets were): it then leaves the nested run suspended.
+        [RESTART_RESUME_SYMBOL]:
+          restartsResume && step.component === 'WORKFLOW' ? (nestedResumeTarget ?? null) : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,
