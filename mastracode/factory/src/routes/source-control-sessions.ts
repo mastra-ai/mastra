@@ -650,7 +650,7 @@ function backgroundWorkRoutes(options: SourceControlSessionRoutesOptions): ApiRo
         const tail = Number(c.req.query('tail') ?? 0);
         if (!Number.isInteger(tail) || tail < 0) return c.json({ error: 'tail must be a whole number' }, 400);
         try {
-          const found = await sessionProcess(access.session, pid);
+          const found = await sessionProcess(access.session, pid, c.req.query('toolCallId') || undefined);
           if (!found) return c.json({ error: 'Process not found' }, 404);
           const { handle } = found;
           return c.json({

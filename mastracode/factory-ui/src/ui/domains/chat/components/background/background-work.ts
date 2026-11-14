@@ -58,8 +58,6 @@ export type BackgroundFinishedNotice =
       toolCallId?: string;
       toolName?: string;
       status: string;
-      title?: string;
-      summary?: string;
       text: string;
     };
 
@@ -71,25 +69,16 @@ export function backgroundFinishedNotice(entry: MessageEntry): BackgroundFinishe
   const completion = signal.metadata.backgroundCompletion;
   if (!isRecord(completion)) return undefined;
   const toolCallId = typeof completion.originToolCallId === 'string' ? completion.originToolCallId : undefined;
-  const summary = typeof completion.summary === 'string' && completion.summary ? completion.summary : undefined;
   const text = signalPartsText(entry);
   if (completion.kind === 'process') {
     if (typeof completion.pid !== 'string' || typeof completion.exitCode !== 'number') return undefined;
+    const summary = typeof completion.summary === 'string' && completion.summary ? completion.summary : undefined;
     return { kind: 'process', pid: completion.pid, toolCallId, exitCode: completion.exitCode, summary, text };
   }
+  // A task notice names its task, call and tool; Mastra Code carries no kind, title or summary on it.
   if (typeof completion.taskId !== 'string' || typeof completion.status !== 'string') return undefined;
-  const title = typeof completion.title === 'string' ? completion.title : undefined;
   const toolName = typeof completion.toolName === 'string' ? completion.toolName : undefined;
-  return {
-    kind: 'task',
-    taskId: completion.taskId,
-    toolCallId,
-    toolName,
-    status: completion.status,
-    title,
-    summary,
-    text,
-  };
+  return { kind: 'task', taskId: completion.taskId, toolCallId, toolName, status: completion.status, text };
 }
 
 /** Exit codes the transcript already reported, by the call that started each process. */

@@ -272,6 +272,21 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered[0]?.metadata).toMatchObject({ backgroundCompletion: { summary: 'Dev server on thread-a' } });
   });
 
+  // A run outside an agent has its thread at the top of the tool context; the exit carries that thread too.
+  it('matches the exit of a shell started from a run with its thread at the top level', async () => {
+    const { delivered, start } = await setup();
+
+    const { exit } = await start(node('process.exit(0)'), {
+      agent: { toolCallId: 'top-call' },
+      threadId: 'thread-top',
+      resourceId: 'resource-1',
+    });
+    await exit;
+
+    expect(delivered[0]?.target).toEqual({ resourceId: 'resource-1', threadId: 'thread-top' });
+    expect(delivered[0]?.signal.metadata).toMatchObject({ backgroundCompletion: { summary: 'Building the app' } });
+  });
+
   describe('which thread a shell reports to', () => {
     /**
      * The controller context of the run that starts the shell. A plain subagent

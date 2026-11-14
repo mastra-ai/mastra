@@ -111,8 +111,8 @@ function WorkRow({
   );
 }
 
-function ProcessOutput({ work, pid }: { work: BackgroundWorkApi; pid: string }) {
-  const { data, error, isPending } = useBackgroundProcessOutput(work, pid);
+function ProcessOutput({ work, pid, toolCallId }: { work: BackgroundWorkApi; pid: string; toolCallId: string }) {
+  const { data, error, isPending } = useBackgroundProcessOutput(work, pid, toolCallId);
   const note = (text: string) => (
     <Txt variant="caption" tone="muted">
       {text}
@@ -169,7 +169,7 @@ function ProcessRow({
         />
       }
     >
-      {open ? <ProcessOutput work={work} pid={process.pid} /> : null}
+      {open ? <ProcessOutput work={work} pid={process.pid} toolCallId={toolCallId} /> : null}
     </WorkRow>
   );
 }

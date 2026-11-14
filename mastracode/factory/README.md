@@ -1280,15 +1280,15 @@ The setting also lets the agent run read-only workspace tools (reading, listing 
 
 The Factory UI lists a thread's running background commands above the composer, with their output, and can stop them. Anyone who can read the session, and so send it messages, can stop its background commands. A command stopped this way posts no exit notice. Calls the agent handed to background tasks are listed too, but can't be stopped from there.
 
-| Method | Path                                                                       | Result                                                                                                             |
-| ------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/web/user-sessions/:sessionId/background/processes?threadId=`             | `{ processes }`: the commands an agent started in the session's sandbox, running or unread.                        |
-| `GET`  | `/web/user-sessions/:sessionId/background/processes/:pid?tail=`            | The command's status and output; `tail` keeps the last lines. Reading it doesn't release it.                       |
-| `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill?toolCallId=` | `{ pid, killed }`. `toolCallId` names the call that started the command, so a reused PID isn't stopped by mistake. |
+| Method | Path                                                                        | Result                                                                                                                                    |
+| ------ | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes?threadId=`              | `{ processes }`: the commands an agent started in the session's sandbox, running or unread.                                               |
+| `GET`  | `/web/user-sessions/:sessionId/background/processes/:pid?tail=&toolCallId=` | The command's status and output; `tail` keeps the last lines. With `toolCallId`, only that call's command. Reading it doesn't release it. |
+| `POST` | `/web/user-sessions/:sessionId/background/processes/:pid/kill?toolCallId=`  | `{ pid, killed }`. `toolCallId` names the call that started the command, so a reused PID isn't stopped by mistake.                        |
 
 With authentication on, Mastra's routes for listing, reading and stopping sandbox processes (`/api/workspaces/:workspaceId/sandbox/processes`, `/:pid` and `/:pid/kill`) answer `403`: they don't check which session a caller can read. Until they do, Studio's background work dock can't list or stop processes on a Factory server. Mastra's background task routes (`GET /api/background-tasks`, `GET /api/background-tasks/:id`, `GET /api/background-tasks/stream` and `POST /api/background-tasks/:id/resume`) don't check sessions either, and remain open to any signed-in caller.
 
-These routes read the sandbox held by the server process that runs the session, and never start one: a sandbox that isn't running lists nothing. With several replicas, only the replica that runs the session sees its background commands; a request that lands on another replica lists none and can't stop them. Recreating a session's sandbox ends its background commands without exit notices. After a Factory server restart, commands started before it are no longer tracked: they get no exit notice and the routes don't list them, even when the sandbox kept them running.
+These routes read the sandbox held by the server process that runs the session, and never start one: a sandbox that isn't running lists nothing. With several replicas, only the replica that runs the session sees its background commands. A request sent to another replica lists none and can't stop them. Recreating a session's sandbox ends its background commands without exit notices. After a Factory server restart, commands started before it are no longer tracked: they get no exit notice and the routes don't list them, even when the sandbox kept them running.
 
 ### Factory tools in user sessions
 

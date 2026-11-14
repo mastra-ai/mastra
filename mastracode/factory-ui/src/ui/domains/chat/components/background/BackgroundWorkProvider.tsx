@@ -93,10 +93,10 @@ export function BackgroundWorkProvider({
  * The newest output of a background command, polled while it is on screen until it is known to have ended. A
  * failed read is retried on the next poll: the command may still run.
  */
-export function useBackgroundProcessOutput(work: BackgroundWorkApi, pid: string) {
+export function useBackgroundProcessOutput(work: BackgroundWorkApi, pid: string, toolCallId: string) {
   return useQuery({
-    queryKey: ['background-process-output', work.sessionId, pid] as const,
-    queryFn: () => getBackgroundProcessOutput(work.baseUrl, work.sessionId, pid, OUTPUT_TAIL_LINES),
+    queryKey: ['background-process-output', work.sessionId, pid, toolCallId] as const,
+    queryFn: () => getBackgroundProcessOutput(work.baseUrl, work.sessionId, pid, toolCallId, OUTPUT_TAIL_LINES),
     refetchInterval: query => (query.state.data?.running === false ? false : POLL_MS),
   });
 }

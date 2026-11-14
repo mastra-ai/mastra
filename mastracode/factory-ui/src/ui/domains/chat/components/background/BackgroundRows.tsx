@@ -164,7 +164,7 @@ export function BackgroundFinishedRow({ notice }: { notice: BackgroundFinishedNo
   const ending = process
     ? { label: 'Command finished', status: notice.exitCode === 0 ? ('idle' as const) : ('error' as const) }
     : (TASK_ENDINGS[notice.status] ?? TASK_ENDINGS.failed);
-  const detail = process ? (notice.summary ?? `PID ${notice.pid}`) : (notice.summary ?? notice.title);
+  const detail = process ? (notice.summary ?? `PID ${notice.pid}`) : notice.toolName;
   const { icon: Icon } = presentTool(process ? 'execute_command' : (notice.toolName ?? ''), {});
   return (
     <Activity

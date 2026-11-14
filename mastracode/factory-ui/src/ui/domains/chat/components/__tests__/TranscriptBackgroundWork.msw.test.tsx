@@ -117,14 +117,17 @@ describe('Transcript background commands', () => {
     let processes = [running('4242', 'dev')];
     server.use(
       http.get(PROCESSES_URL, () => HttpResponse.json({ processes })),
-      http.get(`${PROCESSES_URL}/:pid`, ({ params }) =>
-        HttpResponse.json({
-          ...running(String(params.pid), 'dev'),
-          stdout: 'ready on :3000\n',
-          stderr: '',
-          stdoutTruncated: false,
-          stderrTruncated: false,
-        }),
+      // As the route does: output only for the call that started the command.
+      http.get(`${PROCESSES_URL}/:pid`, ({ params, request }) =>
+        new URL(request.url).searchParams.get('toolCallId') === 'dev'
+          ? HttpResponse.json({
+              ...running(String(params.pid), 'dev'),
+              stdout: 'ready on :3000\n',
+              stderr: '',
+              stdoutTruncated: false,
+              stderrTruncated: false,
+            })
+          : HttpResponse.json({ error: 'Process not found' }, { status: 404 }),
       ),
       http.post(`${PROCESSES_URL}/:pid/kill`, ({ params, request }) => {
         killed.push(`${String(params.pid)} from ${new URL(request.url).searchParams.get('toolCallId')}`);
@@ -237,5 +240,40 @@ describe('Transcript background commands', () => {
     expect(within(command).getByRole('button', { name: 'Stop command' })).toBeVisible();
     expect(task).toHaveTextContent(/search/i);
     expect(within(task).queryAllByRole('button')).toEqual([]);
+  });
+
+  it('names the tool on the row a finished background task draws', () => {
+    // The notice Mastra Code posts when a background task finishes.
+    const notice: MastraDBMessage = {
+      id: 'task-done',
+      role: 'signal',
+      createdAt: CREATED_AT,
+      content: {
+        format: 2,
+        parts: [{ type: 'text', text: 'web_search completed in background' }],
+        metadata: {
+          signal: {
+            id: 'background-task:task-1:completed',
+            type: 'notification',
+            tagName: 'notification',
+            createdAt: CREATED_AT.toISOString(),
+            attributes: { source: 'background-work', kind: 'background-task-completed', status: 'completed' },
+            metadata: {
+              backgroundCompletion: {
+                eventId: 'background-task:task-1:completed',
+                taskId: 'task-1',
+                originRunId: 'run-1',
+                originToolCallId: 'search',
+                toolName: 'web_search',
+                status: 'completed',
+              },
+            },
+          },
+        },
+      },
+    };
+    renderChat(createInitialTranscript({ messages: [notice] }).entries);
+
+    expect(screen.getByRole('group', { name: 'Task finished: web_search' })).toBeVisible();
   });
 });

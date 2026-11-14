@@ -1820,9 +1820,13 @@ describe('session background work', () => {
       server.pid,
     ]);
     await vi.waitFor(async () => {
-      const output = (await (await as('teammate', `/${server.pid}?tail=5`)).json()) as { stdout: string };
+      const output = (await (await as('teammate', `/${server.pid}?tail=5&toolCallId=call-1`)).json()) as {
+        stdout: string;
+      };
       expect(output.stdout).toContain('listening');
     });
+    // Nor is a reused PID's output shown for the call that started an earlier command.
+    expect((await as('teammate', `/${server.pid}?toolCallId=call-0`)).status).toBe(404);
     expect((await as('teammate', `/${own.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
     // A stop names the call that started the command, so a PID a later command reused isn't stopped by mistake.
     expect((await as('teammate', `/${server.pid}/kill?toolCallId=call-0`, { method: 'POST' })).status).toBe(404);

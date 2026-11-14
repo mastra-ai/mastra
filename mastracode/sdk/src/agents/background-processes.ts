@@ -24,9 +24,15 @@ interface Launch {
 
 interface ToolContextLike {
   agent?: { toolCallId?: string; threadId?: string };
+  /** A run outside an agent puts its thread here, where `execute_command` also reads it for the exit metadata. */
+  threadId?: string;
   workspace?: { sandbox?: WorkspaceSandbox };
   requestContext?: { get?: (key: string) => unknown };
 }
+
+/** The thread `execute_command` records as the process owner, so a launch and its exit share one key. */
+const launchThreadId = (context: ToolContextLike | undefined) =>
+  context?.agent?.threadId || context?.threadId || undefined;
 
 export interface BackgroundProcessNotices {
   /** Workspace `beforeToolCall` hook: records launches and marks `kill_process` targets. */
@@ -147,7 +153,7 @@ export function createBackgroundProcessNotices(options: {
       const toolCallId = toolContext?.agent?.toolCallId;
       if (!toolCallId) return;
       for (const [pid, sandbox] of sandboxes) if (isTornDown(sandbox)) sandboxes.delete(pid);
-      launches.set(launchKey(toolContext?.agent?.threadId || undefined, toolCallId), {
+      launches.set(launchKey(launchThreadId(toolContext), toolCallId), {
         command: stringInput(input, 'command'),
         description: stringInput(input, 'description'),
         sandbox: toolContext?.workspace?.sandbox,
@@ -165,7 +171,7 @@ export function createBackgroundProcessNotices(options: {
       }
       if (workspaceToolName !== WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND) return;
       const toolCallId = toolContext?.agent?.toolCallId;
-      const key = toolCallId && launchKey(toolContext?.agent?.threadId || undefined, toolCallId);
+      const key = toolCallId && launchKey(launchThreadId(toolContext), toolCallId);
       const pid = error === undefined ? parseBackgroundProcessPid(output) : undefined;
       // No PID means no process started (an error, or a call the hook chain answered), so no exit will come.
       if (!pid) {

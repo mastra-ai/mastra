@@ -30,13 +30,16 @@ export async function listBackgroundProcesses(
   return body.processes;
 }
 
+/** The output of the command `toolCallId` started, so a reused PID never shows another command's output. */
 export async function getBackgroundProcessOutput(
   baseUrl: string,
   sessionId: string,
   pid: string,
+  toolCallId: string,
   tail: number,
 ): Promise<BackgroundProcessOutput> {
-  const res = await fetch(`${backgroundUrl(baseUrl, sessionId, `processes/${encodeURIComponent(pid)}`)}?tail=${tail}`, {
+  const query = `?tail=${tail}&toolCallId=${encodeURIComponent(toolCallId)}`;
+  const res = await fetch(`${backgroundUrl(baseUrl, sessionId, `processes/${encodeURIComponent(pid)}`)}${query}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
