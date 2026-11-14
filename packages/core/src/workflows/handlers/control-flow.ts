@@ -40,8 +40,13 @@ import {
   resolveForeachConcurrency,
 } from '../utils';
 import { isWorkflowRunCanceled } from './entry';
-import { getForeachProgress, omitForeachProgress } from './foreach-progress';
-import type { ForeachProgress } from './foreach-progress';
+import {
+  getForeachProgress,
+  getForeachResumeTarget,
+  getNestedResumeTarget,
+  omitForeachProgress,
+} from './foreach-progress';
+import type { ForeachProgress, ForeachResumeTarget, NestedResumeTarget } from './foreach-progress';
 import { emitStepResultEvents } from './step';
 import type { ExecuteStepParams } from './step';
 
@@ -1050,6 +1055,7 @@ export interface ExecuteForeachParams extends ObservabilityContext {
     resumePayload: any;
     resumePath: number[];
     forEachIndex?: number;
+    label?: string;
   };
   executionContext: ExecutionContext;
   pubsub: PubSub;
@@ -1130,9 +1136,25 @@ export async function executeForeach(
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
+  const restartsRunning = !!restart && stepResults[stepId]?.status === 'running';
   // Items that finished before a crash, checkpointed on the running foreach result (#26214).
-  const restartProgress =
-    restart && stepResults[stepId]?.status === 'running' ? getForeachProgress(stepResults[stepId]) : undefined;
+  const restartProgress = restartsRunning ? getForeachProgress(stepResults[stepId]) : undefined;
+  // Which items the stored `resumePayload` belongs to. A restart keeps the stored target so it
+  // survives another crash; results stored before targets were recorded have none (undefined).
+  const resumeTarget: ForeachResumeTarget | undefined =
+    resume?.steps[0] === stepId
+      ? (resume.forEachIndex ?? 'all')
+      : restartsRunning
+        ? getForeachResumeTarget(stepResults[stepId])
+        : 'none';
+  // What the resume targeted inside an item that is a nested workflow, for a restart that has to
+  // resume that item's nested run again.
+  const nestedResumeTarget: NestedResumeTarget | undefined =
+    resume?.steps[0] === stepId
+      ? { steps: resume.steps.slice(1), ...(resume.label ? { label: resume.label } : {}) }
+      : restartsRunning
+        ? getNestedResumeTarget(stepResults[stepId])
+        : undefined;
 
   const stepInfo = {
     // Same as executeStep: strip prior completion/suspend fields on re-entry.
@@ -1189,8 +1211,11 @@ export async function executeForeach(
   type ForeachStepResult = StepResult<any, any, any, any> | StepBailed;
   type PersistedForeachStepResult = ForeachStepResult & { suspendPayload?: any };
 
-  const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
-    []) as PersistedForeachStepResult[];
+  // A copy: the running record keeps the stored suspend state, which progress checkpoints don't
+  // rewrite, while items record their results here.
+  const prevForeachOutput = [
+    ...(prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput || []),
+  ] as PersistedForeachStepResult[];
   const foreachProgress: ForeachProgress = { ...restartProgress };
   for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
     prevForeachOutput[Number(index)] = {
@@ -1222,7 +1247,17 @@ export async function executeForeach(
     status: 'running',
   };
   const runningWithProgress = (): StepResult<any, any, any, any> =>
-    ({ ...runningFields, metadata: { ...stepInfo.metadata, foreachProgress } }) as StepResult<any, any, any, any>;
+    ({
+      ...runningFields,
+      metadata: {
+        ...stepInfo.metadata,
+        // A copy: items that finish while a write is in flight belong to the next write, whose
+        // patch on storage v2 is built from the items unsent when it starts.
+        foreachProgress: { ...foreachProgress },
+        ...(resumeTarget !== undefined ? { foreachResumeTarget: resumeTarget } : {}),
+        ...(nestedResumeTarget ? { nestedResumeTarget } : {}),
+      },
+    }) as StepResult<any, any, any, any>;
   /** Items finished since the latest progress write started. */
   let unsentItems: number[] = [];
 
@@ -1256,6 +1291,9 @@ export async function executeForeach(
             workflowStatus: 'running',
             requestContext,
             phase: `foreach-progress.${checkpointCount++}`,
+            // Also when this instance last stored the run as suspended: a restart must find the
+            // resumed foreach running with its target, or it can't tell which items were resumed.
+            recordResumedStepStart: resume?.steps[0] === stepId,
           });
         } catch (err) {
           checkpointError = err instanceof Error ? err : new Error(String(err));
@@ -1484,7 +1522,11 @@ export async function executeForeach(
     const prevItemResult = prevForeachOutput[k];
     if (
       prevItemResult?.status === 'success' ||
-      (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined)
+      (prevItemResult?.status === 'suspended' && resume?.forEachIndex !== k && resume?.forEachIndex !== undefined) ||
+      // On a restart, a suspended item stays suspended when the stored resume targeted another item or recorded no target.
+      (prevItemResult?.status === 'suspended' &&
+        restartsRunning &&
+        (resumeTarget === undefined || (typeof resumeTarget === 'number' && resumeTarget !== k)))
     ) {
       if (prevItemResult?.status === 'success') {
         // Already succeeded in a previous run – clean up resume label

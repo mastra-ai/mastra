@@ -102,6 +102,7 @@ export async function loadGraph() {
     { createEventedAgent },
     { globalRunRegistry },
     { __resetExecutionFencesForTests },
+    { MockMemory },
     workflows,
     eventedWorkflows,
   ] = await Promise.all([
@@ -113,6 +114,7 @@ export async function loadGraph() {
     import('../create-evented-agent'),
     import('../run-registry'),
     import('../execution-fence'),
+    import('../../../memory/mock'),
     import('../../../workflows'),
     import('../../../workflows/evented'),
   ]);
@@ -126,6 +128,7 @@ export async function loadGraph() {
     globalRunRegistry,
     /** Stops this graph's claim heartbeats and forgets its local executions. */
     resetExecutionFences: __resetExecutionFencesForTests,
+    MockMemory,
     createWorkflow: workflows.createWorkflow,
     createStep: workflows.createStep,
     createEventedWorkflow: eventedWorkflows.createWorkflow,
@@ -182,7 +185,8 @@ export function createGate() {
 
 export type Gate = ReturnType<typeof createGate>;
 
-type BuildContext = { core: CoreGraph; generation: number };
+/** `storage` is the graph's store: a memory built on it keeps its data across the restart. */
+type BuildContext = { core: CoreGraph; generation: number; storage: any };
 
 type AgentBuild = (ctx: BuildContext) => Agent<any, any, any>;
 type WorkflowBuild = (ctx: BuildContext) => any;
@@ -235,7 +239,7 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
     options.storageMode === 'serializing'
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
       : new core.InMemoryStore();
-  const built = options.build({ core, generation } as BuildContext);
+  const built = options.build({ core, generation, storage } as BuildContext);
   let mastra: any;
   try {
     if (options.kind === 'workflow') {
@@ -453,7 +457,14 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
      * recovers the run. Fails if the checkpoint has no running row to recover
      * from, so a test cannot pass by recovering nothing.
      */
-    async restart(checkpoint: Checkpoint): Promise<RestartResult> {
+    async restart(
+      checkpoint: Checkpoint,
+      /**
+       * Agent kinds: close the recovered stream when the run suspends again; it stays open by
+       * default, so a test that expects the run to suspend sets this.
+       */
+      { closeOnSuspend }: { closeOnSuspend?: boolean } = {},
+    ): Promise<RestartResult> {
       const graph = await buildGraph(options, ++generation);
       graphs.push(graph);
       // Graph 1 is the one that ran; every later graph is seeded from it, not from a previous restart.
@@ -485,7 +496,10 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       );
       let onFinishCalls = 0;
       const attempt = (async () => {
-        const recovered = await agent.recover(options.runId, { onFinish: () => void onFinishCalls++ });
+        const recovered = await agent.recover(options.runId, {
+          onFinish: () => void onFinishCalls++,
+          ...(closeOnSuspend ? { closeOnSuspend } : {}),
+        });
         // Read while the run is live: the registry entry is cleared on cleanup.
         const execution = graph.core.globalRunRegistry.get(options.runId)?.workflowExecution;
         const streamErrors: string[] = [];

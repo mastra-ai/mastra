@@ -82,11 +82,18 @@ import { isMastraTool } from '../tools/toolchecks';
 import type { ToolExecutionContext } from '../tools/types';
 import type { DynamicArgument } from '../types';
 import { resolveDynamicArgument } from '../utils/dynamic-argument';
-import { HAND_BACK_STATE_SYMBOL, PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from './constants';
+import {
+  HAND_BACK_STATE_SYMBOL,
+  PARENT_STATE_SYMBOL,
+  PUBSUB_SYMBOL,
+  RESTART_RESUME_SYMBOL,
+  WORKFLOW_CANCELLED_SYMBOL,
+} from './constants';
 import { DefaultExecutionEngine } from './default';
 import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
+import type { NestedResumeTarget } from './handlers/foreach-progress';
 import { validateTemplate } from './mapping-template';
 import {
   cancelNestedRun,
@@ -3402,6 +3409,7 @@ export class Workflow<
     [PUBSUB_SYMBOL]: pubsub,
     [PARENT_STATE_SYMBOL]: parentState,
     [HAND_BACK_STATE_SYMBOL]: handBackState,
+    [RESTART_RESUME_SYMBOL]: restartResume,
     mastra,
     requestContext,
     abort,
@@ -3443,6 +3451,8 @@ export class Workflow<
     [PUBSUB_SYMBOL]: PubSub;
     [PARENT_STATE_SYMBOL]?: ParentStateLink;
     [HAND_BACK_STATE_SYMBOL]?: (state: TState, base: Record<string, unknown>) => Promise<void>;
+    /** `null`: the restarted resume didn't record its target inside the nested run. */
+    [RESTART_RESUME_SYMBOL]?: NestedResumeTarget | null;
     mastra: Mastra;
     requestContext?: RequestContext<TRequestContext>;
     engine: DefaultEngineType;
@@ -3566,6 +3576,8 @@ export class Workflow<
     // What the nested run's hand-back is relative to. A nested run a restarting parent resumes may
     // have changes its parent never received, so it hands back its whole state.
     let handBackBase: Record<string, unknown> | undefined;
+    // The state a nested run left suspended by a restart had handed back when it parked.
+    let parkedState: Record<string, unknown> | undefined;
     try {
       let restartNested = !!restart;
       let resumeNested = isResume;
@@ -3625,16 +3637,32 @@ export class Workflow<
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
         });
+      } else if (resumeNested && !resume && restartResume === null) {
+        // The interrupted resume didn't record what it targeted inside the nested run, so its data
+        // can't be handed to the right step there: leave the nested run suspended as stored, and
+        // this step suspends with it, to be resumed again.
+        const stored = await run.runStorage.loadFull();
+        res = {
+          status: 'suspended',
+          steps: (stored?.context ?? {}) as any,
+          resumeLabels: stored?.resumeLabels,
+        } as WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>;
+        // The nested run hasn't run since it parked, so the state it had handed back then is its
+        // stored state; it hands nothing back now.
+        if (!parentState) parkedState = toJsonState(stored?.value);
       } else if (resumeNested) {
+        // A restart that resumes the nested run resumes what the interrupted resume targeted.
+        const target = resume ?? restartResume ?? undefined;
         res = await run.resumeNestedByParent({
           resumeData,
-          step: resume?.steps?.length ? (resume.steps as any) : undefined,
+          step: target?.steps?.length ? (target.steps as any) : undefined,
           requestContext,
           actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
-          label: resume?.label,
+          label: target?.label,
+          forEachIndex: target?.forEachIndex,
           perStep,
         });
         if (isResume) handBackBase = run.resumedFromState;
@@ -3676,7 +3704,7 @@ export class Workflow<
     // parent's current state from here, so the changes it already handed back aren't applied twice.
     // Storage v2 keeps the state each drive started from, so a v2 parent reads it from there
     // instead of storing a copy.
-    const handedBack = handBackBase && !parentState ? toJsonState(res.state) : undefined;
+    const handedBack = parkedState ?? (handBackBase && !parentState ? toJsonState(res.state) : undefined);
 
     if (suspendedSteps?.length) {
       for (const [stepName, stepResult] of suspendedSteps) {
