@@ -170,18 +170,6 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(await counter.countMessageAsync(message)).toBe(await new TokenCounter().countMessageAsync(fresh));
   });
 
-  it('calls getStatus once on a step where nothing was observed, buffered, or activated', async () => {
-    const f = await setup();
-    f.messageList.add(assistant([toolPart(1)]), 'response');
-    const spy = vi.spyOn(f.om, 'getStatus');
-
-    const context = await f.turn.step(1).prepare();
-
-    expect(context.observed).toBe(false);
-    expect(context.buffered).toBe(false);
-    expect(spy).toHaveBeenCalledTimes(1);
-  });
-
   it('refreshes status when a background tool result lands while the step saves', async () => {
     const f = await setup();
     f.messageList.add({ ...assistant([{ type: 'text', text: 'first result' }]), id: 'assistant' }, 'response');
@@ -266,6 +254,49 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(context.status.pendingTokens).toBe(current.pendingTokens);
   });
 
+  it('refreshes status when a result is edited in place while the step saves', async () => {
+    const f = await setup();
+    f.messageList.add(
+      assistant([
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'x',
+            toolName: 'read_file',
+            args: {},
+            result: { payload: 'small' },
+          },
+        },
+      ]),
+      'response',
+    );
+    const part: any = f.messageList.get.all
+      .db()
+      .find(m => m.id === 'assistant')!
+      .content.parts.find(p => p.type === 'tool-invocation');
+    const result = part.toolInvocation.result;
+    const persist = f.om.persistMessages.bind(f.om);
+    let edited = false;
+    vi.spyOn(f.om, 'persistMessages').mockImplementation(async (...args) => {
+      await persist(...args);
+      result.payload = 'new data '.repeat(5000);
+      edited = true;
+    });
+
+    const context = await f.turn.step(1).prepare();
+    const current = await f.om.getStatus({
+      threadId: 't',
+      resourceId: 'r',
+      record: f.turn.record,
+      messages: f.messageList.get.all.db(),
+    });
+
+    expect(edited).toBe(true);
+    expect(part.toolInvocation.result).toBe(result);
+    expect(context.status.pendingTokens).toBe(current.pendingTokens);
+  });
+
   it('still refreshes status after a step that started buffering', async () => {
     const f = await setup({ messageTokens: 100_000, bufferTokens: 500, bufferActivation: 0.5 });
     f.messageList.add(assistant([toolPart(1)]), 'response');
@@ -278,7 +309,7 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
-  it('serializes each prior tool result at most once per step as a long tool run grows', async () => {
+  it('serializes each prior tool result at most twice per step as a long tool run grows', async () => {
     const f = await setup();
     const observe = vi.spyOn(f.om, 'observe');
     const { counts, spy } = spyOnResultSerialization();
@@ -295,9 +326,10 @@ describe('OM token counting work in long tool runs (#29851)', () => {
     }
 
     expect(observe).not.toHaveBeenCalled();
-    // Main serialized every accumulated result four times per step (two getStatus passes × two
-    // serializations each). The fix keeps it to one pass over the accumulated results.
-    expect(perStep[100]).toBeLessThanOrEqual(100);
-    expect(perStep[10]).toBeLessThanOrEqual(10);
+    // Main serialized every accumulated result four times per step: two getStatus passes, each
+    // serializing plain JSON results twice. Each pass now serializes them once. Both passes stay:
+    // the second one picks up anything that changed while the step saved.
+    expect(perStep[100]).toBeLessThanOrEqual(200);
+    expect(perStep[10]).toBeLessThanOrEqual(20);
   });
 });
