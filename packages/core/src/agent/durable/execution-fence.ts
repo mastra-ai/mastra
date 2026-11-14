@@ -37,7 +37,6 @@ import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
-import { readRunDeadline, syncRunDeadline } from './abort-transport';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
 import { getRunRegistryEntry } from './run-registry';
@@ -1398,10 +1397,7 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
       const scope = params.mastra?.__createRunScope(runId) ?? createRunScope();
       const key = createRunScopeKey<ExecutionOwnershipGuard>('durable-step-ownership');
       scope.set(key, guard);
-      // Steps refresh a worker's run controller as they start (`ensureRemoteAbortListener`). Refresh it first, and
-      // read the signal at each check, so a check races the signal the step runs under.
-      const entry = getRunRegistryEntry(runId, params.mastra);
-      if (entry?.abortController) syncRunDeadline(entry, readRunDeadline(params.requestContext));
+      // A worker's step creates the run's registry entry as it starts, so each check reads the signal again.
       const signal = () => getRunRegistryEntry(runId, params.mastra)?.abortSignal ?? params.abortSignal;
       try {
         await checkUnlessAborted(guard, signal());

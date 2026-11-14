@@ -8,7 +8,7 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
-import { ensureRemoteAbortListener, RUN_DEADLINE_KEY } from './abort-transport';
+import { ensureRemoteAbortListener, publishAbortRequest } from './abort-transport';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -695,47 +695,47 @@ describe('storage-backed ExecutionFence', () => {
     });
   });
 
-  it.each(['before', 'during'] as const)(
-    'checks ownership around a resumed step on a worker whose previous segment hit its deadline, taken over %s the step',
-    async takeover => {
-      vi.useFakeTimers();
-      const { workflowsStore } = await stores();
-      const fence = await storageClaim(workflowsStore, 'run-1');
-      const pubsub = new EventEmitterPubSub();
-      // The previous segment's total deadline stopped this worker's controller while the run was suspended.
-      await ensureRemoteAbortListener(pubsub, 'run-1', undefined, { at: Date.now(), timeoutMs: 1_000 });
-      onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
-      const deadline = { at: Date.now() + 60_000, timeoutMs: 60_000 };
-      const requestContext = new RequestContext();
-      setExecutionClaim(requestContext, 'run-1', fence.claim);
-      requestContext.set(RUN_DEADLINE_KEY, deadline);
-      const takeOver = () =>
-        workflowsStore.claimRunOwnership({
-          runId: 'run-1',
-          ownerId: 'successor',
-          leaseMs: EXECUTION_LEASE_TTL_MS,
-          force: true,
-          expectedGeneration: fence.generation,
-        });
-      const work = vi.fn(async () => {
-        // Durable steps refresh the run's controller as they start.
-        await ensureRemoteAbortListener(pubsub, 'run-1', undefined, deadline);
-        if (takeover === 'during') await takeOver();
+  it('ends a cancelled post-check on a worker whose step created the run registry entry', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const pubsub = new EventEmitterPubSub();
+    const requestContext = new RequestContext();
+    setExecutionClaim(requestContext, 'run-1', fence.claim);
+    onTestFinished(() => deleteRunRegistryEntry('run-1', undefined));
+    const read = vi.spyOn(workflowsStore, 'getRunOwnership');
+    const step = withExecutionFence({
+      id: 'llm',
+      execute: async (_params: unknown) => {
+        // Durable steps give a worker without a registry entry its own run controller as they start.
+        await ensureRemoteAbortListener(pubsub, 'run-1');
+        read.mockImplementationOnce(() => new Promise(() => {}));
         return 'output';
-      });
-      if (takeover === 'before') await takeOver();
+      },
+    });
 
-      await expect(
-        withExecutionFence({ id: 'llm', execute: work }).execute({
-          runId: 'nested-run',
-          requestContext,
-          mastra: undefined,
-          getInitData: () => ({ runId: 'run-1', agentId }),
-        }),
-      ).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
-      expect(work).toHaveBeenCalledTimes(takeover === 'before' ? 0 : 1);
-    },
-  );
+    let outcome: unknown = 'pending';
+    const settled = step
+      .execute({
+        runId: 'nested-run',
+        requestContext,
+        mastra: undefined,
+        getInitData: () => ({ runId: 'run-1', agentId }),
+      })
+      .then(
+        value => (outcome = value),
+        error => (outcome = error),
+      );
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(outcome).toBe('pending');
+
+    await publishAbortRequest(pubsub, 'run-1');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(outcome).toBe('output');
+    await settled;
+    expect(fence.isLost()).toBe(false);
+  });
 
   it('marks the fence lost when a storage renewal never returns, so a recovered execution is not split-brain', async () => {
     vi.useFakeTimers();

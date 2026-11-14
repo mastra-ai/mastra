@@ -129,7 +129,7 @@ const armedDeadlines = new WeakMap<
 >();
 
 /** Arm the entry's deadline, replacing a timer armed for a different deadline. */
-export function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
+function syncRunDeadline(entry: RunRegistryEntry, deadline: RunDeadline | undefined): void {
   const armed = armedDeadlines.get(entry);
   if (armed && armed.at !== deadline?.at) replaceTimedOutWorkerController(entry);
   if (!deadline) {
