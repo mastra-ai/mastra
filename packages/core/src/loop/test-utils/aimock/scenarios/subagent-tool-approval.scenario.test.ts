@@ -311,7 +311,10 @@ describeForAllEngines(
         memory,
       } as any)) as unknown as RunHandle;
       // Read until the approved delegation returns; call-sup-a is still waiting.
-      await readUntil(approvedB, chunks => chunks.some(c => c.type === 'tool-result'));
+      await readUntil(approvedB, chunks =>
+        chunks.some(c => c.type === 'tool-result' && (c.payload as any).toolCallId === 'call-sup-b'),
+      );
+      expect(executions.queries).toEqual(['beta']);
       const approvedA = (await agent.approveToolCall({
         runId: run.runId,
         toolCallId: 'call-sup-a',
