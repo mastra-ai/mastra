@@ -270,6 +270,13 @@ export function evictSessionSandbox(sessionId: string): void {
   failedSetupCommands.delete(sessionId);
 }
 
+/** How many of this process's session sandboxes are running. */
+export function countRunningSessionSandboxes(): number {
+  let running = 0;
+  for (const entry of sessionSandboxes.values()) if (entry.sandbox.status === 'running') running++;
+  return running;
+}
+
 /** Test-only: reset the process-wide memo between tests. */
 export function __clearSessionSandboxesForTests(): void {
   sessionSandboxes.clear();

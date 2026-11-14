@@ -8,6 +8,8 @@
 
 import type { Context } from 'hono';
 
+import { recordWorkspacePhase } from './metrics/sandbox.js';
+
 /**
  * Verbose per-operation timing (HTTP requests, storage calls, sandbox
  * commands). Off by default; enable per deployment with `FACTORY_TIMING=1`.
@@ -125,14 +127,21 @@ export function instrumentAsyncMethods<T extends object>(target: T, label: strin
   });
 }
 
-/** Run `fn`, logging its duration under `phase` when `bootDiagnosticsEnabled`. Boot-phase use. */
+/**
+ * Run `fn`, logging its duration under `phase` when `bootDiagnosticsEnabled`. Workspace phases also
+ * feed the `sandbox` metrics, whether or not the line is logged.
+ */
 export async function timedPhase<T>(phase: string, fn: () => Promise<T>): Promise<T> {
-  if (!bootDiagnosticsEnabled) return fn();
   const start = performance.now();
+  let ok = false;
   try {
-    return await fn();
+    const result = await fn();
+    ok = true;
+    return result;
   } finally {
-    process.stderr.write(`[factory:timing] ${phase} ${Math.round(performance.now() - start)}ms\n`);
+    const elapsed = performance.now() - start;
+    if (bootDiagnosticsEnabled) process.stderr.write(`[factory:timing] ${phase} ${Math.round(elapsed)}ms\n`);
+    recordWorkspacePhase(phase, elapsed, ok);
   }
 }
 

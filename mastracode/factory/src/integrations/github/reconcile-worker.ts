@@ -3,6 +3,7 @@ import type { LeaseProvider, PubSub } from '@mastra/core/events';
 import { MastraWorker } from '@mastra/core/worker';
 import type { WorkerDeps } from '@mastra/core/worker';
 
+import { recordReconcileSweep, recordSweepWorkerStarted } from '../../metrics/intake.js';
 import type {
   ConfiguredExternalRepositoryKey,
   ExternalRepositoryProjectTarget,
@@ -116,6 +117,8 @@ export class GithubReconcileWorker extends MastraWorker {
       pullRequestDiscoveryIntervalMs: this.#discover ? this.#discoveryIntervalMs : undefined,
     });
     // Sweep on boot: a restart is exactly when webhooks were most likely missed.
+    if (this.#reconcile) recordSweepWorkerStarted('github', 'merge_close');
+    if (this.#discover) recordSweepWorkerStarted('github', 'open');
     this.#schedule(0);
   }
 
@@ -197,12 +200,21 @@ export class GithubReconcileWorker extends MastraWorker {
 
     try {
       const targets = await this.#targets();
-      if (targets.length === 0) return;
+      if (targets.length === 0) {
+        // Nothing to sweep is a clean sweep, not a stalled one.
+        if (reconcilePullRequests) recordReconcileSweep('github', 'merge_close', { replayed: 0, ok: true });
+        if (discoverPullRequests) recordReconcileSweep('github', 'open', { replayed: 0, ok: true });
+        return;
+      }
 
       if (reconcilePullRequests && this.#reconcile) {
         const startedAt = Date.now();
         try {
           const { errors, ...counts } = await this.#reconcile(targets);
+          recordReconcileSweep('github', 'merge_close', {
+            replayed: counts.merged + counts.closed,
+            ok: counts.failed === 0,
+          });
           const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
           if (counts.failed > 0) {
             this.deps?.logger.warn('GitHub pull request reconcile sweep completed with failures', {
@@ -215,6 +227,7 @@ export class GithubReconcileWorker extends MastraWorker {
             this.deps?.logger.debug('GitHub pull request reconcile sweep completed', context);
           }
         } catch (error) {
+          recordReconcileSweep('github', 'merge_close', { replayed: 0, ok: false });
           this.deps?.logger.warn('GitHub pull request reconcile sweep failed', {
             error: error instanceof Error ? error.message : String(error),
           });
@@ -225,6 +238,10 @@ export class GithubReconcileWorker extends MastraWorker {
         const startedAt = Date.now();
         try {
           const { errors, ...counts } = await this.#discover(targets);
+          recordReconcileSweep('github', 'open', {
+            replayed: counts.created + counts.repaired,
+            ok: counts.failed === 0,
+          });
           const context = { ...counts, candidateRepositories: targets.length, durationMs: Date.now() - startedAt };
           if (counts.failed > 0) {
             this.deps?.logger.warn('GitHub pull request discovery completed with failures', { ...context, errors });
@@ -234,6 +251,7 @@ export class GithubReconcileWorker extends MastraWorker {
             this.deps?.logger.debug('GitHub pull request discovery completed', context);
           }
         } catch (error) {
+          recordReconcileSweep('github', 'open', { replayed: 0, ok: false });
           this.deps?.logger.warn('GitHub pull request discovery failed', {
             error: error instanceof Error ? error.message : String(error),
           });
