@@ -18,6 +18,7 @@ function seededRoutes(): IntakeRouteInfo[] {
       boardKey: route.target.boardKey,
       phaseKey: route.target.phaseKey ?? null,
       joinClosedIssue: route.target.joinClosedIssue ?? false,
+      moveToBoardKey: null,
     },
     on: [...(route.on ?? ['work_item.opened'])],
     revision: 1,
@@ -83,8 +84,8 @@ describe('describeRule on routes', () => {
       'Integration is GitHub or GitLab and source kind is pull request and author is not trusted',
     );
     expect(lines['closed-canceled']).toBe('Close reason is not planned');
-    expect(lines['closes-issue']).toBe(
-      'Source kind is pull request and author is trusted and pull request closes an issue and closed issue phase is Intake and closed issue has no pull request',
+    expect(lines['linked-pull-request']).toBe(
+      "Pull request's author is trusted and pull request closes an issue and closed issue phase is Intake and closed issue has no pull request",
     );
     expect(Object.values(lines).join(' ')).not.toMatch(/[a-z]+\.[a-zA-Z]+|_/);
     expect(describeRule(route('everything-else').when)).toBe('Every card');

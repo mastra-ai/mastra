@@ -22,7 +22,7 @@ function intakeRouteTo(boardKey: string, overrides: Partial<IntakeRoute> = {}): 
     enabled: true,
     position: 0,
     when: null,
-    target: { boardKey, phaseKey: null, joinClosedIssue: false },
+    target: { boardKey, phaseKey: null, joinClosedIssue: false, moveToBoardKey: null },
     on: ['work_item.opened'],
     revision: 1,
     createdBy: 'user-1',
@@ -137,7 +137,11 @@ describe('custom-only board routing', () => {
     ['its only route moves existing cards on a later event', [intakeRouteTo('release', { on: ['work_item.closed'] })]],
     [
       'its only route joins pull requests to existing cards',
-      [intakeRouteTo('release', { target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true } })],
+      [
+        intakeRouteTo('release', {
+          target: { boardKey: 'release', phaseKey: null, joinClosedIssue: true, moveToBoardKey: null },
+        }),
+      ],
     ],
   ])('asks for an intake route, not a source, while a source is connected but %s', async (_case, intakeRoutes) => {
     const { client } = renderBoard(undefined, undefined, undefined, undefined, null, intakeRoutes);
