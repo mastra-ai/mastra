@@ -15,12 +15,13 @@ export interface BackgroundWorkRowProps {
   detail?: string;
   /** Epoch milliseconds the work started on the server; the elapsed time is hidden without it. */
   startedAt?: number;
-  stop: ReactNode;
+  /** A control that stops the work; tasks have none, they are listed read-only. */
+  stop?: ReactNode;
   /** The expanded body, mounted only while the row is open. */
   children: ReactNode;
 }
 
-/** One running piece of background work in the dock: what it is, how long it has run, its output, a stop. */
+/** One running piece of background work in the dock: what it is, how long it has run, its output. */
 export function BackgroundWorkRow({ icon, label, detail, startedAt, stop, children }: BackgroundWorkRowProps) {
   return (
     <li>

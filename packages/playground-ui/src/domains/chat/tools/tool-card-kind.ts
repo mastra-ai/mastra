@@ -63,33 +63,9 @@ export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: 
 export const isSettledState = (state: string | undefined): boolean =>
   state === 'output-available' || state === 'result';
 
-const BACKGROUND_TASK_ENDED: ReadonlySet<string | undefined> = new Set([
-  'completed',
-  'failed',
-  'cancelled',
-  'timed_out',
-]);
-
 /** A call running as a Mastra background task. An awaited call's part also names its task, but holds the final result. */
 export const isDeferredCall = (backgroundTaskId: string | undefined, backgroundTaskStatus: string | undefined) =>
-  backgroundTaskId !== undefined && !BACKGROUND_TASK_ENDED.has(backgroundTaskStatus);
-
-// Core stores a timed-out task as `failed`; `timed_out` is kept in case a call is ever marked with it.
-const STOPPED_LABELS = new Map([
-  ['cancelled', 'cancelled'],
-  ['timed_out', 'timed out'],
-]);
-
-/** How a deferred call's task was stopped before it returned, if it was: its part keeps the placeholder. */
-export const stoppedBackgroundLabel = (
-  backgroundTaskId: string | undefined,
-  backgroundTaskStatus: string | undefined,
-): string | undefined => (backgroundTaskId === undefined ? undefined : STOPPED_LABELS.get(backgroundTaskStatus ?? ''));
-
-export const isStoppedBackgroundCall = (
-  backgroundTaskId: string | undefined,
-  backgroundTaskStatus: string | undefined,
-) => stoppedBackgroundLabel(backgroundTaskId, backgroundTaskStatus) !== undefined;
+  backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
 
 interface StatusCall {
   toolName: string;
@@ -167,13 +143,8 @@ export function toolCardKind(
     return 'submit_plan';
   }
   // A foreground call parked on an MCP task's question: the run waits for the answer. A deferred
-  // call's question lives on its background task instead, which the background card reads. A stopped
-  // call's task can't take an answer, though a suspension may outlive it in the message metadata.
-  if (
-    !isDeferredCall(backgroundTaskId, backgroundTaskStatus) &&
-    !isStoppedBackgroundCall(backgroundTaskId, backgroundTaskStatus) &&
-    suspendedMcpInputRequest(metadata, toolCallId)
-  ) {
+  // call's question lives on its background task instead, which the background card reads.
+  if (!isDeferredCall(backgroundTaskId, backgroundTaskStatus) && suspendedMcpInputRequest(metadata, toolCallId)) {
     return 'mcp_input_request';
   }
   if (typeof output === 'string' && output.toLowerCase().includes('background task')) return 'background';

@@ -1,21 +1,18 @@
 // @vitest-environment jsdom
 import type { SandboxProcess } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { memoryThreadMessagesQueryKey } from '@mastra/react/hooks/memory';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { BackgroundWorkPanel } from '../background-work-panel';
 import { BackgroundWorkProvider } from '../background-work-provider';
 import { ChatAgentContext, ChatMessagesContext } from '@/domains/chat/context/chat-context';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
 import { MessageRow } from '@/domains/chat/messages/message-row';
 import {
-  BACKGROUND_TASK_ID,
   backgroundCommandTurn,
-  backgroundTask,
   DEV_SERVER_PID,
   deferredReportTurn,
   devServer,
@@ -31,8 +28,6 @@ import {
   THREAD_ID,
   WORKSPACE_ID,
 } from '@/domains/chat/tools/__tests__/fixtures/background-task';
-import { foregroundSuspendedMetadata } from '@/domains/chat/tools/__tests__/fixtures/mcp-input-request';
-import { ToolCard } from '@/domains/chat/tools/tool-card';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
@@ -274,16 +269,11 @@ describe('a background command in the chat', () => {
 
 describe('a deferred call in the chat', () => {
   describe('when its task streams as running on the thread', () => {
-    it('lists it with its output in the dock and cancels it once the reader confirms', async () => {
-      const cancelled: string[] = [];
+    it('lists it read-only with its output in the dock', async () => {
       server.use(
         http.get(`${API}/background-tasks/stream`, ({ request }) => {
           expect(new URL(request.url).searchParams.get('threadId')).toBe(THREAD_ID);
           return new HttpResponse(eventStream(reportTaskStream), { headers: { 'Content-Type': 'text/event-stream' } });
-        }),
-        http.post(`${API}/background-tasks/:taskId/cancel`, ({ params }) => {
-          cancelled.push(String(params.taskId));
-          return HttpResponse.json(backgroundTask('cancelled'));
         }),
       );
       renderWithProviders(
@@ -295,9 +285,7 @@ describe('a deferred call in the chat', () => {
       const row = await screen.findByRole('group', { name: 'Reports slow report' });
       fireEvent.click(within(row).getByRole('button', { name: /Reports slow report/ }));
       expect(await within(row).findByText('Pulled Q3 revenue')).not.toBeNull();
-      await confirm('Cancel task');
-
-      await waitFor(() => expect(cancelled).toEqual([BACKGROUND_TASK_ID]));
+      expect(within(row).queryByRole('button', { name: 'Cancel task' })).toBeNull();
     });
   });
 
@@ -349,77 +337,6 @@ describe('a deferred call in the chat', () => {
       );
 
       await waitFor(() => expect(screen.queryByRole('group', { name: 'Reports slow report' })).toBeNull());
-    });
-  });
-
-  describe('when the reader cancels its task from the dock after the turn ended', () => {
-    it('marks the call cancelled, without waiting for the thread to be read again', async () => {
-      server.use(
-        http.get(
-          `${API}/background-tasks/stream`,
-          () => new HttpResponse(eventStream(reportTaskStream), { headers: { 'Content-Type': 'text/event-stream' } }),
-        ),
-        http.get(`${API}/background-tasks/:taskId`, () => HttpResponse.json(backgroundTask('running'))),
-        http.post(`${API}/background-tasks/:taskId/cancel`, () => HttpResponse.json(backgroundTask('cancelled'))),
-      );
-      const { queryClient } = renderChat([deferredReportTurn]);
-      const invalidated = vi.spyOn(queryClient, 'invalidateQueries');
-      const card = await screen.findByTestId('tool-badge');
-      expect(within(card).getByText('Background')).not.toBeNull();
-
-      await screen.findByRole('group', { name: 'Reports slow report' });
-      await confirm('Cancel task');
-
-      expect(await within(card).findByText('cancelled')).not.toBeNull();
-      expect(within(card).queryByText('Background')).toBeNull();
-      // The chat's messages and the memory panel's are read again, so the stored `cancelled` comes back.
-      await waitFor(() => {
-        expect(invalidated).toHaveBeenCalledWith({ queryKey: ['memory', 'messages', THREAD_ID] });
-        expect(invalidated).toHaveBeenCalledWith({ queryKey: memoryThreadMessagesQueryKey(THREAD_ID) });
-      });
-    });
-  });
-
-  describe('when its task was cancelled', () => {
-    const cancelledCall = (metadata?: ReturnType<typeof foregroundSuspendedMetadata>) => (
-      <ChatProviders messages={[]}>
-        <ToolCard
-          toolName="reports_slow_report"
-          input={{ topic: 'q3' }}
-          output={`Background task started with id ${BACKGROUND_TASK_ID}`}
-          toolCallId="call-1"
-          state="output-available"
-          backgroundTaskId={BACKGROUND_TASK_ID}
-          backgroundTaskStatus="cancelled"
-          metadata={metadata}
-        />
-      </ChatProviders>
-    );
-
-    it('says so and never reads the task', async () => {
-      const reads: string[] = [];
-      server.use(
-        http.get(`${API}/background-tasks/:taskId`, ({ params }) => {
-          reads.push(String(params.taskId));
-          return HttpResponse.json(backgroundTask('cancelled'));
-        }),
-      );
-      const { queryClient } = renderWithProviders(cancelledCall());
-
-      const card = await screen.findByTestId('tool-badge');
-      expect(within(card).getByText('cancelled')).not.toBeNull();
-      expect(within(card).queryByText('Background')).toBeNull();
-      await waitForMutationsIdle(queryClient);
-      expect(reads).toEqual([]);
-    });
-
-    it('offers no answer to a question its task asked before it stopped', async () => {
-      // The cancel reaches the chat as a stream chunk, which leaves the call's suspension in the message.
-      renderWithProviders(cancelledCall(foregroundSuspendedMetadata()));
-
-      const card = await screen.findByTestId('tool-badge');
-      expect(within(card).getByText('cancelled')).not.toBeNull();
-      expect(screen.queryByTestId('mcp-input-request')).toBeNull();
     });
   });
 
