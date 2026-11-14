@@ -140,12 +140,7 @@ export class RecursiveJsonTransformer {
         chunks: [...chunks, currentChunk],
       };
     } else if (typeof value === 'string') {
-      const stringChunks = this.splitLongString(value);
-      const newChunks = stringChunks
-        .map(chunk => {
-          return this.createChunk(chunk, fullPath);
-        })
-        .filter(chunk => RecursiveJsonTransformer.jsonSize(chunk) <= this.maxSize);
+      const newChunks = this.splitStringForPath(value, fullPath).map(chunk => this.createChunk(chunk, fullPath));
 
       return {
         currentChunk,
@@ -156,7 +151,7 @@ export class RecursiveJsonTransformer {
     const newChunk = this.createChunk(value, fullPath);
     return {
       currentChunk,
-      chunks: RecursiveJsonTransformer.jsonSize(newChunk) <= this.maxSize ? [...chunks, newChunk] : chunks,
+      chunks: [...chunks, newChunk],
     };
   }
 
@@ -312,30 +307,63 @@ export class RecursiveJsonTransformer {
   }
 
   /**
-   * Splits long strings into smaller chunks at word boundaries
-   * Ensures each chunk is within maxSize limit
+   * Splits a string so that each produced chunk, serialized with its full field
+   * path, fits within maxSize. Pieces are cut on code-point boundaries and no
+   * content is discarded: when the field path alone leaves no room for a
+   * character, the remainder is emitted as one oversized chunk.
    */
-  private splitLongString(value: string): string[] {
-    const chunks: string[] = [];
+  private splitStringForPath(value: string, path: string[]): string[] {
+    const pieces: string[] = [];
     let remaining = value;
 
-    while (remaining.length > 0) {
-      const overhead = 20;
-      const chunkSize = Math.floor(this.maxSize - overhead);
+    const fits = (candidate: string) =>
+      RecursiveJsonTransformer.jsonSize(this.createChunk(candidate, path)) <= this.maxSize;
 
-      if (remaining.length <= chunkSize) {
-        chunks.push(remaining);
+    const splitsSurrogatePair = (index: number) => {
+      if (index <= 0 || index >= remaining.length) return false;
+      const previous = remaining.charCodeAt(index - 1);
+      const next = remaining.charCodeAt(index);
+      return previous >= 0xd800 && previous <= 0xdbff && next >= 0xdc00 && next <= 0xdfff;
+    };
+
+    // JSON.stringify escapes a lone surrogate to six characters, so a prefix
+    // ending mid-pair can serialize larger than the pair-inclusive prefix.
+    // Measure and cut only at code-point boundaries.
+    const alignDown = (index: number) => (splitsSurrogatePair(index) ? index - 1 : index);
+
+    while (remaining.length > 0) {
+      let low = 0;
+      let high = remaining.length;
+
+      while (low < high) {
+        const mid = Math.ceil((low + high) / 2);
+        if (fits(remaining.slice(0, alignDown(mid)))) {
+          low = mid;
+        } else {
+          high = mid - 1;
+        }
+      }
+
+      let end = alignDown(low);
+
+      // The serialized field path alone exceeds maxSize: keep the remainder
+      // instead of dropping it.
+      if (end === 0) {
+        pieces.push(remaining);
         break;
       }
 
-      const lastSpace = remaining.slice(0, chunkSize).lastIndexOf(' ');
-      const splitAt = lastSpace > 0 ? lastSpace + 1 : chunkSize;
+      // Prefer splitting after a space, as the previous implementation did.
+      const lastSpace = remaining.lastIndexOf(' ', end - 1);
+      if (lastSpace > 0) {
+        end = lastSpace + 1;
+      }
 
-      chunks.push(remaining.slice(0, splitAt));
-      remaining = remaining.slice(splitAt);
+      pieces.push(remaining.slice(0, end));
+      remaining = remaining.slice(end);
     }
 
-    return chunks;
+    return pieces;
   }
 
   /**
