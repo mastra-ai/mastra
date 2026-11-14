@@ -1945,8 +1945,7 @@ export class Agent<
    * topic. Best-effort: a failed publish is logged, and a request nobody hears
    * is a no-op, like aborting a finished run.
    */
-  protected async requestRemoteAbort(runId: string): Promise<void> {
-    const bus = this.__getStreamBus();
+  protected async requestRemoteAbort(runId: string, bus = this.__getStreamBus()): Promise<void> {
     if (!bus) return;
     try {
       await publishAbortRequest(bus.pubsub, runId);
@@ -12688,7 +12687,7 @@ export class Agent<
       cleanup: detach,
       detach,
       abort: async () => {
-        await this.requestRemoteAbort(runId);
+        await this.requestRemoteAbort(runId, bus);
       },
     };
   }

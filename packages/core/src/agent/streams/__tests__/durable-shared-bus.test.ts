@@ -430,6 +430,55 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     15_000,
   );
 
+  it('aborts an existing observer on its original transport after wrapping with another pubsub', async () => {
+    let started!: () => void;
+    const toolStarted = new Promise<void>(resolve => (started = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    let toolSignal: AbortSignal | undefined;
+    getMock().on(
+      { endpoint: 'chat', hasToolResult: false },
+      { toolCalls: [{ id: 'call_abort_wrap', name: 'wait', arguments: {} }] },
+    );
+    getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Released.' });
+    const inner = new Agent({
+      id: 'observe-abort-wrap',
+      name: 'observe-abort-wrap',
+      instructions: 'Use the tool.',
+      model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+      durable: true,
+      pubsub: new EventEmitterPubSub(),
+      tools: {
+        wait: createTool({
+          id: 'wait',
+          description: 'Wait for release',
+          inputSchema: z.object({}),
+          execute: async (_input, context) => {
+            toolSignal = context?.abortSignal;
+            started();
+            await released;
+            return 'released';
+          },
+        }),
+      },
+    });
+    const running = await inner.stream('Use the tool.');
+    const consuming = running.consumeStream();
+    await toolStarted;
+    const observer = await inner.observe(running.runId);
+    const observing = observer.output.consumeStream();
+    createDurableAgent({ agent: inner, pubsub: new EventEmitterPubSub() });
+    try {
+      await observer.abort();
+      await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
+    } finally {
+      release();
+      await consuming;
+      await observing;
+    }
+    expect(await observer.output.finishReason).toBe('aborted');
+  });
+
   it.each(['pubsub', 'cache', 'cleanupTimeoutMs', 'shouldCache'] as const)(
     'does not warn when an idle Agent is wrapped with %s',
     setting => {
