@@ -71,6 +71,8 @@ export class InMemoryMemory extends MemoryStorage {
   // Fence checks and the writes they guard run without awaiting in between,
   // which makes each fenced write atomic on the single JS thread.
 
+  override readonly supportsAtomicWorkingMemoryMerge = true;
+
   supportsRunFencing(): boolean {
     return true;
   }
@@ -708,6 +710,25 @@ export class InMemoryMemory extends MemoryStorage {
 
     this.db.resources.set(resourceId, resource);
     return resource;
+  }
+
+  // No await between the read and the write, so the merge is atomic on the single JS thread.
+  async mergeResourceWorkingMemory({
+    resourceId,
+    merge,
+  }: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    this.assertFence(undefined, 'mergeResourceWorkingMemory');
+    const existing = this.db.resources.get(resourceId);
+    const workingMemory = merge(existing?.workingMemory ?? undefined);
+    const now = new Date();
+    const resource: StorageResourceType = existing
+      ? { ...existing, workingMemory, updatedAt: now }
+      : { id: resourceId, workingMemory, metadata: {}, createdAt: now, updatedAt: now };
+    this.db.resources.set(resourceId, resource);
+    return { ...resource, metadata: resource.metadata ? { ...resource.metadata } : resource.metadata };
   }
 
   async copyThread(args: StorageCloneThreadInput): Promise<StorageCopyThreadOutput> {

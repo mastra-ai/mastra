@@ -72,6 +72,17 @@ const OM_MAX_HEAD_HOPS = 3;
 /** Optimistic lifecycle writes rerun at most this many times when another process changes the row. */
 const OM_MAX_CAS_ATTEMPTS = 10;
 const OM_CAS_CONFLICT = Symbol('om-cas-conflict');
+const WM_MAX_CAS_ATTEMPTS = 50;
+const WM_CAS_MAX_BACKOFF_MS = 32;
+
+/**
+ * After a lost working memory compare-and-swap, waits a random delay that grows with the attempt
+ * (capped at WM_CAS_MAX_BACKOFF_MS), so writers contending on one resource spread out instead of
+ * re-reading and colliding in lockstep.
+ */
+function wmCasBackoff(attempt: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, Math.random() * Math.min(2 ** attempt, WM_CAS_MAX_BACKOFF_MS)));
+}
 /** A stored OM row plus a WHERE fragment matching exactly that row state. */
 type OMRow = { record: ObservationalMemoryRecord; guard: { sql: string; args: InValue[] } };
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -139,6 +150,7 @@ function addSqliteMetadataValuePredicate(
 
 export class MemoryLibSQL extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
+  override readonly supportsAtomicWorkingMemoryMerge = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
 
@@ -1260,6 +1272,82 @@ export class MemoryLibSQL extends MemoryStorage {
     );
 
     return updatedResource;
+  }
+
+  /**
+   * Compare-and-swap: read the stored working memory, compute `merge`, and write only if the
+   * stored value is still the one read; otherwise re-read and retry. No interactive transaction is
+   * held across `merge` or across attempts (see `#withOMCas`), and the guard works across
+   * processes and connections. A missing resource is created with `ON CONFLICT DO NOTHING`, so
+   * concurrent first writes conflict instead of overwriting each other.
+   */
+  override async mergeResourceWorkingMemory({
+    resourceId,
+    merge,
+  }: {
+    resourceId: string;
+    merge: (existing: string | undefined) => string;
+  }): Promise<StorageResourceType> {
+    const check = this.#runFenceCheck(undefined, 'mergeResourceWorkingMemory');
+    const callbackError: { error?: unknown } = {};
+    try {
+      for (let i = 0; i < WM_MAX_CAS_ATTEMPTS; i++) {
+        const existing = await this.getResourceById({ resourceId });
+
+        let workingMemory: string;
+        try {
+          workingMemory = merge(existing?.workingMemory ?? undefined);
+        } catch (error) {
+          callbackError.error = error;
+          throw error;
+        }
+
+        const now = new Date();
+        const nowIso = now.toISOString();
+        const result = await this.#fencedWrite('mergeResourceWorkingMemory', check, writer =>
+          writer.execute(
+            existing
+              ? {
+                  sql: `UPDATE ${TABLE_RESOURCES} SET workingMemory = ?, updatedAt = ? WHERE id = ? AND workingMemory IS ?`,
+                  args: [workingMemory, nowIso, resourceId, existing.workingMemory ?? null],
+                }
+              : {
+                  sql: `INSERT INTO ${TABLE_RESOURCES} (id, workingMemory, metadata, createdAt, updatedAt)
+                        VALUES (?, ?, jsonb(?), ?, ?) ON CONFLICT(id) DO NOTHING`,
+                  args: [resourceId, workingMemory, '{}', nowIso, nowIso],
+                },
+          ),
+        );
+        if (result.rowsAffected > 0) {
+          return existing
+            ? { ...existing, workingMemory, updatedAt: now }
+            : { id: resourceId, workingMemory, metadata: {}, createdAt: now, updatedAt: now };
+        }
+        // An embedded replica reads locally; pull the other instance's write before re-reading.
+        if (this.#embeddedReplica) await this.#client.sync?.();
+        await wmCasBackoff(i);
+      }
+      throw new MastraError({
+        id: createStorageErrorId('LIBSQL', 'MERGE_RESOURCE_WORKING_MEMORY', 'CONFLICT'),
+        text: `Working memory merge kept conflicting with concurrent writers (${WM_MAX_CAS_ATTEMPTS} attempts)`,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { resourceId },
+      });
+    } catch (error) {
+      if (error === callbackError.error || error instanceof MastraError || isRunFenceConflictError(error)) {
+        throw error;
+      }
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'MERGE_RESOURCE_WORKING_MEMORY', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { resourceId },
+        },
+        error,
+      );
+    }
   }
 
   async getThreadById({

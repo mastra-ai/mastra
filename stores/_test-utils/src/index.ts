@@ -4,6 +4,7 @@ export * from './domains/observability-vnext';
 export * from './domains/memory/messages-list-include-resource-scope';
 export * from './domains/memory/observational-memory-concurrency';
 export * from './domains/memory/child-process-memory-storage';
+export * from './domains/memory/merge-resource-working-memory';
 export * from './domains/knowledge';
 export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
