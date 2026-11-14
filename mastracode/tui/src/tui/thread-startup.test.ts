@@ -178,6 +178,33 @@ describe('resumeThreadOnStartup', () => {
     expect(switchThread).not.toHaveBeenCalled();
   });
 
+  it('does not switch threads when the caller stopped while threads were listed', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    const switchThread = vi.fn().mockResolvedValue(undefined);
+    let current = true;
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        identity: { getResourceId: vi.fn(() => 'resource-1') },
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn(async () => {
+            current = false;
+            return [latest];
+          }),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await expect(resumeThreadOnStartup(state, undefined, () => current)).resolves.toBeUndefined();
+
+    expect(switchThread).not.toHaveBeenCalled();
+    expect(state.pendingNewThread).toBe(false);
+  });
+
   it('resumes the latest unlocked thread for the current directory', async () => {
     const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
     const older = createThread('thread-older', 'Older thread', '2026-08-28T10:00:00Z');

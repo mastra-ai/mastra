@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -10,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   renderExistingTasks: vi.fn(),
   setCurrentThreadTitle: vi.fn(),
   showInfo: vi.fn(),
+  resumeThreadOnStartup: vi.fn(),
 }));
 
 function stopIfAt(stage: string): void {
@@ -37,10 +39,16 @@ vi.mock('../setup.js', () => ({
 }));
 
 vi.mock('../thread-startup.js', () => ({
-  resumeThreadOnStartup: vi.fn(async () => {
+  resumeThreadOnStartup: async (...args: unknown[]) => {
+    mocks.resumeThreadOnStartup(...args);
     stopIfAt('resume');
     return undefined;
-  }),
+  },
+}));
+
+vi.mock('../render-messages.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../render-messages.js')>()),
+  renderExistingMessages: vi.fn(async () => stopIfAt('messages')),
 }));
 
 vi.mock('../thread-title.js', () => ({
@@ -301,6 +309,43 @@ describe('MastraTUI startup stopped part-way', () => {
     await initAndCollectTimer(tui);
 
     expect(mocks.renderExistingTasks).not.toHaveBeenCalled();
+  });
+
+  it('does not start the idle status timer when stopped while existing messages render', async () => {
+    const { tui } = createStartupTui('messages');
+    delete (tui as Partial<StartupTui>).renderExistingMessagesAndSeedIdleCounter;
+    tui.state.session.run = { isRunning: () => false };
+    tui.state.lastRenderedMessageAt = Date.now();
+
+    await initAndCollectTimer(tui);
+    const statusTimer = tui.statusTimingTimer;
+    if (statusTimer) clearInterval(statusTimer);
+
+    expect(statusTimer).toBeNull();
+  });
+
+  it('does not persist fallback state or set the title when stopped while the initial thread state reads threads', async () => {
+    const { tui } = createStartupTui('thread-list');
+    tui.state.session.thread.getId = () => 'thread-1';
+    tui.state.session.state = {
+      get: () => ({ [MODEL_FALLBACK_STATE_KEY]: { toModelId: 'model-b' } }),
+      setIf: vi.fn(async () => true),
+    };
+
+    await initAndCollectTimer(tui);
+
+    expect(tui.state.session.thread.list).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.state.setIf).not.toHaveBeenCalled();
+    expect(mocks.setCurrentThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('tells the startup thread resume that a stop ended the TUI', async () => {
+    const { tui } = createStartupTui('resume');
+
+    await initAndCollectTimer(tui);
+
+    const isCurrent = mocks.resumeThreadOnStartup.mock.calls[0]?.[2] as (() => boolean) | undefined;
+    expect(isCurrent?.()).toBe(false);
   });
 
   it('does not open onboarding when stopped while tasks render', async () => {
