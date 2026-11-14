@@ -1344,7 +1344,7 @@ describe('Workflow (Evented Engine Specific)', () => {
         forEachIndex: undefined,
         expected: own(0, 1, 2),
       },
-      // With no record of its own, a resumed item must not get another item's payload with its resume data.
+      // With no record of its own, an item must not fall back to another item's payload.
       {
         name: 'gives an item with no stored record no suspend data',
         items: [0, 1, 2],

@@ -217,18 +217,10 @@ export class StepExecutor extends MastraBase {
     // Records suspended by earlier versions have no `foreachOutput`; the item's own output slot
     // holds the same record there.
     if (suspendDataToUse && typeof params.foreachIdx === 'number') {
-      const foreachOutput = suspendDataToUse.__workflow_meta?.foreachOutput;
       const iterationResult =
-        foreachOutput?.[params.foreachIdx] ??
+        suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx] ??
         (params.stepResults[stepId] as { output?: any[] } | undefined)?.output?.[params.foreachIdx];
-      if (iterationResult?.status === 'suspended') {
-        suspendDataToUse = iterationResult.suspendPayload;
-      } else if (Array.isArray(foreachOutput) || params.resumeData !== undefined) {
-        suspendDataToUse = undefined;
-      }
-      // Otherwise the record comes from an earlier version and this item's own payload is gone (a
-      // restart after its slot was reset): keep the step-level payload as that version did, so the
-      // item still counts as suspended. It never comes with resume data.
+      suspendDataToUse = iterationResult?.status === 'suspended' ? iterationResult.suspendPayload : undefined;
     }
 
     // Filter out internal workflow metadata before exposing to step code
