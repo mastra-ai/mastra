@@ -152,6 +152,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'pullRequestReviewSubmitted',
   'pullRequestMerged',
   'pullRequestClosed',
+  'pullRequestReopened',
 ] as const;
 export type FactoryGithubEventName = (typeof FACTORY_GITHUB_EVENTS)[number];
 
@@ -702,6 +703,11 @@ export interface FactoryTransitionDecision extends FactoryCommitDecisionBase {
 export interface FactoryRouteEventDecision extends FactoryCommitDecisionBase {
   type: 'routeEvent';
   event: BoardEventFacts;
+  /**
+   * An update the card's own session made (its labels or assignees, set through Factory): held
+   * until the session's run ends, then combined with the session's other updates into one event.
+   */
+  fromCardSession?: true;
 }
 
 /**

@@ -46,7 +46,7 @@ export function boardEventFor(context: Pick<FactoryVantaRuleContext, 'event' | '
   if (context.event === 'vulnerabilityClosed') {
     return { type: 'work_item.closed', reason: closeReason(false) };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? undefined : { type: 'work_item.opened' };
 }
 
 /** The closing ingress for a card whose vulnerability Vanta stopped listing, rebuilt from the card. */

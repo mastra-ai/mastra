@@ -3,6 +3,7 @@ import type { RuleFacts } from '../rules/rule-group.js';
 import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { BoardEventFacts } from './board-events.js';
+import { eventRuleFacts } from './board-events.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { boardFlow, boardForWorkItem, hasPullRequest } from './semantics.js';
 
@@ -13,7 +14,7 @@ type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'ta
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
-  return route.on.includes('work_item.created');
+  return route.on.includes('work_item.opened');
 }
 
 /**
@@ -46,11 +47,11 @@ export function intakeTargetProblem(
   if (!board) {
     return { code: 'unknown_board', message: `Board "${target.boardKey}" is not installed in this project.` };
   }
-  if (target.joinClosedIssue && route.on.some(event => event !== 'work_item.created')) {
+  if (target.joinClosedIssue && route.on.some(event => event !== 'work_item.opened')) {
     return {
       code: 'join_on_event',
       message:
-        'A route that joins a pull request to the card of the issue it closes handles only arrivals: its `on` must be `work_item.created` alone.',
+        'A route that joins a pull request to the card of the issue it closes handles only arrivals: its `on` must be `work_item.opened` alone.',
     };
   }
   if (!target.phaseKey) return undefined;
@@ -69,7 +70,7 @@ export function intakeTargetProblem(
   if (!kind) {
     return { code: 'unknown_phase', message: `Board "${target.boardKey}" has no phase "${target.phaseKey}".` };
   }
-  if (!route.on.includes('work_item.created')) return undefined;
+  if (!route.on.includes('work_item.opened')) return undefined;
   if (kind === 'terminal') {
     return {
       code: 'terminal_phase',
@@ -117,6 +118,7 @@ export function closedIssueRuleFacts(closedIssue: Pick<Card, 'stages' | 'workIte
   if (!closedIssue) return { 'pullRequest.closesIssue': false };
   return {
     'pullRequest.closesIssue': true,
+    'item.hasIssue': true,
     ...(closedIssue.stages.length === 1 ? { 'closedIssue.phase': closedIssue.stages[0] } : {}),
     'closedIssue.hasPullRequest': hasPullRequest(closedIssue),
   };
@@ -205,11 +207,7 @@ export function resolveEventRoute(
   board: InstalledBoard,
   carriesPullRequest = false,
 ): { phase: string; routeId: string } | undefined {
-  const facts: RuleFacts = {
-    ...cardFacts,
-    'event.type': event.type,
-    ...(event.reason ? { 'event.reason': event.reason } : {}),
-  };
+  const facts: RuleFacts = { ...cardFacts, ...eventRuleFacts(event) };
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
     if (!evaluateRuleGroup(route.when, facts)) continue;

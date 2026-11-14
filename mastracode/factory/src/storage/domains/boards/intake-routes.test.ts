@@ -120,7 +120,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       enabled: true,
       position: 0,
       when: CLOSES_ISSUE_INTAKE_ROUTE.when,
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
       revision: 1,
       createdBy: 'factory',
@@ -130,7 +130,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       enabled: true,
       position: 1,
       when: DEFAULT_INTAKE_ROUTE.when,
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
       revision: 1,
       createdBy: 'factory',
@@ -140,7 +140,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       name: PULL_REQUEST_INTAKE_ROUTE.name,
       position: 2,
       when: PULL_REQUEST_INTAKE_ROUTE.when,
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: false },
       createdBy: 'factory',
     });
@@ -197,7 +197,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(catchAll).toMatchObject({
       name: CATCH_ALL_INTAKE_ROUTE.name,
       position: 11,
-      on: ['work_item.created'],
+      on: ['work_item.opened'],
       when: null,
       target: { boardKey: 'work', phaseKey: 'intake', joinClosedIssue: false },
       createdBy: 'factory',
@@ -600,7 +600,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       const bare = await boards.createIntakeRoute(scope, route('New cards'), 'u');
 
       expect(closes).toMatchObject({ on: ['work_item.closed', 'work_item.reopened'] });
-      expect(bare).toMatchObject({ on: ['work_item.created'] });
+      expect(bare).toMatchObject({ on: ['work_item.opened'] });
       expect(await boards.listIntakeRoutes(scope)).toEqual([closes, bare]);
     });
 
@@ -661,7 +661,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       );
       // Narrowing `on` back to new cards would leave a condition that can never be tested.
       await expect(
-        boards.updateIntakeRoute(scope, closes.id, { on: ['work_item.created'] }, { expectedRevision: 1, actor: 'u' }),
+        boards.updateIntakeRoute(scope, closes.id, { on: ['work_item.opened'] }, { expectedRevision: 1, actor: 'u' }),
       ).rejects.toMatchObject({ code: 'invalid_intake_route' });
       expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
     });
@@ -727,9 +727,45 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       expect(await boards.getIntakeRoute(scope, id)).toMatchObject({
         name: 'Old route',
         when: TRUSTED,
-        on: ['work_item.created'],
+        on: ['work_item.opened'],
       });
     });
+  });
+
+  it('reads a route stored under the old work_item.created name as work_item.opened, ahead of which new routes still go', async () => {
+    const storage =
+      backend === 'postgres'
+        ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+        : new LibSQLFactoryStorage({ id: `intake-routes-${randomUUID()}`, url: ':memory:' });
+    const boards = storage.registerDomain(new StoredBoardsStorage());
+    await storage.init();
+    onTestFinished(() => storage.close());
+    const scope = { orgId: 'org-1', factoryProjectId: 'project-1' };
+    const id = randomUUID();
+    await storage.ops.insertOne('factory_intake_routes', {
+      id,
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      name: 'Stored before the rename',
+      enabled: true,
+      position: 0,
+      when_condition: null,
+      board_key: 'work',
+      phase_key: 'triage',
+      on_events: ['work_item.created', 'work_item.closed'],
+      join_closed_issue: false,
+      revision: 1,
+      created_by: 'u',
+      created_at: new Date(),
+      updated_by: 'u',
+      updated_at: new Date(),
+    });
+
+    expect(await boards.getIntakeRoute(scope, id)).toMatchObject({ on: ['work_item.opened', 'work_item.closed'] });
+    // Still a catch-all for new cards: a new placing route goes ahead of it.
+    const placed = await boards.createIntakeRoute(scope, { name: 'Bugs', target: { boardKey: 'work' } }, 'u');
+    const order = (await boards.listIntakeRoutes(scope)).map(route => route.id);
+    expect(order.indexOf(placed.id)).toBe(order.indexOf(id) - 1);
   });
 
   it('refuses a stale update or delete from another client and changes nothing', async () => {

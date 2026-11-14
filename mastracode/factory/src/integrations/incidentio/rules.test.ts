@@ -338,7 +338,7 @@ describe('incident.io board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'followUpObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'followUpObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open incident.io follow-up is not a status change.
       { event: 'followUpObserved', boardEvent: undefined },
       { event: 'followUpClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

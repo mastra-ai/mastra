@@ -3988,6 +3988,7 @@ describe('GithubRules and the shared board list', () => {
       ],
       ['pullRequestOpened', pullRequestEvent('opened', 'shared-pr-opened')],
       ['pullRequestUpdated', pullRequestEvent('synchronize', 'shared-pr-updated')],
+      ['pullRequestReopened', pullRequestEvent('reopened', 'shared-pr-reopened')],
       // Feedback on the pull request follows the Review card's parent link to the authoring item.
       ['pullRequestCommentCreated', pullRequestComment('shared-pr-comment', { body: 'Looks good to me' })],
       [
@@ -4103,6 +4104,130 @@ describe('GithubRules issue labels', () => {
     });
   });
 
+  it("hands a person's label change to the card's routes as one work_item.updated event", async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const item = await createLinkedIssue(workItems, project.id);
+    await service.ingest(issueLabels('labeled', ['bug']));
+    await service.ingest(issueLabels('labeled', ['bug', 'Ship'], 'label-ship'));
+    await service.ingest(issueLabels('labeled', ['bug', 'Ship'], 'label-same'));
+
+    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
+      entry => entry.decision.type === 'routeEvent',
+    );
+    expect(updates.map(entry => entry.decision)).toEqual([
+      {
+        type: 'routeEvent',
+        idempotencyKey: '7:label-labeled:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      },
+      {
+        type: 'routeEvent',
+        idempotencyKey: '7:label-ship:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['Ship'], removed: [] } },
+      },
+    ]);
+  });
+
+  it("marks a label change Factory made itself as the card's own session's, so it waits for the run", async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const item = await createLinkedIssue(workItems, project.id);
+    const byFactory = issueLabels('unlabeled', [], 'factory-unlabel');
+    await workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { labels: ['status: needs approval'] } },
+    });
+    (byFactory.payload.sender as Record<string, unknown>).login = 'factory-app[bot]';
+    await service.ingest(byFactory);
+
+    const [update] = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
+      entry => entry.decision.type === 'routeEvent',
+    );
+    expect(update?.decision).toMatchObject({
+      fromCardSession: true,
+      event: { type: 'work_item.updated', labels: { added: [], removed: ['status: needs approval'] } },
+    });
+  });
+
+  function pullRequestChanged(action: string, deliveryId: string, extra: Record<string, unknown>) {
+    return {
+      event: 'pull_request',
+      deliveryId,
+      payload: {
+        action,
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'maintainer' },
+        pull_request: { number: 17, html_url: 'https://github.com/acme/repo/pull/17' },
+        ...extra,
+      },
+    };
+  }
+
+  it("hands a pull request's label and assignee changes to its own card as work_item.updated", async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const own = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: ['intake'],
+          sessions: {},
+          metadata: { number: 17 },
+        },
+      })
+    ).item;
+    await service.ingest(pullRequestChanged('labeled', 'pr-label', { label: { name: 'ready' } }));
+    await service.ingest(pullRequestChanged('unassigned', 'pr-unassign', { assignee: { login: 'ada' } }));
+
+    const events = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: own.id }))
+      .filter(entry => entry.decision.type === 'routeEvent')
+      .map(entry => entry.decision.event);
+    expect(events).toEqual([
+      { type: 'work_item.updated', labels: { added: ['ready'], removed: [] } },
+      { type: 'work_item.updated', assignees: { added: [], removed: ['ada'] } },
+    ]);
+  });
+
+  it('reports a change to a pull request attached to an issue card as pull_request.updated', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const issue = await createLinkedIssue(workItems, project.id);
+    await workItems.attachSource({
+      orgId: 'org-1',
+      id: issue.id,
+      source: {
+        integrationId: 'github',
+        type: 'pull-request',
+        externalId: 'github:10:pull-request:17',
+        url: 'https://github.com/acme/repo/pull/17',
+      },
+      metadata: { state: 'open' },
+    });
+    await service.ingest(pullRequestChanged('labeled', 'attached-label', { label: { name: 'ready' } }));
+    const [update] = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: issue.id })).filter(
+      entry => entry.decision.type === 'routeEvent',
+    );
+    expect(update?.decision.event).toEqual({ type: 'pull_request.updated', labels: { added: ['ready'], removed: [] } });
+  });
+
+  it('files a reopened issue with no card the way a new one is filed', async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const reopened = issueOpened('reopened-no-card');
+    (reopened.payload as Record<string, unknown>).action = 'reopened';
+    await expect(service.ingest(reopened)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
+  });
+
   it.each(['work', 'plan'])(
     'leaves a card a run owns (session %s) where it is but still records the labels',
     async role => {
@@ -4143,12 +4268,12 @@ describe('GithubRules issue labels', () => {
   }
 
   it.each([
-    { action: 'assigned', before: [], after: ['alice', 'bob'] },
-    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'] },
-    { action: 'unassigned', before: ['bob'], after: [] },
+    { action: 'assigned', before: [], after: ['alice', 'bob'], added: ['alice', 'bob'], removed: [] },
+    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'], added: [], removed: ['alice'] },
+    { action: 'unassigned', before: ['bob'], after: [], added: [], removed: ['bob'] },
   ] as const)(
-    'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
-    async ({ action, before, after }) => {
+    'mirrors $action from $before to $after onto the linked issue card and hands only the change to its routes',
+    async ({ action, before, after, added, removed }) => {
       const { service, workItems, project } = await setupRoutes();
       const created = await createLinkedIssue(workItems, project.id);
       const item = (await workItems.update({
@@ -4164,7 +4289,13 @@ describe('GithubRules issue labels', () => {
         stages: ['planning'],
         workItem: expect.objectContaining({ metadata: expect.objectContaining({assignees: [...after]}) }),
       });
-      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+      expect((await workItems.listDeferredDecisions('org-1', project.id)).map(entry => entry.decision)).toEqual([
+        {
+          type: 'routeEvent',
+          idempotencyKey: `7:assignee-${action}:event-route`,
+          event: { type: 'work_item.updated', assignees: { added: [...added], removed: [...removed] } },
+        },
+      ]);
     },
   );
 
@@ -6301,6 +6432,7 @@ describe('GithubRules board events', () => {
       issueClosed: record,
       issueReopened: record,
       issueEdited: record,
+      pullRequestReopened: record,
     });
     const service = new GithubRules({
       github,
@@ -6326,7 +6458,7 @@ describe('GithubRules board events', () => {
     await service.ingest(issueEdited('board-event-edited'));
 
     expect(seen).toEqual([
-      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueOpened', boardEvent: { type: 'work_item.opened' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
@@ -6335,6 +6467,13 @@ describe('GithubRules board events', () => {
       // An edit is activity, not a status change.
       { event: 'issueEdited', boardEvent: undefined },
     ]);
+  });
+
+  it('reports a reopened pull request as pull_request.reopened', async () => {
+    const { seen, service } = await recording();
+    const delivery = pullRequest('opened', 'board-event-pr-reopened');
+    await service.ingest({ ...delivery, payload: { ...delivery.payload, action: 'reopened' } });
+    expect(seen).toEqual([{ event: 'pullRequestReopened', boardEvent: { type: 'pull_request.reopened' } }]);
   });
 
   it('leaves a status event to routes only when the deployment does not answer it itself', async () => {

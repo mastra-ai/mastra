@@ -12,7 +12,7 @@ import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } f
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabRuleOverrides } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
-import { GitLabRules } from './rules.js';
+import { GitLabRules, updateEventFor } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
 
 const PROJECT_ID = '101';
@@ -1454,7 +1454,7 @@ describe('GitLab board events', () => {
       await service.ingest(issueHook(`board-event-${action}`, action));
     }
     expect(seen).toEqual([
-      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueOpened', boardEvent: { type: 'work_item.opened' } },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
       { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
       { event: 'issueUpdated', boardEvent: undefined },
@@ -1581,9 +1581,53 @@ describe('GitLab activity signals', () => {
         reference: `${PROJECT_PATH}#42`,
         idleBehavior: 'persist',
       }),
+      // A label change is no activity: it goes to the card's routes as an update.
+      {
+        type: 'routeEvent',
+        idempotencyKey: 'gitlab:101:activity-labels:event-route',
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      },
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
+  });
+});
+
+describe('GitLab update events', () => {
+  const issueCard = { source: 'gitlab-issue' } as never;
+  const mergeRequestCard = { source: 'gitlab-pr' } as never;
+
+  it('reports only label and assignee changes, as what was added and removed', () => {
+    expect(
+      updateEventFor(
+        { event: 'issueUpdated', item: issueCard },
+        {
+          labels: { previous: [{ title: 'bug' }], current: [{ title: 'Ship' }] },
+          assignees: { previous: [], current: [{ username: 'ada' }] },
+          title: { previous: 'Old', current: 'New' },
+        },
+      ),
+    ).toEqual({
+      type: 'work_item.updated',
+      labels: { added: ['Ship'], removed: ['bug'] },
+      assignees: { added: ['ada'], removed: [] },
+    });
+    expect(
+      updateEventFor({ event: 'issueUpdated', item: issueCard }, { title: { previous: 'Old', current: 'New' } }),
+    ).toBeUndefined();
+    expect(
+      updateEventFor({ event: 'issueUpdated', item: undefined }, { labels: { previous: [], current: [{ title: 'x' }] } }),
+    ).toBeUndefined();
+  });
+
+  it("reports a merge request's change as the card's own update on its card, a pull request update on an issue card", () => {
+    const changes = { labels: { previous: [], current: [{ title: 'ready' }] } };
+    expect(updateEventFor({ event: 'mergeRequestUpdated', item: mergeRequestCard }, changes)?.type).toBe(
+      'work_item.updated',
+    );
+    expect(updateEventFor({ event: 'mergeRequestUpdated', item: issueCard }, changes)?.type).toBe(
+      'pull_request.updated',
+    );
   });
 });
 

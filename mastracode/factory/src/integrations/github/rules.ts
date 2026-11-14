@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-import { closeReason } from '../../boards/board-events.js';
+import { closeReason, listChange, updateEventFacts } from '../../boards/board-events.js';
 import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
@@ -23,7 +23,13 @@ import type { ProjectBoardSource } from '../../boards/project-boards.js';
 import { cardLabels } from '../../boards/relocate.js';
 import type { PullRequest, PullRequestPage, VersionControl } from '../../capabilities/version-control.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import {
+  commitCardUpdate,
+  deploymentOwnsEvent,
+  routeEventDecision,
+  selectEventRule,
+  withoutRouteEvent,
+} from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -99,6 +105,10 @@ function boolean(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
+}
+
 function actorLogins(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.flatMap(actor => {
@@ -168,9 +178,11 @@ export function activitySignalFor(
 export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
   switch (context.event) {
     case 'issueOpened':
-      return { type: 'work_item.created' };
+      return { type: 'work_item.opened' };
     case 'issueReopened':
       return { type: 'work_item.reopened' };
+    case 'pullRequestReopened':
+      return { type: 'pull_request.reopened' };
     case 'issueClosed': {
       const stateReason = context.issue?.stateReason;
       return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
@@ -213,6 +225,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return boolean(object(parsed.payload.pull_request)?.merged) ? 'pullRequestMerged' : 'pullRequestClosed';
   }
   if (parsed.event === 'pull_request' && action === 'review_requested') return 'pullRequestReviewRequested';
+  if (parsed.event === 'pull_request' && action === 'reopened') return 'pullRequestReopened';
   if (parsed.event === 'pull_request_review' && action === 'submitted') return 'pullRequestReviewSubmitted';
   if (parsed.event === 'pull_request_review' && action === 'edited') {
     const review = object(parsed.payload.review);
@@ -456,6 +469,8 @@ export interface GithubRulesOptions {
 /** Identity under which label and assignee syncs are recorded. */
 const CARD_SYNC_USER_ID = 'factory-rule-dispatcher';
 
+const PULL_REQUEST_UPDATE_ACTIONS = new Set(['labeled', 'unlabeled', 'assigned', 'unassigned']);
+
 type IssueActionHandler = (
   parsed: ParsedGithubWebhook,
   repositoryId: number,
@@ -508,8 +523,8 @@ export class GithubRules {
   }
 
   /**
-   * `labeled` / `unlabeled` are not rule events: the card's label metadata is refreshed and the card
-   * stays where it is. Intake routes placed it when it arrived; a label change doesn't move it.
+   * `labeled` / `unlabeled` refresh the card's label metadata, then hand what changed to the card's
+   * routes as a `work_item.updated` event. Only routes naming the event move the card.
    */
   async #syncIssueLabels(
     parsed: ParsedGithubWebhook,
@@ -532,7 +547,8 @@ export class GithubRules {
     );
     if (!found || found.externalSource?.type !== 'issue') return { status: 'ignored' };
     const labels = labelNames(issue?.labels);
-    if (sameLabels(cardLabels(found), labels)) return { status: 'ignored' };
+    const before = cardLabels(found);
+    if (sameLabels(before, labels)) return { status: 'ignored' };
     let updated;
     try {
       updated = await this.options.storage.syncCard({
@@ -548,12 +564,63 @@ export class GithubRules {
       if (!(error instanceof WorkItemUpdateConflictError)) throw error;
       return { status: 'ignored' };
     }
-    return { status: updated ? 'committed' : 'ignored' };
+    if (!updated) return { status: 'ignored' };
+    await this.#commitIssueUpdate(parsed, repositoryName, project, updated.item, {
+      labels: listChange(before, labels),
+    });
+    return { status: 'committed' };
   }
 
   /**
-   * `assigned` / `unassigned` are not rule events either: an existing issue card only mirrors the
-   * issue's full assignee list. No card is created, moved, or handed to a run.
+   * Hands a label or assignee change on an issue card to the card's routes. A change Factory made
+   * itself is the card's own session's, held until its run ends.
+   */
+  async #commitIssueUpdate(
+    parsed: ParsedGithubWebhook,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+    item: Card,
+    change: Parameters<typeof updateEventFacts>[1],
+  ): Promise<void> {
+    await this.#commitUpdate(parsed, repositoryName, project, item, updateEventFacts('work_item.updated', change));
+  }
+
+  async #commitUpdate(
+    parsed: ParsedGithubWebhook,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+    item: Card,
+    event: BoardEventFacts | undefined,
+  ): Promise<boolean> {
+    const installationId = number(object(parsed.payload.installation)?.id);
+    const login = string(object(parsed.payload.sender)?.login);
+    if (!installationId || !login || !event) return false;
+    const fromCardSession = this.#isFactoryLogin(login);
+    const actor = await githubActor(this.options.github, {
+      installationId,
+      repository: repositoryName,
+      login,
+      factoryAuthored: fromCardSession,
+    });
+    const status = await commitCardUpdate(this.options.storage, {
+      orgId: project.orgId,
+      factoryProjectId: project.factoryProjectId,
+      item,
+      ingress: {
+        identity: `${installationId}:${parsed.deliveryId}`,
+        triggerType: parsed.event === 'pull_request' ? 'github.pullRequestChanged' : 'github.issueUpdated',
+      },
+      configVersion: this.options.configVersion,
+      actor: { ...actor },
+      event,
+      fromCardSession,
+    });
+    return status !== 'ignored';
+  }
+
+  /**
+   * `assigned` / `unassigned` mirror the issue's full assignee list onto an existing issue card,
+   * then hand what changed to the card's routes as a `work_item.updated` event. No card is created.
    */
   async #syncIssueAssignees(
     parsed: ParsedGithubWebhook,
@@ -601,7 +668,11 @@ export class GithubRules {
         },
         expectedSourceRevision: primarySource(item)?.revision,
       });
-      return { status: updated ? 'committed' : 'ignored' };
+      if (!updated) return { status: 'ignored' };
+      await this.#commitIssueUpdate(parsed, repositoryName, project, updated.item, {
+        assignees: listChange(stringList(item.workItem.metadata?.assignees), assignees),
+      });
+      return { status: 'committed' };
     } catch (error) {
       // A concurrent write won; nothing reconciles issue-card assignees, so they stay as the
       // winner left them until the next assigned/unassigned delivery for this issue.
@@ -610,8 +681,55 @@ export class GithubRules {
     }
   }
 
+  /**
+   * A label or assignee added to or removed from a pull request, handed to the routes of the card it
+   * belongs to: `work_item.updated` on the pull request's own card, `pull_request.updated` on the
+   * issue card it is attached to. GitHub names the one label or assignee that changed.
+   */
+  async #pullRequestUpdate(
+    parsed: ParsedGithubWebhook,
+    repositoryId: number,
+    repositoryName: string,
+    project: ExternalRepositoryProjectTarget,
+  ): Promise<{ status: 'ignored' | 'committed' }> {
+    const pullRequestNumber = number(object(parsed.payload.pull_request)?.number);
+    if (!pullRequestNumber) return { status: 'ignored' };
+    const action = string(parsed.payload.action);
+    const name =
+      action === 'labeled' || action === 'unlabeled'
+        ? string(object(parsed.payload.label)?.name)
+        : string(object(parsed.payload.assignee)?.login);
+    if (!name) return { status: 'ignored' };
+    const item = await this.#relatedItem(
+      project.orgId,
+      project.factoryProjectId,
+      repositoryId,
+      repositoryName,
+      undefined,
+      pullRequestNumber,
+      undefined,
+      null,
+    );
+    const ownCard = item?.externalSource?.type === 'pull-request';
+    if (!item || (!ownCard && !attachedPullRequestSource(item, repositoryId, repositoryName, pullRequestNumber))) {
+      return { status: 'ignored' };
+    }
+    const change = action === 'labeled' || action === 'assigned' ? { added: [name], removed: [] } : { added: [], removed: [name] };
+    const event = updateEventFacts(
+      ownCard ? 'work_item.updated' : 'pull_request.updated',
+      action === 'labeled' || action === 'unlabeled' ? { labels: change } : { assignees: change },
+    );
+    const committed = await this.#commitUpdate(parsed, repositoryName, project, item, event);
+    return { status: committed ? 'committed' : 'ignored' };
+  }
+
   /** `issues` actions that are not rule events but still update an existing card. */
   #issueActionHandler(parsed: ParsedGithubWebhook): IssueActionHandler | undefined {
+    if (parsed.event === 'pull_request') {
+      return PULL_REQUEST_UPDATE_ACTIONS.has(string(parsed.payload.action) ?? '')
+        ? (...args) => this.#pullRequestUpdate(...args)
+        : undefined;
+    }
     if (parsed.event !== 'issues') return undefined;
     switch (string(parsed.payload.action)) {
       case 'labeled':

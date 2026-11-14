@@ -12,7 +12,7 @@ import {
 import type { BoardRegistry } from '../../boards/index.js';
 import { toBoardSource } from '../../boards/project-boards.js';
 import type { ProjectBoardSource } from '../../boards/project-boards.js';
-import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
+import { commitObservedChange, deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteEvent } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { StoredBoardScope } from '../../storage/domains/boards/base.js';
@@ -85,7 +85,7 @@ export function boardEventFor(context: Pick<FactoryLinearRuleContext, 'event' | 
   if (context.event === 'issueClosed') {
     return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
   }
-  return context.item ? undefined : { type: 'work_item.created' };
+  return context.item ? undefined : { type: 'work_item.opened' };
 }
 
 export class LinearRules {
@@ -247,6 +247,20 @@ export class LinearRules {
       const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
       if (relatedItem && !fresh) return 'missing';
       return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
+    if (relatedItem && event === 'issueObserved' && outcome.status === 'accepted' && !ownedByDeployment) {
+      await commitObservedChange(this.options.storage, {
+        orgId: input.orgId,
+        factoryProjectId: input.factoryProjectId,
+        item: relatedItem,
+        ingressId,
+        triggerType: 'linear.issueUpdated',
+        configVersion: this.options.configVersion,
+        actor,
+        labels: issue.labels,
+        assignee: issue.assignee,
+        metadata: { linearAssignee: issue.assignee },
+      });
     }
     return committed.status;
   }

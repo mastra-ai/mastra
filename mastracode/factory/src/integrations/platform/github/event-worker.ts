@@ -747,7 +747,7 @@ function normalizeSettings(value: PlatformGithubEventWorkerSettings | null): Pla
 // parsed event; the platform path gates because the remaining events (issue
 // edits, comment edits and deletions) only interest the subscription
 // dispatcher, not the factory rules.
-const ISSUE_INGESTED_ACTIONS = new Set(['opened', 'reopened', 'edited', 'labeled', 'unlabeled']);
+const ISSUE_INGESTED_ACTIONS = new Set(['opened', 'reopened', 'edited', 'labeled', 'unlabeled', 'assigned', 'unassigned']);
 
 function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if ((event.event === 'issues' || event.event === 'pull_request') && event.payload.action === 'closed') {
@@ -759,8 +759,10 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
     // factory-authored PR never gets reviewed on the polling path, which is the
     // only path a local deployment has.
     if (action === 'opened' || action === 'synchronize' || action === 'review_requested') return true;
+    // A reopen, and a label or assignee change, reach the routes of the card the pull request belongs to.
+    if (action === 'reopened' || ['labeled', 'unlabeled', 'assigned', 'unassigned'].includes(String(action))) return true;
   }
-  // Issue opens, reopens, edits and label changes mint and update Work cards.
+  // Issue opens, reopens, edits, label and assignee changes mint and update Work cards.
   // Without them a new issue never becomes a card on the polling path (#24972).
   if (event.event === 'issues' && ISSUE_INGESTED_ACTIONS.has(String(event.payload.action))) return true;
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;

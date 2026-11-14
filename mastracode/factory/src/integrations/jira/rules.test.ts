@@ -137,6 +137,27 @@ describe('JiraRules', () => {
     expect((await cardsFor(project.id))[0]?.id).not.toBe(held?.id);
   });
 
+  it("hands an assignee change a later sync sees to the card's routes as one work_item.updated event", async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    const [card] = await cardsFor(project.id);
+    const updates = async () =>
+      (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card!.id }))
+        .filter(entry => entry.decision.type === 'routeEvent')
+        .map(entry => entry.decision.event);
+
+    // The first sighting of a filed card records what it reports; it changed nothing.
+    await ingest(issue);
+    await ingest({ ...issue, assignee: 'bob', updatedAt: '2026-07-03T00:00:00Z' });
+    await ingest({ ...issue, assignee: 'bob', updatedAt: '2026-07-04T00:00:00Z' });
+    expect(await updates()).toEqual([
+      { type: 'work_item.updated', assignees: { added: ['bob'], removed: ['ada'] } },
+    ]);
+  });
+
   it('re-observing an issue in the same project reuses its card, also after it finished', async () => {
     const { project, service, workItems, drain, cardsFor } = await setup();
     const ingest = (observed: typeof issue) =>
@@ -460,7 +481,7 @@ describe('Jira board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open Jira issue is not a status change.
       { event: 'issueObserved', boardEvent: undefined },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },

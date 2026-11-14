@@ -96,6 +96,64 @@ describe('LinearRules', () => {
     });
   });
 
+  it("moves a card by its work_item.updated route when a later sync sees a label added, once", async () => {
+    const boards = createBoardRegistry();
+    const { project, service, workItems, storedBoards } = await setup(undefined, boards);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: workItems,
+      boards,
+      transitionService: new FactoryTransitionService({ storage: workItems, boards, configVersion: 'factory-config-v1' }),
+      intakeRoutes: storedBoards,
+      ownerId: 'linear-update-routes',
+    });
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    await storedBoards.createIntakeRoute(
+      scope,
+      {
+        name: 'Ship it',
+        on: ['work_item.updated'],
+        when: {
+          operator: 'AND',
+          conditions: [{ field: 'event.labels.added', operator: 'contains', value: 'ship' }],
+        },
+        target: { boardKey: 'work', phaseKey: 'done' },
+      },
+      'admin',
+    );
+    const card = (
+      await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          title: issue.title,
+          stages: ['planning'],
+          sessions: {},
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+          metadata: { linearIssueId: issue.id, labels: ['bug'], assignee: 'ada', linearAssignee: 'ada' },
+        },
+      })
+    ).item;
+    const sync = (updatedAt: string, labels: string[]) =>
+      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
+    const updates = async () =>
+      (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: card.id }))
+        .filter(record => record.decision.type === 'routeEvent')
+        .map(record => record.decision.event);
+
+    // The same labels and assignee as the card recorded: nothing changed.
+    await sync('2026-07-02T00:00:00Z', ['bug']);
+    expect(await updates()).toEqual([]);
+
+    await sync('2026-07-03T00:00:00Z', ['bug', 'ship']);
+    await sync('2026-07-04T00:00:00Z', ['bug', 'ship']);
+    expect(await updates()).toEqual([{ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } }]);
+
+    await dispatcher.runOnce(new Date(Date.now() + 60_000));
+    expect((await workItems.get({ orgId: 'org-1', id: card.id }))!.stages).toEqual(['done']);
+  });
+
   it('files an observed issue on Work › Intake, where the project\'s intake routes place it', async () => {
     const { project, service, workItems } = await setup(
       undefined,
@@ -814,7 +872,7 @@ describe('Linear board events', () => {
     await ingest('canceled', '2026-07-05T00:00:00Z');
 
     expect(seen).toEqual([
-      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueObserved', boardEvent: { type: 'work_item.opened' } },
       // A later sighting of an open Linear issue is not a status change.
       { event: 'issueObserved', boardEvent: undefined },
       { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
