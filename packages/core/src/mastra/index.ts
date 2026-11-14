@@ -4,10 +4,11 @@ import {
   getActiveDurableAgentWorkflowExecutions,
   isDurableAgentExecutionDetached,
 } from '../agent/durable/run-registry';
+import { hasDurableExecution } from '../agent/streams/execution-capability';
 import type { ExecutionEngineDefaults } from '../agent/streams/execution-engine';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
-import { hasDurableExecution, isDurableAgentLike } from '../agent/types';
+import { isDurableAgentLike } from '../agent/types';
 import type { AgentController } from '../agent-controller';
 import { BackgroundTaskManager } from '../background-tasks';
 import type { BackgroundTaskManagerConfig } from '../background-tasks/types';
