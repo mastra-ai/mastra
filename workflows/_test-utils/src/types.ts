@@ -515,6 +515,13 @@ export type SkippableTest =
   | 'perStepConditional'
   | 'perStepNested'
   | 'perStepContinue'
+  | 'perStepRetry'
+  | 'perStepLoop'
+  | 'perStepBail'
+  | 'perStepBailRetry'
+  | 'perStepCancel'
+  | 'perStepNoBranch'
+  | 'perStepNestedBail'
   // Tracing tests
   | 'tracingContext'
   | 'tracingMultistep'
@@ -553,6 +560,8 @@ export type SkippableTest =
   // Run count tests
   | 'runCount'
   | 'retryCount'
+  // Retry of a resumed step keeps its resume data
+  | 'retryAfterResume'
   // Error persistence tests (require storage spy access)
   | 'errorPersistWithoutStack'
   | 'errorPersistMastraError'
