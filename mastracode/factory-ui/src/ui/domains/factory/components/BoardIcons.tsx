@@ -199,6 +199,11 @@ export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): stri
   return TONE_CLASSES[stageToneFor(stage, kind)].strongTint;
 }
 
+/** The phase's own colour as `currentColor`, the one its icon is drawn in. */
+export function stageColorClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].icon;
+}
+
 export function BoardStageIcon({
   stage,
   kind,
@@ -209,7 +214,7 @@ export function BoardStageIcon({
   /** Beside text that already names the phase, the icon adds nothing to the accessible name. */
   decorative?: boolean;
 }) {
-  const icon = <StageArt stage={stage} kind={kind} className={TONE_CLASSES[stageToneFor(stage, kind)].icon} />;
+  const icon = <StageArt stage={stage} kind={kind} className={stageColorClass(stage, kind)} />;
   if (decorative || !kind) return icon;
   return (
     <span role="img" aria-label={`${kind} phase`} className="inline-flex shrink-0">

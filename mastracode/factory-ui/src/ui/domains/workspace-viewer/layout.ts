@@ -44,8 +44,14 @@ export const popoverSizeClass: Record<WorkspacePanelSize, string> = {
 
 export const treeRowContainmentClass = '[content-visibility:auto] [contain-intrinsic-size:auto_1.75rem]';
 
-/** The chat shell maps this onto `--chat-inset-end`, which pads its scroller. */
+/** The overview and the page summary above it scroll as one when the card runs out of height. */
+export const overviewScrollClass = 'flex min-h-0 w-full min-w-0 grow flex-col overflow-y-auto';
+
+/** The chat shell maps `--workspace-files-inset` onto `--chat-inset-end`, which pads its scroller.
+ * `--workspace-files-header-inset` ends the page header one gutter short of the card, which sits
+ * `right-3` from the edge, so the header's last action lines up beside it rather than under it. */
 export const reservedSpaceClass = {
-  none: '[--workspace-files-inset:0px]',
-  docked: '[--workspace-files-inset:calc(var(--workspace-files-card)+var(--thread-gutter)+var(--thread-gutter))]',
+  none: '[--workspace-files-inset:0px] [--workspace-files-header-inset:0px]',
+  docked:
+    '[--workspace-files-inset:calc(var(--workspace-files-card)+var(--thread-gutter)+var(--thread-gutter))] [--workspace-files-header-inset:calc(var(--workspace-files-card)+var(--thread-gutter))]',
 };

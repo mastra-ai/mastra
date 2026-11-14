@@ -235,7 +235,7 @@ describe('WorkspaceFiles', () => {
       renderPanel();
 
       const card = await screen.findByTestId('workspace-files-card');
-      const toggle = screen.getByRole('button', { name: 'Workspace files' });
+      const toggle = screen.getByRole('button', { name: 'Session panel' });
       expect(card).not.toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'true');
       await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
@@ -254,7 +254,7 @@ describe('WorkspaceFiles', () => {
       await waitForMutationsIdle(client);
       expect(changesRequests).toEqual([]);
 
-      const toggle = screen.getByRole('button', { name: 'Workspace files' });
+      const toggle = screen.getByRole('button', { name: 'Session panel' });
       await user.click(toggle);
       await user.click(toggle);
 
@@ -268,6 +268,30 @@ describe('WorkspaceFiles', () => {
 
       expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       expect(changesRequests).toEqual([WORKSPACE]);
+    });
+
+    it('shows the branch change counts on the overview once the viewer has been to Changes', async () => {
+      stubContainerWidth(1200);
+      const user = userEvent.setup();
+      const { client } = renderPanel();
+      server.use(
+        http.get(CHANGES_URL, () =>
+          HttpResponse.json({
+            workspacePath: WORKSPACE,
+            available: true,
+            additions: 3,
+            deletions: 2,
+            changes: [{ path: 'src/ui/AppSidebar.tsx', status: 'modified', additions: 3, deletions: 2 }],
+          }),
+        ),
+      );
+
+      await waitForMutationsIdle(client);
+      await user.click(await screen.findByRole('button', { name: /^Changes/ }));
+      await user.click(await screen.findByRole('button', { name: 'Back to workspace' }));
+
+      const changesRow = await screen.findByRole('button', { name: /^Changes/ });
+      await waitFor(() => expect(changesRow).toHaveTextContent(/\+3\s*−2/));
     });
   });
 
@@ -289,9 +313,9 @@ describe('WorkspaceFiles', () => {
       act(() => observer.resize(container, 900));
 
       expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
-      expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'false');
 
-      await user.click(screen.getByRole('button', { name: 'Workspace files' }));
+      await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
       expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
       expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
@@ -308,7 +332,7 @@ describe('WorkspaceFiles', () => {
       expect(screen.queryByRole('button', { name: /^Files/ })).not.toBeInTheDocument();
       expect(changesRequests).toEqual([]);
 
-      await user.click(screen.getByRole('button', { name: 'Workspace files' }));
+      await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
       expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
     });

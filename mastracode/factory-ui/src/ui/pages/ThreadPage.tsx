@@ -21,8 +21,8 @@ import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspace
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
+import { SessionPanelSummary } from '../domains/factory/components/SessionPanelSummary';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
-import { WorkspaceFilesSurface } from '../domains/workspace-viewer/components/WorkspaceFilesSurface';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
 import { chatColumnClass, RAIL_MIN_REM } from '../domains/workspace-viewer/layout';
@@ -56,7 +56,7 @@ export function ThreadPage() {
   return (
     <ChatSessionBoundary threadId={threadId}>
       <PageTitle />
-      <WorkspaceFilesProvider>
+      <WorkspaceFilesProvider summary={<SessionPanelSummary />}>
         <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
       </WorkspaceFilesProvider>
     </ChatSessionBoundary>
@@ -110,7 +110,6 @@ function ThreadPageMain({
           className={threadShellClass}
           contentRef={railBoxRef}
           contentOverlay={railFits ? <ThreadRailLayer /> : undefined}
-          stageSurface={<WorkspaceFilesSurface />}
         />
       </FactorySessionPage>
     </ThreadSessionEffects>

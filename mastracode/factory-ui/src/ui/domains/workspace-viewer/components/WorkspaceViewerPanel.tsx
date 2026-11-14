@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -20,6 +21,8 @@ interface WorkspaceViewerPanelProps {
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
   sessionId?: string;
+  /** What the page shows above the overview; the files and changes views take the whole card. */
+  summary?: ReactNode;
 }
 
 type WorkspacePanelView =
@@ -35,6 +38,7 @@ export function WorkspaceViewerPanel({
   readsChanges = true,
   factoryProjectId,
   sessionId,
+  summary,
 }: WorkspaceViewerPanelProps) {
   const session = useUserSessionQuery(sessionId);
   const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
@@ -42,7 +46,10 @@ export function WorkspaceViewerPanel({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
+  // Opening files or changes reads the sandbox, so it is awake by the time the viewer comes back
+  // to the overview, which may then show the change counts without waking anything.
+  const [visitedSandbox, setVisitedSandbox] = useState(false);
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && (readsChanges || visitedSandbox) });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
@@ -57,6 +64,7 @@ export function WorkspaceViewerPanel({
     onSizeChange?.('compact');
   };
   const showView = (type: 'files' | 'changes') => {
+    setVisitedSandbox(true);
     setView({ type });
     onSizeChange?.('full');
   };
@@ -111,6 +119,7 @@ export function WorkspaceViewerPanel({
       recreateSandbox={
         canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
       }
+      summary={summary}
     />
   );
 }

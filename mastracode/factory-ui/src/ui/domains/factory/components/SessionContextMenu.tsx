@@ -11,7 +11,7 @@ export function cardSessionPath(factoryId: string, session: CardContextSession):
   return `/factories/${factoryId}/workspaces/${session.ref.sessionId}/threads/${session.ref.threadId}`;
 }
 
-/** Switches between the card's sessions, one per context, from the breadcrumb. */
+/** Switches between the card's sessions, one per context, from beside the session's title. */
 export function SessionContextMenu({
   factoryId,
   sessions,

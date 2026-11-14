@@ -165,7 +165,7 @@ describe('ThreadPage loading shell', () => {
     expect(within(conversation).getByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(conversation).not.toContainElement(composer);
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Workspace files' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('status', { name: 'Loading workspace details' })).toBeInTheDocument();
     expect(onChanges).not.toHaveBeenCalled();
     expect(send).toBeDisabled();
@@ -194,7 +194,7 @@ describe('ThreadPage loading shell', () => {
 
     const header = await findPageHeader();
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
-    expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Session panel' })).toBeInTheDocument();
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
@@ -316,7 +316,7 @@ describe('ThreadPage when reading the session fails', () => {
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${SESSION_ID}`);
 
     expect(await screen.findByText(/not found or is private to another user/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Workspace files' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Session panel' })).not.toBeInTheDocument();
     expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
   });
 });

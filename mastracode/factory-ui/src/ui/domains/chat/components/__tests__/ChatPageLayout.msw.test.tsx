@@ -32,13 +32,13 @@ afterEach(() => {
 });
 
 describe('ChatPageLayout', () => {
-  it('puts the drawer trigger and the breadcrumbs on one mobile header row, with search on the right', () => {
+  it('puts the drawer trigger and the title on one mobile header row, with search on the right', () => {
     mockMobileViewport(true);
     render(
       <MemoryRouter initialEntries={['/settings/preferences']}>
         <SidebarProvider storageKey="chat-header-test" mobileBreakpoint={10_000}>
           <OverlaysProvider>
-            <ChatPageLayout crumbs={<li>Page title</li>} headerActions={<button type="button">Panel</button>}>
+            <ChatPageLayout title="Page title" headerActions={<button type="button">Panel</button>}>
               body
             </ChatPageLayout>
           </OverlaysProvider>
@@ -63,7 +63,7 @@ describe('ChatPageLayout', () => {
     render(
       <SidebarProvider storageKey="chat-header-desktop-test" collapsedWidth={0} mobileBreakpoint={768}>
         <OverlaysProvider>
-          <ChatPageLayout crumbs={<li>Page title</li>}>body</ChatPageLayout>
+          <ChatPageLayout title="Page title">body</ChatPageLayout>
         </OverlaysProvider>
       </SidebarProvider>,
     );

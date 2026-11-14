@@ -9,8 +9,11 @@ import { DOCK_MIN_REM, cardWidthClass, reservedSpaceClass, threadGeometryClass }
 import type { WorkspacePanelSize } from '../layout';
 import { WorkspacePanelContext } from './WorkspacePanelContext';
 
-/** Owns the box the card measures itself against, and shares its state with the session header. */
-export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
+/**
+ * Owns the box the card measures itself against, and shares its state with the session header.
+ * `summary` sits above the panel's overview, so it renders wherever the panel does.
+ */
+export function WorkspaceFilesProvider({ summary, children }: { summary?: ReactNode; children: ReactNode }) {
   const { workspacePath, threadId } = useThreadWorkspacePath();
   const chatRef = useRef<HTMLDivElement>(null);
   const { wider: canDock, revision: layoutRevision } = useWiderThan(chatRef, DOCK_MIN_REM);
@@ -38,7 +41,7 @@ export function WorkspaceFilesProvider({ children }: { children: ReactNode }) {
 
   return (
     <WorkspacePanelContext.Provider
-      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges }}
+      value={{ open, setOpen, workspacePath, threadId, size, setSize, canDock, readsChanges, summary }}
     >
       <div
         ref={chatRef}
