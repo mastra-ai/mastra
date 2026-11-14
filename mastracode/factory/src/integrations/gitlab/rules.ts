@@ -211,7 +211,7 @@ function carriesAttachedMergeRequest(item: Card, mergeRequestKey: string): boole
   );
 }
 
-function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
+export function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid: number): string {
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 

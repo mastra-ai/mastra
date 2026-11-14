@@ -349,7 +349,7 @@ function workItemSourceKey(item: Card): string | null {
 // Throws on a failed lookup: callers writing permanent state must retry, not
 // record the failure as distrust.
 export async function trustedCollaborator(
-  github: GithubRulesIntegration,
+  github: Pick<GithubRulesIntegration, 'getRepositoryCollaboratorPermission'>,
   input: { installationId: number; repository: string; login: string },
 ): Promise<boolean> {
   const permission = await github.getRepositoryCollaboratorPermission(
