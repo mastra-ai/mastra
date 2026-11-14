@@ -26,8 +26,6 @@ permissions: {}
 jobs:
   publish-e2e-registry:
     name: Publish E2E registry
-    # Only the registry's users need it; skip it when the test tiers skip all of them.
-    if: ${{ inputs.experiment_worker_e2e_changed || !(contains(fromJSON(inputs.skip_jobs), 'job:e2e/monorepo') && contains(fromJSON(inputs.skip_jobs), 'job:e2e/no-bundling') && contains(fromJSON(inputs.skip_jobs), 'job:e2e/create-mastra') && contains(fromJSON(inputs.skip_jobs), 'job:e2e/commonjs') && contains(fromJSON(inputs.skip_jobs), 'job:e2e/deployers') && contains(fromJSON(inputs.skip_jobs), 'job:e2e/type-check')) }}
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:

@@ -244,6 +244,26 @@ export function addJobKeys(tiers, keys, date) {
   return added.sort();
 }
 
+/** PR runs, oldest first. Runs on this repository's own main are not PR runs; a fork's main is. */
+export function prRuns(runs, repo) {
+  return runs
+    .filter(r => !(r.head_branch === 'main' && r.head_repo === repo))
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+}
+
+/** The first later green run of the same workflow on the same branch of the same repository, at a new head. */
+export function nextGreenRun(runs, run) {
+  return runs.find(
+    r =>
+      r.workflow_id === run.workflow_id &&
+      r.head_repo === run.head_repo &&
+      r.head_branch === run.head_branch &&
+      r.created_at > run.created_at &&
+      r.head_sha !== run.head_sha &&
+      r.conclusion === 'success',
+  );
+}
+
 // ---------------------------------------------------------------------------------------------
 // GitHub glue (not unit tested; exercised only in the workflow).
 
@@ -335,15 +355,16 @@ function versioningCommand(tiers, { runId, date }) {
 
 function dailyCommand(tiers, { days, date }) {
   const since = daysBefore(date, Number(days));
-  const runs = JOB_WORKFLOWS.flatMap(workflow =>
-    ghJson(
-      `repos/${repo}/actions/workflows/${workflow}/runs?created=>=${since}&per_page=100`,
-      '-q',
-      '.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_sha,created_at,conclusion,run_attempt,workflow_id}|@json',
+  const runs = prRuns(
+    JOB_WORKFLOWS.flatMap(workflow =>
+      ghJson(
+        `repos/${repo}/actions/workflows/${workflow}/runs?created=>=${since}&per_page=100`,
+        '-q',
+        '.workflow_runs[]|select(.event=="pull_request" or .event=="workflow_run")|{id,head_branch,head_repo:.head_repository.full_name,head_sha,created_at,conclusion,run_attempt,workflow_id}|@json',
+      ),
     ),
-  )
-    .filter(r => r.head_branch !== 'main')
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+    repo,
+  );
   const laterGreenRun = run =>
     runs.some(
       r =>
@@ -371,14 +392,7 @@ function dailyCommand(tiers, { days, date }) {
         continue;
       }
       const rerunPassed = passedLater(job);
-      const next = runs.find(
-        r =>
-          r.workflow_id === run.workflow_id &&
-          r.head_branch === run.head_branch &&
-          r.created_at > run.created_at &&
-          r.head_sha !== run.head_sha &&
-          r.conclusion === 'success',
-      );
+      const next = nextGreenRun(runs, run);
       let diffFiles = null;
       if (next && !rerunPassed) {
         const key = `${run.head_sha}...${next.head_sha}`;

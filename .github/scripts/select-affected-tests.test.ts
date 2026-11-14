@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { parse } from 'yaml';
 import selection from './select-affected-tests.cjs';
 
 const { routeTests, diffLockfiles } = selection;
@@ -165,6 +166,40 @@ describe('Prebuild test tiers', () => {
     expect(tiered(input, true).unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
     expect(tiered(input, true).tiers.skippedJobs).toEqual([]);
     expect(tiered({ ...input, fullSuite: true }).tiers.skippedJobs).toEqual([]);
+  });
+
+  test('the E2E workflow still starts for npm import when every tiered E2E job is quiet', () => {
+    const e2eJobs = Object.fromEntries(
+      [
+        'monorepo',
+        'kitchen-sink',
+        'deployers',
+        'create-mastra',
+        'commonjs',
+        'no-bundling',
+        'mcp-compat',
+        'client-js',
+        'type-check',
+      ].map(name => [`job:e2e/${name}`, out]),
+    );
+    const result = route({
+      changedFiles: ['packages/core/src/mcp/index.ts'],
+      tiers: { tiers: { files: { ...tierFiles, ...e2eJobs } }, fullTestsLabel: false },
+    } as never);
+
+    expect(result.tiers.skippedJobs).toContain('job:e2e/mcp-compat');
+    expect(result.flags.e2e_changed).toBe(true);
+  });
+
+  test('the E2E registry publishes whenever the E2E workflow runs', () => {
+    // e2e-npm-import is not tiered and needs the registry, so its publisher can't be tiered either.
+    const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+    const consumers = Object.entries(workflow.jobs as Record<string, { needs?: string | string[] }>)
+      .filter(([, job]) => [job.needs ?? []].flat().includes('publish-e2e-registry'))
+      .map(([name]) => name);
+
+    expect(consumers).toContain('e2e-npm-import');
+    expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
   });
 
   test('without tiers nothing is dropped', () => {

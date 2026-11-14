@@ -8,6 +8,8 @@ import {
   failingFilesFromLog,
   jobKeysFor,
   moveOut,
+  nextGreenRun,
+  prRuns,
   recordPrFailures,
   syncFiles,
 } from './update.mjs';
@@ -317,4 +319,48 @@ test('a versioning-run job failure brings the job in', () => {
   };
   assert.deepEqual(applyVersioningFailures(t, ['job:e2e/kitchen-sink'], '2026-11-02'), ['job:e2e/kitchen-sink']);
   assert.equal(t.files['job:e2e/kitchen-sink'].tier, 'in');
+});
+
+test("keeps PR runs from a fork's main branch, drops runs on this repo's main", () => {
+  const runs = [
+    { id: 1, head_branch: 'main', head_repo: 'mastra-ai/mastra', created_at: '2026-11-02' },
+    { id: 2, head_branch: 'main', head_repo: 'someone/mastra', created_at: '2026-11-01' },
+    { id: 3, head_branch: 'fix', head_repo: 'mastra-ai/mastra', created_at: '2026-11-03' },
+  ];
+  assert.deepEqual(
+    prRuns(runs, 'mastra-ai/mastra').map(r => r.id),
+    [2, 3],
+  );
+});
+
+test('the next green run must come from the same repository as the failing run', () => {
+  const failing = {
+    id: 1,
+    workflow_id: 7,
+    head_branch: 'patch-1',
+    head_repo: 'alice/mastra',
+    head_sha: 'a1',
+    created_at: '2026-11-01T00:00:00Z',
+    conclusion: 'failure',
+  };
+  const otherFork = {
+    id: 2,
+    workflow_id: 7,
+    head_branch: 'patch-1',
+    head_repo: 'bob/mastra',
+    head_sha: 'b1',
+    created_at: '2026-11-02T00:00:00Z',
+    conclusion: 'success',
+  };
+  const sameFork = {
+    id: 3,
+    workflow_id: 7,
+    head_branch: 'patch-1',
+    head_repo: 'alice/mastra',
+    head_sha: 'a2',
+    created_at: '2026-11-03T00:00:00Z',
+    conclusion: 'success',
+  };
+  assert.equal(nextGreenRun([failing, otherFork], failing), undefined);
+  assert.equal(nextGreenRun([failing, otherFork, sameFork], failing), sameFork);
 });

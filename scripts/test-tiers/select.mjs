@@ -58,6 +58,8 @@ export function selectUnitTests({ files, tiers, problem = null, changedFiles, fu
   if (fullTestsLabel) return { kept: files, dropped: [], reason: 'full-tests label runs every file' };
   if (!tiers)
     return { kept: files, dropped: [], reason: `no tiers, running every file: ${problem ?? 'tiers not loaded'}` };
+  if (changedFiles.some(file => CI_PATHS.some(p => file.startsWith(p))))
+    return { kept: files, dropped: [], reason: 'tier selection changed, running every file' };
 
   const changed = new Set(changedFiles);
   const kept = [];

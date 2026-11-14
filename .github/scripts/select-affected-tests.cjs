@@ -164,7 +164,7 @@ function routeTests({
   const workspaceDockerRun = workspaceDockerPackages.filter(name => runs(`job:workspace-docker/${name}`));
   flags.stores_changed &&= storeNames.length === 0 || storeNames.some(name => runs(`job:store/${name}`));
   flags.memory_changed &&= runs('job:memory');
-  flags.e2e_changed &&= E2E_TIER_JOBS.some(name => runs(`job:e2e/${name}`));
+  // e2e_changed stays as routed: E2E npm import is not tiered, so the workflow always has a job to run.
   flags.experiment_worker_e2e_changed &&= runs('job:e2e/experiments');
   flags.mastracode_e2e_changed &&= runs('job:mastracode-e2e') || runs('job:mastracode-om');
   flags.workspaces_changed = workspaceUnitRun.length + workspaceDockerRun.length > 0;

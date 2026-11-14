@@ -36,6 +36,18 @@ test('keeps an out file the PR changes', () => {
   assert.deepEqual(result.kept, files);
 });
 
+test('a change to the tier selection or its CI wiring keeps every file', () => {
+  for (const file of [
+    'scripts/test-tiers/select.mjs',
+    '.github/scripts/select-affected-tests.cjs',
+    '.github/workflows/prebuild.yml',
+  ]) {
+    const result = selectUnitTests({ ...base, changedFiles: [file] });
+    assert.deepEqual(result.dropped, [], file);
+    assert.deepEqual(result.kept, files, file);
+  }
+});
+
 test('full suite keeps every file', () => {
   const result = selectUnitTests({ ...base, fullSuite: true });
   assert.deepEqual(result.kept, files);
