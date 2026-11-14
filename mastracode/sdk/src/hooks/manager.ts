@@ -37,6 +37,12 @@ export class HookManager {
   private configDirName: string;
   private homeDir?: string;
   private runId?: string;
+  /**
+   * Run id each pending permission prompt was raised under. A suspended run can
+   * end (clearing runId) while its prompt stays open, so the result must not
+   * read the current run id.
+   */
+  private permissionRunIds = new Map<string, string>();
   private worktree?: SessionWorktreeInfo;
   /** True once SessionStart has fired, so later thread binds announce themselves. */
   private sessionStarted = false;
@@ -325,11 +331,12 @@ export class HookManager {
     toolName: string,
     toolInput?: unknown,
   ): Promise<HookEventResult> {
+    const runId = this.runId;
+    if (runId) this.permissionRunIds.set(toolCallId, runId);
     const hooks = this.config.PermissionRequest;
     if (!hooks || hooks.length === 0) {
       return emptyResult();
     }
-    const runId = this.runId;
     if (!runId) {
       return emptyResult();
     }
@@ -353,12 +360,12 @@ export class HookManager {
     decision: PermissionDecision,
     toolInput?: unknown,
   ): Promise<HookEventResult> {
+    const runId = this.permissionRunIds.get(toolCallId) ?? this.runId;
+    this.permissionRunIds.delete(toolCallId);
     const hooks = this.config.PermissionResult;
     if (!hooks || hooks.length === 0) {
       return emptyResult();
     }
-
-    const runId = this.runId;
     if (!runId) {
       return emptyResult();
     }

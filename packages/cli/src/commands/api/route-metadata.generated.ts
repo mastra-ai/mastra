@@ -1356,6 +1356,22 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /memory/working-memory": {
+    "method": "GET",
+    "path": "/memory/working-memory",
+    "pathParams": [],
+    "queryParams": [
+      "agentId",
+      "memoryConfig",
+      "resourceId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /memory/save-messages": {
     "method": "POST",
     "path": "/memory/save-messages",
@@ -6247,20 +6263,6 @@ export const API_ROUTE_METADATA = {
     ],
     "hasQuery": false,
     "hasBody": true,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
-  "POST /background-tasks/:backgroundTaskId/cancel": {
-    "method": "POST",
-    "path": "/background-tasks/:backgroundTaskId/cancel",
-    "pathParams": [
-      "backgroundTaskId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
     "responseShape": {
       "kind": "single"
     }

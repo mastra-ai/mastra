@@ -38,20 +38,6 @@ describe('handleContextCommand', () => {
     return ctx.showInfo.mock.calls[0][0] as string;
   }
 
-  it('leaves out subagent guidance when the controller runs without subagents', async () => {
-    const basePromptTokens: number[] = [];
-    for (const subagentsEnabled of [true, false]) {
-      const ctx = createCtx();
-      ctx.state.options = { backgroundToolsEnabled: true, subagentsEnabled };
-      await handleContextCommand(ctx);
-      const tokens = reportOf(ctx).match(/Base system prompt\s+([\d,]+)/)?.[1];
-      basePromptTokens.push(Number(tokens?.replace(/,/g, '')));
-    }
-
-    // The agent's prompt drops the subagent rules and the background subagent hint; so must the audit.
-    expect(basePromptTokens[1]).toBeLessThan(basePromptTokens[0]!);
-  });
-
   it('reports a startup breakdown before any request has been made', async () => {
     const ctx = createCtx();
 

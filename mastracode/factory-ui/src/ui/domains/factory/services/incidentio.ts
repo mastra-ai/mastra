@@ -12,36 +12,11 @@ export interface IncidentioStatus {
   reason?: 'missing_config' | 'auth_required' | 'organization_required' | 'ready';
 }
 
-export interface IncidentioIssue {
-  /** Prefixed item reference, e.g. `incidentio:follow-up:<ulid>`. */
-  id: string;
-  /** Human reference like `INC-42` when available, else the item reference. */
-  identifier: string;
-  title: string;
-  url: string;
-  author?: string | null;
-  state: string;
-  stateType: string;
-  priorityLabel: string;
-  assignee: string | null;
-  incident: string | null;
-  labels: string[];
-  createdAt: string;
-  updatedAt: string;
-  /** incident.io source the follow-up was read from; matches an intake binding's `sourceId`. */
-  sourceId?: string | null;
-}
-
 export interface IncidentioIssueDetail {
   identifier: string;
   title: string;
   url: string;
   description: string | null;
-}
-
-export interface IncidentioIssuePage {
-  issues: IncidentioIssue[];
-  nextCursor: string | null;
 }
 
 interface IntakeSourceResponse {
@@ -75,16 +50,6 @@ export async function fetchIncidentioStatus(baseUrl: string): Promise<Incidentio
   if (res.status === 404) return { enabled: false, configured: false, reason: 'missing_config' };
   if (!res.ok) throw new Error(`incident.io status request failed (${res.status})`);
   return (await res.json()) as IncidentioStatus;
-}
-
-export async function listIncidentioIssues(
-  baseUrl: string,
-  factoryProjectId: string,
-  after?: string,
-): Promise<IncidentioIssuePage> {
-  const params = new URLSearchParams({ factoryProjectId });
-  if (after) params.set('after', after);
-  return requestJson<IncidentioIssuePage>(`${baseUrl}/web/incidentio/issues?${params.toString()}`);
 }
 
 export async function getIncidentioIssue(

@@ -192,12 +192,6 @@ You can also pass `requestContext` as a `Record<string, any>`.
       "Answers a suspended [background task](/docs/harness/background-tasks#answer-a-suspended-task-from-a-client) with `resumeData` and returns the task. Pass `options.suspendedAt` (a `Date`, ISO string, or epoch milliseconds) from the task you read; the server rejects the answer with `409` if the task has resumed or suspended again since. Also rejects with `409` when the task isn't suspended or no concurrency slot is free, and `404` when the task doesn't exist or belongs to another resource.",
   },
   {
-    name: 'cancelBackgroundTask(backgroundTaskId)',
-    type: 'Promise<BackgroundTaskResponse>',
-    description:
-      "Cancels a pending, running, or suspended [background task](/docs/harness/background-tasks#cancel-a-task-from-a-client) and returns it. A task that already finished is returned unchanged. Rejects with `404` when the task doesn't exist or belongs to another resource.",
-  },
-  {
     name: 'getWorkspace(workspaceId)',
     type: 'Workspace',
     description:

@@ -1,7 +1,11 @@
+import { Container } from '@earendil-works/pi-tui';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
+import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import type { TaskItemSnapshot } from '@mastra/core/signals';
+import stripAnsi from 'strip-ansi';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ToolExecutionComponentEnhanced } from './components/tool-execution-enhanced.js';
 import { dispatchEvent } from './event-dispatch.js';
 import type { EventHandlerContext } from './handlers/types.js';
 import type { TUIState } from './state.js';
@@ -533,5 +537,69 @@ describe('dispatchEvent task updates', () => {
     await dispatchEvent({ type: 'task_updated', tasks: [] }, ectx, state);
 
     expect(ectx.renderClearedTasksInline).toHaveBeenCalledWith(previousTasks, expect.anything());
+  });
+});
+
+describe('dispatchEvent background shells', () => {
+  it('shows the exit of a shell that ended before its call returned the PID', async () => {
+    const controller = createMockAgentController();
+    const state = createMockTUIState(controller);
+    const args = { command: 'pnpm build', description: 'Building the app', background: true };
+    const row = new ToolExecutionComponentEnhanced('execute_command', args, { collapsedByDefault: true }, state.ui);
+    Object.assign(state, {
+      options: { backgroundToolsEnabled: true },
+      chatContainer: new Container(),
+      pendingTools: new Map([['shell-call', row]]),
+      pendingSubagents: new Map(),
+      pendingAskUserComponents: new Map(),
+      backgroundShellRows: new Map(),
+      backgroundToolContexts: new Map([
+        [
+          'shell-call',
+          {
+            toolName: 'execute_command',
+            resourceId: 'resource-1',
+            threadId: 'current-thread',
+            createdAt: 1,
+            args,
+          },
+        ],
+      ]),
+      // The exit event came first: the activity list already has the finished shell.
+      backgroundActivities: new Map([
+        [
+          'process:42',
+          {
+            id: 'process:42',
+            taskId: 'process:42',
+            kind: 'process',
+            pid: '42',
+            exitCode: 2,
+            toolCallId: 'shell-call',
+            toolName: 'execute_command',
+            resourceId: 'resource-1',
+            threadId: 'current-thread',
+            status: 'failed',
+            createdAt: 1,
+            completedAt: 2,
+          },
+        ],
+      ]),
+      globalBackgroundNotice: { setActivities: vi.fn() },
+    });
+    Object.assign(controller.session, { identity: { getResourceId: () => 'resource-1' } });
+    const event: AgentControllerEvent = {
+      type: 'tool_end',
+      toolCallId: 'shell-call',
+      result: 'Started background process (PID: 42)',
+      isError: false,
+    };
+
+    await dispatchEvent(event, { ...createMockEctx(), state }, state);
+
+    expect(stripAnsi(row.render(100).join('\n'))).toMatch(/exit 2/);
+    // Its exit is final, so no later notice needs to reach it.
+    expect(state.backgroundShellRows.has('shell-call')).toBe(false);
+    expect(state.backgroundActivities.get('process:42')).toMatchObject({ status: 'failed', exitCode: 2 });
   });
 });

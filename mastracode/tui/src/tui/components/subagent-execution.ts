@@ -52,11 +52,6 @@ export interface SubagentExecutionOptions {
   forked?: boolean;
   /** When true, show full completed content including the final result. Default false. */
   expandOnComplete?: boolean;
-  /**
-   * The global Ctrl+E state. A background run finishes expanded only while it
-   * is on; otherwise it stays compact. Default: always compact.
-   */
-  isToolOutputExpanded?: () => boolean;
   /** Footer label before the agent type. Default "subagent". */
   label?: string;
   /** Max activity lines shown while running. Default 15. */
@@ -95,7 +90,6 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   private expanded = false;
   private collapseOnComplete: boolean;
   private expandOnComplete: boolean;
-  private isToolOutputExpanded: () => boolean;
   private forked: boolean;
   private label: string;
   private maxActivityLines: number;
@@ -111,7 +105,6 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.ui = ui;
     this.collapseOnComplete = options?.collapseOnComplete ?? false;
     this.expandOnComplete = options?.expandOnComplete ?? false;
-    this.isToolOutputExpanded = options?.isToolOutputExpanded ?? (() => false);
     this.forked = options?.forked ?? false;
     this.label = options?.label ?? 'subagent';
     this.maxActivityLines = clampPositiveInt(options?.maxActivityLines, MAX_ACTIVITY_LINES);
@@ -135,11 +128,6 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
 
   setTask(task: string): void {
     this.task = task;
-    this.rebuild();
-  }
-
-  setModelId(modelId: string): void {
-    this.modelId = modelId;
     this.rebuild();
   }
 
@@ -192,12 +180,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     this.done = true;
     this.isError = isError;
     this.finalResult = isDuplicateFinalResult(result, this.activity, this.lastTextSnapshot) ? undefined : result;
-    // Background work finishes while the user is doing something else, so it
-    // stays compact rather than unfolding into the chat, unless Ctrl+E has
-    // expanded every tool output.
-    if (this.backgroundTaskId) {
-      this.expanded = this.isToolOutputExpanded();
-    } else if (this.expandOnComplete) {
+    if (this.expandOnComplete) {
       this.expanded = true;
     } else if (this.collapseOnComplete) {
       this.expanded = false;
@@ -255,11 +238,11 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     const statusIcon = this.backgroundTaskId
       ? this.done
         ? this.cancelled
-          ? theme.fg('muted', ' ■ background')
+          ? theme.fg('muted', ` ■ background · ${this.backgroundTaskId}`)
           : this.isError
-            ? theme.fg('error', ' ✗ background')
-            : theme.fg('success', ' ✓ background')
-        : theme.fg('warning', ' ◌ background')
+            ? theme.fg('error', ` ✗ background · ${this.backgroundTaskId}`)
+            : theme.fg('success', ` ✓ background · ${this.backgroundTaskId}`)
+        : theme.fg('warning', ` ◌ background · ${this.backgroundTaskId}`)
       : this.done && this.isError
         ? colorText(this.colors.icon, ` ${this.icons.error}`, (text: string) => theme.fg('error', text))
         : ''; // The title's ● dot shows running / done; a failure also gets the error icon.
@@ -276,16 +259,6 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
     // Completed background work follows the ordinary tool display model: compact by default,
     // with the authoritative result available through Ctrl+E expansion.
     if ((this.collapseOnComplete || this.backgroundTaskId) && this.done && !this.expanded) {
-      emit();
-      return;
-    }
-
-    // A running background box stays small while the chat moves on below it:
-    // only its latest activity line.
-    if (this.backgroundTaskId && !this.done && !this.expanded) {
-      const latest = this.activity.at(-1);
-      const latestLine = latest ? formatActivityLine(latest, maxLineWidth, this.icons, this.colors.icon).at(-1) : '';
-      if (latestLine) output.push(latestLine);
       emit();
       return;
     }

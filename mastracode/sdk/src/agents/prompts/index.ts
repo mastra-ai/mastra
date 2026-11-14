@@ -40,7 +40,7 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
   disabledTools?: readonly string[];
-  /** Background shells and subagents are on; adds guidance on when to use them. */
+  /** Background shells are on; adds guidance on when to use them. */
   backgroundTools?: boolean;
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
   submitPlanAvailable?: boolean;
@@ -146,7 +146,6 @@ export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?:
     plansDir: getLocalPlansRelativeDir({ factoryProjectId, plansDir: ctx.plansDir }),
   });
 
-  const hasSubagents = ctx.hasSubagents !== false && !deniedTools.has('subagent');
   // Map new context to base context
   const baseCtx: BasePromptContext = {
     projectPath: ctx.workingDir || '(no workspace attached)',
@@ -160,10 +159,7 @@ export function buildFullPromptSections(ctx: PromptContext, loadedInstructions?:
     coAuthorName: ctx.coAuthorName,
     coAuthorEmail: ctx.coAuthorEmail,
     activePlan: ctx.state?.activePlan,
-    hasSubagents,
-    // The tool guidance then says when to run one subagent in the background, which the
-    // base prompt's parallel-only rule would contradict.
-    backgroundSubagents: hasSubagents && !!ctx.backgroundTools,
+    hasSubagents: ctx.hasSubagents !== false && !deniedTools.has('subagent'),
     planApprovalStartsGoal: ctx.planApprovalStartsGoal,
     toolGuidance,
   };

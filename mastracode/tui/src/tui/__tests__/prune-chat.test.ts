@@ -28,6 +28,7 @@ function createState(childrenCount: number): TUIState {
     messageComponentsById: new Map(),
     pendingTools: new Map(),
     pendingSubagents: new Map(),
+    backgroundShellRows: new Map(),
     pendingAskUserComponents: new Map(),
     pendingSubmitPlanComponents: new Map(),
     followUpComponents: [],

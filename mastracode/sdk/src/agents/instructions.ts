@@ -26,7 +26,7 @@ export async function getDynamicInstructions({
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
-  /** Background shells and subagents are on (`backgroundTools.enabled`). */
+  /** Background shells are on (`backgroundTools.enabled`). */
   backgroundTools?: boolean;
 }): Promise<string> {
   return joinPromptSections(
@@ -72,7 +72,7 @@ export async function getDynamicInstructionSections({
   plansDir?: string;
   /** Agent tools removed via `disabledTools` (e.g. `web_search`); their prompt guidance is omitted. */
   disabledTools?: readonly string[];
-  /** Background shells and subagents are on (`backgroundTools.enabled`). */
+  /** Background shells are on (`backgroundTools.enabled`). */
   backgroundTools?: boolean;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as

@@ -109,45 +109,6 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   },
 });
 
-export const CANCEL_BACKGROUND_TASK_ROUTE = createRoute({
-  method: 'POST',
-  path: '/background-tasks/:backgroundTaskId/cancel',
-  responseType: 'json' as const,
-  pathParamSchema: backgroundTaskIdPathParams,
-  responseSchema: backgroundTaskResponseSchema,
-  summary: 'Cancel a background task',
-  description:
-    'Stops a pending, running or suspended background task and returns it. A task that already finished is returned unchanged.',
-  tags: ['Background Tasks'],
-  requiresAuth: true,
-  handler: async ({ mastra, backgroundTaskId, requestContext }) => {
-    const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
-    const bgManager = mastra.backgroundTaskManager;
-    if (!bgManager) {
-      throw new HTTPException(404, { message: 'Background task not found' });
-    }
-
-    const task = await bgManager.getTask(backgroundTaskId);
-    // Report another resource's task as missing so its existence is not disclosed.
-    if (!task || (scoped && task.resourceId !== resourceId)) {
-      throw new HTTPException(404, { message: 'Background task not found' });
-    }
-
-    try {
-      await bgManager.cancel(backgroundTaskId);
-    } catch (error) {
-      // Deleted between the read above and the cancel.
-      if (error instanceof Error && error.message.startsWith('Task not found')) {
-        throw new HTTPException(404, { message: 'Background task not found' });
-      }
-      throw error;
-    }
-    const cancelled = await bgManager.getTask(backgroundTaskId);
-    if (!cancelled) throw new HTTPException(404, { message: 'Background task not found' });
-    return cancelled;
-  },
-});
-
 export const RESUME_BACKGROUND_TASK_ROUTE = createRoute({
   method: 'POST',
   path: '/background-tasks/:backgroundTaskId/resume',

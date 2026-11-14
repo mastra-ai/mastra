@@ -1,5 +1,5 @@
 export interface BackgroundTaskCompletionEvent {
-  kind?: 'task';
+  kind: 'task';
   id: string;
   taskId: string;
   originRunId: string;
@@ -8,10 +8,6 @@ export interface BackgroundTaskCompletionEvent {
   threadId: string;
   toolName: string;
   status: 'completed' | 'failed' | 'cancelled';
-  /** What people call the task: the subagent's name for subagents, else the tool name. */
-  title?: string;
-  /** The subagent's task, first line. */
-  summary?: string;
 }
 
 /** A background `execute_command` process exited. */
@@ -21,7 +17,7 @@ export interface BackgroundProcessExitEvent {
   pid: string;
   command?: string;
   exitCode: number;
-  /** True when the process was killed (by the agent, the user, an abort or shutdown) rather than exiting on its own. */
+  /** True when the process was killed (by the agent, the user or a shutdown) rather than exiting on its own. */
   killed: boolean;
   toolCallId?: string;
   resourceId?: string;

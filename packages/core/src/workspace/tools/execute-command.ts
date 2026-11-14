@@ -119,7 +119,7 @@ const SANDBOX_TEARDOWN_STATUSES: ReadonlySet<string> = new Set(['stopping', 'sto
 /**
  * Sends the exit of a background process to the agent's thread, with the end of its output:
  * the tool call only returned the PID. The agent must be registered on Mastra to be found
- * (subagents built per call are not), and the run needs a memory thread and resource.
+ * (agents built inside a tool or another agent are not), and the run needs a memory thread and resource.
  */
 async function notifyAgentOfExit(
   meta: BackgroundProcessExitMeta,
@@ -251,11 +251,12 @@ async function executeCommand(input: Record<string, any>, context: any) {
 
     // Lets hosts route exit notices to the run and thread that started the process.
     // Empty ids count as missing: the tool builder passes `agentId: ''` when
-    // there is no agent id.
+    // there is no agent id. Workflow tool calls carry the thread and resource
+    // at the top level instead of under `agent`.
     const owner = {
       agentId: context?.agent?.agentId || undefined,
-      threadId: context?.agent?.threadId || undefined,
-      resourceId: context?.agent?.resourceId || undefined,
+      threadId: context?.agent?.threadId || context?.threadId || undefined,
+      resourceId: context?.agent?.resourceId || context?.resourceId || undefined,
       runId: context?.runId || undefined,
     };
 

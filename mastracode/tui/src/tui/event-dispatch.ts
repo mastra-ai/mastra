@@ -1,7 +1,7 @@
 /**
  * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
  */
-import { MC_TOOLS, SUBAGENT_TOOL_NAME } from '@mastra/code-sdk/tool-names';
+import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
 import type {
   AgentControllerEvent,
@@ -14,9 +14,9 @@ import type { AskUserSelectionMode } from '@mastra/core/tools';
 
 import {
   acceptBackgroundActivity,
+  finishedShellExit,
   getBackgroundActivitiesForTarget,
   parseBackgroundProcessPid,
-  processActivityKey,
   startBackgroundProcessActivity,
 } from './background-activity.js';
 import { getBackgroundToolMetadata } from './background-tool-result.js';
@@ -44,8 +44,6 @@ import {
   handleSubagentToolStart,
   handleSubagentToolEnd,
   handleSubagentEnd,
-  markBackgroundSubagent,
-  subagentDisplayName,
   handleToolApprovalRequired,
   handleToolStart,
   handleToolUpdate,
@@ -355,17 +353,12 @@ export async function dispatchEvent(
           startBackgroundProcessActivity(state.backgroundActivities, pid, event.toolCallId, context);
           const row = state.pendingTools.get(event.toolCallId);
           if (row) {
-            state.backgroundShellRows.set(event.toolCallId, row);
             // A command that ends at once can report its exit before its result.
-            const activity = state.backgroundActivities.get(processActivityKey(pid));
-            if (activity && activity.status !== 'accepted' && activity.exitCode !== undefined) {
-              row.setBackgroundProcessExit?.({ exitCode: activity.exitCode, killed: activity.status === 'cancelled' });
-            }
+            const exit = finishedShellExit(state.backgroundActivities, pid, event.toolCallId);
+            if (exit) row.setBackgroundProcessExit?.(exit);
+            // Still running, or its exit notice is yet to arrive.
+            else state.backgroundShellRows.set(event.toolCallId, row);
           }
-        }
-        if (taskId && context?.toolName === SUBAGENT_TOOL_NAME) {
-          markBackgroundSubagent(ectx, event.toolCallId, taskId);
-          context.subagentName = subagentDisplayName(state, event.toolCallId);
         }
         if ((taskId || pid) && context) {
           if (taskId) acceptBackgroundActivity(state.backgroundActivities, taskId, event.toolCallId, context);
@@ -410,7 +403,6 @@ export async function dispatchEvent(
       ectx.showInfo(`Switched to thread: ${event.threadId}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
-      state.backgroundSubagentCalls?.clear();
       // Clear per-thread ephemeral state first so renderExistingMessages
       // and other downstream observers see clean state.
       if (!(await clearThreadState(state, isCurrent))) break;
@@ -459,7 +451,6 @@ export async function dispatchEvent(
       ectx.showInfo(`Created thread: ${event.thread.id}`);
       state.latestRequestPromptTokens = undefined;
       state.backgroundToolContexts?.clear();
-      state.backgroundSubagentCalls?.clear();
       // Update current thread title for status line display
       setCurrentThreadTitle(state, event.thread.title);
       state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(

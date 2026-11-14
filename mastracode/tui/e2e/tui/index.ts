@@ -34,7 +34,6 @@ import {
   backgroundPlaceholderOptOutScenario,
 } from './background-placeholder-opt-out.js';
 import { backgroundShellsScenario } from './background-shells.js';
-import { backgroundSubagentDeferredScenario } from './background-subagent-deferred.js';
 import { backgroundSubagentsScenario } from './background-subagents.js';
 import { backgroundToolsSettingsScenario } from './background-tools-settings.js';
 import { bedrockModelDiscoveryScenario } from './bedrock-model-discovery.js';
@@ -190,6 +189,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
+import { providerSafetyRejectionScenario } from './provider-safety-rejection.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -296,7 +296,6 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'background-placeholder-opt-in': backgroundPlaceholderOptInScenario,
   'background-placeholder-opt-out': backgroundPlaceholderOptOutScenario,
   'background-shells': backgroundShellsScenario,
-  'background-subagent-deferred': backgroundSubagentDeferredScenario,
   'background-subagents': backgroundSubagentsScenario,
   'background-tools-settings': backgroundToolsSettingsScenario,
   'experimental-agent-durable': experimentalAgentDurableScenario,
@@ -437,6 +436,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'process-shortcuts': processShortcutsScenario,
   'provider-history-compat': providerHistoryCompatScenario,
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
+  'provider-safety-rejection': providerSafetyRejectionScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
   'profile-command': profileCommandScenario,

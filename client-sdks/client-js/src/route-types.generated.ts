@@ -9332,6 +9332,32 @@ export interface GetMemoryThreadsThreadIdWorkingMemory_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /memory/working-memory
+// ============================================================================
+export type GetMemoryWorkingMemory_QueryParams = GetMemoryThreadsThreadIdWorkingMemory_QueryParams;
+
+export type GetMemoryWorkingMemory_Response = GetMemoryThreadsThreadIdWorkingMemory_Response;
+
+export type GetMemoryWorkingMemory_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryWorkingMemory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryWorkingMemory_QueryParams
+        ? { query?: GetMemoryWorkingMemory_QueryParams }
+        : { query: GetMemoryWorkingMemory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryWorkingMemory_RouteContract {
+  pathParams: never;
+  queryParams: GetMemoryWorkingMemory_QueryParams;
+  body: never;
+  request: GetMemoryWorkingMemory_Request;
+  response: GetMemoryWorkingMemory_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /memory/save-messages
 // ============================================================================
 export type PostMemorySaveMessages_QueryParams = GetMemoryConfig_QueryParams;
@@ -22699,30 +22725,6 @@ export interface PostBackgroundTasksBackgroundTaskIdResume_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /background-tasks/:backgroundTaskId/cancel
-// ============================================================================
-export type PostBackgroundTasksBackgroundTaskIdCancel_PathParams = GetBackgroundTasksBackgroundTaskId_PathParams;
-
-export type PostBackgroundTasksBackgroundTaskIdCancel_Response = GetBackgroundTasksBackgroundTaskId_Response;
-
-export type PostBackgroundTasksBackgroundTaskIdCancel_Request = Simplify<
-  (PostBackgroundTasksBackgroundTaskIdCancel_PathParams extends never
-    ? {}
-    : { params: PostBackgroundTasksBackgroundTaskIdCancel_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostBackgroundTasksBackgroundTaskIdCancel_RouteContract {
-  pathParams: PostBackgroundTasksBackgroundTaskIdCancel_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostBackgroundTasksBackgroundTaskIdCancel_Request;
-  response: PostBackgroundTasksBackgroundTaskIdCancel_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: GET /editor/builder/settings
 // ============================================================================
 export type GetEditorBuilderSettings_Response = {
@@ -25821,6 +25823,7 @@ export interface RouteTypes {
   'GET /memory/threads/:threadId': GetMemoryThreadsThreadId_RouteContract;
   'GET /memory/threads/:threadId/messages': GetMemoryThreadsThreadIdMessages_RouteContract;
   'GET /memory/threads/:threadId/working-memory': GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  'GET /memory/working-memory': GetMemoryWorkingMemory_RouteContract;
   'POST /memory/save-messages': PostMemorySaveMessages_RouteContract;
   'POST /memory/threads': PostMemoryThreads_RouteContract;
   'PATCH /memory/threads/:threadId': PatchMemoryThreadsThreadId_RouteContract;
@@ -26091,7 +26094,6 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'POST /background-tasks/:backgroundTaskId/resume': PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
-  'POST /background-tasks/:backgroundTaskId/cancel': PostBackgroundTasksBackgroundTaskIdCancel_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
   'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
   'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
@@ -26523,9 +26525,6 @@ export interface Client {
   '/background-tasks/:backgroundTaskId': {
     GET: GetBackgroundTasksBackgroundTaskId_RouteContract;
   };
-  '/background-tasks/:backgroundTaskId/cancel': {
-    POST: PostBackgroundTasksBackgroundTaskIdCancel_RouteContract;
-  };
   '/background-tasks/:backgroundTaskId/resume': {
     POST: PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
   };
@@ -26814,6 +26813,9 @@ export interface Client {
   '/memory/threads/:threadId/working-memory': {
     GET: GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
     POST: PostMemoryThreadsThreadIdWorkingMemory_RouteContract;
+  };
+  '/memory/working-memory': {
+    GET: GetMemoryWorkingMemory_RouteContract;
   };
   '/observability/branches': {
     GET: GetObservabilityBranches_RouteContract;

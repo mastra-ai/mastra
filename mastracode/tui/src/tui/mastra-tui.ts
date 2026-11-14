@@ -370,7 +370,6 @@ export class MastraTUI {
       onCancel: () => this.state.ui.hideOverlay(),
       onAbort: activity => void this.abortBackgroundActivity(activity),
       onOpen: activity => void this.openBackgroundActivity(activity),
-      canOpen: activity => activity.kind === 'process' || this.state.backgroundSubagentCalls.has(activity.toolCallId),
       // Shells live in this process's sandbox; a remote session cannot reach it.
       canControlProcesses: Boolean(this.state.local && this.state.options.backgroundProcesses),
     });
@@ -379,12 +378,7 @@ export class MastraTUI {
   }
 
   private async openBackgroundActivity(activity: BackgroundActivity): Promise<void> {
-    if (activity.kind !== 'process') {
-      this.state.ui.hideOverlay();
-      this.state.backgroundSubagentCalls.get(activity.toolCallId)?.component?.toggleExpanded();
-      flushRender(this.state);
-      return;
-    }
+    if (activity.kind !== 'process') return;
     try {
       const handle = this.state.local ? await this.state.options.backgroundProcesses?.read(activity.pid!) : undefined;
       this.state.ui.hideOverlay();

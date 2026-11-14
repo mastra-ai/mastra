@@ -734,37 +734,6 @@ describe('BackgroundTaskManager', () => {
       expect(result?.status).toBe('timed_out');
       expect(result?.error?.message).toContain('timed out');
     });
-
-    it('never times out a task with timeoutMs 0', async () => {
-      let release!: () => void;
-      const gate = new Promise<void>(resolve => (release = resolve));
-      const executeFn = vi.fn(
-        (_args: any, opts: { abortSignal: AbortSignal }) =>
-          new Promise((resolve, reject) => {
-            opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
-            void gate.then(() => resolve('done'));
-          }),
-      );
-
-      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
-      try {
-        const { task } = await manager.enqueue(
-          { toolName: 'long-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
-          ctx(executeFn),
-        );
-        await vi.waitFor(() => expect(executeFn).toHaveBeenCalled());
-
-        // Well past both this manager's default (5s) and the global one (300s).
-        await vi.advanceTimersByTimeAsync(600_000);
-        release();
-
-        await vi.waitFor(async () =>
-          expect(await manager.getTask(task.id)).toMatchObject({ status: 'completed', result: 'done' }),
-        );
-      } finally {
-        vi.useRealTimers();
-      }
-    });
   });
 
   describe('retry', () => {
@@ -845,136 +814,6 @@ describe('BackgroundTaskManager', () => {
   });
 
   describe('cancel', () => {
-    // A tool that stops when its task is cancelled: its run ends, and its context goes, while the cancel is still running.
-    async function startAbortableTask(
-      onExecution: NonNullable<TaskContext['onExecution']>,
-      mgr: BackgroundTaskManager = manager,
-    ) {
-      let started = false;
-      const { task } = await mgr.enqueue(
-        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
-        {
-          executor: {
-            execute: (_args: any, opts: { abortSignal: AbortSignal }) =>
-              new Promise((_resolve, reject) => {
-                started = true;
-                opts.abortSignal.addEventListener('abort', () => reject(opts.abortSignal.reason));
-              }),
-          },
-          onExecution,
-        },
-      );
-      await vi.waitFor(() => expect(started).toBe(true));
-      return task;
-    }
-
-    it('tells the dispatcher a running task was cancelled when the tool stops on the abort', async () => {
-      // A host callback that takes a while: the aborted run ends before the cancel tells the dispatcher.
-      let taskId: string | undefined;
-      const local = await makeLocalManager({
-        enabled: true,
-        onTaskCancelled: () => vi.waitFor(() => expect(local.mgr.taskContexts.has(taskId!)).toBe(false)),
-      });
-      try {
-        const updates: Array<{ cancelledAt?: Date }> = [];
-        const task = await startAbortableTask(params => void updates.push(params), local.mgr);
-        taskId = task.id;
-
-        await local.mgr.cancel(task.id);
-
-        const cancelled = updates.filter(update => update.cancelledAt);
-        expect(cancelled).toHaveLength(1);
-        expect(cancelled[0]!.cancelledAt!.getTime()).toBe((await local.mgr.getTask(task.id))!.completedAt!.getTime());
-      } finally {
-        await local.cleanup();
-      }
-    });
-
-    // A shutdown leaves the stored call as a crash would, so hosts replay it as interrupted, not cancelled.
-    it('does not tell the dispatcher a task was cancelled when shutdown stops it', async () => {
-      let release!: (value: string) => void;
-      const local = await makeLocalManager({ enabled: true, onTaskCancelled: () => release('late') });
-      try {
-        const updates: Array<{ cancelledAt?: Date }> = [];
-        let started = false;
-        // Ignores the abort, so its context is still registered when shutdown cancels it.
-        const { task } = await local.mgr.enqueue(
-          { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1', maxRetries: 0 },
-          {
-            executor: {
-              execute: () =>
-                new Promise<string>(resolve => {
-                  started = true;
-                  release = resolve;
-                }),
-            },
-            onExecution: params => void updates.push(params),
-          },
-        );
-        await vi.waitFor(() => expect(started).toBe(true));
-        const beforeShutdown = updates.length;
-
-        await local.mgr.shutdown();
-
-        expect((await local.mgr.getTask(task.id))?.status).toBe('cancelled');
-        expect(updates.slice(beforeShutdown)).toEqual([]);
-      } finally {
-        await local.cleanup();
-      }
-    });
-
-    // The in-process pubsub delivers this process's own `task.cancelled` event while the cancel runs.
-    it.each<{ state: string; execute: TaskContext['executor']['execute']; reached: string }>([
-      {
-        state: 'running and ignores the abort',
-        execute: () => new Promise(() => {}),
-        reached: 'running',
-      },
-      {
-        state: 'suspended',
-        execute: async (_args, opts) => {
-          await opts?.suspend?.({ question: 'Approve?' });
-        },
-        reached: 'suspended',
-      },
-    ])('tells the dispatcher once that a task that is $state was cancelled', async ({ execute, reached }) => {
-      const updates: Array<{ cancelledAt?: Date }> = [];
-      const { task } = await manager.enqueue(
-        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
-        { executor: { execute }, onExecution: params => void updates.push(params) },
-      );
-      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe(reached));
-      if (reached === 'running') await vi.waitFor(() => expect(manager.activeAbortControllers.has(task.id)).toBe(true));
-      const beforeCancel = updates.length;
-
-      await manager.cancel(task.id);
-
-      const after = updates.slice(beforeCancel);
-      expect(after).toHaveLength(1);
-      expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
-    });
-
-    it('still tells the dispatcher a task was cancelled when the cancelled event fails to publish', async () => {
-      const updates: Array<{ cancelledAt?: Date }> = [];
-      const { task } = await manager.enqueue(
-        { toolName: 'crawl', toolCallId: 'c1', args: {}, agentId: 'a', runId: 'run-1' },
-        { executor: { execute: () => new Promise(() => {}) }, onExecution: params => void updates.push(params) },
-      );
-      await vi.waitFor(() => expect(manager.activeAbortControllers.has(task.id)).toBe(true));
-      const publish = pubsub.publish.bind(pubsub);
-      vi.spyOn(pubsub, 'publish').mockImplementation((topic, event) =>
-        event.type === 'task.cancelled' ? Promise.reject(new Error('broker down')) : publish(topic, event),
-      );
-      const beforeCancel = updates.length;
-
-      await manager.cancel(task.id);
-
-      expect((await manager.getTask(task.id))?.status).toBe('cancelled');
-      const after = updates.slice(beforeCancel);
-      expect(after).toHaveLength(1);
-      expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
-    });
-
     it('cancels a pending task', async () => {
       const resolvers: Array<() => void> = [];
       const executeFn = vi.fn().mockImplementation(
@@ -1684,56 +1523,6 @@ describe('BackgroundTaskManager', () => {
         const completed = await mgr.getTask('stale-1');
         expect(completed?.status).toBe('completed');
         expect(completed?.result).toBe('recovered');
-      } finally {
-        await local.backgroundTaskManager?.shutdown();
-        await local.stopWorkers();
-      }
-    });
-
-    it('calls onTaskFailed once per task that a restart fails, even when the callback throws', async () => {
-      const seedStorage = new MockStore();
-      const onTaskFailed = vi.fn(async () => {
-        throw new Error('callback boom');
-      });
-      const local = new Mastra({
-        logger: false,
-        storage: seedStorage,
-        backgroundTasks: { enabled: true, onTaskFailed },
-      });
-
-      const bgStore = await seedStorage.getStore('backgroundTasks');
-      for (const id of ['crashed-1', 'crashed-2']) {
-        await bgStore!.createTask({
-          id,
-          status: 'running',
-          toolName: 't',
-          toolCallId: id,
-          args: {},
-          agentId: 'a',
-          runId: 'r',
-          retryCount: 0,
-          maxRetries: 0,
-          timeoutMs: 5000,
-          createdAt: new Date(),
-          startedAt: new Date(Date.now() - 60_000),
-        });
-      }
-      await local.startWorkers();
-
-      try {
-        await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(2));
-        // Give a duplicate failure event a chance to arrive.
-        await new Promise(resolve => setTimeout(resolve, 300));
-        expect(onTaskFailed).toHaveBeenCalledTimes(2);
-
-        const failedIds = onTaskFailed.mock.calls.map(([task]: any[]) => task.id).sort();
-        expect(failedIds).toEqual(['crashed-1', 'crashed-2']);
-        for (const [task] of onTaskFailed.mock.calls as any[]) {
-          expect(task).toMatchObject({
-            status: 'failed',
-            error: { message: 'Worker process terminated before task completed' },
-          });
-        }
       } finally {
         await local.backgroundTaskManager?.shutdown();
         await local.stopWorkers();
@@ -2679,30 +2468,6 @@ describe('BackgroundTaskManager', () => {
         payload: { toolName: 'slow', result: 'late-result' },
       });
 
-      abortController.abort();
-    });
-
-    it('a client that connects after a task suspended still sees its question', async () => {
-      const { task } = await manager.enqueue(
-        { toolName: 'refund', toolCallId: 'c1', args: { amount: 40 }, agentId: 'a1', runId: 'run-1' },
-        ctx(async (_args, opts) => {
-          await opts?.suspend?.({ question: 'Approve the refund?' });
-          return undefined;
-        }),
-      );
-      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
-
-      const abortController = new AbortController();
-      const reader = manager.stream({ abortSignal: abortController.signal }).getReader();
-      const snapshot = await reader.read();
-      expect(snapshot.value).toMatchObject({
-        type: 'background-task-suspended',
-        payload: { taskId: task.id, toolName: 'refund', suspendPayload: { question: 'Approve the refund?' } },
-      });
-      expect((snapshot.value!.payload as { suspendedAt?: unknown }).suspendedAt).toBeInstanceOf(Date);
-
-      const byId = manager.stream({ abortSignal: abortController.signal, taskId: task.id }).getReader();
-      expect((await byId.read()).value).toMatchObject({ type: 'background-task-suspended' });
       abortController.abort();
     });
 

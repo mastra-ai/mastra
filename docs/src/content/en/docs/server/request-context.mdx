@@ -335,7 +335,7 @@ requestContext.set(MASTRA_THREAD_ID_KEY, threadId)
 | Key | Purpose |
 | - | - |
 | `MASTRA_RESOURCE_ID_KEY` | Forces all memory operations to use this resource ID. The server validates that accessed threads belong to this resource and returns 403 if not. |
-| `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values |
+| `MASTRA_THREAD_ID_KEY` | Forces thread operations to use this thread ID, overriding client-provided values. Passing `memory.thread` to an agent call leaves this key unset, so set it yourself wherever you rely on it, such as for a workspace resolver. Tools can read the current run's thread from `context.agent.threadId` instead. |
 | `MASTRA_SCOPES_KEY` | Sets the [scopes](/docs/memory/overview#identify-memory-with-scopes) the agent run acts as, as an array of `<type>:<value>` strings. Combined with per-call `scopes`; the agent's `scopes` list adds to them, and a `scopes` function replaces them. A `resource:` or `thread:` scope that conflicts with another resource or thread value returns a 400 error. |
 | `MASTRA_MESSAGE_AUTHOR_KEY` | Names who sent a user message as `{ id, name?, avatarUrl? }`. Agent-controller sessions persist it at `content.metadata.signal.author` and mirror it to `providerMetadata.mastra.author` for compatibility, so a thread shared by several people can show who wrote what. |
 

@@ -38,7 +38,3 @@ console.log(proc.metadata?.threadId, proc.metadata?.startedAt);
 const sandbox = await workspace.getCachedSandbox({ requestContext });
 if (sandbox?.status === 'running') console.log(await sandbox.processes?.list());
 ```
-
-**Suspended tasks on reconnect**
-
-The background task stream now also replays suspended tasks, as `background-task-suspended`, when a client connects. A client that reconnects while a task waits for an answer still sees the question.

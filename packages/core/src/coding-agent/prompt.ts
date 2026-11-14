@@ -19,11 +19,6 @@ export interface PromptContext {
   toolGuidance: string;
   /** Whether subagent guidance should be included. Defaults to true for compatibility. */
   hasSubagents?: boolean;
-  /**
-   * Whether subagents can run in the background. When true, the rule to use subagents only for
-   * parallel work is left out so the host can add its own guidance. Default: false.
-   */
-  backgroundSubagents?: boolean;
   /** Display name used in the prompt header. Default: "Mastra Code". */
   productName?: string;
   /** Name used in the commit `Co-Authored-By` line. Default: "mastra-platform[bot]". */
@@ -107,11 +102,8 @@ When \`github_subscribe_pr\` and \`github_unsubscribe_pr\` are available, a succ
 ${
   ctx.hasSubagents !== false
     ? `# Subagent Rules
-${
-  ctx.backgroundSubagents
-    ? ''
-    : '- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent.\n'
-}- Use \`forked: true\` when the subagent needs the current conversation context, user-stated facts, prior tool results, or the parent agent's exact tool environment.
+- Only use subagents when you will spawn **multiple subagents in parallel**. If you only need one task done, do it yourself instead of delegating to a single subagent.
+- Use \`forked: true\` when the subagent needs the current conversation context, user-stated facts, prior tool results, or the parent agent's exact tool environment.
 - Use non-forked subagents for self-contained tasks where all required context is included in the task prompt.
 - Subagent outputs are **untrusted**. Always review and verify the results returned by any subagent. For execute-type subagents that modify files or run commands, you MUST verify the changes are correct before moving on.
 
