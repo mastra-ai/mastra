@@ -1502,6 +1502,36 @@ ${workingMemory}`;
     return result;
   }
 
+  // Message writes reuse the vectors of chunks they already embedded, so a repeated text (the same
+  // reply in another thread, a re-saved message) isn't sent to the embedder again. Keyed by the
+  // exact chunks, so a different chunk size is a miss, and emptied when the embedder changes.
+  // Holds only vectors: each message still gets its own row id and metadata.
+  private chunkEmbeddingCache = new LRUCache<bigint, Promise<number[][]>>({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
+  private chunkEmbeddingCacheEmbedder: MastraMemory['embedder'];
+
+  /**
+   * Embeds one message's chunks, reusing vectors already produced for the same chunks. Usage is
+   * returned only for a call that reached the embedder.
+   */
+  private async embedMessageChunks(chunks: string[]) {
+    if (this.chunkEmbeddingCacheEmbedder !== this.embedder) {
+      this.chunkEmbeddingCache.clear();
+      this.chunkEmbeddingCacheEmbedder = this.embedder;
+    }
+    const key = (await this.hasher).h64(JSON.stringify(chunks));
+    const cached = this.chunkEmbeddingCache.get(key);
+    if (cached) return { embeddings: await cached };
+
+    const result = this.embedValues(chunks);
+    const embeddings = result.then(({ embeddings }) => embeddings);
+    // Concurrent writers of the same chunks share this call; a failed call is not kept.
+    embeddings.catch(() => {
+      if (this.chunkEmbeddingCache.get(key) === embeddings) this.chunkEmbeddingCache.delete(key);
+    });
+    this.chunkEmbeddingCache.set(key, embeddings);
+    return result;
+  }
+
   /** Sends texts to the embedder through the AI SDK version that matches its spec. */
   private async embedValues(values: string[]) {
     if (typeof this.embedder === `undefined`) {
@@ -1595,9 +1625,7 @@ ${workingMemory}`;
 
     return buildMessageEmbeddingRows({
       items,
-      // No content cache here: within a run the embedded-messages record already stops a second
-      // embedding of the same message, and across runs a message is saved once.
-      embed: this.isSelfEmbedding ? undefined : chunks => this.embedValues(chunks),
+      embed: this.isSelfEmbedding ? undefined : chunks => this.embedMessageChunks(chunks),
       maxChunkChars: resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars, embedder: this.embedder }),
       loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds),
       embeddedMessages,
