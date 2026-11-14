@@ -240,6 +240,98 @@ export function createPerStepWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: a step-by-step run still pauses after a step that was retried
+  {
+    mockRegistry.register('perstep-retry:step1', () =>
+      vi.fn().mockRejectedValueOnce(new Error('transient failure')).mockResolvedValue({ value: 'step1-done' }),
+    );
+    mockRegistry.register('perstep-retry:step2', () => vi.fn().mockResolvedValue({ value: 'step2-done' }));
+
+    const step1 = createStep({
+      id: 'step1',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      retries: 1,
+      execute: async ctx => mockRegistry.get('perstep-retry:step1')(ctx),
+    });
+
+    const step2 = createStep({
+      id: 'step2',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-retry:step2')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-retry',
+      steps: [step1, step2],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow.then(step1).then(step2).commit();
+
+    workflows['perstep-retry'] = {
+      workflow,
+      mocks: {
+        get step1() {
+          return mockRegistry.get('perstep-retry:step1');
+        },
+        get step2() {
+          return mockRegistry.get('perstep-retry:step2');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
+  // Test: a step-by-step run pauses after a loop, once every iteration ran
+  {
+    mockRegistry.register('perstep-loop:increment', () =>
+      vi.fn().mockImplementation(async ({ inputData }: any) => ({ count: inputData.count + 1 })),
+    );
+    mockRegistry.register('perstep-loop:after', () => vi.fn().mockResolvedValue({ count: -1 }));
+
+    const increment = createStep({
+      id: 'increment',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ctx => mockRegistry.get('perstep-loop:increment')(ctx),
+    });
+
+    const after = createStep({
+      id: 'after',
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+      execute: async ctx => mockRegistry.get('perstep-loop:after')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-loop',
+      steps: [increment, after],
+      inputSchema: z.object({ count: z.number() }),
+      outputSchema: z.object({ count: z.number() }),
+    });
+
+    workflow
+      .dountil(increment, async ({ inputData }) => inputData.count >= 3)
+      .then(after)
+      .commit();
+
+    workflows['perstep-loop'] = {
+      workflow,
+      mocks: {
+        get increment() {
+          return mockRegistry.get('perstep-loop:increment');
+        },
+        get after() {
+          return mockRegistry.get('perstep-loop:after');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   return workflows;
 }
 
@@ -355,5 +447,29 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
         expect(mocks.step1).toHaveBeenCalled();
       },
     );
+
+    it.skipIf(skipTests.perStepRetry)('should pause after a step that succeeded on its retry', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-retry']!;
+      resetMocks?.();
+      const result = await execute(workflow, { input: 'test' }, { perStep: true });
+
+      expect(result.status).toBe('paused');
+      expect(result.steps.step1).toMatchObject({ status: 'success', output: { value: 'step1-done' } });
+      expect(result.steps.step2).toBeUndefined();
+      expect(mocks.step1).toHaveBeenCalledTimes(2);
+      expect(mocks.step2).not.toHaveBeenCalled();
+    });
+
+    it.skipIf(skipTests.perStepLoop)('should pause after a loop once all its iterations ran', async () => {
+      const { workflow, mocks, resetMocks } = registry!['perstep-loop']!;
+      resetMocks?.();
+      const result = await execute(workflow, { count: 0 }, { perStep: true });
+
+      expect(result.status).toBe('paused');
+      expect(result.steps.increment).toMatchObject({ status: 'success', output: { count: 3 } });
+      expect(result.steps.after).toBeUndefined();
+      expect(mocks.increment).toHaveBeenCalledTimes(3);
+      expect(mocks.after).not.toHaveBeenCalled();
+    });
   });
 }

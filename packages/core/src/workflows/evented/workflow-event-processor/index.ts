@@ -3823,6 +3823,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           retryCount: retryCount + 1,
           state: currentState,
           outputOptions,
+          resumeData,
+          perStep,
         },
       });
     }
@@ -3878,6 +3880,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           requestContext,
           actor,
           retryCount,
+          perStep,
         },
         step,
         stepResult,
