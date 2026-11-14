@@ -1,5 +1,129 @@
 # @mastra/core
 
+## 1.84.0-alpha.1
+
+### Minor Changes
+
+- Added a workflow recovery loop. A default-engine workflow run whose instance crashed is now restarted without waiting for another instance to boot (#28712). ([#30281](https://github.com/mastra-ai/mastra/pull/30281))
+
+  `startWorkers()` starts the loop on an instance that runs the orchestration worker. Every `recovery.workflowScanIntervalMs` (60 seconds by default, give or take a fifth), it restarts the default-engine runs that stopped, by the same rule as `restartAllActiveWorkflowRuns()`. A crashed instance's run is restarted at the first pass after its lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`, 15 seconds by default) expired and `recovery.workflowGraceMs` passed, so within about one scan interval of that.
+
+  Instances that share a storage adapter elect one loop leader through a lease row in storage, and only the leader's loop lists runs. The leader keeps the role until its `stopWorkers()` or `shutdown()` hands it back, or its lease expires after a crash. The leader applies to the loop only: `restartAllActiveWorkflowRuns()` at boot still restarts each instance's own stopped default-engine runs. The loop recovers only the workflows the leader registers, and a run it restarts executes on the leader.
+
+  ```ts
+  const mastra = new Mastra({
+    recovery: { workflowScanIntervalMs: 30_000 },
+  });
+  ```
+
+  The loop never restarts evented runs, and doesn't run when `recovery.workflows` is `'off'` or on a storage adapter without run-ownership support. `restartAllActiveWorkflowRuns()` no longer schedules a check of its own for runs it found live or in their grace period; the loop looks at them again.
+
+- `restartAllActiveWorkflowRuns()` no longer restarts evented workflow runs that a broker recovers on its own, and restarts a default-engine run only once it stopped (#28712). ([#30279](https://github.com/mastra-ai/mastra/pull/30279))
+
+  **Evented runs on a broker.** With a pubsub whose broker redelivers a dead worker's unacked messages (Redis Streams, Valkey Streams, Google Cloud Pub/Sub), booting instances no longer restart evented runs. Before, every instance that booted restarted every active evented run, so steps ran again on several instances at once. Now the broker hands the stopped step's message to another worker, and the run goes on from there. Pubsub implementations report this through the new `redeliversUnacked` getter, which defaults to `false`.
+
+  With Redis or Valkey Streams, keep `reclaimIdleMs` at 30 seconds or more (the default is 60 seconds). A message reclaimed sooner can arrive while the dead worker's step fence is still held, and is then dropped as a duplicate.
+
+  Booting instances still restart these evented runs, each of them, as before:
+
+  - scheduled runs, whose events stay in the process that fired them
+  - runs on the default in-process `EventEmitterPubSub` or on the Unix socket pubsub. Several instances that share one storage aren't supported for evented workflows with these; use a broker.
+
+  **Known limits on a broker.** These evented runs stay `running` until you call `restart()` on them. Before, the next booting instance restarted them.
+
+  - A sleeping run whose instance exits, after a crash or during a normal deploy. The sleep's timer lives in that process.
+  - A run whose step message Redis or Valkey Streams trimmed. The streams trim to `maxStreamLength` entries (10,000 by default), pending ones included, so a step that is still running while that many newer events are published loses its message if its instance then exits. Raise `maxStreamLength` if you run long steps with a high event volume.
+  - A run whose message the broker dropped after `maxDeliveryAttempts` or `inFlightTimeoutMs`, a run whose failure couldn't be published after several attempts, and runs on a Redis instance that restarted without persistence.
+
+  **Default-engine runs.** A `running` or `waiting` run counts as stopped when no instance holds its run lease and neither the run nor that lease changed for `recovery.workflowGraceMs` (2 seconds by default). A run that stopped more recently is left to the workflow recovery loop that `startWorkers()` starts. Without run fencing in the store, every active run is still restarted, as before.
+
+  ```ts
+  const mastra = new Mastra({
+    recovery: { workflowGraceMs: 5_000 },
+  });
+  ```
+
+  Recovery is also faster when many runs are active: it lists runs without their step results and reads a run's snapshot only when it restarts it. With 3,000 active runs that another instance holds, among 30,000 finished runs, a call takes about 30 ms instead of 1.8 s on Postgres and 45 ms instead of 630 ms on LibSQL. A call made while another is still handing out restarts joins that call, and `shutdown()` waits, within `drainTimeout`, for a recovery call in progress and the runs it is restarting.
+
+  A default-engine nested run resumed directly now keeps its parent from being restarted while it runs. On stores without atomic status updates, it keeps itself from being restarted instead.
+
+- Added `agent.recoverResume()` to finish a tool approval or resume after the process handling it crashed, without asking for the decision again. Previously the approval or resume data only lived in the memory of that process, so a crash between approving and the tool running lost the answer and left the run stuck. The decision and the targeted tool call are now saved with the resume claim, and `recoverResume()` replays them once the claim is abandoned. Fixes #30285. ([#30330](https://github.com/mastra-ai/mastra/pull/30330))
+
+  ```typescript
+  // The process that called approveToolCall({ runId, toolCallId }) crashed.
+  const stream = await agent.recoverResume({ runId });
+  ```
+
+- Added `getRunOwnerships({ runIds })` to workflows storage (#28712). It returns the ownership records of many runs at once, in a `Map` keyed by run ID; runs without a stored record are left out. Stores without a batch query fall back to reading each run with `getRunOwnership()`, at most 8 at a time. ([#30274](https://github.com/mastra-ai/mastra/pull/30274))
+
+  ```ts
+  const workflows = await mastra.getStorage()?.getStore('workflows');
+  const owners = await workflows?.getRunOwnerships({ runIds: ['run-1', 'run-2'] });
+  owners?.get('run-1')?.live; // true while the run's lease hasn't expired
+  ```
+
+  The in-memory store now honors `summary: true` in `listWorkflowRuns()`: each run's snapshot comes back as only `status`, `timestamp` and, for nested runs, `parentWorkflow: { workflowId, runId }`.
+
+  ```ts
+  const { runs } = await workflows!.listWorkflowRuns({ workflowName: 'charge', status: 'running', summary: true });
+  runs[0]?.snapshot; // { status: 'running', timestamp: 1731456000000, parentWorkflow: { workflowId: 'order', runId: 'run-1' } }
+  ```
+
+  In the in-memory store, `updateWorkflowResults()`, `updateWorkflowState()` and `updateWorkflowRunHeader()` now move a run's `updatedAt`, as they do in the database adapters.
+
+### Patch Changes
+
+- Exclude uncheckpointed durable agent output when replaying a run after an ownership takeover, while retaining previously checkpointed steps. ([#28530](https://github.com/mastra-ai/mastra/pull/28530))
+
+- Fixed `DurableAgent.recover()` silently continuing a recovered run without its processors or memory. If processor or memory resolution fails during recovery, `recover()` now rejects with `DurableProcessorRebuildError` before calling the model. The run stays recoverable, so calling `recover()` again once the resolver works resumes it with guardrails and message persistence intact. ([#29153](https://github.com/mastra-ai/mastra/pull/29153))
+
+- Retries in `fetchWithRetry` now wait through the shared retry delay helper. Retry timing and abort behaviour are unchanged. ([#29100](https://github.com/mastra-ai/mastra/pull/29100))
+
+- Background task lease tests can now run with a lease shorter than 3 seconds through an internal test-only setting, so lease-expiry tests finish in milliseconds instead of seconds. The supported 3-second minimum lease and all default timings are unchanged. ([#29100](https://github.com/mastra-ai/mastra/pull/29100))
+
+- Fixed agents that resolve their model, instructions, or memory from request context failing to run when a signal wakes a thread whose claimed owner runs on another server. The caller's request context now travels with the wake, without the auth token, the signed-in user, or values that can't be sent as JSON, so the woken run resolves the same way it would locally. This covers background-task finish reports, schedules, and notifications delivered to a claimed owner. ([#29447](https://github.com/mastra-ai/mastra/pull/29447))
+
+  A claimed owner woken by a signal now always runs and saves on its own thread and resource, even when the caller's request context names another thread. When it has its own auth token, it also keeps its own signed-in user, roles, and permissions instead of taking the caller's.
+
+  Background-task finish reports are more reliable:
+
+  - A request context that a tool transformed with its `requestContextSchema` is passed to the woken run in its original input form, so the run no longer fails validation.
+  - When a suspended run's leftover lease briefly blocks the thread, the report waits for the lease to clear instead of being dropped.
+
+- Fixed processor workflows that use `ProcessorStepOutputSchema` dropping `providerMetadata` in the `outputStep` phase. `processOutputStep` in those workflows now receives the provider metadata, such as Bedrock guardrail traces. ([#30331](https://github.com/mastra-ai/mastra/pull/30331))
+
+- Channel agents now always reply when someone tags them in a public channel or thread. Messages that mention the bot are marked `mentioned="true"`, and the channel prompt tells the model to answer those, even with a short acknowledgement when the sender only says more details are coming. The stay-silent guidance now applies only to messages that don't mention the bot. ([#30277](https://github.com/mastra-ai/mastra/pull/30277))
+
+- Removed the 10 ms pause after every memory save. Saving messages no longer waits before the run continues. A new message stamped in the same millisecond as the stored answer before it now sorts after that answer instead of before it, so the next response no longer merges into the previous one. ([#29148](https://github.com/mastra-ai/mastra/pull/29148))
+
+  A queued message handed to a run on another process is no longer stuck when that run's lease disappears after this process stopped watching the thread; it now starts its own run.
+
+- Core's own unit tests can now shorten internal drain budgets, snapshot polls and the post-save pause in message history. Production behavior is unchanged. ([#29134](https://github.com/mastra-ai/mastra/pull/29134))
+
+- Fixed `DurableAgent.recover()`, `recoverActiveRuns()` and automatic recovery skipping the agent's `defaultOptions` `onFinish`, `onError` and `onAbort` callbacks. Recovered runs now call them like `stream()` does, and callbacks passed to `recover()` run after them. ([#30278](https://github.com/mastra-ai/mastra/pull/30278))
+
+- Fixed evented workflows running a step again when its event arrives after the step finished, for example a broker redelivery or a message that waited in a queue while `restart()` ran the step (#28712). The run now continues from the step's saved result, or ignores the event when the run is already past the step. A run whose instance stopped after a step finished but before the next step started also continues this way once the step's event is delivered again. A late `workflow.step.run` event for a step that already finished no longer fails the run after it uses up its delivery attempts. ([#30275](https://github.com/mastra-ai/mastra/pull/30275))
+
+  This needs a storage adapter with run-ownership support. Workflows with `autoRestartActiveRuns: false`, including durable agent workflows, and workflows whose `shouldPersistSnapshot` returns false for a running run, are unchanged.
+
+  If an evented workflow sets `pruneSnapshot`, keep each step result's `status`, `startedAt` and `endedAt`, a loop step's `metadata.iterationCount`, a foreach step's `suspendPayload.__workflow_meta.foreachOutput`, and the snapshot's `activePaths`. Without them, a late event can run its step a second time.
+
+- Fixed AgentController sessions pausing every tool call for approval and running a step's tool calls one at a time. Fixes #30131. ([#30151](https://github.com/mastra-ai/mastra/pull/30151))
+
+  - Calls to tools the session's permission rules allow no longer pause the run. Only calls that need approval wait on an approval prompt, and `deny` calls are still declined.
+  - Tool calls in one step run concurrently when none of them needs approval or can suspend. Durable agents still run them one at a time unless the session's `yolo` state is on.
+  - Answering `ask_user` no longer turns off approval for the rest of the run.
+  - On durable and evented agents, answering a suspended tool call from another thread now returns once the resumed run ends. It used to never return. Fixes #30150.
+  - Runs on a thread the session no longer has open use that thread's permission rules. `session.resolveToolApproval(toolName, scope)` accepts a run's `RequestContext` as `scope` for this.
+  - When a step runs its calls one at a time, a function `requireToolApproval` is evaluated for each call when it starts, so a rule changed by an earlier call or while the run waited for approval applies to the calls after it.
+  - A numeric `toolCallConcurrency` in an agent's `defaultOptions` is kept as the limit when a call passes `toolCallConcurrency` as an object, such as the `{ strategy: 'called' }` controller runs now use.
+
+  Allowed tools no longer emit `tool-call-approval` and `tool-call-resumed` chunks or store an approval on the tool part. Runs with `yolo` on already behaved this way.
+
+- Fixed background tasks with `timeoutMs: 0` being stopped right away as timed out. A timeout of `0` now means the task has no timeout, whether it is set on the tool, the agent, or the background task manager's `defaultTimeoutMs`. ([#30381](https://github.com/mastra-ai/mastra/pull/30381))
+
+  A background task whose tool throws its own `AbortError` is now reported as failed with the tool's error, and retried if retries are configured, instead of being marked as timed out.
+
 ## 1.84.0-alpha.0
 
 ### Minor Changes
