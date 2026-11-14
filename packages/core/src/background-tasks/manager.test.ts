@@ -765,6 +765,24 @@ describe('BackgroundTaskManager', () => {
         vi.useRealTimers();
       }
     });
+
+    it('reports a tool abort error as a failure, not a timeout', async () => {
+      const executeFn = vi.fn(async () => {
+        throw new DOMException('Upstream request aborted', 'AbortError');
+      });
+
+      const { task } = await manager.enqueue(
+        { toolName: 'fetch-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', timeoutMs: 0, runId: 'run-1' },
+        ctx(executeFn),
+      );
+
+      await vi.waitFor(async () =>
+        expect(await manager.getTask(task.id)).toMatchObject({
+          status: 'failed',
+          error: { message: 'Upstream request aborted' },
+        }),
+      );
+    });
   });
 
   describe('retry', () => {
