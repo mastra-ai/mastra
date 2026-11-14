@@ -849,6 +849,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
         // Shared processor states map for accessing persisted state
         processorStates,
@@ -1172,6 +1173,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         toolCallId,
         args: toolCallArgs,
         toolResultValue,
+        modelOutput,
         providerExecuted,
       };
 
@@ -1376,8 +1378,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 (streamParts ?? []).length,
               );
               let processorSpan = mutableState[spanKey] as
-                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
-                | undefined;
+                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
@@ -1644,6 +1645,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 toolCallId: toolCallId ?? '',
                 args: toolCallArgs,
                 result: toolResultValue,
+                modelOutput,
                 providerExecuted,
                 systemMessages: (systemMessages ?? []) as CoreMessage[],
                 steps: steps ?? [],

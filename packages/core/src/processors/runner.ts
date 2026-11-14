@@ -2627,6 +2627,7 @@ export class ProcessorRunner {
       toolCallId: string;
       toolArgs: unknown;
       result: unknown;
+      modelOutput?: unknown;
       providerExecuted?: boolean;
       requestContext?: RequestContext;
       retryCount?: number;
@@ -2642,6 +2643,7 @@ export class ProcessorRunner {
       toolCallId,
       toolArgs,
       result,
+      modelOutput,
       providerExecuted,
       requestContext,
       retryCount = 0,
@@ -2672,6 +2674,7 @@ export class ProcessorRunner {
             // Carry the tool return value via toolResultValue to avoid colliding
             // with the OutputResult `result` field used by outputResult phase.
             toolResultValue: result,
+            modelOutput,
             providerExecuted,
             systemMessages: currentSystemMessages,
             steps,
@@ -2735,6 +2738,7 @@ export class ProcessorRunner {
           toolCallId,
           args: toolArgs,
           result,
+          modelOutput,
           providerExecuted,
           systemMessages: currentSystemMessages,
           steps,

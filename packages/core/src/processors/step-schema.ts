@@ -91,10 +91,7 @@ export type ProcessorMessageType = {
  * In workflows, model configs may not yet be resolved, so we accept both resolved and unresolved types.
  */
 export type ProcessorStepModelConfig =
-  | LanguageModelV2
-  | ModelRouterModelId
-  | OpenAICompatibleConfig
-  | MastraLanguageModel;
+  LanguageModelV2 | ModelRouterModelId | OpenAICompatibleConfig | MastraLanguageModel;
 
 /**
  * Tools type for processor step schema.
@@ -224,6 +221,7 @@ export type ProcessorStepOutputType = {
   toolCallId?: string;
   args?: unknown;
   toolResultValue?: unknown;
+  modelOutput?: unknown;
   providerExecuted?: boolean;
   model?: MastraLanguageModel;
   tools?: ProcessorStepToolsConfig;
@@ -658,6 +656,10 @@ export const ProcessorToolResultPhaseSchema = z.object({
   toolCallId: z.string().describe('Unique identifier for this specific tool call'),
   args: z.unknown().optional().describe('Arguments the LLM passed to the tool'),
   result: z.unknown().optional().describe('Raw value returned by tool.execute() (already serialized)'),
+  modelOutput: z
+    .unknown()
+    .optional()
+    .describe("The tool's toModelOutput mapping of the result, which the next model call reads"),
   providerExecuted: z
     .boolean()
     .optional()
@@ -732,6 +734,7 @@ export const ProcessorStepOutputSchema: z.ZodType<ProcessorStepOutputType> = z.o
   toolCallId: z.string().optional(),
   args: z.unknown().optional(),
   toolResultValue: z.unknown().optional(),
+  modelOutput: z.unknown().optional(),
   providerExecuted: z.boolean().optional(),
 
   // Retry count

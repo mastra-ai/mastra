@@ -79,6 +79,86 @@ export async function computeModelOutputProviderMetadata(deps: {
   return Object.keys(providerMetadata).length > 0 ? providerMetadata : undefined;
 }
 
+/** The mapped `toModelOutput` value carried in `providerMetadata.mastra.modelOutput`, if any. */
+export function readModelOutput(providerMetadata: Record<string, unknown> | undefined): unknown {
+  return (providerMetadata as { mastra?: { modelOutput?: unknown } } | undefined)?.mastra?.modelOutput;
+}
+
+/**
+ * Resolve the model output after `processToolResult` ran.
+ *
+ * Processors rewrite a tool result by committing a `result`-state part through
+ * `messageList.updateToolInvocation`. That part may carry a replacement
+ * `providerMetadata.mastra.modelOutput` (e.g. resized or removed images); it
+ * then replaces the mapped output. A processor that only replaces the raw
+ * `result` gets it re-mapped through `toModelOutput`, so the model never sees
+ * the mapping of the value the processor replaced. Without either, the output
+ * mapped before the hook stands and `toModelOutput` is not called again.
+ */
+export async function resolveModelOutputAfterToolResultProcessors(deps: {
+  messageList: MessageList;
+  tool: { toModelOutput?: (output: unknown) => unknown } | undefined;
+  toolName: string;
+  toolCallId: string;
+  /** The result the processors were given. */
+  resultBeforeProcessors: unknown;
+  /** Metadata computed before the processors ran, including the mapped output. */
+  providerMetadata: Record<string, unknown> | undefined;
+  parentSpan?: ToolMappingParentSpan;
+}): Promise<Record<string, unknown> | undefined> {
+  const part = findCommittedToolInvocationPart(deps.messageList, deps.toolCallId);
+  if (!part) return deps.providerMetadata;
+
+  const processorMastra = (part.providerMetadata as { mastra?: Record<string, unknown> } | undefined)?.mastra;
+  const { mastra: previousMastra, ...otherNamespaces } = deps.providerMetadata ?? {};
+  const { modelOutput: _previous, ...mastraWithoutModelOutput } = (previousMastra as Record<string, unknown>) ?? {};
+  const withoutModelOutput: Record<string, unknown> = Object.keys(mastraWithoutModelOutput).length
+    ? { ...otherNamespaces, mastra: mastraWithoutModelOutput }
+    : otherNamespaces;
+
+  if (processorMastra && 'modelOutput' in processorMastra) {
+    const modelOutput = normalizeModelOutput(processorMastra.modelOutput);
+    if (modelOutput == null) {
+      // Cleared: the model reads the (processed) raw result. Drop the key from the
+      // part too, since the commit merges metadata and would otherwise keep it.
+      delete processorMastra.modelOutput;
+      return Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined;
+    }
+    return { ...withoutModelOutput, mastra: { ...mastraWithoutModelOutput, modelOutput } };
+  }
+
+  if (part.toolInvocation.result === deps.resultBeforeProcessors || !deps.tool?.toModelOutput) {
+    return deps.providerMetadata;
+  }
+
+  return computeModelOutputProviderMetadata({
+    tool: deps.tool,
+    toolName: deps.toolName,
+    toolCallId: deps.toolCallId,
+    result: part.toolInvocation.result,
+    existingProviderMetadata: Object.keys(withoutModelOutput).length ? withoutModelOutput : undefined,
+    parentSpan: deps.parentSpan,
+  });
+}
+
+function findCommittedToolInvocationPart(messageList: MessageList, toolCallId: string) {
+  const messages = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation.state === 'result'
+      ) {
+        return part as typeof part & { toolInvocation: { result?: unknown } };
+      }
+    }
+  }
+  return undefined;
+}
+
 /** Resolved terminal state for one tool call, as recorded to the transcript. */
 export type ToolResultCommitOutcome =
   | { kind: 'denied'; approval: { id: string; approved: false; reason?: string } }
