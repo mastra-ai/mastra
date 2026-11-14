@@ -40,6 +40,8 @@ export const CARD_RULE_FIELDS = [
   'source.provider',
   'source.repository',
   'item.pullRequest',
+  'item.hasPullRequest',
+  'item.hasIssue',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

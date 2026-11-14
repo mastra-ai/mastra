@@ -514,7 +514,8 @@ export const defaultGithubRules = Object.freeze({
   // comments on the issue don't run it again.
   issueEdited: null,
   issueClosed: issueClosed,
-  issueReopened: null,
+  // A reopened issue with no card is filed the way a new one is; one with a card goes to its routes.
+  issueReopened: context => (context.item ? undefined : issueOpened(context)),
   issueCommentCreated: null,
   issueCommentEdited: null,
   issueCommentDeleted: null,
@@ -525,6 +526,8 @@ export const defaultGithubRules = Object.freeze({
   pullRequestReviewSubmitted: pullRequestReviewSubmitted,
   pullRequestMerged: pullRequestMerged,
   pullRequestClosed: pullRequestClosed,
+  // A reopened pull request moves a card only where a route on its board names `pull_request.reopened`.
+  pullRequestReopened: null,
 } satisfies GithubEventRules);
 
 export function resolveGithubRules(overrides?: GithubRuleOverrides): GithubEventRules {

@@ -546,3 +546,29 @@ describe('Factory activity signal validation', () => {
     expect(() => validateFactoryRuleDecision(decision)).toThrow(FactoryRuleValidationError);
   });
 });
+
+describe('routeEvent decisions carrying what changed', () => {
+  const route = (event: unknown) => ({ type: 'routeEvent', idempotencyKey: 'delivery-1:event-route', event });
+
+  it('keeps an update event with its label and assignee changes', () => {
+    const decision = route({
+      type: 'work_item.updated',
+      labels: { added: ['ship'], removed: [] },
+      assignees: { added: [], removed: ['ada'] },
+    });
+    expect(validateFactoryRuleDecision(decision)).toEqual(decision);
+  });
+
+  it.each([
+    ['changes on an event that is not an update', { type: 'work_item.closed', labels: { added: ['x'], removed: [] } }],
+    ['a change that is not two lists', { type: 'work_item.updated', labels: { added: 'ship' } }],
+    ['a change with an extra field', { type: 'pull_request.updated', labels: { added: [], removed: [], kept: [] } }],
+    ['a blank name', { type: 'work_item.updated', assignees: { added: [' '], removed: [] } }],
+    [
+      'too many names',
+      { type: 'work_item.updated', labels: { added: Array.from({ length: 101 }, (_, i) => `l${i}`), removed: [] } },
+    ],
+  ])('refuses %s', (_name, event) => {
+    expect(() => validateFactoryRuleDecision(route(event))).toThrow(FactoryRuleValidationError);
+  });
+});

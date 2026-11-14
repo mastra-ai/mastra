@@ -19,7 +19,7 @@ function seededRoutes(): IntakeRouteInfo[] {
       phaseKey: route.target.phaseKey ?? null,
       joinClosedIssue: route.target.joinClosedIssue ?? false,
     },
-    on: [...(route.on ?? ['work_item.created'])],
+    on: [...(route.on ?? ['work_item.opened'])],
     revision: 1,
     createdBy: 'factory',
     createdAt: '2026-11-01T00:00:00.000Z',

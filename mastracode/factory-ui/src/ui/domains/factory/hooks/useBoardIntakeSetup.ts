@@ -76,7 +76,7 @@ export function useBoardIntakeSetup({
     (jiraEligible && boundToProject('jira', config?.jira.sourceIds)) ||
     (incidentioEligible && boundToProject('incidentio', config?.incidentio?.sourceIds));
   // A connected source files onto the default board, and onto another board only through an
-  // intake route that places its new cards there: enabled, run on `work_item.created`, and not
+  // intake route that places its new cards there: enabled, run on `work_item.opened`, and not
   // one that only joins a pull request to an existing card (the server's `resolveIntakeRoute`).
   const readsIntakeRoutes = !defaultBoard && sourceConnected;
   const intakeRoutesQuery = useIntakeRoutesQuery(readsIntakeRoutes ? factoryProjectId : undefined);
@@ -84,7 +84,7 @@ export function useBoardIntakeSetup({
   const routePlacesCardsHere = (intakeRoutesQuery.data?.intakeRoutes ?? []).some(
     route =>
       route.enabled &&
-      route.on.includes('work_item.created') &&
+      route.on.includes('work_item.opened') &&
       !route.target.joinClosedIssue &&
       route.target.boardKey === kind,
   );

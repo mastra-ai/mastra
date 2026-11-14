@@ -58,11 +58,11 @@ const ROUTE_FACT_PROPERTIES = {
 
 /**
  * The facts an intake route handling `on` can test. As the route API requires, event facts
- * apply only to a route handling an event besides `work_item.created`, and `event.reason` only
+ * apply only to a route handling an event besides `work_item.opened`, and `event.reason` only
  * to one handling `work_item.closed`, the one event that carries a reason.
  */
 export function intakeRouteFacts(on: readonly string[]): Facts {
-  if (on.every(type => type === 'work_item.created')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
+  if (on.every(type => type === 'work_item.opened')) return { type: 'object', properties: ROUTE_FACT_PROPERTIES };
   const event = {
     type: { type: 'string', title: 'Type' },
     ...(on.includes('work_item.closed') ? { reason: { type: 'string', title: 'Reason' } } : {}),
@@ -166,7 +166,7 @@ const FIELD_SHAPES: Record<string, FieldShape> = {
     label: 'Event',
     strict: true,
     options: [
-      { value: 'work_item.created', label: 'New card' },
+      { value: 'work_item.opened', label: 'New card' },
       { value: 'work_item.closed', label: 'Closed' },
       { value: 'work_item.reopened', label: 'Reopened' },
       { value: 'pull_request.opened', label: 'PR opened' },
@@ -226,7 +226,7 @@ const BOOLEAN_TEXT: Record<string, readonly [yes: string, no: string]> = {
 /** Values named after a product or a phase keep their capitals mid-sentence. */
 const PROPER_VALUES = new Set(['source.integration', 'source.provider', 'closedIssue.phase']);
 
-const EVERY_FACT = intakeRouteFacts(['work_item.created', 'work_item.closed']);
+const EVERY_FACT = intakeRouteFacts(['work_item.opened', 'work_item.closed']);
 
 function describeMember(member: RuleCondition | RuleGroup, fields: ReadonlyMap<string, FilterBarField>): string {
   if ('conditions' in member) return `(${describeMembers(member, fields)})`;

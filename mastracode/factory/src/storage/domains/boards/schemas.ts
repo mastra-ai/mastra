@@ -69,7 +69,7 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     // Null lands the card in the board's first phase.
     phase_key: { type: 'text', nullable: true },
     // The status events the route handles (`StatusEvent`s). Null on rows written before routes named
-    // events: those place new cards, as `['work_item.created']`.
+    // events: those place new cards, as `['work_item.opened']`.
     on_events: { type: 'json', nullable: true },
     // True files a pull request on the card of the issue it closes instead of a new card. Null on rows written before it.
     join_closed_issue: { type: 'boolean', nullable: true },

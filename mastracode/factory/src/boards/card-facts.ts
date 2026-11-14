@@ -3,7 +3,7 @@ import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { stringList, stringValue } from '../work-items/providers/metadata-keys.js';
-import { newestOpenPullRequestNumber } from './semantics.js';
+import { newestOpenPullRequestNumber, pullRequestSources } from './semantics.js';
 
 type WorkItemFacts = Pick<Card['workItem'], 'labels' | 'author'> &
   Partial<Pick<Card['workItem'], 'sources' | 'provider' | 'key' | 'state' | 'metadata'>>;
@@ -44,6 +44,11 @@ export function cardRuleFacts(
   const state = stored?.state ?? normalized?.state ?? null;
   const providerMetadata = stored?.metadata ?? normalized?.metadata ?? null;
   const repository = adapter?.repository?.({ key, metadata: providerMetadata }) ?? null;
+  const sources = item.workItem?.sources ?? [];
+  // A pull request linked to an issue: the card holds both a pull request and an issue source.
+  const linksIssue =
+    pullRequestSources({ workItem: item.workItem ?? null }).length > 0 &&
+    sources.some(entry => entry.sourceType !== 'pull-request');
   return {
     'item.labels': labels,
     'item.title': item.title,
@@ -54,6 +59,8 @@ export function cardRuleFacts(
     'author.trusted': authorTrusted(item.metadata),
     // The open change request: the one Factory opened for the card, else its own or an attached open one.
     ...(pullRequest !== null ? { 'item.pullRequest': pullRequest } : {}),
+    'item.hasPullRequest': pullRequest !== null,
+    'item.hasIssue': linksIssue,
     ...(source
       ? {
           'source.kind': source.type === 'pull-request' ? 'pull_request' : source.type,

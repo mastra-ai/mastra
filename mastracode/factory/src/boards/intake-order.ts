@@ -4,7 +4,7 @@ type OrderRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'on' | 'tar
 
 /** Whether the route can place a new card: enabled, handling arrivals, and not joining a closed issue's card. */
 export function placesArrivals(route: OrderRoute): boolean {
-  return route.enabled && route.on.includes('work_item.created') && !route.target.joinClosedIssue;
+  return route.enabled && route.on.includes('work_item.opened') && !route.target.joinClosedIssue;
 }
 
 /** Whether the board's intake list takes every new card that reaches it. */
