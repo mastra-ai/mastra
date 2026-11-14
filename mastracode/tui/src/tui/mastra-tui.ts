@@ -888,6 +888,10 @@ export class MastraTUI {
     // Render existing tasks if any
     await renderExistingTasks(this.state);
 
+    // The TUI can be stopped (e.g. Ctrl+C) while the thread renders; a stopped TUI
+    // must not take plugin errors from the manager or start update checks.
+    if (this.stopped) return;
+
     // Subscribed only once the thread is on screen, which would otherwise clear the
     // notices: errors reported earlier, such as a plugin signal provider failing to
     // start while Mastra Code boots, are held by the manager and handed over here.
