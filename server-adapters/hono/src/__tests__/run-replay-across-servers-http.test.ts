@@ -144,7 +144,7 @@ describe.each(['durable', 'evented'] as const)('finished run replay across serve
         await cache.set(
           `agent.durable.replay-owner.agent.${runId}`,
           { agentId: 'agent', runId, resourceId: 'alice', threadId: 'alice-thread' },
-          { ttlMs: 60_000 },
+          60_000,
         );
         for (const { mastra } of instances) {
           expect(await mastra.getAgent('agent').__getRunRecord(runId)).toBeUndefined();
