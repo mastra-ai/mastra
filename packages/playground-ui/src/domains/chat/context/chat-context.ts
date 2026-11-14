@@ -58,6 +58,8 @@ export interface AgentContextValue {
   agentId: string;
   agentVersionId?: string;
   requestContext?: Record<string, unknown>;
+  /** The chat's memory thread; absent before the first message creates it. */
+  threadId?: string;
 }
 
 // NOTE: Tool/network approvals are NOT exposed here. They live in a separate
@@ -80,3 +82,4 @@ export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendCo
 export const useChatModelContext = (): SendContextValue['setModelContext'] =>
   useContext(ChatSendContext).setModelContext;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;
+export const useChatThreadId = (): string | undefined => useContext(ChatAgentContext)?.threadId;

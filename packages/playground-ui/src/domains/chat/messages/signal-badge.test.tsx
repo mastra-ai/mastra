@@ -30,6 +30,15 @@ describe('SignalBadge', () => {
       expect(screen.getByText('Build failed on main')).not.toBeNull();
       expect(screen.getByText(/ci/)).not.toBeNull();
     });
+
+    it('keeps a background-process notice it cannot read as a plain notification', () => {
+      render(
+        <SignalBadge signal={{ type: 'notification', tagName: 'background-process', contents: 'Process exited' }} />,
+      );
+
+      expect(screen.getByRole('group', { name: 'Notification: Notification' })).not.toBeNull();
+      expect(screen.queryByRole('group', { name: /^Command finished/ })).toBeNull();
+    });
   });
 
   describe('when the signal is a state signal', () => {

@@ -1,5 +1,8 @@
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext, useMemo } from 'react';
+import { BackgroundCommandBadge } from '../background/background-command-badge';
+import { backgroundProcessPid } from '../background/background-process';
+import { useChatBackgroundWork } from '../background/use-chat-background-work';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
 import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
@@ -17,6 +20,7 @@ import {
   useChatModelContext,
   useChatRunning,
   useChatSend,
+  useChatThreadId,
 } from '@/domains/chat/context/chat-context';
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
@@ -90,6 +94,8 @@ export const ToolCardInner = ({
   readOnly = false,
 }: ToolCardProps) => {
   const { data: mcpAppTools } = useMcpAppTools();
+  const backgroundWork = useChatBackgroundWork();
+  const threadId = useChatThreadId();
   const send = useChatSend();
   const chatAgent = useContext(ChatAgentContext);
   const { isRunning } = useChatRunning();
@@ -278,6 +284,28 @@ export const ToolCardInner = ({
             status={status}
           />
         );
+      case 'background_command': {
+        const pid = backgroundProcessPid(toolName, input, output);
+        if (pid && backgroundWork && threadId) {
+          return (
+            <BackgroundCommandBadge
+              toolName={toolName}
+              toolCallId={toolCallId}
+              args={input}
+              result={output}
+              pid={pid}
+              dataParts={dataParts}
+              work={backgroundWork}
+              threadId={threadId}
+              toolApprovalMetadata={toolApprovalMetadata}
+              isNetwork={isNetwork}
+              isGenerateMode={metadata?.mode === 'generate'}
+            />
+          );
+        }
+        // Outside a chat that tracks its background work (Agent Builder, traces), it draws as the call it was.
+        // falls through
+      }
       case 'sandbox':
         return (
           <SandboxExecutionBadge

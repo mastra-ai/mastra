@@ -1,5 +1,7 @@
 import type { TaskItem } from '@mastra/core/signals';
 
+import { BackgroundFinishedNotice } from '../background/background-finished-notice';
+import { isBackgroundNotice } from '../background/background-notices';
 import { PinnedKnowledgeActivity } from '../knowledge/pinned-knowledge';
 import { pinnedKnowledgeFromSignal } from '../knowledge/pinned-knowledge-data';
 import { NotificationSignalNotice } from './notification-signal-notice';
@@ -71,7 +73,10 @@ export const SignalBadge = ({ signal: value, defaultOpen }: SignalBadgeProps) =>
     return <SignalActivity kind="state" label={state.id} mode={state.mode} message={text} defaultOpen={defaultOpen} />;
   }
 
-  if (value.type === 'notification') return <NotificationSignalNotice signal={value} defaultOpen={defaultOpen} />;
+  if (value.type === 'notification') {
+    if (isBackgroundNotice(value)) return <BackgroundFinishedNotice signal={value} defaultOpen={defaultOpen} />;
+    return <NotificationSignalNotice signal={value} defaultOpen={defaultOpen} />;
+  }
 
   if (value.type === 'reactive') {
     const skill = getSkillActivation(value, text);

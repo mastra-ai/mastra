@@ -1,3 +1,4 @@
+import { BackgroundTag } from '../../background/background-tag';
 import type { McpInputRequestPayload } from '../mcp-input-request';
 import { isDeferredCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
@@ -108,6 +109,7 @@ export const ToolBadge = ({
       detail={detail}
       description={description}
       status={status}
+      badges={deferred ? <BackgroundTag /> : undefined}
       extraInfo={
         metadata?.mode === 'network' ? (
           <NetworkChoiceMetadataDialogTrigger

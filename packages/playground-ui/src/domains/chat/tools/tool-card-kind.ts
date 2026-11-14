@@ -1,3 +1,4 @@
+import { backgroundProcessPid } from '../background/background-process';
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
@@ -26,6 +27,7 @@ export type ToolCardKind =
   | 'workflow'
   | 'file_tree'
   | 'sandbox'
+  | 'background_command'
   | 'code_mode'
   | 'mcp_app'
   | 'knowledge'
@@ -149,6 +151,7 @@ export function toolCardKind(
   if (isAgentCall(metadata, toolName)) return 'agent';
   if (isWorkflowCall(metadata, toolName)) return 'workflow';
   if (toolName === WORKSPACE_TOOLS.FILESYSTEM.LIST_FILES) return 'file_tree';
+  if (backgroundProcessPid(toolName, input, output)) return 'background_command';
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';

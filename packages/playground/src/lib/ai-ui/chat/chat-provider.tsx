@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
+import { BackgroundWorkProvider } from '@mastra/playground-ui/domains/chat/background/background-work-provider';
 import {
   ChatAgentContext,
   ChatMessagesContext,
@@ -349,8 +350,8 @@ export function ChatProvider({
   const sendValue = useMemo<SendContextValue>(() => ({ send, setModelContext }), [send, setModelContext]);
   const tasksValue = useMemo<TasksContextValue>(() => ({ tasks }), [tasks]);
   const agentValue = useMemo<AgentContextValue>(
-    () => ({ agentId, agentVersionId, requestContext }),
-    [agentId, agentVersionId, requestContext],
+    () => ({ agentId, agentVersionId, requestContext, threadId }),
+    [agentId, agentVersionId, requestContext, threadId],
   );
 
   return (
@@ -370,7 +371,7 @@ export function ChatProvider({
                 toolCallApprovals={toolCallApprovals}
                 networkToolCallApprovals={networkToolCallApprovals}
               >
-                {children}
+                <BackgroundWorkProvider messages={renderMessages}>{children}</BackgroundWorkProvider>
               </ToolCallProvider>
             </ChatSendContext.Provider>
           </ChatTasksContext.Provider>

@@ -8,8 +8,11 @@ import type { ToolCardContext, ToolCardKind } from './tool-card-kind';
 import { groupConsecutive } from '@/ds/components/ai/tool-call';
 import type { ConsecutiveGroups } from '@/ds/components/ai/tool-call';
 
-/** Cards that only draw: nothing in them waits on the reader. */
-const FOLDABLE_KINDS = new Set<ToolCardKind>(['plain', 'background', 'file_tree', 'sandbox', 'code_mode', 'knowledge']);
+/**
+ * Cards that only draw: nothing in them waits on the reader. Background work (`background`,
+ * `background_command`) keeps running after its call returned, so it never hides in a fold.
+ */
+const FOLDABLE_KINDS = new Set<ToolCardKind>(['plain', 'file_tree', 'sandbox', 'code_mode', 'knowledge']);
 
 export function foldsIntoGroup(part: ToolPart, context: ToolCardContext): boolean {
   const fields = readToolPart(part);
