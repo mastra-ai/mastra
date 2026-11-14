@@ -25,6 +25,7 @@ import {
   selectEventRule,
   withoutRouteEvent,
 } from '../../rules/event-rules.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
   FactoryGitLabRuleContext,
@@ -281,6 +282,11 @@ interface GitLabRulesOptions {
   configVersion: string;
   /** The code boards, or the per-project source so a project's stored boards run its cards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /**
+   * Tells which items intake turned away (Not routed). A label or assignee change to one of them
+   * runs intake again; without it, a change to an issue with no card does nothing.
+   */
+  notRouted?: NotRoutedLookup;
 }
 
 interface ProjectTarget {
@@ -423,6 +429,28 @@ export class GitLabRules {
           ),
         )
       : undefined;
+    // An issue intake turned away (Not routed) changed labels or assignees: run intake again.
+    const changes = object(parsed.payload.changes);
+    if (
+      event === 'issueUpdated' &&
+      !issueItem &&
+      issueSourceKey &&
+      (changes?.labels !== undefined || changes?.assignees !== undefined) &&
+      (await this.options.notRouted?.isNotRouted(
+        { orgId: target.target.orgId, factoryProjectId: target.target.factoryProjectId },
+        issueSourceKey,
+      ))
+    ) {
+      return this.#ingestProject(
+        { ...parsed, deliveryId: `${parsed.deliveryId}:intake` },
+        'issueOpened',
+        projectId,
+        projectPath,
+        host,
+        username,
+        target,
+      );
+    }
     const reviewItem = mergeRequestKey
       ? own(
           items.find(

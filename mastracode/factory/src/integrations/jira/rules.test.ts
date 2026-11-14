@@ -137,6 +137,21 @@ describe('JiraRules', () => {
     expect((await cardsFor(project.id))[0]?.id).not.toBe(held?.id);
   });
 
+  it('runs intake again on each change a sync sees to an item with no card, as intake turned it away', async () => {
+    const { project, service, workItems } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    // Nothing changed since: no second look.
+    await ingest(issue);
+    await ingest({ ...issue, assignee: 'bob', updatedAt: '2026-07-03T00:00:00Z' });
+
+    const intakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      record => record.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(intakes).toHaveLength(2);
+  });
+
   it("hands an assignee change a later sync sees to the card's routes as one work_item.updated event", async () => {
     const { project, service, workItems, drain, cardsFor } = await setup();
     const ingest = (observed: typeof issue) =>

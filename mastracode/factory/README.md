@@ -993,12 +993,12 @@ A deployment that answers an event itself keeps routes out of it: a handler or `
 `work_item.updated` and `pull_request.updated` fire only when an item's labels or assignees change; title, body and draft edits never do. They carry what changed in `event.labels.added`, `event.labels.removed`, `event.assignees.added` and `event.assignees.removed`, so "move to Ship when `ship` is added" is `event.labels.added contains ship`. A pull or merge request that is the card's own source reports `work_item.updated`; one attached to an issue card reports `pull_request.updated`.
 
 - An update moves a card whatever its phase, like `synchronized`; use `card.phase` to move only from one phase.
-- Changes Factory itself makes (the card's own session, through the Factory app) while the card's run is in flight are held and evaluated once when the run ends, as one combined update. "After Triage labels it, move it" works without racing the agent.
+- Changes Factory itself makes (the card's own session, through the Factory app) while the card's run is in flight are held and evaluated once when the run ends, as one combined update. "After Triage labels it, move it" works without racing the agent. The dispatcher checks for the run end about every 10 seconds, so a held update lands within about 10 seconds of the run ending.
 - Changes from people and other sources don't wait for a run. Several changes to one item within about 5 seconds are combined into one update first, so "immediate" means no run wait, about 5 seconds.
 - A combined update carries the net change: adding `bug` and removing it again is no change, and nothing fires.
 - An update never cancels a close or reopen, nor is cancelled by one.
-- A rule moving a card changes the card, not the source, so it never produces an update.
-- Items with no card don't run intake on update. Intake on update for items intake turned away (Not routed) is wired but stays off until Not routed records exist.
+- A rule moving a card changes the card, not the source, so it never produces an update. Factory's own status labels (`status: needs approval`, `status: auto-triaged`) are bookkeeping in the same way: adding or removing them never counts as a change, whoever does it.
+- An update to an item with no card runs intake only when intake turned the item away (Not routed). GitHub and GitLab ask a Not routed lookup, and do nothing until one is connected to the Not routed records. Linear, Jira and incident.io already run intake for an item with no card on every sync that sees it change.
 
 | Provider    | `work_item.updated`                                                          | `pull_request.updated` | Held for the card's run                       |
 | ----------- | ---------------------------------------------------------------------------- | ---------------------- | --------------------------------------------- |

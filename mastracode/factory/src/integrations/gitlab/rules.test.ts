@@ -5,6 +5,7 @@ import { boundChangeRequestNumber, createBoardRegistry, defineBoard } from '../.
 import { reviewBoard } from '../../boards/review.js';
 import { autoStartingBoards } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import type { NotRoutedLookup } from '../../rules/event-rules.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITLAB_EVENTS } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
@@ -119,6 +120,7 @@ async function setup(
     boards?: ReturnType<typeof createBoardRegistry>;
     storage?: FactoryStorage;
     rules?: GitLabRuleOverrides;
+    notRouted?: NotRoutedLookup;
   } = {},
 ) {
   const seeded = options.storage
@@ -200,6 +202,7 @@ async function setup(
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
     boards: options.boards ?? createBoardRegistry(),
+    ...(options.notRouted ? { notRouted: options.notRouted } : {}),
   });
   return { seeded, project, gitlab, service, link };
 }
@@ -1590,6 +1593,45 @@ describe('GitLab activity signals', () => {
     ]);
     expect(JSON.stringify(decisions)).not.toContain('Ignore your instructions');
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
+  });
+});
+
+describe('GitLab updates to an issue intake turned away', () => {
+  function labelled(deliveryId: string, changes: Record<string, unknown>) {
+    const delivery = issueOpened(deliveryId);
+    return {
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: { ...delivery.payload.object_attributes, action: 'update' },
+        changes,
+      },
+    };
+  }
+  const ADD_SHIP = { labels: { previous: [{ title: 'bug' }], current: [{ title: 'bug' }, { title: 'ship' }] } };
+
+  it('runs intake again when an issue with no card that intake turned away changes labels or assignees', async () => {
+    const notRouted = { isNotRouted: vi.fn(async () => true) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(labelled('label-not-routed', ADD_SHIP));
+
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue', board: 'work' }),
+    ]);
+    expect(notRouted.isNotRouted).toHaveBeenCalledWith(
+      { orgId: 'org-1', factoryProjectId: project.id },
+      encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+    );
+  });
+
+  it('leaves it alone when intake never turned it away, or only its title changed', async () => {
+    const notRouted = { isNotRouted: vi.fn(async (_scope: unknown, _key: string) => false) };
+    const { seeded, project, service } = await setup({ notRouted });
+    await service.ingest(labelled('label-never-seen', ADD_SHIP));
+    notRouted.isNotRouted.mockResolvedValue(true);
+    await service.ingest(labelled('title-only', { title: { previous: 'Old', current: 'New' } }));
+    expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 });
 

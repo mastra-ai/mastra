@@ -11,6 +11,7 @@ import {
   PICKER_RULE_FIELDS,
   routeEventsProblem,
   STATUS_EVENTS,
+  updateEventFacts,
 } from './board-events.js';
 
 const when = (field: string, operator = 'contains', value: unknown = 'ship') =>
@@ -131,5 +132,16 @@ describe('combineChanges', () => {
 
   it('nets a removal of a label that was there before', () => {
     expect(combineChanges([{ added: [], removed: ['wip'] }])).toEqual({ added: [], removed: ['wip'] });
+  });
+
+  it('leaves out the labels Factory manages itself: they are bookkeeping, not a change', () => {
+    expect(
+      updateEventFacts('work_item.updated', {
+        labels: { added: ['Status: Auto-Triaged', 'ship'], removed: ['status: needs approval'] },
+      }),
+    ).toEqual({ type: 'work_item.updated', labels: { added: ['ship'], removed: [] } });
+    expect(
+      updateEventFacts('work_item.updated', { labels: { added: [], removed: ['status: needs approval'] } }),
+    ).toBeUndefined();
   });
 });

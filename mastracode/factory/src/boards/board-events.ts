@@ -1,5 +1,6 @@
 import type { RuleGroup } from '../rules/rule-group.js';
 import { CARD_RULE_FIELDS } from '../rules/rule-group.js';
+import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../rules/types.js';
 
 /**
  * What happened to a card's source, named the same for every provider. Integrations map their
@@ -86,13 +87,27 @@ export function isUpdateEvent(type: string): type is UpdateEvent {
 }
 
 /**
+ * Labels Factory sets and clears itself to track triage and acceptance. Like a rule's own move,
+ * changing them is bookkeeping, so they never count as a change, whoever made it.
+ */
+const FACTORY_MANAGED_LABELS = new Set([NEEDS_APPROVAL_LABEL, AUTO_TRIAGED_LABEL]);
+
+function withoutManagedLabels(change: ItemChange | undefined): ItemChange | undefined {
+  if (!change) return undefined;
+  const kept = (names: readonly string[]) => names.filter(name => !FACTORY_MANAGED_LABELS.has(name.toLowerCase()));
+  return { added: kept(change.added), removed: kept(change.removed) };
+}
+
+/**
  * The update event for a change of labels and assignees, or undefined when nothing changed: an
- * item that reports "changed" without a label or assignee difference produces no event.
+ * item that reports "changed" without a label or assignee difference produces no event, and
+ * neither does a change to only the labels Factory manages.
  */
 export function updateEventFacts(
   type: UpdateEvent,
-  change: { labels?: ItemChange; assignees?: ItemChange },
+  { assignees, ...rest }: { labels?: ItemChange; assignees?: ItemChange },
 ): BoardEventFacts | undefined {
+  const change = { labels: withoutManagedLabels(rest.labels), assignees };
   if (!changed(change.labels) && !changed(change.assignees)) return undefined;
   return {
     type,

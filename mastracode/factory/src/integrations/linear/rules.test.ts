@@ -96,6 +96,26 @@ describe('LinearRules', () => {
     });
   });
 
+  it('runs intake again on each change a sync sees to an issue with no card, as intake turned it away', async () => {
+    const { project, service, workItems } = await setup();
+    const scope = { orgId: 'org-1', factoryProjectId: project.id };
+    const sync = (updatedAt: string, labels: string[]) =>
+      service.ingest({ ...scope, userId: 'user-1', issues: [{ ...issue, labels, updatedAt }] });
+
+    await sync('2026-07-02T00:00:00Z', ['bug']);
+    // Nothing changed since: no second look.
+    await sync('2026-07-02T00:00:00Z', ['bug']);
+    await sync('2026-07-03T00:00:00Z', ['bug', 'ship']);
+
+    const intakes = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      record => record.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(intakes.map(record => (record.decision as { metadata?: { labels?: unknown } }).metadata?.labels)).toEqual([
+      ['bug'],
+      ['bug', 'ship'],
+    ]);
+  });
+
   it("moves a card by its work_item.updated route when a later sync sees a label added, once", async () => {
     const boards = createBoardRegistry();
     const { project, service, workItems, storedBoards } = await setup(undefined, boards);

@@ -4132,23 +4132,51 @@ describe('GithubRules issue labels', () => {
   it("marks a label change Factory made itself as the card's own session's, so it waits for the run", async () => {
     const { service, workItems, project } = await setupRoutes();
     const item = await createLinkedIssue(workItems, project.id);
-    const byFactory = issueLabels('unlabeled', [], 'factory-unlabel');
     await workItems.update({
       orgId: 'org-1',
       id: item.id,
       userId: 'user-1',
       patch: { metadata: { labels: ['status: needs approval'] } },
     });
+    // Triage labels the issue: one real label, and its own status bookkeeping.
+    const byFactory = issueLabels('labeled', ['bug', 'status: auto-triaged'], 'factory-label');
     (byFactory.payload.sender as Record<string, unknown>).login = 'factory-app[bot]';
     await service.ingest(byFactory);
 
-    const [update] = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
+    const updates = (await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id })).filter(
       entry => entry.decision.type === 'routeEvent',
     );
-    expect(update?.decision).toMatchObject({
-      fromCardSession: true,
-      event: { type: 'work_item.updated', labels: { added: [], removed: ['status: needs approval'] } },
+    expect(updates.map(entry => entry.decision)).toEqual([
+      expect.objectContaining({
+        fromCardSession: true,
+        event: { type: 'work_item.updated', labels: { added: ['bug'], removed: [] } },
+      }),
+    ]);
+  });
+
+  it("never reports a change to the labels Factory manages itself, as with a rule's own move", async () => {
+    const { service, workItems, project } = await setupRoutes();
+    const item = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { labels: ['bug', 'status: needs approval'] } },
     });
+    // A person accepts the card; Factory clears its approval label on GitHub.
+    const accepted = issueLabels('unlabeled', ['bug'], 'acceptance-unlabel');
+    (accepted.payload.sender as Record<string, unknown>).login = 'factory-app[bot]';
+    await service.ingest(accepted);
+    // Someone re-adds Factory's own status label by hand: still bookkeeping, not a change.
+    await service.ingest(issueLabels('labeled', ['bug', 'Status: Auto-Triaged'], 'manual-status'));
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id, { workItemId: item.id });
+    expect(decisions.filter(entry => entry.decision.type === 'routeEvent')).toEqual([]);
+    // The card still records the labels as they are.
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.workItem.labels).toEqual([
+      'bug',
+      'Status: Auto-Triaged',
+    ]);
   });
 
   function pullRequestChanged(action: string, deliveryId: string, extra: Record<string, unknown>) {
