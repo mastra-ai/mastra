@@ -64,6 +64,46 @@ describe('durable stream adapter suspension ordering', () => {
     },
   );
 
+  it('allows an open-stream suspension callback to await resumed output after settlement', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'resume-from-suspension-callback';
+    const order: string[] = [];
+    let callbackFinished = false;
+    const stream = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      closeOnSuspend: false,
+      onTerminalEvent: async status => {
+        order.push(status);
+      },
+      onSuspended: async () => {
+        expect(order).toEqual(['suspended']);
+        await emitChunkEvent(pubsub, runId, {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: 'resumed', text: 'Resumed.' },
+        });
+        await emitFinishEvent(pubsub, runId, { output: { text: 'Resumed.' }, stepResult: { reason: 'stop' } } as any);
+        expect(await stream.output.text).toBe('Resumed.');
+        callbackFinished = true;
+      },
+    });
+    const text = stream.output.text;
+    await stream.ready;
+    try {
+      await emitSuspendedEvent(pubsub, runId, suspendedData);
+      await expect.poll(() => callbackFinished, { timeout: 1_000 }).toBe(true);
+      expect(await text).toBe('Resumed.');
+      expect(order).toEqual(['suspended', 'finished']);
+    } finally {
+      stream.cleanup();
+      await pubsub.close();
+    }
+  });
+
   it('holds resumed deliveries behind the owning reader’s pending suspension settlement', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'pending-suspension-settlement';

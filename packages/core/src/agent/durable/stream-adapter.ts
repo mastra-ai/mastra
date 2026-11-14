@@ -1011,6 +1011,13 @@ export function createDurableAgentStream<OUTPUT = undefined>(
               safeClose(controller);
             }
           } else {
+            // Settlement must precede resumed events, but a callback may await those events itself.
+            if (releaseSettlement) {
+              terminalSettlement = undefined;
+              releaseSettlement();
+              releaseSettlement = undefined;
+              armIdleTimer();
+            }
             await onSuspended?.(data);
           }
           break;
