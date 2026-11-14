@@ -1809,17 +1809,6 @@ export class Agent<
     return false;
   }
 
-  /** Whether this class executes through the plain Agent publisher. @internal */
-  protected __ownsPlainStreamPublisher(): boolean {
-    return true;
-  }
-
-  // Sharing transport does not opt durable execution into plain run records or abort checks.
-  #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
-    return this.__getStreamBus();
-  }
-
   /**
    * Whether runs of this agent can be followed from another reader with
    * `observe()` (or the server's observe route): true when its runs publish
@@ -1862,7 +1851,8 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
     // A resume may still find its own finishing publisher here: the suspension is
@@ -1886,7 +1876,8 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
-    const bus = this.#ownStreamBus();
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
       pubsub: bus.pubsub,
@@ -1926,7 +1917,7 @@ export class Agent<
       const { resourceId, threadId } = local;
       return { agentId: this.id, runId, resourceId, threadId, status: 'running', updatedAt: Date.now() };
     }
-    const bus = this.#ownStreamBus();
+    const bus = this.__getStreamBus();
     if (!bus) return undefined;
     return readAgentRunRecord(bus.runRecordCache, this.id, runId);
   }
@@ -1947,7 +1938,9 @@ export class Agent<
    * topic. Best-effort: a failed publish is logged, and a request nobody hears
    * is a no-op, like aborting a finished run.
    */
-  async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
+  protected async requestRemoteAbort(runId: string): Promise<void> {
+    const bus = this.__getStreamBus();
+    if (!bus) return;
     try {
       await publishAbortRequest(bus.pubsub, runId);
     } catch (error) {
@@ -10664,17 +10657,16 @@ export class Agent<
   }
 
   abortRunStream(runId: string): boolean {
-    const aborted = this.#abortLocalRun(runId);
+    const aborted = this.__abortLocalRun(runId);
     if (aborted) return true;
     // A published run may be executing in another process; it listens on its
     // control topic.
-    const bus = this.#ownStreamBus();
-    if (bus) void this.#requestStreamAbort(bus, runId);
+    void this.requestRemoteAbort(runId);
     return false;
   }
 
   /** Abort `runId` if this process executes it or holds it parked. */
-  #abortLocalRun(runId: string): boolean {
+  protected __abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
@@ -10693,8 +10685,8 @@ export class Agent<
    * @internal Used by the server's run abort route.
    */
   async __abortRunAcknowledged(runId: string): Promise<boolean> {
-    if (this.#abortLocalRun(runId)) return true;
-    const bus = this.#ownStreamBus();
+    if (this.__abortLocalRun(runId)) return true;
+    const bus = this.__getStreamBus();
     if (!bus) return false;
     return requestAcknowledgedAbort(bus.pubsub, runId);
   }
@@ -12689,7 +12681,7 @@ export class Agent<
       cleanup: detach,
       detach,
       abort: async () => {
-        await this.#requestStreamAbort(bus, runId);
+        await this.requestRemoteAbort(runId);
       },
     };
   }

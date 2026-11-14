@@ -8,6 +8,8 @@ import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
+import { Agent } from '../agent';
+import { AGENT_STREAM_TOPIC } from '../streams/constants';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -21,14 +23,17 @@ import {
   EXECUTION_UNVERIFIED_ERROR_ID,
   ExecutionFence,
   executionLeaseKey,
+  fencePubSub,
   getExecutionClaim,
   getRunFence,
   isExecutionFenceError,
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
+import { ExecutionOwnershipGuard } from './execution-ownership-guard';
+import { getExecutionStreamPublisher, withExecutionStreamPublisher } from './execution-stream-publisher';
 import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
-import type { RunRegistryEntry } from './run-registry';
+import type { RunRegistryEntry } from './types';
 
 const agentId = 'agent-1';
 const key = (runId: string) => executionLeaseKey(agentId, runId);
@@ -40,6 +45,117 @@ function claim(leaseProvider: LeaseProvider, runId: string, mode: 'acquire' | 't
 afterEach(() => {
   __resetExecutionFencesForTests();
   vi.useRealTimers();
+});
+
+describe('execution publisher transport boundaries (COR-1560)', () => {
+  it.each([false, true])('keeps the same step guard across publisher nesting (lost=%s)', async lost => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const options = { runId, agentId, mastra, claim: fence.claim };
+    const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+    const guard = new ExecutionOwnershipGuard({
+      observe: async () => {},
+      details: { runId, agentId, executionId: fence.executionId },
+      subscribe: () => () => {},
+    });
+    const received: string[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      received.push(event.type);
+    });
+    await pubsub.subscribe('other-topic', event => {
+      received.push(event.type);
+    });
+    const step = fencePubSub(withExecutionStreamPublisher(pubsub, options), guard);
+    const nested = withExecutionStreamPublisher(step, options);
+    const checks = vi.spyOn(guard, 'isLost');
+    const publications = vi.spyOn(publisher, 'publishEvent');
+    try {
+      if (lost) await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+      expect(guard.isLost()).toBe(lost);
+      expect(fence.isLost()).toBe(false);
+      expect(await pubsub.getLeaseOwner(key(runId))).toBe(fence.executionId);
+      checks.mockClear();
+      await nested.publish(AGENT_STREAM_TOPIC(runId), { type: 'iteration-start', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start']);
+      expect(publications).toHaveBeenCalledTimes(1);
+      expect(checks).toHaveBeenCalledTimes(1);
+      await nested.publish('other-topic', { type: 'other', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start', 'other']);
+      // The fallback path must still delegate through the original fence.
+      const fallback = withExecutionStreamPublisher(step, { runId: `${runId}-fallback`, agentId });
+      await pubsub.subscribe(AGENT_STREAM_TOPIC(`${runId}-fallback`), event => {
+        received.push(event.type);
+      });
+      await fallback.publish(AGENT_STREAM_TOPIC(`${runId}-fallback`), { type: 'fallback', runId, data: {} });
+      expect(received).toEqual(lost ? [] : ['iteration-start', 'other', 'fallback']);
+      expect(checks).toHaveBeenCalledTimes(3);
+    } finally {
+      guard.dispose();
+      await publisher.detach();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
+
+  it('keeps one ordered queue when a step wrapper appears after producer creation', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = crypto.randomUUID();
+    const fence = await claim(pubsub, runId);
+    const agent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'Answer.',
+      model: 'openai/gpt-4o-mini',
+      durable: true,
+    });
+    const mastra = new Mastra({ agents: { agent }, pubsub, logger: false });
+    const options = { runId, agentId, mastra, claim: fence.claim };
+    const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+    const received: string[] = [];
+    const ownerEvents: string[] = [];
+    const stepEvents: string[] = [];
+    const stepTransport = new EventEmitterPubSub();
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      ownerEvents.push(event.type);
+      received.push(event.type);
+    });
+    await stepTransport.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      stepEvents.push(event.type);
+      received.push(event.type);
+    });
+    const guard = new ExecutionOwnershipGuard({
+      observe: async () => {},
+      details: { runId, agentId, executionId: fence.executionId },
+      subscribe: () => () => {},
+    });
+    try {
+      const before = publisher.publishEvent({ type: 'before-wrapper', runId, data: {} }, pubsub);
+      const step = withExecutionStreamPublisher(
+        fencePubSub(withExecutionStreamPublisher(stepTransport, options), guard),
+        options,
+      );
+      const after = step.publish(AGENT_STREAM_TOPIC(runId), { type: 'after-wrapper', runId, data: {} });
+      const finish = step.publish(AGENT_STREAM_TOPIC(runId), { type: 'finish', runId, data: {} });
+      await Promise.all([before, after, finish]);
+      await publisher.detach();
+      expect(received).toEqual(['before-wrapper', 'after-wrapper', 'finish']);
+      expect(ownerEvents).toEqual(['before-wrapper']);
+      expect(stepEvents).toEqual(['after-wrapper', 'finish']);
+    } finally {
+      guard.dispose();
+      await publisher.detach();
+      deleteRunRegistryEntry(runId, mastra);
+    }
+  });
 });
 
 describe('ExecutionFence.claim', () => {

@@ -11,11 +11,7 @@ import { AGENT_CONTROL_TOPIC } from '../../streams/constants';
 import { writeAgentRunRecord } from '../../streams/run-records';
 import { createDurableAgent } from '../create-durable-agent';
 
-/**
- * DurableAgent publishes on its own stream bus. The plain Agent publisher and
- * its bus must stay absent for it, otherwise the inherited abort path sends a
- * second abort request and run records are read from the plain bus's cache.
- */
+/** Count requests on the shared control topic so aborts are not delivered twice. */
 function countControlPublishes(pubsub: PubSub, runId: string): () => number {
   let count = 0;
   const publish = pubsub.publish.bind(pubsub);
@@ -46,7 +42,7 @@ function setup() {
   return { pubsub, serverCache, durableAgent: mastra.getAgent('durableAgent'), mastra };
 }
 
-describe('DurableAgent never uses the plain Agent stream publisher', () => {
+describe('DurableAgent shares the run publisher transport and records', () => {
   const mastras: Mastra[] = [];
   afterEach(async () => {
     await Promise.all(mastras.splice(0).map(m => m.shutdown?.()));
@@ -64,7 +60,7 @@ describe('DurableAgent never uses the plain Agent stream publisher', () => {
     expect(published()).toBe(1);
   });
 
-  it('does not read run records from a plain-bus cache', async () => {
+  it('reads shared run ownership records for cross-server authorization', async () => {
     const { durableAgent, mastra } = setup();
     mastras.push(mastra);
     const runId = 'recorded-run';
@@ -76,7 +72,13 @@ describe('DurableAgent never uses the plain Agent stream publisher', () => {
       updatedAt: Date.now(),
     });
 
-    await expect(durableAgent.__getRunRecord(runId)).resolves.toBeUndefined();
+    await expect(durableAgent.__getRunRecord(runId)).resolves.toMatchObject({
+      agentId: durableAgent.id,
+      runId,
+      resourceId: 'someone',
+      status: 'running',
+    });
+    await expect(durableAgent.__getReplayOwner(runId)).resolves.toEqual({ resourceId: 'someone' });
   });
 
   it('exposes only its own singly wrapped bus', () => {

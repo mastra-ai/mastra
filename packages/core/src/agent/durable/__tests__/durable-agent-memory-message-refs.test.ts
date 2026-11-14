@@ -278,7 +278,7 @@ async function collectText(stream: { fullStream: AsyncIterable<any> }) {
 
 describe('memory-recalled messages in durable runs', () => {
   it('persists recalled messages as refs in workflow state and restores them for every model call', async () => {
-    const { durableAgent, workflows, prompts } = await startProcess(history());
+    const { durableAgent, workflows, prompts, storage } = await startProcess(history());
     const persisted: SnapshotRow[] = [];
     const persist = workflows.persistWorkflowSnapshot.bind(workflows);
     workflows.persistWorkflowSnapshot = async args => {
@@ -289,10 +289,29 @@ describe('memory-recalled messages in durable runs', () => {
     const result = await durableAgent.stream('Look it up', { memory: memoryOption });
     expect(await collectText(result)).toBe('done');
 
+    const memoryStore = (await storage.getStore('memory'))!;
+    await vi.waitFor(async () => {
+      const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+      expect(messages.filter(message => !allHistoryIds.includes(message.id)).map(message => message.role)).toEqual([
+        'user',
+        'assistant',
+      ]);
+    });
+    const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
+    const saved = messages.filter(message => !allHistoryIds.includes(message.id));
+    expect(JSON.stringify(saved[0]!.content)).toContain('Look it up');
+    expect(JSON.stringify(saved[1]!.content)).toContain('done');
+    const expectedIds = [...allHistoryIds, ...saved.map(message => message.id)].sort();
+    await vi.waitFor(() => {
+      expect(refIds(persisted.at(-1)?.snapshot).sort()).toEqual(expectedIds);
+    });
+
     const withTranscript = persisted.filter(row => (row.snapshot.value as any)?.messageListState);
     expect(withTranscript.length).toBeGreaterThan(0);
     for (const row of withTranscript) {
-      expect(refIds(row.snapshot)).toEqual(allHistoryIds);
+      const refs = refIds(row.snapshot);
+      expect(refs.filter((id: string) => allHistoryIds.includes(id))).toEqual(allHistoryIds);
+      for (const id of refs) expect(expectedIds).toContain(id);
       expect(JSON.stringify(row.snapshot.value)).not.toContain(historyText(0));
     }
 

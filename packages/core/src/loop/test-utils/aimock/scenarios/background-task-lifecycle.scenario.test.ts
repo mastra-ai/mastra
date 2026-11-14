@@ -1406,13 +1406,50 @@ describeForAllEngines(
       }
       await waitFor(storedText(memory, thread), s => s.includes('Both research tasks are finished.'));
 
-      // One signal per task: the first wakes the thread, the second joins that run or the one after it.
-      const notified = (r: { body: unknown }, id: string) =>
-        JSON.stringify((r.body as any).messages).includes(`Background task ${id} `);
+      const toolCallIds = chunks!
+        .filter(c => c.type === 'background-task-started')
+        .map(c => c.payload.toolCallId as string);
+      expect(new Set(toolCallIds)).toEqual(new Set(['call-bg-1', 'call-bg-2']));
+      const completedEntries = taskIds.map((id, index) => `${toolCallIds[index]} (research), background task ${id}`);
+      const completionDirectives = [[0], [1], [0, 1], [1, 0]].map(indices => ({
+        indices,
+        content:
+          'IMPORTANT: These tool calls ran as background tasks. Their authoritative results may now look like ordinary tool results after reconciliation; do not reinterpret them as foreground calls. ' +
+          `IMPORTANT: The following tool-call IDs completed successfully: ${indices.map(index => completedEntries[index]).join(', ')}. ` +
+          'Their results are now in the conversation. Do not call the same tool again — the result is already available.',
+      }));
+      // A completion can wake a new run or continue one still finishing. Both must
+      // identify the completed task and tool call, not merely include its result.
+      const reportsFor = (request: { body: unknown }, index: number): Array<{ isSystem: boolean; content: string }> =>
+        ((request.body as any).messages ?? []).flatMap((message: any) => {
+          if (
+            message.role === 'user' &&
+            typeof message.content === 'string' &&
+            message.content.startsWith(
+              `<background-task status="completed" taskId="${taskIds[index]}" toolCallId="${toolCallIds[index]}" toolName="research">Background task ${taskIds[index]} for tool call ${toolCallIds[index]} (research) has completed.`,
+            )
+          ) {
+            return [{ isSystem: false, content: message.content }];
+          }
+          return message.role === 'system' &&
+            completionDirectives.some(
+              directive => directive.indices.includes(index) && directive.content === message.content,
+            )
+            ? [{ isSystem: true, content: message.content }]
+            : [];
+        });
       const followUps = await waitFor(
         async () => requestsFor(llm, prompt).slice(2),
-        rs => taskIds.every(id => rs.some(r => notified(r, id))),
+        rs => taskIds.every((_, index) => rs.some(request => reportsFor(request, index).length > 0)),
       );
+      for (const [index] of taskIds.entries()) {
+        const reports = followUps.flatMap(request => reportsFor(request, index));
+        // Only persisted user notices may recur in later request histories.
+        const userNotices = new Set(reports.filter(report => !report.isSystem).map(report => report.content));
+        const directives = reports.filter(report => report.isSystem);
+        expect(userNotices.size + directives.length).toBe(1);
+        for (const request of followUps) expect(reportsFor(request, index).length).toBeLessThanOrEqual(1);
+      }
       expect(followUps.length).toBeGreaterThanOrEqual(1);
       expect(followUps.length).toBeLessThanOrEqual(2);
       const lastToolResults = ((followUps.at(-1)!.body as any).messages as any[])
