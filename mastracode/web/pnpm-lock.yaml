@@ -14,7 +14,7 @@ overrides:
   yaml@>=2.0.0 <2.9.1: 2.9.1
   source-map-js@>=1.0.0 <1.2.2: 1.2.2
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.79
 
 importers:
 

@@ -27,6 +27,6 @@ overrides:
   'yargs@<18.1.0': 18.2.0
   # Vanta 2026-10-15: AIKIDO-2026-526145 (@ai-sdk/provider-utils) fixed 4.0.52 / 5.0.37; mirror root floors
   '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.79
   # provider-utils 4.0.56 pulls undici ^6; mirror root undici floor
   'undici@<8.12.4': 8.12.4
