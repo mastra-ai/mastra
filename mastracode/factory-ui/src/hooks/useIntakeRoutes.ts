@@ -9,7 +9,7 @@ function routesPath(factoryProjectId: string, suffix = '') {
   return `/web/factory/projects/${encodeURIComponent(factoryProjectId)}/intake-routes${suffix}`;
 }
 
-async function sendRouteRequest<T>(
+export async function sendRouteRequest<T>(
   baseUrl: string,
   path: string,
   init?: { method: 'POST' | 'PATCH' | 'DELETE'; body?: unknown },
