@@ -2366,6 +2366,20 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (row?.result as Record<string, unknown> | undefined) ?? null;
   }
 
+  async listRecordedIngress(
+    orgId: string,
+    factoryProjectId: string,
+    identities: readonly string[],
+  ): Promise<Set<string>> {
+    if (identities.length === 0) return new Set();
+    const rows = await this.#db.findMany<GovernanceDbRow>('factory_rule_ingress', {
+      org_id: orgId,
+      factory_project_id: factoryProjectId,
+      identity: { in: [...new Set(identities)] },
+    });
+    return new Set(rows.map(row => String(row.identity)));
+  }
+
   async commitTransition(input: CommitFactoryTransitionInput): Promise<CommitFactoryTransitionResult> {
     const commit = (): Promise<CommitFactoryTransitionResult> =>
       this.#withTransaction<CommitFactoryTransitionResult>(async ops => {
