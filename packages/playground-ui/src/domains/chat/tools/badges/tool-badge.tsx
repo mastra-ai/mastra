@@ -92,7 +92,6 @@ export const ToolBadge = ({
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
       ? metadata.backgroundTasks[toolCallId]
       : undefined;
-  const bgStarted = Boolean(bgEntry?.taskId && bgEntry?.startedAt);
 
   return (
     <ToolApprovalBadge
@@ -117,7 +116,7 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : mcpTask || bgStarted ? (
+        ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
           <>
             {mcpTask &&
               (backgroundTaskId ? (

@@ -15,7 +15,7 @@ export interface BackgroundWorkRowProps {
   detail?: string;
   /** Epoch milliseconds the work started on the server; the elapsed time is hidden without it. */
   startedAt?: number;
-  /** A control that stops the work; tasks have none, they are listed read-only. */
+  /** Control that stops the work; omitted for work that can't be stopped. */
   stop?: ReactNode;
   /** The expanded body, mounted only while the row is open. */
   children: ReactNode;
@@ -37,7 +37,8 @@ export function BackgroundWorkRow({ icon, label, detail, startedAt, stop, childr
           </ActivityTrigger>
           <ActivityTrailing className="gap-1 pr-1">
             {startedAt !== undefined && <RunningFor startedAt={startedAt} />}
-            {stop}
+            {/* Holds the stop button's place so elapsed times line up across rows. */}
+            {stop ?? <span aria-hidden className="size-control-sm shrink-0" />}
           </ActivityTrailing>
         </div>
         <ActivityContent>{children}</ActivityContent>

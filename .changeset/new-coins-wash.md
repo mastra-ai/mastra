@@ -17,7 +17,7 @@ const workspace = new Workspace({
   sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
   tools: {
     [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
-      backgroundProcesses: { notifyAgent: true, abortSignal: null },
+      backgroundProcesses: { notifyAgent: true },
     },
   },
 });

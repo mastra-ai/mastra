@@ -124,7 +124,7 @@ interface ProcessExit {
 }
 
 /** What core sends the thread when a background process exits, with `backgroundProcesses.notifyAgent` on. */
-export const exitNoticeSignal = ({ pid, exitCode, command, toolCallId = DEV_SERVER_CALL_ID }: ProcessExit) => ({
+const exitNoticeSignal = ({ pid, exitCode, command, toolCallId = DEV_SERVER_CALL_ID }: ProcessExit) => ({
   type: 'notification' as const,
   tagName: 'background-process',
   contents: [

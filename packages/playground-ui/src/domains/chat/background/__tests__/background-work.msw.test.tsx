@@ -283,9 +283,11 @@ describe('a deferred call in the chat', () => {
       );
 
       const row = await screen.findByRole('group', { name: 'Reports slow report' });
-      fireEvent.click(within(row).getByRole('button', { name: /Reports slow report/ }));
+      // Read-only: the row's only button opens it.
+      const [trigger, ...others] = within(row).getAllByRole('button');
+      expect(others).toHaveLength(0);
+      fireEvent.click(trigger);
       expect(await within(row).findByText('Pulled Q3 revenue')).not.toBeNull();
-      expect(within(row).queryByRole('button', { name: 'Cancel task' })).toBeNull();
     });
   });
 
