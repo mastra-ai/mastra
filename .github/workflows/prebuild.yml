@@ -418,9 +418,9 @@ jobs:
 
       # The performance benchmarks (src/performance-testing) each run one long test against a
       # Docker store; they take most of this job's time, so PRs skip them and the twice-daily
-      # alpha cron (a workflow_call on main) runs them.
+      # alpha cron (a workflow_call on main) runs them, on 2 workers to stay within memory (#13937).
       - name: Run Memory tests
-        run: pnpm vitest run ${{ github.event_name == 'pull_request' && '--exclude "src/performance-testing/**"' || '' }}
+        run: pnpm vitest run ${{ github.event_name == 'pull_request' && '--exclude "src/performance-testing/**"' || '--maxWorkers=2' }}
         working-directory: packages/memory/integration-tests
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
