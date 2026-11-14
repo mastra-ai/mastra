@@ -258,6 +258,144 @@ const intakeRouteAgainResponseSchema = z.object({
   phaseKey: z.string(),
   routeId: z.string(),
 });
+/** A board's rules as edited, not saved yet: they stand in for all of that board's rules. */
+const intakeDraftBoardSchema = z
+  .object({
+    boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH),
+    routes: z
+      .array(
+        z
+          .object({
+            /** The saved rule this edits, so its counts line up; omitted for a new rule. */
+            id: uuidSchema.optional(),
+            name: intakeRouteFields.name,
+            enabled: intakeRouteFields.enabled.default(true),
+            when: intakeRouteFields.when.default(null),
+            target: z
+              .object({ phaseKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH).nullable().optional() })
+              .strict(),
+            on: intakeRouteFields.on.optional(),
+          })
+          .strict(),
+      )
+      .max(MAX_INTAKE_ROUTES_PER_BOARD),
+  })
+  .strict();
+const intakeDraftFields = {
+  /** Unsaved rules, board by board; boards not named run their saved rules. */
+  boards: z
+    .array(intakeDraftBoardSchema)
+    .max(MAX_PROJECT_INTAKE_ROUTES)
+    .refine(boards => new Set(boards.map(board => board.boardKey)).size === boards.length, {
+      message: 'Each board may appear only once.',
+    })
+    .optional(),
+  /** An unsaved intake order; omitted, the saved one. */
+  order: intakeOrderBodySchema.shape.boardKeys.optional(),
+};
+export const intakeDryRunBodySchema = z.object(intakeDraftFields).strict();
+const intakePlacementSchema = z.object({ boardKey: z.string(), routeId: z.string(), phase: z.string() });
+const intakeKeysByBoardSchema = z.array(z.object({ boardKey: z.string(), keys: z.array(z.string()) }));
+const intakeDryRunResponseSchema = z.object({
+  /** How many of the project's newest items (at most 200) were decided, from their stored facts. */
+  sampled: z.number().int(),
+  /** Every board in intake order, with what it and each of its rules would take. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      /** Keys of the items the board would take. */
+      takes: z.array(z.string()),
+      /** Items its rules matched that another board took first, by that board. */
+      lostTo: intakeKeysByBoardSchema,
+      rules: z.array(
+        z.object({
+          /** A rule not saved yet reads `draft:<boardKey>:<index>`. */
+          routeId: z.string(),
+          name: z.string().nullable(),
+          enabled: z.boolean(),
+          takes: z.array(z.string()),
+          /** Items it matched but an earlier rule took, by the board that took them. */
+          lost: intakeKeysByBoardSchema,
+          /** Cards it actually filed in the last 30 days. */
+          filed: z.number().int(),
+        }),
+      ),
+    }),
+  ),
+  /** Keys of the items no board would take. */
+  notRouted: z.array(z.string()),
+  /** With unsaved rules or order: how many items land somewhere other than the saved ones put them. */
+  changed: z.number().int().optional(),
+  items: z.array(
+    z.object({
+      key: z.string(),
+      /** The card's id, or the Not routed decision's. */
+      id: z.string(),
+      kind: z.enum(['card', 'not_routed']),
+      title: z.string(),
+      url: z.string().nullable(),
+      placement: intakePlacementSchema.nullable(),
+      /** Every rule that matched and could take it, in the order intake asked them; the first won. */
+      matched: z.array(z.object({ boardKey: z.string(), routeId: z.string() })),
+      /** With unsaved rules or order: where the saved ones put it. */
+      before: intakePlacementSchema.nullable().optional(),
+    }),
+  ),
+  /** Whether the caller may run unsaved rules or order. */
+  canEdit: z.boolean(),
+});
+export const intakeTestBodySchema = z
+  .object({
+    ...intakeDraftFields,
+    /** An issue or pull request URL; one the Factory has never seen is fetched once, read-only, from a linked source. */
+    url: z.string().trim().url().max(2000).optional(),
+    /** A recent item: a card's id, or a Not routed decision's. */
+    itemId: uuidSchema.optional(),
+  })
+  .strict()
+  .refine(body => (body.url === undefined) !== (body.itemId === undefined), {
+    message: 'Send either a url or an itemId.',
+  });
+const failedConditionSchema = z.object({
+  field: z.string(),
+  operator: z.string(),
+  value: z.unknown().optional(),
+  /** The item's value for the field; null when it has none. */
+  actual: z.unknown(),
+});
+const intakeTestResponseSchema = z.object({
+  item: z.object({
+    title: z.string(),
+    url: z.string().nullable(),
+    /** `card` and `not_routed` are items the Factory has; `fetched` was read from its provider for this test. */
+    kind: z.enum(['card', 'not_routed', 'fetched']),
+    id: z.string().nullable(),
+  }),
+  placement: intakePlacementSchema.nullable(),
+  /** Why no board takes it. */
+  reason: z.string().nullable(),
+  /** Every board in intake order and every placing rule on it, with what it answered. */
+  boards: z.array(
+    z.object({
+      boardKey: z.string(),
+      name: z.string(),
+      rules: z.array(
+        z.object({
+          routeId: z.string(),
+          name: z.string().nullable(),
+          phase: z.string(),
+          /** `took` decides; `lost` matched after the rule that took it; `phase_refuses` matched but its phase can't hold the item. */
+          outcome: z.enum(['took', 'lost', 'no_match', 'phase_refuses', 'disabled']),
+          /** With `no_match`: the conditions it failed on. */
+          failed: z.array(failedConditionSchema).optional(),
+          /** With `lost`: the rule that took it. */
+          to: z.object({ boardKey: z.string(), routeId: z.string() }).optional(),
+        }),
+      ),
+    }),
+  ),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -1381,6 +1519,23 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Run intake again for an item no board took, filing it where the rules now say',
     pathSchema: intakeDecisionPathSchema,
     responseSchema: intakeRouteAgainResponseSchema,
+  },
+  intakeDryRun: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/dry-run',
+    description:
+      "Run a Factory project's intake rules, saved or unsaved, over its newest 200 items without filing anything",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeDryRunBodySchema,
+    responseSchema: intakeDryRunResponseSchema,
+  },
+  intakeTest: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake/test',
+    description: 'Show where intake would file one item, and what every rule answered, without filing it',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeTestBodySchema,
+    responseSchema: intakeTestResponseSchema,
   },
   workItemList: {
     method: 'GET',

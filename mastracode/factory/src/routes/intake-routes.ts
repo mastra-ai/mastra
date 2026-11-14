@@ -15,6 +15,7 @@ import type { z } from 'zod';
 import { DEFAULT_ROUTE_EVENTS } from '../boards/board-events.js';
 
 import type { StatusEvent } from '../boards/board-events.js';
+import type { IntakeItemLookup } from '../boards/intake-lookup.js';
 import {
   arrivalRuleFacts,
   compareIntakeOrder,
@@ -38,6 +39,7 @@ import type {
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import { IntakeCheck, IntakeCheckRefusal, isDraft } from './intake-check.js';
 import type { RouteDependencies } from './route.js';
 import { loose, Route } from './route.js';
 
@@ -56,6 +58,8 @@ export interface IntakeRouteRoutesDeps extends RouteDependencies {
   intakeEvaluator?: IntakeEvaluator;
   /** The rule set a Route again commits under. */
   configVersion?: string;
+  /** Providers the tester can read an unseen item from by URL. */
+  intakeLookups?: readonly IntakeItemLookup[];
 }
 
 type LinkedDecision = Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
@@ -320,6 +324,9 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
           return await handle(context);
         } catch (error) {
           if (error instanceof Refusal) return context.json(error.body, error.status);
+          if (error instanceof IntakeCheckRefusal) {
+            return context.json({ error: error.code, message: error.message }, error.status);
+          }
           if (error instanceof StoredBoardError) {
             return context.json(
               { error: error.code, message: error.message },
@@ -338,10 +345,33 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     });
   }
 
+  /** Members read the saved rules; running a draft of them needs the right to edit them. */
+  async #check<T extends { boards?: unknown; order?: unknown }>(c: Context, schema: z.ZodType<T>) {
+    const scope = await this.#resolve(c);
+    const body = await this.#body(c, schema);
+    if (isDraft(body)) await this.#requireAdmin(c, scope);
+    const check = new IntakeCheck({
+      storage: this.deps.storage,
+      workItems: this.deps.workItems,
+      ...(this.deps.intakeLookups && { lookups: this.deps.intakeLookups }),
+    });
+    return { scope, body, check, registry: await this.#registry(scope) };
+  }
+
   routes(): ApiRoute[] {
     const { storage } = this.deps;
     const contracts = FACTORY_ROUTE_CONTRACTS;
     return [
+      this.#route(contracts.intakeDryRun, async c => {
+        const { scope, body, check, registry } = await this.#check(c, contracts.intakeDryRun.bodySchema);
+        return c.json({ ...(await check.dryRun(scope, registry, body)), canEdit: await this.#canEdit(c, scope) });
+      }),
+
+      this.#route(contracts.intakeTest, async c => {
+        const { scope, body, check, registry } = await this.#check(c, contracts.intakeTest.bodySchema);
+        return c.json(await check.test(scope, registry, body));
+      }),
+
       this.#route(contracts.intakeRouteList, async c => {
         const scope = await this.#resolve(c);
         const query = contracts.intakeRouteList.querySchema.safeParse({ boardKey: c.req.query('boardKey') });
