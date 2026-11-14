@@ -15,7 +15,8 @@
 import type { PubSub } from '../../events';
 import { isMastraTimeoutError, MastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
-import { subscribeToAbortRequests } from '../streams/abort-transport';
+import { createAgentStreamPublisher } from '../streams/publisher';
+import type { AgentStreamPublisher } from '../streams/publisher';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
@@ -70,15 +71,21 @@ export async function ensureRemoteAbortListener(
   // would otherwise both pass the check and install duplicate subscriptions.
   entry.remoteAbortListenerInstalled = true;
 
-  let unsubscribe: () => Promise<void>;
+  let publisher: AgentStreamPublisher | undefined;
   try {
-    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
-      const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
-      if (controller && !controller.signal.aborted) {
-        controller.abort(new Error('Aborted'));
-      }
+    publisher = createAgentStreamPublisher({
+      pubsub,
+      runId,
+      cleanupTimeoutMs: 0,
+      role: 'producer',
+      onAbortRequested: () => {
+        const controller = getRunRegistryEntry(runId, mastra)?.abortController ?? entry.abortController;
+        if (controller && !controller.signal.aborted) controller.abort(new Error('Aborted'));
+      },
     });
+    await publisher.ready;
   } catch (error) {
+    await publisher?.detach();
     // Release the claim so the next step in this run can retry. Leaving it set
     // would make the run permanently deaf to remote aborts after one transient
     // pubsub failure.
@@ -94,7 +101,7 @@ export async function ensureRemoteAbortListener(
     try {
       previousCleanup?.();
     } finally {
-      void unsubscribe();
+      void publisher.detach();
     }
   };
 }

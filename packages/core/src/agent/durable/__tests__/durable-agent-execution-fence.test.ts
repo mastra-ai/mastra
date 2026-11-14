@@ -52,6 +52,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { getDurableStreamPublisher } from '../stream-publisher';
 import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
@@ -434,6 +435,235 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         }
       },
     );
+
+    it('finishes the owning reader record while its verified execution releases ownership (COR-1560)', async () => {
+      const storage = createStorage(backend);
+      const model = gatedModel('released answer');
+      const durableAgent = buildAgent({
+        model: model.model,
+        storage,
+        cache: new InMemoryServerCache(),
+        cleanupTimeoutMs: 0,
+      });
+      const runId = `release-window-${backend}`;
+      const released = gate();
+      const completeRelease = gate();
+      const publish = pubsub.publish.bind(pubsub);
+      let deliverTerminal: (() => Promise<void>) | undefined;
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+          deliverTerminal = () => publish(topic, event);
+          return;
+        }
+        return publish(topic, event);
+      });
+      if (backend === 'storage') {
+        const workflows = storage.stores.workflows!;
+        const release = workflows.releaseRunOwnership.bind(workflows);
+        vi.spyOn(workflows, 'releaseRunOwnership').mockImplementation(async args => {
+          const result = await release(args);
+          if (args.runId === runId) {
+            released.open();
+            await completeRelease.opened;
+          }
+          return result;
+        });
+      } else {
+        const leases = resolveLeaseProvider(pubsub);
+        const release = leases.releaseLease.bind(leases);
+        vi.spyOn(leases, 'releaseLease').mockImplementation(async (...args) => {
+          const result = await release(...args);
+          if (args[0] === executionLeaseKey(durableAgent.id, runId)) {
+            released.open();
+            await completeRelease.opened;
+          }
+          return result;
+        });
+      }
+      const result = await durableAgent.stream('Answer me.', { runId });
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const stream = collect(result.fullStream);
+      try {
+        model.release();
+        await released.opened;
+        expect(deliverTerminal).toBeDefined();
+        await deliverTerminal!();
+        await vi.waitFor(async () =>
+          expect(await durableAgent.__getRunRecord(runId)).toMatchObject({ status: 'finished' }),
+        );
+        expect(fence.isLost()).toBe(false);
+        completeRelease.open();
+        await fence.whenSettled;
+        expect(fence.settlement).toBe('owned');
+      } finally {
+        completeRelease.open();
+        await stream.stop();
+        result.cleanup();
+      }
+    });
+
+    it.each(['takeover', 'unverified'])(
+      'a held terminal preserves shared state and only completes a nonsuperseded reader when ownership is %s (COR-1560)',
+      async ownership => {
+        const storage = createStorage(backend);
+        const model = gatedModel('old answer');
+        const agent = createDurableAgent({
+          agent: new Agent({
+            id: 'released-reader-agent',
+            name: 'Released reader',
+            instructions: 'Answer.',
+            model: model.model,
+          }),
+          pubsub,
+          cache: new InMemoryServerCache(),
+          cleanupTimeoutMs: 0,
+        });
+        const mastra = new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+        const runId = `released-reader-${backend}`;
+        const publish = pubsub.publish.bind(pubsub);
+        const subscribe = pubsub.subscribe.bind(pubsub);
+        let terminalDelivery: Promise<void> | undefined;
+        vi.spyOn(pubsub, 'subscribe').mockImplementation((topic, callback, options) =>
+          subscribe(
+            topic,
+            (event, ack, nack) => {
+              const delivery = Promise.resolve(callback(event, ack, nack));
+              if (topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH) {
+                terminalDelivery = delivery;
+              }
+              return delivery;
+            },
+            options,
+          ),
+        );
+        let terminal: Parameters<typeof pubsub.publish> | undefined;
+        vi.spyOn(pubsub, 'publish').mockImplementation(async (...args) => {
+          if (args[0] === AGENT_STREAM_TOPIC(runId) && args[1].type === AgentStreamEventTypes.FINISH) {
+            terminal = args;
+            return;
+          }
+          return publish(...args);
+        });
+        const onFinish = vi.fn();
+        const scheduleCleanup = vi.spyOn(agent.__getStreamBus(), 'scheduleCleanup');
+        const clearTopic = vi.spyOn(pubsub, 'clearTopic');
+        const result = await agent.stream('Answer me.', { runId, onFinish });
+        const stream = collect(result.fullStream);
+        const fence = ExecutionFence.getLocalActive(runId)!;
+        const foreign = foreignOwnership(backend, storage, pubsub);
+        const originalPublisher = getDurableStreamPublisher({
+          runId,
+          agentId: agent.id,
+          mastra,
+          claim: fence.claim,
+          role: 'lifecycle',
+        })!;
+        try {
+          await model.entered;
+          model.release();
+          await fence.whenSettled;
+          expect(fence.settlement).toBe('owned');
+          expect(terminal).toBeDefined();
+          if (ownership === 'takeover') {
+            await foreign.hold(agent.id, runId, 'replacement-reader');
+            const record =
+              backend === 'storage'
+                ? await storage.stores.workflows!.getRunOwnership({ agentId: agent.id, runId })
+                : undefined;
+            const replacement = getDurableStreamPublisher({
+              runId,
+              agentId: agent.id,
+              mastra,
+              role: 'lifecycle',
+              claim: { executionId: 'replacement-reader', agentId: agent.id, generation: record?.generation },
+            })!;
+            await replacement.ready;
+          }
+          const expected = await agent.__getRunRecord(runId);
+          expect(expected).toMatchObject({
+            status: 'running',
+            publisherId: ownership === 'takeover' ? 'replacement-reader' : fence.executionId,
+          });
+          if (ownership === 'unverified') {
+            const unavailable = new Error('ownership backend unavailable');
+            const check =
+              backend === 'storage'
+                ? vi.spyOn(storage.stores.workflows!, 'getRunOwnership')
+                : vi.spyOn(resolveLeaseProvider(pubsub), 'getLeaseOwner');
+            check.mockRejectedValueOnce(unavailable).mockRejectedValueOnce(unavailable);
+          }
+          await publish(...terminal!);
+          expect(terminalDelivery).toBeDefined();
+          await terminalDelivery;
+          expect(await agent.__getRunRecord(runId)).toEqual(expected);
+          if (ownership === 'unverified') {
+            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+            expect(onFinish).toHaveBeenCalledOnce();
+            expect(onFinish.mock.calls[0]![0].text).toBe('old answer');
+            expect(scheduleCleanup).not.toHaveBeenCalled();
+            expect(clearTopic).not.toHaveBeenCalled();
+            expect(agent.__getRunOwner(runId)).toBeDefined();
+            result.cleanup();
+            await originalPublisher.detach();
+            expect(agent.__getRunOwner(runId)).toBeUndefined();
+            expect(globalRunRegistry.get(runId)).toBeUndefined();
+            expect(await agent.__getRunRecord(runId)).toEqual(expected);
+            expect(clearTopic).not.toHaveBeenCalled();
+          } else {
+            expect(stream.chunks.some(chunk => chunk.type === 'finish')).toBe(false);
+            expect(onFinish).not.toHaveBeenCalled();
+            result.cleanup();
+            await originalPublisher.detach();
+            expect(await agent.__getRunRecord(runId)).toEqual(expected);
+          }
+        } finally {
+          model.release();
+          await stream.stop();
+          result.cleanup();
+          if (ownership === 'takeover') await foreign.free(agent.id, runId, 'replacement-reader');
+        }
+      },
+    );
+
+    it('a reader cannot finish the shared record after another execution takes its generation (COR-1560)', async () => {
+      const storage = createStorage(backend);
+      const model = gatedModel('stale answer');
+      const agent = createDurableAgent({
+        agent: new Agent({
+          id: 'reader-fence-agent',
+          name: 'Reader fence',
+          instructions: 'Answer.',
+          model: model.model,
+        }),
+        pubsub,
+        cache: new InMemoryServerCache(),
+        cleanupTimeoutMs: 0,
+      });
+      const mastra = new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+      const runId = `reader-generation-${backend}`;
+      const result = await agent.stream('Answer me.', { runId });
+      const stream = collect(result.fullStream);
+      const fence = ExecutionFence.getLocalActive(runId)!;
+      const publisher = getDurableStreamPublisher({
+        runId,
+        agentId: agent.id,
+        mastra,
+        claim: fence.claim,
+        role: 'lifecycle',
+      })!;
+      try {
+        await model.entered;
+        await publisher.ready;
+        await foreignOwnership(backend, storage, pubsub).takeOver(fence, 'new-reader-owner');
+        await expect(publisher.settle('finished')).rejects.toMatchObject({ id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'running', publisherId: fence.executionId });
+      } finally {
+        model.release();
+        await stream.stop();
+        result.cleanup();
+        await foreignOwnership(backend, storage, pubsub).free(agent.id, runId, 'new-reader-owner');
+      }
+    });
 
     it('a superseded execution does not overwrite the recovered answer, delete snapshots, or publish a terminal event', async () => {
       const storage = createStorage(backend);
@@ -1532,7 +1762,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The recovery's own cleanup still finds its state, and clears it.
         recovered.cleanup();
         expect(globalRunRegistry.get(runId)).toBeUndefined();
-        expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+        await vi.waitFor(() => expect(clearTopic).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId)));
       },
     );
 

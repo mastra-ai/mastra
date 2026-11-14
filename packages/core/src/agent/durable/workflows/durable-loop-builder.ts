@@ -35,6 +35,7 @@ import {
 } from '../execution-fence';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
+import { withDurableStreamPublisher } from '../stream-publisher';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -310,9 +311,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const mastra = predicateParams.mastra as Mastra | undefined;
     const runId = state.runId ?? initData.runId;
     const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+    const agentId = state.agentId ?? initData.agentId;
+    const pubsub = predicateParams[PUBSUB_SYMBOL] as PubSub | undefined;
     return {
       runId,
-      agentId: state.agentId ?? initData.agentId,
+      agentId,
       agentName: state.agentName ?? initData.agentName,
       threadId: initData?.state?.threadId,
       resourceId: initData?.state?.resourceId,
@@ -325,7 +328,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       // runId is pre-bound at registry-entry creation; scope defaults to
       // 'pending' in the underlying stream runtime.
       drainPendingSignals: registryEntry?.drainPendingSignals,
-      pubsub: predicateParams[PUBSUB_SYMBOL] as PubSub | undefined,
+      pubsub:
+        pubsub &&
+        withDurableStreamPublisher(pubsub, {
+          runId,
+          agentId,
+          mastra,
+          claim: getExecutionClaim(predicateParams.requestContext, runId),
+        }),
     };
   }
 
@@ -1095,7 +1105,15 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const state = inputData as IterationState;
             const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
-            const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+            const runPubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+            const pubsub =
+              runPubsub &&
+              withDurableStreamPublisher(runPubsub, {
+                runId: state.runId,
+                agentId: state.agentId,
+                mastra,
+                claim: getExecutionClaim(requestContext, state.runId),
+              });
             const logger = mastra?.getLogger?.();
 
             const storedSteps = readAccumulatedSteps(params.state, state);

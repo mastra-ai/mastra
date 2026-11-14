@@ -1,11 +1,132 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { ChunkFrom } from '../../../stream/types';
+import { AGENT_STREAM_TOPIC } from '../../streams/constants';
 import { createDurableAgentStream, emitChunkEvent, emitFinishEvent, emitSuspendedEvent } from '../stream-adapter';
 import type { DurableAgentStreamResult } from '../stream-adapter';
 
 const suspendedData = { toolCallId: 'call-1', toolName: 'askTool', suspendPayload: {} } as any;
 
 describe('durable stream adapter suspension ordering', () => {
+  it.each(['finish', 'error'])(
+    'settles concurrent %s deliveries once after an asynchronous generation check',
+    async type => {
+      const pubsub = new EventEmitterPubSub();
+      const runId = `duplicate-${type}`;
+      let release!: () => void;
+      const generation = new Promise<number>(resolve => {
+        release = () => resolve(1);
+      });
+      const settled: string[] = [];
+      const callbacks: string[] = [];
+      const stream = createDurableAgentStream({
+        pubsub,
+        runId,
+        messageId: `msg-${runId}`,
+        model: { modelId: 'test', provider: 'test', version: 'v3' },
+        rereadMinGeneration: () => generation,
+        onTerminalEvent: async status => {
+          settled.push(status);
+        },
+        onFinish: () => {
+          callbacks.push('finish');
+        },
+        onError: () => {
+          callbacks.push('error');
+        },
+      });
+      const text = stream.output.text.catch(error => error);
+      await stream.ready;
+      try {
+        const event = {
+          type,
+          runId,
+          generation: 1,
+          data:
+            type === 'finish'
+              ? { output: { text: '' }, stepResult: { reason: 'stop' } }
+              : { error: { message: 'failed', name: 'Error' } },
+        };
+        await Promise.all([
+          pubsub.publish(AGENT_STREAM_TOPIC(runId), event),
+          pubsub.publish(AGENT_STREAM_TOPIC(runId), event),
+        ]);
+        release();
+        await text;
+        await stream.waitForEventDelivery();
+        expect(settled).toEqual(['finished']);
+        expect(callbacks).toEqual([type]);
+      } finally {
+        release();
+        stream.cleanup();
+        await pubsub.close();
+      }
+    },
+  );
+
+  it('holds resumed deliveries behind the owning reader’s pending suspension settlement', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'pending-suspension-settlement';
+    const order: string[] = [];
+    let release!: () => void;
+    const pending = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const stream = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      closeOnSuspend: false,
+      onTerminalEvent: async status => {
+        order.push(`settling:${status}`);
+        if (status === 'suspended') await pending;
+        order.push(`settled:${status}`);
+      },
+      onSuspended: () => {
+        order.push('suspended');
+      },
+      onChunk: chunk => {
+        if (chunk.type === 'text-delta') order.push('resumed');
+      },
+      onFinish: () => {
+        order.push('finished');
+      },
+    });
+    const text = stream.output.text;
+    await stream.ready;
+    try {
+      await emitSuspendedEvent(pubsub, runId, suspendedData);
+      await expect.poll(() => order).toEqual(['settling:suspended']);
+      await emitChunkEvent(pubsub, runId, {
+        type: 'text-delta',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { id: 'after', text: 'after' },
+      });
+      await emitFinishEvent(pubsub, runId, { output: { text: 'after' }, stepResult: { reason: 'stop' } } as any);
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(order).toEqual(['settling:suspended']);
+      release();
+      expect(await text).toBe('after');
+      await stream.waitForEventDelivery();
+      expect(order).toEqual([
+        'settling:suspended',
+        'settled:suspended',
+        'suspended',
+        'resumed',
+        'settling:finished',
+        'settled:finished',
+        'finished',
+      ]);
+    } finally {
+      release();
+      await stream.waitForEventDelivery();
+      stream.cleanup();
+      await pubsub.close();
+    }
+  });
+
   it('runs onSuspended after the chunk delivered in the same tick, and closes under closeOnSuspend', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'suspend-order-run';

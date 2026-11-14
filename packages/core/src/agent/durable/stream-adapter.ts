@@ -30,6 +30,7 @@ import type { ResponseMessagesReplay } from '../streams/response-messages';
 import type { AgentStreamStepFinishPayload } from '../streams/wire';
 import type { StructuredOutputOptions } from '../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, shouldRejectStream } from './constants';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from './execution-fence';
 import type {
   AgentStreamEvent,
   AgentChunkEventData,
@@ -339,6 +340,8 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onStepFinish?: (result: DurableAgentStepFinishResult) => void | Promise<void>;
   /** Callback when execution finishes — routed through MastraModelOutput for rich step data */
   onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Only owning stream/resume/recovery readers receive this hook; observers never settle records. */
+  onTerminalEvent?: (status: 'suspended' | 'finished', generation: number | undefined) => void | Promise<void>;
   /** Lifecycle hook called after the FINISH event closes the stream (for cleanup scheduling) */
   onStreamFinished?: () => void | Promise<void>;
   /** Callback on error */
@@ -457,6 +460,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     onChunk,
     onStepFinish,
     onFinish,
+    onTerminalEvent,
     onStreamFinished,
     onError,
     onSuspended,
@@ -707,6 +711,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   };
   let onChunkDelivery = Promise.resolve();
   let activityVersion = 0;
+  let terminalSettlement: Promise<void> | undefined;
 
   const handleEvent = async (event: Event) => {
     // Deliveries resume in arrival order once the skipped events are folded.
@@ -714,6 +719,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     // After a terminal event the stream is closed and its callbacks have fired.
     // A later duplicate (a replayed pre-crash FINISH plus the recovered one)
     // must not fire onFinish/onError again.
+    while (terminalSettlement) await terminalSettlement;
     if (!controller || terminated) return;
 
     // Parse the event data as AgentStreamEvent
@@ -724,6 +730,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     let keep = keepGeneration(streamEvent);
     if (typeof keep !== 'boolean') {
       keep = await keep;
+      while (terminalSettlement) await terminalSettlement;
       if (!controller || terminated) return;
     }
     if (!keep) return;
@@ -743,7 +750,25 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     // Public chunks carry their run-log index so a client can resume at index + 1.
     const logIndex = typeof streamEvent.index === 'number' ? { index: streamEvent.index } : undefined;
 
+    let releaseSettlement: (() => void) | undefined;
     try {
+      if (onTerminalEvent && STREAM_ENDING_EVENT_TYPES.has(streamEvent.type)) {
+        terminalSettlement = new Promise<void>(resolve => {
+          releaseSettlement = resolve;
+        });
+        clearIdleTimer();
+        try {
+          await onChunkDelivery;
+          await onTerminalEvent(
+            streamEvent.type === AgentStreamEventTypes.SUSPENDED ? 'suspended' : 'finished',
+            streamEvent.generation,
+          );
+        } catch (error) {
+          if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID) return;
+          logError(`[DurableAgentStream] terminal settlement error:`, error);
+        }
+        if (!controller || terminated) return;
+      }
       switch (streamEvent.type) {
         case AgentStreamEventTypes.CHUNK: {
           // The envelope index is authoritative: drop any index a forwarded sub-agent chunk carried.
@@ -800,7 +825,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.FINISH: {
           clearIdleTimer();
-          await onChunkDelivery;
+          if (!onTerminalEvent) await onChunkDelivery;
           if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
@@ -935,7 +960,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           const data = streamEvent.data as AgentSuspendedEventData;
           // Let earlier chunk callbacks finish first, as FINISH does, so onSuspended
           // sees every chunk that preceded the suspension.
-          await onChunkDelivery;
+          if (!onTerminalEvent) await onChunkDelivery;
           if (!controller || terminated) return;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
@@ -1019,6 +1044,12 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       // inner try/catch and close/error the stream before invoking callbacks,
       // so they are not affected by this outer handler.
       logError(`[DurableAgentStream] Error handling event ${streamEvent.type}:`, error);
+    } finally {
+      if (releaseSettlement) {
+        terminalSettlement = undefined;
+        releaseSettlement();
+        if (!terminated && streamEvent.type === AgentStreamEventTypes.SUSPENDED) armIdleTimer();
+      }
     }
   };
 

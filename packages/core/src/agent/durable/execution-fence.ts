@@ -38,6 +38,7 @@ import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-owners
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
+import { withDurableStreamPublisher } from './stream-publisher';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
 export const EXECUTION_LEASE_TTL_MS = AGENT_LEASE_TTL_MS;
@@ -820,6 +821,10 @@ export class ExecutionFence implements RunFenceScope {
     return this.#lossError !== undefined;
   }
 
+  get settlement(): ExecutionSettlement | undefined {
+    return this.#settledAs;
+  }
+
   /** An owned deadline settlement revokes writes without handing its topics to another execution. */
   ownsRunTopics(): boolean {
     return this.#settledAs === 'owned' || !this.#lossError;
@@ -1328,6 +1333,21 @@ export async function assertExecutionNotSuperseded(args: {
   }
 }
 
+/** Check a reader's generation without verifying or changing the local execution fence. */
+export async function assertExecutionGenerationCurrent(args: {
+  runId: string;
+  agentId: string;
+  mastra: Mastra | undefined;
+  claim: DurableExecutionClaim;
+}): Promise<void> {
+  const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, args.claim);
+  if (!backend) return;
+  const details = { agentId: args.agentId, runId: args.runId, executionId: args.claim.executionId };
+  if (await retryOnce(() => backend.isSuperseded(args.claim), details)) {
+    throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+  }
+}
+
 const OWNERSHIP_GUARD = Symbol('durable-execution-ownership-guard');
 type GuardHandle = { scope: RunScope; key: RunScopeKey<ExecutionOwnershipGuard> };
 
@@ -1389,7 +1409,15 @@ export function withExecutionFence<TStep extends FenceableStep>(step: TStep): TS
               // Preserve lazy workflow properties, especially the unused step writer.
               ...Object.getOwnPropertyDescriptors(params),
               [OWNERSHIP_GUARD]: { enumerable: true, value: { scope, key } },
-              [PUBSUB_SYMBOL]: { enumerable: true, value: pubsub && fencePubSub(pubsub, guard) },
+              [PUBSUB_SYMBOL]: {
+                enumerable: true,
+                value:
+                  pubsub &&
+                  fencePubSub(
+                    withDurableStreamPublisher(pubsub, { runId, agentId, mastra: params.mastra, claim }),
+                    guard,
+                  ),
+              },
               writer: {
                 enumerable: true,
                 get() {

@@ -153,9 +153,13 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     // caller abort.
     expect(chunks.some((c: any) => c.type === 'finish')).toBe(false);
     expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).not.toHaveLength(0);
+    // The deadline revokes execution writes before this reader receives the error.
+    // It retains cleanup authority, but cannot finish the record outside settlement's scope.
+    expect(await durableAgent.__getRunRecord(result.runId)).toMatchObject({ status: 'running' });
     result.cleanup();
     await vi.waitFor(async () => {
       expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).toHaveLength(0);
+      expect(await durableAgent.__getRunRecord(result.runId)).toBeUndefined();
     });
   });
 
