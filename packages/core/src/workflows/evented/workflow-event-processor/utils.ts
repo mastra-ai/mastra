@@ -5,6 +5,18 @@ import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import type { SingleStepEntry } from '../../types';
 import { isSingleStepEntry } from '../../utils';
 
+/**
+ * Whether a `workflow.end` paused the run. `workflowStatus` is the run status `endWorkflow`
+ * stored; an event published by a process that predates it falls back to that process's own rule.
+ */
+export function endedPaused(
+  endData: { workflowStatus?: string; perStep?: boolean; prevResult?: { status?: string } },
+  perStep = endData.perStep,
+): boolean {
+  if (endData.workflowStatus !== undefined) return endData.workflowStatus === 'paused';
+  return endData.prevResult?.status === 'paused' || !!perStep;
+}
+
 export function getNestedWorkflow(
   mastra: Mastra,
   { workflowId, executionPath, parentWorkflow, runId }: StepExecutionParentWorkflow,
