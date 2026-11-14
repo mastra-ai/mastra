@@ -1280,7 +1280,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    * from other processes.
    */
   async releaseLease(key: string, owner: string): Promise<void> {
-    if (this.#closed) return;
+    // Not `#closed`: a nack during close() still republishes through the
+    // writer, and the redelivery must not find the lease still held.
+    if (this.#writerReleased) return;
     await this.#ensureWriterConnected();
     const script = `
       if redis.call("GET", KEYS[1]) == ARGV[1] then
