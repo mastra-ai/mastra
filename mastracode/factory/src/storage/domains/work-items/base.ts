@@ -1693,12 +1693,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     source,
     metadata,
     expectedRevision,
+    cardMetadata,
   }: {
     orgId: string;
     id: string;
     source: ExternalWorkItemSource;
     metadata: Record<string, unknown> | null;
     expectedRevision?: number;
+    /** Rewrites the card's own metadata in the same write that attaches the source. */
+    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>;
   }): Promise<{ item: Card; attached: boolean } | null> {
     let result: Awaited<ReturnType<Cards['attachSource']>>;
     try {
@@ -1708,6 +1711,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           { org_id: orgId, id },
           { external_source: source, metadata, now: new Date() },
           expectedRevision,
+          cardMetadata,
         );
         if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
         if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');

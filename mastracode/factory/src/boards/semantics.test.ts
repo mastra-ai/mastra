@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { workItemBranch } from '../work-item-branch.js';
 import { pullRequestSourceNumber, reviewedPullRequest } from '../work-items/change-requests.js';
@@ -14,6 +15,7 @@ import {
   resolveBoardClosure,
   resolveBoardToolRule,
   resolvePhaseSemantics,
+  workingPullRequest,
   workItemPhaseSemantics,
 } from './semantics.js';
 import { createTestBoard } from './test-utils.js';
@@ -275,5 +277,50 @@ describe('the number of an attached change request', () => {
 
     expect(attached && pullRequestSourceNumber(attached)).toBe(17);
     expect(/(\d+)$/.exec(key)?.[1]).not.toBe('17');
+  });
+});
+
+describe("a card's working pull request", () => {
+  const pr = (number: number, state: 'open' | 'closed' | 'merged') =>
+    ({
+      sourceType: 'pull-request',
+      provider: 'github',
+      externalId: `github-pr:${number}`,
+      state,
+      metadata: { githubPullRequestNumber: number },
+    }) as unknown as WorkItemSourceRow;
+  const card = (sources: WorkItemSourceRow[], metadata: Record<string, unknown> = {}) => ({
+    metadata,
+    workItem: { sources },
+  });
+  const outsider = (number: number) => ({ untrustedPullRequests: [`github:github-pr:${number}`] });
+  const working = (item: ReturnType<typeof card>, except?: number) => {
+    const source = workingPullRequest(item, except);
+    return source && pullRequestSourceNumber(source);
+  };
+
+  it('is the one the card points at, else the first trusted one linked', () => {
+    expect(working(card([pr(17, 'open'), pr(18, 'open')], { openPullRequestNumber: 18 }))).toBe(18);
+    expect(working(card([pr(17, 'open'), pr(18, 'open')]))).toBe(17);
+    expect(working(card([pr(17, 'open'), pr(18, 'open')], outsider(17)))).toBe(18);
+  });
+
+  it("is never an outsider's on its own, but is one a person picked", () => {
+    expect(working(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
+    expect(working(card([pr(17, 'open')], { ...outsider(17), openPullRequestNumber: 17 }))).toBe(17);
+  });
+
+  it('falls back to the first trusted open one when the one pointed at closes unmerged, never to an outsider', () => {
+    const sources = [pr(16, 'open'), pr(17, 'closed'), pr(18, 'open')];
+    expect(working(card(sources, { ...outsider(16), openPullRequestNumber: 17 }))).toBe(18);
+    expect(
+      working(card([pr(16, 'open'), pr(17, 'closed')], { ...outsider(16), openPullRequestNumber: 17 })),
+    ).toBeUndefined();
+  });
+
+  it('stays the first one once it merges, so merging it finishes the card', () => {
+    expect(working(card([pr(17, 'merged'), pr(18, 'open')]))).toBe(17);
+    expect(working(card([pr(17, 'merged'), pr(18, 'open')]), 17)).toBe(18);
+    expect(reviewedPullRequest(card([pr(17, 'open')], outsider(17)))).toBeUndefined();
   });
 });

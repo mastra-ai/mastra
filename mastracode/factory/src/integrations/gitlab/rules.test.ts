@@ -1925,18 +1925,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(boundChangeRequestNumber(createBoardRegistry(), own)).toBe('23');
     });
 
-    it("never files an outsider's \"Closes #42\" merge request on issue 42's card", async () => {
+    it("links an outsider's \"Closes #42\" merge request to issue 42's card, untrusted, and moves or runs nothing", async () => {
       const h = await harness(10);
       const issue = await h.issueCard('intake');
 
       await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(issueAfter).toMatchObject({ stages: ['intake'], revision: issue.revision });
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      expect(cards.find(card => card.id !== issue.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['intake'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.untrustedPullRequests).toHaveLength(1);
       expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
     });
 
@@ -2245,14 +2244,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       );
     });
 
-    it('gives a second merge request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
+    it('links a second merge request without moving the card, and moves the card to Done when the first merges', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');
       await h.ingest(mergeRequest(17, 'Closes #42'));
       await h.ingest(mergeRequest(18, 'Closes #42'));
 
-      expect(await h.cards()).toHaveLength(2);
-      expect(sourceTypes((await h.cards()).find(card => card.id === issue.id)!)).toEqual(['issue', 'pull-request']);
+      const linked = await h.cards();
+      expect(linked).toHaveLength(1);
+      expect(linked[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+      expect(sourceTypes(linked[0]!)).toEqual(['issue', 'pull-request', 'pull-request']);
 
       await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-merge-17', action: 'merge' }));
       const card = (await h.cards()).find(item => item.id === issue.id)!;
@@ -2260,8 +2261,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card.workItem.sources[1]).toMatchObject({ state: 'merged' });
     });
 
-    it.each(['planning', 'execute', 'review'])(
-      "gives someone else's merge request its own card once the issue is in %s, by the default route",
+    it.each(['triage', 'planning', 'execute', 'review'])(
+      "links someone else's merge request to the issue's card in %s, and the seeded rules leave the card there",
       async stage => {
         const h = await harness();
         const issue = await h.issueCard(stage);
@@ -2269,15 +2270,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await h.ingest(mergeRequest(17, 'Closes #42'));
 
         const cards = await h.cards();
-        expect(cards).toHaveLength(2);
-        expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+        expect(cards).toHaveLength(1);
+        expect(cards[0]).toMatchObject({ id: issue.id, stages: [stage] });
+        expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+        expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
       },
     );
 
-    it("follows the project's closing-issue route: edited, it joins a planned issue", async () => {
+    it("follows the project's card-move rule for linked merge requests: edited, it moves a planned issue", async () => {
       const h = await harness();
       const scope = { orgId: 'org-1', factoryProjectId: h.project.id };
-      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(entry => entry.target.joinClosedIssue)!;
+      const route = (await h.seeded.boards.listIntakeRoutes(scope)).find(entry =>
+        entry.on.includes('pull_request.opened'),
+      )!;
       await h.seeded.boards.updateIntakeRoute(
         scope,
         route.id,
@@ -2285,7 +2290,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           when: {
             operator: 'AND',
             conditions: [
-              { field: 'author.trusted', operator: 'equals', value: true },
+              { field: 'pullRequest.trusted', operator: 'equals', value: true },
               { field: 'closedIssue.phase', operator: 'equals', value: 'planning' },
             ],
           },
@@ -2298,34 +2303,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       const cards = await h.cards();
       expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['planning'] });
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['pr-review'] });
       expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
-    });
-
-    it('gives a merge request for an issue in Triage its own card in PR review, and reviews it right away', async () => {
-      const h = await harness();
-      const issue = await h.issueCard('triage');
-
-      await h.ingest(mergeRequest(17, 'Closes #42'));
-
-      const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(issueAfter).toMatchObject({ stages: ['triage'] });
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      const own = cards.find(card => card.id !== issue.id)!;
-      expect(own).toMatchObject({ board: 'work', stages: ['pr-review'] });
-      expect(sourceTypes(own)).toEqual(['pull-request']);
-      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
-        expect.objectContaining({ workItemId: own.id, decision: expect.objectContaining({ role: 'review' }) }),
-      ]);
     });
 
     const builderSession = {
       work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
     };
 
-    it("gives someone else's \"Closes #42\" merge request its own card once the issue's builder has started", async () => {
+    it("links someone else's \"Closes #42\" merge request to the card once its builder has started, but tracks only the builder's own", async () => {
       const h = await harness();
       const issue = await h.issueCard('execute');
       await h.seeded.workItems.update({
@@ -2338,14 +2324,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       await h.ingest(mergeRequest(17, 'Closes #42'));
       const cards = await h.cards();
-      expect(cards).toHaveLength(2);
-      const issueAfter = cards.find(card => card.id === issue.id)!;
-      expect(sourceTypes(issueAfter)).toEqual(['issue']);
-      expect(issueAfter.metadata.openPullRequestNumber ?? null).toBeNull();
+      expect(cards).toHaveLength(1);
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
 
       await h.ingest(mergeRequest(18, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
       const card = (await h.cards()).find(item => item.id === issue.id)!;
-      expect(sourceTypes(card)).toEqual(['issue', 'pull-request']);
+      expect(sourceTypes(card)).toEqual(['issue', 'pull-request', 'pull-request']);
       expect(card.metadata).toMatchObject({ openPullRequestNumber: 18 });
     });
 

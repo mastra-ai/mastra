@@ -1,6 +1,7 @@
 import {
   isPullRequestCard,
-  newestOpenPullRequestNumber,
+  openPullRequestSource,
+  workingPullRequest,
   pullRequestSourceNumber,
   pullRequestSources,
   reviewedPullRequest,
@@ -184,8 +185,7 @@ function materializePullRequestIntake(
     url: context.pullRequest.url,
     stage: intake.initialPhase,
     // A pull request for a card already on the board is filed on that card; the authoring card's
-    // own evaluation moves it. For one that closes an issue on the board, the project's intake
-    // routes decide whether it joins that card.
+    // own evaluation moves it. One that closes an issue on the board links to that card.
     ...(home
       ? home.reason === 'closes'
         ? { closesIssue: { workItemId: home.workItemId } }
@@ -276,12 +276,16 @@ function pullRequestMerged(context: FactoryGithubRuleContext) {
   // Provenance bound the event to the card that authored the pull request instead: the merge
   // is what finishes the work, so it closes that card alongside the PR's own card —
   // unless the card has since opened another pull request, which is still out.
-  // A card carrying several pull requests waits for the one it has out, else for any still open.
+  // A card carrying several pull requests waits for its working one: the one it has out, else
+  // the first trusted one linked. Merging that one, or any when the card has none, finishes it.
   const recorded = context.item.metadata?.openPullRequestNumber;
+  const working = workingPullRequest(context.item);
   const openPullRequestNumber =
     typeof recorded === 'number'
       ? recorded
-      : newestOpenPullRequestNumber(context.item, context.pullRequest.number);
+      : working && openPullRequestSource(working)
+        ? pullRequestSourceNumber(working)
+        : undefined;
   if (typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest.number) {
     const role = context.flow?.buildRole;
     if (!role) return;
@@ -415,7 +419,8 @@ function pullRequestClosed(context: FactoryGithubRuleContext) {
     // review going.
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedPullRequest(context) || !inPullRequestReview(context)) return;
-    if (newestOpenPullRequestNumber(context.item, context.pullRequest.number) !== null) return;
+    const other = workingPullRequest(context.item, context.pullRequest.number);
+    if (other && openPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:pull-request-closed`,
       board: context.board,

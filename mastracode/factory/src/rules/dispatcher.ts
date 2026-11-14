@@ -15,9 +15,12 @@ import {
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,
+  pullRequestSources,
+  pullRequestTrustKey,
   resolvePhaseSemantics,
   REVIEW_CONTEXT,
   reviewsPullRequest,
+  UNTRUSTED_PULL_REQUESTS_KEY,
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -29,7 +32,6 @@ import {
   placedByIntakeRoute,
   resolveEventRoute,
   resolveIntake,
-  resolveIntakeRoute,
   projectIntakeEvaluator,
   ROUTE_AGAIN_KEY_PREFIX,
   routesHandleEvent,
@@ -1942,6 +1944,11 @@ export class FactoryDecisionDispatcher {
     ) {
       const source = externalSourceForDecision(requested);
       const facts = workItemProviderAdapter(source).toSource(source, requested.metadata ?? null);
+      // The card a pull request linked to may not have had its event yet (the delivery that
+      // linked it lost a race); the event's key makes this a no-op once it has.
+      if (requested.closesIssue?.workItemId === existing.id && record.workItemId === null) {
+        await this.#queueLinkedPullRequestOpened(record, requested, existing, causalChain);
+      }
       if (facts?.state === 'open') {
         await this.#storage.syncWorkItemSource({
           orgId: record.orgId,
@@ -1968,7 +1975,7 @@ export class FactoryDecisionDispatcher {
         return;
       }
     }
-    if (!existing && requested.closesIssue && (await this.#joinClosedIssue(record, requested, causalChain))) return;
+    if (!existing && requested.closesIssue && (await this.#linkClosedIssue(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     // Filing the card *was* the placement, so a retry of the same decision has
     // nothing left to apply — and must not drag a card that has since moved
@@ -2181,6 +2188,8 @@ export class FactoryDecisionDispatcher {
     workItemId: string,
     causalChain: FactoryRuleCausalEntry[],
     admit: (card: Card) => { phase: string | null } | undefined,
+    cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    afterAttach?: (card: Card) => Promise<void>,
   ): Promise<boolean> {
     // A dry run of the work item split has no sources table to attach to: the pull request
     // gets its own card, as before.
@@ -2208,6 +2217,7 @@ export class FactoryDecisionDispatcher {
           source: externalSourceForDecision(decision),
           metadata: decision.metadata ?? null,
           expectedRevision: card.revision,
+          ...(cardMetadata ? { cardMetadata } : {}),
         });
         if (!result) return false;
         attached = { card: result.item, phase: admitted.phase };
@@ -2219,6 +2229,7 @@ export class FactoryDecisionDispatcher {
     }
     if (!attached) return false;
     const { card, phase } = attached;
+    await afterAttach?.(card);
     const stage = card.stages.length === 1 ? card.stages[0] : undefined;
     const board = boards.get(boardForWorkItem(card));
     if (!phase || !stage || stage === phase) return true;
@@ -2250,33 +2261,91 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Joins a pull or merge request to the card of the issue it closes when the project's intake
-   * routes say so: the first route matching the arrival, with the facts of that card as it is now,
-   * is a joining one. Only an arrival the routes would place qualifies, and only from an author
-   * with write access: no route can put an outsider's pull request on someone else's card.
+   * Links a pull or merge request to the card of the issue it closes, whoever opened it: Factory
+   * does this itself, before intake, wherever the card sits, so long as it is unfinished. Linking
+   * runs nothing. An outsider's pull request is recorded as untrusted on the card, so it never
+   * becomes the card's working pull request on its own; a person picks it. The card then gets the
+   * pull request's `pull_request.opened`, so its board's own card-move rules decide whether it moves.
    */
-  async #joinClosedIssue(
+  async #linkClosedIssue(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<boolean> {
-    if (!authorTrusted(decision.metadata) || !this.#intakeRoutes || decision.skipRules === true) return false;
-    if (record.workItemId !== null) return false;
-    const boards = await this.#boards.load(record);
-    const routes = await this.#intakeRoutes.listIntakeRoutes({
+    if (decision.skipRules === true || record.workItemId !== null) return false;
+    const trusted = authorTrusted(decision.metadata);
+    const trustKey = this.#pullRequestTrustKey(decision);
+    return this.#attachLinkedItem(
+      record,
+      decision,
+      decision.closesIssue!.workItemId,
+      causalChain,
+      () => ({ phase: null }),
+      trusted || !trustKey
+        ? undefined
+        : metadata => {
+            const listed = metadata[UNTRUSTED_PULL_REQUESTS_KEY];
+            const untrusted = Array.isArray(listed) ? listed.filter(entry => typeof entry === 'string') : [];
+            return untrusted.includes(trustKey)
+              ? metadata
+              : { ...metadata, [UNTRUSTED_PULL_REQUESTS_KEY]: [...untrusted, trustKey] };
+          },
+      card => this.#queueLinkedPullRequestOpened(record, decision, card, causalChain),
+    );
+  }
+
+  /** The key a card lists an untrusted attached pull request under (see `UNTRUSTED_PULL_REQUESTS_KEY`). */
+  #pullRequestTrustKey(decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>): string | undefined {
+    const source = externalSourceForDecision(decision);
+    const facts = workItemProviderAdapter(source).toSource(source, decision.metadata ?? null);
+    return facts ? pullRequestTrustKey(facts) : undefined;
+  }
+
+  /**
+   * Hands the card a linked pull request's `pull_request.opened`, with the card's facts as they
+   * were before it joined (its phase, and whether another pull request was already on it). Keyed
+   * by the card and the pull request, so whichever delivery files the pull request, and however
+   * often, the card gets the event once.
+   */
+  async #queueLinkedPullRequestOpened(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    card: Card,
+    causalChain: FactoryRuleCausalEntry[],
+  ): Promise<void> {
+    const sourceKey = externalSourceKey(externalSourceForDecision(decision));
+    const key = `linked-pull-request:${card.id}:${sourceKey}`;
+    const trustKey = this.#pullRequestTrustKey(decision);
+    const others = pullRequestSources(card).filter(source => pullRequestTrustKey(source) !== trustKey);
+    const queued = await this.#storage.commitRuleEvaluation({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
+      workItemId: card.id,
+      ingress: { identity: `decision:${key}`, triggerType: 'pull_request.linked' },
+      configVersion: this.#transitionService.configVersion,
+      expectedRevision: card.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      outcome: { status: 'accepted' },
+      decisions: [
+        {
+          type: 'routeEvent',
+          idempotencyKey: key,
+          event: {
+            type: 'pull_request.opened',
+            pullRequestTrusted: authorTrusted(decision.metadata),
+            closedIssue: {
+              phase: card.stages.length === 1 ? card.stages[0]! : null,
+              hasPullRequest: others.length > 0,
+            },
+          },
+        },
+      ],
+      causalChain,
+      now: new Date(),
     });
-    if (routes.length === 0) return false;
-    const arrival = cardRuleFacts({
-      title: decision.title,
-      metadata: decision.metadata ?? {},
-      externalSource: externalSourceForDecision(decision),
-    });
-    return this.#attachLinkedItem(record, decision, decision.closesIssue!.workItemId, causalChain, card => {
-      const route = resolveIntakeRoute(routes, { ...arrival, ...closedIssueRuleFacts(card) }, boards, card);
-      return route?.type === 'join' ? { phase: route.phase } : undefined;
-    });
+    if (queued.status === 'stale') {
+      throw new Error('Factory linked pull request event was not queued: the work item changed concurrently.');
+    }
   }
 
   /** Marks the item's Not routed record, if any, resolved: its card is filed. */

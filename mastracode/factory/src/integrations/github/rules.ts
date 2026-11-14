@@ -1679,9 +1679,8 @@ export class GithubRules {
    * Linear, incident.io) carries no repository of its own to match against, so it is taken as it is.
    * In order: the card that authored it (on a board that reviews pull requests), by provenance or session branch,
    * when the pull request is Factory-authored or its author is trusted; it is filed there. Then,
-   * for a trusted author only, the card of the first issue its description says it closes; an
-   * intake route decides whether it joins that one. An untrusted author's pull request never
-   * lands on another card, whatever it says.
+   * whoever opened it, the card of the first issue its description says it closes; it links to that
+   * one. Linking runs nothing: an outsider's pull request is recorded as untrusted there.
    */
   async #pullRequestHome(input: {
     orgId: string;
@@ -1694,7 +1693,6 @@ export class GithubRules {
     authorTrusted: boolean;
     body: string | undefined;
   }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason'] } | undefined> {
-    if (!input.factoryAuthored && !input.authorTrusted) return undefined;
     const items = await this.options.storage.listShared({
       orgId: input.orgId,
       factoryProjectId: input.factoryProjectId,
@@ -1716,14 +1714,16 @@ export class GithubRules {
       !isTerminalWorkItem(this.#boards(input), card) &&
       (card.externalSource.integrationId !== 'github' ||
         cardBelongsToRepository(card, input.repositoryId, input.repositoryName));
+    // Resolution can match a card by branch alone, so only a trusted (or Factory's) pull request
+    // is taken as that card's own.
     if (
+      (input.factoryAuthored || input.authorTrusted) &&
       input.matchedItem &&
       eligible(input.matchedItem) &&
       cardBoardFlow(this.#boards(input), input.matchedItem).pullRequestReview !== undefined
     ) {
       return { card: input.matchedItem, reason: 'authored' };
     }
-    if (!input.authorTrusted) return undefined;
     for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
       const card = items.find(
         item =>

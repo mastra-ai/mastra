@@ -13,7 +13,6 @@ import {
   isPullRequestCard,
   pullRequestSourceNumber,
   pullRequestSources,
-  reviewedPullRequest,
 } from '../work-items/change-requests.js';
 import type { SourcedItem } from '../work-items/change-requests.js';
 import { DEFAULT_BOARD_ID } from './default-board.js';
@@ -222,12 +221,42 @@ export function trustedPullRequestSource(
   return !(Array.isArray(untrusted) && untrusted.includes(pullRequestTrustKey(source)));
 }
 
-/** The newest still-open pull request on a card other than `except`, for re-pointing `openPullRequestNumber`. */
-export function newestOpenPullRequestNumber(item: SourcedItem, except?: number): number | null {
-  const open = pullRequestSources(item).filter(
-    source => isOpenPullRequestSource(source) && pullRequestSourceNumber(source) !== except,
+function closedUnmerged(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
+  return (
+    !isOpenPullRequestSource(source) && (source.state ?? source.metadata?.state) !== 'merged' && source.metadata?.merged !== true
   );
-  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
+}
+
+/**
+ * The card's working pull request, the one its review passes and status checks follow: the one
+ * `openPullRequestNumber` names (its session's own, or the one a person picked), unless it closed
+ * without merging; else the first trusted one linked that hasn't. An outsider's pull request is
+ * never picked on its own. `except` leaves one pull request out.
+ */
+export function workingPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+  except?: number,
+): WorkItemSourceRow | undefined {
+  const sources = pullRequestSources(item).filter(
+    source => !closedUnmerged(source) && (except === undefined || pullRequestSourceNumber(source) !== except),
+  );
+  const pointer = item.metadata?.openPullRequestNumber;
+  return (
+    (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
+    sources.find(source => trustedPullRequestSource(item, source))
+  );
+}
+
+/** The pull request a PR review pass on this card reviews: its {@link workingPullRequest}. */
+export function reviewedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): WorkItemSourceRow | undefined {
+  return workingPullRequest(item);
+}
+
+/** Whether a pull request source is still open. */
+export function openPullRequestSource(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
+  return isOpenPullRequestSource(source);
 }
 
 interface SessionedItem {

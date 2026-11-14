@@ -7,7 +7,7 @@ import { arrivalKinds, DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../..
 import type { ArrivalKind, RouteArrivals, RouteEvent } from '../../../boards/board-events.js';
 import type { FactoryPhaseTool } from '../../../boards/define-board.js';
 import { deriveIntakeOrder, reconcileIntakeOrder } from '../../../boards/intake-order.js';
-import { DEFAULT_INTAKE_ROUTES } from '../../../boards/work-routes.js';
+import { DEFAULT_INTAKE_ROUTES, LINKED_PULL_REQUEST_ROUTE_KEY } from '../../../boards/work-routes.js';
 import { currentRuleGroup } from '../../../rules/rule-group.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import type { RetiredAutomationSettings } from '../projects/base.js';
@@ -279,7 +279,8 @@ export {
   PULL_REQUEST_CLOSED_ISSUE_ROUTE,
   PULL_REQUEST_UPDATED_ROUTE,
   PULL_REQUEST_REVIEW_REQUESTED_ROUTE,
-  CLOSES_ISSUE_INTAKE_ROUTE,
+  LINKED_PULL_REQUEST_ROUTE,
+  LINKED_PULL_REQUEST_ROUTE_KEY,
   CATCH_ALL_INTAKE_ROUTE,
   DEFAULT_INTAKE_ROUTES,
 } from '../../../boards/work-routes.js';
@@ -1170,6 +1171,15 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       const missing = missingDefaults(current);
       if (missing.length === 0) return;
       const rows = await readIntakeRoutes(ops, scope);
+      // Pull requests link to the card of the issue they close on their own now: a route that
+      // joined them is switched off, and kept so its history stays readable.
+      if (missing.some(({ key }) => key === LINKED_PULL_REQUEST_ROUTE_KEY)) {
+        for (const row of rows) {
+          if (row.join_closed_issue && row.enabled) {
+            await updateIntakeRouteRow(ops, row, { enabled: false, updated_by: DEFAULT_INTAKE_ROUTE_ACTOR });
+          }
+        }
+      }
       let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
       const first: string[] = [];
       const perBoard = new Map<string, number>();

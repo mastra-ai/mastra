@@ -966,6 +966,75 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   });
 });
 
+describe('PUT /web/factory/projects/:id/work-items/:workItemId/working-pull-request', () => {
+  async function issueWithPullRequests() {
+    const res = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({ externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:7:issue:1' } }),
+    );
+    const { workItem } = await res.json();
+    const attach = (
+      number: number,
+      state: string,
+      cardMetadata?: (metadata: Record<string, unknown>) => Record<string, unknown>,
+    ) =>
+      seed.workItems.attachSource({
+        orgId: 'org1',
+        id: workItem.id,
+        source: { integrationId: 'github', type: 'pull-request', externalId: `github:7:pull-request:${number}` },
+        metadata: { githubPullRequestNumber: number, state },
+        cardMetadata,
+      });
+    await attach(2, 'open', metadata => ({
+      ...metadata,
+      pullRequestHeadSha: 'abc',
+      untrustedPullRequests: ['github:github:7:pull-request:2'],
+    }));
+    await attach(3, 'closed');
+    return (await seed.workItems.get({ orgId: 'org1', id: workItem.id }))!;
+  }
+  const pick = (item: { id: string; revision: number }, pullRequest: number, expectedRevision = item.revision) =>
+    json('PUT', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/working-pull-request`, {
+      pullRequest,
+      expectedRevision,
+    });
+
+  it("makes an outsider's linked pull request the card's working one when a person picks it", async () => {
+    const item = await issueWithPullRequests();
+    auditRecorded = [];
+
+    const res = await pick(item, 2);
+
+    expect(res.status).toBe(200);
+    const stored = await seed.workItems.get({ orgId: 'org1', id: item.id });
+    expect(stored?.metadata).toMatchObject({ openPullRequestNumber: 2, pullRequestHeadSha: null });
+    expect(stored?.metadata?.untrustedPullRequests).toEqual(['github:github:7:pull-request:2']);
+    expect(auditRecorded).toContainEqual(expect.objectContaining({ action: 'factory.work_item.updated' }));
+  });
+
+  it('refuses a pull request that is not linked to the card, or is closed', async () => {
+    const item = await issueWithPullRequests();
+
+    expect(await (await pick(item, 9)).json()).toMatchObject({ error: 'pull_request_not_linked' });
+    expect(await (await pick(item, 3)).json()).toMatchObject({ error: 'pull_request_not_open' });
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+
+  it('refuses a pick made against an older revision of the card', async () => {
+    const item = await issueWithPullRequests();
+
+    const res = await pick(item, 2, item.revision - 1);
+
+    expect(res.status).toBe(409);
+    expect((await seed.workItems.get({ orgId: 'org1', id: item.id }))?.metadata).not.toHaveProperty(
+      'openPullRequestNumber',
+    );
+  });
+});
+
 describe('POST /web/factory/projects/:id/runs/start', () => {
   const startBody = (workItemId?: string) => ({
     sessionId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',

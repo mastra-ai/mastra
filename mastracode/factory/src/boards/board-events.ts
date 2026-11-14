@@ -197,6 +197,11 @@ export interface BoardEventFacts {
   assignees?: ItemChange;
   /** On a pull request event: whether that pull request's author has write access (or is Factory). */
   pullRequestTrusted?: boolean;
+  /**
+   * On the `pull_request.opened` a pull request linking to the card of the issue it closes brings:
+   * that card as it was before the pull request joined it (see `closedIssueRuleFacts`).
+   */
+  closedIssue?: { phase: string | null; hasPullRequest: boolean };
 }
 
 /** The facts a route's `when` reads from an event. */

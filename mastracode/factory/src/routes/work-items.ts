@@ -11,7 +11,15 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import { boardFlow, boardPhaseOutcomes, DEFAULT_BOARD_ID } from '../boards/index.js';
+import {
+  boardFlow,
+  boardPhaseOutcomes,
+  DEFAULT_BOARD_ID,
+  isPullRequestCard,
+  openPullRequestSource,
+  pullRequestSourceNumber,
+  pullRequestSources,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -25,6 +33,7 @@ import type {
 } from '../rules/start-coordinator.js';
 import { FactoryStartTransitionError, WorkItemRepositoryError } from '../rules/start-coordinator.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import type { FactoryRuleBoardFlow, WorkItemSource } from '../rules/types.js';
 import type { LiveSessions } from '../session/live-sessions.js';
 import { auditRequestOrigin } from '../storage/domains/audit/domain.js';
@@ -914,6 +923,66 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           });
           if (result.status === 'accepted') return c.json({ result });
           return c.json({ result }, result.code === 'stale' ? 409 : 422);
+        },
+      }),
+
+      // ── Pick the pull request a card's sessions work on ──────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          const contract = FACTORY_ROUTE_CONTRACTS.workItemWorkingPullRequest;
+          const parsedPath = contract.pathSchema.safeParse({
+            id: resolved.factoryProjectId,
+            workItemId: context.req.param('workItemId'),
+          });
+          if (!parsedPath.success) return c.json({ error: 'Work item not found' }, 404);
+          const body = contract.bodySchema.safeParse(await readJson(context));
+          if (!body.success) return c.json({ error: 'invalid_working_pull_request' }, 400);
+          await workItems.ensureReady();
+          const existing = await workItems.get({ orgId: resolved.orgId, id: parsedPath.data.workItemId });
+          if (!existing || existing.factoryProjectId !== resolved.factoryProjectId) {
+            return c.json({ error: 'Work item not found' }, 404);
+          }
+          const source = pullRequestSources(existing).find(
+            candidate => pullRequestSourceNumber(candidate) === body.data.pullRequest,
+          );
+          if (!source || isPullRequestCard({ source: workItemSource(existing.externalSource) })) {
+            return c.json(
+              { error: 'pull_request_not_linked', message: 'That pull request is not linked to this card.' },
+              422,
+            );
+          }
+          if (!openPullRequestSource(source)) {
+            return c.json({ error: 'pull_request_not_open', message: 'That pull request is closed.' }, 422);
+          }
+          // The recorded head belongs to the pull request being replaced; the next push records this one's.
+          const patch = {
+            metadata: {
+              openPullRequestNumber: body.data.pullRequest,
+              pullRequestHeadSha: null,
+              pullRequestHeadAt: null,
+              pullRequestHeadDeliveryId: null,
+            },
+          };
+          try {
+            const updated = await workItems.update({
+              orgId: resolved.orgId,
+              id: existing.id,
+              userId: resolved.userId,
+              patch,
+              expectedRevision: body.data.expectedRevision,
+            });
+            if (!updated) return c.json({ error: 'Work item not found' }, 404);
+            await this.#auditWorkItemPatch({ context, item: updated.item, patch });
+            return c.json({ workItem: toWireWorkItem(updated.item) });
+          } catch (error) {
+            if (error instanceof WorkItemUpdateConflictError) return c.json({ error: 'stale' }, 409);
+            throw error;
+          }
         },
       }),
 

@@ -249,13 +249,7 @@ function placed(card: { board?: string | null; stages: string[] } | undefined) {
 }
 
 describe('intake routes placing linked cards', () => {
-  describe('a route that joins a pull request to the card of the issue it closes', () => {
-    const joinRoute = (enabled = true) => ({
-      name: 'Anything joins',
-      enabled,
-      when: null,
-      target: { boardKey: 'work', phaseKey: 'pr-review', joinClosedIssue: true },
-    });
+  describe('a pull request that closes an issue on the board', () => {
     const pullRequest = (issueId: string, authorTrusted: boolean) => ({
       sourceKey: 'github-pr:17',
       source: 'github-pr' as const,
@@ -266,38 +260,67 @@ describe('intake routes placing linked cards', () => {
     const sourceTypes = async (seeded: Awaited<ReturnType<typeof setup>>, id: string) =>
       (await seeded.workItems.get({ orgId: 'org-1', id }))!.workItem.sources.map(source => source.sourceType);
 
-    it("joins a trusted author's pull request, and moves the waiting card to PR review", async () => {
-      const seeded = await setup();
-      await seeded.route(joinRoute());
+    it("links an outsider's pull request to the issue's card, and neither moves the card nor runs anything", async () => {
+      const seeded = await setup({ withDefaultRoute: true, autoStart: true });
+      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: false } }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, false))).toBeUndefined();
+
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!;
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
+      expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+      expect(card.metadata).toMatchObject({ untrustedPullRequests: [expect.stringContaining('17')] });
+      expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+      expect(await seeded.runs(issue.id)).toEqual([]);
+    });
+
+    it("takes a waiting issue's card to Review for a trusted pull request, once, by the seeded card-move rule", async () => {
+      const seeded = await setup({ withDefaultRoute: true });
+      const linkedRoute = (await seeded.boards.listIntakeRoutes(seeded.scope)).find(route =>
+        route.on.includes('pull_request.opened'),
+      )!;
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+
+      expect(await seeded.deliver(pullRequest(issue.id, true))).toBeUndefined();
+      // The same pull request filed again (a redelivery, or a later event) moves nothing more.
+      await seeded.deliver(pullRequest(issue.id, true));
+      await seeded.retry();
+
+      const card = (await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!;
+      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
+      expect(placed(card)).toEqual({ board: 'work', stages: ['pr-review'] });
+      expect(card.metadata).not.toHaveProperty('untrustedPullRequests');
+      expect(card.stageHistory.filter(entry => entry.by === `intake-route:${linkedRoute.id}`)).toHaveLength(1);
+      expect(await seeded.workItems.list(seeded.scope)).toHaveLength(1);
+    });
+
+    it("links a person's pull request to the card on whichever board it sits", async () => {
+      const seeded = await setup();
+      await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+      await seeded.route({ name: 'Docs', when: DOCS, target: { boardKey: 'docs', phaseKey: 'inbox' } });
+      const issue = (await seeded.deliver({
+        sourceKey: 'github-issue:42',
+        metadata: { authorTrusted: true, labels: ['docs'] },
+      }))!;
+      expect(placed(issue)).toEqual({ board: 'docs', stages: ['inbox'] });
 
       expect(await seeded.deliver(pullRequest(issue.id, true))).toBeUndefined();
 
       expect(await sourceTypes(seeded, issue.id)).toEqual(['issue', 'pull-request']);
-      expect((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!.stages).toEqual(['pr-review']);
+      expect(placed((await seeded.workItems.get({ orgId: 'org-1', id: issue.id }))!)).toEqual({
+        board: 'docs',
+        stages: ['inbox'],
+      });
     });
 
-    it("never joins an untrusted author's pull request, even when a route matches every card", async () => {
+    it('files the pull request on its own card when the issue card is finished', async () => {
       const seeded = await setup();
-      await seeded.route(joinRoute());
       const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
+      await seeded.putAt(issue.id, 'done');
 
       const own = await seeded.deliver(pullRequest(issue.id, false));
 
       expect(own!.id).not.toBe(issue.id);
-      expect(placed(own)).toEqual({ board: 'work', stages: ['intake'] });
-      expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
-    });
-
-    it('falls through to the next route when the joining route is disabled', async () => {
-      const seeded = await setup();
-      await seeded.route(joinRoute(false));
-      await seeded.route({ name: 'To PR review', when: null, target: { boardKey: 'work', phaseKey: 'pr-review' } });
-      const issue = (await seeded.deliver({ sourceKey: 'github-issue:42', metadata: { authorTrusted: true } }))!;
-
-      const own = await seeded.deliver(pullRequest(issue.id, true));
-
-      expect(placed(own)).toEqual({ board: 'work', stages: ['pr-review'] });
       expect(await sourceTypes(seeded, issue.id)).toEqual(['issue']);
     });
   });

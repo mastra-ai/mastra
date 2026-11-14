@@ -586,9 +586,9 @@ export class GitLabRules {
       factoryAuthored: await this.#isFactoryUser(connectionIds, username),
     };
     // A merge request seen for the first time is filed on the card whose branch it comes from,
-    // when its board reviews merge requests. Otherwise a trusted author's merge request names the card of the issue
-    // its description says it closes, and the project's intake routes decide, when it is filed,
-    // whether it joins that card. An untrusted author's merge request never lands on another card.
+    // when its board reviews merge requests. Otherwise, whoever opened it, it links to the card of
+    // the issue its description says it closes. Linking runs nothing: an outsider's merge request
+    // is recorded as untrusted there.
     // A card with no source of its own (a manual card) never takes one: the merge request would
     // become its only source and turn it into a merge request card. A GitHub card keeps only
     // GitHub pull requests, so a merge request on its session's branch gets its own card.
@@ -611,7 +611,7 @@ export class GitLabRules {
         cardBoardFlow(this.#boards(authoringItem), authoringItem).pullRequestReview !== undefined
       ) {
         home = { card: authoringItem, reason: 'authored' };
-      } else if (mergeRequestAuthorTrusted) {
+      } else {
         for (const iid of closingIssueNumbers(string(mergeRequest?.description), {
           provider: 'gitlab',
           repository: projectPath,

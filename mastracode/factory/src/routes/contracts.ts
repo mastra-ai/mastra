@@ -1691,6 +1691,18 @@ export const FACTORY_ROUTE_CONTRACTS = {
     bodySchema: transitionBodySchema,
     responseSchema: entitySchema,
   },
+  workItemWorkingPullRequest: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/work-items/:workItemId/working-pull-request',
+    description:
+      "Make one of the pull requests linked to a card the one its sessions work on. The only way an outside author's pull request becomes a card's working pull request.",
+    pathSchema: transitionPathSchema,
+    bodySchema: z.object({
+      pullRequest: z.number().int().positive(),
+      expectedRevision: z.number().int().nonnegative(),
+    }),
+    responseSchema: workItemResponseSchema,
+  },
   workItemStart: {
     method: 'POST',
     path: '/web/factory/projects/:id/runs/start',

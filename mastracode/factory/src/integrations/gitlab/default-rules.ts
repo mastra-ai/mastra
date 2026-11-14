@@ -1,6 +1,8 @@
 import {
   isPullRequestCard,
-  newestOpenPullRequestNumber,
+  openPullRequestSource,
+  pullRequestSourceNumber,
+  workingPullRequest,
   pullRequestSources,
   reviewedPullRequest,
   reviewsPullRequest,
@@ -140,8 +142,8 @@ function materializeMergeRequest(context: FactoryGitLabRuleContext) {
     title: context.mergeRequest.title,
     url: context.mergeRequest.url,
     stage: context.intake.initialPhase,
-    // A merge request for a card already on the board is filed on that card. For one that closes
-    // an issue on the board, the project's intake routes decide whether it joins that card.
+    // A merge request for a card already on the board is filed on that card. One that closes an
+    // issue on the board links to that card.
     ...(context.pullRequestHome
       ? context.pullRequestHome.reason === 'closes'
         ? { closesIssue: { workItemId: context.pullRequestHome.workItemId } }
@@ -238,10 +240,13 @@ function mergeRequestMerged(context: FactoryGitLabRuleContext) {
   // A merge request on the card itself finishes the work, unless another one it carries is still out.
   if (attachedMergeRequest(context)) {
     const recorded = context.item.metadata?.openPullRequestNumber;
+    const working = workingPullRequest(context.item);
     const open =
       typeof recorded === 'number' && recorded !== context.mergeRequest.number
         ? recorded
-        : newestOpenPullRequestNumber(context.item, context.mergeRequest.number);
+        : working && openPullRequestSource(working)
+          ? pullRequestSourceNumber(working)
+          : undefined;
     if (typeof open === 'number' && open !== context.mergeRequest.number) {
       if (!role) return;
       return {
@@ -283,7 +288,8 @@ function mergeRequestClosed(context: FactoryGitLabRuleContext) {
     // where its board's cards rest.
     const initialPhase = context.flow?.initialPhase;
     if (!initialPhase || !attachedMergeRequest(context) || !inPullRequestReview(context)) return;
-    if (newestOpenPullRequestNumber(context.item, context.mergeRequest.number) !== null) return;
+    const other = workingPullRequest(context.item, context.mergeRequest.number);
+    if (other && openPullRequestSource(other)) return;
     return pullRequestMoveByRoutes('pull_request.closed', {
       idempotencyKey: `${context.ingress.id}:merge-request-closed`,
       board: context.board,

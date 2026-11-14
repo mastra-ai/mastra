@@ -217,6 +217,15 @@ describe('item.pullRequest', () => {
 
     expect(cardRuleFacts(issueCard([], { openPullRequestNumber: 21 }))['item.pullRequest']).toBe(21);
   });
+
+  it("is never an outsider's open pull request, unless a person picked it", () => {
+    const outsider = { ...pullRequest(14, 'open'), provider: 'github', externalId: 'github-pr:14' };
+    const untrusted = { untrustedPullRequests: ['github:github-pr:14'] };
+    expect(cardRuleFacts(issueCard([outsider], untrusted))).not.toHaveProperty('item.pullRequest');
+    expect(cardRuleFacts(issueCard([outsider], untrusted))).not.toHaveProperty('pullRequest.trusted');
+    const picked = cardRuleFacts(issueCard([outsider], { ...untrusted, openPullRequestNumber: 14 }));
+    expect(picked).toMatchObject({ 'item.pullRequest': 14, 'pullRequest.trusted': false });
+  });
 });
 
 describe('item.hasPullRequest and item.hasIssue', () => {

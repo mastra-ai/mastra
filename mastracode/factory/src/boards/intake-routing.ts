@@ -166,55 +166,28 @@ export function closedIssueRuleFacts(closedIssue: Pick<Card, 'stages' | 'workIte
   };
 }
 
-export type IntakeRouteResolution =
-  | { type: 'place'; board: string; phase: string; routeId: string }
-  | { type: 'join'; phase: string | null; routeId: string };
-
 /**
- * What happens to an arrival: the first enabled route that places new cards, whose condition matches it and whose
- * target can take it. A placing route lands a new card on an installed board; one without a
- * phase, or whose phase has since gone, lands it in the board's initial phase. A joining route
- * matches only a pull request whose closed issue's card (`closedIssue`) is on the route's board;
- * the pull request joins that card, which moves to the route's phase when set. Undefined leaves
- * today's placement alone.
+ * Where a new card lands: the first enabled route that places new cards, whose condition matches
+ * it and whose target can take it, on an installed board; a route without a phase, or whose phase
+ * has since gone, lands it in the board's initial phase. Routes that once joined a pull request to
+ * the card of the issue it closes place nothing: pull requests link to that card on their own.
+ * Undefined leaves today's placement alone.
  */
-export function resolveIntakeRoute(
-  routes: readonly IntakeRoute[],
-  facts: RuleFacts,
-  registry: BoardRegistry,
-  closedIssue?: Pick<Card, 'board'>,
-): IntakeRouteResolution | undefined {
-  for (const route of routes) {
-    if (!route.enabled || !placesArrival(route, facts) || !evaluateRuleGroup(route.when, facts)) continue;
-    const board = registry.get(route.target.boardKey);
-    if (!board) continue;
-    if (route.target.joinClosedIssue) {
-      if (facts['source.kind'] !== 'pull_request' || !closedIssue || boardForWorkItem(closedIssue) !== board.id)
-        continue;
-      const phase = route.target.phaseKey;
-      return {
-        type: 'join',
-        phase: phase && board.phaseKind(phase) && !board.isTerminal(phase) ? phase : null,
-        routeId: route.id,
-      };
-    }
-    const phase = landingPhase(board, route.target.phaseKey);
-    if (!placementTakesCard(board, phase, facts)) continue;
-    return { type: 'place', board: board.id, phase, routeId: route.id };
-  }
-  return undefined;
-}
-
-/** Where a new card lands, by {@link resolveIntakeRoute}, for an arrival no route can join to a card. */
 export function resolveIntakePlacement(
   routes: readonly IntakeRoute[],
   facts: RuleFacts,
   registry: BoardRegistry,
 ): { board: string; phase: string; routeId: string } | undefined {
-  const resolution = resolveIntakeRoute(routes, facts, registry);
-  return resolution?.type === 'place'
-    ? { board: resolution.board, phase: resolution.phase, routeId: resolution.routeId }
-    : undefined;
+  for (const route of routes) {
+    if (!route.enabled || route.target.joinClosedIssue || !placesArrival(route, facts)) continue;
+    if (!evaluateRuleGroup(route.when, facts)) continue;
+    const board = registry.get(route.target.boardKey);
+    if (!board) continue;
+    const phase = landingPhase(board, route.target.phaseKey);
+    if (!placementTakesCard(board, phase, facts)) continue;
+    return { board: board.id, phase, routeId: route.id };
+  }
+  return undefined;
 }
 
 /** Where intake sends an arrival: placed on a board, or Not routed with the reason. */
@@ -431,6 +404,13 @@ export function resolveEventRoute(
     ...rest,
     ...(pullRequestTrusted !== undefined ? { 'pullRequest.trusted': pullRequestTrusted } : {}),
     ...eventRuleFacts(event),
+    ...(event.closedIssue
+      ? {
+          'pullRequest.closesIssue': true,
+          ...(event.closedIssue.phase !== null ? { 'closedIssue.phase': event.closedIssue.phase } : {}),
+          'closedIssue.hasPullRequest': event.closedIssue.hasPullRequest,
+        }
+      : {}),
   };
   for (const route of routes) {
     if (!route.enabled || !route.on.includes(event.type) || route.target.boardKey !== board.id) continue;
