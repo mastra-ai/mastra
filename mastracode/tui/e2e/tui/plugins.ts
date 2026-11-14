@@ -785,6 +785,8 @@ export const pluginsLocalReloadFailureScenario: McE2eScenario = {
 
     terminal.submit('Call the reload failure plugin after the broken edit.');
     await runtime.waitForScreenText(/version-one-after/i, terminal, 10_000);
+    // The turn must end on the text reply to the tool result, not loop into more tool calls.
+    await runtime.waitForScreenText(/Reload failure plugin follow-up complete/i, terminal, 10_000);
 
     terminal.keyCtrlC();
   },

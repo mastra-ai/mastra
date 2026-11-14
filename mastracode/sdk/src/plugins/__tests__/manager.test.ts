@@ -395,6 +395,31 @@ describe('PluginManager', () => {
         },
       ]);
     });
+
+    it('finishes the reload and tells the other listeners when one error listener throws', async () => {
+      const { manager, pluginDir } = await setUp();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const errors: unknown[] = [];
+      const reloads: string[][] = [];
+      manager.onPluginError(() => {
+        throw new Error('listener broke');
+      });
+      manager.onPluginError(event => {
+        errors.push(event.pluginId);
+      });
+      manager.onReload(plugins => {
+        reloads.push(plugins.map(plugin => plugin.id));
+      });
+
+      writeReloadablePlugin(pluginDir, 'second', true);
+      await expect(manager.reload()).resolves.toHaveLength(1);
+
+      expect(errors).toEqual(['acme.reload']);
+      expect(reloads).toEqual([['acme.reload']]);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('listener broke'));
+      warn.mockRestore();
+    });
+
     it('does not claim to be running the previous version once that load is in conflict', async () => {
       tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
       const rivalDir = path.join(tempDir, 'rival');
