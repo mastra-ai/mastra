@@ -4,6 +4,7 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
+import { formatDuration } from '../format-duration.js';
 import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -16,20 +17,6 @@ function formatTokens(tokens: number): string {
   return k % 1 === 0 ? `${k}k` : `${k.toFixed(1)}k`;
 }
 
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-
-  const totalSeconds = Math.floor(ms / 1000);
-  if (totalSeconds < 60) return `${totalSeconds}s`;
-
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (totalMinutes < 60) return seconds === 0 ? `${totalMinutes}m` : `${totalMinutes}m${seconds}s`;
-
-  const hours = Math.floor(totalMinutes / 60);
-  const minutes = totalMinutes % 60;
-  return minutes === 0 ? `${hours}h` : `${hours}h${minutes}m`;
-}
 export type OMMarkerData =
   | {
       type: 'om_observation_start';
@@ -103,9 +90,9 @@ function formatMarker(data: OMMarkerData): string {
         data.tokensObserved > 0 && data.observationTokens > 0
           ? `${Math.round(data.tokensObserved / data.observationTokens)}x`
           : '';
-      const duration = (data.durationMs / 1000).toFixed(1);
+      const duration = formatDuration(data.durationMs, { precision: 'ms' });
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
-      return theme.fg('success', `  🧠 Observed: ${observed} → ${compressed} tokens${ratioStr} in ${duration}s ✓`);
+      return theme.fg('success', `  🧠 Observed: ${observed} → ${compressed} tokens${ratioStr} in ${duration} ✓`);
     }
     case 'om_observation_failed': {
       const tokens = data.tokensAttempted ? ` (${formatTokens(data.tokensAttempted)} tokens)` : '';
@@ -126,7 +113,9 @@ function formatMarker(data: OMMarkerData): string {
       const label =
         data.activationCount && data.activationCount > 1 ? `${data.activationCount} observations` : 'observations';
       const idleSuffix =
-        data.activateAfterIdle !== undefined ? ` (${formatDuration(data.activateAfterIdle)} idle timeout)` : '';
+        data.activateAfterIdle !== undefined
+          ? ` (${formatDuration(data.activateAfterIdle, { precision: 'ms' })} idle timeout)`
+          : '';
       return theme.fg(
         'success',
         `  ✓ Activated ${label}: -${msgTokens} msg tokens, +${obsTokens} obs tokens${idleSuffix}`,

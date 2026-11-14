@@ -170,13 +170,20 @@ export const workIdleStatusScenario: McE2eScenario = {
     updateStatusLine(state);
     state.idleCounter.setTimingState(state);
     state.ui.requestRender?.();
-    await runtime.waitForScreenText(/\d+m\d+s\s+✓/i, terminal);
+    await runtime.waitForScreenText(/\b1m 1s\s+✓/i, terminal);
 
     state.lastAgentRunEndedAt = Date.now() - 60_000;
     state.idleCounter.setTimingState(state);
     state.ui.requestRender?.();
 
     await runtime.waitForScreenText(/1m idle/i, terminal, 5_000);
+
+    // Longer idle times use the same spaced units as every other duration in the TUI.
+    state.lastAgentRunEndedAt = Date.now() - 80 * 60_000;
+    state.idleCounter.setTimingState(state);
+    state.ui.requestRender?.();
+
+    await runtime.waitForScreenText(/\b1h 20m idle\b/i, terminal, 5_000);
 
     terminal.keyCtrlC();
   },
