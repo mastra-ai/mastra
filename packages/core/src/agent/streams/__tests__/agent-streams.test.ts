@@ -99,6 +99,28 @@ describe('Agent durable resumable streams option', () => {
     expect(agent.__getStreamBus()).toBeUndefined();
   });
 
+  it.each(['stream', 'generate'] as const)(
+    'keeps direct %s runs unpublished when a durable wrapper shares a disabled Agent bus',
+    async method => {
+      const pubsub = new RecordingPubSub();
+      const agent = makeAgent({ durable: false, pubsub });
+      const durable = createDurableAgent({ agent });
+      new Mastra({ agents: { agent: durable }, pubsub, logger: false });
+
+      const output = await agent[method]('Say hello.');
+      if ('consumeStream' in output) await output.consumeStream();
+      expect(await output.text).toBe('Hello there.');
+      await pubsub.flush();
+      expect(pubsub.published).toEqual([]);
+      expect(await agent.__getRunRecord(output.runId)).toBeUndefined();
+
+      const result = await durable.stream('Say hello.');
+      await result.output.consumeStream();
+      await waitForFinish(pubsub, result.runId);
+      expect(await result.output.text).toBe('Hello there.');
+    },
+  );
+
   it('does not publish runs of a standalone agent by default', async () => {
     const pubsub = new RecordingPubSub();
     const agent = makeAgent({ pubsub });
