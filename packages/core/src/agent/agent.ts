@@ -1816,7 +1816,7 @@ export class Agent<
 
   // Sharing transport does not opt durable execution into plain run records or abort checks.
   #ownStreamBus(): AgentStreamBus | undefined {
-    if (!this.__ownsPlainStreamPublisher()) return undefined;
+    if (!this.__ownsPlainStreamPublisher() || !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     return this.__getStreamBus();
   }
 
