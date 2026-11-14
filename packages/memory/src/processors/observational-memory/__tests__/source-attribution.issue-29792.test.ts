@@ -24,35 +24,20 @@ const prompts = () => ({
 
 describe('source attribution guidance (#29792)', () => {
   it.each(Object.entries(prompts()))('%s keeps user lines to what the user said', (_name, prompt) => {
-    expect(prompt).toContain('SOURCE ATTRIBUTION');
     expect(prompt).toContain(
-      'An observation that says what the user asked, stated, or wanted must contain only information from the user',
-    );
-    expect(prompt).toContain('Record what the agent or a tool found in its own observation');
-    expect(prompt).toContain('Never drop a finding to keep it off the user');
-  });
-
-  it.each(Object.entries(prompts()))('%s includes the separated research example', (_name, prompt) => {
-    expect(prompt).toContain(
-      'BAD: 🔴 (10:00) User asked which university received the thesis (University of Glasgow, 1997, supervised by John P. Grant).',
-    );
-    expect(prompt).toContain(
-      'GOOD: 🔴 (10:00) User asked which university received a thesis; the only clue they gave is that it is the fourth oldest university.',
-    );
-    expect(prompt).toContain(
-      'GOOD: 🔴 (10:01) Agent found via web_search: thesis was submitted to the University of Glasgow in 1997, supervised by John P. Grant.',
+      'A line about what the user asked or stated holds only what the user said. Put facts the agent or a tool found on their own line, attributed to the agent or tool, and keep them.',
     );
   });
 
   it('keeps the precise-terminology allowance from adding facts to the user line', () => {
     expect(OBSERVER_EXTRACTION_INSTRUCTIONS).toContain(
-      "When the assistant interprets or confirms the user's vague language, prefer the assistant's precise terminology, but only to name what the user said more exactly. Never use it to add facts the user did not give.",
+      "prefer the assistant's precise terminology, without adding facts the user didn't give.",
     );
   });
 
   it('Reflector keeps attribution when consolidating', () => {
     expect(buildReflectorSystemPrompt()).toContain(
-      'When merging observations, never move a fact from an agent or tool observation into a "User asked" or "User stated" line.',
+      'When merging, don\'t move facts the agent or a tool found into a "User asked" or "User stated" line.',
     );
   });
 
@@ -68,9 +53,9 @@ describe('source attribution guidance (#29792)', () => {
       buildObserverSystemPrompt(true, custom),
       buildReflectorSystemPrompt(custom),
     ]) {
-      expect(prompt).toContain('SOURCE ATTRIBUTION');
+      expect(prompt).toContain('holds only what the user said');
       expect(prompt).toContain(`=== CUSTOM INSTRUCTIONS ===\n\n${custom}`);
-      expect(prompt.indexOf('SOURCE ATTRIBUTION')).toBeLessThan(prompt.indexOf(custom));
+      expect(prompt.indexOf('holds only what the user said')).toBeLessThan(prompt.indexOf(custom));
     }
   });
 

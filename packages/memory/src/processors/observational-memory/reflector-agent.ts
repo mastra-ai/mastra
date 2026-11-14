@@ -94,7 +94,7 @@ When consolidating, USER ASSERTIONS TAKE PRECEDENCE. The user is the authority o
 If you see both "User stated: has two kids" and later "User asked: how many kids do I have?",
 keep the assertion - the question doesn't invalidate what they told you. The answer is in the assertion.
 
-When merging observations, never move a fact from an agent or tool observation into a "User asked" or "User stated" line. Keep the user's words and the agent's findings in separate lines, and keep both.
+When merging, don't move facts the agent or a tool found into a "User asked" or "User stated" line.
 
 === THREAD ATTRIBUTION (Resource Scope) ===
 
