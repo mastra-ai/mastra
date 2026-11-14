@@ -152,10 +152,34 @@ test('reads failing files from a unit job log', () => {
     '2026-10-31T10:00:03.0000000Z  ✓ unit:packages/core  src/agent/c.test.ts',
     '2026-10-31T10:00:04.0000000Z  FAIL  [ packages/memory/src/d.test.ts ]',
   ].join('\n');
-  assert.deepEqual(failingFilesFromLog(log), [
-    'packages/core/src/agent/a.test.ts',
-    'packages/memory/src/d.test.ts',
-    'stores/pg/src/b.test.ts',
+  assert.deepEqual(
+    failingFilesFromLog(log, [
+      'packages/core/src/agent/a.test.ts',
+      'packages/memory/src/d.test.ts',
+      'stores/pg/src/b.test.ts',
+    ]),
+    ['packages/core/src/agent/a.test.ts', 'packages/memory/src/d.test.ts', 'stores/pg/src/b.test.ts'],
+  );
+});
+
+test('maps a vitest project name that is not a directory to the real test file', () => {
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:packages/core-isolated  src/agent/__tests__/lease.test.ts > lease',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/core:durable-other-storage-version  src/agent/d.test.ts > d',
+    '2026-11-14T10:00:02.0000000Z  FAIL  unit:mastracode-core  src/only-here.test.ts > x',
+    '2026-11-14T10:00:03.0000000Z  FAIL  unit:packages/core  src/agent/gone.test.ts > deleted since',
+    '2026-11-14T10:00:04.0000000Z  FAIL  [ packages/memory/src/gone.test.ts ]',
+  ].join('\n');
+  const tracked = [
+    'packages/core/src/agent/__tests__/lease.test.ts',
+    'packages/core/src/agent/d.test.ts',
+    'packages/memory/src/agent/d.test.ts',
+    'mastracode/sdk/src/only-here.test.ts',
+  ];
+  assert.deepEqual(failingFilesFromLog(log, tracked), [
+    'mastracode/sdk/src/only-here.test.ts',
+    'packages/core/src/agent/__tests__/lease.test.ts',
+    'packages/core/src/agent/d.test.ts',
   ]);
 });
 

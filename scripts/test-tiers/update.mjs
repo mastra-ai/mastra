@@ -313,26 +313,50 @@ export const gitDiffFiles = (base, head, cwd) => {
     .filter(Boolean);
 };
 
-/** Failing test files in a unit job's log, as repo paths (same parsing as the E4 crawl). */
-export function failingFilesFromLog(log) {
+/**
+ * Failing test files in a unit job's log, as repo paths (same parsing as the E4 crawl).
+ * Vitest prints a project name, which is not always the package directory
+ * (unit:packages/core-isolated runs files from packages/core), so each file is
+ * resolved against the tracked test files and dropped when it matches none.
+ */
+export function failingFilesFromLog(log, tracked = repoTestFiles()) {
+  const known = new Set(tracked);
   const files = new Set();
+  const keep = file => {
+    if (known.has(file)) files.add(file);
+  };
   for (const raw of log.split('\n')) {
     const line = raw.replace(/\x1b\[[0-9;]*m/g, '');
     if (!/^[0-9TZ:.-]+ +FAIL /.test(line)) continue;
     let m = /\[ ([^\]]+\.(?:test|spec)\.[a-z]+) \]/.exec(line);
     if (m) {
-      files.add(m[1]);
+      keep(m[1]);
       continue;
     }
     m = /FAIL +(\S+) +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
     if (m) {
-      files.add(`${m[1].split(':').slice(1).join(':') || m[1]}/${m[2]}`);
+      const file = projectFile(m[1].split(':').slice(1).join(':') || m[1], m[2], known);
+      if (file) files.add(file);
       continue;
     }
     m = /FAIL +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
-    if (m) files.add(m[1]);
+    if (m) keep(m[1]);
   }
   return [...files].filter(f => TEST_FILE.test(f)).sort();
+}
+
+// The tracked file a project-relative path belongs to: the project directory itself,
+// else the longest package directory the project name starts with
+// (packages/core-isolated, packages/core:durable-… → packages/core),
+// else the only tracked file with that relative path.
+function projectFile(project, rel, known) {
+  if (known.has(`${project}/${rel}`)) return `${project}/${rel}`;
+  const matches = [...known].filter(f => f.endsWith(`/${rel}`));
+  const prefixed = matches
+    .filter(f => project.startsWith(f.slice(0, -rel.length - 1)))
+    .sort((a, b) => b.length - a.length);
+  if (prefixed.length) return prefixed[0];
+  return matches.length === 1 ? matches[0] : undefined;
 }
 
 const runJobs = runId =>
@@ -364,10 +388,12 @@ function packageDir(file) {
   return parts.slice(0, 2).join('/');
 }
 
+let trackedTestFiles;
 function repoTestFiles() {
-  return execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+  trackedTestFiles ??= execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
     .split('\n')
     .filter(f => TEST_FILE.test(f) && !f.includes('node_modules/'));
+  return trackedTestFiles;
 }
 
 function versioningCommand(tiers, { runId, date }) {
