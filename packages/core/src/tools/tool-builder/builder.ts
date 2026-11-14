@@ -36,9 +36,11 @@ import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema 
 import type { StandardSchemaWithJSON } from '../../schema';
 import {
   getNeedsApprovalFn,
+  isStepPromptTool,
   isVercelTool,
   isProviderDefinedTool,
   markBuiltBeforeApproval,
+  markStepPromptTool,
 } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
@@ -1386,6 +1388,12 @@ export class CoreToolBuilder extends MastraBase {
     } as unknown as CoreTool;
 
     registerToolOutputValidationSchema(builtTool, outputSchema);
+    // `builtTool` is a fresh object built by spreading `definition`, so own-property
+    // symbol markers set on the original tool do not survive conversion. Re-apply the
+    // step-prompt marker so downstream loop code can still recognize the tool.
+    if (isStepPromptTool(this.originalTool)) {
+      markStepPromptTool(builtTool);
+    }
     return builtTool;
   }
 }

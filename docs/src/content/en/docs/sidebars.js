@@ -79,6 +79,11 @@ const sidebars = {
               id: 'agents/code-mode',
               label: 'Code Mode',
             },
+            {
+              type: 'doc',
+              id: 'agents/advisor',
+              label: 'Advisor',
+            },
           ],
         },
         {

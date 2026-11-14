@@ -620,6 +620,23 @@ export interface GoalConfig {
 /** Resumable stream configuration. Durable execution requires createDurableAgent(). */
 export type AgentDurableOption = boolean | AgentStreamsConfig;
 
+/**
+ * Opt-in advisor configuration. When set, the agent is given an `ask_advisor`
+ * tool it may call mid-run to consult a stronger model before continuing on its
+ * own (cheaper) model. Each consult is a single short model call billed
+ * separately.
+ */
+export interface AdvisorConfig<TRequestContext = any> {
+  /** Model the executor consults. Any model-router id or model instance. */
+  model: DynamicArgument<MastraModelConfig, TRequestContext>;
+  /** Optional advisor-side instructions, appended after the default advisor preamble. */
+  instructions?: string;
+  /** Maximum advisor consults per run. @defaultValue 3 */
+  maxUses?: number;
+  /** Maximum output tokens per advisor call. @defaultValue 2048 */
+  maxTokens?: number;
+}
+
 interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -746,6 +763,12 @@ interface AgentConfigBase<
    * If a workspace also defines tool hooks, workspace hooks wrap the workspace tool first, then agent hooks wrap the exposed tool call.
    */
   hooks?: ToolHooks;
+  /**
+   * Opt-in advisor: when set, the agent gains an `ask_advisor` tool it can call
+   * mid-run to consult a stronger model. Each consult is a single short model
+   * call whose usage is reported separately from the executor's. Omit to disable.
+   */
+  advisor?: AdvisorConfig<TRequestContext>;
   /**
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */

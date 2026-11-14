@@ -153,8 +153,16 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
+import {
+  isMastraTool,
+  isProviderTool,
+  isApprovalExempt,
+  isStepPromptTool,
+  markApprovalExempt,
+  markStepPromptTool,
+} from '../tools/toolchecks';
 import type {
+  AgentToolExecutionContext,
   CoreTool,
   MastraToolInvocationOptions,
   McpMetadata,
@@ -263,6 +271,7 @@ import type {
   AgentGenerateOptions,
   AgentNotificationConfig,
   GoalConfig,
+  AdvisorConfig,
   AgentStreamOptions,
   ToolsetsInput,
   ToolsInput,
@@ -340,6 +349,39 @@ export const AGENT_RESUME_CLAIM_STALE_MS = 60_000;
 
 /** How often a running resume renews its claim lease. Several renewals fit in one stale window. */
 const AGENT_RESUME_CLAIM_RENEW_MS = AGENT_RESUME_CLAIM_STALE_MS / 4;
+
+/** Tool id of the framework-provided advisor consult tool. */
+const ADVISOR_TOOL_ID = 'ask_advisor';
+/** Default number of advisor consults allowed per run. */
+const DEFAULT_ADVISOR_MAX_USES = 3;
+/** Default advisor response cap, in tokens, per consult. */
+const DEFAULT_ADVISOR_MAX_TOKENS = 2048;
+
+/**
+ * Baseline advisor instructions, prepended to any user-supplied `advisor.instructions`.
+ * Keeps the advisor oriented to "return guidance, take no actions" regardless of config.
+ */
+const ADVISOR_PREAMBLE = [
+  'You are an advisor consulted by a working agent that is stuck or facing conflicting information.',
+  "You are shown the agent's conversation so far and must reply with concise, concrete guidance:",
+  'which source to trust and why, the next check to run, or a short plan to carry out.',
+  'You have no tools and cannot act — only advise. Reply with the guidance itself, not a restatement of the task.',
+].join(' ');
+
+/** Header that separates the executor's own system prompt from the advisor's instructions. */
+const ADVISOR_EXECUTOR_CONTEXT_HEADER = 'The agent you are advising was given these instructions:';
+
+/** Error codes surfaced in the advisor tool result. */
+type AdvisorToolError = 'max_uses_exceeded' | 'advisor_error';
+
+/** Shape returned by the `ask_advisor` tool. */
+type AdvisorToolResult = { text: string; error?: AdvisorToolError };
+
+/**
+ * Tool-invocation context the advisor tool receives. The agent loop nests the live
+ * conversation under `agent`, which `MastraToolInvocationOptions` alone does not model.
+ */
+type AdvisorToolContext = MastraToolInvocationOptions & { agent?: AgentToolExecutionContext<unknown, unknown> };
 
 const createSubAgentInputSchema = ({ withResultRefs = false }: { withResultRefs?: boolean } = {}) =>
   z.object({
@@ -939,6 +981,7 @@ export class Agent<
   #defaultNetworkOptions: DynamicArgument<NetworkOptions, TRequestContext>;
   #tools: DynamicArgument<TTools, TRequestContext>;
   #hooks?: ToolHooks;
+  #advisor?: AdvisorConfig<TRequestContext>;
   #scorers: DynamicArgument<MastraScorers, TRequestContext>;
   #scopes?: AgentScopesConfig<TRequestContext>;
   #agents: DynamicArgument<Record<string, SubAgent<string, TRequestContext>>, TRequestContext>;
@@ -1101,6 +1144,7 @@ export class Agent<
 
     this.#tools = config.tools || ({} as TTools);
     this.#hooks = config.hooks;
+    this.#advisor = config.advisor;
     this.#pubsub = config.pubsub;
 
     if (config.mastra) {
@@ -3875,7 +3919,7 @@ export class Agent<
     };
 
     if (typeof this.#tools !== 'function') {
-      return resolveToolList(this.#tools as ToolsInput | undefined);
+      return this.#withAdvisorTools(await resolveToolList(this.#tools as ToolsInput | undefined));
     }
 
     const result = resolveDynamicArgument(this.#tools, {
@@ -3883,7 +3927,138 @@ export class Agent<
       mastra: this.#mastra,
     });
 
-    return resolveMaybePromise(result, tools => resolveToolList(tools as ToolsInput | undefined));
+    const resolved = await resolveMaybePromise(result, tools => resolveToolList(tools as ToolsInput | undefined));
+    return this.#withAdvisorTools(resolved);
+  }
+
+  /**
+   * Merges the framework advisor tool into a resolved tool map when the agent has an
+   * `advisor` configured. A user-declared tool of the same name always wins, so the
+   * framework tool is spread first.
+   */
+  #withAdvisorTools(tools: TTools): TTools {
+    const advisorTools = this.listAdvisorTools();
+    if (Object.keys(advisorTools).length === 0) return tools;
+    return { ...advisorTools, ...tools } as TTools;
+  }
+
+  /**
+   * Builds the `ask_advisor` tool for an agent with an `advisor` configured, or an empty
+   * record when there is none, so the tool only exists for opt-in agents.
+   *
+   * The tool is built once per run, during tool assembly, so the `maxUses` counter lives in
+   * this closure and is shared by every consult of the run. Like the delegation reference
+   * registry, it is not persisted and does not survive a suspend/resume rebuild.
+   *
+   * @internal
+   */
+  private listAdvisorTools(): TTools {
+    const advisor = this.#advisor;
+    if (!advisor) return {} as TTools;
+
+    const maxUses = advisor.maxUses ?? DEFAULT_ADVISOR_MAX_USES;
+    let uses = 0;
+
+    const advisorTool = createTool({
+      id: ADVISOR_TOOL_ID,
+      description:
+        'Consult a stronger advisor model when you are unsure how to proceed, or when you have conflicting ' +
+        'information and need help deciding. The advisor sees your conversation so far and returns concise ' +
+        'guidance. It cannot act on your behalf. Takes no arguments.',
+      inputSchema: z.object({}),
+      outputSchema: z.object({
+        text: z.string(),
+        error: z.string().optional(),
+      }),
+      execute: async (_input, context) => {
+        if (uses >= maxUses) {
+          // Reaching the cap must not fail the run: hand back guidance the model can use
+          // to move on, plus a machine-readable code for observers.
+          return {
+            text: 'Advisor consult limit reached for this run; continue with what you have.',
+            error: 'max_uses_exceeded',
+          } satisfies AdvisorToolResult;
+        }
+        uses += 1;
+        return this.runAdvisor(context as AdvisorToolContext);
+      },
+    });
+
+    // Tells the agentic loop to hand this tool the full processor-adjusted step prompt,
+    // like agent-delegation tools, so the advisor sees what the executor actually sees.
+    markStepPromptTool(advisorTool);
+
+    return { [ADVISOR_TOOL_ID]: advisorTool } as unknown as TTools;
+  }
+
+  /**
+   * Runs a single advisor consult: resolves the advisor model, forwards the executor's
+   * transcript, and returns the advisor's guidance as a short text result.
+   *
+   * The advisor is a one-step, tool-less agent run, so it emits its own trace/span and its
+   * own token usage — the executor's reported usage is unaffected. Failures come back as an
+   * error-shaped tool result rather than throwing, so one bad consult never fails the run.
+   */
+  private async runAdvisor(context: AdvisorToolContext): Promise<AdvisorToolResult> {
+    const advisor = this.#advisor;
+    if (!advisor) {
+      return { text: 'Advisor is not configured; continue with what you have.', error: 'advisor_error' };
+    }
+
+    try {
+      const requestContext = (context.requestContext ?? new RequestContext()) as RequestContext;
+      const model = await this.resolveModelConfig(advisor.model as DynamicArgument<MastraModelConfig>, requestContext);
+
+      const executionMessages = (context.agent?.messages ?? []) as any[];
+      const executorSystemPrompt = executionMessages
+        .filter(message => message?.role === 'system')
+        .map(message => (typeof message.content === 'string' ? message.content : ''))
+        .filter(Boolean)
+        .join('\n\n');
+
+      const instructions = [
+        ADVISOR_PREAMBLE,
+        advisor.instructions,
+        executorSystemPrompt ? `${ADVISOR_EXECUTOR_CONTEXT_HEADER}\n${executorSystemPrompt}` : undefined,
+      ]
+        .filter(Boolean)
+        .join('\n\n');
+
+      const advisorAgent = new Agent({
+        id: `${this.id}-advisor`,
+        name: `${this.name}-advisor`,
+        model,
+        instructions,
+      });
+      if (this.#mastra) advisorAgent.__registerMastra(this.#mastra);
+
+      // System messages are folded into the advisor's instructions above, so drop them
+      // from the transcript to avoid two competing system prompts.
+      const transcript = executionMessages.filter(message => message?.role !== 'system');
+      const advisorInput: MessageListInput = transcript.length
+        ? (transcript as MessageListInput)
+        : [{ role: 'user' as const, content: 'Advise on how to proceed.' }];
+
+      const result = await advisorAgent.generate(advisorInput, {
+        maxSteps: 1,
+        modelSettings: { maxOutputTokens: advisor.maxTokens ?? DEFAULT_ADVISOR_MAX_TOKENS },
+        requestContext,
+        ...resolveObservabilityContext(context),
+      });
+
+      const text = result.text?.trim();
+      if (!text) {
+        return { text: 'The advisor returned no guidance; continue with what you have.' };
+      }
+      return { text };
+    } catch (error) {
+      this.logger?.error('Advisor consult failed', { agent: this.name, error });
+      const detail = error instanceof Error ? error.message : String(error);
+      return {
+        text: `Advisor unavailable: ${detail}. Continue with what you have.`,
+        error: 'advisor_error',
+      };
+    }
   }
 
   /**
@@ -7932,6 +8107,8 @@ export class Agent<
     };
     // The spread drops the non-enumerable exemption marker.
     if (isApprovalExempt(tool)) markApprovalExempt(wrapped);
+    // Same for the step-prompt marker: the spread drops it too, so re-apply.
+    if (isStepPromptTool(tool)) markStepPromptTool(wrapped);
     return wrapped;
   }
 

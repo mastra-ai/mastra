@@ -81,6 +81,21 @@ export function isApprovalExempt(tool: unknown): boolean {
   return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[APPROVAL_EXEMPT] === true;
 }
 
+const STEP_PROMPT_TOOL = Symbol.for('mastra.tool.stepPrompt');
+
+/**
+ * Marks a framework-built tool (e.g. the advisor's `ask_advisor`) as needing the full
+ * processor-adjusted step prompt in `context.agent.messages`, like agent-delegation
+ * tools get, instead of the input-only prompt regular tools receive.
+ */
+export function markStepPromptTool(tool: object): void {
+  Object.defineProperty(tool, STEP_PROMPT_TOOL, { value: true, enumerable: false });
+}
+
+export function isStepPromptTool(tool: unknown): boolean {
+  return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[STEP_PROMPT_TOOL] === true;
+}
+
 /**
  * Reads a per-tool {@link NeedsApprovalFn} attached to a tool instance, if present.
  *

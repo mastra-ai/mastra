@@ -17,6 +17,7 @@ import {
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import { getToolTitle } from '../../../tools/tool-title';
+import { isStepPromptTool } from '../../../tools/toolchecks';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
 import { ensureSerializable } from '../../../utils';
@@ -941,6 +942,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // resumeStream instead of stream (otherwise the sub-agent restarts from scratch)
         const isAgentTool = inputData.toolName?.startsWith('agent-');
         const isWorkflowTool = inputData.toolName?.startsWith('workflow-');
+        // Framework tools that need the full processor-adjusted prompt (e.g. the advisor
+        // `ask_advisor` tool) opt in with a symbol marker rather than a name prefix, so
+        // they can be named freely. `tool` is resolved from the step's tool set below.
+        const needsFullStepPrompt = Boolean(isAgentTool) || isStepPromptTool(tool);
         const resumeDataToPassToToolOptions =
           !isAgentTool &&
           approvalGated &&
@@ -962,9 +967,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const toolOptions: MastraToolInvocationOptions = {
           abortSignal,
           toolCallId: inputData.toolCallId,
-          // Agent tools receive the exact processor-adjusted prompt visible to the parent model.
+          // Agent tools and framework tools that opt in via the step-prompt marker
+          // receive the exact processor-adjusted prompt visible to the parent model.
           // Regular tools retain the input-only context expected by the AI SDK tool contract.
-          messages: isAgentTool
+          messages: needsFullStepPrompt
             ? (readScoped(scopeCtx, STEP_MODEL_MESSAGES_KEY, 'stepModelMessages') ?? messageList.get.all.aiV5.model())
             : messageList.get.input.aiV5.model(),
           getMessages: () => messageList.get.all.db(),

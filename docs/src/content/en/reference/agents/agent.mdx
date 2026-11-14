@@ -1007,6 +1007,47 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
     ],
   },
   {
+    name: 'advisor',
+    type: 'AdvisorConfig',
+    isOptional: true,
+    description:
+      "Opt-in advisor the agent can consult mid-run through the framework-provided `ask_advisor` tool. Each consult is a single short, tool-less model call whose usage is reported separately from the executor's. Omit to disable.",
+    properties: [
+      {
+        type: 'AdvisorConfig',
+        parameters: [
+          {
+            name: 'model',
+            type: 'MastraLanguageModel | ({ requestContext: RequestContext }) => MastraLanguageModel | Promise<MastraLanguageModel>',
+            isOptional: false,
+            description:
+              'Model the agent consults. Pass a model router string in `provider/model` format, a model configuration or provider instance, or a function that resolves the model at runtime.',
+          },
+          {
+            name: 'instructions',
+            type: 'string',
+            isOptional: true,
+            description:
+              'Advisor-side instructions, appended after the default advisor preamble that tells the model it is advising a working agent and has no tools.',
+          },
+          {
+            name: 'maxUses',
+            type: 'number',
+            isOptional: true,
+            description:
+              'Maximum advisor consults per run. Once reached, `ask_advisor` returns an error-shaped result and the agent continues. Defaults to 3.',
+          },
+          {
+            name: 'maxTokens',
+            type: 'number',
+            isOptional: true,
+            description: 'Maximum output tokens for a single advisor reply. Defaults to 2048.',
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'transform',
     type: 'ToolPayloadTransformPolicy',
     isOptional: true,

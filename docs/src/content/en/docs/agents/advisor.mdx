@@ -1,0 +1,93 @@
+---
+title: 'Advisor | Agents'
+description: 'Let a running Mastra agent consult a stronger model mid-run through the ask_advisor tool, so the agent keeps its own model while getting help when it is stuck.'
+packages:
+  - '@mastra/core'
+---
+
+# Advisor
+
+**Added in:** `@mastra/core@1.84.0`
+
+An advisor lets a running agent consult a stronger model mid-run without moving the whole run onto that model. The agent keeps calling its own configured model, and when it needs help it calls the framework-provided `ask_advisor` tool. One short model call runs on the advisor model, and its reply comes back as the tool result. The agent never leaves its own run.
+
+## When to use an advisor
+
+Use an advisor when the agent's own model is good enough for most of the work but you want a stronger model available at the moments that matter. A research agent on a fast, cheap model can call `ask_advisor` when two sources contradict each other, get a short plan for which source to trust, and then carry out that plan with its own tools.
+
+The advisor is not a way to run the agent on a different model. It cannot use tools or take actions, and it cannot address the user. For delegating a whole task to another agent, see [Subagents](/docs/subagents).
+
+## How it works
+
+Set `advisor` on the agent. Mastra then adds an `ask_advisor` tool to that agent's tool set, and the model decides when to call it.
+
+Each call does the following:
+
+1. Sends one advisor-side request to `advisor.model`. The request contains the executor's instructions and its transcript so far, including the tool calls and tool results of the current run.
+1. Returns the advisor's reply as the `ask_advisor` tool result, so the agent's next step sees it.
+1. Records the consult as its own run. Its tokens are reported separately and are not added to the executor's usage.
+
+The advisor has no tools and runs for a single step, so a consult cannot loop or act on the agent's behalf.
+
+## Configure an advisor
+
+Pass the advisor model alongside the agent's own model, instructions, and tools:
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const researchAgent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'You research questions and cite the sources you used.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  tools: { search, fetchPage },
+  // highlight-start
+  advisor: {
+    model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+    instructions: 'When asked, give a short plan and say which source to trust and why.',
+    maxUses: 3,
+    maxTokens: 2048,
+  },
+  // highlight-end
+})
+```
+
+### `model`
+
+Required. The model the agent consults. Accepts any model router string in `provider/model` format, a model configuration, a provider instance, or a function that resolves one from the request context.
+
+Pick a model at least as capable as the agent's own model. A weaker advisor adds a round trip without adding much.
+
+### `instructions`
+
+Optional. Appended after the default advisor preamble, which tells the model that it is advising a working agent, that it should reply with guidance rather than a restatement of the task, and that it has no tools. Use this to shape the advisor's replies, such as asking for a short plan or for a recommendation between options.
+
+### `maxUses`
+
+Optional, defaults to `3`. The number of consults allowed per run. Once the agent has used them all, `ask_advisor` returns an error-shaped result instead of consulting again, and the agent continues with what it has. Reaching the cap never fails the run.
+
+The counter lives with the tool set built for the run. It is not persisted, so a run that suspends and resumes gets a fresh allowance — the same boundary as other per-run tool state.
+
+### `maxTokens`
+
+Optional, defaults to `2048`. The maximum output tokens for a single advisor reply. Advisor guidance is meant to be short, so the default is small; raise it if you ask the advisor for longer answers.
+
+## Usage and tracing
+
+Advisor consults use their own model and their own run, so they appear in traces as their own spans. The executor's reported usage covers the executor's model only, which lets you compare the cost of advising against the cost of running everything on the strong model.
+
+The `ask_advisor` tool returns an object with `text`, the guidance to act on, and an optional `error` code set when the advisor could not answer:
+
+| `error` | Meaning |
+| - | - |
+| `max_uses_exceeded` | The run used its allowance of `maxUses` consults. |
+| `advisor_error` | The advisor model could not be reached, or the call failed. |
+
+In both cases the tool result still carries readable `text`, so the agent can keep going. The run is never failed by a consult.
+
+## Related
+
+- [Agent reference](/reference/agents/agent) for `advisor` and the other constructor options
+- [Tools](/docs/agents/tools)
+- [Subagents](/docs/subagents)
