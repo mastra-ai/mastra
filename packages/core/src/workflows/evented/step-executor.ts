@@ -212,14 +212,23 @@ export class StepExecutor extends MastraBase {
       params.stepResults[stepId]?.status === 'suspended' ? params.stepResults[stepId]?.suspendPayload : undefined;
 
     // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
-    // iteration's payload. When resuming a specific iteration, use that iteration's own payload
-    // from `__workflow_meta.foreachOutput` so parallel suspensions don't read a sibling's data
-    // (e.g. another tool call's suspended run id).
+    // iteration's payload. A foreach item reads only its own record, so it never sees a sibling's
+    // data (e.g. another tool call's suspended run id); an item that never suspended gets none.
+    // Records suspended by earlier versions have no `foreachOutput`; the item's own output slot
+    // holds the same record there.
     if (suspendDataToUse && typeof params.foreachIdx === 'number') {
-      const iterationResult = suspendDataToUse.__workflow_meta?.foreachOutput?.[params.foreachIdx];
-      if (iterationResult?.status === 'suspended' && iterationResult.suspendPayload) {
+      const foreachOutput = suspendDataToUse.__workflow_meta?.foreachOutput;
+      const iterationResult =
+        foreachOutput?.[params.foreachIdx] ??
+        (params.stepResults[stepId] as { output?: any[] } | undefined)?.output?.[params.foreachIdx];
+      if (iterationResult?.status === 'suspended') {
         suspendDataToUse = iterationResult.suspendPayload;
+      } else if (Array.isArray(foreachOutput) || params.resumeData !== undefined) {
+        suspendDataToUse = undefined;
       }
+      // Otherwise the record comes from an earlier version and this item's own payload is gone (a
+      // restart after its slot was reset): keep the step-level payload as that version did, so the
+      // item still counts as suspended. It never comes with resume data.
     }
 
     // Filter out internal workflow metadata before exposing to step code

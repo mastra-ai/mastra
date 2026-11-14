@@ -1302,6 +1302,98 @@ describe('Workflow (Evented Engine Specific)', () => {
     });
   });
 
+  // Runs whose concurrent foreach suspended on an earlier version stored the suspended record without
+  // `__workflow_meta.foreachOutput`. A resumed item must still get its own suspend payload: for an
+  // agent tool call, missing suspend data makes the call look fresh and can run a declined tool.
+  describe('foreach suspended before per-item records were kept in the suspended record', () => {
+    const approve = createStep({
+      id: 'upgrade-approve',
+      inputSchema: z.object({ item: z.number() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      outputSchema: z.object({ item: z.number() }),
+      execute: async ({ inputData, suspendData, resumeData, suspend }) => {
+        if (!resumeData) {
+          return suspend({ item: inputData.item });
+        }
+        seen.push({ item: inputData.item, suspendData });
+        return { item: inputData.item };
+      },
+    });
+    let seen: { item: number; suspendData: unknown }[] = [];
+
+    const workflow = createWorkflow({
+      id: 'evented-foreach-upgrade',
+      inputSchema: z.array(z.object({ item: z.number() })),
+      outputSchema: z.array(z.object({ item: z.number() })),
+    });
+    workflow.foreach(approve, { concurrency: 3 }).commit();
+
+    const own = (...items: number[]) => items.map(item => ({ item, suspendData: { item } }));
+    const cases: {
+      name: string;
+      items: number[];
+      forEachIndex?: number;
+      clearSlot?: number;
+      expected: { item: number; suspendData: unknown }[];
+    }[] = [
+      { name: 'gives the only item its own suspend data', items: [0], forEachIndex: 0, expected: own(0) },
+      { name: 'gives item 1 of three its own suspend data', items: [0, 1, 2], forEachIndex: 1, expected: own(1) },
+      {
+        name: 'gives every item of three its own suspend data',
+        items: [0, 1, 2],
+        forEachIndex: undefined,
+        expected: own(0, 1, 2),
+      },
+      // With no record of its own, a resumed item must not get another item's payload with its resume data.
+      {
+        name: 'gives an item with no stored record no suspend data',
+        items: [0, 1, 2],
+        forEachIndex: 1,
+        clearSlot: 1,
+        expected: [{ item: 1, suspendData: undefined }],
+      },
+    ];
+    it.each(cases.map(c => [c.name, c] as const))('%s on resume', async (_name, c) => {
+      const { items, forEachIndex, clearSlot, expected } = c;
+      seen = [];
+      const mastra = new Mastra({
+        logger: false,
+        storage: testStorage,
+        pubsub: new EventEmitterPubSub(),
+        workflows: { 'evented-foreach-upgrade': workflow },
+      });
+      await mastra.startWorkers();
+
+      try {
+        const run = await workflow.createRun();
+        const started = await run.start({ inputData: items.map(item => ({ item })) });
+        expect(started.status).toBe('suspended');
+
+        const workflowsStore = (await testStorage.getStore('workflows'))!;
+        const snapshot = (await workflowsStore.loadWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+        }))!;
+        const record = snapshot.context['upgrade-approve'] as any;
+        const meta = record.suspendPayload.__workflow_meta;
+        expect(meta.foreachOutput).toHaveLength(items.length);
+        delete meta.foreachOutput;
+        if (clearSlot !== undefined) record.output[clearSlot] = null;
+        await workflowsStore.persistWorkflowSnapshot({
+          workflowName: 'evented-foreach-upgrade',
+          runId: run.runId,
+          snapshot,
+        });
+
+        await run.resume({ step: 'upgrade-approve', forEachIndex, resumeData: { approved: true } });
+
+        expect(seen.sort((a, b) => a.item - b.item)).toEqual(expected);
+      } finally {
+        await mastra.stopWorkers();
+      }
+    });
+  });
+
   describe('foreach iteration records (issue #24943)', () => {
     it('does not copy the foreach input array into each iteration record', async () => {
       const items = Array.from({ length: 5 }, (_, i) => i);

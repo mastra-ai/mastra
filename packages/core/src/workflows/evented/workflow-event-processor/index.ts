@@ -4538,6 +4538,17 @@ export class WorkflowEventProcessor extends EventProcessor {
             }
           }
 
+          // Each resumed item reads its own suspend payload from foreachOutput. The records come
+          // from the merged output, not the stored foreachOutput: concurrent per-item writes can
+          // drop each other's entries there or leave a finished item marked suspended.
+          const foreachOutput = iterationResults.map(iterResult => {
+            if (iterResult && typeof iterResult === 'object' && iterResult.status === 'suspended') {
+              const { payload: _payload, ...iterationRecord } = iterResult;
+              return iterationRecord;
+            }
+            return null;
+          });
+
           // Create the aggregated foreach step suspend result.
           // Preserve non-__workflow_meta keys (e.g. __streamState stashed by the agent loop's
           // tool-call-step) from a suspended iteration so callers reading the step-level
@@ -4557,6 +4568,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               __workflow_meta: {
                 path: executionPath,
                 resumeLabels: collectedResumeLabels,
+                foreachOutput,
               },
             },
           };

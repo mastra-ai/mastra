@@ -37,13 +37,18 @@ type ApprovalPayload = {
   delegatedToolName?: string;
 };
 type SubCall = { id: string; query: string };
+type SupervisorCall = { id: string; prompt: string; subCalls?: SubCall[] };
 
 describeForAllEngines(
   'AIMock loop scenario: subagent tool approval',
   engine => {
     const getMock = useLoopScenarioAimock();
 
-    async function setup(mock: LLMock, subCalls: SubCall[] = [{ id: 'call-sub-1', query: 'classified' }]) {
+    async function setup(
+      mock: LLMock,
+      subCalls: SubCall[] = [{ id: 'call-sub-1', query: 'classified' }],
+      supervisorCalls: SupervisorCall[] = [{ id: 'call-sup-1', prompt: 'fetch the secret' }],
+    ) {
       const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
       const executions = { count: 0, queries: [] as string[] };
       const secretTool = createTool({
@@ -75,12 +80,28 @@ describeForAllEngines(
 
       mock.on(
         { endpoint: 'chat', predicate: req => isSupervisor(req) && !lastIsToolResult(req) },
-        { toolCalls: [{ id: 'call-sup-1', name: 'agent-subAgent', arguments: { prompt: 'fetch the secret' } }] },
+        {
+          toolCalls: supervisorCalls.map(call => ({
+            id: call.id,
+            name: 'agent-subAgent',
+            arguments: { prompt: call.prompt },
+          })),
+        },
       );
-      mock.on(
-        { endpoint: 'chat', predicate: req => isSubagent(req) && !lastIsToolResult(req) },
-        { toolCalls: subCalls.map(call => ({ id: call.id, name: 'secretTool', arguments: { query: call.query } })) },
-      );
+      // Each delegation's subagent gets the tool calls of the prompt it was given.
+      for (const delegation of supervisorCalls) {
+        const calls = delegation.subCalls ?? subCalls;
+        mock.on(
+          {
+            endpoint: 'chat',
+            predicate: req =>
+              isSubagent(req) &&
+              !lastIsToolResult(req) &&
+              JSON.stringify(req.messages.filter(m => m.role === 'user')).includes(delegation.prompt),
+          },
+          { toolCalls: calls.map(call => ({ id: call.id, name: 'secretTool', arguments: { query: call.query } })) },
+        );
+      }
       mock.on(
         { endpoint: 'chat', predicate: req => isSubagent(req) && lastIsToolResult(req) },
         { content: SUB_AGENT_ANSWER },
@@ -138,6 +159,16 @@ describeForAllEngines(
         .map(c => (c.payload as { text: string }).text)
         .join('');
       return { chunks, types: chunks.map(c => c.type), text };
+    }
+
+    // Durable streams stay open while suspended, so a turn is read until `done` holds or the stream ends.
+    async function readUntil(run: RunHandle, done: (chunks: ChunkType[]) => boolean) {
+      const chunks: ChunkType[] = [];
+      for await (const chunk of run.fullStream) {
+        chunks.push(chunk);
+        if (done(chunks)) break;
+      }
+      return chunks;
     }
 
     const subagentRequests = (mock: LLMock) =>
@@ -254,6 +285,42 @@ describeForAllEngines(
       expect(types, `final chunks: ${types.join(', ')}`).not.toContain('error');
       expect(waiting).toEqual(['call-sub-a', 'call-sub-b']);
       expect(executions.queries).toEqual(['alpha', 'beta']);
+    });
+
+    // Each delegation is one item of the supervisor's tool-call foreach and resumes its own
+    // subagent run from the suspend data of that item. Approving the second delegation must not
+    // resume the first delegation's subagent run.
+    it('runs the tool of the delegation the user approved when two delegations wait for approval', async () => {
+      const mock = getMock();
+      const { agent, executions } = await setup(mock, undefined, [
+        { id: 'call-sup-a', prompt: 'fetch alpha', subCalls: [{ id: 'call-sub-a', query: 'alpha' }] },
+        { id: 'call-sup-b', prompt: 'fetch beta', subCalls: [{ id: 'call-sub-b', query: 'beta' }] },
+      ]);
+      const memory = { thread: 'subagent-approval-two-delegations', resource: 'subagent-approval-user' };
+
+      const run = (await agent.stream('Get both secrets', { memory, maxSteps: 5 })) as unknown as RunHandle;
+      const waiting = await readUntil(run, chunks => chunks.filter(c => c.type === 'tool-call-approval').length === 2);
+      expect(waiting.filter(c => c.type === 'tool-call-approval').map(c => (c.payload as any).toolCallId)).toEqual([
+        'call-sup-a',
+        'call-sup-b',
+      ]);
+
+      const approvedB = (await agent.approveToolCall({
+        runId: run.runId,
+        toolCallId: 'call-sup-b',
+        memory,
+      } as any)) as unknown as RunHandle;
+      // Read until the approved delegation returns; call-sup-a is still waiting.
+      await readUntil(approvedB, chunks => chunks.some(c => c.type === 'tool-result'));
+      const approvedA = (await agent.approveToolCall({
+        runId: run.runId,
+        toolCallId: 'call-sup-a',
+        memory,
+      } as any)) as unknown as RunHandle;
+      const { types } = await drain(approvedA.fullStream);
+
+      expect(executions.queries).toEqual(['beta', 'alpha']);
+      expect(types, `final chunks: ${types.join(', ')}`).not.toContain('tool-error');
     });
   },
   { skip: ['fs'] },

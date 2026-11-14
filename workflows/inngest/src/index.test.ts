@@ -15343,6 +15343,7 @@ createWorkflowTestSuite({
     resumeForeachPartialIndex: true, // Foreach partial index resume not supported
     resumeForeachLabel: true, // Foreach label resume not supported
     resumeForeachPartial: true, // Foreach partial resume not supported
+    resumeForeachSuspendData: true, // Relies on the forEachIndex and concurrent foreach resumes skipped above
     resumeNotSuspendedWorkflow: true, // Error for non-suspended workflow differs
     // Storage tests - enabled for testing
     storageListRuns: false,

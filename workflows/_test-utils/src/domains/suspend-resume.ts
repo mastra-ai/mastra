@@ -1519,6 +1519,43 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: each resumed foreach item receives its own suspend payload
+  for (const concurrency of [3, 1]) {
+    const approveAction = vi.fn().mockImplementation(async ({ inputData, resumeData, suspend }) => {
+      if (!resumeData) {
+        return suspend({ item: inputData.item });
+      }
+      return { item: inputData.item, approved: resumeData.approved };
+    });
+
+    const approveStep = createStep({
+      id: 'approve',
+      inputSchema: z.object({ item: z.number() }),
+      suspendSchema: z.object({ item: z.number() }),
+      resumeSchema: z.object({ approved: z.number() }),
+      outputSchema: z.object({ item: z.number(), approved: z.number() }),
+      execute: approveAction,
+    });
+
+    const workflowId = `foreach-suspend-data-concurrency-${concurrency}-workflow`;
+    const workflow = createWorkflow({
+      id: workflowId,
+      steps: [approveStep],
+      inputSchema: z.array(z.object({ item: z.number() })),
+      outputSchema: z.array(z.object({ item: z.number(), approved: z.number() })),
+    });
+
+    workflow.foreach(approveStep, { concurrency }).commit();
+
+    workflows[workflowId] = {
+      workflow,
+      mocks: { approveAction },
+      resetMocks: () => {
+        approveAction.mockClear();
+      },
+    };
+  }
+
   // Test: should handle consecutive nested workflows with suspend/resume
   {
     const step1Action = vi.fn().mockImplementation(async ({ resumeData, suspend }) => {
@@ -3865,6 +3902,80 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
           status: 'success',
           output: { finalValue: 36 + 12 + 349 + 457 + 1019 }, // 1873
         });
+      },
+    );
+
+    // Step code reads suspendData to know what it is resuming (an agent's tool call reads its
+    // suspended sub-agent run id from it), so an item handed a sibling's payload acts on the wrong item.
+    const foreachSuspendDataExecutions = (approveAction: any) =>
+      approveAction.mock.calls.map(([{ inputData, suspendData, resumeData }]: any[]) => ({
+        item: inputData.item,
+        suspendData,
+        resumeData,
+      }));
+
+    it.skipIf(ctx.skipTests.resumeForeachSuspendData || !ctx.resume)(
+      'should give each foreach item its own suspend data when the items are resumed one by one',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['foreach-suspend-data-concurrency-3-workflow']!;
+        resetMocks?.();
+        const runId = `foreach-suspend-data-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, [{ item: 0 }, { item: 1 }, { item: 2 }], { runId });
+        expect(startResult.status).toBe('suspended');
+
+        const order = [1, 0, 2];
+        for (const [position, index] of order.entries()) {
+          mocks.approveAction.mockClear();
+          const result = await ctx.resume!(workflow, {
+            runId,
+            forEachIndex: index,
+            resumeData: { approved: index },
+          });
+          expect(result.status).toBe(position === order.length - 1 ? 'success' : 'suspended');
+          expect(foreachSuspendDataExecutions(mocks.approveAction)).toEqual([
+            { item: index, suspendData: { item: index }, resumeData: { approved: index } },
+          ]);
+        }
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeForeachSuspendData || !ctx.resume)(
+      'should give each foreach item its own suspend data when all items are resumed at once',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['foreach-suspend-data-concurrency-3-workflow']!;
+        resetMocks?.();
+        const runId = `foreach-suspend-data-all-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, [{ item: 0 }, { item: 1 }, { item: 2 }], { runId });
+        expect(startResult.status).toBe('suspended');
+
+        mocks.approveAction.mockClear();
+        const result = await ctx.resume!(workflow, { runId, resumeData: { approved: 7 } });
+        expect(result.status).toBe('success');
+        expect(foreachSuspendDataExecutions(mocks.approveAction).sort((a: any, b: any) => a.item - b.item)).toEqual(
+          [0, 1, 2].map(item => ({ item, suspendData: { item }, resumeData: { approved: 7 } })),
+        );
+      },
+    );
+
+    it.skipIf(ctx.skipTests.resumeForeachSuspendData || !ctx.resume)(
+      'should give a foreach item started after a resume no suspend data',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['foreach-suspend-data-concurrency-1-workflow']!;
+        resetMocks?.();
+        const runId = `foreach-suspend-data-sequential-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
+        const startResult = await execute(workflow, [{ item: 0 }, { item: 1 }, { item: 2 }], { runId });
+        expect(startResult.status).toBe('suspended');
+
+        mocks.approveAction.mockClear();
+        const result = await ctx.resume!(workflow, { runId, forEachIndex: 0, resumeData: { approved: 0 } });
+        expect(result.status).toBe('suspended');
+        expect(foreachSuspendDataExecutions(mocks.approveAction)).toEqual([
+          { item: 0, suspendData: { item: 0 }, resumeData: { approved: 0 } },
+          { item: 1, suspendData: undefined, resumeData: undefined },
+        ]);
       },
     );
 
