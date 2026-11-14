@@ -5,8 +5,11 @@ const mocks = vi.hoisted(() => ({
   buildLayout: vi.fn(),
   setupKeyHandlers: vi.fn(() => () => {}),
   subscribeToAgentController: vi.fn(),
-  applyCurrentThreadPack: vi.fn(async () => {}),
+  applyCurrentThreadPack: vi.fn(),
   saveSettings: vi.fn(),
+  renderExistingTasks: vi.fn(),
+  setCurrentThreadTitle: vi.fn(),
+  showInfo: vi.fn(),
 }));
 
 function stopIfAt(stage: string): void {
@@ -15,7 +18,7 @@ function stopIfAt(stage: string): void {
 
 vi.mock('../display.js', () => ({
   showError: vi.fn(),
-  showInfo: vi.fn(),
+  showInfo: mocks.showInfo,
   showFormattedError: vi.fn(),
   notify: vi.fn(),
 }));
@@ -27,7 +30,10 @@ vi.mock('../setup.js', () => ({
   refreshSkillsAutocomplete: vi.fn(async () => {}),
   setupKeyHandlers: mocks.setupKeyHandlers,
   subscribeToAgentController: mocks.subscribeToAgentController,
-  renderExistingTasks: vi.fn(async () => {}),
+  renderExistingTasks: async (...args: unknown[]) => {
+    mocks.renderExistingTasks(...args);
+    stopIfAt('tasks');
+  },
 }));
 
 vi.mock('../thread-startup.js', () => ({
@@ -38,11 +44,17 @@ vi.mock('../thread-startup.js', () => ({
 }));
 
 vi.mock('../thread-title.js', () => ({
-  setCurrentThreadTitle: vi.fn(),
+  setCurrentThreadTitle: (...args: unknown[]) => {
+    mocks.setCurrentThreadTitle(...args);
+    stopIfAt('thread-state');
+  },
 }));
 
 vi.mock('../model-packs/apply.js', () => ({
-  applyCurrentThreadPack: mocks.applyCurrentThreadPack,
+  applyCurrentThreadPack: async (...args: unknown[]) => {
+    mocks.applyCurrentThreadPack(...args);
+    stopIfAt('pack-apply');
+  },
   listResolvableModePacks: vi.fn(() => []),
 }));
 
@@ -66,7 +78,7 @@ type StartupTui = {
   updateCheckTimer: ReturnType<typeof setInterval> | null;
   caffeinateProcess: null;
   queuedUserInput: string[];
-  syncThreadActivePackMetadata: () => Promise<void>;
+  syncThreadActivePackMetadata: ReturnType<typeof vi.fn>;
   renderExistingMessagesAndSeedIdleCounter: () => Promise<void>;
   shouldShowOnboarding: () => boolean;
   showOnboarding: ReturnType<typeof vi.fn>;
@@ -98,6 +110,7 @@ function createStartupTui(stopAt: string) {
     runSessionEnd: vi.fn(async () => {}),
   };
   const exit = vi.fn();
+  const startWorkers = vi.fn(async () => stopIfAt('start-workers'));
 
   tui.state = {
     isInitialized: false,
@@ -111,7 +124,7 @@ function createStartupTui(stopAt: string) {
     local: {
       controller: {
         init: vi.fn(async () => stopIfAt('controller-init')),
-        getMastra: () => undefined,
+        getMastra: () => ({ startWorkers }),
         loadOMProgress: vi.fn(async () => stopIfAt('om-progress')),
       },
       session: {},
@@ -119,12 +132,27 @@ function createStartupTui(stopAt: string) {
     pluginManager,
     mcpManager,
     hookManager,
+    goalManager: {
+      loadFromThread: vi.fn(async () => {}),
+      getGoal: () => undefined,
+      loadFromThreadMetadata: vi.fn(),
+    },
     assistantRenderRegistry: new AssistantRenderRegistry(),
     editor: {},
     ui: { start: vi.fn(), stop: vi.fn(), requestRender: vi.fn() },
     session: {
       mode: { get: () => 'build' },
-      thread: { getId: () => '' },
+      thread: {
+        getId: () => '',
+        list: vi.fn(async () => {
+          stopIfAt('thread-list');
+          return [];
+        }),
+        listMessages: vi.fn(async () => {
+          stopIfAt('resumed-check');
+          return [{ id: 'message-1' }];
+        }),
+      },
       state: { get: () => ({}) },
     },
   };
@@ -132,7 +160,7 @@ function createStartupTui(stopAt: string) {
   tui.updateCheckTimer = null;
   tui.caffeinateProcess = null;
   tui.queuedUserInput = [];
-  tui.syncThreadActivePackMetadata = async () => stopIfAt('pack-metadata');
+  tui.syncThreadActivePackMetadata = vi.fn(async () => stopIfAt('pack-metadata'));
   tui.renderExistingMessagesAndSeedIdleCounter = async () => stopIfAt('render');
   tui.shouldShowOnboarding = () => true;
   tui.showOnboarding = vi.fn(async () => stopIfAt('onboarding'));
@@ -140,7 +168,7 @@ function createStartupTui(stopAt: string) {
   tui.submitUserInput = vi.fn(async () => {});
   tui.getUserInput = vi.fn(() => new Promise<string>(() => {}));
 
-  return { tui, pluginManager, mcpManager, backgroundCompletionEvents, hookManager, exit };
+  return { tui, pluginManager, mcpManager, backgroundCompletionEvents, hookManager, exit, startWorkers };
 }
 
 async function initAndCollectTimer(tui: StartupTui): Promise<ReturnType<typeof setInterval> | null> {
@@ -156,17 +184,22 @@ describe('MastraTUI startup stopped part-way', () => {
   });
 
   it('runs every startup step when nothing stops it', async () => {
-    const { tui, pluginManager, mcpManager, backgroundCompletionEvents, hookManager } = createStartupTui('');
+    const { tui, pluginManager, mcpManager, backgroundCompletionEvents, hookManager, startWorkers } =
+      createStartupTui('');
 
     const running = tui.run();
     await vi.waitFor(() => expect(tui.getUserInput).toHaveBeenCalled());
 
+    expect(startWorkers).toHaveBeenCalledTimes(1);
     expect(pluginManager.onPluginError).toHaveBeenCalledTimes(1);
     expect(tui.state.ui.start).toHaveBeenCalledTimes(1);
     expect(mocks.applyCurrentThreadPack).toHaveBeenCalledTimes(1);
+    expect(tui.syncThreadActivePackMetadata).toHaveBeenCalledTimes(1);
     expect(mocks.subscribeToAgentController).toHaveBeenCalledTimes(1);
     expect(backgroundCompletionEvents.subscribe).toHaveBeenCalledTimes(1);
+    expect(mocks.setCurrentThreadTitle).toHaveBeenCalledTimes(1);
     expect(mcpManager.initInBackground).toHaveBeenCalledTimes(1);
+    expect(mocks.renderExistingTasks).toHaveBeenCalledTimes(1);
     expect(tui.showOnboarding).toHaveBeenCalledTimes(1);
     expect(tui.checkForUpdate).toHaveBeenCalledTimes(1);
     expect(tui.updateCheckTimer).not.toBeNull();
@@ -178,8 +211,16 @@ describe('MastraTUI startup stopped part-way', () => {
     void running;
   });
 
-  it('does not subscribe to the plugin manager when stopped while the controller starts', async () => {
-    const { tui, pluginManager } = createStartupTui('controller-init');
+  it('does not start workers when stopped while the controller initializes', async () => {
+    const { tui, startWorkers } = createStartupTui('controller-init');
+
+    await initAndCollectTimer(tui);
+
+    expect(startWorkers).not.toHaveBeenCalled();
+  });
+
+  it('does not subscribe to the plugin manager when stopped while workers start', async () => {
+    const { tui, pluginManager } = createStartupTui('start-workers');
 
     await initAndCollectTimer(tui);
 
@@ -208,6 +249,27 @@ describe('MastraTUI startup stopped part-way', () => {
     expect(exit).not.toHaveBeenCalled();
   });
 
+  it('does not sync the thread pack when stopped while the startup pack applies', async () => {
+    const { tui } = createStartupTui('pack-apply');
+
+    await initAndCollectTimer(tui);
+
+    expect(tui.syncThreadActivePackMetadata).not.toHaveBeenCalled();
+  });
+
+  it('does not apply the thread pack when stopped while the pack sync reads threads', async () => {
+    const { tui } = createStartupTui('thread-list');
+    delete (tui as Partial<StartupTui>).syncThreadActivePackMetadata;
+    tui.state.options.initialPackId = undefined;
+    tui.state.options.initialModelOverride = true;
+    tui.state.session.thread.getId = () => 'thread-1';
+
+    await initAndCollectTimer(tui);
+
+    expect(tui.state.session.thread.list).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCurrentThreadPack).not.toHaveBeenCalled();
+  });
+
   it('does not subscribe to controller or background events when stopped while the pack syncs', async () => {
     const { tui, backgroundCompletionEvents } = createStartupTui('pack-metadata');
 
@@ -217,16 +279,32 @@ describe('MastraTUI startup stopped part-way', () => {
     expect(backgroundCompletionEvents.subscribe).not.toHaveBeenCalled();
   });
 
-  it('does not connect MCP servers when stopped while memory progress loads', async () => {
-    const { tui, mcpManager } = createStartupTui('om-progress');
+  it('does not sync the initial thread state when stopped while memory progress loads', async () => {
+    const { tui } = createStartupTui('om-progress');
+
+    await initAndCollectTimer(tui);
+
+    expect(mocks.setCurrentThreadTitle).not.toHaveBeenCalled();
+  });
+
+  it('does not connect MCP servers when stopped while the initial thread state syncs', async () => {
+    const { tui, mcpManager } = createStartupTui('thread-state');
 
     await initAndCollectTimer(tui);
 
     expect(mcpManager.initInBackground).not.toHaveBeenCalled();
   });
 
-  it('does not open onboarding when stopped while the thread renders', async () => {
+  it('does not render tasks when stopped while messages render', async () => {
     const { tui } = createStartupTui('render');
+
+    await initAndCollectTimer(tui);
+
+    expect(mocks.renderExistingTasks).not.toHaveBeenCalled();
+  });
+
+  it('does not open onboarding when stopped while tasks render', async () => {
+    const { tui } = createStartupTui('tasks');
 
     await initAndCollectTimer(tui);
 
@@ -251,6 +329,22 @@ describe('MastraTUI startup stopped part-way', () => {
     if (timer) clearInterval(timer);
 
     expect(hookManager.runSessionStart).not.toHaveBeenCalled();
+    expect(tui.submitUserInput).not.toHaveBeenCalled();
+    expect(tui.getUserInput).not.toHaveBeenCalled();
+  });
+
+  it('does not show the resume notice or send the initial message when stopped while checking for a resumed conversation', async () => {
+    const { tui } = createStartupTui('resumed-check');
+    tui.state.options.resumeSkipNotice = 'Resumed; startup prompt skipped.';
+    tui.state.session.thread.getId = () => 'thread-1';
+
+    const running = tui.run();
+    await Promise.race([running, new Promise(resolve => setTimeout(resolve, 50))]);
+    const timer = tui.updateCheckTimer;
+    if (timer) clearInterval(timer);
+
+    expect(tui.state.session.thread.listMessages).toHaveBeenCalledTimes(1);
+    expect(mocks.showInfo).not.toHaveBeenCalledWith(tui.state, 'Resumed; startup prompt skipped.');
     expect(tui.submitUserInput).not.toHaveBeenCalled();
     expect(tui.getUserInput).not.toHaveBeenCalled();
   });
