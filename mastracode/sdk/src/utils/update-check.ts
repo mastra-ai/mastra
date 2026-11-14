@@ -118,8 +118,16 @@ export function getCurrentVersion(): string {
   // Fallback for running from source (e.g. pnpx tsx mastracode/src/main.ts)
   const dir = dirname(fileURLToPath(import.meta.url));
   const pkgPath = resolve(dir, '../../package.json');
-  const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
-  return pkg.version;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'));
+    return pkg.version;
+  } catch (error) {
+    // A bundled SDK has no package.json at this relative path. Kimi's headers
+    // are initialized during import, so a missing manifest must not prevent
+    // the entire Factory server from starting.
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'unknown';
+    throw error;
+  }
 }
 
 /**
