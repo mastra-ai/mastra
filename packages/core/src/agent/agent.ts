@@ -1851,6 +1851,7 @@ export class Agent<
     resourceId: string | undefined,
     { resuming }: { resuming: boolean },
   ): Promise<AgentRunRecord | undefined> {
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
 
@@ -1875,6 +1876,7 @@ export class Agent<
     runId: string,
     owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
   ): AgentStreamPublisher | undefined {
+    if (!areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     const bus = this.__getStreamBus();
     if (!bus) return undefined;
     const publisher = createAgentStreamPublisher({
