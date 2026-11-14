@@ -378,6 +378,19 @@ describe('MastraTUI startup stopped part-way', () => {
     expect(tui.getUserInput).not.toHaveBeenCalled();
   });
 
+  it('does not wait for typed input when stopped while the initial message is submitted', async () => {
+    const { tui } = createStartupTui('');
+    tui.submitUserInput = vi.fn(async () => tui.stop());
+
+    const running = tui.run();
+    await Promise.race([running, new Promise(resolve => setTimeout(resolve, 50))]);
+    const timer = tui.updateCheckTimer;
+    if (timer) clearInterval(timer);
+
+    expect(tui.submitUserInput).toHaveBeenCalledWith('hello');
+    expect(tui.getUserInput).not.toHaveBeenCalled();
+  });
+
   it('does not show the resume notice or send the initial message when stopped while checking for a resumed conversation', async () => {
     const { tui } = createStartupTui('resumed-check');
     tui.state.options.resumeSkipNotice = 'Resumed; startup prompt skipped.';

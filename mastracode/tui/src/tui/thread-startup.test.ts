@@ -178,6 +178,33 @@ describe('resumeThreadOnStartup', () => {
     expect(switchThread).not.toHaveBeenCalled();
   });
 
+  it('does not switch or mark a pending thread for a factory session when the caller stopped while threads were listed', async () => {
+    for (const threads of [[createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z')], []]) {
+      const switchThread = vi.fn().mockResolvedValue(undefined);
+      let current = true;
+      const state = {
+        projectInfo: { rootPath: '/tmp/project' },
+        pendingNewThread: false,
+        session: {
+          thread: {
+            getId: vi.fn(() => null),
+            list: vi.fn(async () => {
+              current = false;
+              return threads;
+            }),
+            switch: switchThread,
+          },
+        },
+      } as any;
+
+      await expect(resumeThreadOnStartup(state, undefined, () => current)).resolves.toBeUndefined();
+
+      expect(state.session.thread.list).toHaveBeenCalledTimes(1);
+      expect(switchThread).not.toHaveBeenCalled();
+      expect(state.pendingNewThread).toBe(false);
+    }
+  });
+
   it('does not switch threads when the caller stopped while threads were listed', async () => {
     const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
     const switchThread = vi.fn().mockResolvedValue(undefined);
