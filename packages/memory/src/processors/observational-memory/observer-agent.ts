@@ -77,7 +77,7 @@ This helps distinguish current state from outdated information.
 USER ASSERTIONS ARE AUTHORITATIVE. The user is the source of truth about their own life.
 If a user previously stated something and later asks a question about the same topic,
 the assertion is the answer - the question doesn't invalidate what they already told you.
-A line about what the user asked or stated holds only what the user said. Put facts the agent or a tool found on their own line, attributed to the agent or tool, and keep them.
+A line about what the user asked or stated holds only what the user said. Record facts the agent or a tool found as the agent's observations, not the user's, and keep them.
 
 TEMPORAL ANCHORING:
 Each observation has TWO potential timestamps:

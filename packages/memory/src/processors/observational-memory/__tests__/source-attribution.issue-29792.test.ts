@@ -25,7 +25,7 @@ const prompts = () => ({
 describe('source attribution guidance (#29792)', () => {
   it.each(Object.entries(prompts()))('%s keeps user lines to what the user said', (_name, prompt) => {
     expect(prompt).toContain(
-      'A line about what the user asked or stated holds only what the user said. Put facts the agent or a tool found on their own line, attributed to the agent or tool, and keep them.',
+      "A line about what the user asked or stated holds only what the user said. Record facts the agent or a tool found as the agent's observations, not the user's, and keep them.",
     );
   });
 
