@@ -65,7 +65,7 @@ Agents receive tools for the capabilities supported by the sandbox backend:
 | Tool | Does |
 | - | - |
 | `execute_command` | Runs a shell command and returns stdout, stderr, and the exit code. Supports `background: true` when the backend can spawn long-running processes. |
-| `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `wait: true` to wait for the process to exit. For a static sandbox, this tool and `kill_process` are only added when the backend supports background processes. Workspaces that resolve their sandbox per request always include both tools, because capabilities aren't known until the sandbox resolves. |
+| `get_process_output` | Gets stdout, stderr, and status for a background process. Supports `tail` to limit output and `waitSeconds` to wait up to that many seconds (max 300) for the process to exit. For a static sandbox, this tool and `kill_process` are only added when the backend supports background processes. Workspaces that resolve their sandbox per request always include both tools, because capabilities aren't known until the sandbox resolves. |
 | `kill_process` | Stops a background process and returns its recent output. |
 
 Configured capabilities determine which tools are available. Tool configuration can then disable, rename, or add policies to those tools:
@@ -289,6 +289,21 @@ const workspace = new Workspace({
 ```
 
 These callbacks fire for all background processes started by the agent through `execute_command`.
+
+When a background process exits on its own, the agent that started it also gets a notification with the exit code and the last lines of output, so it doesn't have to poll `get_process_output`. If the thread is idle, the notification wakes it. This needs the `notifications` storage domain. Set `notifyOnExit: false` in `backgroundProcesses` to turn it off.
+
+Foreground commands don't block the agent forever either. A foreground command still running after 30 seconds moves to the background: the tool returns the output so far and the PID, and the agent is notified when the command exits. `get_process_output` with `waitSeconds` stops waiting at the same limit and returns the output so far. Change the limit with `foregroundDetachMs`, or set it to `false` to wait for every foreground command:
+
+```typescript title="src/mastra/workspaces.ts"
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      foregroundDetachMs: 10 * 60_000,
+    },
+  },
+})
+```
 
 By default, background processes inherit the agent's abort signal and stop when the agent disconnects. Set `abortSignal` to a custom signal, or use `null` or `false` when the process should continue after the request ends.
 

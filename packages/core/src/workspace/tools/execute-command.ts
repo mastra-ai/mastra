@@ -7,6 +7,9 @@ import {
   DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
   RetainedOutputBuffer,
 } from '../sandbox/process-manager/process-handle';
+import type { ProcessHandle } from '../sandbox/process-manager/process-handle';
+import type { CommandResult } from '../sandbox/types';
+import type { Workspace } from '../workspace';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
@@ -38,7 +41,7 @@ export const executeCommandWithBackgroundSchema = executeCommandInputSchema.exte
     .boolean()
     .optional()
     .describe(
-      'Run the command in the background. Returns a PID immediately instead of waiting for completion. Use get_process_output to check on it later.',
+      'Run the command in the background. Returns a PID immediately instead of waiting for completion. You are notified when it exits; use get_process_output to check on it before then.',
     ),
 });
 
@@ -106,6 +109,183 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   const output = parts.join('\n');
   const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n';
   return `${output}${separator}${terminalLine}`;
+}
+
+export const DEFAULT_FOREGROUND_DETACH_MS = 30_000;
+
+/** A wait as `30 seconds` or `5 minutes`. */
+export function formatWait(ms: number) {
+  const seconds = Math.max(1, Math.round(ms / 1000));
+  if (seconds % 60 === 0) return `${seconds / 60} minute${seconds === 60 ? '' : 's'}`;
+  return `${seconds} second${seconds === 1 ? '' : 's'}`;
+}
+
+/** Processes whose exit will be reported to the agent that started them. */
+const exitNotified = new WeakSet<ProcessHandle>();
+
+/** Whether the agent that started this process will be notified when it exits. */
+export function willNotifyOnExit(handle: ProcessHandle): boolean {
+  return exitNotified.has(handle);
+}
+/** Output lines included in a process-exit notification. */
+const EXIT_NOTIFICATION_TAIL_LINES = 20;
+
+/**
+ * Watch a process the agent is no longer waiting on: run the configured `onExit`
+ * callback and, unless disabled, notify the agent that spawned it, which wakes an
+ * idle thread. Runs after the tool has returned, so every failure is logged rather
+ * than thrown.
+ */
+function observeExit(
+  handle: ProcessHandle,
+  { command, context, workspace }: { command: string; context: any; workspace: Workspace },
+) {
+  const toolCallId = context?.agent?.toolCallId;
+  const bgConfig = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.backgroundProcesses;
+  const target = exitNotificationTarget(context, bgConfig?.notifyOnExit);
+  if (!bgConfig?.onExit && !target) return;
+  if (target) exitNotified.add(handle);
+
+  void handle
+    .wait()
+    .then(async result => {
+      if (bgConfig?.onExit) {
+        try {
+          await bgConfig.onExit({
+            pid: handle.pid,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            stdoutTruncated: result.stdoutTruncated,
+            stderrTruncated: result.stderrTruncated,
+            stdoutDroppedBytes: result.stdoutDroppedBytes,
+            stderrDroppedBytes: result.stderrDroppedBytes,
+            toolCallId,
+          });
+        } catch (callbackError) {
+          workspace.logger?.error('Background process onExit callback threw', {
+            error: callbackError,
+            pid: handle.pid,
+            toolCallId,
+          });
+        }
+      }
+      // A killed process was stopped by the agent (kill_process) or by a cancelled run:
+      // nothing new to tell it.
+      if (!target || (result.killed && !result.timedOut)) return;
+      try {
+        await notifyAgentOfExit(target, handle.pid, command, result);
+      } catch (notifyError) {
+        workspace.logger?.warn('Could not notify the agent that a background process exited', {
+          error: notifyError,
+          pid: handle.pid,
+          toolCallId,
+        });
+      }
+    })
+    .catch(observeError => {
+      // Observation failures never synthesize a successful exit.
+      workspace.logger?.error('Failed to observe background process exit', {
+        error: observeError,
+        pid: handle.pid,
+        toolCallId,
+      });
+    });
+}
+
+/**
+ * Run a foreground command, but stop waiting on it after `detachMs`: the agent gets
+ * the handle back and the command keeps running. The run's abort signal stops the
+ * command only while the agent is still waiting on it.
+ */
+async function runUntilDetached(
+  processes: NonNullable<Workspace['sandbox']>['processes'] & {},
+  command: string,
+  options: {
+    cwd?: string;
+    timeout?: number;
+    abortSignal?: AbortSignal;
+    detachMs: number;
+    onStdout: (data: string) => Promise<void>;
+    onStderr: (data: string) => Promise<void>;
+  },
+): Promise<{ result: CommandResult } | { detached: ProcessHandle }> {
+  let waiting = true;
+  const stop = new AbortController();
+  const forwardAbort = () => stop.abort(options.abortSignal?.reason);
+  if (options.abortSignal?.aborted) forwardAbort();
+  else options.abortSignal?.addEventListener('abort', forwardAbort, { once: true });
+
+  let timer: Parameters<typeof clearTimeout>[0];
+  try {
+    const handle = await processes.spawn(command, {
+      cwd: options.cwd,
+      timeout: options.timeout,
+      // The agent can't drive stdin, so a command reading it would never exit.
+      stdinMode: 'ignore',
+    });
+    const exited = handle.wait({
+      abortSignal: stop.signal,
+      // Once detached, the output is read through get_process_output instead.
+      onStdout: data => void (waiting && options.onStdout(data).catch(() => {})),
+      onStderr: data => void (waiting && options.onStderr(data).catch(() => {})),
+    });
+    const detached = new Promise<undefined>(resolve => {
+      timer = setTimeout(resolve, options.detachMs);
+    });
+    const result = await Promise.race([exited, detached]);
+    if (result) return { result };
+    // Keep a later rejection from surfacing as unhandled; observeExit reports it.
+    exited.catch(() => {});
+    return { detached: handle };
+  } finally {
+    waiting = false;
+    clearTimeout(timer);
+    options.abortSignal?.removeEventListener('abort', forwardAbort);
+  }
+}
+
+type ExitNotificationTarget = {
+  mastra: { getAgentById: (id: string) => any };
+  agentId: string;
+  resourceId: string;
+  threadId: string;
+  toolCallId?: string;
+};
+
+/** The agent thread that spawned the process, captured now because the exit outlives this call. */
+function exitNotificationTarget(context: any, enabled: boolean | undefined): ExitNotificationTarget | undefined {
+  if (enabled === false) return undefined;
+  const { agentId, resourceId, threadId, toolCallId } = context?.agent ?? {};
+  const mastra = context?.mastra;
+  if (!agentId || !resourceId || !threadId || typeof mastra?.getAgentById !== 'function') return undefined;
+  return { mastra, agentId, resourceId, threadId, toolCallId };
+}
+
+async function notifyAgentOfExit(target: ExitNotificationTarget, pid: string, command: string, result: CommandResult) {
+  const agent = target.mastra.getAgentById(target.agentId);
+  const output = formatCommandOutput(
+    await truncateOutput(result.stdout, EXIT_NOTIFICATION_TAIL_LINES),
+    await truncateOutput(result.stderr, EXIT_NOTIFICATION_TAIL_LINES),
+  ).join('\n');
+  const status = result.timedOut ? 'timed out' : `exited with code ${result.exitCode}`;
+  const summary = [`Background process ${pid} (\`${command}\`) ${status}.`, output && `Last output:\n${output}`]
+    .filter(Boolean)
+    .join('\n\n');
+
+  const sent = await agent.sendNotificationSignal(
+    {
+      source: 'workspace',
+      kind: 'process-exit',
+      priority: 'high',
+      summary,
+      sourceId: pid,
+      dedupeKey: `process-exit:${target.toolCallId ?? ''}:${pid}`,
+      payload: { pid, command, exitCode: result.exitCode, success: result.success, timedOut: result.timedOut },
+    },
+    { resourceId: target.resourceId, threadId: target.threadId },
+  );
+  await Promise.all([sent.persisted, sent.accepted].filter(Boolean));
 }
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
@@ -208,48 +388,13 @@ async function executeCommand(input: Record<string, any>, context: any) {
         : undefined,
     });
 
-    // Wire exit callback (fire-and-forget). The observer runs after this tool has
-    // already returned the PID, so any failure here has no live call frame to catch
-    // it. Own the detached promise: await the callback so both synchronous throws and
-    // rejected async callbacks land in the try/catch, and attach a terminal .catch()
-    // for a rejected wait(), routing all failures to the logger so
-    // neither escapes as a process-terminating unhandled rejection. Observation
-    // failures are logged distinctly and never synthesize a successful exit.
-    if (bgConfig?.onExit) {
-      void handle
-        .wait()
-        .then(async result => {
-          try {
-            await bgConfig.onExit!({
-              pid: handle.pid,
-              exitCode: result.exitCode,
-              stdout: result.stdout,
-              stderr: result.stderr,
-              stdoutTruncated: result.stdoutTruncated,
-              stderrTruncated: result.stderrTruncated,
-              stdoutDroppedBytes: result.stdoutDroppedBytes,
-              stderrDroppedBytes: result.stderrDroppedBytes,
-              toolCallId,
-            });
-          } catch (callbackError) {
-            workspace.logger?.error('Background process onExit callback threw', {
-              error: callbackError,
-              pid: handle.pid,
-              toolCallId,
-            });
-          }
-        })
-        .catch(observeError => {
-          workspace.logger?.error('Failed to observe background process exit', {
-            error: observeError,
-            pid: handle.pid,
-            toolCallId,
-          });
-        });
-    }
+    observeExit(handle, { command, context, workspace });
 
     span.end({ success: true }, { pid: Number(handle.pid) || undefined });
-    return `Started background process (PID: ${handle.pid})`;
+    const notified = exitNotificationTarget(context, bgConfig?.notifyOnExit)
+      ? ". You'll be notified when it exits"
+      : '';
+    return `Started background process (PID: ${handle.pid})${notified}`;
   }
 
   // Foreground mode: execute and wait for completion
@@ -268,31 +413,68 @@ async function executeCommand(input: Record<string, any>, context: any) {
   // (while the result is being reported) did not stop the command.
   let abortedWhenSettled = false;
   try {
-    const result = await sandbox
-      .executeCommand(reportUpstreamPipelineFailure(command, sandbox.provider), [], {
-        timeout: timeout ?? undefined,
+    const onStdout = async (data: string) => {
+      stdout.append(data);
+      await context?.writer?.custom({
+        type: 'data-sandbox-stdout',
+        data: { output: data, timestamp: Date.now(), toolCallId },
+        transient: true,
+      });
+    };
+    const onStderr = async (data: string) => {
+      stderr.append(data);
+      await context?.writer?.custom({
+        type: 'data-sandbox-stderr',
+        data: { output: data, timestamp: Date.now(), toolCallId },
+        transient: true,
+      });
+    };
+    const shellCommand = reportUpstreamPipelineFailure(command, sandbox.provider);
+    const detachMs = toolConfig?.foregroundDetachMs ?? DEFAULT_FOREGROUND_DETACH_MS;
+
+    let result: CommandResult;
+    if (sandbox.processes && detachMs !== false) {
+      const outcome = await runUntilDetached(sandbox.processes, shellCommand, {
         cwd: cwd ?? undefined,
-        abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
-        onStdout: async (data: string) => {
-          stdout.append(data);
-          await context?.writer?.custom({
-            type: 'data-sandbox-stdout',
-            data: { output: data, timestamp: Date.now(), toolCallId },
-            transient: true,
-          });
-        },
-        onStderr: async (data: string) => {
-          stderr.append(data);
-          await context?.writer?.custom({
-            type: 'data-sandbox-stderr',
-            data: { output: data, timestamp: Date.now(), toolCallId },
-            transient: true,
-          });
-        },
-      })
-      .finally(() => {
+        timeout: timeout ?? undefined,
+        abortSignal: context?.abortSignal,
+        detachMs,
+        onStdout,
+        onStderr,
+      }).finally(() => {
         abortedWhenSettled = context?.abortSignal?.aborted === true;
       });
+
+      if ('detached' in outcome) {
+        const handle = outcome.detached;
+        observeExit(handle, { command, context, workspace });
+        span.end({ success: true }, { pid: Number(handle.pid) || undefined });
+        const parts = formatCommandOutput(
+          noteDroppedOutput(await truncateOutput(handle.stdout, tail, tokenLimit, tokenFrom), stdout.dropped, 'stdout'),
+          noteDroppedOutput(await truncateOutput(handle.stderr, tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
+        );
+        const notified = exitNotificationTarget(context, toolConfig?.backgroundProcesses?.notifyOnExit)
+          ? " You'll be notified when it exits."
+          : '';
+        return appendTerminalLine(
+          parts,
+          `Still running after ${formatWait(detachMs)}, so it was moved to the background (PID: ${handle.pid}).${notified} Use get_process_output to check on it or kill_process to stop it.`,
+        );
+      }
+      result = outcome.result;
+    } else {
+      result = await sandbox
+        .executeCommand(shellCommand, [], {
+          timeout: timeout ?? undefined,
+          cwd: cwd ?? undefined,
+          abortSignal: context?.abortSignal, // foreground processes use agent's abort signal
+          onStdout,
+          onStderr,
+        })
+        .finally(() => {
+          abortedWhenSettled = context?.abortSignal?.aborted === true;
+        });
+    }
 
     await context?.writer?.custom({
       type: 'data-sandbox-exit',
@@ -382,7 +564,9 @@ export const executeCommandTool = createTool({
 
 const backgroundDescription = `${baseDescription}
 
-Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.`;
+Set background: true to run long-running commands (dev servers, watchers) without blocking. You'll get a PID to track the process, and a notification with its exit code and last output when it exits, so there's no need to poll it. On a background command, timeout stops the process after that many seconds: leave it out for dev servers and anything else that should keep running.
+
+A foreground command still running after 30 seconds moves to the background: you get its output so far and its PID, and a notification when it exits.`;
 
 /** Tool with background param in schema (used when sandbox.processes exists). */
 export const executeCommandWithBackgroundTool = createTool({

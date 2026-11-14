@@ -2,9 +2,13 @@ import { z } from 'zod/v4';
 import { createTool } from '../../tools';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
+import type { ProcessHandle } from '../sandbox/process-manager/process-handle';
+import { DEFAULT_FOREGROUND_DETACH_MS, formatWait, willNotifyOnExit } from './execute-command';
 import { coerceNumericString, emitWorkspaceMetadata, getDynamicSandboxCacheKeyHint, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
+
+const MAX_WAIT_SECONDS = 300;
 
 const LEFT_BEHIND_NOTE =
   'The command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.';
@@ -16,7 +20,7 @@ export const getProcessOutputTool = createTool({
   id: WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT,
   description: `Get the current output (stdout, stderr) and status of a background process by its PID.
 
-Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output.`,
+Use this after starting a background command with execute_command (background: true) to check if the process is still running and read its output. Pass waitSeconds to wait for it to finish first.`,
   toModelOutput: sandboxToModelOutput,
   outputSchema: z.string(),
   inputSchema: z.object({
@@ -27,21 +31,21 @@ Use this after starting a background command with execute_command (background: t
       .describe(
         `Number of lines to return, similar to tail -n. Positive or negative returns last N lines from end. Defaults to ${DEFAULT_TAIL_LINES}. Use 0 for no limit.`,
       ),
-    wait: z
-      .boolean()
+    waitSeconds: z
+      .preprocess(coerceNumericString, z.number().int().min(1).max(MAX_WAIT_SECONDS))
       .optional()
       .describe(
-        'If true, block until the process exits and return the final output. Useful for short-lived background commands where you want to wait for the result.',
+        `Wait up to this many seconds (max ${MAX_WAIT_SECONDS}) for the process to exit before returning. If it is still running when the wait ends, you get the output so far. Omit to return right away.`,
       ),
   }),
-  execute: async ({ pid, tail, wait: shouldWait }, context) => {
+  execute: async ({ pid, tail, waitSeconds }, context) => {
     const { workspace, sandbox } = requireSandbox(context);
     await emitWorkspaceMetadata(context, WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT);
 
     const span = startWorkspaceSpan(context, workspace, {
       category: 'sandbox',
       operation: 'getProcessOutput',
-      input: { pid, tail, wait: shouldWait },
+      input: { pid, tail, waitSeconds },
       attributes: { sandboxProvider: sandbox.provider },
     });
 
@@ -65,35 +69,21 @@ Use this after starting a background command with execute_command (background: t
         });
       }
 
-      // If wait requested, block until process exits with streaming callbacks.
-      // The run's abortSignal is forwarded so aborting the run (e.g. a user
-      // stop) interrupts a blocking wait instead of outliving the turn: the
-      // handle kills the process on abort, mirroring the spawn-time
-      // `abortSignal` convention.
+      // Wait for the exit, streaming output, but give up when the wait runs out or the
+      // run is cancelled. Either way the process keeps running: only waiting stops.
       let result: Awaited<ReturnType<typeof handle.wait>> | undefined;
-      if (shouldWait && handle.exitCode === undefined) {
-        result = await handle.wait({
-          abortSignal: context?.abortSignal,
-          onStdout: context?.writer
-            ? async (data: string) => {
-                await context.writer!.custom({
-                  type: 'data-sandbox-stdout',
-                  data: { output: data, timestamp: Date.now(), toolCallId },
-                  transient: true,
-                });
-              }
-            : undefined,
-          onStderr: context?.writer
-            ? async (data: string) => {
-                await context.writer!.custom({
-                  type: 'data-sandbox-stderr',
-                  data: { output: data, timestamp: Date.now(), toolCallId },
-                  transient: true,
-                });
-              }
-            : undefined,
+      let waitedMs: number | undefined;
+      if (waitSeconds && handle.exitCode === undefined) {
+        const detachMs = workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]?.foregroundDetachMs;
+        waitedMs = Math.min(waitSeconds * 1000, detachMs || DEFAULT_FOREGROUND_DETACH_MS);
+        result = await waitForExit(handle, waitedMs, context?.abortSignal, (type, output) => {
+          void context?.writer
+            ?.custom({ type, data: { output, timestamp: Date.now(), toolCallId }, transient: true })
+            .catch(() => {});
         });
+      }
 
+      if (result) {
         await context?.writer?.custom({
           type: 'data-sandbox-exit',
           data: {
@@ -122,9 +112,14 @@ Use this after starting a background command with execute_command (background: t
         'stderr',
       );
 
+      const stillRunningNote =
+        running && waitedMs !== undefined
+          ? `Still running after ${formatWait(waitedMs)}.${willNotifyOnExit(handle) ? " You'll be notified when it exits." : ''} Call get_process_output again to check on it, or kill_process to stop it.`
+          : undefined;
+
       if (running && !stdout && !stderr) {
         span.end({ success: true }, { exitCode: handle.exitCode });
-        return '(no output yet)';
+        return stillRunningNote ? `(no output yet)\n\n${stillRunningNote}` : '(no output yet)';
       }
 
       const parts: string[] = [];
@@ -146,6 +141,8 @@ Use this after starting a background command with execute_command (background: t
           `Exit code: ${exitCode}`,
         ];
         parts.push(...(parts.length > 0 ? [''] : []), ...terminalLines);
+      } else if (stillRunningNote) {
+        parts.push('', stillRunningNote);
       }
 
       span.end({ success: true }, { exitCode });
@@ -156,3 +153,38 @@ Use this after starting a background command with execute_command (background: t
     }
   },
 });
+
+/**
+ * Wait for a process to exit, for at most `ms` or until `abortSignal` fires. Returns
+ * undefined when it stopped waiting first; the process is left running.
+ */
+async function waitForExit(
+  handle: ProcessHandle,
+  ms: number,
+  abortSignal: AbortSignal | undefined,
+  onOutput: (type: 'data-sandbox-stdout' | 'data-sandbox-stderr', data: string) => void,
+) {
+  let waiting = true;
+  let timer: Parameters<typeof clearTimeout>[0];
+  let onAbort: (() => void) | undefined;
+  const exited = handle.wait({
+    onStdout: data => waiting && onOutput('data-sandbox-stdout', data),
+    onStderr: data => waiting && onOutput('data-sandbox-stderr', data),
+  });
+  const stopped = new Promise<undefined>(resolve => {
+    timer = setTimeout(resolve, ms);
+    onAbort = () => resolve(undefined);
+    if (abortSignal?.aborted) onAbort();
+    else abortSignal?.addEventListener('abort', onAbort, { once: true });
+  });
+  try {
+    const result = await Promise.race([exited, stopped]);
+    // A later rejection belongs to whoever else is watching the process.
+    if (!result) exited.catch(() => {});
+    return result;
+  } finally {
+    waiting = false;
+    clearTimeout(timer);
+    if (onAbort) abortSignal?.removeEventListener('abort', onAbort);
+  }
+}

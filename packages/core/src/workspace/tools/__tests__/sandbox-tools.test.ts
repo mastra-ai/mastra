@@ -280,23 +280,16 @@ describe('execute_command tool', () => {
       expect(result).toBe('Started background process (PID: 42)');
     });
 
-    it('runs foreground when background is not set', async () => {
+    it('runs foreground through the process manager when background is not set', async () => {
+      const handle = createMockHandle({ pid: '7', stdout: 'foreground result\n' });
       const sandbox = createMockSandbox({
-        executeCommand: vi.fn().mockResolvedValue({
-          success: true,
-          exitCode: 0,
-          stdout: 'foreground result\n',
-          stderr: '',
-          executionTimeMs: 5,
-        }),
-        processes: {
-          spawn: vi.fn(),
-        },
+        executeCommand: vi.fn(),
+        processes: { spawn: vi.fn().mockResolvedValue(handle) },
       });
       const ctx = createContext(sandbox);
       const result = await executeCommandWithBackgroundTool.execute({ command: 'echo hi' }, ctx);
       expect(result).toBe('foreground result\n');
-      expect(sandbox.processes.spawn).not.toHaveBeenCalled();
+      expect(sandbox.executeCommand).not.toHaveBeenCalled();
     });
 
     it('passes truncation metadata to background onExit callbacks', async () => {
@@ -512,7 +505,7 @@ describe('get_process_output tool', () => {
         );
         const pid = String(started).match(/PID: (.+)\)/)![1]!;
 
-        const result = await getProcessOutputTool.execute!({ pid, wait: true }, { workspace } as any);
+        const result = await getProcessOutputTool.execute!({ pid, waitSeconds: 10 }, { workspace } as any);
 
         expect(result).toBe(
           'started\n\n\nThe command exited, but a process it started is still running and holding its output open. Call kill_process to stop it.\nExit code: 0',
@@ -740,7 +733,7 @@ describe('get_process_output tool', () => {
   });
 
   describe('wait param', () => {
-    it('blocks until process exits when wait: true', async () => {
+    it('waits for the process to exit when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '15',
         stdout: 'final output\n',
@@ -757,13 +750,13 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '15', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '15', waitSeconds: 10 }, ctx);
       expect(handle.wait).toHaveBeenCalled();
       expect(result).toContain('final output');
       expect(result).toContain('Exit code: 0');
     });
 
-    it('returns output for exited process when wait: true', async () => {
+    it('returns output for an exited process when waitSeconds is set', async () => {
       const handle = createMockHandle({
         pid: '16',
         stdout: 'build complete\nDone in 2.3s\n',
@@ -776,7 +769,7 @@ describe('get_process_output tool', () => {
         },
       });
       const ctx = createContext(sandbox);
-      const result = await getProcessOutputTool.execute({ pid: '16', wait: true }, ctx);
+      const result = await getProcessOutputTool.execute({ pid: '16', waitSeconds: 10 }, ctx);
       expect(result).toContain('build complete');
       expect(result).toContain('Done in 2.3s');
     });
@@ -803,8 +796,11 @@ describe('background processes killed by an aborted run', () => {
       const handle = await spawn.mock.results.at(-1)!.value;
       return { pid, handle };
     };
-    const read = (pid: string, opts: { wait?: boolean; abortSignal?: AbortSignal } = {}) =>
-      getProcessOutputTool.execute!({ pid, wait: opts.wait }, { workspace, abortSignal: opts.abortSignal } as any);
+    const read = (pid: string, opts: { waitSeconds?: number; abortSignal?: AbortSignal } = {}) =>
+      getProcessOutputTool.execute!({ pid, waitSeconds: opts.waitSeconds }, {
+        workspace,
+        abortSignal: opts.abortSignal,
+      } as any);
     const cleanup = async () => {
       await workspace.destroy();
       await fs.rm(dir, { recursive: true, force: true });
@@ -828,17 +824,22 @@ describe('background processes killed by an aborted run', () => {
     }
   });
 
-  it('explains the exit when the run waiting on the process was aborted', async () => {
+  it('stops waiting, but leaves the process running, when the run waiting on it is cancelled', async () => {
     const { start, read, cleanup } = await setup();
     try {
       const { pid, handle } = await start('echo started; sleep 30');
       await vi.waitFor(() => expect(handle.stdout).toContain('started'));
 
       const controller = new AbortController();
-      const reading = read(pid, { wait: true, abortSignal: controller.signal });
+      const reading = read(pid, { waitSeconds: 60, abortSignal: controller.signal });
       controller.abort();
 
-      expect(await reading).toBe(`started\n\n\n${abortNote}\nExit code: ${handle.exitCode}`);
+      expect(await reading).toBe(
+        'started\n\n\nStill running after 30 seconds. Call get_process_output again to check on it, or kill_process to stop it.',
+      );
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(handle.exitCode).toBeUndefined();
+      await handle.kill();
     } finally {
       await cleanup();
     }
