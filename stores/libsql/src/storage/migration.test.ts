@@ -1,6 +1,7 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
 import { MastraError } from '@mastra/core/error';
+import { noopLogger } from '@mastra/core/logger';
 import {
   OLD_SPAN_SCHEMA,
   TABLE_SPANS,
@@ -31,6 +32,7 @@ describe('LibSQL Spans Table Migration', () => {
       client,
       maxRetries: 5,
       initialBackoffMs: 100,
+      getLogger: () => noopLogger,
     });
   });
 
@@ -556,6 +558,7 @@ describe('LibSQL JSONB Backwards Compatibility', () => {
       client,
       maxRetries: 5,
       initialBackoffMs: 100,
+      getLogger: () => noopLogger,
     });
   });
 

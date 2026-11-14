@@ -64,7 +64,12 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
         : ['http', 'https', 'ws', 'wss'].includes(client.protocol)
           ? 'remote'
           : undefined;
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async init(): Promise<void> {

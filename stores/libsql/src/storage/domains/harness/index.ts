@@ -133,7 +133,12 @@ export class HarnessLibSQL extends HarnessStorage {
   constructor(config: LibSQLDomainConfig) {
     super();
     const client = resolveClient(config);
-    this.#db = new LibSQLDB({ client, maxRetries: config.maxRetries, initialBackoffMs: config.initialBackoffMs });
+    this.#db = new LibSQLDB({
+      client,
+      maxRetries: config.maxRetries,
+      initialBackoffMs: config.initialBackoffMs,
+      getLogger: () => this.logger,
+    });
   }
 
   async init(): Promise<void> {

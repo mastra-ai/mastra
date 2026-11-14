@@ -7204,6 +7204,8 @@ export class Mastra<
     this.#storageSource = getStorageSource(storage);
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+    // Storage attached after construction must log through this instance's logger too.
+    this.#storage.__setLogger(this.#logger);
     for (const knowledge of Object.values(this.#knowledge)) {
       if (!knowledge.hasOwnStorage) {
         knowledge.setStorage(this.#storage, this.#storageSource);

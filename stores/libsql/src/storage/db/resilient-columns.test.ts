@@ -1,4 +1,5 @@
 import { createClient } from '@libsql/client';
+import { noopLogger } from '@mastra/core/logger';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { TABLE_NAMES, StorageColumn } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -80,7 +81,7 @@ describe('Resilient storage columns', () => {
 
   beforeEach(async () => {
     rawClient = createClient({ url: 'file::memory:' });
-    db = new LibSQLDB({ client: rawClient });
+    db = new LibSQLDB({ client: rawClient, getLogger: () => noopLogger });
 
     // Create the table with the known schema
     await db.createTable({
