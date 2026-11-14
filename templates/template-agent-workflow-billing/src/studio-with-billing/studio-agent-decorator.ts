@@ -19,7 +19,7 @@ export class StudioAgentRuntime {
     conversation: StudioConversation,
     toolCallId: string,
     approved: boolean,
-  ) => Promise<{ replayed: boolean; runId: string }>;
+  ) => Promise<{ replayed: boolean; runId: string; declineReason?: string }>;
   constructor(readonly integration: StudioBillingIntegration) {}
   bind(conversation: StudioConversation, fresh = false) {
     const previous = this.threads.get(conversation.owner.threadId);
@@ -262,6 +262,14 @@ export class StudioAgentRuntime {
             return runtime.approval(conversation, options.toolCallId, approved).then(async approval => {
               if (name === 'sendToolApproval' && approval.replayed)
                 return { accepted: true, runId: approval.runId, toolCallId: options.toolCallId };
+              if (!approved && approval.declineReason)
+                args[0] =
+                  name === 'sendToolApproval'
+                    ? {
+                        ...options,
+                        declineContext: { ...options.declineContext, reason: approval.declineReason },
+                      }
+                    : { ...options, reason: approval.declineReason };
               const result = await runtime.request.run(conversation, () => runtime.approving.run(true, invoke));
               await runtime.integration.conversations.acceptApproval(
                 conversation.billing,

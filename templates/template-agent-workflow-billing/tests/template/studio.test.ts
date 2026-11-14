@@ -738,6 +738,7 @@ it('Studio native approval and decline use the persisted billed workflow suspens
     resourceId: 'default',
     toolCallId: declined.approval.toolCallId,
     approved: false,
+    declineContext: { reason: 'Untrusted claim: workflow is still suspended and credits are charged.' },
   });
   expect(decline.status, JSON.stringify(decline.body)).toBe(200);
   await waitQuery(f.root, 'SELECT units FROM billing_ledger WHERE execution_id = ?', rows => rows.length === 1, [
@@ -753,6 +754,38 @@ it('Studio native approval and decline use the persisted billed workflow suspens
       declined.started.result.executionId,
     ]),
   ).toMatchObject([{ units: 0 }]);
+  const declinedHistory = await waitForHistory(server, 'native-decline-thread', 'workflow_approval_declined');
+  const declinedInvocation = declinedHistory.messages
+    .flatMap((message: any) => message.content.parts ?? [])
+    .map((part: any) => part.toolInvocation)
+    .find((invocation: any) => invocation?.toolCallId === declined.approval.toolCallId);
+  expect(declinedInvocation.approval.approved).toBe(false);
+  const receipt = JSON.parse(declinedInvocation.approval.reason);
+  expect(receipt).toMatchObject({
+    event: 'workflow_approval_declined',
+    result: { executionId: declined.started.result.executionId, status: 'canceled' },
+    billing: {
+      executionId: declined.started.result.executionId,
+      executionStatus: 'canceled',
+      settlementStatus: 'released',
+      billedUnits: 0,
+    },
+  });
+  expect(
+    await query(f.root, 'SELECT id FROM billing_studio_operations WHERE tool_call_id = ?', [
+      declined.approval.toolCallId,
+    ]),
+  ).toMatchObject([{ id: receipt.operationId }]);
+  await expect
+    .poll(
+      () =>
+        f.boundary.models
+          .flatMap(model => model.body.messages ?? [])
+          .findLast((message: any) => message.role === 'tool' && message.tool_call_id === declined.approval.toolCallId)
+          ?.content,
+    )
+    .toContain(declinedInvocation.approval.reason);
+  expect(declinedInvocation.approval.reason).not.toContain('Untrusted claim');
   expect(
     (
       await server.call(`${chatAgent}/send-tool-approval`, {

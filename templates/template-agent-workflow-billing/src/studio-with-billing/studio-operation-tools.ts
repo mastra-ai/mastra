@@ -176,21 +176,33 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
       operation.id,
       approved,
     );
-    if (previous?.accepted) return { replayed: true, runId: pending.nativeRunId };
-    if (!previous) await validatePending(conversation, operation);
-    await integration.conversations.approval(conversation.billing, conversation.owner, operation.id, approved, true);
-    if (!approved)
-      await root(() =>
-        integration.execution.workflowOperation(
-          operation.resourceId,
-          operation.executionId!,
-          'cancel',
-          conversation.billing,
-          operation.requestKey,
-          {},
-        ),
-      );
-    return { replayed: false, runId: pending.nativeRunId };
+    if (!previous?.accepted) {
+      if (!previous) await validatePending(conversation, operation);
+      await integration.conversations.approval(conversation.billing, conversation.owner, operation.id, approved, true);
+      if (!approved)
+        await root(() =>
+          integration.execution.workflowOperation(
+            operation.resourceId,
+            operation.executionId!,
+            'cancel',
+            conversation.billing,
+            operation.requestKey,
+            {},
+          ),
+        );
+    }
+    return {
+      replayed: previous?.accepted ?? false,
+      runId: pending.nativeRunId,
+      ...(!approved
+        ? {
+            declineReason: JSON.stringify({
+              event: 'workflow_approval_declined',
+              ...(await read(conversation, operation)),
+            }),
+          }
+        : {}),
+    };
   };
   return {
     agentTool(id: string) {
