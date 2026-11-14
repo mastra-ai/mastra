@@ -264,6 +264,20 @@ export function nextGreenRun(runs, run) {
   );
 }
 
+/** GitHub's compare API lists at most this many changed files. */
+const COMPARE_FILE_CAP = 300;
+
+/**
+ * Changed files from the pages of `gh api --paginate compare/<a>...<b>`. Only the first page
+ * carries `files` (later pages page the commits and have `files: null`), and GitHub stops the
+ * list at 300 files, so a capped or missing list returns null and the caller diffs with git instead.
+ */
+export function compareFiles(pages) {
+  if (!pages.some(p => Array.isArray(p.files))) return null;
+  const files = pages.flatMap(p => p.files ?? []).map(f => f.filename);
+  return files.length >= COMPARE_FILE_CAP ? null : files;
+}
+
 // ---------------------------------------------------------------------------------------------
 // GitHub glue (not unit tested; exercised only in the workflow).
 
@@ -275,6 +289,17 @@ const ghJson = (...args) =>
     .split('\n')
     .filter(Boolean)
     .map(line => JSON.parse(line));
+
+/** Files changed between two commits (three-dot, like compare), fetched without blobs. */
+const gitDiffFiles = (base, head) => {
+  execFileSync('git', ['fetch', '--quiet', '--no-tags', '--filter=blob:none', 'origin', base, head]);
+  return execFileSync('git', ['diff', '--name-only', '--no-renames', `${base}...${head}`], {
+    encoding: 'utf8',
+    maxBuffer: 1 << 28,
+  })
+    .split('\n')
+    .filter(Boolean);
+};
 
 /** Failing test files in a unit job's log, as repo paths (same parsing as the E4 crawl). */
 export function failingFilesFromLog(log) {
@@ -397,7 +422,8 @@ function dailyCommand(tiers, { days, date }) {
       if (next && !rerunPassed) {
         const key = `${run.head_sha}...${next.head_sha}`;
         if (!compareCache.has(key)) {
-          compareCache.set(key, ghJson(`repos/${repo}/compare/${key}?per_page=100`, '-q', '.files[].filename|@json'));
+          const pages = ghJson(`repos/${repo}/compare/${key}?per_page=100`, '-q', '{files}|@json');
+          compareCache.set(key, compareFiles(pages) ?? gitDiffFiles(run.head_sha, next.head_sha));
         }
         diffFiles = compareCache.get(key);
       }

@@ -5,6 +5,7 @@ import {
   applyCatches,
   applyVersioningFailures,
   classifyPrFailure,
+  compareFiles,
   failingFilesFromLog,
   jobKeysFor,
   moveOut,
@@ -363,4 +364,27 @@ test('the next green run must come from the same repository as the failing run',
   };
   assert.equal(nextGreenRun([failing, otherFork], failing), undefined);
   assert.equal(nextGreenRun([failing, otherFork, sameFork], failing), sameFork);
+});
+
+// GitHub's compare API pages its commits; only the first page carries `files`, later pages
+// have `files: null`, and the list stops at 300 files (run 43566479365 died on page 2).
+const page = (files, commits = 100) => ({ files: files && files.map(filename => ({ filename })), commits });
+
+test('compare files: later pages without files are skipped', () => {
+  assert.deepEqual(compareFiles([page(['packages/core/src/a.ts', 'docs/x.md']), page(null, 21)]), [
+    'packages/core/src/a.ts',
+    'docs/x.md',
+  ]);
+  assert.deepEqual(compareFiles([page([])]), []);
+});
+
+test('compare files: a response with no file list is unknown, not empty', () => {
+  assert.equal(compareFiles([page(null), page(null, 21)]), null);
+  assert.equal(compareFiles([]), null);
+});
+
+test('compare files: a list cut at the 300-file cap is not trusted', () => {
+  const capped = Array.from({ length: 300 }, (_, i) => `packages/core/src/f${i}.ts`);
+  assert.equal(compareFiles([page(capped), page(null, 21)]), null);
+  assert.equal(compareFiles([page(capped.slice(1))]).length, 299);
 });
