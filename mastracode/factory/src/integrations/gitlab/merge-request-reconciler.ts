@@ -187,13 +187,21 @@ export function attachGitLabMergeRequestReconciler(
       errors: [],
     };
     for (const project of await source.projects()) {
-      const cards = await source.cards({ orgId: project.orgId, factoryProjectId: project.id });
-      const mergeRequests = cards.filter(
-        item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.type === 'pull-request',
-      );
-      // Before the boards are loaded: a project with no merge request cards costs no read.
-      if (mergeRequests.length === 0) continue;
-      await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
+      let mergeRequests: Card[];
+      try {
+        const cards = await source.cards({ orgId: project.orgId, factoryProjectId: project.id });
+        mergeRequests = cards.filter(
+          item => item.externalSource?.integrationId === 'gitlab' && item.externalSource.type === 'pull-request',
+        );
+        // Before the boards are loaded: a project with no merge request cards costs no read.
+        if (mergeRequests.length === 0) continue;
+        await toBoardSource(boards).load({ orgId: project.orgId, factoryProjectId: project.id });
+      } catch (error) {
+        // One project whose boards or cards cannot be read must not end the sweep for the others.
+        summary.failed += 1;
+        summary.errors.push({ projectId: project.id, error: error instanceof Error ? error.message : String(error) });
+        continue;
+      }
       const items = mergeRequests.filter(item => {
         if (workItemPhaseSemantics(toBoardSource(boards).forProject(item), item)?.kind !== 'terminal') return true;
         // Same contract as the GitHub sweep: a terminal card is settled once
