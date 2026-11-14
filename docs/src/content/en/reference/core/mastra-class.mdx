@@ -78,6 +78,13 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     defaultValue: '{}',
   },
   {
+    name: 'durable',
+    type: "{ executionEngine?: 'durable' | 'evented' | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number; shouldPersistSnapshot?: ShouldPersistSnapshotFn }",
+    isOptional: true,
+    description:
+      'Stored native-agent stream defaults and staged engine policy. Does not activate native durable execution or recovery. Must be an object, not a boolean. See [durable configuration](/reference/configuration#durable) for precedence and lifetime rules.',
+  },
+  {
     name: 'storage',
     type: 'MastraCompositeStore',
     description: 'Storage engine instance for persisting data',

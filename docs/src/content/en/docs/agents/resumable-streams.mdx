@@ -52,7 +52,7 @@ export const supportAgent = new Agent({
 
 `durable: true` turns streams on with these defaults, including for standalone agents.
 
-On a plain `Agent`, `durable` configures resumable streams only. For checkpoint-backed execution, wrap the agent explicitly with `createDurableAgent({ agent })`. To recover in-flight runs after a crash, also configure persistent workflow storage and `recovery: { durableAgents: 'auto' }`. For manual recovery instead, pass a `shouldPersistSnapshot` policy that includes `running` snapshots and call `recoverActiveRuns()` yourself. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for setup and persistence policies.
+On a plain `Agent`, `durable` configures resumable streams and staged engine policy. The new `executionEngine` and `shouldPersistSnapshot` fields **don't** activate native checkpoint execution or change return values. [Mastra defaults](/reference/configuration#durable) apply at stored registration, following the inheritance and lifetime rules in the [agent policy table](/reference/agents/agent#execution-engine-policy). For checkpoint-backed execution today, wrap the agent explicitly with `createDurableAgent({ agent })`. To recover in-flight runs after a crash, also configure persistent workflow storage and `recovery: { durableAgents: 'auto' }`. For manual recovery instead, pass a `shouldPersistSnapshot` policy that includes `running` snapshots and call `recoverActiveRuns()` yourself. See [crash recovery](/docs/harness/durable-agents#crash-recovery) for setup and persistence policies.
 
 Configure the wrapper's stream cache and transport through the factory's `cache`, `pubsub`, `shouldCache`, and `cleanupTimeoutMs` options.
 

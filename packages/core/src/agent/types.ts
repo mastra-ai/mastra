@@ -617,7 +617,7 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
-/** Resumable stream configuration. Durable execution requires createDurableAgent(). */
+/** Resumable streams and staged engine policy. Durable execution still requires createDurableAgent(). */
 export type AgentDurableOption = boolean | AgentStreamsConfig;
 
 interface AgentConfigBase<
@@ -757,9 +757,10 @@ interface AgentConfigBase<
    *
    * - Omitted: on when registered on Mastra, off standalone.
    * - true: on, using the Mastra pubsub and server cache when registered.
-   * - false: off; HTTP disconnects abort the run.
+   * - false: off; HTTP disconnects abort the run. Also opts out of inherited engine policy.
    * - An object: on, with custom pubsub, cache, shouldCache or cleanupTimeoutMs.
    *   cache: false keeps publishing but disables replay.
+   *   executionEngine and shouldPersistSnapshot are staged policy only; native execution is unchanged.
    */
   durable?: AgentDurableOption;
   /**
