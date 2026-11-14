@@ -68,9 +68,10 @@ function createModel(reject: Rejection) {
   return { model, prompts };
 }
 
-/** Sandbox double with the `writeFiles` fast path; records every write. */
+/** Sandbox double with the `writeFiles` fast path; records every write and command. */
 function createFakeSandbox(overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles'>> = {}) {
   const writes: SandboxFileInput[][] = [];
+  const commands: string[] = [];
   const sandbox = {
     id: 'fake-sandbox',
     name: 'Fake Sandbox',
@@ -80,10 +81,13 @@ function createFakeSandbox(overrides: Partial<Pick<WorkspaceSandbox, 'writeFiles
     writeFiles: async (files: SandboxFileInput[]) => {
       writes.push(files);
     },
-    executeCommand: async () => ({ success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 }),
+    executeCommand: async (_command: string, args: string[]) => {
+      commands.push(args.at(-1) ?? '');
+      return { success: true, exitCode: 0, stdout: '', stderr: '', executionTimeMs: 0 };
+    },
     ...overrides,
   } as unknown as WorkspaceSandbox;
-  return { sandbox, writes };
+  return { sandbox, writes, commands };
 }
 
 function createAgent(
@@ -408,6 +412,27 @@ describe('UnsupportedFileHandler, a default error processor of every agent', () 
       expect(result.text).toBe('ok');
       expect(result.tripwire).toBeUndefined();
       expect(userTexts(prompts[1]!)).toEqual(['Read these', unsentNote('leads.xlsx')]);
+    });
+
+    it('does not start a stopped sandbox to check a file of the thread history', async () => {
+      const { sandbox, writes, commands } = createFakeSandbox();
+      const { agent, prompts } = createAgent(rejectsTypes(XLSX), { sandbox });
+
+      await agent.generate(turnWith(file(workbook, 'leads.xlsx', XLSX)), { memory: MEMORY });
+      expect(userTexts(prompts.at(-1)!)).toEqual(['Read these', uploadedNote(workbookPath)]);
+      expect(writes).toHaveLength(1);
+
+      sandbox.status = 'stopped';
+      const commandsBefore = commands.length;
+      const writesBefore = writes.length;
+
+      const later = await agent.generate('What was in it?', { memory: MEMORY });
+
+      expect(later.text).toBe('ok');
+      // The stored workbook is the thread's history, so the stopped sandbox is left alone and keeps its files.
+      expect(commands).toHaveLength(commandsBefore);
+      expect(writes).toHaveLength(writesBefore);
+      expect(userTexts(prompts.at(-1)!)).toContain(uploadedNote(workbookPath));
     });
   });
 });

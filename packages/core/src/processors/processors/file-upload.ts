@@ -20,7 +20,7 @@ import type {
 } from '../index';
 import { describeError, FILE_UPLOAD_ERROR_CODES, FileUploadError } from './file-upload-errors';
 import type { FileUploadFailureDetails, FileUploadTripwireMetadata } from './file-upload-errors';
-import { resolveWritableSandbox, uploadFiles } from './file-upload-writer';
+import { isStopped, placementPathOf, resolveWritableSandbox, uploadFiles } from './file-upload-writer';
 
 export { FILE_UPLOAD_ERROR_CODES } from './file-upload-errors';
 export type { FileUploadErrorCode, FileUploadTripwireMetadata } from './file-upload-errors';
@@ -155,6 +155,8 @@ export class FileUploadProcessor implements Processor<'file-upload', FileUploadT
         abortSignal,
         // A file of the thread history must never block the thread: only a file of this turn stops it.
         noteSandboxFailures: !files.some(file => isOfCurrentTurn(file, currentTurn)),
+        // A stopped sandbox keeps its files: only a file new to this request is worth starting it for.
+        mayStartSandbox: hasFileNewToRequest(files, currentTurn),
       });
       return { prompt: replaceParts(prompt, notes) };
     } catch (error) {
@@ -313,6 +315,12 @@ export interface PromptUploadOptions {
   abortSignal?: AbortSignal;
   /** When the sandbox can't take the files, note why instead of throwing. */
   noteSandboxFailures?: boolean;
+  /**
+   * Whether placing the files may start the sandbox. `false` leaves the files
+   * of the thread history alone while the sandbox is stopped, so the turn does
+   * not pay the resume. Defaults to `true`.
+   */
+  mayStartSandbox?: boolean;
 }
 
 /** The failures that come from the sandbox rather than from a file or from user code. */
@@ -332,7 +340,15 @@ const SANDBOX_FAILURES = new Set<string>([
  */
 export async function uploadPromptFiles(
   files: PromptFile[],
-  { workspace, requestContext, maxFileSize, cache, abortSignal, noteSandboxFailures }: PromptUploadOptions,
+  {
+    workspace,
+    requestContext,
+    maxFileSize,
+    cache,
+    abortSignal,
+    noteSandboxFailures,
+    mayStartSandbox = true,
+  }: PromptUploadOptions,
 ): Promise<Map<PromptFilePart, string>> {
   const directory = uploadDirectoryOf(requestContext);
   const notes = new Map<PromptFilePart, string>();
@@ -342,16 +358,17 @@ export async function uploadPromptFiles(
     if ('rejection' in loaded) notes.set(file.part, rejectedNote(file.fileName, loaded.rejection));
     else ready.push({ file, ...loaded, relativePath: buildUploadPath({ ...file, directory, hash: loaded.hash }) });
   }
+  let placements: Map<string, string> | undefined;
   let sandboxFailure: string | undefined;
   try {
-    await placeFiles(ready, workspace, requestContext, cache, abortSignal);
+    placements = await placeFiles(ready, { workspace, requestContext, cache, abortSignal, mayStartSandbox });
   } catch (error) {
     if (!noteSandboxFailures || !(error instanceof FileUploadError) || !SANDBOX_FAILURES.has(error.code)) throw error;
     sandboxFailure = error.message;
   }
   // After a sandbox failure, only the paths placed earlier in the request are in the cache.
   for (const { file, relativePath, size } of ready) {
-    const path = cache.paths.get(relativePath);
+    const path = placements?.get(relativePath) ?? cache.paths.get(relativePath);
     notes.set(
       file.part,
       path ? uploadedNote({ ...file, path, size }) : rejectedNote(file.fileName, sandboxFailure ?? 'not uploaded'),
@@ -360,23 +377,43 @@ export async function uploadPromptFiles(
   return notes;
 }
 
-// Each path is named after the content, so a path already placed during this request needs nothing more.
+type PlacementOptions = Pick<
+  PromptUploadOptions,
+  'workspace' | 'requestContext' | 'cache' | 'abortSignal' | 'mayStartSandbox'
+>;
+
+/**
+ * Places the files and returns where each one is. A path already placed during
+ * this request is not placed again. Each path is named after the content, so a
+ * file of the thread history is where it was left: while the sandbox is stopped
+ * and the caller allows no start, the path is read from the sandbox instead of
+ * asking it, which would start it.
+ */
 async function placeFiles(
   ready: ReadyFile[],
-  workspace: AnyWorkspace,
-  requestContext: RequestContext,
-  cache: UploadCache,
-  abortSignal?: AbortSignal,
-): Promise<void> {
+  { workspace, requestContext, cache, abortSignal, mayStartSandbox }: PlacementOptions,
+): Promise<Map<string, string>> {
+  const placements = new Map<string, string>();
   const pending = new Map<string, { path: string; content: Buffer }>();
   for (const { file, relativePath } of ready) {
-    if (cache.paths.has(relativePath) || pending.has(relativePath)) continue;
-    pending.set(relativePath, { path: relativePath, content: decodePromptData(file) });
+    const placed = cache.paths.get(relativePath);
+    if (placed !== undefined) placements.set(relativePath, placed);
+    else if (!pending.has(relativePath))
+      pending.set(relativePath, { path: relativePath, content: decodePromptData(file) });
   }
-  if (pending.size === 0) return;
+  if (pending.size === 0) return placements;
   const sandbox = await resolveWritableSandbox(workspace, requestContext);
-  const placed = await uploadFiles(sandbox, [...pending.values()], abortSignal);
-  [...pending.keys()].forEach((relativePath, index) => cache.paths.set(relativePath, placed[index]!.path));
+  if (!mayStartSandbox && isStopped(sandbox)) {
+    for (const relativePath of pending.keys()) placements.set(relativePath, placementPathOf(sandbox, relativePath));
+    return placements;
+  }
+  const uploaded = await uploadFiles(sandbox, [...pending.values()], abortSignal);
+  [...pending.keys()].forEach((relativePath, index) => {
+    const path = uploaded[index]!.path;
+    cache.paths.set(relativePath, path);
+    placements.set(relativePath, path);
+  });
+  return placements;
 }
 
 /** @internal Shared with `UnsupportedFileHandler`. */
@@ -406,9 +443,11 @@ export function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Ma
 /**
  * Base64 content of the inline files of the new messages, to tell a file of
  * this turn from one of the thread history in the prompt. A link Mastra
- * downloads has no base64 to match, so it counts as history.
+ * downloads has no base64 to match, so it isn't in the set.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
  */
-function currentTurnContents(messageList: MessageList | undefined): Set<string> {
+export function currentTurnContents(messageList: MessageList | undefined): Set<string> {
   const contents = new Set<string>();
   for (const { data } of messageList ? newFiles(messageList) : []) {
     const { isDataUri, base64Content } = parseDataUri(data);
@@ -420,6 +459,17 @@ function currentTurnContents(messageList: MessageList | undefined): Set<string> 
 
 const isOfCurrentTurn = ({ data }: PromptFile, currentTurn: Set<string>) =>
   typeof data === 'string' && currentTurn.has(data.replace(/\s+/g, ''));
+
+/**
+ * Whether any of the files is new to this request rather than one the sandbox
+ * was already given: a file of this turn, or a link Mastra downloads for the
+ * model, whose content is not the stored base64 a file of the turn matches.
+ *
+ * @internal Shared with `UnsupportedFileHandler`.
+ */
+export function hasFileNewToRequest(files: PromptFile[], currentTurn: Set<string>): boolean {
+  return files.some(file => typeof file.data !== 'string' || isOfCurrentTurn(file, currentTurn));
+}
 
 /**
  * Names of the files of the messages, by their base64 content. The prompt

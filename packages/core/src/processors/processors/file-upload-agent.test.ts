@@ -140,7 +140,7 @@ function createHarness(
       : [new FileUploadProcessor({ workspace, ...options })],
   });
   const recall = async () => (await memory.recall({ threadId: MEMORY.thread, resourceId: MEMORY.resource })).messages;
-  return { agent, prompts, recall, memory };
+  return { agent, prompts, recall, memory, workspace };
 }
 
 const text = (value: string) => ({ type: 'text' as const, text: value });
@@ -325,6 +325,71 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
       expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual(
         [`${sha256(first)}.txt`, `${sha256(second)}.txt`].sort(),
       );
+    });
+  });
+
+  describe('while the sandbox is stopped', () => {
+    it('does not start the sandbox to check a file of the thread history', async () => {
+      const { sandbox, agent, prompts, workspace } = createLocalHarness();
+      const start = vi.spyOn(sandbox, '_start');
+      const bytes = Buffer.from('uploaded on the first turn');
+
+      await agent.generate([userMessage(text('Read this'), file(bytes, 'notes.txt', 'text/plain'))], {
+        memory: MEMORY,
+      });
+      await workspace.stop();
+      expect(sandbox.status).toBe('stopped');
+      start.mockClear();
+
+      await agent.generate('Thanks', { memory: MEMORY });
+      await agent.generate('Thanks again', { memory: MEMORY });
+
+      const noted = [prompts[0], prompts[1], prompts[2]].map(prompt => notedPathIn(prompt)!);
+      expect(start).not.toHaveBeenCalled();
+      expect(sandbox.status).toBe('stopped');
+      expect(textsIn(prompts.at(-1)).join('\n')).toContain('[File uploaded to the sandbox]');
+      // The paths can differ in form — the running turn learns the directory from `pwd` — but name the same file.
+      expect(new Set(await Promise.all(noted.map(uploaded => fs.realpath(uploaded)))).size).toBe(1);
+      expect(await fs.readFile(noted[1]!)).toEqual(bytes);
+    });
+
+    it('writes a file lost while stopped on the next turn that starts the sandbox', async () => {
+      const { sandbox, agent, prompts, workspace } = createLocalHarness();
+      const lost = Buffer.from('gone from the sandbox');
+      const second = Buffer.from('sent on the later turn');
+
+      await agent.generate([userMessage(text('One'), file(lost, 'lost.txt', 'text/plain'))], { memory: MEMORY });
+      await workspace.stop();
+      await fs.rm(notedPathIn(prompts[0])!);
+
+      await agent.generate([userMessage(text('Two'), file(second, 'second.txt', 'text/plain'))], { memory: MEMORY });
+
+      expect(sandbox.status).toBe('running');
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual(
+        [`${sha256(lost)}.txt`, `${sha256(second)}.txt`].sort(),
+      );
+    });
+
+    it('leaves a file lost while stopped missing until a turn runs the sandbox again', async () => {
+      const { sandbox, agent, prompts, workspace } = createLocalHarness();
+      const bytes = Buffer.from('deleted while stopped');
+
+      await agent.generate([userMessage(text('One'), file(bytes, 'gone.txt', 'text/plain'))], { memory: MEMORY });
+      const noted = notedPathIn(prompts[0])!;
+      await workspace.stop();
+      await fs.rm(noted);
+
+      await agent.generate('Is it still there?', { memory: MEMORY });
+
+      expect(sandbox.status).toBe('stopped');
+      expect(textsIn(prompts.at(-1)).join('\n')).toContain('[File uploaded to the sandbox]');
+      await expect(fs.readFile(noted)).rejects.toThrow();
+
+      await sandbox.start();
+      await agent.generate('And now?', { memory: MEMORY });
+
+      expect(await fs.readFile(noted)).toEqual(bytes);
     });
   });
 
@@ -538,6 +603,23 @@ describe('FileUploadProcessor through an agent (fake sandbox)', () => {
     expect(notedPathIn(prompts[1])).toBe(notedPathIn(prompts[0]));
     expect(writes).toHaveLength(1);
     expect(commands).toHaveLength(2);
+  });
+
+  it('does not ask a stopped sandbox for a file of the thread history', async () => {
+    const { sandbox, writes, commands } = createFakeSandbox();
+    const { agent, prompts } = createHarness(sandbox);
+    const bytes = Buffer.from('kept by the sandbox');
+
+    await agent.generate([userMessage(text('First'), file(bytes, 'notes.txt', 'text/plain'))], { memory: MEMORY });
+    const [writesBefore, commandsBefore] = [writes.length, commands.length];
+    sandbox.status = 'stopped';
+
+    await agent.generate('Second', { memory: MEMORY });
+
+    expect(sandbox.status).toBe('stopped');
+    expect(commands).toHaveLength(commandsBefore);
+    expect(writes).toHaveLength(writesBefore);
+    expect(notedPathIn(prompts.at(-1))).toBe(notedPathIn(prompts[0]));
   });
 
   it('asks filter about each file, uploads the ones it accepts and leaves the others to the model', async () => {

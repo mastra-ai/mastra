@@ -201,9 +201,11 @@ The processor reads the command directory with `pwd`, then writes the file and r
 
 The file is named after a SHA-256 hash of its content, so the same bytes are always written to the same path:
 
-- A file the sandbox already has isn't written again. On later turns, the file only costs a check that it's still there.
-- A file deleted from the sandbox, or lost with a sandbox that was recycled, is written again on the next turn.
+- A file the sandbox already has isn't written again. On later turns, the file only costs a check that it's still there, and only while the sandbox is running.
+- A file deleted from the sandbox, or lost with a sandbox that was recycled, is written again on the next turn that runs with a live sandbox.
 - Within one request, a file is placed once, however many times the model is called.
+
+A stopped sandbox isn't started just to look at a file of the thread history. A stopped sandbox keeps its files, so the note still points at the file, and the path comes from the sandbox's own `workingDirectory` rather than from asking the sandbox.
 
 The path keeps nothing of the original name but its extension. A path that looks like the name invites the model to retype one from the other, and to ask the sandbox for a file that doesn't exist. The name stays available in the note.
 
