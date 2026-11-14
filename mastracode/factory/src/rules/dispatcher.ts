@@ -1757,7 +1757,8 @@ export class FactoryDecisionDispatcher {
         return;
       }
       case 'notify': {
-        const binding = await this.#requireBinding(record);
+        const selected = await this.#requireBinding(record);
+        const binding = await this.#requireOrPrepareBinding(record, selected.role);
         // A notification can wake the idle session, so it runs as the session's
         // owner like any other Factory-started run, never as nobody.
         const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;

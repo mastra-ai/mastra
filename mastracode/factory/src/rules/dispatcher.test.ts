@@ -1175,6 +1175,105 @@ describe('FactoryDecisionDispatcher', () => {
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
   });
 
+  it('recovers a stale notification binding before delivering as the replacement session owner', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-stale-binding',
+    });
+    const stale = await bindWorkRun(storage, item.id);
+    const { controller, session, sendNotificationSignal } = createSession();
+    controller.getSession.mockImplementation(async (sessionId: string) =>
+      sessionId === 'session-2' ? session : undefined,
+    );
+    const prepareBinding = vi.fn(async ({ role }: FactoryBindingPreparationInput) => {
+      expect(role).toBe('work');
+      const prepared = await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: item.id,
+          input: {
+            externalSource: item.externalSource,
+            title: item.title,
+            stages: ['execute'],
+            sessions: {},
+            metadata: item.metadata,
+          },
+        },
+        role,
+        session: { sessionId: 'session-2', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: PROJECT_ID,
+        kickoffKey: 'recovered-notify',
+        kickoffMessage: null,
+      });
+      await storage.markPendingStart(prepared.binding.id, 'sent');
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      prepareBinding,
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(prepareBinding).toHaveBeenCalledOnce();
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'rule-notification', summary: 'Review feedback' }),
+      { requestContext: expect.anything() },
+    );
+    expect(sendNotificationSignal.mock.calls[0]?.[1]?.requestContext?.get('user')).toEqual({
+      workosId: 'user-1',
+      organizationId: 'org-1',
+    });
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'succeeded' });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(binding => binding.status === 'active'),
+    ).toMatchObject({
+      sessionId: 'session-2',
+      role: 'work',
+    });
+    expect(stale.sessionId).toBe('session-1');
+  });
+
+  it('does not create an unrelated session for a stale notification binding without a preparer', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'notify',
+      title: 'Review feedback',
+      body: 'Please address the review.',
+      level: 'warning',
+      idempotencyKey: 'notify-no-preparer',
+    });
+    const binding = await bindWorkRun(storage, item.id);
+    const { controller, sendNotificationSignal } = createSession();
+    controller.getSession.mockResolvedValue(undefined);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect(sendNotificationSignal).not.toHaveBeenCalled();
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      failureCode: 'session_unavailable',
+    });
+    expect(
+      (await storage.listRunBindings('org-1', PROJECT_ID, item.id)).find(candidate => candidate.status === 'active')
+        ?.id,
+    ).toBe(binding.id);
+  });
+
   it('renews the lease while an external delivery remains in flight', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00Z'));
