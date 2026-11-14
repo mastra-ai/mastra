@@ -4645,42 +4645,50 @@ export class Run<
     if (onDispatched) {
       // Recovery can list the run from its first snapshot on, so the lease has to be live by then.
       held = await this.#claimOwnership(true);
-      const shouldPersistSnapshot =
-        this.executionEngine.getRunPersistenceOverride(this.runId) ??
-        this.executionEngine.options.shouldPersistSnapshot;
-      if (
-        this.workflowRunStatus === 'pending' &&
-        shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
-      ) {
-        const initialRunSnapshot: WorkflowRunState = {
-          runId: this.runId,
-          status: 'waiting',
-          value: initialStateToUse as Record<string, any>,
-          context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
-          requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
-          activePaths: [0],
-          activeStepsPath: {},
-          serializedStepGraph: this.serializedStepGraph,
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        };
-        try {
-          await this.runStorage.writeInitial(
-            this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
-              ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
-              : initialRunSnapshot,
-            this.resourceId,
-          );
-        } catch (error) {
-          if ('release' in held) await held.release();
-          workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
-          throw error;
+      // Until `#executeOwned` takes the lease over, nothing else releases it.
+      try {
+        const shouldPersistSnapshot =
+          this.executionEngine.getRunPersistenceOverride(this.runId) ??
+          this.executionEngine.options.shouldPersistSnapshot;
+        if (
+          this.workflowRunStatus === 'pending' &&
+          shouldPersistSnapshot({ workflowStatus: 'waiting', stepResults: {} })
+        ) {
+          const initialRunSnapshot: WorkflowRunState = {
+            runId: this.runId,
+            status: 'waiting',
+            value: initialStateToUse as Record<string, any>,
+            context: inputDataToUse !== undefined ? ({ input: inputDataToUse } as any) : ({} as any),
+            requestContext: withoutAuthToken((requestContext ?? new RequestContext()).toJSON()),
+            activePaths: [0],
+            activeStepsPath: {},
+            serializedStepGraph: this.serializedStepGraph,
+            suspendedPaths: {},
+            resumeLabels: {},
+            waitingPaths: {},
+            timestamp: Date.now(),
+          };
+          try {
+            await this.runStorage.writeInitial(
+              this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
+                ? this.executionEngine.options.pruneSnapshot({
+                    snapshot: initialRunSnapshot,
+                    workflowStatus: 'waiting',
+                  })
+                : initialRunSnapshot,
+              this.resourceId,
+            );
+          } catch (error) {
+            workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
+            throw error;
+          }
         }
+        this.workflowRunStatus = 'running';
+        onDispatched();
+      } catch (error) {
+        if ('release' in held) await held.release();
+        throw error;
       }
-      this.workflowRunStatus = 'running';
-      onDispatched();
     }
 
     const result = await this.#executeOwned(

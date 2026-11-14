@@ -376,6 +376,30 @@ describe('workflow recovery rule (#28712)', () => {
     },
   );
 
+  it('releases the lease of a startAsync run that fails before it executes', async () => {
+    const storage = new InMemoryStore();
+    const store = (await storage.getStore('workflows'))!;
+    const failure = new Error('cannot decide whether to persist waiting');
+    const a = startBlockingReplica(
+      storage,
+      [],
+      { workflowGraceMs: 0 },
+      {
+        shouldPersistSnapshot: ({ workflowStatus }) => {
+          if (workflowStatus === 'waiting') throw failure;
+          return true;
+        },
+      },
+    );
+
+    const run = await a.mastra.getWorkflow('recovered-wf').createRun({ runId: 'run-1' });
+    await expect(run.startAsync({ inputData: {} })).rejects.toBe(failure);
+
+    // A lease left behind keeps renewing, so recovery could never restart the run.
+    expect(await store.getRunOwnership({ runId: 'run-1' })).toMatchObject({ live: false });
+    expect(a.executions).toEqual([]);
+  });
+
   it('restarts every active run at once in a store without run fencing', async () => {
     const storage = new InMemoryStore();
     const executions: string[] = [];
