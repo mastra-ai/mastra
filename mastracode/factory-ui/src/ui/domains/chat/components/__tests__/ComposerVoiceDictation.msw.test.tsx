@@ -1,9 +1,11 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { HttpResponse } from 'msw';
+import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { LiveSessionResponse } from '../../../../../api/types';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { FACTORY_ID, renderThread, stubPreparingSession } from './composer-session-test-fixture';
 import { acceptTranscribe, answerLiveSession, composerReady, stubVoiceSettings } from './voice-dictation-test-fixture';
 
@@ -48,6 +50,7 @@ describe('Composer voice dictation', () => {
   });
 
   afterEach(() => {
+    delete window.MASTRA_PLATFORM_PROJECT_ID;
     vi.unstubAllGlobals();
     Reflect.deleteProperty(navigator, 'mediaDevices');
     stopTrack.mockReset();
@@ -70,6 +73,66 @@ describe('Composer voice dictation', () => {
     expect(bodies).toEqual([{ factoryId: FACTORY_ID, contentType: 'audio/webm', clip: 'opus' }]);
     expect(stopTrack).toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Dictate' })).toBeEnabled();
+  });
+
+  it('uses the preferred Gateway model through the existing microphone when access is enabled', async () => {
+    window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    stubVoiceSettings(null, { provider: 'mastra-gateway', model: 'mistral/voxtral' });
+    const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'unused' }));
+    const liveSession = vi.fn(() => HttpResponse.json(recordedClipMode));
+    answerLiveSession(liveSession);
+    const models = [{ id: 'openai/whisper' }, { id: 'mistral/voxtral' }];
+    const transcriptions: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
+        HttpResponse.json({ speech: [], transcription: models }),
+      ),
+      http.post(`${TEST_BASE_URL}/api/system/gateway-audio/transcriptions`, async ({ request }) => {
+        transcriptions.push(await request.text());
+        return HttpResponse.json({ text: 'Gateway dictation' });
+      }),
+    );
+    const user = userEvent.setup();
+    const message = await composerReady();
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
+
+    await waitFor(() => expect(message).toHaveValue('Gateway dictation'));
+    expect(transcriptions).toHaveLength(1);
+    expect(transcriptions[0]).toContain('mistral/voxtral');
+    expect(legacyBodies).toEqual([]);
+    expect(liveSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps the configured voice provider available when Gateway is enabled', async () => {
+    window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    stubVoiceSettings({ provider: 'openai', model: 'whisper-1' }, { provider: 'openai', model: 'whisper-1' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, () =>
+        HttpResponse.json({ speech: [], transcription: [{ id: 'openai/whisper' }] }),
+      ),
+    );
+    const legacyBodies = acceptTranscribe(() => HttpResponse.json({ text: 'Provider dictation' }));
+    const user = userEvent.setup();
+    const message = await composerReady();
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Dictate' }));
+    await user.click(await screen.findByRole('button', { name: 'Dictate', pressed: true }));
+
+    await waitFor(() => expect(message).toHaveValue('Provider dictation'));
+    expect(legacyBodies).toHaveLength(1);
+  });
+
+  it('does not show Gateway choices when the deployed user is denied access', async () => {
+    window.MASTRA_PLATFORM_PROJECT_ID = 'project-1';
+    const checked = vi.fn(() => new HttpResponse(null, { status: 403 }));
+    server.use(http.get(`${TEST_BASE_URL}/api/system/gateway-audio/models`, checked));
+    await composerReady();
+
+    await waitFor(() => expect(checked).toHaveBeenCalledOnce());
+    expect(screen.queryByRole('button', { name: 'Voice input settings' })).not.toBeInTheDocument();
   });
 
   it('explains a blocked microphone without sending a recording', async () => {

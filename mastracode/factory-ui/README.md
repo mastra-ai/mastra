@@ -66,6 +66,10 @@ The sidebar footer shows your profile picture (or an initial) and name, and link
 
 Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold behind a **Settings** toggle, which `#personal-defaults` / `#factory-defaults` links open, so they can be set up before switching routing. Chats never borrow from the defaults their routing leaves unused. Without a chosen model, a session starts on the built-in default model its keys can run, which the empty model picker shows as **Built-in default**; the New session page asks for a provider or a model only when no key can run it. Without a personal thinking level, a personal chat starts at medium. **Memory** holds personal and Factory observational memory. Retired `personal-models`, `factory-memory` and `environment` URLs redirect to Models, Memory and Repositories, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections or reopening settings from the sidebar footer.
 
+## Voice input
+
+Factory's web composer uses its existing microphone for speech-to-text. In deployments with an injected Gateway V2 key, users enabled for Gateway audio see **Mastra Gateway** as the preferred voice source and can choose among the transcription models available to that key. They can switch back to their configured speech provider beside the microphone. The Gateway choice is absent when the deployment key or user feature flag is unavailable.
+
 ## Tests
 
 Use unit tests for isolated code and MSW tests for pages, routes, hooks, mutations, and React Query behavior.

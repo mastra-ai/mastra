@@ -18,6 +18,7 @@ interface ComposerVoiceButtonProps {
   factoryId: string;
   disabled: boolean;
   dictation: VoiceDictation;
+  gatewaySelected?: boolean;
 }
 
 function VoiceIcon({ state }: { state: VoiceDictationState }) {
@@ -27,12 +28,12 @@ function VoiceIcon({ state }: { state: VoiceDictationState }) {
   return <Mic size={14} />;
 }
 
-function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProps) {
+function VoiceButton({ factoryId, disabled, dictation, gatewaySelected }: ComposerVoiceButtonProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const settingsQuery = useVoiceSettings(factoryId);
   const { state, start, stop } = dictation;
-  const needsSetup = settingsQuery.data !== undefined && settingsQuery.data.effective === null;
+  const needsSetup = !gatewaySelected && settingsQuery.data !== undefined && settingsQuery.data.effective === null;
 
   if (needsSetup && state === 'idle') {
     return (
@@ -53,7 +54,9 @@ function VoiceButton({ factoryId, disabled, dictation }: ComposerVoiceButtonProp
   const recording = state === 'recording';
   // Stopping must always work, so a recording clip can be ended even after the composer locks.
   const blocked =
-    state === 'requesting' || state === 'transcribing' || (!recording && (disabled || settingsQuery.isPending));
+    state === 'requesting' ||
+    state === 'transcribing' ||
+    (!recording && (disabled || (!gatewaySelected && settingsQuery.isPending)));
   return (
     <Button
       type="button"

@@ -13,6 +13,7 @@ vi.mock('node:os', () => ({ homedir: homedirMock }));
 
 import {
   fetchChangelog,
+  getCurrentVersion,
   isNewerVersion,
   locateOwnInstall,
   parseChangelog,
@@ -21,6 +22,24 @@ import {
   resolveUpdateOutcome,
   runUpdate,
 } from '../update-check.js';
+
+describe('getCurrentVersion', () => {
+  afterEach(() => readFileSyncMock.mockReset());
+
+  it('reads the SDK package version when the manifest is present', () => {
+    readFileSyncMock.mockReturnValue(JSON.stringify({ version: '1.19.1' }));
+
+    expect(getCurrentVersion()).toBe('1.19.1');
+  });
+
+  it('does not crash when a deployment bundles the SDK without its package manifest', () => {
+    readFileSyncMock.mockImplementation(() => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
+
+    expect(getCurrentVersion()).toBe('unknown');
+  });
+});
 
 describe('isNewerVersion', () => {
   it('compares release versions', () => {

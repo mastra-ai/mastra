@@ -16,6 +16,7 @@ export interface RuntimeConfig {
 declare global {
   interface Window {
     __MASTRACODE_CONFIG__?: RuntimeConfig;
+    MASTRA_PLATFORM_PROJECT_ID?: string;
   }
 }
 
