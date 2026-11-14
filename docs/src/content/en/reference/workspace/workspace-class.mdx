@@ -699,6 +699,16 @@ const sandbox = await workspace.resolveSandbox({ requestContext: ctx })
 
 **Returns:** `Promise<WorkspaceSandbox | undefined>`
 
+#### `getCachedSandbox({ requestContext })`
+
+Return the sandbox a request would get without running the resolver: the configured static sandbox, or the resolver-backed sandbox already cached under the request's `sandboxCacheKey`. Returns `undefined` when there is no cache key, the key is null for the request, or no sandbox is cached under it. Use it to read sandbox state without starting a new sandbox.
+
+```typescript
+const sandbox = await workspace.getCachedSandbox({ requestContext: ctx })
+```
+
+**Returns:** `Promise<WorkspaceSandbox | undefined>`
+
 #### `clearSandboxCache(cacheKey?)`
 
 Clear resolver-backed sandboxes cached by `sandboxCacheKey`. Pass a cache key to clear one entry, or omit it to clear all keyed sandbox entries.
@@ -829,8 +839,16 @@ The `execute_command` tool accepts these options:
             name: 'onExit',
             type: '(meta: BackgroundProcessExitMeta) => void',
             description:
-              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, and killedByAbort (true when the abort signal killed the process, false for a normal exit or kill_process).',
+              'Callback when a background process exits. Meta includes the onStdout fields plus exitCode, stdout, stderr, killedByAbort (true when the abort signal killed the process), and killedOnRequest (true when kill_process, the HTTP kill route, or sandbox.processes.kill() stopped it). Both are false for a normal exit.',
             isOptional: true,
+          },
+          {
+            name: 'notifyAgent',
+            type: 'boolean',
+            description:
+              "Sends the agent's thread a notification when a background process exits, with the command, exit code, and the end of its output. An active run gets it on its next step, and an idle thread wakes. Skips processes stopped with kill_process, the kill route, the run's abort signal, or a sandbox shutting down. Needs an agent registered on the Mastra instance and a run with a memory thread and resource. Set `abortSignal: null` with it: by default, aborting the run kills the process, and that exit sends no notification.",
+            isOptional: true,
+            defaultValue: 'false',
           },
           {
             name: 'abortSignal',

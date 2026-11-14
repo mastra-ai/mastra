@@ -476,6 +476,8 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
 
   // Workspace route params
   if (route.path.includes(':workspaceId')) params.workspaceId = 'test-workspace';
+  // The background process createTestWorkspace starts in its sandbox
+  if (route.path.includes(':pid')) params.pid = 'test-pid';
 
   // Skills route params
   if (route.path.includes(':skillName')) params.skillName = 'test-skill';

@@ -960,6 +960,24 @@ export class Workspace<
   }
 
   /**
+   * Returns the sandbox a request would get, but only if it already exists: the static
+   * sandbox, or the resolver-backed sandbox cached under this request's `sandboxCacheKey`.
+   * Never runs the resolver, so reading sandbox state (for example over HTTP) can't create
+   * a sandbox. `undefined` when there is no cache key, it is null for this request, or
+   * nothing is cached under it.
+   */
+  async getCachedSandbox({
+    requestContext,
+  }: {
+    requestContext: RequestContext;
+  }): Promise<WorkspaceSandbox | undefined> {
+    if (!this._sandboxResolver) return this._sandbox;
+    const cacheKey = this._sandboxCacheKey?.({ requestContext });
+    if (cacheKey == null) return undefined;
+    return this._sandboxKeyCache.get(cacheKey)?.catch(() => undefined);
+  }
+
+  /**
    * Clear cached resolver-backed sandboxes stored by `sandboxCacheKey`.
    *
    * This only clears the keyed cache. Per-RequestContext WeakMap entries are

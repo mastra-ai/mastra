@@ -934,6 +934,7 @@ describe('background processes killed by an aborted run', () => {
         resourceId: 'user-1',
         runId: 'run-1',
         killedByAbort: true,
+        killedOnRequest: false,
       });
     } finally {
       await cleanup();
@@ -957,7 +958,7 @@ describe('background processes killed by an aborted run', () => {
   ])('tells onStdout and onExit who started the process from $when', async ({ context, expected }) => {
     const outputs: BackgroundProcessMeta[] = [];
     const exits: BackgroundProcessExitMeta[] = [];
-    const { start, cleanup } = await setup({
+    const { start, cleanup, sandbox } = await setup({
       onStdout: (_data, meta) => void outputs.push(meta),
       onExit: meta => void exits.push(meta),
     });
@@ -970,6 +971,9 @@ describe('background processes killed by an aborted run', () => {
         expect(meta).toMatchObject({ pid, ...expected });
         expect(meta.agentId).toBeUndefined();
       }
+      // The spawn metadata hosts list and filter by carries the same owner.
+      const [listed] = await sandbox.processes!.list();
+      expect(listed?.metadata).toMatchObject({ threadId: expected.threadId, resourceId: expected.resourceId });
     } finally {
       await cleanup();
     }
@@ -980,6 +984,7 @@ describe('background processes killed by an aborted run', () => {
       when: 'exits on its own',
       command: `node -e "console.log('started'); setTimeout(() => process.exit(3), 100)"`,
       stop: async () => {},
+      killedOnRequest: false,
     },
     {
       when: 'is stopped with kill_process',
@@ -987,8 +992,9 @@ describe('background processes killed by an aborted run', () => {
       stop: async (pid: string, workspace: Workspace) => {
         await killProcessTool.execute!({ pid }, { workspace } as any);
       },
+      killedOnRequest: true,
     },
-  ])('does not report an abort to onExit when the process $when', async ({ command, stop }) => {
+  ])('tells onExit how the process ended when it $when', async ({ command, stop, killedOnRequest }) => {
     const exits: BackgroundProcessExitMeta[] = [];
     const { start, cleanup, workspace } = await setup({ onExit: meta => void exits.push(meta) });
     try {
@@ -1000,7 +1006,24 @@ describe('background processes killed by an aborted run', () => {
       await vi.waitFor(() => expect(exits).toHaveLength(1), { timeout: 5000 });
       controller.abort();
 
-      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false });
+      expect(exits[0]).toMatchObject({ pid, runId: 'run-1', killedByAbort: false, killedOnRequest });
+    } finally {
+      await cleanup();
+    }
+  });
+
+  // Hosts scope process lists and kills by these, so a missing owner would show one user's processes to another.
+  it('records the thread, resource and tool call that started a background process', async () => {
+    const { start, cleanup, sandbox } = await setup();
+    try {
+      const before = Date.now();
+      const { pid } = await start(longRunning);
+
+      const owner = { threadId: 'thread-1', resourceId: 'user-1', toolCallId: 'call-1' };
+      const [listed] = await sandbox.processes!.list();
+      expect(listed).toMatchObject({ pid, command: longRunning, running: true, metadata: owner });
+      expect(listed!.metadata!.startedAt).toBeGreaterThanOrEqual(before);
+      expect((await sandbox.processes!.get(pid, { release: false }))?.metadata).toEqual(listed!.metadata);
     } finally {
       await cleanup();
     }

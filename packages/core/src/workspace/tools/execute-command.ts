@@ -1,15 +1,23 @@
 import { z } from 'zod/v4';
+import type { Agent } from '../../agent';
 import { browserCliHandler } from '../../browser/cli-handler';
+import type { Mastra } from '../../mastra';
+import { unwrapMastraTracingProxy } from '../../observability/context';
+import type { RequestContext } from '../../request-context';
 import { createTool } from '../../tools';
+import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import { WORKSPACE_TOOLS } from '../constants';
 import { SandboxFeatureNotSupportedError } from '../errors';
 import {
   DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES,
   RetainedOutputBuffer,
 } from '../sandbox/process-manager/process-handle';
+import { wasKilledOnRequest } from '../sandbox/process-manager/process-manager';
+import type { Workspace } from '../workspace';
 import { coerceNumericString, emitWorkspaceMetadata, requireSandbox } from './helpers';
 import { DEFAULT_TAIL_LINES, noteDroppedOutput, truncateOutput, sandboxToModelOutput } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
+import type { BackgroundProcessExitMeta } from './types';
 
 /**
  * Base input schema for execute_command (no background param).
@@ -106,6 +114,85 @@ function appendTerminalLine(parts: string[], terminalLine: string): string {
   const output = parts.join('\n');
   const separator = output.endsWith('\n\n') ? '' : output.endsWith('\n') ? '\n' : '\n\n';
   return `${output}${separator}${terminalLine}`;
+}
+
+const SANDBOX_TEARDOWN_STATUSES: ReadonlySet<string> = new Set(['stopping', 'stopped', 'destroying', 'destroyed']);
+
+/**
+ * Whether the run the notice wakes rewrites tool payloads for the transcript. Resolved like that
+ * run does (default options, then the agent, then Mastra): a `transform` passed to the call that
+ * started the process doesn't carry over to it.
+ */
+async function hasTranscriptTransform(agent: Agent, mastra: Mastra | undefined, requestContext?: RequestContext) {
+  const defaults = await agent.getDefaultOptions?.({ requestContext });
+  const policy =
+    normalizeToolPayloadTransformPolicy(defaults?.transform) ??
+    agent.getToolPayloadTransform?.() ??
+    normalizeToolPayloadTransformPolicy(mastra?.getToolPayloadTransform?.());
+  return Boolean(policy?.transformToolPayload && (!policy.targets || policy.targets.includes('transcript')));
+}
+
+/**
+ * Sends the exit of a background process to the agent's thread, with the end of its output:
+ * the tool call only returned the PID. The agent must be registered on Mastra to be found
+ * (agents built inside a tool or another agent are not), and the run needs a memory thread and resource.
+ */
+async function notifyAgentOfExit(
+  meta: BackgroundProcessExitMeta,
+  options: { command: string; context: any; workspace: Workspace; tokenLimit?: number },
+) {
+  const { command, context, workspace, tokenLimit } = options;
+  const { agentId, threadId, resourceId, pid, exitCode } = meta;
+  if (!agentId || !threadId || !resourceId) return;
+  // The tool context's Mastra is wrapped for the tool call's span, which ended long ago.
+  const mastra = unwrapMastraTracingProxy(context?.mastra) as Mastra | undefined;
+  let agent: Agent | undefined;
+  try {
+    agent = mastra?.getAgentById?.(agentId);
+  } catch {
+    // Not registered on Mastra.
+  }
+  if (!agent) {
+    workspace.logger?.debug('Background process exit not sent: agent is not registered on Mastra', { agentId, pid });
+    return;
+  }
+
+  try {
+    const outputTool =
+      workspace.getToolsConfig()?.[WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT]?.name ??
+      WORKSPACE_TOOLS.SANDBOX.GET_PROCESS_OUTPUT;
+    let contents: string[];
+    if (await hasTranscriptTransform(agent, mastra, context?.requestContext)) {
+      // The notice is stored as a message, which transcript transforms don't rewrite. Leave the
+      // command and its output to the output tool, whose result the transform does cover.
+      contents = [
+        `Background process ${pid} exited with code ${exitCode}.`,
+        `Read its output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+      ];
+    } else {
+      const tail = (output: string) => truncateOutput(output, DEFAULT_TAIL_LINES, tokenLimit, 'sandwich');
+      const output = formatCommandOutput(
+        noteDroppedOutput(await tail(meta.stdout), meta.stdoutDroppedBytes, 'stdout'),
+        noteDroppedOutput(await tail(meta.stderr), meta.stderrDroppedBytes, 'stderr'),
+      ).join('\n');
+      contents = [
+        `Background process ${pid} exited with code ${exitCode}: ${command}`,
+        output || '(no output)',
+        `Read the rest of its retained output with ${outputTool} (PID ${pid}). Tell the user the outcome if it matters to them.`,
+      ];
+    }
+    await agent.__sendThreadNotice(
+      {
+        type: 'notification',
+        tagName: 'background-process',
+        contents: contents.join('\n\n'),
+        attributes: { pid, exitCode, ...(meta.toolCallId ? { toolCallId: meta.toolCallId } : {}) },
+      },
+      { threadId, resourceId, requestContext: context?.requestContext },
+    );
+  } catch (error) {
+    workspace.logger?.warn('Could not notify the agent that a background process exited', { error, pid, agentId });
+  }
 }
 
 /** Shared execute function used by both foreground-only and background-capable tool variants. */
@@ -211,6 +298,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       // so close stdin at spawn. Otherwise `rg`/`grep`/`cat` with no path argument
       // reads stdin and never exits.
       stdinMode: 'ignore',
+      metadata: { threadId: owner.threadId, resourceId: owner.resourceId, toolCallId },
       onStdout: bgConfig?.onStdout
         ? (data: string) => bgConfig.onStdout!(data, { pid: handle.pid, toolCallId, ...owner })
         : undefined,
@@ -226,31 +314,47 @@ async function executeCommand(input: Record<string, any>, context: any) {
     // for a rejected wait(), routing all failures to the logger so
     // neither escapes as a process-terminating unhandled rejection. Observation
     // failures are logged distinctly and never synthesize a successful exit.
-    if (bgConfig?.onExit) {
+    const notifyAgent = bgConfig?.notifyAgent === true;
+    if (bgConfig?.onExit || notifyAgent) {
       void handle
         .wait()
         .then(async result => {
-          try {
-            await bgConfig.onExit!({
-              pid: handle.pid,
-              exitCode: result.exitCode,
-              stdout: result.stdout,
-              stderr: result.stderr,
-              stdoutTruncated: result.stdoutTruncated,
-              stderrTruncated: result.stderrTruncated,
-              stdoutDroppedBytes: result.stdoutDroppedBytes,
-              stderrDroppedBytes: result.stderrDroppedBytes,
-              killedByAbort: handle.killedByAbort,
-              toolCallId,
-              ...owner,
-            });
-          } catch (callbackError) {
-            workspace.logger?.error('Background process onExit callback threw', {
-              error: callbackError,
-              pid: handle.pid,
-              toolCallId,
-            });
-          }
+          const exitMeta: BackgroundProcessExitMeta = {
+            pid: handle.pid,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            stdoutTruncated: result.stdoutTruncated,
+            stderrTruncated: result.stderrTruncated,
+            stdoutDroppedBytes: result.stdoutDroppedBytes,
+            stderrDroppedBytes: result.stderrDroppedBytes,
+            killedByAbort: handle.killedByAbort,
+            killedOnRequest: wasKilledOnRequest(handle),
+            toolCallId,
+            ...owner,
+          };
+          const runOnExit = async () => {
+            if (!bgConfig?.onExit) return;
+            try {
+              await bgConfig.onExit(exitMeta);
+            } catch (callbackError) {
+              workspace.logger?.error('Background process onExit callback threw', {
+                error: callbackError,
+                pid: handle.pid,
+                toolCallId,
+              });
+            }
+          };
+          // Killed on purpose, by the run's abort or a sandbox shutting down: nothing for the agent to act on.
+          const stopped =
+            exitMeta.killedByAbort || exitMeta.killedOnRequest || SANDBOX_TEARDOWN_STATUSES.has(sandbox.status);
+          // Run side by side, so a slow or hanging onExit doesn't hold back the agent's notice.
+          await Promise.all([
+            runOnExit(),
+            notifyAgent && !stopped
+              ? notifyAgentOfExit(exitMeta, { command, context, workspace, tokenLimit })
+              : undefined,
+          ]);
         })
         .catch(observeError => {
           workspace.logger?.error('Failed to observe background process exit', {

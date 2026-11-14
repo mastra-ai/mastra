@@ -1,6 +1,7 @@
 export { isWorkspaceV1Supported, isWorkspaceNotSupportedError, shouldRetryWorkspaceQuery } from './compatibility';
 export * from './file-type';
 export * from './types';
+export * from './use-sandbox-processes';
 export * from './use-skills-sh';
 export * from './use-stored-workspaces';
 export * from './use-workspace';

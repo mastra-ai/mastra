@@ -177,6 +177,29 @@ export function getContextResourceId(requestContext: RequestContext | undefined)
 }
 
 /**
+ * Resolves the resource filter for a request on resource-owned records (background tasks,
+ * sandbox processes). A resource-scoped caller is pinned to its own resource and may not
+ * request another one; a privileged caller (no resource in the request context) keeps the
+ * client-provided filter.
+ */
+export function resolveResourceScope(
+  requestContext: RequestContext | undefined,
+  clientResourceId: string | undefined,
+): { resourceId: string | undefined; scoped: boolean } {
+  const contextResourceId = getContextResourceId(requestContext);
+  if (contextResourceId === undefined) return { resourceId: clientResourceId, scoped: false };
+  // An empty resource id must not be mistaken for a privileged (unscoped) caller, and
+  // storage filters ignore empty strings, so it cannot be scoped safely either.
+  if (contextResourceId === '') {
+    throw new HTTPException(403, { message: 'Access denied: authenticated resourceId is empty' });
+  }
+  if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
+    throw new HTTPException(403, { message: 'Access denied: resourceId does not match the authenticated resource' });
+  }
+  return { resourceId: contextResourceId, scoped: true };
+}
+
+/**
  * Ensures a memory request has a resolvable resource ID. The body's
  * `memory.resource` is optional so authenticated setups can rely on the
  * server-derived resource ID (MASTRA_RESOURCE_ID_KEY set via mapUserToResourceId).

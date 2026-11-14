@@ -9,6 +9,12 @@ import type { MastraQueryOptions } from '../shared/query-options';
 
 type BackgroundTaskStreamReader = ReturnType<Awaited<ReturnType<MastraClient['streamBackgroundTasks']>>['getReader']>;
 
+/** A chunk a running background task streamed, such as a nested agent's text or a workflow step. */
+export type BackgroundTaskOutputChunk = Extract<
+  AgentChunkType,
+  { type: 'background-task-output' }
+>['payload']['payload'];
+
 export interface BackgroundTaskEvent {
   taskId: string;
   toolName: string;
@@ -20,11 +26,20 @@ export interface BackgroundTaskEvent {
   status: BackgroundTaskStatus;
   args: Record<string, unknown>;
   suspendPayload?: unknown;
+  /** The latest output chunks the task streamed while this hook was connected, oldest first. */
+  output?: BackgroundTaskOutputChunk[];
 }
+
+const DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS = 200;
 
 export interface UseBackgroundTaskStreamOptions extends StreamBackgroundTasksParams {
   /** Whether the stream is active. Default: true */
   enabled?: boolean;
+  /**
+   * How many of a task's latest output chunks to keep on its `output`. Older chunks are dropped.
+   * Set to 0 to keep none. Default: 200.
+   */
+  maxOutputChunks?: number;
 }
 
 export interface UseBackgroundTaskStreamReturn {
@@ -88,7 +103,15 @@ const EVENT_STATUS_MAP: Record<EventType['type'], BackgroundTaskStatus> = {
 };
 
 export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions = {}): UseBackgroundTaskStreamReturn {
-  const { enabled = true, agentId, runId, threadId, resourceId, taskId } = options;
+  const {
+    enabled = true,
+    agentId,
+    runId,
+    threadId,
+    resourceId,
+    taskId,
+    maxOutputChunks = DEFAULT_BACKGROUND_TASK_OUTPUT_CHUNKS,
+  } = options;
   const client = useMastraClient();
 
   const [tasks, setTasks] = useState<Record<string, BackgroundTaskEvent>>({});
@@ -97,6 +120,9 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
   const abortRef = useRef<AbortController | null>(null);
   const readerRef = useRef<BackgroundTaskStreamReader | null>(null);
   const connectSeqRef = useRef(0);
+  // Read when each chunk arrives, so changing the limit doesn't reconnect the stream.
+  const maxOutputChunksRef = useRef(maxOutputChunks);
+  maxOutputChunksRef.current = maxOutputChunks;
 
   const runningTasks = useMemo(() => {
     return Object.values(tasks).filter(task => task.status === 'running');
@@ -147,7 +173,24 @@ export function useBackgroundTaskStream(options: UseBackgroundTaskStreamOptions 
         if (done) break;
 
         const event = value as EventType;
-        if (event.type !== 'background-task-output') {
+        if (event.type === 'background-task-output') {
+          const keep = maxOutputChunksRef.current;
+          if (keep <= 0) continue;
+          const { payload: chunk, ...ids } = event.payload;
+          setTasks(prev => {
+            const existing = prev[ids.taskId];
+            return {
+              ...prev,
+              [ids.taskId]: {
+                ...ids,
+                ...existing,
+                status: existing?.status ?? 'running',
+                args: existing?.args ?? {},
+                output: [...(existing?.output ?? []), chunk].slice(-keep),
+              },
+            };
+          });
+        } else {
           setTasks(prev => ({
             ...prev,
             [event.payload.taskId]: {

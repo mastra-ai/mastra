@@ -620,6 +620,36 @@ describe('Workspace Resource', () => {
       );
     });
   });
+
+  describe('sandbox processes', () => {
+    const base = `${clientOptions.baseUrl}/api/workspaces/${WORKSPACE_ID}/sandbox/processes`;
+
+    it('lists, reads and kills processes scoped to a thread, with provider pids encoded', async () => {
+      mockFetchResponse({ processes: [] });
+      mockFetchResponse({ pid: 'exec/1', running: true, stdout: '', stderr: '' });
+      mockFetchResponse({ pid: 'exec/1', killed: true });
+
+      await workspace.listSandboxProcesses({ threadId: 'thread-1' });
+      await workspace.getSandboxProcess('exec/1', { threadId: 'thread-1', tail: 50 });
+      const killed = await workspace.killSandboxProcess('exec/1', { threadId: 'thread-1' });
+
+      const calls = (global.fetch as any).mock.calls.map(([url, init]: [string, RequestInit]) => [url, init.method]);
+      expect(calls).toEqual([
+        [`${base}?threadId=thread-1`, undefined],
+        [`${base}/exec%2F1?threadId=thread-1&tail=50`, undefined],
+        [`${base}/exec%2F1/kill?threadId=thread-1`, 'POST'],
+      ]);
+      expect(killed).toEqual({ pid: 'exec/1', killed: true });
+    });
+
+    it('sends a kill once: a lost response is not retried', async () => {
+      const retrying = new MastraClient({ ...clientOptions, retries: 2, backoffMs: 1 }).getWorkspace(WORKSPACE_ID);
+      (global.fetch as any).mockRejectedValueOnce(new TypeError('fetch failed'));
+
+      await expect(retrying.killSandboxProcess('42')).rejects.toThrow('fetch failed');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
 });
 
 describe('WorkspaceSkillResource', () => {

@@ -9,29 +9,7 @@ import {
   resumeBackgroundTaskBodySchema,
 } from '../schemas/background-tasks';
 import { createRoute } from '../server-adapter/routes/route-builder';
-import { getContextResourceId } from './utils';
-
-/**
- * Resolves the resource filter for a background-task request. A resource-scoped caller
- * is pinned to its own resource and may not request another one; a privileged caller
- * (no resource in the request context) keeps the client-provided filter.
- */
-function resolveResourceScope(
-  requestContext: Parameters<typeof getContextResourceId>[0],
-  clientResourceId: string | undefined,
-): { resourceId: string | undefined; scoped: boolean } {
-  const contextResourceId = getContextResourceId(requestContext);
-  if (contextResourceId === undefined) return { resourceId: clientResourceId, scoped: false };
-  // An empty resource id must not be mistaken for a privileged (unscoped) caller, and
-  // storage filters ignore empty strings, so it cannot be scoped safely either.
-  if (contextResourceId === '') {
-    throw new HTTPException(403, { message: 'Access denied: authenticated resourceId is empty' });
-  }
-  if (clientResourceId !== undefined && clientResourceId !== contextResourceId) {
-    throw new HTTPException(403, { message: 'Access denied: resourceId does not match the authenticated resource' });
-  }
-  return { resourceId: contextResourceId, scoped: true };
-}
+import { resolveResourceScope } from './utils';
 
 export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   method: 'GET',

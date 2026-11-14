@@ -3615,6 +3615,61 @@ export const API_ROUTE_METADATA = {
       "listProperty": "updated"
     }
   },
+  "GET /workspaces/:workspaceId/sandbox/processes": {
+    "method": "GET",
+    "path": "/workspaces/:workspaceId/sandbox/processes",
+    "pathParams": [
+      "workspaceId"
+    ],
+    "queryParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "processes"
+    }
+  },
+  "GET /workspaces/:workspaceId/sandbox/processes/:pid": {
+    "method": "GET",
+    "path": "/workspaces/:workspaceId/sandbox/processes/:pid",
+    "pathParams": [
+      "workspaceId",
+      "pid"
+    ],
+    "queryParams": [
+      "resourceId",
+      "tail",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /workspaces/:workspaceId/sandbox/processes/:pid/kill": {
+    "method": "POST",
+    "path": "/workspaces/:workspaceId/sandbox/processes/:pid/kill",
+    "pathParams": [
+      "workspaceId",
+      "pid"
+    ],
+    "queryParams": [
+      "resourceId",
+      "threadId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/generate-legacy": {
     "method": "POST",
     "path": "/agents/:agentId/generate-legacy",

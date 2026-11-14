@@ -33,6 +33,24 @@ export interface SpawnProcessOptions extends CommandOptions {
    * expose stdin control; on those, `stdinMode` is accepted but has no effect.
    */
   stdinMode?: 'pipe' | 'ignore';
+  /**
+   * Who started the process. The process manager stores it on the handle and
+   * returns it from `list()` and `get()`, so hosts can show or scope processes
+   * by thread or resource. Providers ignore it.
+   */
+  metadata?: ProcessMetadata;
+}
+
+/** Who started a process and when. */
+export interface ProcessMetadata {
+  /** Memory thread of the run that started the process. */
+  threadId?: string;
+  /** Memory resource of the run that started the process. */
+  resourceId?: string;
+  /** Tool call that started the process. */
+  toolCallId?: string;
+  /** When the process was spawned, in milliseconds since the epoch. The process manager fills it in when omitted. */
+  startedAt?: number;
 }
 
 // =============================================================================
@@ -52,4 +70,6 @@ export interface ProcessInfo {
   running: boolean;
   /** Exit code if the process has finished */
   exitCode?: number;
+  /** Who started the process, when it was spawned with `metadata` (as `execute_command` does) */
+  metadata?: ProcessMetadata;
 }

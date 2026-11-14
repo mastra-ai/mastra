@@ -487,6 +487,8 @@ const stream = bgManager.stream({
 | `allResources` | Include tasks from every resource when `resourceId` is omitted. Trusted server-side code only |
 | `abortSignal` | Closes the stream when the signal aborts |
 
+In React, `useBackgroundTaskStream()` from `@mastra/react/hooks/agents` reads the same stream over HTTP and keeps the latest state of each task. While it's connected, it also keeps each task's latest output chunks on `output`, 200 by default. Set `maxOutputChunks` to change the limit, or `0` to keep none.
+
 ### Look up task state directly
 
 For one-off lookups instead of a live stream, use `getTask` and `listTasks`:

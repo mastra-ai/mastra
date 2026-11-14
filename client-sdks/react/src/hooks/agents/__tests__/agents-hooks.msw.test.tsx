@@ -128,4 +128,39 @@ describe('useBackgroundTaskStream', () => {
       await waitFor(() => expect(result.current.completedTasks.map(task => task.taskId)).toEqual(['task-1']));
     });
   });
+
+  describe('when a running task streams output', () => {
+    it('keeps its latest output chunks', async () => {
+      const { result: _result, completedAt: _completedAt, ...ids } = completedEvent.payload;
+      const output = (text: string) => ({
+        type: 'background-task-output',
+        payload: { ...ids, payload: { type: 'tool-output', payload: { output: { type: 'text-delta', text } } } },
+      });
+      const events = [
+        { type: 'background-task-running', payload: { ...ids, args: { topic: 'fusion' } } },
+        output('one'),
+        output('two'),
+        output('three'),
+      ];
+      server.use(
+        http.get(
+          `${API}/background-tasks/stream`,
+          () =>
+            new HttpResponse(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join(''), {
+              headers: { 'Content-Type': 'text/event-stream' },
+            }),
+        ),
+      );
+
+      const { result } = renderHookWithProviders(() => useBackgroundTaskStream({ maxOutputChunks: 2 }));
+
+      await waitFor(() => expect(result.current.tasks['task-1']?.output).toHaveLength(2));
+      const task = result.current.tasks['task-1']!;
+      expect(task).toMatchObject({ status: 'running', args: { topic: 'fusion' } });
+      expect(task.output!.map(chunk => (chunk.payload as { output: { text: string } }).output.text)).toEqual([
+        'two',
+        'three',
+      ]);
+    });
+  });
 });
