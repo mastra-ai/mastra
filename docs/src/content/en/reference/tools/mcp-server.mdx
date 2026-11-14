@@ -181,6 +181,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       "How HTTP requests from 2025-era clients (those that open with `initialize`, such as VS Code and Cursor) are served. `'reject'` (default) answers them with an unsupported-protocol-version error. `'stateless'` answers each request without a session: listing and calling tools, reading resources and getting prompts work, `GET` and `DELETE` session requests get `405`, and features that need 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to these clients.",
   },
   {
+    name: 'maxRequestBodySize',
+    type: 'number',
+    isOptional: true,
+    description:
+      'Upper bound, in bytes, on the HTTP request body the server reads. A larger body is answered with a `413` JSON-RPC error before it is parsed, so no tool runs. Defaults to `4194304` (4 MiB). Raise it on servers that receive large `tools/call` payloads, such as base64-encoded documents. Must be a positive number. Not applied to `stdio`, which has no request bodies.',
+  },
+  {
     name: 'toolResult',
     type: 'MCPServerToolResultOptions',
     isOptional: true,
