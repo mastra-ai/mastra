@@ -1203,6 +1203,40 @@ describe('TokenCounter', () => {
       expect(estimateImageTokensSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('reuses the stored multimodal estimate after the message is reloaded from storage', () => {
+      const message = createMessage({
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'result',
+              toolCallId: 'tool-1',
+              toolName: 'view',
+              result: {
+                content: [
+                  { type: 'text', text: 'Screenshot' },
+                  { type: 'image', data: 'a'.repeat(200_000), mimeType: 'image/png' },
+                ],
+              },
+            },
+          },
+        ],
+      });
+      const firstCount = new TokenCounter({ model: 'openai/gpt-4o' }).countMessage(message);
+
+      const reloaded = JSON.parse(JSON.stringify(message));
+      const sameModelCounter = new TokenCounter({ model: 'openai/gpt-4o' });
+      const sameModelSpy = vi.spyOn(sameModelCounter as any, 'estimateImageTokens');
+      expect(sameModelCounter.countMessage(reloaded)).toBe(firstCount);
+      expect(sameModelSpy).not.toHaveBeenCalled();
+
+      const otherModelCounter = new TokenCounter({ model: 'anthropic/claude-sonnet-4-5' });
+      const otherModelSpy = vi.spyOn(otherModelCounter as any, 'estimateImageTokens');
+      otherModelCounter.countMessage(JSON.parse(JSON.stringify(message)));
+      expect(otherModelSpy).toHaveBeenCalledTimes(1);
+    });
+
     it('recounts multimodal tool results mutated in place', () => {
       const counter = new TokenCounter();
       const estimateImageTokensSpy = vi.spyOn(counter as any, 'estimateImageTokens');

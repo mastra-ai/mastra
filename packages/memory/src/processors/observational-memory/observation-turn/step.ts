@@ -663,8 +663,13 @@ export class ObservationStep {
       };
     }
 
+    // Records read from older stores can hold a non-array here (e.g. a `{}` column default).
+    const recordObservedIds = Array.isArray(obsResult.record.observedMessageIds)
+      ? obsResult.record.observedMessageIds
+      : [];
+
     if (obsResult.observed) {
-      const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
+      const observedMessageIds = new Set(recordObservedIds);
       const liveMessages = getObservableMessages(messageList);
       let latestObservedIndex = -1;
 
@@ -716,12 +721,7 @@ export class ObservationStep {
       succeeded: activated || obsResult.observed,
       record: obsResult.record,
       activatedMessageIds: activated ? activatedMessageIds : undefined,
-      cleanupMessageIds: [
-        ...new Set([
-          ...activatedMessageIds,
-          ...(obsResult.observed ? (obsResult.record.observedMessageIds ?? []) : []),
-        ]),
-      ],
+      cleanupMessageIds: [...new Set([...activatedMessageIds, ...(obsResult.observed ? recordObservedIds : [])])],
       observerExchange: om.observer.lastExchange,
     };
   }

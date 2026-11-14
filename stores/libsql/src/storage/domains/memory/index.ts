@@ -88,6 +88,14 @@ import { buildSelectColumns } from '../../db/utils';
 import { withClientWriteLock } from '../../db/write-lock';
 import { runPrune, resolveTargets } from '../../retention';
 
+// Databases that gained this column through an older migration have a `'{}'` default, and rows
+// inserted without it (such as reflection generations) read back as an object, not an id list.
+function parseObservedMessageIds(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || !value) return undefined;
+  const parsed: unknown = JSON.parse(value);
+  return Array.isArray(parsed) ? parsed : undefined;
+}
+
 function addSqliteMetadataFilter(
   conditions: string[],
   params: unknown[],
@@ -1874,7 +1882,7 @@ export class MemoryLibSQL extends MemoryStorage {
       lastBufferedAtTime: row.lastBufferedAtTime ? new Date(String(row.lastBufferedAtTime)) : null,
       config: row.config ? JSON.parse(row.config) : {},
       metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
-      observedMessageIds: row.observedMessageIds ? JSON.parse(row.observedMessageIds) : undefined,
+      observedMessageIds: parseObservedMessageIds(row.observedMessageIds),
       observedTimezone: row.observedTimezone || undefined,
       supersededBy: row.supersededBy ?? null,
     };
