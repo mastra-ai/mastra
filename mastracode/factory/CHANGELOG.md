@@ -1,5 +1,72 @@
 # @mastra/factory
 
+## 0.29.0-alpha.1
+
+### Minor Changes
+
+- **Lower default run cap** ([#30295](https://github.com/mastra-ai/mastra/pull/30295))
+
+  A Factory server now runs at most 10 automated agent runs at once, down from 25. Runs past the cap wait their turn instead of all starting together. Raise the cap with `dispatcher.maxInFlight`, or the `MASTRACODE_DISPATCH_MAX_IN_FLIGHT` environment variable on a deployed server. The cap applies to each server process, not to the whole deployment.
+
+  ```ts
+  new MastraFactory({
+    storage,
+    dispatcher: { maxInFlight: 25 },
+  });
+  ```
+
+  **See the run queue on the board**
+
+  The board now shows how many automated runs are waiting for a free slot. Click the indicator to see each waiting automated run, oldest first, with its card, and open the card from the list. A waiting card says `Queued (#3)` instead of `Starting an automated run…`. The list and card positions cover the oldest 50 waiting runs; the count always includes every one. The same data is available from `GET /web/factory/projects/:id/run-queue`.
+
+### Patch Changes
+
+- Stopped the Mastra platform GitHub event poll from reading the Factory database every 20 seconds. It now remembers which repositories are linked to projects and reads them again only when a link or connection changes. Renamed repositories are picked up from the platform during the hourly reconcile. An idle Factory makes fewer database queries, which helps databases that suspend when unused. ([#30257](https://github.com/mastra-ai/mastra/pull/30257))
+
+- incident.io boards in Factory no longer create cards while a list loads. Factory now checks incident.io every five minutes and files new follow-ups itself. It files only follow-ups from a source bound to a project. This happens with no board open. The `MASTRACODE_INCIDENT_IO_RECONCILE_ENABLED` setting is removed: the check always runs. To stop incident.io for one organization, turn it off in Settings › Work Intake. ([#30271](https://github.com/mastra-ai/mastra/pull/30271))
+
+- The incident.io sweep no longer re-runs rules for follow-ups it already handled, and one follow-up that fails no longer stops the rest of its page from getting cards. ([#30378](https://github.com/mastra-ai/mastra/pull/30378))
+
+- Fixed the Factory chat showing the same tool call twice, such as two identical plan cards with their own Approve and Reject buttons. When the server saved a run as several steps, a later step that only held tool calls appeared as a second turn the next time the page refreshed the transcript. Every saved step now attaches to the live turn it belongs to. ([#30214](https://github.com/mastra-ai/mastra/pull/30214))
+
+- Factory onboarding's Work step now lists the GitHub repository or GitLab project chosen in the first step as an issue source, switched on by default. Its open issues start feeding the Work board as soon as setup finishes, and the switch turns them off again (GitLab projects are routed to the new Factory so the board picks them up). ([#30273](https://github.com/mastra-ai/mastra/pull/30273))
+
+- Allow Factory hosts to pass `scorers` to the mounted Mastra Code agent. No scorers are registered by default; the existing `disableScoreStorage` option remains available for hosts that opt into scorer results. ([#30363](https://github.com/mastra-ai/mastra/pull/30363))
+
+- Fixed slow Linear boards in Factory. Opening a board no longer creates cards while the page loads. ([#29998](https://github.com/mastra-ai/mastra/pull/29998))
+
+  New Linear issues in sources bound to a project now get their card from the background Linear sweep, within its interval (5 minutes by default), even when nobody has the board open.
+
+- GitLab boards in Factory no longer create cards while a list loads. Factory now checks GitLab every five minutes and files new merge requests and issues itself. This works without a webhook and with no board open. The `MASTRACODE_GITLAB_RECONCILE_ENABLED` and `MASTRACODE_GITLAB_ISSUE_RECONCILE_ENABLED` settings are removed: the check always runs. ([#30265](https://github.com/mastra-ai/mastra/pull/30265))
+
+- Channel agents now always reply when someone tags them in a public channel or thread. Messages that mention the bot are marked `mentioned="true"`, and the channel prompt tells the model to answer those, even with a short acknowledgement when the sender only says more details are coming. The stay-silent guidance now applies only to messages that don't mention the bot. ([#30277](https://github.com/mastra-ai/mastra/pull/30277))
+
+- Fixed Vanta intake appearing automatically when Platform credentials are configured. ([#30284](https://github.com/mastra-ai/mastra/pull/30284))
+
+- Stopped Factory's background issue sweeps from reading the database when nothing changed. The Jira, incident.io, GitLab and Linear issue sweeps and GitHub pull request discovery now keep each project's synced cards in memory and read a board again only after it changes, on any replica. Apart from Linear intake discovery and the GitLab merge request sweep for projects that have merge request cards, an idle Factory makes no database queries during these sweeps, which helps databases that suspend when unused. ([#30267](https://github.com/mastra-ai/mastra/pull/30267))
+
+- Simplified `mastra factory dev` startup output. Per-phase `[factory:timing]` lines, per-integration "initialized" lines, and poller/worker "started" lines no longer print on a local dev boot. Instead you see the ready banner (with the Factory UI URL on its own line) and one Intake line showing which integrations are connected and which are available: ([#30344](https://github.com/mastra-ai/mastra/pull/30344))
+
+  ```
+  ◇ Intake: GitHub connected · Jira, Linear, GitLab, incident.io available
+  ```
+
+  Run `mastra factory dev --debug` to bring back the boot timings and integration details. Deployed Factories still log boot timings as before.
+
+- Jira boards in Factory open faster and no longer create cards while a list loads. Factory now checks Jira every five minutes and files new issues of each routed project itself. This happens with no board open. The `MASTRACODE_JIRA_RECONCILE_ENABLED`, `MASTRACODE_LINEAR_ISSUE_RECONCILE_ENABLED` and `MASTRACODE_LINEAR_RECONCILE_ENABLED` settings are removed: the Jira and Linear checks always run. To stop a provider for one organization, turn it off in Settings › Work Intake. ([#30270](https://github.com/mastra-ai/mastra/pull/30270))
+
+- Fixed pull requests Factory opened from an issue card also showing up in Intake as new items. Once a pull request is attached to an issue card, the board treats it as already on that card and no longer offers it as something to file. ([#30337](https://github.com/mastra-ai/mastra/pull/30337))
+
+- The "Manage in Mastra Platform" button under Settings → Mastra Connect tools now opens the Connect settings of the Factory's Platform project, instead of the Platform home page. The `/web/integrations/platform/connect-tools` response now includes the `projectId` it lists connections for. ([#30262](https://github.com/mastra-ai/mastra/pull/30262))
+
+- Fixed Vanta sync closing every filed vulnerability card when Vanta is not connected. Without an active connection the sync now does nothing and reads no projects, and a vulnerability list cut off by the page limit fails the sync instead of closing the cards past the limit. ([#30289](https://github.com/mastra-ai/mastra/pull/30289))
+
+- Updated dependencies [[`be9831d`](https://github.com/mastra-ai/mastra/commit/be9831d78983cace224cc60b617dcbbef993c6b6), [`eb57671`](https://github.com/mastra-ai/mastra/commit/eb57671973c9dc6e86611789a54c9d01ef6db5b9), [`62161a0`](https://github.com/mastra-ai/mastra/commit/62161a09063104ca7fab49b5b6c49b4588b87577), [`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`af1d6bd`](https://github.com/mastra-ai/mastra/commit/af1d6bdfd25b5ad9c640802585d0478d6f79f00a), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`ddb52d5`](https://github.com/mastra-ai/mastra/commit/ddb52d535d646870311766e6736efe17e7df5b65), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/code-sdk@1.19.1-alpha.1
+  - @mastra/connect@1.4.1-alpha.0
+  - @mastra/core@1.84.0-alpha.1
+  - @mastra/mcp@2.9.0
+
 ## 0.29.0-alpha.0
 
 ### Minor Changes

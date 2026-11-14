@@ -191,9 +191,12 @@ jobs:
       memory_changed: ${{ steps.compute.outputs.memory_changed }}
       workspace_packages: ${{ steps.compute.outputs.workspace_packages }}
       workspace_docker_packages: ${{ steps.compute.outputs.workspace_docker_packages }}
+      tier_skip_jobs: ${{ steps.compute.outputs.tier_skip_jobs }}
     permissions:
       contents: read
       id-token: write
+      # Reads the PR's labels (full-tests).
+      issues: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -230,7 +233,31 @@ jobs:
           HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
           FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
           AFFECTED_TESTS_CACHE: ${{ runner.temp }}/affected-graph.json
-        run: node .github/scripts/select-affected-tests.cjs
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          TIERS_PATH: /tmp/tiers.json
+        run: |
+          # Test tiers (scripts/test-tiers/select.mjs): files and jobs marked `out` on the
+          # ci/test-tiers branch skip PRs that don't edit them. Without the branch, everything runs.
+          if git fetch --quiet --depth 1 origin ci/test-tiers && git show FETCH_HEAD:tiers.json > "$TIERS_PATH"; then
+            echo "Loaded tiers.json from ci/test-tiers."
+          else
+            rm -f "$TIERS_PATH"
+            echo "No ci/test-tiers branch; the tier filter will run everything."
+          fi
+          # The full-tests label is read live, so re-running the job after adding it is enough.
+          # If the labels can't be read, run everything.
+          FULL_TESTS_LABEL=false
+          if [ -n "$PR_NUMBER" ]; then
+            if labels=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/labels" --jq '.[].name'); then
+              if grep -qx 'full-tests' <<< "$labels"; then FULL_TESTS_LABEL=true; fi
+            else
+              echo "::warning::Could not read PR labels; running every test."
+              FULL_TESTS_LABEL=true
+            fi
+          fi
+          export FULL_TESTS_LABEL
+          node .github/scripts/select-affected-tests.cjs
 
       - name: Upload affected-tests artifact
         if: always()
@@ -272,6 +299,7 @@ jobs:
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       experiment_worker_e2e_changed: ${{ needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true' }}
+      skip_jobs: ${{ needs.affected-tests.outputs.tier_skip_jobs || '[]' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -286,6 +314,7 @@ jobs:
       id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
+      skip_jobs: ${{ needs.affected-tests.outputs.tier_skip_jobs || '[]' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -300,6 +329,7 @@ jobs:
       id-token: write
     with:
       head_sha: ${{ needs.changes.outputs.head_sha }}
+      skip_jobs: ${{ needs.affected-tests.outputs.tier_skip_jobs || '[]' }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

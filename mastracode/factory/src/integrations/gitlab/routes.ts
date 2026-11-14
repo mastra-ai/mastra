@@ -85,7 +85,7 @@ function gitlabProjectPayload(source: { id: string; name: string; metadata?: Rec
   };
 }
 
-function positiveId(value: string | undefined): number | null {
+export function positiveId(value: string | undefined): number | null {
   const number = Number(value);
   return value && /^[1-9]\d*$/.test(value) && Number.isSafeInteger(number) ? number : null;
 }
@@ -94,7 +94,7 @@ function mergeRequestSourceKey(host: string, projectId: number, mergeRequestIid:
   return `gitlab-pr:${Buffer.from(JSON.stringify({ version: 1, host, projectId, mergeRequestIid }), 'utf8').toString('base64url')}`;
 }
 
-const LINKED_BACKLOG_MAX_PAGES = 5;
+export const LINKED_BACKLOG_MAX_PAGES = 5;
 const POLLED_ACTOR = '__factory_poll__';
 
 function listedMergeRequestEvent(
@@ -129,7 +129,7 @@ function listedMergeRequestEvent(
   };
 }
 
-function listedMergeRequestEvents(
+export function listedMergeRequestEvents(
   project: { host: string; projectId: number; projectPath: string },
   pr: PullRequest,
 ): ParsedGitLabWebhook[] {
@@ -152,7 +152,7 @@ function listedMergeRequestEvents(
   ];
 }
 
-function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
+export function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
   const source = decodeSourceId(issue.sourceId ?? '');
   const projectId = source && positiveId(source.projectId);
   const iid = positiveId(issue.id);
@@ -180,16 +180,25 @@ function listedIssueEvent(issue: IntakeIssue): ParsedGitLabWebhook | null {
   };
 }
 
-async function ingestListedEvents(events: Array<ParsedGitLabWebhook | null>, ingest?: BuildGitLabRoutesOptions['ingestFactoryEvent']) {
-  if (!ingest) return;
+/** Ingests listed events and returns the reasons of the ones the rules ingress rejected. */
+export async function ingestListedEvents(
+  events: Array<ParsedGitLabWebhook | null>,
+  ingest?: BuildGitLabRoutesOptions['ingestFactoryEvent'],
+): Promise<unknown[]> {
+  if (!ingest) return [];
   const listed = events.filter((event): event is ParsedGitLabWebhook => event !== null);
   const openings = listed.filter(event => !event.deliveryId.startsWith('poll:merge-request-head:'));
   const headUpdates = listed.filter(event => event.deliveryId.startsWith('poll:merge-request-head:'));
+  const failures: unknown[] = [];
   for (const batch of [openings, headUpdates]) {
     const results = await Promise.allSettled(batch.map(event => ingest(event)));
-    const rejected = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
-    if (rejected) console.warn('[Mastra Factory] Failed to ingest listed GitLab events', { error: rejected.reason });
+    const rejected = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (rejected[0]) {
+      console.warn('[Mastra Factory] Failed to ingest listed GitLab events', { error: rejected[0].reason });
+    }
+    failures.push(...rejected.map(result => result.reason));
   }
+  return failures;
 }
 
 export async function ingestLinkedGitLabRepositoryBacklog(args: {
@@ -230,6 +239,25 @@ export async function ingestLinkedGitLabRepositoryBacklog(args: {
     if (result.nextCursor === null) break;
     cursor = result.nextCursor;
   }
+}
+
+/** Selected GitLab sources routed to one Factory, or null when GitLab intake is turned off. */
+export async function routedGitLabSourceIds(
+  intake: IntakeStorage,
+  { orgId, factoryProjectId }: { orgId: string; factoryProjectId: string },
+): Promise<string[] | null> {
+  await intake.ensureReady();
+  const config = await intake.getConfig({ orgId, integrationIds: ['gitlab'] });
+  const selection = config.gitlab!;
+  if (!selection.enabled) return null;
+  const selected = new Set(selection.sourceIds ?? []);
+  return [
+    ...new Set(
+      (await intake.listBindings({ orgId, integrationId: 'gitlab' }))
+        .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
+        .map(binding => binding.sourceId),
+    ),
+  ];
 }
 
 async function reconcileGitLabSourceIdentity({
@@ -438,12 +466,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               includeDrafts: false,
               cursor: String(page),
             });
-            await ingestListedEvents(
-              result.pullRequests.flatMap(pr =>
-                listedMergeRequestEvents({ host: linked.host, projectId, projectPath: linked.repository.slug }, pr),
-              ),
-              options.ingestFactoryEvent,
-            );
             return c.json({
               pullRequests: result.pullRequests.map(pr => ({
                 number: Number(pr.id),
@@ -525,23 +547,13 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
             return c.json({ error: 'factory_project_not_found' }, 404);
           }
 
-          await intake.ensureReady();
-          const config = await intake.getConfig({ orgId: resolved.tenant.orgId, integrationIds: ['gitlab'] });
-          const selection = config.gitlab!;
-          if (!selection.enabled) {
+          const sourceIds = await routedGitLabSourceIds(intake, { orgId: resolved.tenant.orgId, factoryProjectId });
+          if (!sourceIds) {
             return c.json(
               { error: 'gitlab_intake_disabled', message: 'GitLab intake is turned off in Settings.' },
               404,
             );
           }
-          const selected = new Set(selection.sourceIds ?? []);
-          const sourceIds = [
-            ...new Set(
-              (await intake.listBindings({ orgId: resolved.tenant.orgId, integrationId: 'gitlab' }))
-                .filter(binding => binding.factoryProjectId === factoryProjectId && selected.has(binding.sourceId))
-                .map(binding => binding.sourceId),
-            ),
-          ];
           if (sourceIds.length === 0) return c.json({ issues: [], nextCursor: null });
 
           try {
@@ -550,7 +562,6 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
               sourceIds,
               cursor: c.req.query('after')?.trim() || undefined,
             });
-            await ingestListedEvents(result.issues.map(listedIssueEvent), options.ingestFactoryEvent);
             return c.json({
               ...result,
               issues: result.issues.map(issue => {

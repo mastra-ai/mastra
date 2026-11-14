@@ -80,7 +80,10 @@ export default action;
 const imageActionTemplate = `import { z } from 'zod';
 import { createAction } from 'nango';
 
-const InputSchema = z.object({ prompt: z.string() });
+const InputSchema = z.object({
+  prompt: z.string(),
+  model: z.string().optional().describe('A supported GPT Image model ID. Defaults to "gpt-image-1".'),
+});
 const OutputSchema = z.object({
   data: z.array(z.object({
     url: z.string().optional(),
@@ -96,7 +99,7 @@ const action = createAction({
   output: OutputSchema,
   scopes: [],
   exec: async (nango, input): Promise<z.infer<typeof OutputSchema>> => {
-    const response = await nango.post({ endpoint: '/images', data: input });
+    const response = await nango.post({ endpoint: '/images', data: { model: input.model ?? 'gpt-image-1', prompt: input.prompt } });
     return OutputSchema.parse(response.data);
   },
 });
@@ -804,6 +807,16 @@ export default action;
       /import \{ toImageGenerationModelOutput \} from ["']\.\.\/\.\.\/\.\.\/runtime\/model-output\.js["'];/,
     );
     expect(generatedTool).toContain('toModelOutput: toImageGenerationModelOutput,');
+  });
+
+  // OpenAI retired gpt-image-1 on 2026-10-23; regeneration must not restore it as the default.
+  it('defaults the OpenAI image generation tool to a model OpenAI still serves', async () => {
+    await addProvider({ providerId: 'openai', localId: 'openai', yes: true, expectedTemplateSha: templateSha });
+
+    const generatedTool = readFileSync(resolve(packageRoot, 'src/providers/openai/tools/create-image.ts'), 'utf8');
+    expect(generatedTool).toMatch(/input\.model \?\? ["']gpt-image-2\.5-sunburst["']/);
+    expect(generatedTool).toMatch(/Defaults to \\?"gpt-image-2\.5-sunburst\\?"/);
+    expect(generatedTool).not.toContain('gpt-image-1');
   });
 
   // #29401: Fireflies sends summary.keywords as a list and speakers[].id as a

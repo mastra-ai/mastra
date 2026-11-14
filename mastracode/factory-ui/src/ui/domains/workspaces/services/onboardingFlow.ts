@@ -60,6 +60,11 @@ const draftSchema = z.object({
   repository: repositorySchema.optional(),
   /** Set once the user leaves Work by Continue or Skip. */
   workConfirmed: z.boolean().optional(),
+  /**
+   * Whether the codebase step's repository feeds issues into this Factory. Only an explicit
+   * `false` turns it off, so an older draft without the field keeps the on-by-default behaviour.
+   */
+  codeHostSync: z.boolean().optional(),
   modelScope: z.enum(['factory', 'user', 'hybrid']).optional(),
   model: draftModelSchema.optional(),
   personal: draftModelSchema.optional().catch(undefined),

@@ -118,6 +118,8 @@ const illustrations = [
   ['threads', 'Threads'],
   ['deploys', 'Deploys'],
   ['no-charges', 'Charges'],
+  ['no-alerts', 'Alerts'],
+  ['no-destinations', 'Destinations'],
 ] as const;
 
 export const AllIllustrations: Story = {

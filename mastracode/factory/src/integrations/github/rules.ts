@@ -53,7 +53,6 @@ import { closingIssueNumbers } from '../closing-references.js';
 import { storageCards } from '../kept-cards.js';
 import type { CardSource } from '../kept-cards.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
-import { cardIngressId } from '../record-cards.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
 import type { GithubRepositoryPermission } from './integration.js';
@@ -1085,8 +1084,7 @@ export class GithubRules {
     // identity suffixed with its id, because ingress identities are the replay
     // key and reusing the delivery's own would drop it as a duplicate.
     const pullRequestOpened = event === 'pullRequestOpened';
-    const primaryIdentity = await cardIngressId(this.options.storage, deliveryIdentity, evaluated);
-    const primary = await evaluate(evaluated, primaryIdentity, pullRequestOpened);
+    const primary = await evaluate(evaluated, deliveryIdentity, pullRequestOpened);
     // A closed pull request is the one *other* event both linked cards need:
     // the Review card has to close, and the Work item that wrote the code has
     // to finish (on merge) or at least stop recording it as open. Resolution binds the delivery to
@@ -1233,49 +1231,17 @@ export class GithubRules {
       relatedItem.externalSource?.type !== 'pull-request'
         ? relatedItem
         : undefined;
-    const companion = linked ?? authoringItem;
-    // When the authoring card's record has cards on other boards, the arrival already took the
-    // card's suffixed identity; the card's own evaluation then takes one of its own.
-    const companionIdentity = `${deliveryIdentity}:${companion?.id}`;
-    const secondary = companion
-      ? await evaluate(
-          companion,
-          companionIdentity === primaryIdentity ? `${companionIdentity}:authoring` : companionIdentity,
-        )
-      : undefined;
-    await stampClosed(secondary?.status);
-    // The record's cards on other boards run their own rules for it, each under its own identity.
-    const statuses = [primary, ...(secondary ? [secondary] : [])];
-    for (const sibling of await this.#siblingCards([relatedItem, companion])) {
-      statuses.push(await evaluate(sibling, await cardIngressId(this.options.storage, deliveryIdentity, sibling)));
+    if (linked === undefined && authoringItem === undefined) {
+      await stampClosed();
+      return primary;
     }
+    const companion = linked ?? authoringItem;
+    const secondary = await evaluate(companion, `${deliveryIdentity}:${companion?.id ?? 'pull-request'}`);
+    await stampClosed(secondary.status);
     for (const status of ['committed', 'replayed'] as const) {
-      if (statuses.some(result => result.status === status)) return { status };
+      if (primary.status === status || secondary.status === status) return { status };
     }
     return primary;
-  }
-
-  /**
-   * The other cards filed for each evaluated card's record (the issue's and the pull request's),
-   * one per board, excluding the evaluated cards themselves.
-   */
-  async #siblingCards(evaluated: ReadonlyArray<Card | undefined>): Promise<Card[]> {
-    const seen = new Set(evaluated.flatMap(card => (card ? [card.id] : [])));
-    const siblings: Card[] = [];
-    for (const card of evaluated) {
-      if (!card?.externalSource) continue;
-      const cards = await this.options.storage.listByProjectSource({
-        orgId: card.orgId,
-        factoryProjectId: card.factoryProjectId,
-        source: card.externalSource,
-      });
-      for (const other of cards) {
-        if (seen.has(other.id)) continue;
-        seen.add(other.id);
-        siblings.push(other);
-      }
-    }
-    return siblings;
   }
 
   /**

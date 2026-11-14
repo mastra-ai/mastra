@@ -188,6 +188,12 @@ await pubsub.subscribeFromOffset('my-topic', 42, event => {
     description:
       'Whether `subscribeFromOffset()` honors numeric offsets. Defaults to `false`. A non-zero offset on an unsupported implementation falls back to replay subscription and emits a diagnostic warning when a logger is configured.',
   },
+  {
+    name: 'redeliversUnacked',
+    type: 'boolean',
+    description:
+      "Whether an event delivered to a consumer that neither acks nor nacks it, for example because its process stopped, is delivered again to another consumer of the same group once the broker considers it abandoned. Defaults to `false`. Workflow recovery doesn't restart evented runs on a pubsub that returns `true`, so return `true` only when the broker does this, and only after 30 seconds or more.",
+  },
 ]}
 />
 

@@ -1,5 +1,69 @@
 # @mastra/playground-ui
 
+## 69.1.0-alpha.1
+
+### Minor Changes
+
+- Polished the shared sidebar so it looks the same in every app. ([#30204](https://github.com/mastra-ai/mastra/pull/30204))
+
+  - The sidebar is 232px wide by default (192px to 340px when dragged) and 60px collapsed. The defaults live in the component and `SIDEBAR_WIDTHS` exports them; pass `minWidth` only when a view needs more room.
+  - Rows sit 1px apart and 10px from the sidebar's edges, with 8px under the header. Groups sit 14px apart, with titles 4px above their rows, and the first group's title is kept for screen readers only.
+  - Filled product icons (Agent, Workflow, MCP Server) draw at the same size as the line icons beside them.
+  - The resize handle and the collapsed logo's toggle appear after a short hover delay, so passing over them doesn't flash them.
+  - The nav's scrollbar no longer stays on screen after you click a link, and expanding the sidebar onto an open sub-menu no longer moves focus to its Back button.
+
+  `Sidebar.Meter` keeps one layout in both states. It accepts `loading`, which shows the card at its loaded size, and `railValue`, a shorter amount for the rail:
+
+  ```tsx
+  <Sidebar.Meter label="Credits" value="$6,649.10" railValue="$7k" status="Auto top-up On" />
+  <Sidebar.Meter loading label="Credits" value="" status=" " />
+  ```
+
+- `InputGroupAddon` now insets its icon like a Button does (the group's `--control-px` and `--control-gap`), so a leading or trailing icon in any field lines up with the icons of the controls beside it. A field built from `InputGroup` parts by hand gets the same inset as `SearchInput`. An icon `InputGroupButton` is now a chip inset in the field (8px shorter than it, with an even ring around it) instead of a full-height circle. ([#30062](https://github.com/mastra-ai/mastra/pull/30062))
+
+  `SearchInput` is now plain `InputGroup` composition (a search icon, the input and a clear button) with no styling of its own. Its clear button keeps its space while hidden, so the field doesn't resize when text appears. It takes over `ListSearch`'s behaviour. It is either controlled (`value`, following every change the parent makes, such as a Reset or a URL change) or keeps its own text (`defaultValue`). Both modes accept `debounceMs`, which delays `onValueChange` while typing; clearing reports right away. `shortcut` turns on the Cmd/Ctrl+Shift+F focus shortcut, and `listSearchProps` bundles a list page's `size`, `debounceMs` and `shortcut`. `ListSearch` and `SearchFieldBlock` are removed.
+
+  **Migrating**
+
+  ```tsx
+  // Before
+  <ListSearch onSearch={setSearch} label="Search agents" placeholder="Search by name" />
+
+  // After
+  <SearchInput {...listSearchProps} onValueChange={setSearch} label="Search agents" placeholder="Search by name" />
+  ```
+
+  - `ListSearch`'s `onSearch` → `onValueChange`, `value` → `defaultValue`, `shortcutDisabled` → leave out `shortcut`. It defaulted to `size="sm"` and a 300ms debounce; pass them. To reset a field that keeps its own text, remount it with a `key`.
+  - `SearchFieldBlock` → `SearchInput`, inside a `Field` when it needs a visible label.
+  - `SearchInput`'s `label` is now the input's `aria-label` instead of a visually hidden `<label>`.
+
+- The dashboards entry point (`@mastra/playground-ui/domains/dashboards`) now exports the schemas a widget is validated with, so an app that edits stored dashboard widgets can check its changes against the same rules the renderer uses. ([#30298](https://github.com/mastra-ai/mastra/pull/30298))
+
+  - Options schemas for each built-in widget kind: `kpisOptionsSchema`, `kpiItemSchema`, `tableOptionsSchema`, `tableColumnOptionsSchema`, `timeseriesOptionsSchema`, `timeseriesSeriesSchema` and `scoresOptionsSchema`, with their types.
+  - Value expression schemas and types: `valueExprSchema`, `valueRefSchema`, `queryRefSchema`, `ValueExpr`, `ValueRef` and `LabelledValue`.
+  - The allowed formats, colors and KPI icons: `VALUE_FORMATS`, `formatSchema`, `CHART_COLOR_NAMES`, `SERIES_COLORS`, `colorSchema`, `KPI_ICONS`, and the `ValueFormat`, `ChartColorName` and `KpiIcon` types.
+
+  ```ts
+  import { kpisOptionsSchema, valueExprSchema } from '@mastra/playground-ui/domains/dashboards';
+
+  kpisOptionsSchema.parse({ items: [{ label: 'Runs', format: 'count', value: { query: 'runs' } }] });
+  ```
+
+- Add a “Contains text” filter to the span and trace explorers for backends that support indexed search. Histograms are hidden while search is applied. ([#30299](https://github.com/mastra-ai/mastra/pull/30299))
+
+### Patch Changes
+
+- Added two empty-state illustrations, `no-alerts` and `no-destinations`, for pages that list alerts and their destinations. Use them with `<EmptyStateIllustration name="no-alerts" />`. ([#30354](https://github.com/mastra-ai/mastra/pull/30354))
+
+- Fixed page scrolling getting stuck when the cursor is over a DataList. The page now keeps scrolling once the list has nothing left to scroll. ([#30333](https://github.com/mastra-ai/mastra/pull/30333))
+
+- Updated dependencies [[`1bac054`](https://github.com/mastra-ai/mastra/commit/1bac054f7a9089d112f2b4732caef0fe9801df71), [`f51098e`](https://github.com/mastra-ai/mastra/commit/f51098e60cbb47a9eac5e458d6d85cd4ef162926), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`2788a6d`](https://github.com/mastra-ai/mastra/commit/2788a6d959ec16c454d1ac6564d546f47be8f1eb), [`51c340a`](https://github.com/mastra-ai/mastra/commit/51c340a7824530b348e157cb6f71094522e2b5c2), [`7fd6830`](https://github.com/mastra-ai/mastra/commit/7fd6830a26ac38060fa02675b2daef82f2c0ef2e), [`99ec3bd`](https://github.com/mastra-ai/mastra/commit/99ec3bd582a79d85d4c0c09b50ed9ed0830c79d5), [`70f3eba`](https://github.com/mastra-ai/mastra/commit/70f3eba5ecb9870d21582455fb55137663766d50), [`a21d692`](https://github.com/mastra-ai/mastra/commit/a21d69244449f1d478ccb4b7b548e0e0bd202947), [`cb5f3a5`](https://github.com/mastra-ai/mastra/commit/cb5f3a5c7964e9304c9b2a9141ab971158fe16d4), [`8ac8822`](https://github.com/mastra-ai/mastra/commit/8ac88228d67a5b3987084adeb40364a333347c97), [`3c1b528`](https://github.com/mastra-ai/mastra/commit/3c1b528b6eadf54528931e299e98f592a5d3e302), [`6d14d0e`](https://github.com/mastra-ai/mastra/commit/6d14d0edc4fb03e800d8d86e7e7fa00bf3943b56), [`7b9130f`](https://github.com/mastra-ai/mastra/commit/7b9130f50ec0d68daae4ef11bbfaf2d3bc9454ed), [`0278a5c`](https://github.com/mastra-ai/mastra/commit/0278a5ce834fad3cced73cfd19336a34d1bc8f10), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba), [`0d22884`](https://github.com/mastra-ai/mastra/commit/0d228849b8c6867938860fb19a1e92a0a8c77f27), [`a86a47c`](https://github.com/mastra-ai/mastra/commit/a86a47c7ef92aa3a48b6663336235a43b7535aaa), [`8559e74`](https://github.com/mastra-ai/mastra/commit/8559e74767d2baf74e29f408e5dfa41a0d1007b0), [`7b646a0`](https://github.com/mastra-ai/mastra/commit/7b646a07a8da8aa84ca2a0a4564369c9d2462af5), [`8acea4c`](https://github.com/mastra-ai/mastra/commit/8acea4cc5b97dcfd1e1179f9b40ca34c05f255cf)]:
+  - @mastra/core@1.84.0-alpha.1
+  - @mastra/memory@1.41.2-alpha.0
+  - @mastra/client-js@1.60.1-alpha.1
+  - @mastra/ai-sdk@1.12.0
+  - @mastra/react@1.15.1-alpha.1
+
 ## 69.0.1-alpha.0
 
 ### Patch Changes

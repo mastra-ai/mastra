@@ -244,7 +244,7 @@ export class PlatformGithubEventWorker extends MastraWorker {
       this.#repositories = undefined;
     });
     this.#running = true;
-    this.deps.logger.info('Platform GitHub event polling started', {
+    this.deps.logger.debug('Platform GitHub event polling started', {
       intervalMs: this.#intervalMs,
       leaseTtlMs: this.#leaseTtlMs,
     });

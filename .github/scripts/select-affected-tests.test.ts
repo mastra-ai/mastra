@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { parse } from 'yaml';
 import selection from './select-affected-tests.cjs';
 
 const { routeTests, diffLockfiles } = selection;
@@ -84,6 +85,131 @@ describe('Prebuild test routing', () => {
     const { flags } = route({ changedFiles: ['packages/core/README.md', 'stores/pg/CHANGELOG.md'] });
 
     expect(Object.values(flags).some(Boolean)).toBe(false);
+  });
+});
+
+describe('Prebuild test tiers', () => {
+  const out = { tier: 'out' };
+  const tierFiles: Record<string, { tier: string }> = {
+    'packages/core/src/quiet.test.ts': out,
+    'packages/core/src/quiet.e2e.test.ts': out,
+    'job:store/pg': out,
+    'job:memory': out,
+    'job:workspace-unit/docker': out,
+  };
+  const tiered = (
+    input: { changedFiles: string[]; affectedTests?: string[]; fullSuite?: boolean },
+    fullTestsLabel = false,
+  ) =>
+    route({ ...input, storeNames: ['pg', 'libsql'], tiers: { tiers: { files: tierFiles }, fullTestsLabel } } as never);
+
+  test('drops quiet files the PR does not edit, before deciding the unit shards', () => {
+    const many = Array.from({ length: 499 }, (_, i) => `packages/core/src/t${i}.test.ts`);
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: [...many, 'packages/core/src/quiet.test.ts', 'packages/core/src/quiet.e2e.test.ts'],
+    });
+
+    expect(result.unitTestFiles).not.toContain('packages/core/src/quiet.test.ts');
+    expect(result.e2eTestFiles).toEqual([]);
+    expect(result.unitShards).toEqual([1]);
+    expect(result.tiers.droppedFiles).toEqual([
+      'packages/core/src/quiet.test.ts',
+      'packages/core/src/quiet.e2e.test.ts',
+    ]);
+  });
+
+  test('keeps a quiet file the PR edits', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/quiet.test.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+  });
+
+  test('turns a gate off when every job behind it is quiet and untouched', () => {
+    const memory = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/memory/integration-tests/a.test.ts'],
+    });
+    expect(memory.flags.memory_changed).toBe(false);
+    expect(memory.tiers.skippedJobs).toContain('job:memory');
+
+    // libsql is not tiered out, so the store workflow still starts and skips only pg.
+    const stores = tiered({ changedFiles: ['stores/_test-utils/src/index.ts'] });
+    expect(stores.flags.stores_changed).toBe(true);
+  });
+
+  test('a quiet job still runs when the PR edits its own paths', () => {
+    const result = tiered({ changedFiles: ['packages/memory/src/index.ts'] });
+
+    expect(result.flags.memory_changed).toBe(true);
+    expect(result.tiers.skippedJobs).not.toContain('job:memory');
+  });
+
+  test('skips quiet workspace packages but keeps the full list for the cloud tests', () => {
+    const result = tiered({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['workspaces/docker/src/a.test.ts', 'workspaces/s3/src/a.test.ts'],
+    });
+
+    expect(result.workspaceSelection.packages).toEqual(expect.arrayContaining(['docker', 's3']));
+    expect(result.workspaceUnitRun).toEqual(['s3']);
+    expect(result.workspaceDockerRun).toEqual(['s3']);
+    expect(result.flags.workspaces_changed).toBe(true);
+  });
+
+  test('the full-tests label and the full suite run everything', () => {
+    const input = { changedFiles: ['packages/core/src/index.ts'], affectedTests: ['packages/core/src/quiet.test.ts'] };
+
+    expect(tiered(input, true).unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(tiered(input, true).tiers.skippedJobs).toEqual([]);
+    expect(tiered({ ...input, fullSuite: true }).tiers.skippedJobs).toEqual([]);
+  });
+
+  test('the E2E workflow still starts for npm import when every tiered E2E job is quiet', () => {
+    const e2eJobs = Object.fromEntries(
+      [
+        'monorepo',
+        'kitchen-sink',
+        'deployers',
+        'create-mastra',
+        'commonjs',
+        'no-bundling',
+        'mcp-compat',
+        'client-js',
+        'type-check',
+      ].map(name => [`job:e2e/${name}`, out]),
+    );
+    const result = route({
+      changedFiles: ['packages/core/src/mcp/index.ts'],
+      tiers: { tiers: { files: { ...tierFiles, ...e2eJobs } }, fullTestsLabel: false },
+    } as never);
+
+    expect(result.tiers.skippedJobs).toContain('job:e2e/mcp-compat');
+    expect(result.flags.e2e_changed).toBe(true);
+  });
+
+  test('the E2E registry publishes whenever the E2E workflow runs', () => {
+    // e2e-npm-import is not tiered and needs the registry, so its publisher can't be tiered either.
+    const workflow = parse(readFileSync(new URL('../workflows/e2e-tests.yml', import.meta.url), 'utf8'));
+    const consumers = Object.entries(workflow.jobs as Record<string, { needs?: string | string[] }>)
+      .filter(([, job]) => [job.needs ?? []].flat().includes('publish-e2e-registry'))
+      .map(([name]) => name);
+
+    expect(consumers).toContain('e2e-npm-import');
+    expect(workflow.jobs['publish-e2e-registry'].if).toBeUndefined();
+  });
+
+  test('without tiers nothing is dropped', () => {
+    const result = route({
+      changedFiles: ['packages/core/src/index.ts'],
+      affectedTests: ['packages/core/src/quiet.test.ts'],
+    });
+
+    expect(result.unitTestFiles).toEqual(['packages/core/src/quiet.test.ts']);
+    expect(result.tiers.skippedJobs).toEqual([]);
   });
 });
 

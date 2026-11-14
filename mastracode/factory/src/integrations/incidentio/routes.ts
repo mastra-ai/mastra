@@ -17,12 +17,11 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
-import type { Intake } from '../../capabilities/intake.js';
+import type { Intake, IntakeItem } from '../../capabilities/intake.js';
 import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import { IncidentioApiError } from './api.js';
-import type { IncidentioRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
@@ -57,12 +56,6 @@ export interface MountIncidentioRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed follow-ups. When present, a
-   * board-scoped listing also materializes new cards through the incident.io
-   * event rules — the same automatic intake Linear and Jira have.
-   */
-  ingestFactoryIssues?: (input: IncidentioRulesIngress) => Promise<unknown>;
 }
 
 /**
@@ -155,6 +148,38 @@ interface IncidentioIssuePayload {
   createdAt: string;
   updatedAt: string;
   sourceId: string | null;
+}
+
+/**
+ * The follow-ups a listing page serves, shared by the board route and the
+ * reconcile sweep that files their cards. Incidents stay out of intake even
+ * when a stale binding selects the incidents source.
+ */
+export function followUpIssues(items: IntakeItem[]): IncidentioIssuePayload[] {
+  return items
+    .filter(item => item.source.externalId.startsWith(FOLLOW_UP_PREFIX))
+    .map(item => {
+      const externalId = item.source.externalId;
+      const metadata = item.metadata ?? {};
+      const identifier = typeof metadata.identifier === 'string' ? metadata.identifier : externalId;
+      const titlePrefix = `${identifier}: `;
+      return {
+        id: externalId,
+        identifier,
+        title: item.title.startsWith(titlePrefix) ? item.title.slice(titlePrefix.length) : item.title,
+        url: item.source.url ?? '',
+        author: typeof metadata.author === 'string' ? metadata.author : null,
+        state: item.status ?? '',
+        stateType: typeof metadata.stateType === 'string' ? metadata.stateType : '',
+        priorityLabel: typeof metadata.priority === 'string' ? metadata.priority : '',
+        assignee: item.assignee ?? null,
+        incident: typeof metadata.incidentioIncidentId === 'string' ? metadata.incidentioIncidentId : null,
+        labels: item.labels ?? [],
+        createdAt: item.createdAt ?? '',
+        updatedAt: item.updatedAt ?? '',
+        sourceId: item.sourceId || null,
+      };
+    });
 }
 
 /**
@@ -261,41 +286,7 @@ export function buildIncidentioRoutes(options: MountIncidentioRoutesOptions): Ap
             sourceIds,
             ...(after ? { cursor: after } : {}),
           });
-          const issuePayload: IncidentioIssuePayload[] = [];
-          for (const item of page.items) {
-            const externalId = item.source.externalId;
-            // Incidents stay out of intake even when a stale binding selects
-            // the incidents source — only follow-ups are served.
-            if (!externalId.startsWith(FOLLOW_UP_PREFIX)) continue;
-            const metadata = item.metadata ?? {};
-            const identifier = typeof metadata.identifier === 'string' ? metadata.identifier : externalId;
-            const titlePrefix = `${identifier}: `;
-            issuePayload.push({
-              id: externalId,
-              identifier,
-              title: item.title.startsWith(titlePrefix) ? item.title.slice(titlePrefix.length) : item.title,
-              url: item.source.url ?? '',
-              author: typeof metadata.author === 'string' ? metadata.author : null,
-              state: item.status ?? '',
-              stateType: typeof metadata.stateType === 'string' ? metadata.stateType : '',
-              priorityLabel: typeof metadata.priority === 'string' ? metadata.priority : '',
-              assignee: item.assignee ?? null,
-              incident: typeof metadata.incidentioIncidentId === 'string' ? metadata.incidentioIncidentId : null,
-              labels: item.labels ?? [],
-              createdAt: item.createdAt ?? '',
-              updatedAt: item.updatedAt ?? '',
-              sourceId: item.sourceId || null,
-            });
-          }
-          if (factoryProjectId && boundSourceIds && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload,
-            });
-          }
-          return c.json({ issues: issuePayload, nextCursor: page.nextCursor });
+          return c.json({ issues: followUpIssues(page.items), nextCursor: page.nextCursor });
         } catch (err) {
           return incidentioFetchError(loose(c), err);
         }

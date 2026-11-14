@@ -1,5 +1,19 @@
 # create-factory
 
+## 0.4.4-alpha.1
+
+### Patch Changes
+
+- `create-factory` can now set up the Factory in the current directory. When you run it without a project name in an empty directory, the name prompt defaults to that directory: press Enter to use it, or type a name to create a new directory. An existing empty directory can also be passed as the project name. ([#30343](https://github.com/mastra-ai/mastra/pull/30343))
+
+  ```bash
+  mkdir my-factory && cd my-factory
+  npx create-factory@latest
+  ```
+
+- Updated dependencies [[`673c45a`](https://github.com/mastra-ai/mastra/commit/673c45a8616e7c6a548861b6addeb82f139809fe), [`049b31d`](https://github.com/mastra-ai/mastra/commit/049b31dd2c674a6ef7f14f900fc9bc58987caeed), [`558b8b9`](https://github.com/mastra-ai/mastra/commit/558b8b997ca3995cf637ab15d66236dd0db60a45), [`8bb6aa8`](https://github.com/mastra-ai/mastra/commit/8bb6aa8e9db7c0ad35ec5e228616f5f6bb9ef7c0), [`2087fdc`](https://github.com/mastra-ai/mastra/commit/2087fdccb8d7bfb609a1b5014b116fe188c5bfba)]:
+  - mastra@1.39.1-alpha.1
+
 ## 0.4.4-alpha.0
 
 ### Patch Changes

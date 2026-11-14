@@ -86,16 +86,7 @@ async function runCell(engine: Engine, mode?: (typeof REDELIVERY_MODES)[number])
       const match = { spec: 't56-wf@2', runId } as const;
       expect(driver.stepRuns(match).at(-1)?.data).toMatchObject({ workflowId: 't56-wf', runId, executionPath: [2] });
       await redeliverAndDrain(driver, match, mode);
-      expectRedeliveryParity(
-        { increments, afterInputs },
-        { increments: [2, 3], afterInputs: [3] },
-        mode === 'same-id'
-          ? undefined
-          : {
-              reason: 'COR-1307 / COR-1394: completed after executes again on fresh-ID or expired replay.',
-              expect: correct => ({ ...correct, afterInputs: [...correct.afterInputs, 3] }),
-            },
-      );
+      expectRedeliveryParity({ increments, afterInputs }, { increments: [2, 3], afterInputs: [3] });
     }
   } finally {
     if (engine === 'evented') await mastra.stopWorkers();

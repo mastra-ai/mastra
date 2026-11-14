@@ -2,7 +2,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
-import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
+import type { BoardSource } from '../../../hooks/useWorkSourceConnections';
+import type { SourceControlRepository } from '../../../services/github';
 import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
 import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
@@ -16,8 +17,8 @@ export interface OnboardingPreviewProps {
   modelScope?: OnboardingModelScope;
   local?: boolean;
   personalModel?: string;
-  repository?: { name: string; fullName: string; defaultBranch: string };
-  source?: WorkSource;
+  repository?: SourceControlRepository;
+  source?: BoardSource;
   model?: string;
   providerId?: string;
   personalProviderId?: string;
@@ -91,7 +92,7 @@ export function OnboardingPreview({
           <OnboardingCodebasePreview repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={step === 'project-management'}>
-          <OnboardingIntakePreview source={source} />
+          <OnboardingIntakePreview source={source} repository={repository} />
         </OnboardingScene>
         <OnboardingScene active={scene === 'accounts'}>
           <OnboardingAccountsPreview

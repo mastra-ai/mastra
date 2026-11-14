@@ -1,5 +1,6 @@
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
+import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
 import { isValid } from 'date-fns';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
@@ -355,6 +356,11 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (candidateSourceKey) keys.add(candidateSourceKey);
     // The URL names the repository, covering cards filed before they were stamped with one.
     if (item.url && (item.source === 'github-issue' || item.source === 'github-pr')) keys.add(item.url);
+    // A pull request attached to an issue card is filed on that card.
+    for (const source of item.workItem?.sources ?? []) {
+      keys.add(sourceExternalId(source));
+      if (source.url) keys.add(source.url);
+    }
   }
   return keys;
 }
