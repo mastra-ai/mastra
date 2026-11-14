@@ -17,6 +17,7 @@ export type StartupResumeIssue =
 export async function resumeThreadOnStartup(
   state: TUIState,
   requestedThreadId?: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<StartupResumeIssue | undefined> {
   const local = state.local;
   if (!local) return resumeFactoryThread(state);
@@ -24,6 +25,7 @@ export async function resumeThreadOnStartup(
 
   const currentPath = state.projectInfo.rootPath;
   const allThreads = await session.thread.list(requestedThreadId ? { allResources: true } : undefined);
+  if (!isCurrent()) return;
   const activeThreadId = session.thread.getId();
 
   if (requestedThreadId) {

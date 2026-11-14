@@ -133,16 +133,17 @@ function fallbackStatusFromMetadata(
   return undefined;
 }
 
-export async function syncInitialThreadState(state: TUIState): Promise<void> {
+export async function syncInitialThreadState(state: TUIState, isCurrent: () => boolean = () => true): Promise<void> {
   const initThreadId = state.session.thread.getId();
   if (!initThreadId) {
     setCurrentThreadTitle(state, undefined);
     state.fallbackStatus = undefined;
     return;
   }
+  const ownsUpdate = () => isCurrent() && state.session.thread.getId() === initThreadId;
 
   const initThreads = await state.session.thread.list();
-  if (state.session.thread.getId() !== initThreadId) return;
+  if (!ownsUpdate()) return;
 
   const initThread = initThreads.find(t => t.id === initThreadId);
   const metadata = initThread?.metadata as Record<string, unknown> | undefined;
@@ -165,11 +166,11 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
       [MODEL_FALLBACK_STATE_KEY]: validPendingFallback,
     };
     const applied = state.session.state.setIf
-      ? await state.session.state.setIf(updates, () => state.session.thread.getId() === initThreadId)
-      : state.session.thread.getId() === initThreadId
+      ? await state.session.state.setIf(updates, ownsUpdate)
+      : ownsUpdate()
         ? await state.session.state.set(updates).then(() => true)
         : false;
-    if (!applied || state.session.thread.getId() !== initThreadId) return;
+    if (!applied || !ownsUpdate()) return;
   }
 
   setCurrentThreadTitle(state, initThread?.title);
@@ -178,7 +179,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
   if (state.local) await state.goalManager.loadFromThread(state.local);
-  if (state.session.thread.getId() !== initThreadId) return;
+  if (!ownsUpdate()) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
   }
@@ -831,7 +832,11 @@ export class MastraTUI {
     this.state.ui.start();
 
     // Resume the latest unlocked thread for this directory.
-    const startupResumeIssue = await resumeThreadOnStartup(this.state, this.state.options.resumeThreadId);
+    const startupResumeIssue = await resumeThreadOnStartup(
+      this.state,
+      this.state.options.resumeThreadId,
+      () => !this.stopped,
+    );
     if (this.stopped) return;
     // A --pack startup applies to whatever thread startup selected, including a
     // resumed one — it overrides the thread's sticky pack for this session.
@@ -878,7 +883,7 @@ export class MastraTUI {
 
     // Sync current thread metadata — the thread_changed event from
     // Initial thread setup ran before we subscribed above.
-    await syncInitialThreadState(this.state);
+    await syncInitialThreadState(this.state, () => !this.stopped);
     if (this.stopped) return;
 
     this.state.isInitialized = true;
@@ -905,7 +910,7 @@ export class MastraTUI {
     }
 
     // Render existing messages
-    await this.renderExistingMessagesAndSeedIdleCounter();
+    await this.renderExistingMessagesAndSeedIdleCounter(() => !this.stopped);
     if (this.stopped) return;
     // Render existing tasks if any
     await renderExistingTasks(this.state);
