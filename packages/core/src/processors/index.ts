@@ -697,7 +697,8 @@ export interface Processor<TId extends string = string, TTripwireMetadata = unkn
    * compile time.
    */
   readonly spanAttributes?:
-    Partial<SpanTypeMap[ProcessorSpanType]> | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
+    | Partial<SpanTypeMap[ProcessorSpanType]>
+    | ((phase: ProcessorSpanPhase) => Partial<SpanTypeMap[ProcessorSpanType]>);
   /** Index of this processor in the workflow (set at runtime when combining processors) */
   processorIndex?: number;
 
@@ -957,7 +958,9 @@ export type ErrorProcessor<TTripwireMetadata = unknown> = WithRequired<
   Processor<string, TTripwireMetadata>;
 
 export type ProcessorTypes<TTripwireMetadata = unknown> =
-  InputProcessor<TTripwireMetadata> | OutputProcessor<TTripwireMetadata> | ErrorProcessor<TTripwireMetadata>;
+  | InputProcessor<TTripwireMetadata>
+  | OutputProcessor<TTripwireMetadata>
+  | ErrorProcessor<TTripwireMetadata>;
 
 /** @internal Context consumed by processor step adapters, without workflow engine machinery. */
 export type ProcessorStepExecutor<TInput = ProcessorStepOutput> = (args: {
@@ -1014,13 +1017,15 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
  * Input processor config: can be a Processor or a Workflow.
  */
 export type InputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  InputProcessor<TTripwireMetadata> | ProcessorWorkflow;
+  | InputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
 
 /**
  * Output processor config: can be a Processor or a Workflow.
  */
 export type OutputProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  OutputProcessor<TTripwireMetadata> | ProcessorWorkflow;
+  | OutputProcessor<TTripwireMetadata>
+  | ProcessorWorkflow;
 
 /**
  * Error processor config: must be a processor with processAPIError.
@@ -1035,7 +1040,8 @@ export type ErrorProcessorOrWorkflow<TTripwireMetadata = unknown> = ErrorProcess
  * `processLLMRequest` still gets its hook. Entries without that method are inert there.
  */
 export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
-  InputProcessorOrWorkflow<TTripwireMetadata> | ErrorProcessorOrWorkflow<TTripwireMetadata>;
+  | InputProcessorOrWorkflow<TTripwireMetadata>
+  | ErrorProcessorOrWorkflow<TTripwireMetadata>;
 
 export { isProcessorWorkflow } from './is-processor-workflow';
 

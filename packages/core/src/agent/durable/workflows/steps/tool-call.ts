@@ -2140,7 +2140,8 @@ export function createDurableToolCallStep() {
       // carrying it on the serializable step output stops the loop in the
       // same iteration on every engine.
       const consumeDelegationBailSignal = ():
-        { delegationBailed: true; tracingDelegationFailure?: SpanTermination } | undefined => {
+        | { delegationBailed: true; tracingDelegationFailure?: SpanTermination }
+        | undefined => {
         let bailed = false;
         let failure: SpanTermination | undefined;
         for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {

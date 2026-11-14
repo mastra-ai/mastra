@@ -1378,7 +1378,8 @@ function createStepFromProcessor<TProcessorId extends string>(
                 (streamParts ?? []).length,
               );
               let processorSpan = mutableState[spanKey] as
-                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
+                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
+                | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor

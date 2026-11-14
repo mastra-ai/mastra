@@ -578,8 +578,8 @@ export function createStep<
   TProcessorId extends string,
   // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
   TInput extends
-    InferPublicSchema<typeof ProcessorStepInputSchema> | InferPublicSchema<typeof ProcessorStepOutputSchema> =
-    InferPublicSchema<typeof ProcessorStepInputSchema>,
+    | InferPublicSchema<typeof ProcessorStepInputSchema>
+    | InferPublicSchema<typeof ProcessorStepOutputSchema> = InferPublicSchema<typeof ProcessorStepInputSchema>,
 >(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
@@ -1550,7 +1550,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 (streamParts ?? []).length,
               );
               let processorSpan = mutableState[spanKey] as
-                ReturnType<NonNullable<typeof parentSpan>['createChildSpan']> | undefined;
+                | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
+                | undefined;
 
               if (!processorSpan && parentSpan) {
                 // First chunk - create span for this processor
