@@ -504,7 +504,7 @@ export interface Config<
    */
   pubsub?: PubSub;
 
-  /** Registered native-agent policy defaults; execution activation is deferred. */
+  /** Provisional naming/API: registered native-agent policy defaults; execution activation is deferred. */
   durable?: ExecutionEngineDefaults;
 
   /**

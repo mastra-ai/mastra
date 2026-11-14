@@ -43,25 +43,6 @@ export const mastra = new Mastra({
 })
 ```
 
-### durable
-
-**Type:** `{ executionEngine?: 'durable' | 'evented' | false; shouldCache?: (topic: string) => boolean; cleanupTimeoutMs?: number; shouldPersistSnapshot?: ShouldPersistSnapshotFn }`
-
-Defaults for native agents stored through constructor `agents` or `mastra.addAgent()`. **Engine configuration is staged: it doesn't activate durable or evented execution on native agents.** Native return values and recovery capability are unchanged. Use explicit [durable wrappers](/docs/harness/durable-agents) for checkpoint execution today.
-
-`durable` must be an object, never `true` or `false`. `executionEngine: false` supplies plain policy while allowing the other defaults. Missing fields inherit individually, while agent-level values win. `Agent.durable: false` opts out entirely. To keep resumable streams enabled without inheriting an engine, use `{ executionEngine: false }`. Keep transport and replay-cache instances on top-level `pubsub` and `cache`, not `Mastra.durable`.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  // Stream defaults apply now; engine selection is policy only.
-  durable: { executionEngine: 'durable', cleanupTimeoutMs: 120_000 },
-})
-```
-
-`shouldCache` controls which topics are cached; `cleanupTimeoutMs` defaults to `30000`, and `0` disables the cleanup timer. `shouldPersistSnapshot` accepts the workflow persistence callback but isn't applied to native execution yet. Host attachment alone, including sub-agent propagation, doesn't inherit engine policy. Engine selection locks at stored registration or the first native run, whichever happens first. Later registrations retain the first defaults. See the [agent precedence table and lifetime rules](/reference/agents/agent#execution-engine-policy).
-
 ### backgroundTasks
 
 **Type:** `BackgroundTaskManagerConfig`
