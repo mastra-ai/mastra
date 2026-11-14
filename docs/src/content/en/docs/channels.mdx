@@ -168,6 +168,17 @@ This bypasses only the requester check: actions still need a pending tool approv
 
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
+### Tools that call `suspend()`
+
+A tool that calls `suspend()` inside `execute` is not the same thing as an approval. Mastra streams a `tool-call-suspended` chunk for it, and channels don't render that chunk: no card, no buttons, no message. Only `requireApproval` produces the Approve/Deny card, and that card carries no resume payload.
+
+What happens next depends on the adapter's buttons:
+
+- **Button-capable adapters (Slack, Discord, Teams, Google Chat, Telegram) with a normal `toolDisplay`**: `autoResumeSuspendedTools` is left off, so the suspension is not resumed by the next message. The run stays parked on the thread and later messages queue behind it instead of starting a new run, until you resume explicitly with `agent.resumeStream(...)`, or the suspended-run TTL sweep releases the thread (`MASTRA_SUSPENDED_RUN_TTL_MS`, default 30 minutes).
+- **Button-less adapters** — no approval buttons, `approvalButtons: false`, or `toolDisplay: 'text'` — Mastra sets `autoResumeSuspendedTools` on the run, so a data-bearing `suspend()` flow (including `ask_user`) can be resumed by the user's next message on the same thread. This requires memory; `requireApproval` approvals are still not covered and need an explicit approve or decline.
+
+If you want a suspension to be answerable in the channel itself, model it as an approval (`requireApproval: true`) or handle it on the `onAction`/tool path yourself. See [Automatic tool resumption](/docs/agents/human-in-the-loop#automatic-tool-resumption) for `resumeSchema` and its requirements.
+
 ### Custom action handling
 
 Use `handlers.onAction` to handle button clicks and select changes from cards you post yourself. The handler is called with the Chat SDK action event and the default handler, plus the same `ctx` the other channel handlers receive. Values you set on `ctx.requestContext` before delegating carry through to the resumed tool call. The default handler processes the built-in Approve and Deny buttons and ignores every other action ID, so call it for events you don't handle to keep tool approval working:
