@@ -205,6 +205,30 @@ describe('Transcript background commands', () => {
     expect(reads).toBe(4);
   });
 
+  it('reads the sandbox again after the first read fails, so a running command still shows up', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    let reads = 0;
+    server.use(
+      http.get(PROCESSES_URL, () => {
+        reads += 1;
+        return reads === 1
+          ? HttpResponse.json({ error: 'unavailable' }, { status: 503 })
+          : HttpResponse.json({ processes: [running('4242', 'older-call')] });
+      }),
+    );
+    const entries = createInitialTranscript({ messages: [assistant('turn', [lint])] }).entries;
+    renderChat(entries, <BackgroundWorkPanel />);
+    await vi.waitFor(() => expect(reads).toBe(1));
+
+    await act(async () => vi.advanceTimersByTimeAsync(3_000));
+
+    const panel = await screen.findByRole('region', { name: 'Background work' });
+    expect(within(panel).getByRole('group', { name: 'Run: pnpm dev' })).toBeVisible();
+  });
+
   // A request can land on a replica that doesn't hold the session's sandbox, which lists nothing.
   it("doesn't call a command ended just because the sandbox didn't list it", async () => {
     server.use(http.get(PROCESSES_URL, () => HttpResponse.json({ processes: [] })));

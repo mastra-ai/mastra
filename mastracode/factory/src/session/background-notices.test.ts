@@ -58,10 +58,11 @@ async function setup() {
       visibility: 'org',
     });
   }
+  const store = new InMemoryStore({ id: 'factory-background-notices' });
   const controller = new AgentController<MastraCodeState>({
     id: 'factory-background-notices',
     stateSchema,
-    storage: new InMemoryStore({ id: 'factory-background-notices' }),
+    storage: store,
     modes: [
       {
         id: 'build',
@@ -102,7 +103,7 @@ async function setup() {
     accepted: Promise.resolve({ accepted: true, action: 'wake' }),
   });
   const saved = vi.spyOn(session, 'sendSignalToThread');
-  return { project, controller, session, second, delivery, woken, saved };
+  return { project, store, controller, session, second, delivery, woken, saved };
 }
 
 describe('Factory background notices', () => {
@@ -162,5 +163,26 @@ describe('Factory background notices', () => {
     expect(backWoken).toHaveBeenCalledWith(signal, expect.objectContaining({ ifIdle: { behavior: 'wake' } }));
     const { requestContext } = backWoken.mock.calls[0]![1] as { requestContext: RequestContext };
     expect(requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+  });
+
+  it('replays a held notice to the resource its thread moved to while the session was offline', async () => {
+    const { project, store, controller, delivery } = await setup();
+    const memory = (await store.getStore('memory'))!;
+    const thread = { id: 'session-b', title: '', createdAt: new Date(), updatedAt: new Date(), metadata: {} };
+    // A private session's thread, on its owner's resource, with no live session: the notice is held.
+    await memory.saveThread({ thread: { ...thread, resourceId: 'user-1' } });
+    await delivery.deliver({ resourceId: 'user-1', threadId: 'session-b' }, signal);
+
+    // Its owner shares it, which moves the thread to the Factory's resource, and the session comes back there.
+    await memory.saveThread({ thread: { ...thread, resourceId: project.id } });
+    const back = await controller.createSession({ id: 'session-b', resourceId: project.id, threadId: 'session-b' });
+    const backWoken = vi.spyOn(back, 'sendSignal').mockReturnValue({
+      id: signal.id,
+      type: 'notification',
+      accepted: Promise.resolve({ accepted: true, action: 'wake' }),
+    });
+    await delivery.flush();
+
+    expect(backWoken).toHaveBeenCalledWith(signal, expect.objectContaining({ ifIdle: { behavior: 'wake' } }));
   });
 });

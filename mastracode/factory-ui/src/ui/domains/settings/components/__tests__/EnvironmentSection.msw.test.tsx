@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { queryKeys } from '../../../../../api/keys';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { FactoryManagementSection } from '../FactoryManagementSection';
 import { customEnvironment, environmentPayload, FACTORY_ID } from './fixtures/environment';
@@ -91,12 +91,13 @@ describe('Environment settings', () => {
     useEnvironment(environment);
     const patches = recordPatches({ ...environment, backgroundToolsEnabled: true });
 
-    renderEnvironmentSettings();
+    const { client } = renderEnvironmentSettings();
 
     const toggle = await screen.findByRole('switch', { name: 'Background commands' });
     expect(toggle).not.toBeChecked();
     await userEvent.click(toggle);
     await waitFor(() => expect(patches).toEqual([{ backgroundToolsEnabled: true }]));
+    await waitForMutationsIdle(client);
   });
 
   it('shows the load failure instead of an empty page', async () => {

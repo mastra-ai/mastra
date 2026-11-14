@@ -320,6 +320,44 @@ describe('createBackgroundNoticeDelivery routing', () => {
     expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
   });
 
+  it('saves the notice to its thread when the session moves to another thread while the wake is prepared', async () => {
+    let currentThreadId = 'thread-1';
+    const { session, sendSignal, sendSignalToThread } = createSession();
+    (session.thread as { getId: () => string }).getId = () => currentThreadId;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveSession: async () => session,
+      wakeRequestContext: async () => {
+        currentThreadId = 'thread-2';
+        return new RequestContext();
+      },
+    });
+
+    await delivery.deliver(target, signal);
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
+  });
+
+  it('replays a held notice to where its thread is now', async () => {
+    const { session, sendSignalToThread } = createSession();
+    let resourceId = 'resource-1';
+    let live: Session<unknown> | undefined;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveTarget: async notice => ({ ...notice, resourceId }),
+      resolveSession: async current => (current.resourceId === 'resource-2' ? live : undefined),
+    });
+    // No session runs the thread yet: held.
+    await delivery.deliver(target, signal);
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+
+    // The thread moved to another resource, and its session came back there.
+    resourceId = 'resource-2';
+    live = session;
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, { resourceId: 'resource-2', threadId: 'thread-1' });
+  });
+
   it('never borrows another live session on the shared resource', async () => {
     const a = createSession({ currentThreadId: 'run-a' });
     const b = createSession({ currentThreadId: 'run-b' });

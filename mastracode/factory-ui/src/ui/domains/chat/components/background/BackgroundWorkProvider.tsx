@@ -74,13 +74,15 @@ export function BackgroundWorkProvider({
   const tasks = useMemo(() => runningBackgroundTasks(entries), [entries]);
   const launches = useMemo(() => openLaunches(entries, exits).join(' '), [entries, exits]);
   // Read once when the chat opens, since a command may still run after its launch left the loaded history.
-  // A new launch gets a fresh read through its key; after that the list is polled only while something runs.
+  // A new launch gets a fresh read through its key; after that the list is polled only while something runs, or
+  // until a read succeeds, since a failed one is not retried otherwise.
   const processes = useQuery({
     queryKey: [...processesKey(sessionId, threadId), launches] as const,
     queryFn: () => listBackgroundProcesses(baseUrl, sessionId, threadId),
     enabled,
     placeholderData: keepPreviousData,
-    refetchInterval: query => (query.state.data?.some(process => process.running) ? POLL_MS : false),
+    refetchInterval: query =>
+      query.state.data === undefined || query.state.data.some(process => process.running) ? POLL_MS : false,
   });
   const value = useMemo(
     () => ({ baseUrl, sessionId, threadId, exits, processes: processes.data, tasks }),

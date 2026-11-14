@@ -21,9 +21,15 @@ export function createFactoryBackgroundNoticeDelivery({
     input: BackgroundNoticeTarget & { requestContext: RequestContext; reportFailure?: boolean },
   ) => Promise<void>;
 }): BackgroundNoticeDelivery {
-  const delivery = createBackgroundNoticeDelivery(
+  return createBackgroundNoticeDelivery(
     () => ({ getSession: async sessionId => getController()?.getSession(sessionId) }),
     {
+      // A command's exit names the resource its thread had when the command started. Sharing a session or making
+      // it private moves its threads, so the stored thread says where the notice goes now, a held one included.
+      resolveTarget: async target => {
+        const thread = await getController()?.queryThreadById({ threadId: target.threadId });
+        return thread?.resourceId ? { ...target, resourceId: thread.resourceId } : target;
+      },
       resolveSession: async target => {
         const controller = getController();
         if (!controller) return undefined;
@@ -44,14 +50,4 @@ export function createFactoryBackgroundNoticeDelivery({
       },
     },
   );
-  return {
-    async deliver(target, signal) {
-      // A command's exit names the resource its thread had when the command started. Sharing a session or
-      // making it private moves its threads, so the stored thread says where the notice goes now.
-      const thread = await getController()?.queryThreadById({ threadId: target.threadId });
-      const current = thread?.resourceId ? { ...target, resourceId: thread.resourceId } : target;
-      return delivery.deliver(current, signal);
-    },
-    flush: () => delivery.flush(),
-  };
 }

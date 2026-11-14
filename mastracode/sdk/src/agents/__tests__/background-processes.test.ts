@@ -226,7 +226,7 @@ describe('Mastra Code background shell exit notices', () => {
       notices.beforeToolCall({
         workspaceToolName,
         input,
-        context: { agent: { toolCallId }, workspace: { sandbox } },
+        context: { agent: { toolCallId, threadId: 't' }, workspace: { sandbox } },
       } as any);
 
     await hook(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, { pid: '7' }, killedIn!, 'kill-call');
@@ -242,6 +242,8 @@ describe('Mastra Code background shell exit notices', () => {
     });
 
     expect(delivered).toHaveLength(1);
+    // The exit was matched to its launch, so the notice describes it.
+    expect(delivered[0]?.metadata).toMatchObject({ backgroundCompletion: { summary: 'pnpm dev' } });
   });
 
   it('tells apart launches that reuse a tool call id on different threads', async () => {
