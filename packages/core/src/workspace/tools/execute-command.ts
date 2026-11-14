@@ -67,17 +67,277 @@ export const executeCommandWithDescriptionAndBackgroundSchema = z.object({
 /** A command whose final pipeline stage is `tail`, e.g. `make test 2>&1 | tail -20`. */
 const TRAILING_TAIL_PIPE = /(?:^|[^|])\|\s*tail(?:\s[^|;&]*)?$/;
 
+/** The rewrite below claims file descriptors 8 and 9; commands that use them keep the plain guard. */
+const USES_WRAPPER_FDS = /(?:^|[^\w])[89][<>]|[<>]&\s*[89](?!\d)/;
+
+/** Text spans of the final top-level pipeline's stages; the last stage is `tail`. */
+type PipelineStages = { start: number; end: number }[];
+
+/** Reserved words that open a compound command, mapped to the word that closes it. */
+const COMPOUND_CLOSERS = new Map([
+  ['if', 'fi'],
+  ['while', 'done'],
+  ['until', 'done'],
+  ['{', '}'],
+]);
+
+/** Reserved words after which the next word starts a command again. */
+const COMMAND_CONTINUERS = new Set(['then', 'elif', 'else', 'do']);
+
+/**
+ * Find the stages of the final top-level pipeline of `command`, scanning it with POSIX `sh` rules.
+ * Returns `undefined` when that pipeline is not a plain `... | tail ...` or when the command uses
+ * syntax the scanner does not follow (here-documents, `case`, a trailing comment, unbalanced
+ * quotes). Those commands keep the plain `set -o pipefail` guard.
+ */
+function findTailPipelineStages(command: string): PipelineStages | undefined {
+  const scan = scanCommandList(command, 0, false);
+  if (!scan || scan.end !== command.length) return undefined;
+  const { stageStarts, negated, commentInPipeline } = scan;
+  if (stageStarts.length < 2 || negated || commentInPipeline) return undefined;
+  const lastStage = command.slice(stageStarts[stageStarts.length - 1]!);
+  if (!/^\s*tail(?:\s|$)/.test(lastStage)) return undefined;
+  return stageStarts.map((start, index) => ({
+    start,
+    end: index + 1 < stageStarts.length ? stageStarts[index + 1]! - 1 : command.length,
+  }));
+}
+
+interface CommandListScan {
+  end: number;
+  /** Start offsets of the stages of the last pipeline at the outer level. */
+  stageStarts: number[];
+  negated: boolean;
+  commentInPipeline: boolean;
+}
+
+/**
+ * Scan a command list from `from`. With `nested`, stop at the `)` closing a `$(...)` and return
+ * its offset. Returns `undefined` for syntax the scanner does not follow.
+ */
+function scanCommandList(src: string, from: number, nested: boolean): CommandListScan | undefined {
+  const closers: string[] = [];
+  let i = from;
+  let commandPosition = true;
+  let stageStarts = [from];
+  let negated = false;
+  let commentInPipeline = false;
+  let forState: 'none' | 'name' | 'afterName' = 'none';
+
+  const endPipeline = (next: number) => {
+    commandPosition = true;
+    if (closers.length > 0) return;
+    stageStarts = [next];
+    negated = false;
+    commentInPipeline = false;
+  };
+
+  while (i < src.length) {
+    const c = src[i]!;
+    if (c === ' ' || c === '\t') {
+      i++;
+    } else if (c === '\\' && src[i + 1] === '\n') {
+      i += 2;
+    } else if (c === '#') {
+      if (closers.length === 0) commentInPipeline = true;
+      while (i < src.length && src[i] !== '\n') i++;
+    } else if (c === '\n') {
+      // A newline right after `|`, `&&`, `||`, `;` or a reserved word only continues the line.
+      if (!commandPosition) endPipeline(i + 1);
+      i++;
+    } else if (c === ';') {
+      if (src[i + 1] === ';') return undefined;
+      endPipeline(i + 1);
+      i++;
+    } else if (c === '&') {
+      // bash reads `&>` as a redirection, POSIX sh as `&` then `>`.
+      if (src[i + 1] === '>') return undefined;
+      i += src[i + 1] === '&' ? 2 : 1;
+      endPipeline(i);
+    } else if (c === '|') {
+      if (src[i + 1] === '|') {
+        i += 2;
+        endPipeline(i);
+      } else if (src[i + 1] === '&') {
+        return undefined;
+      } else {
+        i++;
+        commandPosition = true;
+        if (closers.length === 0) stageStarts.push(i);
+      }
+    } else if (c === '(') {
+      if (!commandPosition) {
+        // `name()` of a function definition; its body follows.
+        i++;
+        while (src[i] === ' ' || src[i] === '\t') i++;
+        if (src[i] !== ')') return undefined;
+      } else {
+        closers.push(')');
+      }
+      i++;
+      commandPosition = true;
+    } else if (c === ')') {
+      if (closers.length === 0) {
+        if (!nested) return undefined;
+        return { end: i, stageStarts, negated, commentInPipeline };
+      }
+      if (closers.pop() !== ')') return undefined;
+      i++;
+      commandPosition = false;
+    } else if (c === '<' || c === '>') {
+      if (src.startsWith('<<', i)) return undefined;
+      i += /^(?:>>|>&|>\||<&|<>)/.test(src.slice(i, i + 2)) ? 2 : 1;
+      while (src[i] === ' ' || src[i] === '\t') i++;
+      const targetEnd = scanWord(src, i);
+      if (targetEnd === undefined || targetEnd === i) return undefined;
+      i = targetEnd;
+      commandPosition = false;
+    } else {
+      const wordEnd = scanWord(src, i);
+      if (wordEnd === undefined) return undefined;
+      const word = src.slice(i, wordEnd);
+      i = wordEnd;
+      if (forState === 'name') {
+        forState = 'afterName';
+        continue;
+      }
+      const afterForName = forState === 'afterName';
+      forState = 'none';
+      if (afterForName && word === 'do') {
+        commandPosition = true;
+        continue;
+      }
+      if (word === ']]' && closers[closers.length - 1] === ']]') {
+        closers.pop();
+        commandPosition = false;
+        continue;
+      }
+      if (!commandPosition) continue;
+      if (word === 'case') return undefined;
+      if (word === '[[') {
+        // bash's conditional command can hold `&&`, `||` and `<`; keep it together.
+        closers.push(']]');
+        commandPosition = false;
+      } else if (word === 'for') {
+        closers.push('done');
+        forState = 'name';
+        commandPosition = false;
+      } else if (COMPOUND_CLOSERS.has(word)) {
+        closers.push(COMPOUND_CLOSERS.get(word)!);
+      } else if (COMMAND_CONTINUERS.has(word)) {
+        if (closers.length === 0) return undefined;
+      } else if (word === 'fi' || word === 'done' || word === '}') {
+        if (closers.pop() !== word) return undefined;
+        commandPosition = false;
+      } else if (word === '!') {
+        if (closers.length === 0) negated = true;
+      } else {
+        commandPosition = false;
+      }
+    }
+  }
+  if (nested || closers.length > 0) return undefined;
+  return { end: i, stageStarts, negated, commentInPipeline };
+}
+
+/** Return the offset after the shell word starting at `from`, or `undefined` if it is unterminated. */
+function scanWord(src: string, from: number): number | undefined {
+  let i = from;
+  while (i < src.length) {
+    const c = src[i]!;
+    if (' \t\n;&|()<>'.includes(c)) return i;
+    const next = scanQuotedPart(src, i, false);
+    if (next === undefined) return undefined;
+    i = next;
+  }
+  return i;
+}
+
+/**
+ * Skip one character or quoted part of a word at `i`: a backslash escape, '...', "...", `...`,
+ * $(...) or ${...}. Inside double quotes, single quotes are literal.
+ */
+function scanQuotedPart(src: string, i: number, inDoubleQuotes: boolean): number | undefined {
+  const c = src[i]!;
+  if (c === '\\') return i + 1 < src.length ? i + 2 : undefined;
+  // bash's $'...' and $"..." quote differently from POSIX sh.
+  if (c === '$' && (src[i + 1] === "'" || src[i + 1] === '"') && !inDoubleQuotes) return undefined;
+  if (c === "'" && !inDoubleQuotes) {
+    const close = src.indexOf("'", i + 1);
+    return close === -1 ? undefined : close + 1;
+  }
+  if (c === '"') return scanUntil(src, i + 1, '"', true);
+  if (c === '`') {
+    for (let j = i + 1; j < src.length; j++) {
+      if (src[j] === '\\') j++;
+      else if (src[j] === '`') return j + 1;
+    }
+    return undefined;
+  }
+  if (c === '$' && src[i + 1] === '(') {
+    const scan = scanCommandList(src, i + 2, true);
+    return scan ? scan.end + 1 : undefined;
+  }
+  if (c === '$' && src[i + 1] === '{') return scanUntil(src, i + 2, '}', inDoubleQuotes);
+  return i + 1;
+}
+
+/** Return the offset after the first unquoted `close` at or after `from`. */
+function scanUntil(src: string, from: number, close: string, inDoubleQuotes: boolean): number | undefined {
+  let i = from;
+  while (i < src.length) {
+    if (src[i] === close) return i + 1;
+    const next = scanQuotedPart(src, i, inDoubleQuotes);
+    if (next === undefined) return undefined;
+    i = next;
+  }
+  return undefined;
+}
+
 /**
  * POSIX shells report a pipeline's status from its last command, so `cmd | tail -N` exits 0 even
- * when `cmd` fails. Enable `pipefail` (where the shell supports it) for pipelines ending in `tail`
- * so the upstream failure is reported. `tail` reads all of its input, so upstream commands are
- * not cut off by SIGPIPE. LocalSandbox on Windows runs commands through cmd.exe, which has no
- * `set -o`.
+ * when `cmd` fails. For pipelines ending in `tail`, report the status of the last failing stage
+ * instead, as `pipefail` does. `tail` reads all of its input, so upstream commands are not cut off
+ * by SIGPIPE.
+ *
+ * dash (`/bin/sh` on Debian and Ubuntu before 26.04) has no `pipefail`, so the final pipeline is
+ * rewritten in POSIX `sh` for every shell: each stage before `tail` runs in a subshell, and its
+ * wrapper writes the stage's status to fd 9, which a command substitution collects. Output reaches
+ * the original stdout through fd 8. The configured shell still parses and expands every word, the
+ * command text appears once, and no newlines are added, so error line numbers do not change.
+ * Commands the scanner does not follow keep the `set -o pipefail` guard, which works where the
+ * shell has `pipefail`. LocalSandbox on Windows runs commands through cmd.exe, which has neither.
  */
 function reportUpstreamPipelineFailure(command: string, sandboxProvider: string): string {
   if (sandboxProvider === 'local' && process.platform === 'win32') return command;
-  if (!TRAILING_TAIL_PIPE.test(command.trim())) return command;
-  return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
+  const trimmed = command.trimEnd();
+  if (!TRAILING_TAIL_PIPE.test(trimmed.trim())) return command;
+  const stages = USES_WRAPPER_FDS.test(trimmed) ? undefined : findTailPipelineStages(trimmed);
+  if (!stages) return `(set -o pipefail) 2>/dev/null && set -o pipefail; ${command}`;
+
+  const pipelineStart = stages[0]!.start;
+  const before = trimmed.slice(0, pipelineStart);
+  const tailStage = stages[stages.length - 1]!;
+  const upstream = stages.slice(0, -1);
+  // Each stage runs in its own subshell, which restores `set -e` or else the previous `$?`. The
+  // wrapper around it runs without `set -e`, so it still reports the status to fd 9.
+  const wrappedStages = upstream.map(
+    ({ start, end }, index) =>
+      `{ ( eval "$__mastra_pf_init"; ${trimmed.slice(start, end)} ) 8>&- 9>&-; echo "__mastra_pf_${index + 1}=$?" >&9; }`,
+  );
+  // pipefail semantics: the rightmost failing stage sets the status; `tail` is the rightmost.
+  const rightmostFailure = upstream
+    .map((_, index) => upstream.length - index)
+    .map(n => `[ "$__mastra_pf_exit" -ne 0 ] || __mastra_pf_exit=\${__mastra_pf_${n}:-0}; `)
+    .join('');
+  return (
+    `${before}${/^$|\s$/.test(before) ? '' : ' '}{ __mastra_pf_init="(exit $?)"; ` +
+    `case $- in *e*) __mastra_pf_init='set -e';; esac; ` +
+    `__mastra_pf_status=$(set +e; { ${wrappedStages.join(' | ')} | ` +
+    `${trimmed.slice(tailStage.start, tailStage.end)} 8>&- 9>&-; } 9>&1 >&8); ` +
+    `__mastra_pf_exit=$?; eval "$__mastra_pf_status"; ${rightmostFailure}` +
+    `(exit "$__mastra_pf_exit"); } 8>&1${command.slice(trimmed.length)}`
+  );
 }
 
 const ABORTED_COMMAND_NOTE =
