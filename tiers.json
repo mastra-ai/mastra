@@ -10475,9 +10475,9 @@
     },
     "packages/core/src/agent/__tests__/signals-claimed-ownership.test.ts": {
       "tier": "in",
-      "since": "2026-10-31",
-      "last_failure": "2026-10-31",
-      "reason": "pr-fail"
+      "since": "2026-11-14",
+      "last_failure": "2026-11-14",
+      "reason": "versioning-fail"
     },
     "packages/core/src/agent/__tests__/signals-cross-runtime.test.ts": {
       "tier": "in",
@@ -34076,6 +34076,72 @@
       "since": "2026-11-01",
       "last_failure": "2026-10-14",
       "reason": "failed-last-30d"
+    },
+    "job:workspace-unit/agentfs": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/apple-container": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/archil": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/cloudflare-sandbox": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/docker": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/files-sdk": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/gcs": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/google-drive": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/mesa": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-unit/vercel": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
+    },
+    "job:workspace-docker/gcs": {
+      "tier": "in",
+      "since": "2026-11-14",
+      "last_failure": null,
+      "reason": "new"
     }
   }
 }
