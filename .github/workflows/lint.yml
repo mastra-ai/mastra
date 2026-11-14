@@ -103,7 +103,29 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
 
+      # Test tiers (scripts/test-tiers/select.mjs): the validator's own tests are tiered as
+      # job:qa/changeset-check. The checks of this PR's changesets below always run.
+      - name: Check test tier
+        id: tier
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          HEAD_REF: ${{ github.head_ref }}
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          FLAGS=()
+          if [[ "$HEAD_REF" == changeset-release/* ]]; then FLAGS+=(--full-suite); fi
+          if jq -e 'index("full-tests")' <<< "$LABELS" > /dev/null; then FLAGS+=(--full-tests-label); fi
+          # An empty file (no ci/test-tiers branch) reads as invalid, which skips nothing.
+          git fetch --quiet --depth 1 origin ci/test-tiers 2>/dev/null && git show FETCH_HEAD:tiers.json > "$RUNNER_TEMP/tiers.json" || : > "$RUNNER_TEMP/tiers.json"
+          # Without a changed-file list the own-path rule can't hold, so skip nothing.
+          git diff --name-only "$BASE_SHA...$HEAD_SHA" > "$RUNNER_TEMP/changed-files.txt" || FLAGS+=(--full-tests-label)
+          SKIP=$(node scripts/test-tiers/select.mjs skip-jobs --tiers="$RUNNER_TEMP/tiers.json" --changed="$RUNNER_TEMP/changed-files.txt" "${FLAGS[@]}" job:qa/changeset-check) || SKIP='[]'
+          echo "skip=$(jq 'length > 0' <<< "$SKIP")" >> "$GITHUB_OUTPUT"
+
       - name: Test changeset package validator
+        if: ${{ steps.tier.outputs.skip != 'true' }}
         run: node --test .github/scripts/check-changeset-packages.test.mjs
 
       # Check all pending changesets, including on changeset-only PRs.
@@ -158,6 +180,9 @@ jobs:
 
       - name: Test npm package existence check, publish and placeholder scripts
         run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs
+
+      - name: Test the test-tier scripts
+        run: node --test scripts/test-tiers/*.test.mjs
 
       # npm-publish.yml publishes with npm trusted publishing (OIDC) and has no
       # token fallback, and npm only allows a trusted publisher on a package
