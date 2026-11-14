@@ -409,13 +409,18 @@ export class ObservationStep {
         }
       }
 
-      // Re-fetch status after observation/cleanup for the snapshot
-      statusSnapshot = await om.getStatus({
-        threadId,
-        resourceId,
-        record: this.turn.record,
-        messages: getObservableMessages(messageList),
-      });
+      // Re-fetch status after observation/cleanup or buffering for the snapshot. On a step where
+      // neither ran, the record and counted messages are unchanged (the step > 0 save only moves
+      // messages between buckets), so the first snapshot still holds and a recount would only
+      // re-walk the whole accumulated context again.
+      if (willObserveNow || buffered) {
+        statusSnapshot = await om.getStatus({
+          threadId,
+          resourceId,
+          record: this.turn.record,
+          messages: getObservableMessages(messageList),
+        });
+      }
     }
 
     // ── Refresh cross-thread context (resource scope) ──────────

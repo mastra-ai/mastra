@@ -1,0 +1,219 @@
+import { MessageList } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { InMemoryDB, InMemoryMemory } from '@mastra/core/storage';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { ObservationalMemory } from '../observational-memory';
+import { TokenCounter } from '../token-counter';
+
+const MARK = 'perf29851';
+
+function toolPart(i: number): any {
+  return {
+    type: 'tool-invocation',
+    toolInvocation: {
+      state: 'result',
+      toolCallId: `call-${i}`,
+      toolName: 'read_file',
+      args: { path: `file-${i}` },
+      result: { [MARK]: true, payload: 'stable tool payload '.repeat(180) },
+    },
+  };
+}
+
+function assistant(parts: any[]): MastraDBMessage {
+  return {
+    id: 'assistant',
+    role: 'assistant',
+    threadId: 't',
+    resourceId: 'r',
+    createdAt: new Date('2026-01-01'),
+    content: { format: 2, parts },
+  };
+}
+
+/** Counts JSON.stringify calls (and characters) on marked tool-result objects only. */
+function spyOnResultSerialization() {
+  const original = JSON.stringify;
+  const counts = { calls: 0, chars: 0 };
+  const spy = vi.spyOn(JSON, 'stringify').mockImplementation(((value: any, ...rest: any[]) => {
+    const text = (original as any)(value, ...rest);
+    if (value && typeof value === 'object' && value[MARK] === true) {
+      counts.calls++;
+      counts.chars += text.length;
+    }
+    return text;
+  }) as typeof JSON.stringify);
+  return { counts, spy };
+}
+
+async function setup(observation: Record<string, unknown> = {}) {
+  const storage = new InMemoryMemory({ db: new InMemoryDB() });
+  await storage.saveThread({
+    thread: { id: 't', resourceId: 'r', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+  });
+  const om = new ObservationalMemory({
+    storage,
+    scope: 'thread',
+    observation: {
+      model: 'test-model',
+      messageTokens: 1_000_000_000,
+      bufferTokens: false,
+      bufferOnIdle: false,
+      ...observation,
+    },
+    reflection: { model: 'test-model', observationTokens: 1_000_000_000 },
+  });
+  const messageList = new MessageList({ threadId: 't', resourceId: 'r' });
+  messageList.add(
+    {
+      id: 'user',
+      role: 'user',
+      threadId: 't',
+      resourceId: 'r',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'inspect all files' }] },
+    },
+    'input',
+  );
+  const turn = om.beginTurn({ threadId: 't', resourceId: 'r', messageList });
+  await turn.start();
+  await turn.step(0).prepare();
+  return { om, turn, messageList };
+}
+
+describe('OM token counting work in long tool runs (#29851)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('serializes a warmed, unchanged plain JSON tool result at most once per count', async () => {
+    const counter = new TokenCounter();
+    const message = assistant([toolPart(1)]);
+    const expected = await counter.countMessageAsync(message);
+
+    const { counts, spy } = spyOnResultSerialization();
+    const actual = await counter.countMessageAsync(message);
+    spy.mockRestore();
+
+    expect(actual).toBe(expected);
+    // Plain JSON results must not pay an extra full serialization just to rule out multimodal content.
+    expect(counts.calls).toBeLessThan(2);
+  });
+
+  it('keeps sync and async counts equal, and warm counts equal to fresh counts', async () => {
+    const counter = new TokenCounter();
+    const message = assistant([toolPart(1), toolPart(2)]);
+    const asyncCount = await counter.countMessageAsync(message);
+    expect(counter.countMessage(message)).toBe(asyncCount);
+    expect(await counter.countMessageAsync(message)).toBe(asyncCount);
+
+    const fresh = JSON.parse(JSON.stringify(message));
+    for (const part of fresh.content.parts) delete part.providerMetadata;
+    expect(await new TokenCounter().countMessageAsync(fresh)).toBe(asyncCount);
+  });
+
+  it('still recounts nested result, args, and modelOutput edits on the same objects', async () => {
+    const counter = new TokenCounter();
+    const part = toolPart(1);
+    const message = assistant([part]);
+    const initial = await counter.countMessageAsync(message);
+
+    part.toolInvocation.result.payload = 'changed data '.repeat(900);
+    const nested = await counter.countMessageAsync(message);
+    expect(nested).not.toBe(initial);
+
+    part.toolInvocation.args.path = 'changed argument '.repeat(600);
+    const args = await counter.countMessageAsync(message);
+    expect(args).not.toBe(nested);
+
+    part.providerMetadata.mastra.modelOutput = { type: 'text', value: 'model-facing short output' };
+    const mapped = await counter.countMessageAsync(message);
+    expect(mapped).not.toBe(args);
+
+    part.providerMetadata.mastra.modelOutput.value = 'model-facing different output '.repeat(800);
+    const changedMapped = await counter.countMessageAsync(message);
+    expect(changedMapped).not.toBe(mapped);
+
+    const fresh = JSON.parse(JSON.stringify(message));
+    delete fresh.content.parts[0].providerMetadata.mastra.tokenEstimate;
+    expect(await new TokenCounter().countMessageAsync(fresh)).toBe(changedMapped);
+  });
+
+  it('still counts image content in tool results as an attachment, and recounts when it changes', async () => {
+    const counter = new TokenCounter();
+    const part = toolPart(1);
+    part.toolInvocation.result = {
+      type: 'content',
+      value: [
+        { type: 'text', text: 'screenshot' },
+        { type: 'media', mediaType: 'image/png', data: 'iVBORw0KGgo'.repeat(10) },
+      ],
+    };
+    const message = assistant([part]);
+    const withImage = await counter.countMessageAsync(message);
+
+    const textOnly = assistant([
+      {
+        ...toolPart(1),
+        toolInvocation: {
+          ...toolPart(1).toolInvocation,
+          result: { type: 'content', value: [{ type: 'text', text: 'screenshot' }] },
+        },
+      },
+    ]);
+    expect(withImage).not.toBe(await new TokenCounter().countMessageAsync(textOnly));
+
+    part.toolInvocation.result.value[1].data = 'iVBORw0KGgo'.repeat(4000);
+    const fresh = JSON.parse(JSON.stringify(message));
+    delete fresh.content.parts[0].providerMetadata;
+    expect(await counter.countMessageAsync(message)).toBe(await new TokenCounter().countMessageAsync(fresh));
+  });
+
+  it('calls getStatus once on a step where nothing was observed, buffered, or activated', async () => {
+    const f = await setup();
+    f.messageList.add(assistant([toolPart(1)]), 'response');
+    const spy = vi.spyOn(f.om, 'getStatus');
+
+    const context = await f.turn.step(1).prepare();
+
+    expect(context.observed).toBe(false);
+    expect(context.buffered).toBe(false);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refreshes status after a step that started buffering', async () => {
+    const f = await setup({ messageTokens: 100_000, bufferTokens: 500, bufferActivation: 0.5 });
+    f.messageList.add(assistant([toolPart(1)]), 'response');
+    vi.spyOn(f.om, 'buffer').mockResolvedValue(undefined as any);
+    const spy = vi.spyOn(f.om, 'getStatus');
+
+    const context = await f.turn.step(1).prepare();
+
+    expect(context.buffered).toBe(true);
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it('serializes each prior tool result at most once per step as a long tool run grows', async () => {
+    const f = await setup();
+    const observe = vi.spyOn(f.om, 'observe');
+    const { counts, spy } = spyOnResultSerialization();
+    const perStep: Record<number, number> = {};
+    try {
+      for (let i = 1; i <= 100; i++) {
+        f.messageList.add(assistant([toolPart(i)]), 'response');
+        counts.calls = 0;
+        await f.turn.step(i).prepare();
+        perStep[i] = counts.calls;
+      }
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(observe).not.toHaveBeenCalled();
+    // Main serialized every accumulated result four times per step (two getStatus passes × two
+    // serializations each). The fix keeps it to one pass over the accumulated results.
+    expect(perStep[100]).toBeLessThanOrEqual(100);
+    expect(perStep[10]).toBeLessThanOrEqual(10);
+  });
+});
