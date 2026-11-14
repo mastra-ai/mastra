@@ -162,7 +162,8 @@ export async function processWorkflowLoop(
     activeStepsPath,
     requestContext,
     actor,
-    retryCount,
+    // Each iteration gets the body's full retry budget, as on the default engine.
+    retryCount: 0,
     perStep,
     state: currentState,
     outputOptions,
