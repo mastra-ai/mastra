@@ -859,6 +859,45 @@ describe('createMastraCode', () => {
     expect(enabled.backgroundCompletionEvents).toBeDefined();
   });
 
+  it('delivers a shell exit that came while no session ran its resource once a session is created', async () => {
+    loadSettingsMock.mockReturnValue({ ...createMockSettings(), backgroundTools: { enabled: true } });
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext: { get: () => undefined } });
+    const { backgroundProcesses } = getDynamicWorkspaceMock.mock.calls[0]![0];
+    controllerGetSessionMock.mockResolvedValue(undefined);
+
+    await backgroundProcesses.onExit({
+      pid: '42',
+      exitCode: 0,
+      stdout: 'BUILD_DONE',
+      stderr: '',
+      toolCallId: 'call-1',
+      runId: 'run-1',
+      threadId: 'thread-1',
+      resourceId: 'project-resource',
+    });
+    const sendSignalToThread = vi.fn(() => ({ accepted: Promise.resolve({ accepted: true }) }));
+    const session = {
+      sendSignalToThread,
+      identity: { getResourceId: () => 'project-resource' },
+      thread: { getId: () => 'other-thread' },
+    };
+    controllerGetSessionMock.mockImplementation(async (id: string) =>
+      id === 'project-resource' ? session : undefined,
+    );
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+    const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
+    trackLiveSession(session);
+
+    await vi.waitFor(() => expect(sendSignalToThread).toHaveBeenCalledOnce());
+    expect(sendSignalToThread).toHaveBeenCalledWith(
+      expect.objectContaining({ contents: expect.stringContaining('BUILD_DONE') }),
+      { resourceId: 'project-resource', threadId: 'thread-1' },
+    );
+  });
+
   it('registers background signal processing only when background tools are enabled', async () => {
     const { createMastraCode } = await import('../index.js');
 
