@@ -893,6 +893,13 @@ describe('Extractor', () => {
       'preference',
     ]);
   });
+
+  it('tells the model to write the thread title in the language of the conversation (#24688)', () => {
+    const titleExtractor = composeObservationExtractors({ threadTitle: true }).find(
+      extractor => extractor.slug === 'thread-title',
+    );
+    expect(titleExtractor?.instructions).toContain('same language');
+  });
 });
 
 describe('WorkingMemoryExtractor schema enforcement', () => {
