@@ -10,13 +10,17 @@ import { createStep, createWorkflow } from '../workflows';
 import { WORKFLOW_RUN_LEASE_TTL_MS } from '../workflows/run-ownership';
 import { Mastra } from './index';
 
-function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Promise<void>) {
+function buildReplica(
+  storage: InMemoryStore,
+  onExecute: (runId: string, suspend: (payload: object) => Promise<unknown>) => Promise<void>,
+  storageVersion?: 1 | 2,
+) {
   const step = createStep({
     id: 'side-effect',
     inputSchema: z.object({}),
     outputSchema: z.object({ done: z.boolean() }),
-    execute: async ({ runId }) => {
-      await onExecute(runId);
+    execute: async ({ runId, suspend }) => {
+      await onExecute(runId, suspend);
       return { done: true };
     },
   });
@@ -24,6 +28,7 @@ function buildReplica(storage: InMemoryStore, onExecute: (runId: string) => Prom
     id: 'recoverable-wf',
     inputSchema: z.object({}),
     outputSchema: z.object({ done: z.boolean() }),
+    ...(storageVersion ? { options: { storageVersion } } : {}),
   })
     .then(step)
     .commit();
@@ -114,6 +119,91 @@ describe('boot-time workflow recovery and run ownership (#25579)', () => {
     finish();
     expect((await resultPromise).status).toBe('success');
     expect(executions).toEqual([`A:${run.runId}`]);
+  });
+
+  describe.each([1, 2] as const)('restart() of a run that stops before the claim (storage v%s)', storageVersion => {
+    /**
+     * Replica A runs the step up to a gate; replica B's `restart()` reads the run while A is live.
+     * Just before B claims the lease, A passes the gate and settles, writing its outcome and
+     * releasing its lease for real.
+     */
+    async function raceRestartWithSettle(afterGate: (suspend: (payload: object) => Promise<unknown>) => Promise<void>) {
+      const storage = new InMemoryStore();
+      const executions: string[] = [];
+      const gate = Promise.withResolvers<void>();
+      const started = Promise.withResolvers<void>();
+      const replicaA = buildReplica(
+        storage,
+        async (runId, suspend) => {
+          executions.push(`A:${runId}`);
+          started.resolve();
+          await gate.promise;
+          await afterGate(suspend);
+        },
+        storageVersion,
+      );
+      const replicaB = buildReplica(
+        storage,
+        async runId => {
+          executions.push(`B:${runId}`);
+        },
+        storageVersion,
+      );
+      replicas.push(replicaA, replicaB);
+
+      const run = await replicaA.getWorkflow('workflow').createRun();
+      const settled = run.start({ inputData: {} });
+      await started.promise;
+
+      const workflowsStore = (await storage.getStore('workflows'))!;
+      const claim = workflowsStore.claimRunOwnership.bind(workflowsStore);
+      vi.spyOn(workflowsStore, 'claimRunOwnership').mockImplementation(async args => {
+        if (args.runId === run.runId && !args.force) {
+          gate.resolve();
+          await settled;
+        }
+        return claim(args);
+      });
+
+      const runOnB = await replicaB.getWorkflow('workflow').createRun({ runId: run.runId });
+      const restarted = runOnB.restart();
+      const settledResult = await settled;
+      const storedAfterSettle = await workflowsStore.getWorkflowRunById({
+        workflowName: 'recoverable-wf',
+        runId: run.runId,
+      });
+      return { run, restarted, settledResult, storedAfterSettle, executions, workflowsStore };
+    }
+
+    it('returns the stored result of a run that finished, and does not run its step again', async () => {
+      const { run, restarted, settledResult, storedAfterSettle, executions, workflowsStore } =
+        await raceRestartWithSettle(async () => {});
+      expect(settledResult.status).toBe('success');
+
+      const result = await restarted;
+      expect(executions).toEqual([`A:${run.runId}`]);
+      expect(result.status).toBe('success');
+      expect(result).toMatchObject({ result: { done: true } });
+      expect(await workflowsStore.getWorkflowRunById({ workflowName: 'recoverable-wf', runId: run.runId })).toEqual(
+        storedAfterSettle,
+      );
+      expect((await workflowsStore.getRunOwnership({ runId: run.runId }))?.live).toBe(false);
+    });
+
+    it('refuses to restart a run that suspended, and does not run its step again', async () => {
+      const { run, restarted, settledResult, storedAfterSettle, executions, workflowsStore } =
+        await raceRestartWithSettle(async suspend => {
+          await suspend({});
+        });
+      expect(settledResult.status).toBe('suspended');
+
+      await expect(restarted).rejects.toThrow('This workflow run was not active');
+      expect(executions).toEqual([`A:${run.runId}`]);
+      expect(await workflowsStore.getWorkflowRunById({ workflowName: 'recoverable-wf', runId: run.runId })).toEqual(
+        storedAfterSettle,
+      );
+      expect((await workflowsStore.getRunOwnership({ runId: run.runId }))?.live).toBe(false);
+    });
   });
 
   /** A parent run suspended in its nested `child` workflow, and the nested run's id. */

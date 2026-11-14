@@ -6041,46 +6041,22 @@ export class Run<
     });
   }
 
-  protected async _restart({
-    requestContext,
-    outputWriter,
-    tracingOptions,
-    outputOptions,
-    actor,
-    ...rest
-  }: {
-    requestContext?: RequestContext<TRequestContext>;
-    outputWriter?: OutputWriter;
-    tracingOptions?: TracingOptions;
-    outputOptions?: {
-      includeState?: boolean;
-      includeResumeLabels?: boolean;
-    };
-    actor?: ActorSignal;
-  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
-    const observabilityContext = resolveObservabilityContext(rest);
-    const allowedEngines = ['default', 'evented'];
-    if (!allowedEngines.includes(this.workflowEngineType)) {
-      throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
-    }
-
-    let snapshot =
-      this.storageVersion === 2
-        ? await this.runStorage.loadForResume({ wait: false })
-        : await this.runStorage.loadFull();
-
-    if (!snapshot) {
-      throw new Error(`Snapshot not found for run ${this.runId}`);
-    }
-
-    // Parent parallel activeStepsPath can lag behind nested child completion after a crash:
-    // children may already be terminal while the parent still lists them as active and
-    // re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
-    // See https://github.com/mastra-ai/mastra/issues/20225
-    //
-    // Only statuses already represented on WorkflowResult are reconstructed here.
-    // Other terminal statuses (canceled/bailed) keep the existing createRestartExecutionParams
-    // "was not active" behavior — expanding WorkflowResult is out of scope for this fix.
+  /**
+   * The result `restart()` returns for a run that already finished, or undefined for any other status.
+   * On the finished path it also runs the run's cleanup.
+   *
+   * Parent parallel activeStepsPath can lag behind nested child completion after a crash:
+   * children may already be terminal while the parent still lists them as active and
+   * re-invokes restart(). Treat terminal snapshots as authoritative and reuse them.
+   * See https://github.com/mastra-ai/mastra/issues/20225
+   *
+   * Only statuses already represented on WorkflowResult are reconstructed here.
+   * Other terminal statuses (canceled/bailed) keep the "was not active" error from
+   * createRestartExecutionParams, because WorkflowResult doesn't represent them.
+   */
+  async #storedRestartResult(
+    snapshot: WorkflowRunState,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion> | undefined> {
     if (snapshot.status === 'success' || snapshot.status === 'failed' || snapshot.status === 'tripwire') {
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
@@ -6148,15 +6124,47 @@ export class Run<
         TStorageVersion
       >;
     }
+    return undefined;
+  }
 
-    if (this.storageVersion === 2) {
-      snapshot = await this.runStorage.loadFull();
-      if (!snapshot) {
-        throw new Error(`Snapshot not found for run ${this.runId}`);
-      }
+  protected async _restart({
+    requestContext,
+    outputWriter,
+    tracingOptions,
+    outputOptions,
+    actor,
+    ...rest
+  }: {
+    requestContext?: RequestContext<TRequestContext>;
+    outputWriter?: OutputWriter;
+    tracingOptions?: TracingOptions;
+    outputOptions?: {
+      includeState?: boolean;
+      includeResumeLabels?: boolean;
+    };
+    actor?: ActorSignal;
+  } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>> {
+    const observabilityContext = resolveObservabilityContext(rest);
+    const allowedEngines = ['default', 'evented'];
+    if (!allowedEngines.includes(this.workflowEngineType)) {
+      throw new Error(`restart() is not supported on ${this.workflowEngineType} workflows`);
     }
 
-    const restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
+    const firstRead =
+      this.storageVersion === 2
+        ? await this.runStorage.loadForResume({ wait: false })
+        : await this.runStorage.loadFull();
+
+    if (!firstRead) {
+      throw new Error(`Snapshot not found for run ${this.runId}`);
+    }
+
+    const storedResult = await this.#storedRestartResult(firstRead);
+    if (storedResult) {
+      return storedResult;
+    }
+    // Throws for a run that isn't active, before it touches the lease table.
+    createRestartExecutionParams({ snapshot: firstRead, graph: this.executionGraph });
 
     const ownership = await this.#claimOwnership(false);
     if (!('release' in ownership)) {
@@ -6173,6 +6181,29 @@ export class Run<
           leaseExpiresAt: ownership.owner?.leaseExpiresAt?.toISOString() ?? null,
         },
       });
+    }
+
+    // The owner can finish, suspend or be canceled and release its lease between the first read
+    // and the claim, so the restart acts on the run as it is once the claim is held.
+    let snapshot: WorkflowRunState;
+    let restartData: ReturnType<typeof createRestartExecutionParams>;
+    let restarting = false;
+    try {
+      const loaded = await this.runStorage.loadFull();
+      if (!loaded) {
+        throw new Error(`Snapshot not found for run ${this.runId}`);
+      }
+      snapshot = loaded;
+      const finishedResult = await this.#storedRestartResult(snapshot);
+      if (finishedResult) {
+        return finishedResult;
+      }
+      restartData = createRestartExecutionParams({ snapshot, graph: this.executionGraph });
+      restarting = true;
+    } finally {
+      if (!restarting) {
+        await ownership.release();
+      }
     }
 
     const requestContextToUse = requestContext ?? new RequestContext();
