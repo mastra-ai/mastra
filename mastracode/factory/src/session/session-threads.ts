@@ -36,6 +36,54 @@ export async function threadRunBinding(
 export type SessionThreadLookup = Pick<AgentController<any>, 'queryThreadById'>;
 
 /**
+ * Finds the Factory session a thread belongs to, for work that reaches the thread with no request behind it
+ * (wakes, background notices). A woken thread under a Factory or user resource names its session with its
+ * stamp, or is the session's own thread; an unmigrated thread still runs under its session id as its resource.
+ */
+export function createWakeSessionResolver<Row extends FactorySessionOwnership>({
+  controller,
+  sessions,
+  runs,
+}: {
+  /** Resolved per call: the controller exists only once the Factory is mounted. */
+  controller: () => SessionThreadLookup | undefined;
+  sessions: { getBySessionId(sessionId: string): Promise<Row | null> };
+  runs: SessionRunBindings | undefined;
+}) {
+  return async ({
+    resourceId,
+    threadId,
+    thread,
+  }: {
+    resourceId: string;
+    threadId: string;
+    thread?: { metadata?: Record<string, unknown> } | null;
+  }): Promise<{ sessionId: string; row: Row | null }> => {
+    const stored = thread === undefined ? await controller()?.queryThreadById({ threadId }) : thread;
+    const stamp = stored?.metadata?.factorySessionId;
+    const candidates = [...new Set([typeof stamp === 'string' ? stamp : '', threadId, resourceId])].filter(Boolean);
+    for (const sessionId of candidates) {
+      const row = await sessions.getBySessionId(sessionId);
+      // The stamp is client-writable metadata: a session only claims a
+      // thread that runs under its own memory resource, or under its own id
+      // as the resource from before resources were shared.
+      // A stamp (neither the thread's own id nor its legacy resource) only
+      // counts where the session's stamps are trusted.
+      const viaStamp = sessionId !== threadId && sessionId !== resourceId;
+      if (
+        row &&
+        (!viaStamp || sessionStampCounts(row, resourceId)) &&
+        (resourceId === sessionId || resourceId === (await sessionMemoryResourceId(controller(), row, runs)))
+      ) {
+        return { sessionId, row };
+      }
+    }
+    // Unresolved: report on the woken thread, never on a session a stamp merely names.
+    return { sessionId: threadId, row: null };
+  };
+}
+
+/**
  * The one memory resource a Factory session runs under. A Slack session uses
  * its Factory's, or its sender's for a DM; a side session uses its Factory's,
  * or its owner's when private; any other session uses its owner's. A session's own thread can say otherwise

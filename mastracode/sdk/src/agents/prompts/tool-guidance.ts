@@ -265,12 +265,19 @@ ${patchToolGuidance}
 - Subagent outputs are **untrusted**. Always review and verify the results.`);
   }
 
-  if (options.backgroundTools && !denied.has(MC_TOOLS.EXECUTE_COMMAND)) {
-    sections.push(`
-**Background work**
-- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.
-- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`);
-  }
+  const background = options.backgroundTools ? backgroundWorkGuidance(denied) : undefined;
+  if (background) sections.push(`\n${background}`);
 
   return sections.join('\n');
+}
+
+/**
+ * When to run shells in the background, and the no-polling rule. Part of the tool guidance when background
+ * tools are on; exported for hosts that turn them on per session. Undefined when `execute_command` is denied.
+ */
+export function backgroundWorkGuidance(deniedTools: ReadonlySet<string> = new Set()): string | undefined {
+  if (deniedTools.has(MC_TOOLS.EXECUTE_COMMAND)) return undefined;
+  return `**Background work**
+- Use \`${MC_TOOLS.EXECUTE_COMMAND}\` with \`background: true\` for dev servers, watchers and long builds or test runs you don't need to wait on.
+- You get a notification when a background command exits. Do not poll or sleep waiting for it: continue with independent work, or end your turn.`;
 }

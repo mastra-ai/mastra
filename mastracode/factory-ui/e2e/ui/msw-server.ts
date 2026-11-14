@@ -26,6 +26,8 @@ export const server = setupServer(
   // Experimental surfaces stay hidden unless a test explicitly enables them.
   http.get('*/web/config/features', () => HttpResponse.json({ knowledge: false })),
   http.get('*/web/status', () => HttpResponse.json({ problems: [] })),
+  // Ambient background command list (read when a session chat opens); background work tests override it.
+  http.get('*/web/user-sessions/:sessionId/background/processes', () => HttpResponse.json({ processes: [] })),
   // Ambient activity poll (sidebar running dots); activity tests override it with `server.use(...)`.
   http.get('*/api/agent-controller/:controllerId/active-runs', () => HttpResponse.json({ runs: [] })),
   http.get('*/web/factory/projects/:id/boards', () => HttpResponse.json(builtinBoardCatalog)),

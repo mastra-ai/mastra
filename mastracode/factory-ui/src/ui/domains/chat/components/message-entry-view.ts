@@ -2,6 +2,8 @@ import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/message
 import type { SkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
+import { backgroundFinishedNotice } from './background/background-work';
+import type { BackgroundFinishedNotice } from './background/background-work';
 import { isRecord } from './transcript-shared';
 import type { MessagePart } from './transcript-parts';
 import { isSkillNotificationSignal, notificationMetadata } from './TranscriptNotifications';
@@ -47,6 +49,7 @@ export type DrawnSignalRow = Exclude<SignalRowView, ReactiveRow> | (ReactiveRow 
 export type MessageEntryView =
   | { kind: 'skill'; activation: SkillActivation }
   | { kind: 'hidden' }
+  | { kind: 'background-finished'; notice: BackgroundFinishedNotice }
   | { kind: 'notifications'; notifications: Array<NotificationEntry | NotificationSummaryEntry> }
   | { kind: 'signal'; row: DrawnSignalRow }
   | { kind: 'status'; status: StatusMetadata }
@@ -72,6 +75,9 @@ export function messageEntryView(entry: MessageEntry, parts: readonly MessagePar
   const activation = skillActivation(entry, parts);
   if (activation) return { kind: 'skill', activation };
   if (isSkillNotificationSignal(entry) || isTemporalGapSignal(entry)) return { kind: 'hidden' };
+
+  const finished = backgroundFinishedNotice(entry);
+  if (finished) return { kind: 'background-finished', notice: finished };
 
   const notifications = notificationMetadata(entry);
   if (notifications.length > 0) return { kind: 'notifications', notifications };

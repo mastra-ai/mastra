@@ -1,5 +1,6 @@
 import type { Session } from '@mastra/core/agent-controller';
 import type { BackgroundTask } from '@mastra/core/background-tasks';
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from './background-completion-events.js';
 import { createBackgroundCompletionCallbacks, createBackgroundNoticeDelivery } from './background-completion.js';
@@ -299,6 +300,62 @@ describe('createBackgroundNoticeDelivery routing', () => {
     );
 
     expect(sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it("wakes with the host's request context, and saves the notice when the host has none to give", async () => {
+    const { session, sendSignal, sendSignalToThread } = createSession({ currentThreadId: 'thread-1' });
+    const owner = new RequestContext();
+    let wakeContext: RequestContext | undefined = owner;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveSession: async () => session,
+      wakeRequestContext: async () => wakeContext,
+    });
+
+    await delivery.deliver(target, signal);
+    expect(sendSignal.mock.calls[0]?.[1]).toMatchObject({ requestContext: owner });
+
+    wakeContext = undefined;
+    await delivery.deliver(target, signal);
+    expect(sendSignal).toHaveBeenCalledTimes(1);
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
+  });
+
+  it('saves the notice to its thread when the session moves to another thread while the wake is prepared', async () => {
+    let currentThreadId = 'thread-1';
+    const { session, sendSignal, sendSignalToThread } = createSession();
+    (session.thread as { getId: () => string }).getId = () => currentThreadId;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveSession: async () => session,
+      wakeRequestContext: async () => {
+        currentThreadId = 'thread-2';
+        return new RequestContext();
+      },
+    });
+
+    await delivery.deliver(target, signal);
+
+    expect(sendSignal).not.toHaveBeenCalled();
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, target);
+  });
+
+  it('replays a held notice to where its thread is now', async () => {
+    const { session, sendSignalToThread } = createSession();
+    let resourceId = 'resource-1';
+    let live: Session<unknown> | undefined;
+    const delivery = createBackgroundNoticeDelivery(() => ({ getSession: async () => undefined }), {
+      resolveTarget: async notice => ({ ...notice, resourceId }),
+      resolveSession: async current => (current.resourceId === 'resource-2' ? live : undefined),
+    });
+    // No session runs the thread yet: held.
+    await delivery.deliver(target, signal);
+    expect(sendSignalToThread).not.toHaveBeenCalled();
+
+    // The thread moved to another resource, and its session came back there.
+    resourceId = 'resource-2';
+    live = session;
+    await delivery.flush();
+
+    expect(sendSignalToThread).toHaveBeenCalledWith(signal, { resourceId: 'resource-2', threadId: 'thread-1' });
   });
 
   it('never borrows another live session on the shared resource', async () => {

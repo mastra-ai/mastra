@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import path, { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { BackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { createMastraCodeWorkspaceTools } from '@mastra/code-sdk/agents/tool-availability';
 import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-sdk/agents/workspace';
@@ -484,6 +485,8 @@ export interface CreateWorkspaceFactoryOptions {
   skills?: readonly InlineSkill[];
   /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
   skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
+  /** Exit notices for background commands, used by sessions whose project turned background tools on. */
+  backgroundProcesses?: BackgroundProcessNotices;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -580,6 +583,8 @@ export interface SessionEnvironment {
   workingDirectory: string | undefined;
   /** The project's stored provider settings document, `{}` when nothing was set. */
   settings: Record<string, unknown>;
+  /** The project's background tools setting. */
+  backgroundToolsEnabled: boolean;
 }
 
 /**
@@ -664,6 +669,7 @@ export async function resolveProjectEnvironment(
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
     settings: project.sandboxSettings ?? {},
+    backgroundToolsEnabled: project.backgroundToolsEnabled,
   };
 }
 
@@ -699,7 +705,19 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides, sandboxEnvs } = options;
+  const {
+    sandbox: sandboxConfig,
+    github,
+    projects,
+    workItems,
+    skillOverrides,
+    sandboxEnvs,
+    backgroundProcesses,
+  } = options;
+  // Built once: the dispatcher tracks launches across every session's workspace.
+  const backgroundWorkspaceTools = backgroundProcesses
+    ? createMastraCodeWorkspaceTools(true, FACTORY_PLANS_DIR, backgroundProcesses)
+    : FACTORY_WORKSPACE_TOOLS;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -810,6 +828,10 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // a factory session, list form or single repository.
     const resolvedEnvironment = await resolveSessionEnvironment(projects, storage, session);
     const sandboxSettings = resolvedEnvironment?.settings ?? {};
+    // Read on every resolution, so a toggled setting reaches a live session's next run.
+    const workspaceTools = resolvedEnvironment?.backgroundToolsEnabled
+      ? backgroundWorkspaceTools
+      : FACTORY_WORKSPACE_TOOLS;
     // The Factory's variables, read before construction (which is synchronous).
     const envScope =
       sandboxEnvs && session.factoryProjectId
@@ -1489,7 +1511,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     }
     existing ??= constructedWorkspaces.get(workspaceId);
     if (existing) {
-      existing.setToolsConfig(FACTORY_WORKSPACE_TOOLS);
+      existing.setToolsConfig(workspaceTools);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
       // Likewise when the project's skill-override revision moves: a save or revert
@@ -1906,7 +1928,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       name: 'Mastra Code Factory Session Workspace',
       filesystem,
       sandbox: sessionSandbox as unknown as ConstructorParameters<typeof Workspace>[0]['sandbox'],
-      tools: FACTORY_WORKSPACE_TOOLS,
+      tools: workspaceTools,
       skills: skillPaths,
       // Project skill roots live in the sandbox checkout; guard them so skill
       // discovery before materialization (e.g. kickoff skill resolution in the

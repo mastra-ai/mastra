@@ -1,6 +1,7 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
+import { Switch } from '@mastra/playground-ui/components/Switch';
+import { SettingsContainer, SettingsRow, SettingsSkeleton } from '@mastra/playground-ui/new/settings';
 
 import {
   useEnvironmentBuildQuery,
@@ -58,6 +59,17 @@ function EnvironmentBlocks({ factoryId, environment }: { factoryId: string; envi
           onSave={save}
         >
           <SandboxBlock environment={environment} disabled={disabled} onSave={save} />
+          <SettingsRow
+            label="Background commands"
+            description="Commands the agent starts in the background keep running when a run is stopped, and the agent is told when they exit."
+          >
+            <Switch
+              aria-label="Background commands"
+              checked={environment.backgroundToolsEnabled}
+              disabled={disabled}
+              onCheckedChange={enabled => void save({ backgroundToolsEnabled: enabled })}
+            />
+          </SettingsRow>
         </WorkspaceSetupBlock>
       </SettingsSubsection>
       <SettingsSubsection

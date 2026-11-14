@@ -24,7 +24,9 @@ import { existsSync } from 'node:fs';
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import type { MastraCodeConfig } from '@mastra/code-sdk';
+import { createBackgroundProcessNotices } from '@mastra/code-sdk/agents/background-processes';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
+import { backgroundWorkGuidance } from '@mastra/code-sdk/agents/prompts/tool-guidance';
 import { getGlobalMcpPath } from '@mastra/code-sdk/mcp/config';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
@@ -141,6 +143,7 @@ import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
+import { createFactoryBackgroundNoticeDelivery } from './session/background-notices.js';
 import { resolveFactoryCredentialTenant, resolveFactoryModelPolicy } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
@@ -157,7 +160,7 @@ import { FactoryReplyCredentialProcessor } from './session/reply-credential-proc
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { selfReviewApprovedHead } from './session/self-review-gate.js';
-import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
+import { createWakeSessionResolver } from './session/session-threads.js';
 import type { ReviewedChangeRequest } from './session/source-control-tools.js';
 import { createSourceControlTools, resolveReviewedChangeRequest } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
@@ -1304,51 +1307,66 @@ export class MastraFactory {
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
     // Repeated attempts of one delivery send one report: identical failures to
     // the same follower are deduplicated.
-    // A woken thread under a Factory or user resource names its session with its
-    // stamp, or is the session's own thread; an unmigrated thread still runs
-    // under its session id as its resource.
-    const resolveWakeSession = async ({
+    const resolveWakeSession = createWakeSessionResolver({
+      controller: () => this.#prepared?.base.controller,
+      sessions: sourceControlSessions,
+      runs: workItemsStorage,
+    });
+    const failWake = async (
+      { sessionId, threadId }: { sessionId: string; threadId: string },
+      reason: string,
+      report = true,
+    ) => {
+      const message = `Factory session ${sessionId} can't be woken as its owner: ${reason}.`;
+      if (report) {
+        await reportSessionRunEnd({
+          sessionId,
+          threadId,
+          since: new Date(),
+          outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
+        }).catch(error => console.warn('[factory] Unable to report a failed wake.', error));
+      }
+      throw new Error(message);
+    };
+    /**
+     * Prepares a run with no signed-in request (a notification, peer signal or background notice wake) to
+     * run as the Factory session's owner in its org; without that, tenant credential resolution fails closed.
+     * With auth on, a wake whose owner can't be resolved must not run (it would fail on credentials with no
+     * hint why): this throws, and the session's followers get a failed report naming the reason unless
+     * `reportFailure` is false, as for a background notice, which is saved to its thread instead.
+     */
+    const prepareWakeRequestContext = async ({
+      requestContext,
       resourceId,
       threadId,
-      thread,
+      reportFailure = true,
     }: {
+      requestContext: RequestContext;
       resourceId: string;
       threadId: string;
-      thread?: { metadata?: Record<string, unknown> } | null;
+      reportFailure?: boolean;
     }) => {
-      const stored =
-        thread === undefined ? await this.#prepared?.base.controller.queryThreadById({ threadId }) : thread;
-      const stamp = stored?.metadata?.factorySessionId;
-      const candidates = [...new Set([typeof stamp === 'string' ? stamp : '', threadId, resourceId])].filter(Boolean);
-      for (const sessionId of candidates) {
-        const row = await sourceControlSessions.getBySessionId(sessionId);
-        // The stamp is client-writable metadata: a session only claims a
-        // thread that runs under its own memory resource, or under its own id
-        // as the resource from before resources were shared.
-        // A stamp (neither the thread's own id nor its legacy resource) only
-        // counts where the session's stamps are trusted.
-        const viaStamp = sessionId !== threadId && sessionId !== resourceId;
-        if (
-          row &&
-          (!viaStamp || sessionStampCounts(row, resourceId)) &&
-          (resourceId === sessionId ||
-            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row, workItemsStorage)))
-        ) {
-          return { sessionId, row };
-        }
+      if (!storage.isDomainReady('source-control')) {
+        if (auth) await failWake({ sessionId: threadId, threadId }, 'session storage is not ready', reportFailure);
+        return;
       }
-      // Unresolved: report on the woken thread, never on a session a stamp merely names.
-      return { sessionId: threadId, row: null };
-    };
-    const failWake = async ({ sessionId, threadId }: { sessionId: string; threadId: string }, reason: string) => {
-      const message = `Factory session ${sessionId} can't be woken as its owner: ${reason}.`;
-      await reportSessionRunEnd({
-        sessionId,
-        threadId,
-        since: new Date(),
-        outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
-      }).catch(error => console.warn('[factory] Unable to report a failed wake.', error));
-      throw new Error(message);
+      const { sessionId, row } = await resolveWakeSession({ resourceId, threadId });
+      // Only a session that owns the thread's resource may lend its owner;
+      // the unresolved fallback id must never be looked up as a session.
+      if (!row) {
+        if (auth) {
+          await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found'], reportFailure);
+        }
+        return;
+      }
+      const prepared = await prepareSessionRunContext(requestContext, sessionId, {
+        sessions: sourceControlSessions,
+      });
+      if (prepared !== 'prepared') {
+        if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED[prepared], reportFailure);
+        return;
+      }
+      await primeCustomProvidersForRequestContext(requestContext);
     };
     const onTerminalStage = terminalCleanup
       ? (args: {
@@ -1721,6 +1739,18 @@ export class MastraFactory {
     const sessionTools =
       this.#config.tools ?? (connectToolsProjectId ? platformConnectTools(connectToolsProjectId) : undefined);
     const warnedConfiguredToolClashes = new Set<string>();
+    // One dispatcher for every session's workspace. It reaches sessions through the
+    // controller, which exists only once mounted; an exit with no live session is held
+    // until one is created.
+    const backgroundNotices = createFactoryBackgroundNoticeDelivery({
+      getController: () => this.#prepared?.base.controller,
+      resolveWakeSession,
+      prepareWakeRequestContext,
+    });
+    const backgroundProcesses = createBackgroundProcessNotices({
+      delivery: backgroundNotices,
+      getSession: async sessionId => this.#prepared?.base.controller.getSession(sessionId),
+    });
 
     // Build the real production controller (agents, tools, memory, OM, MCP,
     // providers) — the terminal app's, minus modes. Agent state lives in
@@ -1759,37 +1789,12 @@ export class MastraFactory {
           sandboxEnvs: sandboxEnvsStorage,
           ...(workItemsStorage ? { workItems: workItemsStorage } : {}),
           workspaceRegistry,
+          backgroundProcesses,
         }),
         disableGithubSignals: true,
         // Host mcp.json files never belong to a hosted session; MCP tools come through `tools`.
         disableMcp: true,
-        // A wake (notification or peer signal) has no signed-in request, so
-        // tenant credential resolution would fail closed. Run it as the Factory
-        // session's owner in its org.
-        // With auth on, a wake whose owner can't be resolved must not run (it
-        // would fail on credentials with no hint why); it fails, and the
-        // session's followers get a failed report naming the reason.
-        prepareWakeRequestContext: async ({ requestContext, resourceId, threadId }) => {
-          if (!storage.isDomainReady('source-control')) {
-            if (auth) await failWake({ sessionId: threadId, threadId }, 'session storage is not ready');
-            return;
-          }
-          const { sessionId, row } = await resolveWakeSession({ resourceId, threadId });
-          // Only a session that owns the thread's resource may lend its owner;
-          // the unresolved fallback id must never be looked up as a session.
-          if (!row) {
-            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
-            return;
-          }
-          const prepared = await prepareSessionRunContext(requestContext, sessionId, {
-            sessions: sourceControlSessions,
-          });
-          if (prepared !== 'prepared') {
-            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED[prepared]);
-            return;
-          }
-          await primeCustomProvidersForRequestContext(requestContext);
-        },
+        prepareWakeRequestContext,
         // A deferred delivery can land after the session closed, after a
         // restart, or on another replica: nobody here owns it, and the wake
         // would run with no identity at all. Bring the session online as its
@@ -1868,7 +1873,19 @@ export class MastraFactory {
               }
             }
           }
-          return undefined;
+          // The SDK adds its background guidance from the host's global settings; a Factory turns
+          // background commands on per project, so it adds the same guidance when the session's project does.
+          // The project comes from the session row, as the workspace reads it; a run's state names it too.
+          if (!context?.sessionId || !storage.isDomainReady('projects')) return undefined;
+          const row = storage.isDomainReady('source-control')
+            ? await sourceControlSessions.getBySessionId(context.sessionId).catch(() => null)
+            : null;
+          const state = context.getState();
+          const orgId = row?.orgId ?? state.factoryOrgId;
+          const projectId = row?.factoryProjectId ?? state.factoryProjectId;
+          if (!orgId || !projectId) return undefined;
+          const project = await factoryProjectsStorage.get({ orgId, id: projectId }).catch(() => null);
+          return project?.backgroundToolsEnabled ? backgroundWorkGuidance() : undefined;
         },
         // A factory reads the repository it works on and its skill, never the
         // ~/.claude instructions of whoever hosts the process. On the controller
@@ -2397,6 +2414,7 @@ export class MastraFactory {
         },
       );
       observeSessionThreadStamp(session);
+      void backgroundNotices.flush();
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

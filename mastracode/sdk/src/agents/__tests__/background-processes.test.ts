@@ -3,7 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Session } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalFilesystem, LocalSandbox, Workspace, createWorkspaceTools } from '@mastra/core/workspace';
+import {
+  LocalFilesystem,
+  LocalSandbox,
+  WORKSPACE_TOOLS,
+  Workspace,
+  createWorkspaceTools,
+} from '@mastra/core/workspace';
+import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createBackgroundCompletionEvents } from '../background-completion-events.js';
 import type { BackgroundCompletionEvent } from '../background-completion-events.js';
@@ -133,6 +140,17 @@ describe('Mastra Code background shell exit notices', () => {
     expect(delivered).toEqual([]);
   });
 
+  it('posts no notice for a process a host kills through the sandbox directly', async () => {
+    const { delivered, exits, start } = await setup();
+
+    const { pid, exit } = await start(node('setInterval(() => {}, 1000)'));
+    expect(await workspace!.sandbox!.processes!.kill(pid)).toBe(true);
+    await exit;
+
+    expect(exits).toContainEqual(expect.objectContaining({ pid, killed: true }));
+    expect(delivered).toEqual([]);
+  });
+
   it('keeps a background process running when the run that started it is aborted', async () => {
     const { start } = await setup();
     const run = new AbortController();
@@ -194,6 +212,81 @@ describe('Mastra Code background shell exit notices', () => {
 
     expect(await notices.kill(pid)).toBe(true);
     await exit;
+  });
+
+  // Factory shares one dispatcher across every session's sandbox, and remote sandboxes number their processes alike.
+  it("keeps an agent's kill in one sandbox from silencing an exit with the same PID in another", async () => {
+    const delivered: BackgroundNoticeSignal[] = [];
+    const notices = createBackgroundProcessNotices({
+      delivery: { deliver: async (_target, signal) => void delivered.push(signal), flush: async () => {} },
+      getSession: async () => undefined,
+    });
+    const [killedIn, exitedIn] = [{ status: 'running' }, { status: 'running' }] as unknown as WorkspaceSandbox[];
+    const hook = (workspaceToolName: string, input: unknown, sandbox: WorkspaceSandbox, toolCallId: string) =>
+      notices.beforeToolCall({
+        workspaceToolName,
+        input,
+        context: { agent: { toolCallId, threadId: 't' }, workspace: { sandbox } },
+      } as any);
+
+    await hook(WORKSPACE_TOOLS.SANDBOX.KILL_PROCESS, { pid: '7' }, killedIn!, 'kill-call');
+    await hook(WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND, { command: 'pnpm dev', background: true }, exitedIn!, 'dev');
+    await notices.onExit({
+      pid: '7',
+      toolCallId: 'dev',
+      threadId: 't',
+      resourceId: 'r',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+
+    expect(delivered).toHaveLength(1);
+    // The exit was matched to its launch, so the notice describes it.
+    expect(delivered[0]?.metadata).toMatchObject({ backgroundCompletion: { summary: 'pnpm dev' } });
+  });
+
+  it('tells apart launches that reuse a tool call id on different threads', async () => {
+    const delivered: BackgroundNoticeSignal[] = [];
+    const notices = createBackgroundProcessNotices({
+      delivery: { deliver: async (_target, signal) => void delivered.push(signal), flush: async () => {} },
+      getSession: async () => undefined,
+    });
+    const sandbox = { status: 'running' } as unknown as WorkspaceSandbox;
+    for (const threadId of ['thread-a', 'thread-b']) {
+      await notices.beforeToolCall({
+        workspaceToolName: WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND,
+        input: { command: 'pnpm dev', description: `Dev server on ${threadId}`, background: true },
+        context: { agent: { toolCallId: 'call-1', threadId }, workspace: { sandbox } },
+      } as any);
+    }
+
+    await notices.onExit({
+      pid: '7',
+      toolCallId: 'call-1',
+      threadId: 'thread-a',
+      resourceId: 'r',
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
+
+    expect(delivered[0]?.metadata).toMatchObject({ backgroundCompletion: { summary: 'Dev server on thread-a' } });
+  });
+
+  // A direct `execute()` call passes its thread at the top of the tool context, not under `agent`; the exit carries that thread too.
+  it('matches the exit of a shell started by a direct call with top-level ids', async () => {
+    const { delivered, start } = await setup();
+
+    const { exit } = await start(node('process.exit(0)'), {
+      agent: { toolCallId: 'top-call' },
+      threadId: 'thread-top',
+      resourceId: 'resource-1',
+    });
+    await exit;
+
+    expect(delivered[0]?.target).toEqual({ resourceId: 'resource-1', threadId: 'thread-top' });
+    expect(delivered[0]?.signal.metadata).toMatchObject({ backgroundCompletion: { summary: 'Building the app' } });
   });
 
   describe('which thread a shell reports to', () => {

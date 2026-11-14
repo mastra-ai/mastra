@@ -1,15 +1,19 @@
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { stateSchema } from '@mastra/code-sdk/schema';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
-import { Workspace } from '@mastra/core/workspace';
+import { LocalSandbox, Workspace } from '@mastra/core/workspace';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import { getFactorySessionAddress, resolveFactorySessionAddress } from '../rules/binding-context.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { evictSessionSandbox, getSessionSandbox } from '../sandbox/session-sandbox.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import {
   FACTORY_OPEN_RUNS_SETTING,
@@ -1762,5 +1766,117 @@ describe('session sandbox recreate', () => {
         session: { sessionId, capabilities: { recreateSandbox: true } },
       });
     }
+  });
+});
+
+describe('session background work', () => {
+  it("lets a teammate read and stop a shared session's background commands, and keeps everyone else out", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-background-work';
+    const row = await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/background-work',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const root = await mkdtemp(join(tmpdir(), 'factory-background-work-'));
+    const { sandbox } = getSessionSandbox(
+      row.id,
+      'rhys-group1/factory-gitlab-primary',
+      () => new LocalSandbox({ workingDirectory: root }),
+    );
+    onTestFinished(async () => {
+      evictSessionSandbox(row.id);
+      await sandbox.destroy?.();
+      await rm(root, { recursive: true, force: true });
+    });
+    await sandbox.start?.();
+    const forever = `node -e "console.log('listening'); setInterval(() => {}, 1000)"`;
+    const server = await sandbox.processes!.spawn(forever, { metadata: { toolCallId: 'call-1', threadId: sessionId } });
+    // Work the sandbox runs for itself (setup, the agent's foreground commands) is not the session's background work.
+    const own = await sandbox.processes!.spawn(forever);
+    onTestFinished(() => own.kill());
+
+    const viewers: Record<string, Viewer> = {
+      teammate: { workosId: 'user-2', organizationId: 'org-1' },
+      outsider: { workosId: 'user-3', organizationId: 'org-2' },
+    };
+    const app = buildApp([sourceControl], seed, undefined, undefined, headers => viewers[headers.get('x-viewer')!]!);
+    const as = (viewer: string, path: string, init: RequestInit = {}) =>
+      app.request(`/web/user-sessions/${sessionId}/background/processes${path}`, {
+        ...init,
+        headers: { 'x-viewer': viewer },
+      });
+
+    expect((await as('outsider', '')).status).toBe(404);
+    expect((await as('outsider', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
+
+    const listed = await as('teammate', '');
+    expect(listed.status).toBe(200);
+    expect(((await listed.json()) as { processes: Array<{ pid: string }> }).processes.map(p => p.pid)).toEqual([
+      server.pid,
+    ]);
+    await vi.waitFor(async () => {
+      const output = (await (await as('teammate', `/${server.pid}?tail=5&toolCallId=call-1`)).json()) as {
+        stdout: string;
+      };
+      expect(output.stdout).toContain('listening');
+    });
+    // Nor is a reused PID's output shown for the call that started an earlier command.
+    expect((await as('teammate', `/${server.pid}?toolCallId=call-0`)).status).toBe(404);
+    expect((await as('teammate', `/${own.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
+    // A stop names the call that started the command, so a PID a later command reused isn't stopped by mistake.
+    expect((await as('teammate', `/${server.pid}/kill?toolCallId=call-0`, { method: 'POST' })).status).toBe(404);
+    expect(server.exitCode).toBeUndefined();
+
+    const killed = await as('teammate', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' });
+    await expect(killed.json()).resolves.toEqual({ pid: server.pid, killed: true });
+    expect(server.exitCode).toBeDefined();
+    expect(own.exitCode).toBeUndefined();
+  });
+
+  it("keeps a private session's background commands to its owner", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const sessionId = 'factory-private-background-work';
+    const row = await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-private-background-work',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const root = await mkdtemp(join(tmpdir(), 'factory-private-background-work-'));
+    const { sandbox } = getSessionSandbox(
+      row.id,
+      'rhys-group1/factory-gitlab-primary',
+      () => new LocalSandbox({ workingDirectory: root }),
+    );
+    onTestFinished(async () => {
+      evictSessionSandbox(row.id);
+      await sandbox.destroy?.();
+      await rm(root, { recursive: true, force: true });
+    });
+    await sandbox.start?.();
+    const server = await sandbox.processes!.spawn(`node -e "setInterval(() => {}, 1000)"`, {
+      metadata: { toolCallId: 'call-1', threadId: sessionId },
+    });
+    const viewers: Record<string, Viewer> = { owner: user, teammate: { workosId: 'user-2', organizationId: 'org-1' } };
+    const app = buildApp([sourceControl], seed, undefined, undefined, headers => viewers[headers.get('x-viewer')!]!);
+    const as = (viewer: string, path: string, init: RequestInit = {}) =>
+      app.request(`/web/user-sessions/${sessionId}/background/processes${path}`, {
+        ...init,
+        headers: { 'x-viewer': viewer },
+      });
+
+    expect((await as('teammate', '')).status).toBe(404);
+    expect((await as('teammate', `/${server.pid}/kill?toolCallId=call-1`, { method: 'POST' })).status).toBe(404);
+    expect(server.exitCode).toBeUndefined();
+    const listed = (await (await as('owner', '')).json()) as { processes: Array<{ pid: string }> };
+    expect(listed.processes.map(p => p.pid)).toEqual([server.pid]);
   });
 });

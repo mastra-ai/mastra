@@ -55,6 +55,10 @@ const MEMORY_PATH = /^\/api\/memory(\/|$)/;
 const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
 const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
+// Mastra's routes for sandbox processes scope by a resource Factory never binds for them, so any signed-in
+// caller would reach every session's commands. Factory serves session-checked equivalents under
+// `/web/user-sessions/:sessionId/background`.
+const UNSCOPED_PROCESS_PATH = /^\/api\/workspaces\/[^/]+\/sandbox\/processes(\/|$)/;
 
 /** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
 function parseFormField(value: string): unknown {
@@ -157,7 +161,8 @@ async function addressed(c: Context): Promise<{ sessionIds: string[]; resourceId
  * the authorized resource, or the caller's own user id when none is named. The
  * controller-wide active-runs list drops runs on unreachable resources.
  * Denials answer 404 so ids do not leak existence. A teammate who can see a
- * session but tries to change its model or thinking level gets 403. With auth
+ * session but tries to change its model or thinking level gets 403, and so does
+ * every caller of Mastra's unscoped sandbox process routes. With auth
  * disabled there is no tenant to protect and everything passes through.
  */
 export function createSessionAccessGuard({
@@ -201,6 +206,9 @@ export function createSessionAccessGuard({
   return async (c, next) => {
     if (!auth.enabled()) return next();
     const ctx = c as unknown as Context;
+    if (UNSCOPED_PROCESS_PATH.test(ctx.req.path)) {
+      return c.json({ error: 'Use the Factory session routes for background commands' }, 403);
+    }
     const target = await addressed(ctx);
     if (!target) return c.json({ error: 'The query and body must name the same session' }, 400);
     const isMemory = MEMORY_PATH.test(ctx.req.path);

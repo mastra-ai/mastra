@@ -11,6 +11,7 @@ import { z } from 'zod';
 import { reclaimDeletedSessionSandbox } from '../integrations/github/sandbox-release.js';
 import { isValidGitRef } from '../sandbox/git-ref.js';
 import type { SessionRetirementCoordinator } from '../sandbox/session-retirement.js';
+import { peekSessionSandbox } from '../sandbox/session-sandbox.js';
 import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
 import { seedSessionOrg } from '../session/org-seed.js';
 import {
@@ -574,6 +575,122 @@ function projectSessionRoutes(
   ];
 }
 
+/** The last `tail` lines of `output`, like `get_process_output`; 0 keeps everything. */
+function tailLines(output: string, tail: number): string {
+  if (!output || tail <= 0) return output;
+  const trailingNewline = output.endsWith('\n');
+  const lines = (trailingNewline ? output.slice(0, -1) : output).split('\n');
+  if (lines.length <= tail) return output;
+  return lines.slice(-tail).join('\n') + (trailingNewline ? '\n' : '');
+}
+
+/**
+ * The background commands in a session's sandbox: processes an agent started with `execute_command`, which
+ * carry its tool call. Read from the sandbox this server process holds, so a sandbox that never started here
+ * (or runs on another replica) has none, and reading never starts one.
+ */
+async function sessionBackgroundProcesses(session: SourceControlSession) {
+  const sandbox = peekSessionSandbox(session.id)?.sandbox;
+  if (!sandbox?.processes || sandbox.status !== 'running') return undefined;
+  const listed = (await sandbox.processes.list()).filter(info => info.metadata?.toolCallId);
+  return { processes: sandbox.processes, listed };
+}
+
+/**
+ * Lists, reads and stops a session's background commands. Anyone who can read the session may stop one: they
+ * can already steer its agent, which can stop the same command with its own tools.
+ */
+function backgroundWorkRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
+  const readableSession = async (c: RouteContext) => {
+    const resolved = await resolveOrgTenant(c, options.auth);
+    if ('response' in resolved) return resolved;
+    const readable = await resolveReadableSession(options, c.req.param('sessionId')!, resolved.tenant);
+    return readable ?? { response: c.json({ error: 'Session not found' }, 404) };
+  };
+  // Only a process one of the session's agents started; any other pid answers as missing.
+  // With `toolCallId`, only the command that call started: a PID can come back for a later command.
+  const sessionProcess = async (session: SourceControlSession, pid: string, toolCallId?: string) => {
+    const found = await sessionBackgroundProcesses(session);
+    const listed = found?.listed.some(
+      info => info.pid === pid && (toolCallId === undefined || info.metadata?.toolCallId === toolCallId),
+    );
+    if (!found || !listed) return undefined;
+    const handle = await found.processes.get(pid, { release: false });
+    return handle && { processes: found.processes, handle };
+  };
+  const failed = (c: RouteContext, message: string, sessionId: string, error: unknown) => {
+    console.error(`[Factory Sessions] ${message}`, { sessionId, error });
+    return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+  };
+
+  return [
+    registerApiRoute('/web/user-sessions/:sessionId/background/processes', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const access = await readableSession(loose(c));
+        if ('response' in access) return access.response;
+        const threadId = c.req.query('threadId') || undefined;
+        try {
+          const found = await sessionBackgroundProcesses(access.session);
+          const processes = (found?.listed ?? []).filter(info => !threadId || info.metadata?.threadId === threadId);
+          return c.json({ processes });
+        } catch (error) {
+          return failed(loose(c), 'Failed to list background processes', access.session.sessionId, error);
+        }
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/background/processes/:pid', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const access = await readableSession(loose(c));
+        if ('response' in access) return access.response;
+        const pid = c.req.param('pid');
+        const tail = Number(c.req.query('tail') ?? 0);
+        if (!Number.isInteger(tail) || tail < 0) return c.json({ error: 'tail must be a whole number' }, 400);
+        try {
+          const found = await sessionProcess(access.session, pid, c.req.query('toolCallId') || undefined);
+          if (!found) return c.json({ error: 'Process not found' }, 404);
+          const { handle } = found;
+          return c.json({
+            pid: handle.pid,
+            command: handle.command,
+            running: handle.exitCode === undefined,
+            exitCode: handle.exitCode,
+            metadata: handle.metadata,
+            stdout: tailLines(handle.stdout, tail),
+            stderr: tailLines(handle.stderr, tail),
+            stdoutTruncated: handle.stdoutTruncated,
+            stderrTruncated: handle.stderrTruncated,
+          });
+        } catch (error) {
+          return failed(loose(c), 'Failed to read a background process', access.session.sessionId, error);
+        }
+      },
+    }),
+    registerApiRoute('/web/user-sessions/:sessionId/background/processes/:pid/kill', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const access = await readableSession(loose(c));
+        if ('response' in access) return access.response;
+        const pid = c.req.param('pid');
+        const toolCallId = c.req.query('toolCallId');
+        if (!toolCallId) return c.json({ error: 'toolCallId is required' }, 400);
+        try {
+          const found = await sessionProcess(access.session, pid, toolCallId);
+          if (!found) return c.json({ error: 'Process not found' }, 404);
+          // The process manager marks this kill as requested, so the agent gets no exit notice for it.
+          return c.json({ pid, killed: await found.processes.kill(pid) });
+        } catch (error) {
+          return failed(loose(c), 'Failed to kill a background process', access.session.sessionId, error);
+        }
+      },
+    }),
+  ];
+}
+
 export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
@@ -806,6 +923,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
       },
     }),
+    ...backgroundWorkRoutes(options),
     registerApiRoute('/web/user-sessions/:sessionId/owner', {
       method: 'POST',
       requiresAuth: false,

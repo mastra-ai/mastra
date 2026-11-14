@@ -88,6 +88,8 @@ export interface FactoryProject {
   buildOnPushEnabled: boolean;
   /** Minutes after a push-triggered attempt during which further pushes do not build. */
   buildPushDebounceMinutes: number;
+  /** Whether background commands survive a stopped run and tell the session when they exit. */
+  backgroundToolsEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -124,6 +126,7 @@ export interface UpdateFactoryProjectInput {
   lastBuildAttemptedAt?: Date | null;
   buildOnPushEnabled?: boolean;
   buildPushDebounceMinutes?: number;
+  backgroundToolsEnabled?: boolean;
 }
 
 export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
@@ -162,6 +165,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     build_start_claim_expires_at: { type: 'timestamp', nullable: true },
     build_on_push_enabled: { type: 'boolean', default: false },
     build_push_debounce_minutes: { type: 'integer', default: DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES },
+    background_tools_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer read or written. The review skill decides whether to publish its test check.
     review_test_checks_enabled: { type: 'boolean', default: false },
     // Retired project switch: no longer written. A board self-reviews when it has a self-review
@@ -202,6 +206,7 @@ interface FactoryProjectDbRow extends Record<string, unknown> {
   build_start_claim_expires_at: Date | null;
   build_on_push_enabled: boolean | null;
   build_push_debounce_minutes: number | null;
+  background_tools_enabled: boolean | null;
   self_review_enabled: boolean | null;
   environment_backfilled_at: Date | null;
   created_at: Date;
@@ -234,6 +239,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     buildStartUncertainSince: row.build_start_uncertain_since ?? null,
     buildOnPushEnabled: row.build_on_push_enabled ?? false,
     buildPushDebounceMinutes: row.build_push_debounce_minutes ?? DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES,
+    backgroundToolsEnabled: row.background_tools_enabled ?? false,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -371,6 +377,9 @@ export class FactoryProjectsStorage extends FactoryStorageDomain {
           ...(changes.buildOnPushEnabled !== undefined ? { build_on_push_enabled: changes.buildOnPushEnabled } : {}),
           ...(changes.buildPushDebounceMinutes !== undefined
             ? { build_push_debounce_minutes: changes.buildPushDebounceMinutes }
+            : {}),
+          ...(changes.backgroundToolsEnabled !== undefined
+            ? { background_tools_enabled: changes.backgroundToolsEnabled }
             : {}),
           updated_at: new Date(),
         };
