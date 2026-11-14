@@ -935,6 +935,31 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'Run intake again for an item no board took, filing it where the rules now say',
     routePlacement: 'origin',
   });
+  const factoryIntake = factory
+    .command('intake')
+    .description("Check a Factory project's intake rules against real items without filing anything");
+  addAction(factoryIntake, 'dry-run', FACTORY_API_ROUTE_CATALOG.intakeDryRun, {
+    description: 'Run the saved, or unsaved, intake rules and order over the newest 200 items',
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Preview asking the docs board before Work',
+        command: `mastra api factory intake dry-run <project-id> '{"order":["docs","work"]}'`,
+      },
+    ],
+  });
+  addAction(factoryIntake, 'test', FACTORY_API_ROUTE_CATALOG.intakeTest, {
+    description: 'Show where intake would file one item, by URL or item id, and what every rule answered',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Test an issue from a linked repository',
+        command: `mastra api factory intake test <project-id> '{"url":"https://github.com/acme/app/issues/12"}'`,
+      },
+    ],
+  });
 
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
