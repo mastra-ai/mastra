@@ -863,6 +863,62 @@ it('Studio native approval and decline use the persisted billed workflow suspens
   ).toMatchObject([{ units: 0 }]);
 }, 180000);
 
+// A single user message must reach native approval after the newly created kit is saved.
+it('Studio creates a kit and requests approval in the same conversation turn', async () => {
+  const f = await fixture();
+  const server = await serve(f.root, f.env);
+  cleanups.push(server.close);
+  const workspaceId = f.manifest.profiles.owner!.workspaceId;
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const threadId = `same-turn-kit-${attempt}`;
+    const sent = await server.call(`${chatAgent}/send-message`, {
+      threadId,
+      resourceId: 'default',
+      message: 'CALL image-kit-start {"brief":"A small fox in a quiet forest"} REQUEST_APPROVAL_IN_SAME_TURN',
+    });
+    expect(sent.status).toBe(200);
+    const history = await waitForHistory(server, threadId, 'pendingToolApprovals');
+    const started = toolResults(history).find((result: any) => result.result?.status === 'suspended');
+    const pending = history.messages.findLast(
+      (message: any) => Object.keys(message.content.metadata?.pendingToolApprovals ?? {}).length,
+    );
+    const [toolCallId, approval] = Object.entries(pending.content.metadata.pendingToolApprovals)[0] as [
+      string,
+      { runId: string },
+    ];
+    expect(
+      history.messages.filter(
+        (message: any) => message.role === 'user' || (message.role === 'signal' && message.type === 'user'),
+      ),
+    ).toHaveLength(1);
+    const operations = await query(
+      f.root,
+      'SELECT action,message_id,execution_id,pending FROM billing_studio_operations WHERE thread_id = ? ORDER BY rowid',
+      [threadId],
+    );
+    expect(operations).toMatchObject([
+      { action: 'start', execution_id: started.result.executionId },
+      { action: 'resume', execution_id: started.result.executionId },
+    ]);
+    expect(operations[1].message_id).toBe(operations[0].message_id);
+    expect(JSON.parse(String(operations[1].pending)).nativeRunId).toBe(approval.runId);
+    expect(await account(server, workspaceId)).toMatchObject({ confirmedBalance: 27, consumedUnits: 0 });
+    expect(f.boundary.images).toHaveLength(0);
+    const declined = await server.call(`${chatAgent}/send-tool-approval`, {
+      threadId,
+      resourceId: 'default',
+      toolCallId,
+      approved: false,
+    });
+    expect(declined.status).toBe(200);
+    await waitQuery(f.root, 'SELECT units FROM billing_ledger WHERE execution_id = ?', rows => rows.length === 1, [
+      started.result.executionId,
+    ]);
+    expect(await account(server, workspaceId)).toMatchObject({ confirmedBalance: 30, consumedUnits: 0 });
+    expect(f.boundary.images).toHaveLength(0);
+  }
+}, 180000);
+
 async function sharedMemoryIsolation() {
   const f = await fixture();
   const application = await studioComposition(f.root, f.boundary.url);

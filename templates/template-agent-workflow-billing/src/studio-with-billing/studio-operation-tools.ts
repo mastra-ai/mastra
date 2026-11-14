@@ -87,6 +87,8 @@ export function createStudioOperationTools(runtime: StudioAgentRuntime) {
     await integration.organizations.authorize(conversation.billing);
     if (!toolCallId || (context?.agent?.threadId && context.agent.threadId !== conversation.owner.threadId))
       throw new BillingError('forbidden');
+    // Approval hooks read persisted history without an agent context in this same turn.
+    await context?.agent?.flushMessages?.();
     const messageId = await messageIdentity(conversation, context);
     conversation.controller.signal.throwIfAborted();
     const operation = await integration.conversations.claim(conversation.billing, conversation.owner, {

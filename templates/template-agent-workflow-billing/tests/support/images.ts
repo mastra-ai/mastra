@@ -77,9 +77,21 @@ export async function imageBoundary() {
       const userText = JSON.stringify(body.messages[lastUser]?.content ?? '');
       const instruction = /CALL ([-a-zA-Z0-9_]+) (\{.*\})/.exec(JSON.parse(userText));
       const already = body.messages.slice(lastUser + 1).some((message: any) => message.role === 'tool');
-      const tool = instruction && !already;
-      const argumentsValue = instruction?.[2] ?? '{}';
-      const name = instruction?.[1];
+      let tool = !!instruction && !already;
+      let argumentsValue = instruction?.[2] ?? '{}';
+      let name = instruction?.[1];
+      if (userText.includes('REQUEST_APPROVAL_IN_SAME_TURN')) {
+        const completedCalls = body.messages.slice(lastUser + 1).filter((message: any) => message.role === 'tool');
+        const started = completedCalls.length ? JSON.parse(completedCalls[0].content) : undefined;
+        if (started?.result?.status === 'suspended' && completedCalls.length < 3) {
+          tool = true;
+          name = completedCalls.length === 1 ? 'image-kit-query' : 'image-kit-resume';
+          argumentsValue = JSON.stringify({
+            operationId: started.operationId,
+            ...(completedCalls.length === 2 ? { step: 'approval', approvalData: { approved: true } } : {}),
+          });
+        }
+      }
       const delta = tool
         ? {
             role: 'assistant',
