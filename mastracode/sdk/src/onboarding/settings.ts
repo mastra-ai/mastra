@@ -522,7 +522,7 @@ const DEFAULTS: GlobalSettings = {
     yolo: null,
     theme: 'auto',
     thinkingLevel: 'off',
-    subagentsEnabled: true,
+    subagentsEnabled: false,
     previewLines: 2,
     webSearchProvider: 'auto',
     mouseDialogs: false,

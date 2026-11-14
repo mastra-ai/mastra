@@ -526,7 +526,7 @@ describe('customProviders parsing/persistence', () => {
 
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
-      expect(settings.preferences.subagentsEnabled).toBe(true);
+      expect(settings.preferences.subagentsEnabled).toBe(false);
       expect(settings.preferences.previewLines).toBe(2);
       expect(settings.shellPassthrough).toEqual({ mode: 'default' });
     });
@@ -536,17 +536,17 @@ describe('customProviders parsing/persistence', () => {
     withTempSettingsFile(filePath => {
       writeFileSync(
         filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: false }, storage: {} }),
-        'utf-8',
-      );
-      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(false);
-
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'false' }, storage: {} }),
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: true }, storage: {} }),
         'utf-8',
       );
       expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(true);
+
+      writeFileSync(
+        filePath,
+        JSON.stringify({ onboarding: {}, models: {}, preferences: { subagentsEnabled: 'true' }, storage: {} }),
+        'utf-8',
+      );
+      expect(loadSettings(filePath).preferences.subagentsEnabled).toBe(false);
     });
   });
 
