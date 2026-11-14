@@ -30,6 +30,10 @@ function workflowRunError(result: { status: string; error?: unknown; tripwire?: 
   return new Error(`Background task workflow run ended with status '${result.status}'`);
 }
 
+function isTerminalStatus(status: string): boolean {
+  return status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
+}
+
 // Workflow results carry errors serialized to plain objects, not Error instances.
 function toTaskError(err: unknown): { message: string; stack?: string } {
   if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
@@ -130,6 +134,8 @@ export class BackgroundTaskManager {
   // deletes they spawn. Shutdown drains these so they finish while storage is
   // still open — Mastra closes storage right after the manager stops.
   #settlingRuns = new Set<Promise<unknown>>();
+  // What each task's tool suspended with, until `#storeSuspension` stores it.
+  #suspendPayloads = new Map<string, unknown>();
 
   // Pubsub callbacks (kept for unsubscribe)
   private workerCallback?: EventCallback;
@@ -381,6 +387,11 @@ export class BackgroundTaskManager {
     return true;
   }
 
+  /** @internal — called by the workflow step when the task's tool calls `suspend()`. */
+  noteSuspendRequested(taskId: string, suspendPayload: unknown): void {
+    this.#suspendPayloads.set(taskId, suspendPayload);
+  }
+
   /** @internal — read by workflow error classification during graceful shutdown. */
   isShuttingDown(): boolean {
     return this.shuttingDown;
@@ -524,6 +535,10 @@ export class BackgroundTaskManager {
   }
 
   async cancel(taskId: string): Promise<void> {
+    return this.#cancel(taskId, 'request');
+  }
+
+  async #cancel(taskId: string, reason: 'request' | 'shutdown'): Promise<void> {
     if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
     let task = await storage.getTask(taskId);
@@ -532,13 +547,20 @@ export class BackgroundTaskManager {
     }
 
     while (true) {
-      if (
-        task.status === 'completed' ||
-        task.status === 'failed' ||
-        task.status === 'cancelled' ||
-        task.status === 'timed_out'
-      ) {
+      if (isTerminalStatus(task.status)) {
         return; // no-op for terminal states
+      }
+      // Shutdown leaves a suspended task resumable, and a running one with
+      // retries for the next process to recover. A running task whose tool has
+      // already called `suspend()` is being suspended, so it is kept too.
+      // Checked on every pass: a suspension that wins the conditional write
+      // below is kept (#30226).
+      if (
+        reason === 'shutdown' &&
+        (task.status === 'suspended' ||
+          (task.status === 'running' && (task.maxRetries > 0 || this.#suspendPayloads.has(taskId))))
+      ) {
+        return;
       }
 
       const previousStatus = task.status;
@@ -828,12 +850,9 @@ export class BackgroundTaskManager {
   ): Promise<BackgroundTask> {
     const storage = await this.getStorage();
 
-    const isTerminal = (status: string) =>
-      status === 'completed' || status === 'failed' || status === 'cancelled' || status === 'timed_out';
-
     for (const id of taskIds) {
       const task = await storage.getTask(id);
-      if (task && isTerminal(task.status)) {
+      if (task && isTerminalStatus(task.status)) {
         return task;
       }
     }
@@ -877,7 +896,7 @@ export class BackgroundTaskManager {
       pollInterval = setInterval(async () => {
         for (const id of taskIds) {
           const task = await storage.getTask(id);
-          if (task && isTerminal(task.status)) {
+          if (task && isTerminalStatus(task.status)) {
             cleanup();
             resolve(task);
             return;
@@ -1265,10 +1284,7 @@ export class BackgroundTaskManager {
   }
 
   async #cancelTaskForShutdown(taskId: string): Promise<void> {
-    const storage = await this.getStorage();
-    const task = await storage.getTask(taskId);
-    if (task?.status === 'running' && task.maxRetries > 0) return;
-    await this.cancel(taskId);
+    await this.#cancel(taskId, 'shutdown');
   }
 
   #abortActiveControllers(): void {
@@ -1516,24 +1532,20 @@ export class BackgroundTaskManager {
       if (this.shuttingDown) return false;
       const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
       const action = shouldRestart ? 'restart' : 'start';
+      const settled = { released: false };
       this.#trackSettlingRun(
         runPromise
           .then(
             result => {
-              if (result.status !== 'suspended') {
-                this.#deleteSettledRun(workflow, taskId);
-              }
-              if (result.status !== 'success' && result.status !== 'suspended') {
-                return this.failUnsettledTask(taskId, action, workflowRunError(result));
-              }
+              if (result.status === 'suspended') return this.#storeSuspension(workflow, taskId, action, settled);
+              return this.#settleEndedRun(workflow, taskId, action, result);
             },
             err => this.failUnsettledTask(taskId, action, err),
           )
           .finally(() => {
             // The run has settled (suspended or terminal), so this worker no
             // longer owns the lease: stop renewing it.
-            this.ownedLeases.delete(taskId);
-            this.releaseLocalSlot(taskId);
+            if (!settled.released) this.#releaseRun(taskId);
             void this.drainPending();
           }),
       );
@@ -1587,7 +1599,6 @@ export class BackgroundTaskManager {
       void this.drainPending();
       return true;
     }
-
     const resumed = await storage.updateTask(
       taskId,
       {
@@ -1651,25 +1662,21 @@ export class BackgroundTaskManager {
         });
       return false;
     }
+    const settled = { released: false };
     this.#trackSettlingRun(
       run
         .resume({ resumeData })
         .then(
           result => {
-            if (result.status !== 'suspended') {
-              this.#deleteSettledRun(workflow, taskId);
-            }
-            if (result.status !== 'success' && result.status !== 'suspended') {
-              return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
-            }
+            if (result.status === 'suspended') return this.#storeSuspension(workflow, taskId, 'resume', settled);
+            return this.#settleEndedRun(workflow, taskId, 'resume', result);
           },
           err => this.failUnsettledTask(taskId, 'resume', err),
         )
         .finally(() => {
           // The resumed run has settled (suspended or terminal): stop renewing
           // the lease this worker held for it.
-          this.ownedLeases.delete(taskId);
-          this.releaseLocalSlot(taskId);
+          if (!settled.released) this.#releaseRun(taskId);
           void this.drainPending();
         }),
     );
@@ -1683,6 +1690,113 @@ export class BackgroundTaskManager {
     void tracked.catch(error => {
       this.#mastra?.getLogger?.()?.error('Background task workflow run settlement failed:', error);
     });
+  }
+
+  /** Stops renewing a task's lease and frees its slot once its run no longer runs it. */
+  #releaseRun(taskId: string): void {
+    this.#suspendPayloads.delete(taskId);
+    this.ownedLeases.delete(taskId);
+    this.releaseLocalSlot(taskId);
+  }
+
+  /**
+   * Stores a task as `suspended` once its run's suspended snapshot is saved,
+   * then runs the suspend hooks and publishes `task.suspended`. Storing it any
+   * earlier lets a crash or shutdown catch a task the run can't resume (#30226).
+   * The run's lease and slot are released as soon as it is stored, before the
+   * hooks: an answer can arrive while they run, and its resumed run takes them.
+   */
+  async #storeSuspension(
+    workflow: { deleteWorkflowRunById(runId: string): Promise<void> },
+    taskId: string,
+    action: 'start' | 'restart' | 'resume',
+    settled: { released: boolean },
+  ): Promise<void> {
+    // Kept until the task is stored: shutdown spares it until then.
+    const suspendPayload = this.#suspendPayloads.get(taskId);
+    const suspendedAt = new Date();
+    let suspended = false;
+    try {
+      // Fenced on ownership: a superseded worker must not park a task another
+      // worker is now running. Clearing the lease marks the task unowned while
+      // it waits to be resumed.
+      suspended = await (
+        await this.getStorage()
+      ).updateTask(
+        taskId,
+        { status: 'suspended', suspendPayload, suspendedAt, ownerId: undefined, leaseExpiresAt: undefined },
+        { expectedStatus: 'running', expectedOwnerId: this.workerId },
+      );
+      // Released in the same tick the write lands, so a resume can't take them first.
+      if (suspended) {
+        this.#releaseRun(taskId);
+        settled.released = true;
+      }
+    } catch (error) {
+      // Like any write that fails as a run settles: fail the task rather than
+      // leave it running with nothing left to finish it. Also fenced on
+      // ownership, so a task another worker took over is left alone.
+      await this.failUnsettledTask(taskId, action, error);
+    }
+    const storage = await this.getStorage();
+    if (!suspended) {
+      // A task that ended while suspending leaves a run nothing will resume.
+      // One another worker took over keeps the stored run: it is now theirs.
+      const current = await storage.getTask(taskId);
+      if (!current || isTerminalStatus(current.status)) {
+        this.#deleteSettledRun(workflow, taskId);
+      }
+      return;
+    }
+    void this.drainPending();
+    // An answer can claim the task from here on. Announce this suspension only
+    // while the task still holds it, so no stale question goes out.
+    const stillSuspended = async () => {
+      const current = await storage.getTask(taskId);
+      return current?.status === 'suspended' && current.suspendedAt?.getTime() === suspendedAt.getTime()
+        ? current
+        : undefined;
+    };
+    const suspendedTask = await stillSuspended();
+    if (!suspendedTask) return;
+    try {
+      // Suspend is non-terminal — DO NOT use `runLocalCompletionHooks` here.
+      // It deregisters the task context, which the resumed run needs.
+      await this.runLocalSuspendHooks(suspendedTask);
+    } catch (error) {
+      this.#mastra?.getLogger?.()?.warn(`background-task suspend hook failed for ${taskId}:`, error as any);
+    }
+    const announced = await stillSuspended();
+    if (announced) await this.publishLifecycleEvent('task.suspended', announced);
+  }
+
+  /**
+   * Settles a run that ended without suspending: fails the task if the run
+   * left it unsettled, then deletes the stored run once the task has ended.
+   */
+  async #settleEndedRun(
+    workflow: { deleteWorkflowRunById(runId: string): Promise<void> },
+    taskId: string,
+    action: 'start' | 'restart' | 'resume',
+    result: Parameters<typeof workflowRunError>[0],
+  ): Promise<void> {
+    if (result.status !== 'success') await this.failUnsettledTask(taskId, action, workflowRunError(result));
+    this.#deleteEndedRun(workflow, taskId);
+  }
+
+  /**
+   * Deletes a run's stored state only once its task has ended or is gone. A
+   * task that has not ended keeps it, even while this worker still holds it:
+   * one left running for recovery can be restarted by another worker, whose
+   * suspended snapshot a late delete from here would remove.
+   */
+  #deleteEndedRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
+    this.#trackSettlingRun(
+      (async () => {
+        const task = await (await this.getStorage()).getTask(taskId);
+        if (!task || isTerminalStatus(task.status)) this.#deleteSettledRun(workflow, taskId);
+      })(),
+    );
   }
 
   #deleteSettledRun(workflow: { deleteWorkflowRunById(runId: string): Promise<void> }, taskId: string): void {
