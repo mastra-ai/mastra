@@ -1,13 +1,8 @@
 /**
- * The session's background work on the Factory server: commands an agent left running in the
- * session's sandbox, and background tasks. Only people who can read the session reach it.
+ * The session's background commands on the Factory server: commands an agent left running in the
+ * session's sandbox. Only people who can read the session reach them.
  */
-import type {
-  BackgroundTaskResponse,
-  KillSandboxProcessResponse,
-  SandboxProcess,
-  SandboxProcessOutputResponse,
-} from '@mastra/client-js';
+import type { KillSandboxProcessResponse, SandboxProcess, SandboxProcessOutputResponse } from '@mastra/client-js';
 
 import { readJsonOrThrow } from '../../workspaces/services/http';
 
@@ -62,17 +57,4 @@ export async function killBackgroundProcess(
     headers: { Accept: 'application/json' },
   });
   return readJsonOrThrow<KillSandboxProcessResponse>(res, 'Failed to stop the command');
-}
-
-export async function cancelBackgroundTask(
-  baseUrl: string,
-  sessionId: string,
-  taskId: string,
-): Promise<BackgroundTaskResponse> {
-  const res = await fetch(backgroundUrl(baseUrl, sessionId, `tasks/${encodeURIComponent(taskId)}/cancel`), {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json' },
-  });
-  return readJsonOrThrow<BackgroundTaskResponse>(res, 'Failed to cancel the task');
 }

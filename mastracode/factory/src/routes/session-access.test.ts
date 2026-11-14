@@ -201,12 +201,11 @@ describe('createSessionAccessGuard', () => {
     expect((await post(teammate, sessionPath('teammate-scratch', 'model'), switchModel)).status).toBe(200);
   });
 
-  // Mastra's process and cancel routes filter by a resource Factory never binds, so they would serve every org's work.
+  // Mastra's process routes filter by a resource Factory never binds, so they would serve every org's commands.
   it.each([
     ['GET', '/api/workspaces/mfw-link-row/sandbox/processes'],
     ['GET', '/api/workspaces/mfw-link-row/sandbox/processes/4242'],
     ['POST', '/api/workspaces/mfw-link-row/sandbox/processes/4242/kill'],
-    ['POST', '/api/background-tasks/task-1/cancel'],
   ])('403s %s %s for everyone, the session owner included', async (method, path) => {
     for (const app of [outsider, teammate, owner]) expect((await app.request(path, { method })).status).toBe(403);
     expect((await buildApp(undefined, { authEnabled: false }).request(path, { method })).status).toBe(200);

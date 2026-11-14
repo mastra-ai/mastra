@@ -18,15 +18,10 @@ import type { ReactNode } from 'react';
 import type { BackgroundProcess } from '../../services/background-work';
 import type { RunningBackgroundTask } from './background-work';
 import { RunningFor } from './BackgroundRows';
-import {
-  useBackgroundProcessOutput,
-  useBackgroundWork,
-  useCancelBackgroundTask,
-  useKillBackgroundProcess,
-} from './BackgroundWorkProvider';
+import { useBackgroundProcessOutput, useBackgroundWork, useKillBackgroundProcess } from './BackgroundWorkProvider';
 import type { BackgroundWorkApi } from './BackgroundWorkProvider';
 
-/** Stops running background work once the reader confirms: it can't be resumed. */
+/** Stops a running background command once the reader confirms: it can't be resumed. */
 function StopButton({
   action,
   title,
@@ -83,7 +78,7 @@ function WorkRow({
   label: string;
   detail?: string;
   startedAt?: number;
-  stop: ReactNode;
+  stop?: ReactNode;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   children?: ReactNode;
@@ -179,67 +174,31 @@ function ProcessRow({
   );
 }
 
-function TaskRow({
-  work,
-  task,
-  onCancelled,
-}: {
-  work: BackgroundWorkApi;
-  task: RunningBackgroundTask;
-  onCancelled: (taskId: string) => void;
-}) {
-  const cancel = useCancelBackgroundTask(work);
+/** A call the agent handed to a background task. Shown for what it is; it isn't stopped from here. */
+function TaskRow({ task }: { task: RunningBackgroundTask }) {
   const { icon: Icon, label, detail } = presentTool(task.toolName, task.args);
-  return (
-    <WorkRow
-      icon={<Icon aria-hidden />}
-      label={label}
-      detail={detail}
-      stop={
-        <StopButton
-          action="Cancel task"
-          title="Cancel this task?"
-          description={`${detail ?? label} stops now and its call ends as cancelled.`}
-          pending={cancel.isPending}
-          onConfirm={() =>
-            cancel.mutate(task.taskId, {
-              onSuccess: () => onCancelled(task.taskId),
-              onError: error => toast.error(`Couldn't cancel the task: ${error.message}`),
-            })
-          }
-        />
-      }
-    />
-  );
+  return <WorkRow icon={<Icon aria-hidden />} label={label} detail={detail} />;
 }
 
 /**
  * The thread's running background work, docked above the composer: commands the agent left running in the
- * session's sandbox and tasks it handed to the background. Hidden while nothing runs.
+ * session's sandbox, which can be stopped, and tasks it handed to the background. Hidden while nothing runs.
  */
 export function BackgroundWorkPanel() {
   const work = useBackgroundWork();
-  // A cancelled call's part says so only once the thread reloads; hide it at once.
-  const [cancelled, setCancelled] = useState<ReadonlySet<string>>(new Set());
   if (!work) return null;
   // Every listed command names the call that started it; that call, not the PID alone, is what a stop targets.
   const processes = (work.processes ?? []).flatMap(process => {
     const toolCallId = process.metadata?.toolCallId;
     return process.running && toolCallId && !work.exits.has(toolCallId) ? [{ process, toolCallId }] : [];
   });
-  const tasks = work.tasks.filter(task => !cancelled.has(task.taskId));
-  if (processes.length === 0 && tasks.length === 0) return null;
+  if (processes.length === 0 && work.tasks.length === 0) return null;
 
   return (
     <TaskListContainer aria-label="Background work" data-testid="background-work-panel">
       <ul className="flex flex-col px-1.5 py-1">
-        {tasks.map(task => (
-          <TaskRow
-            key={task.taskId}
-            work={work}
-            task={task}
-            onCancelled={taskId => setCancelled(current => new Set([...current, taskId]))}
-          />
+        {work.tasks.map(task => (
+          <TaskRow key={task.taskId} task={task} />
         ))}
         {processes.map(({ process, toolCallId }) => (
           <ProcessRow key={toolCallId} work={work} process={process} toolCallId={toolCallId} />

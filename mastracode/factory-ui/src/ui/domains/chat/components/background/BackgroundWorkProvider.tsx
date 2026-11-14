@@ -3,7 +3,6 @@ import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
 
 import {
-  cancelBackgroundTask,
   getBackgroundProcessOutput,
   killBackgroundProcess,
   listBackgroundProcesses,
@@ -109,8 +108,4 @@ export function useKillBackgroundProcess(work: BackgroundWorkApi) {
       killBackgroundProcess(work.baseUrl, work.sessionId, pid, toolCallId),
     onSettled: () => queryClient.invalidateQueries({ queryKey: processesKey(work.sessionId, work.threadId) }),
   });
-}
-
-export function useCancelBackgroundTask(work: BackgroundWorkApi) {
-  return useMutation({ mutationFn: (taskId: string) => cancelBackgroundTask(work.baseUrl, work.sessionId, taskId) });
 }
