@@ -302,7 +302,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     expect(await observed.output.text).toBe('Standalone transport works.');
   });
 
-  it('keeps a user-provided agent pubsub on the default engine and the private bus while unregistered', () => {
+  it('keeps the private bus while unregistered', () => {
     const makeAgent = () =>
       new Agent({
         id: 'durable-bus',
@@ -315,10 +315,43 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
 
     const standalone = createDurableAgent({ agent: makeAgent() });
     expect(raw(standalone.pubsub)).not.toBe(shared.__rawBus());
+  });
 
-    const custom = new EventEmitterPubSub();
-    const withCustom = createDurableAgent({ agent: makeAgent(), pubsub: custom });
-    const mastra = new Mastra({ agents: { agent: withCustom }, pubsub: shared, logger: false });
-    expect(raw((mastra.getAgent('agent') as unknown as DurableAgent).pubsub)).toBe(custom.__rawBus());
+  it('publishes and replays wrapper and fork runs on the wrapper pubsub instead of the Agent or Mastra pubsub', async () => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Wrapper transport wins.' });
+    const agentPubsub = new EventEmitterPubSub();
+    const wrapperPubsub = new EventEmitterPubSub();
+    const mastraPubsub = new EventEmitterPubSub();
+    const inner = new Agent({
+      id: 'wrapper-precedence',
+      name: 'wrapper-precedence',
+      instructions: 'Answer briefly.',
+      model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+      pubsub: agentPubsub,
+    });
+    const agent = createDurableAgent({ agent: inner, pubsub: wrapperPubsub });
+    new Mastra({ agents: { agent }, pubsub: mastraPubsub, storage: new InMemoryStore(), logger: false });
+    const wrapperPublish = vi.spyOn(wrapperPubsub, 'publish');
+    const agentPublish = vi.spyOn(agentPubsub, 'publish');
+    const mastraPublish = vi.spyOn(mastraPubsub, 'publish');
+
+    for (const candidate of [agent, agent.__fork()]) {
+      const run = await candidate.stream('Say something.');
+      await run.output.consumeStream();
+      expect(await run.output.text).toBe('Wrapper transport wins.');
+      const topic = AGENT_STREAM_TOPIC(run.runId);
+      await vi.waitFor(() =>
+        expect(
+          wrapperPublish.mock.calls.some(
+            ([name, event]) => name === topic && event.type === AgentStreamEventTypes.FINISH,
+          ),
+        ).toBe(true),
+      );
+      expect(agentPublish.mock.calls.some(([name]) => name === topic)).toBe(false);
+      expect(mastraPublish.mock.calls.some(([name]) => name === topic)).toBe(false);
+      const observed = await candidate.observe(run.runId);
+      await observed.output.consumeStream();
+      expect(await observed.output.text).toBe('Wrapper transport wins.');
+    }
   });
 });
