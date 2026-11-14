@@ -14,7 +14,13 @@ import { assignTaskIds } from '@mastra/core/signals';
 import type { GoalEvaluationPayload } from '@mastra/core/stream';
 import { TASKS_STATE_ID } from '@mastra/core/tools';
 import { disposeAssistantRenderState, finalizeStreamingAssistant } from './assistant-render-registry.js';
-import { finishedShellExit, parseBackgroundProcessPid } from './background-activity.js';
+import {
+  finishedShellExit,
+  getBackgroundActivitiesForTarget,
+  parseBackgroundProcessPid,
+  processActivityKey,
+  startBackgroundProcessActivity,
+} from './background-activity.js';
 import {
   insertChatComponentWithBoundarySpacing,
   reconcileChatBoundarySpacers,
@@ -963,6 +969,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   const commandExits = collectCommandExits(messages);
   const backgroundTasksByToolCallId = new Map<string, string>();
   const backgroundProcessExits = new Map<string, number>();
+  const unlistedShells: UnlistedShell[] = [];
   const cancelledBackgroundToolCalls = new Set<string>();
   for (const message of messages) {
     if (message.role !== 'signal') continue;
@@ -1187,6 +1194,14 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
             } else if (pid) {
               // Still running, or its exit notice is yet to arrive.
               state.backgroundShellRows.set(part.toolCallId, toolComponent);
+              if (!state.backgroundActivities.has(processActivityKey(pid))) {
+                unlistedShells.push({
+                  pid,
+                  toolCallId: part.toolCallId,
+                  args: toolArgs,
+                  createdAt: part.startedAt ?? Date.now(),
+                });
+              }
             }
           }
 
@@ -1350,6 +1365,46 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
   if (!isCurrent()) return;
   reconcileChatBoundarySpacers(state.chatContainer);
   pruneChatContainer(state);
+  state.ui.requestRender();
+  await listRunningShells(state, unlistedShells, isCurrent);
+}
+
+interface UnlistedShell {
+  pid: string;
+  toolCallId: string;
+  args: unknown;
+  createdAt: number;
+}
+
+/**
+ * Adds replayed shells the activity list never saw start (their result came
+ * while another thread was shown) to Ctrl+G, once the sandbox confirms they
+ * still run.
+ */
+async function listRunningShells(state: TUIState, shells: UnlistedShell[], isCurrent: () => boolean): Promise<void> {
+  // Shells live in this process's sandbox; a remote session cannot reach it.
+  const processes = state.local ? state.options.backgroundProcesses : undefined;
+  if (!processes || shells.length === 0) return;
+  const threadId = state.session.thread.getId();
+  if (!threadId) return;
+  let listed = false;
+  for (const shell of shells) {
+    const handle = await processes.read(shell.pid).catch(() => undefined);
+    if (!isCurrent()) return;
+    if (!handle || handle.exitCode !== undefined) continue;
+    startBackgroundProcessActivity(state.backgroundActivities, shell.pid, shell.toolCallId, {
+      toolName: MC_TOOLS.EXECUTE_COMMAND,
+      resourceId: state.session.identity.getResourceId(),
+      threadId,
+      createdAt: shell.createdAt,
+      args: shell.args,
+    });
+    listed = true;
+  }
+  if (!listed) return;
+  state.globalBackgroundNotice.setActivities(
+    getBackgroundActivitiesForTarget(state.backgroundActivities, state.session.identity.getResourceId(), threadId),
+  );
   state.ui.requestRender();
 }
 

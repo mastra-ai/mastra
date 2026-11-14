@@ -137,6 +137,7 @@ describe('sanitizeProcessOutputForRendering', () => {
   it('shows no terminal commands in the background shell output overlay', () => {
     const overlay = new BackgroundProcessOutputComponent({
       pid: '42',
+      command: 'printf done\x1b]52;c;aGVsbG8=\x07',
       stdout: 'SERVER_READY\x1b]52;c;aGVsbG8=\x07\n\x1b]0;title\x07listening',
       stderr: '',
       onClose: () => {},
@@ -144,6 +145,7 @@ describe('sanitizeProcessOutputForRendering', () => {
 
     const rendered = overlay.render(100).join('\n');
     expect(rendered).not.toMatch(/\x1b[\]P_^X]/);
+    expect(rendered).toContain('printf done');
     expect(rendered).toContain('SERVER_READY');
     expect(rendered).toContain('listening');
   });
