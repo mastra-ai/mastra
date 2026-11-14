@@ -22,6 +22,16 @@ import { cleanStepResult, hydrateSerializedStepErrors } from '../utils';
 import type { ParentWorkflow, WorkflowEventProcessor } from './workflow-event-processor';
 import { getStepId } from './workflow-event-processor/utils';
 
+/**
+ * Whether the run ended paused. `workflowStatus` is the run status the processor stored when
+ * it ended the run; a `workflow.end` published by a process that predates it falls back to
+ * that process's own rule.
+ */
+function endedPaused(resultData: any, perStep: boolean | undefined): boolean {
+  if (resultData.workflowStatus !== undefined) return resultData.workflowStatus === 'paused';
+  return resultData.prevResult?.status === 'paused' || !!perStep;
+}
+
 export class EventedExecutionEngine extends ExecutionEngine {
   protected eventProcessor: WorkflowEventProcessor;
 
@@ -430,10 +440,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
         steps: cleanStepResults,
         state: finalState,
       };
-    } else if (
-      resultData.prevResult.status === 'paused' ||
-      (resultData.perStep && resultData.prevResult.status === 'success')
-    ) {
+    } else if (endedPaused(resultData, params.perStep)) {
       callbackArg = {
         status: 'paused',
         steps: cleanStepResults,
@@ -500,10 +507,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           steps: callbackArg.steps,
         } as TOutput;
       }
-    } else if (
-      resultData.prevResult.status === 'paused' ||
-      (resultData.perStep && resultData.prevResult.status === 'success')
-    ) {
+    } else if (endedPaused(resultData, params.perStep)) {
       result = {
         status: 'paused',
         steps: callbackArg.steps,

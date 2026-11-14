@@ -1397,6 +1397,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         ...args,
         prevResult: normalizedPrevResult,
         workflow: undefined,
+        // The run status this end stored; the run's caller reports it as is.
+        workflowStatus: finalStatus,
         deleteSnapshotAfterEnd: !shouldPersist && finalStatus !== 'paused',
       },
     });

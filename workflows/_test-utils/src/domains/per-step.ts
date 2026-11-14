@@ -332,6 +332,51 @@ export function createPerStepWorkflows(ctx: WorkflowCreatorContext) {
     };
   }
 
+  // Test: a step-by-step run over a conditional with no matching branch pauses
+  {
+    mockRegistry.register('perstep-no-branch:branchA', () => vi.fn().mockResolvedValue({ value: 'A-done' }));
+    mockRegistry.register('perstep-no-branch:after', () => vi.fn().mockResolvedValue({ value: 'after-done' }));
+
+    const branchA = createStep({
+      id: 'branchA',
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-no-branch:branchA')(ctx),
+    });
+
+    const after = createStep({
+      id: 'after',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ value: z.string() }),
+      execute: async ctx => mockRegistry.get('perstep-no-branch:after')(ctx),
+    });
+
+    const workflow = createWorkflow({
+      id: 'perstep-no-branch',
+      steps: [branchA, after],
+      inputSchema: z.object({ input: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    });
+
+    workflow
+      .branch([[async () => false, branchA]])
+      .then(after)
+      .commit();
+
+    workflows['perstep-no-branch'] = {
+      workflow,
+      mocks: {
+        get branchA() {
+          return mockRegistry.get('perstep-no-branch:branchA');
+        },
+        get after() {
+          return mockRegistry.get('perstep-no-branch:after');
+        },
+      },
+      resetMocks: () => mockRegistry.reset(),
+    };
+  }
+
   // Test: a step-by-step run whose step aborts the run ends canceled
   {
     mockRegistry.register('perstep-cancel:step1', () =>
@@ -571,6 +616,24 @@ export function createPerStepTests(ctx: WorkflowTestContext, registry?: Workflow
       expect(mocks.increment).toHaveBeenCalledTimes(3);
       expect(mocks.after).not.toHaveBeenCalled();
     });
+
+    it.skipIf(skipTests.perStepNoBranch)(
+      'should pause a per-step run over a conditional with no matching branch',
+      async () => {
+        const { workflow, mocks, resetMocks } = registry!['perstep-no-branch']!;
+        resetMocks?.();
+        const runId = `perstep-no-branch-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+        const result = await execute(workflow, { input: 'test' }, { perStep: true, runId });
+
+        expect(result.status).toBe('paused');
+        expect(result.steps.after).toBeUndefined();
+        expect(mocks.branchA).not.toHaveBeenCalled();
+        expect(mocks.after).not.toHaveBeenCalled();
+
+        const stored = await workflow.getWorkflowRunById(runId);
+        expect(stored?.status).toBe('paused');
+      },
+    );
 
     it.skipIf(skipTests.perStepCancel)('should end canceled when a step aborts the run', async () => {
       const { workflow, mocks, resetMocks } = registry!['perstep-cancel']!;
