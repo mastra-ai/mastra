@@ -39,7 +39,9 @@ export function resolveBackgroundConfig({
   agentConfig?: AgentBackgroundConfig;
   managerConfig?: BackgroundTaskManagerConfig;
 }): ResolvedBackgroundConfig {
-  const llmOverride = llmBgOverrides as LLMBackgroundOverride | undefined;
+  const llmOverride = isToolBackgroundOverrideEnabled({ toolName, toolConfig, agentConfig })
+    ? (llmBgOverrides as LLMBackgroundOverride | undefined)
+    : undefined;
 
   // If this agent has background tasks disabled, short-circuit so no tool can
   // dispatch a background task even if its own config or the LLM override
@@ -111,6 +113,21 @@ export function isToolBackgroundEligible({
   return agentToolConfig?.enabled ?? toolConfig?.enabled ?? false;
 }
 
+/** Whether an eligible tool exposes per-call background overrides to the model. */
+export function isToolBackgroundOverrideEnabled({
+  toolName,
+  toolConfig,
+  agentConfig,
+}: {
+  toolName: string;
+  toolConfig?: ToolBackgroundConfig;
+  agentConfig?: AgentBackgroundConfig;
+}): boolean {
+  if (!isToolBackgroundEligible({ toolName, toolConfig, agentConfig })) return false;
+  const agentToolConfig = resolveAgentToolConfig(toolName, agentConfig);
+  return agentToolConfig?.allowModelOverride ?? toolConfig?.allowModelOverride ?? true;
+}
+
 /**
  * The disposition an eligible tool resolves to when a call carries no
  * `_background` override. Mirrors the fallback chain in
@@ -133,7 +150,7 @@ export function resolveDefaultDisposition({
 function resolveAgentToolConfig(
   toolName: string,
   agentConfig?: AgentBackgroundConfig,
-): { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' } | undefined {
+): Exclude<AgentBackgroundToolConfig, boolean> | undefined {
   if (!agentConfig?.tools) return undefined;
 
   if (agentConfig.tools === 'all') {

@@ -1,4 +1,4 @@
-import { isToolBackgroundEligible, resolveDefaultDisposition } from './resolve-config';
+import { isToolBackgroundOverrideEnabled, resolveDefaultDisposition } from './resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from './types';
 
 /**
@@ -15,10 +15,8 @@ export interface BackgroundPromptTool {
 /**
  * Generates the system prompt section that tells the LLM about background task capabilities.
  *
- * Only tools that `resolveBackgroundConfig` could actually dispatch to the
- * background are listed (agent-level opt-in, falling back to tool-level
- * config — see `isToolBackgroundEligible`). Returns undefined if no tools are
- * background-eligible (nothing to inject).
+ * Only tools eligible for background execution that allow the model to override
+ * their disposition are listed. Returns undefined if no tools expose an override.
  */
 export function generateBackgroundTaskSystemPrompt(
   tools: Record<string, BackgroundPromptTool>,
@@ -28,7 +26,7 @@ export function generateBackgroundTaskSystemPrompt(
 
   for (const [toolName, tool] of Object.entries(tools)) {
     const toolConfig = tool.backgroundConfig ?? tool.background;
-    if (isToolBackgroundEligible({ toolName, toolConfig, agentConfig })) {
+    if (isToolBackgroundOverrideEnabled({ toolName, toolConfig, agentConfig })) {
       eligibleTools.push({
         toolName,
         defaultDisposition: resolveDefaultDisposition({ toolName, toolConfig, agentConfig }),
