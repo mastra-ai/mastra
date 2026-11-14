@@ -41,7 +41,7 @@ export interface AgentStreamPublisher {
    */
   publish(chunk: ChunkType<any>, messageList?: MessageList): void;
   /** Publish an event whose durable payload and response-message diff are already shaped. */
-  publishEvent(event: Omit<Event, 'id' | 'createdAt'>): Promise<void>;
+  publishEvent(event: Omit<Event, 'id' | 'createdAt'>, transport?: PubSub): Promise<void>;
   /** Resolves once the abort subscription is installed; rejects if installation fails. */
   readonly ready: Promise<void>;
   /** Settle an accepted terminal in the owning reader without republishing it or scheduling cleanup. */
@@ -315,11 +315,11 @@ export function createAgentStreamPublisher({
     },
     cleanup,
     detach: detachPublisher,
-    async publishEvent(event) {
+    async publishEvent(event, transport = pubsub) {
       if (ended) return;
       await enqueue(async () => {
         await assertOwnership?.();
-        await pubsub.publish(AGENT_STREAM_TOPIC(runId), event);
+        await transport.publish(AGENT_STREAM_TOPIC(runId), event);
       }, true);
     },
     publish(chunk, messageList) {

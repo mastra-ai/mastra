@@ -38,7 +38,7 @@ import { MASTRA_DURABLE_EXECUTIONS_KEY } from '../request-context-snapshot';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
-import { withExecutionStreamPublisher } from './execution-stream-publisher';
+import { executionTransport, withExecutionStreamPublisher } from './execution-stream-publisher';
 import { runInRunFenceScope } from './run-fence-scope';
 
 /** Execution lease timing follows the agent thread lease (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). */
@@ -1223,6 +1223,10 @@ export function watchExecutionLoss(
 export function fencePubSub(pubsub: PubSub, fence: Pick<ExecutionFence, 'isLost'>): PubSub {
   return new Proxy(pubsub, {
     get(target, property) {
+      if (property === executionTransport) {
+        const transport: PubSub | undefined = Reflect.get(target, executionTransport);
+        return transport ? fencePubSub(transport, fence) : undefined;
+      }
       const value = Reflect.get(target, property, target);
       if (typeof value !== 'function') return value;
       if (property === 'publish') {

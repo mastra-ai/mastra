@@ -2981,13 +2981,22 @@ export class DurableAgent<
     return true;
   }
 
+  override abortRunStream(runId: string): boolean {
+    return (
+      super.abortRunStream(runId) ||
+      this.#runRegistry.get(runId) !== undefined ||
+      getRunRegistryEntry(runId, this.#mastra) !== undefined ||
+      agentThreadStreamRuntime.hasThreadRun(runId, this.getPubSub())
+    );
+  }
+
   protected override __abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     if (wrapperClose) {
       wrapperClose();
       return true;
     }
-    const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
+    const aborted = super.__abortLocalRun(runId);
     const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
     this.#abortLocalController(runId);
     // An evented run's registry entry can belong to a caller, not its executor.

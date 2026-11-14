@@ -20,6 +20,8 @@ import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
 const publishersKey = createRunScopeKey<Map<string, AgentStreamPublisher>>('execution-stream-publishers');
+// Proxies must forward this transport while retaining their fences, without re-entering a publisher's queue.
+export const executionTransport = Symbol('execution-stream-publisher-transport');
 
 /** Attach the shared publisher to an execution with explicit producer or lifecycle authority. */
 export function getExecutionStreamPublisher({
@@ -122,8 +124,10 @@ export function withExecutionStreamPublisher(
   pubsub: PubSub,
   options: { runId: string; agentId: string; mastra?: Mastra; claim?: DurableExecutionClaim },
 ): PubSub {
+  const transport: PubSub = Reflect.get(pubsub, executionTransport) ?? pubsub;
   return new Proxy(pubsub, {
     get(target, property) {
+      if (property === executionTransport) return transport;
       if (property === 'publish') {
         return async (
           topic: string,
@@ -134,7 +138,8 @@ export function withExecutionStreamPublisher(
             const publisher = getExecutionStreamPublisher({ ...options, role: 'producer' });
             if (publisher) {
               try {
-                return await publisher.publishEvent(event);
+                // Keep each step's fence and cache policy without chaining publishers or splitting their queue.
+                return await publisher.publishEvent(event, transport);
               } catch (error) {
                 // Like fencePubSub, a worker that lost ownership stops publishing without failing the run.
                 if (isExecutionFenceError(error)) return;
