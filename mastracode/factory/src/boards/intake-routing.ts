@@ -1,5 +1,5 @@
-import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts } from '../rules/rule-group.js';
+import { evaluateRuleGroup, explainRuleGroup } from '../rules/rule-group.js';
+import type { FailedRuleCondition, RuleFacts } from '../rules/rule-group.js';
 import { externalSourceForWorkItem } from '../rules/types.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
 import type { IntakeEvaluator, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
@@ -16,7 +16,8 @@ export type IntakeRoutesReader = Pick<
   'listIntakeRoutes' | 'readIntakeOrder' | 'recordIntakeDecision' | 'resolveNotRouted'
 >;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'>;
+type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'on'> &
+  Partial<Pick<StoredIntakeRouteRecord, 'name'>>;
 
 /** Whether the route places new cards, rather than only moving existing ones on later events. */
 export function placesNewCards(route: Pick<StoredIntakeRouteRecord, 'on'>): boolean {
@@ -279,35 +280,104 @@ function placedOn(resolution: IntakeResolution): string | null {
   return resolution.outcome === 'placed' ? resolution.board : null;
 }
 
+/** How one intake rule answered an item, in the order intake asked it. */
+export type IntakeRuleVerdict =
+  /** It took the item: the first enabled rule, in intake order, that matched and whose phase takes it. */
+  | { outcome: 'took' }
+  /** It matched and its phase takes the item, but a rule asked earlier took it first. */
+  | { outcome: 'lost'; to: { boardKey: string; routeId: string } }
+  /** Its condition failed; `failed` names the conditions it failed on. */
+  | { outcome: 'no_match'; failed: FailedRuleCondition[] }
+  /** It matched, but its phase can't hold this kind of item (such as an issue in a pull request review phase). */
+  | { outcome: 'phase_refuses' }
+  /** It is switched off. */
+  | { outcome: 'disabled' };
+
+export type IntakeRuleTrace = IntakeRuleVerdict & {
+  routeId: string;
+  name: string | null;
+  /** The phase the item would land in from this rule. */
+  phase: string;
+};
+
+export interface IntakeBoardTrace {
+  boardKey: string;
+  name: string;
+  /** The board's rules that place new items, top to bottom. */
+  rules: IntakeRuleTrace[];
+}
+
+export interface IntakeTrace {
+  resolution: IntakeResolution;
+  /** Boards in the order intake asked them; with `full`, every board, even after one took the item. */
+  boards: IntakeBoardTrace[];
+}
+
 /**
- * Boards in intake order, and inside each board its own rules top to bottom: the first enabled
- * placing rule that matches and whose phase can take the card decides. Nothing names a board to
- * fall back to; an arrival no board takes is Not routed.
+ * Asks boards in intake order, and inside each board its own rules top to bottom: the first
+ * enabled placing rule that matches and whose phase can take the card decides. Nothing names a
+ * board to fall back to; an arrival no board takes is Not routed. Filing stops at the winner;
+ * `full` keeps asking every rule after it, so the dry run and tester can show which rules
+ * matched but lost. Both read the same verdicts, so what they show is what filing does.
  */
-function resolveByIntakeOrder({ routes, order, facts, registry }: IntakeQuery): IntakeResolution {
-  const checked: string[] = [];
+export function traceIntakeOrder(
+  { routes, order, facts, registry }: Omit<IntakeQuery, 'evaluator'>,
+  options: { full?: boolean } = {},
+): IntakeTrace {
+  const boards: IntakeBoardTrace[] = [];
+  let resolution: Extract<IntakeResolution, { outcome: 'placed' }> | undefined;
+  let winner: { boardKey: string; routeId: string } | undefined;
   // A code board isn't stored, so the stored order can lack it; it slots in as a new board does.
   const boardKeys = [...registry.keys()];
   const stored = order.length > 0 ? order : deriveIntakeOrder(routes, boardKeys);
   for (const boardKey of reconcileIntakeOrder(stored, boardKeys, routes)) {
     const board = registry.get(boardKey);
     if (!board) continue;
-    checked.push(board.name);
+    const trace: IntakeBoardTrace = { boardKey: board.id, name: board.name, rules: [] };
+    boards.push(trace);
     for (const route of routes) {
-      if (route.target.boardKey !== boardKey || route.target.joinClosedIssue) continue;
-      if (!route.enabled || !placesNewCards(route) || !evaluateRuleGroup(route.when, facts)) continue;
+      if (route.target.boardKey !== boardKey || route.target.joinClosedIssue || !placesNewCards(route)) continue;
       const phase = landingPhase(board, route.target.phaseKey);
-      if (!placementTakesCard(board, phase, facts)) continue;
-      return { outcome: 'placed', board: board.id, phase, routeId: route.id };
+      const rule = { routeId: route.id, name: route.name ?? null, phase };
+      if (!route.enabled) {
+        trace.rules.push({ ...rule, outcome: 'disabled' });
+        continue;
+      }
+      const explained = explainRuleGroup(route.when, facts);
+      if (!explained.matched) {
+        trace.rules.push({ ...rule, outcome: 'no_match', failed: explained.failed });
+        continue;
+      }
+      if (!placementTakesCard(board, phase, facts)) {
+        trace.rules.push({ ...rule, outcome: 'phase_refuses' });
+        continue;
+      }
+      if (winner) {
+        trace.rules.push({ ...rule, outcome: 'lost', to: winner });
+        continue;
+      }
+      trace.rules.push({ ...rule, outcome: 'took' });
+      winner = { boardKey: board.id, routeId: route.id };
+      resolution = { outcome: 'placed', board: board.id, phase, routeId: route.id };
+      if (!options.full) return { resolution, boards };
     }
   }
+  if (resolution) return { resolution, boards };
+  const checked = boards.map(board => board.name);
   return {
-    outcome: 'not_routed',
-    reason:
-      checked.length > 0
-        ? `No board's intake rules match it (checked ${checked.join(', ')}).`
-        : 'The project has no board to take it.',
+    resolution: {
+      outcome: 'not_routed',
+      reason:
+        checked.length > 0
+          ? `No board's intake rules match it (checked ${checked.join(', ')}).`
+          : 'The project has no board to take it.',
+    },
+    boards,
   };
+}
+
+function resolveByIntakeOrder(query: IntakeQuery): IntakeResolution {
+  return traceIntakeOrder(query).resolution;
 }
 
 /**

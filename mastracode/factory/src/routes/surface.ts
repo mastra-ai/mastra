@@ -1065,6 +1065,9 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           boards: deps.storedBoards.cache,
           intakeEvaluator: deps.intakeEvaluator,
           configVersion: deps.configVersion,
+          intakeLookups: (deps.integrations ?? []).flatMap(({ integration, ready }) =>
+            ready && integration.intakeLookup ? [integration.intakeLookup] : [],
+          ),
         }).routes()
       : []),
     ...(deps.factoryReady

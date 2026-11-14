@@ -11,6 +11,7 @@ import {
   intakeTargetProblem,
   resolveIntake,
   resolveIntakePlacement,
+  traceIntakeOrder,
 } from './intake-routing.js';
 import { boardRegistryOf, createBoardRegistry } from './registry.js';
 import { createTestBoard, createTriageWorkRegistry } from './test-utils.js';
@@ -314,5 +315,92 @@ describe('intakeTargetProblem', () => {
     // The board and phase must still exist.
     expect(intakeTargetProblem(registry, closes('work', 'gone'))).toMatchObject({ code: 'unknown_phase' });
     expect(intakeTargetProblem(registry, closes('gone', 'done'))).toMatchObject({ code: 'unknown_board' });
+  });
+});
+
+describe('traceIntakeOrder', () => {
+  const twoBoards = boardRegistryOf([simpleBoard('work', 'Work'), simpleBoard('ship', 'Ship')]);
+  const labelled = (id: string, boardKey: string, label: string) =>
+    route({
+      id,
+      name: `Labelled ${label}`,
+      target: { boardKey, phaseKey: null },
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: label }] },
+    });
+  const everything = (id: string, boardKey: string) =>
+    route({ id, name: 'Everything else', target: { boardKey, phaseKey: null } });
+  const routes = [
+    labelled('ship-bug', 'ship', 'ship'),
+    { ...everything('ship-off', 'ship'), enabled: false },
+    labelled('work-bug', 'work', 'bug'),
+    everything('work-all', 'work'),
+    route({ id: 'work-closed', on: ['work_item.closed'], target: { boardKey: 'work', phaseKey: null } }),
+  ];
+
+  it('names, board by board and rule by rule, what each rule answered and why', () => {
+    const trace = traceIntakeOrder(
+      { routes, order: ['ship', 'work'], facts: issue(['bug']), registry: twoBoards },
+      { full: true },
+    );
+    expect(trace.resolution).toEqual({ outcome: 'placed', board: 'work', phase: 'inbox', routeId: 'work-bug' });
+    expect(trace.boards).toEqual([
+      {
+        boardKey: 'ship',
+        name: 'Ship',
+        rules: [
+          {
+            routeId: 'ship-bug',
+            name: 'Labelled ship',
+            phase: 'inbox',
+            outcome: 'no_match',
+            failed: [{ field: 'item.labels', operator: 'contains', value: 'ship', actual: ['bug'] }],
+          },
+          { routeId: 'ship-off', name: 'Everything else', phase: 'inbox', outcome: 'disabled' },
+        ],
+      },
+      {
+        boardKey: 'work',
+        name: 'Work',
+        rules: [
+          { routeId: 'work-bug', name: 'Labelled bug', phase: 'inbox', outcome: 'took' },
+          {
+            routeId: 'work-all',
+            name: 'Everything else',
+            phase: 'inbox',
+            outcome: 'lost',
+            to: { boardKey: 'work', routeId: 'work-bug' },
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('shows a matching rule whose phase can’t hold the item', () => {
+    const review = route({ id: 'review', target: { boardKey: 'work', phaseKey: 'pr-review' } });
+    const trace = traceIntakeOrder({ routes: [review], order: [], facts: issue(), registry }, { full: true });
+    expect(trace.resolution.outcome).toBe('not_routed');
+    expect(trace.boards.flatMap(board => board.rules)).toEqual([
+      { routeId: 'review', name: null, phase: 'pr-review', outcome: 'phase_refuses' },
+    ]);
+  });
+
+  it('stops at the winner when filing, and decides exactly as filing does either way', () => {
+    const factSets = [issue(['ship']), issue(['bug']), issue(['ship', 'bug']), issue([]), pullRequest];
+    for (const order of [
+      ['ship', 'work'],
+      ['work', 'ship'],
+    ]) {
+      for (const facts of factSets) {
+        for (const set of [routes, routes.slice(0, 3), []]) {
+          const query = { routes: set, order, facts, registry: twoBoards };
+          const filed = resolveIntake({ ...query, evaluator: 'intake-order' });
+          expect(traceIntakeOrder(query).resolution).toEqual(filed);
+          expect(traceIntakeOrder(query, { full: true }).resolution).toEqual(filed);
+        }
+      }
+    }
+    const short = traceIntakeOrder({ routes, order: ['ship', 'work'], facts: issue(['ship']), registry: twoBoards });
+    expect(short.boards).toHaveLength(1);
+    expect(short.boards[0]!.rules.at(-1)).toMatchObject({ routeId: 'ship-bug', outcome: 'took' });
   });
 });

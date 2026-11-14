@@ -1313,6 +1313,69 @@ describe('intake by intake order', () => {
     });
   });
 
+  it('dry-runs every arrival onto the board, phase and rule the dispatcher filed it with', async () => {
+    const seeded = await setup({ intakeEvaluator: 'intake-order' });
+    await seeded.boards.create(seeded.scope, docsBoard, 'admin');
+    await seeded.route({ name: 'Trusted', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } });
+    await seeded.route(PULL_REQUEST_INTAKE_ROUTE);
+    await seeded.route(docsRule);
+    await seeded.route({
+      name: 'Bugs',
+      when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'bug' }] },
+      target: { boardKey: 'work', phaseKey: null },
+    });
+    await seeded.boards.setIntakeOrder(seeded.scope, ['docs', 'work'], { boards: ['work', 'docs'] });
+    const arrivals: (Partial<LinkedDecision> & { sourceKey: string })[] = [
+      { sourceKey: 'github-issue:1', metadata: { labels: ['docs'] } },
+      { sourceKey: 'github-issue:2', metadata: { labels: ['bug'] } },
+      { sourceKey: 'github-issue:3', metadata: { labels: ['docs', 'bug'], authorTrusted: true } },
+      { sourceKey: 'github-issue:4', metadata: { labels: ['question'] } },
+      { sourceKey: 'github-issue:5', metadata: { labels: [], authorTrusted: true } },
+      { sourceKey: 'github-pr:6', source: 'github-pr', stage: 'pr-review', metadata: { labels: ['bug'] } },
+      { sourceKey: 'github-pr:7', source: 'github-pr', stage: 'pr-review', metadata: { labels: ['docs'] } },
+    ];
+    for (const arrival of arrivals) await seeded.deliver(arrival);
+
+    const { IntakeCheck } = await import('../routes/intake-check.js');
+    const registry = (
+      await new ProjectBoardCache({
+        codeRegistry: createTriageWorkRegistry(),
+        storage: seeded.boards,
+        recheckMs: 0,
+      }).describe(seeded.scope)
+    ).registry;
+    const result = await new IntakeCheck({ storage: seeded.boards, workItems: seeded.workItems }).dryRun(
+      seeded.scope,
+      registry,
+      {},
+    );
+    expect(result.sampled).toBe(arrivals.length);
+    const cards = await seeded.workItems.list(seeded.scope);
+    const notRouted = (await seeded.boards.listNotRouted(seeded.scope)).notRouted;
+    expect(cards.length + notRouted.length).toBe(arrivals.length);
+    expect(notRouted.length).toBeGreaterThan(0);
+    // The fixture files on both boards, in more than one phase, by more than one rule.
+    expect(
+      new Set(cards.map(card => `${card.board}:${card.stages[0]}:${card.metadata?.intakeRouteId}`)).size,
+    ).toBeGreaterThan(3);
+    for (const item of result.items) {
+      const card = cards.find(entry => entry.externalSource?.externalId === item.key);
+      if (card) {
+        expect(item.placement, item.key).toEqual({
+          boardKey: card.board,
+          phase: card.stages[0],
+          routeId: card.metadata?.intakeRouteId,
+        });
+      } else {
+        expect(notRouted.map(entry => entry.sourceKey)).toContain(item.key);
+        expect(item.placement, item.key).toBeNull();
+      }
+    }
+    // The decision log counts what each rule filed.
+    const filed = result.boards.flatMap(board => board.rules).reduce((sum, rule) => sum + rule.filed!, 0);
+    expect(filed).toBe(cards.length);
+  });
+
   it('still files an unmatched arrival on Work under the old evaluator, the default', async () => {
     const seeded = await setup();
     const card = await seeded.deliver({ sourceKey: 'github-issue:9', metadata: { labels: ['bug'] } });

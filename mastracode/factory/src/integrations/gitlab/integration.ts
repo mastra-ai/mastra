@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
 
+import type { IntakeItemLookup } from '../../boards/intake-lookup.js';
 import type { IntegrationConnection } from '../../capabilities/connection.js';
 import type {
   CreateIntakeCommentInput,
@@ -32,9 +33,10 @@ import {
   GitLabApiClient,
   GitLabApiError,
 } from './api.js';
-import type { GitLabIssue, GitLabNote, GitLabProject } from './api.js';
+import type { GitLabIssue, GitLabMergeRequest, GitLabNote, GitLabProject } from './api.js';
 import { resolveGitLabRules } from './default-rules.js';
 import type { GitLabEventRules, GitLabRuleOverrides } from './default-rules.js';
+import { gitlabIntakeLookup } from './intake-lookup.js';
 import { attachGitLabReconciler } from './reconciler.js';
 import { gitlabReconciliationEnabled, gitlabReconciliationInterval } from './reconciliation-config.js';
 import { buildGitLabRoutes, ingestLinkedGitLabRepositoryBacklog } from './routes.js';
@@ -130,6 +132,12 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     createComment: input => this.#createComment(input),
     updateIssue: input => this.#updateIssue(input),
   };
+  readonly intakeLookup: IntakeItemLookup = gitlabIntakeLookup({
+    sourceControl: () => this.#sourceControl,
+    readWorkItem: (connectionId, projectId, kind, iid) => this.readWorkItem(connectionId, projectId, kind, iid),
+    getProjectMemberAccessLevel: (connectionId, projectId, username) =>
+      this.getProjectMemberAccessLevel(connectionId, projectId, username),
+  });
   readonly versionControl = buildGitLabVersionControl({
     contextForConnection: connection => this.#versionControlContext(connection),
     contextForStoredInstallation: (connection, host) => this.#versionControlContextForInstallation(connection, host),
@@ -250,9 +258,17 @@ export abstract class GitLabIntegrationBase implements FactoryIntegration {
     kind: 'issue' | 'merge_request',
     iid: number,
   ): Promise<string | undefined> {
+    return (await this.readWorkItem(connectionId, projectId, kind, iid)).author?.username;
+  }
+
+  async readWorkItem(
+    connectionId: string,
+    projectId: string,
+    kind: 'issue' | 'merge_request',
+    iid: number,
+  ): Promise<GitLabIssue | GitLabMergeRequest> {
     const api = (await this.contextById(connectionId)).api;
-    const item = kind === 'issue' ? await api.getIssue(projectId, iid) : await api.getMergeRequest(projectId, iid);
-    return item.author?.username;
+    return kind === 'issue' ? api.getIssue(projectId, iid) : api.getMergeRequest(projectId, iid);
   }
 
   async isProjectMemberTrustedForSource(sourceId: string, username: string): Promise<boolean> {
