@@ -927,6 +927,37 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     };
   }
 
+  /**
+   * How many items each intake rule placed since `since`, keyed by rule id. Reads placed rows
+   * newest first, a page at a time, and stops at the first one older than `since`.
+   */
+  async countPlacedByRoute(
+    scope: StoredBoardScope,
+    since: Date,
+    options: { pageSize?: number } = {},
+  ): Promise<Record<string, number>> {
+    const pageSize = options.pageSize ?? 500;
+    const counts: Record<string, number> = {};
+    let cursor: IntakeDecisionRow | undefined;
+    for (;;) {
+      const rows = await this.ops.findMany<IntakeDecisionRow>(
+        INTAKE_DECISIONS,
+        { ...scopeWhere(scope), outcome: 'placed' },
+        {
+          orderBy: NEWEST_DECISION_ORDER,
+          limit: pageSize,
+          ...(cursor && { cursor: { values: [cursor.decided_at, cursor.id] } }),
+        },
+      );
+      for (const row of rows) {
+        if (row.decided_at < since) return counts;
+        if (row.route_id) counts[row.route_id] = (counts[row.route_id] ?? 0) + 1;
+      }
+      if (rows.length < pageSize) return counts;
+      cursor = rows.at(-1);
+    }
+  }
+
   /** Marks the Not routed rows for a source resolved once a card is filed for it. Returns how many. */
   async resolveNotRouted(scope: StoredBoardScope, sourceKey: string, by: string, now = new Date()): Promise<number> {
     return this.ops.updateMany(
@@ -1348,6 +1379,10 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
 const DECISION_ORDER: [string, 'asc'][] = [
   ['decided_at', 'asc'],
   ['id', 'asc'],
+];
+const NEWEST_DECISION_ORDER: [string, 'desc'][] = [
+  ['decided_at', 'desc'],
+  ['id', 'desc'],
 ];
 
 function decodeDecisionCursor(cursor: string): { decidedAt: Date; id: string } {

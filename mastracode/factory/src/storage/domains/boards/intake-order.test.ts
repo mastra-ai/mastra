@@ -233,4 +233,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake order on
       code: 'invalid_intake_cursor',
     });
   });
+
+  it('counts placed items per rule over a window, across pages, ignoring Not routed and other projects', async () => {
+    const { boards, scope } = await setup(['work']);
+    const now = new Date(Date.UTC(2026, 10, 30));
+    const daysAgo = (n: number) => new Date(now.getTime() - n * 86_400_000);
+    const placed = (key: string, routeId: string | undefined, at: Date, where = scope) =>
+      boards.recordIntakeDecision(
+        where,
+        { idempotencyKey: key, outcome: 'placed', evaluator: 'intake-order', title: key, boardKey: 'work', routeId },
+        at,
+      );
+    for (let n = 0; n < 7; n++) await placed(`a${n}`, 'route-a', daysAgo(n));
+    await placed('b1', 'route-b', daysAgo(29));
+    await placed('b-old', 'route-b', daysAgo(31));
+    await placed('manual', undefined, daysAgo(1));
+    await boards.recordIntakeDecision(
+      scope,
+      { idempotencyKey: 'n1', outcome: 'not_routed', evaluator: 'intake-order', title: 'n1' },
+      daysAgo(1),
+    );
+    await placed('other', 'route-a', daysAgo(1), { ...scope, factoryProjectId: 'project-2' });
+
+    const since = daysAgo(30);
+    expect(await boards.countPlacedByRoute(scope, since, { pageSize: 3 })).toEqual({ 'route-a': 7, 'route-b': 1 });
+    expect(await boards.countPlacedByRoute(scope, since)).toEqual({ 'route-a': 7, 'route-b': 1 });
+  });
 });
