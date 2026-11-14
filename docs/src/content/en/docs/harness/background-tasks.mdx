@@ -405,25 +405,6 @@ The manager keeps tool executors in process memory. If the process restarts whil
 
 `manager.cancel(taskId)` works against suspended tasks the same way it works for running ones. The row changes to `cancelled` and the workflow snapshot is cleaned up. A `task.cancelled` event then fires.
 
-## Cancel a task from a client
-
-To cancel a pending, running, or suspended task over HTTP, call `POST /api/background-tasks/:backgroundTaskId/cancel`. The running tool's abort signal fires and the route returns the task with `status: 'cancelled'`. A task that already finished is returned unchanged. The route returns `404` when the task doesn't exist or belongs to another resource, and requires the `background-tasks:execute` permission.
-
-The [client SDK](/reference/client-js/mastra-client) wraps the route as `cancelBackgroundTask()`:
-
-```typescript title="src/client/cancel-task.ts"
-import { MastraClient } from '@mastra/client-js'
-
-const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
-
-const task = await client.cancelBackgroundTask(taskId)
-console.log(task.status) // 'cancelled'
-```
-
-In React, `useCancelBackgroundTask()` from `@mastra/react/hooks/agents` wraps the same call.
-
-A cancelled task doesn't write a result into the thread, and the agent isn't notified. The tool call keeps the placeholder it returned when the task started, and its `providerMetadata.mastra.backgroundTask.status` becomes `cancelled`, so a chat that reloads the thread doesn't show it as running. A task that a shutdown stops keeps `status: 'running'` on its tool call, the same as after a crash.
-
 ## Lifecycle callbacks
 
 Each layer can register terminal-state callbacks. They don't replace one another, and success/failure hooks fire for their outcomes:
@@ -455,7 +436,7 @@ Failure callbacks also fire when recovery fails a task because its worker stoppe
 
 ### Subscribe to all task events
 
-Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of the tasks that are running (as `background-task-running`) or suspended (as `background-task-suspended`), then forwards live events as they happen.
+Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts" oxfmt:false
 const bgManager = mastra.backgroundTaskManager;

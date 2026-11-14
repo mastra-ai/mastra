@@ -25,9 +25,6 @@ const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
 const WORKER_TERMINATED_MESSAGE = 'Worker process terminated before task completed';
 
-/** Why a task was cancelled: a caller asked for it, or the manager is shutting down. */
-type CancelReason = 'request' | 'shutdown';
-
 function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
   if (result.error !== undefined) return result.error;
   if (result.tripwire?.reason) return new Error(result.tripwire.reason);
@@ -236,10 +233,7 @@ export class BackgroundTaskManager {
       }
       if (event.type === 'task.cancelled') {
         try {
-          await this.handleRemoteCancel(
-            event.data.taskId,
-            event.data.cancelReason === 'shutdown' ? 'shutdown' : 'request',
-          );
+          await this.handleRemoteCancel(event.data.taskId);
         } finally {
           await ack?.();
         }
@@ -519,14 +513,6 @@ export class BackgroundTaskManager {
   }
 
   async cancel(taskId: string): Promise<void> {
-    return this.#cancel(taskId, 'request');
-  }
-
-  /**
-   * `shutdown` cancels leave the dispatcher's stored tool call as a crash would, so a host can
-   * tell an interrupted call from one a user cancelled. Only an open request on it is dropped.
-   */
-  async #cancel(taskId: string, reason: CancelReason): Promise<void> {
     if (this.initPromise) await this.initPromise;
     const storage = await this.getStorage();
     let task = await storage.getTask(taskId);
@@ -545,10 +531,7 @@ export class BackgroundTaskManager {
       }
 
       const previousStatus = task.status;
-      // Captured before the abort: the aborted executor (or a run finishing right now)
-      // deregisters the context before the dispatcher has been told about the cancel.
-      const taskContext = this.taskContexts.get(taskId);
-      const isProcessAffine = taskContext !== undefined;
+      const isProcessAffine = this.taskContexts.has(taskId);
       // Cancellation is an explicit operator action and may arrive from any
       // process, so it is fenced on status only — but it must drop the lease,
       // since the task is leaving `running` and no owner should keep renewing.
@@ -562,10 +545,6 @@ export class BackgroundTaskManager {
         if (!task) return;
         continue;
       }
-      // This cancel tells the dispatcher itself, with the context captured above. Deregister
-      // now so this process's own `task.cancelled` event, delivered synchronously by an
-      // in-process pubsub, finds no context and doesn't tell it a second time.
-      this.deregisterTaskContext(taskId);
       this.ownedLeases.delete(taskId);
       this.pinnedPendingLeases.delete(taskId);
       this.localPendingResumes.delete(taskId);
@@ -600,14 +579,7 @@ export class BackgroundTaskManager {
 
       const cancelledTask = await storage.getTask(taskId);
       if (cancelledTask) {
-        // The row is already cancelled: a failed publish must not keep the dispatcher from hearing of it.
-        try {
-          await this.publishLifecycleEvent('task.cancelled', cancelledTask, { cancelReason: reason });
-        } catch (error) {
-          this.#mastra
-            ?.getLogger?.()
-            ?.warn(`background-task cancellation event publish failed for ${taskId}:`, error as any);
-        }
+        await this.publishLifecycleEvent('task.cancelled', cancelledTask);
         try {
           await this.config.onTaskCancelled?.(cancelledTask);
         } catch (error) {
@@ -615,8 +587,11 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
-        await this.#notifyDispatcherOfCancel(cancelledTask, taskContext, reason, previousStatus);
+        // Cancelling answers nothing, but the open request on the tool call
+        // must go so a client doesn't offer to answer a dead task.
+        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
       }
+      this.deregisterTaskContext(taskId);
 
       if (previousStatus === 'running') {
         // Route cancellation to the same process that owns an invocation-bound executor.
@@ -1050,32 +1025,23 @@ export class BackgroundTaskManager {
 
         // 2. Emit snapshot of existing in-flight tasks (running + suspended).
         if (!includeExisting) return;
-        const snapshotChunk = (task: BackgroundTask) => {
-          const base = {
-            taskId: task.id,
-            toolName: task.toolName,
-            toolCallId: task.toolCallId,
-            agentId: task.agentId,
-            runId: task.runId,
-            args: task.args,
-          };
-          return task.status === 'suspended'
-            ? {
-                type: 'background-task-suspended',
-                payload: { ...base, suspendPayload: task.suspendPayload, suspendedAt: task.suspendedAt },
-              }
-            : { type: 'background-task-running', payload: { ...base, startedAt: task.startedAt } };
-        };
         try {
           const storage = await manager.getStorage();
           if (taskId) {
             const task = await storage.getTask(taskId);
-            if (
-              task &&
-              (task.status === 'running' || task.status === 'suspended') &&
-              matchesResource(task.resourceId)
-            ) {
-              controller.enqueue(snapshotChunk(task));
+            if (task && task.status === 'running' && matchesResource(task.resourceId)) {
+              controller.enqueue({
+                type: 'background-task-running',
+                payload: {
+                  taskId: task.id,
+                  toolName: task.toolName,
+                  toolCallId: task.toolCallId,
+                  agentId: task.agentId,
+                  runId: task.runId,
+                  startedAt: task.startedAt,
+                  args: task.args,
+                },
+              });
             }
           } else {
             const { tasks: existing } = await storage.listTasks({
@@ -1083,14 +1049,25 @@ export class BackgroundTaskManager {
               runId,
               threadId,
               resourceId,
-              status: ['running', 'suspended'],
+              status: ['running'],
             });
 
             for (const task of existing) {
               if (abortSignal?.aborted) break;
               if (!matchesResource(task.resourceId)) continue;
               try {
-                controller.enqueue(snapshotChunk(task));
+                controller.enqueue({
+                  type: 'background-task-running',
+                  payload: {
+                    taskId: task.id,
+                    toolName: task.toolName,
+                    toolCallId: task.toolCallId,
+                    agentId: task.agentId,
+                    runId: task.runId,
+                    startedAt: task.startedAt,
+                    args: task.args,
+                  },
+                });
               } catch {
                 break;
               }
@@ -1280,7 +1257,7 @@ export class BackgroundTaskManager {
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (task?.status === 'running' && task.maxRetries > 0) return;
-    await this.#cancel(taskId, 'shutdown');
+    await this.cancel(taskId);
   }
 
   #abortActiveControllers(): void {
@@ -1874,15 +1851,9 @@ export class BackgroundTaskManager {
     });
   }
 
-  /**
-   * @internal Pass `ctx` when the task's context may already be deregistered, and
-   * `cancelledAt` to mark the tool call cancelled.
-   */
-  async runLocalExecutionHook(
-    task: BackgroundTask,
-    ctx: TaskContext | undefined = this.taskContexts.get(task.id),
-    cancelledAt?: Date,
-  ): Promise<void> {
+  /** @internal — also called by the workflow-engine step bodies in workflow.ts */
+  async runLocalExecutionHook(task: BackgroundTask): Promise<void> {
+    const ctx = this.taskContexts.get(task.id);
     if (!ctx) return;
 
     try {
@@ -1895,7 +1866,6 @@ export class BackgroundTaskManager {
         threadId: task.threadId,
         resourceId: task.resourceId,
         startedAt: task.startedAt!,
-        ...(cancelledAt ? { cancelledAt } : {}),
       });
     } catch {
       //fail silently
@@ -1903,36 +1873,15 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * A cancelled task never delivers a result, so tell its dispatcher: the stored tool call is
-   * marked cancelled, and an open request on it goes so a client doesn't offer to answer a
-   * dead task. A shutdown only drops the open request and leaves the call as a crash would.
-   * `previousStatus` is unknown when the cancel came from another process.
+   * Another process cancelled a task this one dispatched. Run its execution
+   * hook, so the dispatcher drops an open request it recorded for the task,
+   * and release the task's context. A cancel made here has already done both.
    */
-  async #notifyDispatcherOfCancel(
-    task: BackgroundTask,
-    ctx: TaskContext | undefined,
-    reason: CancelReason,
-    previousStatus?: BackgroundTaskStatus,
-  ): Promise<void> {
-    if (reason === 'request') {
-      await this.runLocalExecutionHook(task, ctx, task.completedAt ?? new Date());
-    } else if (previousStatus === undefined || previousStatus === 'suspended') {
-      await this.runLocalExecutionHook(task, ctx);
-    }
-  }
-
-  /**
-   * Another process cancelled a task this one dispatched. Tell the dispatcher (see
-   * {@link #notifyDispatcherOfCancel}) and release the task's context. A cancel made here
-   * has already done both.
-   */
-  private async handleRemoteCancel(taskId: string, reason: CancelReason): Promise<void> {
-    // Captured first: the aborted executor deregisters the context while this awaits storage.
-    const taskContext = this.taskContexts.get(taskId);
-    if (!taskContext) return;
+  private async handleRemoteCancel(taskId: string): Promise<void> {
+    if (!this.taskContexts.has(taskId)) return;
     const task = await (await this.getStorage()).getTask(taskId);
     if (task?.status !== 'cancelled') return;
-    await this.#notifyDispatcherOfCancel(task, taskContext, reason);
+    await this.runLocalExecutionHook(task);
     this.deregisterTaskContext(taskId);
   }
 
@@ -2058,13 +2007,10 @@ export class BackgroundTaskManager {
       | 'task.suspended'
       | 'task.resumed',
     task: BackgroundTaskEvent,
-    /** Extra fields for subscribers in other processes, such as why a task was cancelled. */
-    extra?: { cancelReason?: CancelReason },
   ): Promise<void> {
     await this.pubsub.publish(TOPIC_RESULT, {
       type,
       data: {
-        ...extra,
         taskId: task.id,
         toolName: task.toolName,
         toolCallId: task.toolCallId,

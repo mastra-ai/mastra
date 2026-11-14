@@ -22699,30 +22699,6 @@ export interface PostBackgroundTasksBackgroundTaskIdResume_RouteContract {
 }
 
 // ============================================================================
-// Route: POST /background-tasks/:backgroundTaskId/cancel
-// ============================================================================
-export type PostBackgroundTasksBackgroundTaskIdCancel_PathParams = GetBackgroundTasksBackgroundTaskId_PathParams;
-
-export type PostBackgroundTasksBackgroundTaskIdCancel_Response = GetBackgroundTasksBackgroundTaskId_Response;
-
-export type PostBackgroundTasksBackgroundTaskIdCancel_Request = Simplify<
-  (PostBackgroundTasksBackgroundTaskIdCancel_PathParams extends never
-    ? {}
-    : { params: PostBackgroundTasksBackgroundTaskIdCancel_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostBackgroundTasksBackgroundTaskIdCancel_RouteContract {
-  pathParams: PostBackgroundTasksBackgroundTaskIdCancel_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostBackgroundTasksBackgroundTaskIdCancel_Request;
-  response: PostBackgroundTasksBackgroundTaskIdCancel_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
 // Route: GET /editor/builder/settings
 // ============================================================================
 export type GetEditorBuilderSettings_Response = {
@@ -26091,7 +26067,6 @@ export interface RouteTypes {
   'GET /background-tasks': GetBackgroundTasks_RouteContract;
   'GET /background-tasks/:backgroundTaskId': GetBackgroundTasksBackgroundTaskId_RouteContract;
   'POST /background-tasks/:backgroundTaskId/resume': PostBackgroundTasksBackgroundTaskIdResume_RouteContract;
-  'POST /background-tasks/:backgroundTaskId/cancel': PostBackgroundTasksBackgroundTaskIdCancel_RouteContract;
   'GET /editor/builder/settings': GetEditorBuilderSettings_RouteContract;
   'GET /editor/workflow-builder/settings': GetEditorWorkflowBuilderSettings_RouteContract;
   'POST /editor/workflow-builder/stream': PostEditorWorkflowBuilderStream_RouteContract;
@@ -26522,9 +26497,6 @@ export interface Client {
   };
   '/background-tasks/:backgroundTaskId': {
     GET: GetBackgroundTasksBackgroundTaskId_RouteContract;
-  };
-  '/background-tasks/:backgroundTaskId/cancel': {
-    POST: PostBackgroundTasksBackgroundTaskIdCancel_RouteContract;
   };
   '/background-tasks/:backgroundTaskId/resume': {
     POST: PostBackgroundTasksBackgroundTaskIdResume_RouteContract;

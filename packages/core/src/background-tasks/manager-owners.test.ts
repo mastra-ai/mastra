@@ -963,7 +963,7 @@ describe('BackgroundTaskManager: cancelling a suspended task from another proces
     const pubsub = new EventEmitterPubSub();
     const owner = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10 }, pubsub);
     const other = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10 }, pubsub);
-    const executions: Array<{ suspendedAt?: Date; cancelledAt?: Date }> = [];
+    const executions: Array<{ suspendedAt?: Date }> = [];
     const { task } = await owner.enqueue(payload('agent-1', 'call-1'), {
       executor: { execute: async (_args, opts) => opts?.suspend?.({ question: 'ok?' }) },
       onExecution: async info => {
@@ -973,15 +973,9 @@ describe('BackgroundTaskManager: cancelling a suspended task from another proces
     await vi.waitFor(async () => expect((await owner.getTask(task.id))?.status).toBe('suspended'));
     await vi.waitFor(() => expect(executions.at(-1)?.suspendedAt).toBeInstanceOf(Date));
 
-    const beforeCancel = executions.length;
-
     await other.cancel(task.id);
 
     expect((await owner.getTask(task.id))?.status).toBe('cancelled');
-    await vi.waitFor(() => expect(executions.length).toBeGreaterThan(beforeCancel));
-    const after = executions.slice(beforeCancel);
-    expect(after).toHaveLength(1);
-    expect(after[0]!.cancelledAt).toBeInstanceOf(Date);
-    expect(after[0]!.suspendedAt).toBeUndefined();
+    await vi.waitFor(() => expect(executions.at(-1)?.suspendedAt).toBeUndefined());
   });
 });

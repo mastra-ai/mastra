@@ -272,39 +272,6 @@ const locateToolPart = (
 };
 
 /**
- * The tool part that ran background task `taskId`, searched in the same window as
- * {@link locateToolPart}. Matching the task as well as the call matters because
- * providers reuse tool-call ids across turns, so the newest part with the id can
- * belong to a later call.
- */
-const locateBackgroundTaskPart = (
-  messages: MastraDBMessage[],
-  toolCallId: string,
-  taskId: string,
-): { messageIndex: number; toolPartIndex: number } | null => {
-  const findIndex = (parts: MastraMessagePart[]) =>
-    parts.findIndex(
-      part =>
-        isToolPart(part) &&
-        part.toolInvocation.toolCallId === toolCallId &&
-        (part.providerMetadata?.mastra as { backgroundTask?: { taskId?: string } } | undefined)?.backgroundTask
-          ?.taskId === taskId,
-    );
-
-  let count = 0;
-  const maxMessagesBack = 10;
-  for (let i = messages.length - 1; i >= 0; i--) {
-    if (count > maxMessagesBack) break;
-    const message = messages[i];
-    if (message.role !== 'assistant') continue;
-    const idx = findIndex(message.content.parts);
-    if (idx !== -1) return { messageIndex: i, toolPartIndex: idx };
-    count++;
-  }
-  return null;
-};
-
-/**
  * Merge per-toolCallId background-task bookkeeping onto message metadata.
  */
 const mergeBgTaskMetadata = (
@@ -1768,52 +1735,9 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'object-result':
       return result;
 
-    // A cancelled task never reconciles a result, so its call keeps the placeholder:
-    // record the end and mark the call cancelled so it stops reading as running.
-    case 'background-task-cancelled': {
-      // Only the cancelled task's own call: no fallback to another message, which would
-      // record the cancel (and clear its running count) on a message that doesn't hold it.
-      const location = locateBackgroundTaskPart(result, chunk.payload.toolCallId, chunk.payload.taskId);
-      if (!location) return result;
-      const { messageIndex, toolPartIndex } = location;
-      const targetMessage = result[messageIndex];
-      if (!targetMessage || targetMessage.role !== 'assistant') return result;
-
-      const parts = [...targetMessage.content.parts];
-      const toolPart = parts[toolPartIndex];
-      const mastraMeta = (toolPart as MastraToolInvocationPart | undefined)?.providerMetadata?.mastra as
-        | { backgroundTask?: { taskId?: string } }
-        | undefined;
-      if (!toolPart || !mastraMeta?.backgroundTask) return result;
-      parts[toolPartIndex] = {
-        ...toolPart,
-        providerMetadata: {
-          ...(toolPart as MastraToolInvocationPart).providerMetadata,
-          mastra: { ...mastraMeta, backgroundTask: { ...mastraMeta.backgroundTask, status: 'cancelled' } },
-        },
-      } as MastraMessagePart;
-
-      const nextMetadata = mergeBgTaskMetadata(
-        targetMessage.content.metadata as MastraDBMessageMetadata | undefined,
-        metadata.mode,
-        {
-          resetRunningCount: true,
-          perTaskEntry: {
-            toolCallId: chunk.payload.toolCallId,
-            completedAt: chunk.payload.completedAt,
-            taskId: chunk.payload.taskId,
-          },
-        },
-      );
-
-      return replaceAt(result, messageIndex, {
-        ...targetMessage,
-        content: { ...targetMessage.content, parts, metadata: nextMetadata },
-      });
-    }
-
     // ----- Background-task lifecycle markers not folded into messages -----
     case 'background-task-started':
+    case 'background-task-cancelled':
     case 'background-task-resumed':
       return result;
 

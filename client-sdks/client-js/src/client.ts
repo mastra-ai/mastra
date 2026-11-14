@@ -2801,16 +2801,6 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Cancels a pending, running or suspended background task. A task that already
-   * finished is returned unchanged.
-   */
-  public cancelBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
-    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/cancel`, {
-      method: 'POST',
-    });
-  }
-
-  /**
    * Opens an SSE stream of background task events (completed/failed).
    * Returns a Response that can be consumed as a ReadableStream.
    */

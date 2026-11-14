@@ -6251,20 +6251,6 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "POST /background-tasks/:backgroundTaskId/cancel": {
-    "method": "POST",
-    "path": "/background-tasks/:backgroundTaskId/cancel",
-    "pathParams": [
-      "backgroundTaskId"
-    ],
-    "queryParams": [],
-    "bodyParams": [],
-    "hasQuery": false,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",
