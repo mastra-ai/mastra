@@ -513,7 +513,7 @@ overrides:
   # provider-utils 4.0.56 pins @ai-sdk/provider 3.0.18; keep ai v6/gateway on the
   # same provider so @internal/ai-v6's bundled types don't get `_2`-suffixed.
   '@ai-sdk/provider@>=3.0.0 <3.0.18': 3.0.18
-  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.79
   # Keep 3.x/4.x js-yaml consumers on patched lines when not forced to 5.x
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
