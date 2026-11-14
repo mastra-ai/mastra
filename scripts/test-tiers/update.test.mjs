@@ -207,6 +207,20 @@ test('resolves a project alias through the config that names it, even when the r
   ]);
 });
 
+test('a deleted file is dropped, not moved to another package that has the same relative path', () => {
+  const roots = projectRootsFromConfigs([
+    ['packages/core/vitest.config.ts', "{ name: 'unit:packages/core' }"],
+  ]);
+  const log = [
+    '2026-11-14T10:00:00.0000000Z  FAIL  unit:packages/core  src/agent/gone.test.ts > x',
+    '2026-11-14T10:00:01.0000000Z  FAIL  unit:packages/core-isolated  src/agent/gone.test.ts > x',
+    '2026-11-14T10:00:02.0000000Z  FAIL  unit:packages/nope  src/agent/gone.test.ts > x',
+  ].join('\n');
+  const tracked = ['packages/core/src/a.test.ts', 'packages/memory/src/agent/gone.test.ts'];
+  assert.deepEqual(failingFilesFromLog(log, tracked, roots), []);
+  assert.deepEqual(failingFilesFromLog(log, tracked, new Map()), []);
+});
+
 test('a log flooded with FAIL lines resolves without rescanning every tracked file per line', () => {
   const tracked = Array.from({ length: 6000 }, (_, i) => `packages/p${i % 60}/src/f${i}.test.ts`);
   const lines = Array.from(

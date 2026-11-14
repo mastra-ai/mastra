@@ -351,8 +351,10 @@ export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repo
 // The tracked file a project-relative path belongs to: under the directory of the
 // vitest config that names the project (unit:mastracode-core → mastracode/sdk), else
 // under the project name read as a directory, else the longest package directory the
-// name starts with (packages/core-isolated → packages/core), else the only tracked
-// file with that relative path.
+// name starts with (packages/core-isolated → packages/core). Only a project with no
+// known location (no config names it, and its name is not a path) falls back to the
+// only tracked file with that relative path, so a deleted file is never pinned on
+// another package that happens to share its relative path.
 function projectFile(name, rel, known, bySuffix, roots) {
   for (const root of roots.get(name) ?? []) {
     if (known.has(`${root}/${rel}`)) return `${root}/${rel}`;
@@ -364,6 +366,7 @@ function projectFile(name, rel, known, bySuffix, roots) {
     .filter(f => project.startsWith(f.slice(0, -rel.length - 1)))
     .sort((a, b) => b.length - a.length);
   if (prefixed.length) return prefixed[0];
+  if (roots.has(name) || project.includes('/')) return undefined;
   return matches.length === 1 ? matches[0] : undefined;
 }
 
