@@ -11,7 +11,12 @@ import { cardRuleFacts } from '../boards/card-facts.js';
 import { dryRunIntake, intakeSample } from '../boards/intake-dry-run.js';
 import { lookupIntakeItem } from '../boards/intake-lookup.js';
 import type { IntakeItemLookup } from '../boards/intake-lookup.js';
-import { arrivalRuleFacts, INTAKE_ORDER_SAMPLE, traceIntakeOrder } from '../boards/intake-routing.js';
+import {
+  arrivalRuleFacts,
+  INTAKE_ORDER_SAMPLE,
+  intakeTargetProblem,
+  traceIntakeOrder,
+} from '../boards/intake-routing.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { RuleFacts } from '../rules/rule-group.js';
 import type { FactoryCommitDecision } from '../rules/types.js';
@@ -78,17 +83,21 @@ export class IntakeCheck {
       if (!registry.has(board.boardKey)) {
         throw new IntakeCheckRefusal(422, 'intake_board_not_found', `No board "${board.boardKey}" in this project.`);
       }
+      const drafts = board.routes.map((route, index) => ({
+        id: route.id ?? `draft:${board.boardKey}:${index}`,
+        name: route.name,
+        enabled: route.enabled,
+        when: route.when,
+        target: { boardKey: board.boardKey, phaseKey: route.target.phaseKey ?? null, joinClosedIssue: false },
+        on: route.on ?? [...DEFAULT_ROUTE_EVENTS],
+      }));
+      // Held to the checks saving it would face, so a typo'd phase can't quietly land on the first one.
+      for (const route of drafts) {
+        const problem = intakeTargetProblem(registry, route);
+        if (problem) throw new IntakeCheckRefusal(422, problem.code, problem.message);
+      }
       routes = routes.filter(route => route.target.boardKey !== board.boardKey);
-      routes.push(
-        ...board.routes.map((route, index) => ({
-          id: route.id ?? `draft:${board.boardKey}:${index}`,
-          name: route.name,
-          enabled: route.enabled,
-          when: route.when,
-          target: { boardKey: board.boardKey, phaseKey: route.target.phaseKey ?? null, joinClosedIssue: false },
-          on: route.on ?? [...DEFAULT_ROUTE_EVENTS],
-        })),
-      );
+      routes.push(...drafts);
     }
     return { routes, order: body.order ?? saved.order };
   }
@@ -129,8 +138,9 @@ export class IntakeCheck {
   }
 
   async test(scope: StoredBoardScope, registry: BoardRegistry, body: TestBody) {
-    const [saved, item] = await Promise.all([this.#saved(scope, registry), this.#item(scope, registry, body)]);
-    const { routes, order } = this.#draft(saved, body, registry);
+    // The draft is checked before the item is read, so a refused draft never costs a provider fetch.
+    const { routes, order } = this.#draft(await this.#saved(scope, registry), body, registry);
+    const item = await this.#item(scope, registry, body);
     const { resolution, boards } = traceIntakeOrder({ routes, order, facts: item.facts, registry }, { full: true });
     return {
       item: { title: item.title, url: item.url, kind: item.kind, id: item.id },

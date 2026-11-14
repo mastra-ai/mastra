@@ -234,6 +234,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake dry run 
       status: 422,
       body: { error: 'intake_board_not_found' },
     });
+    // A draft rule is held to the same target checks as saving it, rather than quietly landing elsewhere.
+    for (const path of ['/intake/dry-run', '/intake/test']) {
+      expect(
+        await send(path, {
+          ...(path === '/intake/test' && { url: 'https://github.com/acme/app/issues/1' }),
+          boards: [{ boardKey: 'work', routes: [{ name: 'Typo', when: null, target: { phaseKey: 'nope' } }] }],
+        }),
+      ).toMatchObject({ status: 422, body: { error: 'unknown_phase', message: 'Board "work" has no phase "nope".' } });
+    }
     expect(await snapshot()).toEqual(before);
   });
 
