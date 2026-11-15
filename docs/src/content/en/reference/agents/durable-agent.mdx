@@ -417,7 +417,7 @@ Returns: `boolean`. `true` when this process aborted the run locally or can see 
 
 #### `abortThreadStream({ threadId, resourceId?, expectedRunId? })`
 
-Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. When this process runs the thread's active run, or has observed it through `subscribeToThread()`, the abort happens here. A process that never saw the run finds it through the thread's lease and asks the process executing it to stop, publishing the request over the shared PubSub. The lookup runs asynchronously. The method returns what it stopped in this process before the lookup finishes. The server route [`POST /agents/:agentId/threads/abort`](/reference/server/routes#thread-cancellation-routes) awaits the lookup and reports whether a run on another process was asked to stop.
+Aborts the active run on a memory thread with the same abort request as `abortRunStream()`. When this process runs the thread's active run, the abort applies here. When this process has observed the run through `subscribeToThread()`, the abort request is published to the process executing the run, and nothing stops in this process. When the process never saw the run, it looks the run up in the background through the thread's lease and asks the process executing it to stop, publishing the request over the shared PubSub. That lookup runs asynchronously. The method returns before the lookup finishes. The server route [`POST /agents/:agentId/threads/abort`](/reference/server/routes#thread-cancellation-routes) awaits the lookup when the abort wasn't resolved in this process, which is how it reports whether a run on another process was asked to stop.
 
 Pass `expectedRunId` when the request must only stop a specific run. If another queued run becomes active before the request is handled, the method returns `false` without aborting the successor. Omit `expectedRunId` to abort whichever run is active when the request is handled.
 
@@ -429,7 +429,7 @@ const aborted = durableAgent.abortThreadStream({
 })
 ```
 
-Returns: `boolean`. `true` when this process aborted the run. `false` means this process stopped nothing: no run held the thread's lease, the lease named a different run than `expectedRunId`, or the lookup didn't finish before the call returned. Only the `expectedRunId` case leaves the run running by design. In the other two, the background lookup either stops the leased run or finds nothing to stop, and a failed lookup or publish is logged as a warning. Pass `localOnly: true` to keep the abort in this process, and use the thread-abort route above when you need the forwarded outcome reported.
+Returns: `boolean`. `true` when this process aborted the run, or when the abort request was published to the process executing it. A published request doesn't confirm that the other process stopped the run. `false` means this process stopped nothing and the call returned before any abort request was published: no run held the thread's lease, the lease named a different run than `expectedRunId`, the lookup didn't finish in time, or `localOnly: true` kept the abort in this process and left a run owned by another process alone. Only the `expectedRunId` case leaves the run running by design. Without `localOnly` and without an `expectedRunId` mismatch, the background lookup publishes an abort request to the process holding the lease, or finds nothing to publish. A failed lookup or publish is logged as a warning. Use the thread-abort route above when you need the forwarded outcome reported.
 
 ### Recovery
 
