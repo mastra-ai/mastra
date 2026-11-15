@@ -250,7 +250,6 @@ import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
 import { readAgentRunRecord } from './streams/run-records';
 import type { AgentRunRecord } from './streams/run-records';
-import type { AgentStreamsConfig } from './streams/types';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -992,9 +991,6 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Forks share the fallback transport without making it override Mastra registration. */
   #defaultStreamPubsub?: PubSub;
-  /** Execution wrappers configure the same bus without taking over plain-run bookkeeping. */
-  #durableStreamConfig?: AgentStreamsConfig;
-  #streamBusUsesSharedRunLog?: () => boolean;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   #legacyHandler?: AgentLegacyHandler;
@@ -1775,15 +1771,15 @@ export class Agent<
    *
    * @internal
    */
-  __getStreamBus(): AgentStreamBus | undefined {
-    if (!this.#durableStreamConfig && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
+  __getStreamBus(force = false): AgentStreamBus | undefined {
+    if (!force && !areAgentStreamsEnabled(this.#durable, !!this.#mastra)) return undefined;
     if (!this.#streamBus) {
-      const config = this.#durableStreamConfig ?? agentStreamsConfig(this.#durable);
+      const config = agentStreamsConfig(this.#durable);
       this.#streamBus = new AgentStreamBus(
         { ...config, pubsub: config.pubsub ?? this.#pubsub },
         {
           getMastra: () => this.#mastra,
-          usesSharedRunLog: () => this.#streamBusUsesSharedRunLog?.() ?? this.__usesSharedRunLog(),
+          usesSharedRunLog: () => this.__usesSharedRunLog(),
           warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
         },
         (this.#defaultStreamPubsub ??= new EventEmitterPubSub()),
@@ -1791,24 +1787,6 @@ export class Agent<
       if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
     }
     return this.#streamBus;
-  }
-
-  /** @internal Configure the wrapped agent's bus before durable execution uses it. */
-  __configureDurableStreams(config: AgentStreamsConfig, usesSharedRunLog: () => boolean): void {
-    this.#durableStreamConfig = {
-      ...agentStreamsConfig(this.#durable),
-      ...this.#durableStreamConfig,
-      ...Object.fromEntries(Object.entries(config).filter(([, value]) => value !== undefined)),
-    };
-    this.#streamBusUsesSharedRunLog = usesSharedRunLog;
-    if (Object.values(config).some(value => value !== undefined)) {
-      if (this.#publishedRuns.size > 0) {
-        this.logger.warn(
-          `[Agent:${this.id}] Wrapping with ${this.#publishedRuns.size} runs in flight: new stream settings apply to new runs only. Drain runs before wrapping or changing pubsub/cache.`,
-        );
-      }
-      this.#streamBus = undefined;
-    }
   }
 
   /** Whether run frames are published by workers on Mastra's shared log. @internal */
@@ -4543,7 +4521,6 @@ export class Agent<
     }
 
     fork.#inheritedPubSub = this.#inheritedPubSub;
-    fork.#durableStreamConfig = this.#durableStreamConfig;
     fork.#defaultStreamPubsub = this.#defaultStreamPubsub ??= new EventEmitterPubSub();
     fork.source = this.source;
     fork._agentNetworkAppend = this._agentNetworkAppend;
