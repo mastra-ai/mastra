@@ -430,6 +430,36 @@ describe('S3Filesystem', () => {
       expect(config.owner).toEqual({ uid: 2001, gid: 2002 });
     });
 
+    it('copies the owner ids from an owner backed by prototype getters', () => {
+      class OwnerWithGetters {
+        #uid: number;
+        #gid: number;
+
+        constructor(uid: number, gid: number) {
+          this.#uid = uid;
+          this.#gid = gid;
+        }
+
+        get uid() {
+          return this.#uid;
+        }
+
+        get gid() {
+          return this.#gid;
+        }
+      }
+
+      const fs = new S3Filesystem({
+        bucket: 'test',
+        region: 'us-east-1',
+        owner: new OwnerWithGetters(2001, 2002),
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 2001, gid: 2002 });
+    });
+
     it('excludes owner if not set', () => {
       const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
 

@@ -251,6 +251,32 @@ describe('GCSFilesystem', () => {
       expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
     });
 
+    it('copies the owner ids from an owner backed by prototype getters', () => {
+      class OwnerWithGetters {
+        #uid: number;
+        #gid: number;
+
+        constructor(uid: number, gid: number) {
+          this.#uid = uid;
+          this.#gid = gid;
+        }
+
+        get uid() {
+          return this.#uid;
+        }
+
+        get gid() {
+          return this.#gid;
+        }
+      }
+
+      const fs = new GCSFilesystem({ bucket: 'test', owner: new OwnerWithGetters(3001, 3002) });
+
+      const config = fs.getMountConfig();
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
     it('excludes owner if not set', () => {
       const fs = new GCSFilesystem({ bucket: 'test' });
 

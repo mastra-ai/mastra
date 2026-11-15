@@ -303,9 +303,10 @@ export class GCSFilesystem extends MastraFilesystem {
     }
 
     if (this.owner) {
-      // Copy it: the mount marker hashes this config, so a caller that mutates
+      // Copy the ids: the mount marker hashes this config, so a caller that mutates
       // the object it passed in must not change the ownership that was mounted.
-      config.owner = { ...this.owner };
+      // Reading the fields also keeps an accessor-backed owner, which a spread would drop.
+      config.owner = { uid: this.owner.uid, gid: this.owner.gid };
     }
 
     return config;
