@@ -78,5 +78,61 @@ import readiness are not runtime proof. Studio qualification needs the shipped
 Stop control, independently measured server termination, persisted reload state,
 second-run isolation, video, and trace. Hosted CI is unverified until it runs.
 
+## CI scenario evidence
+
+With dedicated Redis, Valkey, Postgres, and Toxiproxy services ready, run from
+`pubsub/redis-streams`:
+
+```sh
+STREAM_HARNESS_EVIDENCE_DIR=/absolute/path/to/a/new/evidence-directory pnpm run test:stream-harness:ci
+```
+
+The runner checks real Redis and Valkey routing through Toxiproxy, then runs
+chunks, lifecycle, and faults serially with one worker and no retries. It does
+not start or stop Docker services or invoke the package's Compose test hooks.
+Use a new evidence directory for every run: existing captures cannot be overwritten.
+
+Artifacts include the expected cell manifest, source provenance, service versions,
+per-group stdout/stderr and exit status, and per-cell process journals, raw reader
+captures, classifier results, and cleanup results. Interrupted capture assembly
+retains the available process output. `summary.json` distinguishes evidence
+coverage (`COMPLETE` or `BLOCKED`) from classifier status (`PASS` or `FAIL`).
+`COMPLETE` does not mean product correctness or ticket attribution. Existing
+classifier failures still return nonzero; missing cells, readers, journals, or
+cleanup evidence also fail. Startup failures produce `infrastructure-error.json`.
+
+The Actions job uploads evidence even when tests fail. Its 150-minute budget
+allows the measured 5,700-second fault grid plus 754-second chunks/lifecycle run
+and roughly 42 minutes for setup and runtime variation. Hosted execution remains
+unverified until an authorized push runs the workflow.
+
 Send evidence to the authorized peer for independent verification/deduplication;
 do not repair production behavior or file tickets as part of qualification.
+
+## Public delegation qualification
+
+After the relevant workspace packages have been built, run from this package:
+
+```sh
+STREAM_QUAL_DELEGATION_EVIDENCE_DIR="$(mktemp -d)" pnpm exec tsx test-fixtures/qualification-delegation.ts
+```
+
+The fixture executes 22 cells: nine supervisor/child success pairings, five
+approval/resume pairings, five decline pairings, and three heterogeneous sibling
+pairs. Siblings approve one protected tool and decline the other. Every cell
+checks model HTTP counts, actual tool effects, parent/child IDs, projected nested
+frames, completion, and cleanup. Raw journals, a pairing manifest, build/source
+hashes, and a summary are written to the evidence directory; failures exit nonzero.
+
+Child source frames come from the supported `defaultOptions.onChunk` callback,
+not an invented child `observe()` API. For parallel siblings the parent reader
+stays open until both approvals arrive; `closeOnSuspend: true` can end it after
+only the first sibling. Approval decisions address the outer supervisor run and
+tool-call IDs, independently of the delegated IDs.
+
+Durable children pass the exported `isAgentCompatible` capability guard before
+registration. This is runtime qualification, not a claim that durable stream
+result types statically satisfy `SubAgentStreamResult` (which requires `text`
+and `messageList`). No production typing or behavior changes are made here.
+This fixture uses one process and in-memory LibSQL; it does not prove restart
+safety, cross-process observation, or Studio behavior.

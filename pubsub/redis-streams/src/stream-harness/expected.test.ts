@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
-import { checkCell, expectedCapture, parseFrames } from './expected';
+import { compareRun } from './compare';
+import {
+  baselineFrames,
+  checkCell,
+  expectedCapture,
+  knownDifferencesFor,
+  observationFor,
+  parseFrames,
+} from './expected';
 import { UNFILED, UNFILED_DIFFERENCES } from './known-differences';
 import { normalise } from './normalise';
 import { getScenario, SCENARIO_NAMES } from './scenarios';
@@ -20,6 +28,146 @@ const plainOf = (cell: Cell): Cell => ({ ...cell, engine: 'plain' });
 const clone = (capture: RunCapture): RunCapture => JSON.parse(JSON.stringify(capture));
 const types = (frames: Frame[] | undefined) => (frames ?? []).map(f => f.type).join(',');
 
+const iterationStartTopics = {
+  'tool-approval':
+    'start,iteration-start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-delta,tool-call-input-streaming-end,tool-call,tool-call-approval,suspended,tool-call-resumed,tool-result[{"value":"found:harness"}],step-finish,iteration-complete,iteration-start,step-start,text-start,text-delta[The lookup found it.],text-end,step-finish,iteration-complete,finish',
+  'run-id-reuse':
+    'start,iteration-start,step-start,text-start,text-delta[First answer.],text-end,step-finish,iteration-complete,finish,start,iteration-start,step-start,text-start,text-delta[Second answer.],text-end,step-finish,iteration-complete,finish',
+  abort: 'start,iteration-start,step-start,text-start,text-delta,finish',
+  'direct-abort': 'start,iteration-start,step-start,text-start,text-delta,finish',
+  'structured-output':
+    'start,iteration-start,step-start,text-start,text-delta[{"answer":"forty-two"}],text-end,step-finish,iteration-complete,finish',
+  'structured-invalid':
+    'start,iteration-start,step-start,text-start,text-delta[{"answer":42}],text-end,step-finish,iteration-complete,finish',
+  'tool-throws':
+    'start,iteration-start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-input-streaming-end,tool-call,tool-error,step-finish,iteration-complete,iteration-start,step-start,text-start,text-delta[The tool failed.],text-end,step-finish,iteration-complete,finish',
+  'tool-undefined':
+    'start,iteration-start,step-start,tool-call-input-streaming-start,tool-call-delta,tool-call-input-streaming-end,tool-call,tool-result,step-finish,iteration-complete,iteration-start,step-start,text-start,text-delta[The tool returned nothing.],text-end,step-finish,iteration-complete,finish',
+  'input-tripwire': 'start,iteration-start,tripwire[blocked by harness],iteration-complete,finish',
+};
+const iterationStartCells: Cell[] = Object.keys(iterationStartTopics).flatMap(scenario =>
+  LAYOUTS.flatMap(layout => (['durable', 'evented'] as const).map(engine => ({ scenario, engine, ...layout }))),
+);
+
+it('keeps the COR-1557 manifest at eight original plus 76 accepted plus six recovered cells', () => {
+  expect(iterationStartCells).toHaveLength(90);
+  expect(new Set(iterationStartCells.map(cell => JSON.stringify(cell))).size).toBe(90);
+});
+
+it.each(iterationStartCells.filter(cell => cell.scenario === 'input-tripwire'))(
+  'accepts only the offset-one tripwire boundary: $engine / $backend / $topology',
+  cell => {
+    const topic = expectedCapture(cell).topic!;
+    expect(topic.map(frame => frame.type)).toEqual([
+      'start',
+      'iteration-start',
+      'tripwire',
+      'iteration-complete',
+      'finish',
+    ]);
+    expect(topic[1]).toEqual({ type: 'iteration-start' });
+  },
+);
+
+// Topic sequences retained from the lifecycle rerun and the full-grid capture, not generated expectations.
+describe.each(iterationStartCells)('COR-1557 $scenario / $engine / $backend / $topology', cell => {
+  const capturedTopic = () =>
+    parseFrames(
+      iterationStartTopics[cell.scenario as keyof typeof iterationStartTopics],
+      baselineFrames(cell.scenario),
+    ).map(frame =>
+      frame.type === 'tool-error'
+        ? {
+            ...frame,
+            shape:
+              `isError=false keys=${cell.backend === 'memory' ? '__mastraSpanErrorOrigin|' : ''}` +
+              'message|name|stack type=object message="kaboom"',
+          }
+        : frame,
+    );
+
+  it('classifies only the evidenced topic boundary and leaves the capture unchanged', () => {
+    const capture = clone(expectedCapture(cell));
+    capture.topic = capturedTopic();
+    const before = clone(capture);
+    const { verdict, drift } = checkCell(cell, capture, expectedCapture(plainOf(cell)));
+    expect(verdict).toEqual({ unlisted: [], stale: [] });
+    expect(drift).toEqual([]);
+    expect(capture).toEqual(before);
+    const pins = knownDifferencesFor(cell).filter(pin => pin.reader === 'topic');
+    const boundaries = pins.filter(pin => pin.evidence.startsWith('iteration-start replay boundary'));
+    expect(boundaries).toHaveLength(2);
+    expect(boundaries.every(pin => pin.ticket === 'COR-1557' && pin.cause === 'engine')).toBe(true);
+  });
+
+  it('preserves the historical topic attribution independently of iteration-start', () => {
+    const pins = knownDifferencesFor(cell).filter(
+      pin => pin.reader === 'topic' && !pin.evidence.startsWith('iteration-start replay boundary'),
+    );
+    const unamended = clone(expectedCapture(cell));
+    unamended.topic = capturedTopic().filter(frame => frame.type !== 'iteration-start');
+    const original = compareRun(cell, unamended, expectedCapture(plainOf(cell)))
+      .filter(difference => difference.reader === 'topic')
+      .map(difference => {
+        const own = observationFor(cell, 'topic');
+        const attribution =
+          difference.against === 'live'
+            ? (own?.againstLive ?? own ?? observationFor(cell, 'live'))
+            : (own?.againstPlain ?? own ?? observationFor(plainOf(cell), 'topic'));
+        expect(attribution).toBeDefined();
+        return {
+          against: difference.against,
+          ticket: attribution!.ticket,
+          cause: attribution!.cause,
+          evidence: attribution!.evidence,
+        };
+      });
+    expect(pins.map(({ against, ticket, cause, evidence }) => ({ against, ticket, cause, evidence }))).toEqual(
+      original,
+    );
+    if (cell.scenario === 'structured-output' || cell.scenario === 'structured-invalid') {
+      expect(pins.some(pin => pin.ticket === 'COR-1547')).toBe(true);
+    }
+  });
+
+  it.each(['missing', 'extra', 'moved', 'shaped', 'terminal', 'payload', 'historical', 'reader'])(
+    'rejects %s drift beside the authorized boundary',
+    mutation => {
+      const capture = clone(expectedCapture(cell));
+      const topic = capturedTopic();
+      capture.topic = topic;
+      if (mutation === 'missing') topic.splice(1, 1);
+      if (mutation === 'extra') topic.splice(1, 0, { type: 'iteration-start' });
+      if (mutation === 'moved') topic.splice(2, 0, ...topic.splice(1, 1));
+      if (mutation === 'shaped') topic[1] = { type: 'iteration-start', shape: 'invented' };
+      if (mutation === 'terminal') topic.pop();
+      if (mutation === 'payload') {
+        topic.find(frame => frame.type === 'text-delta' || frame.type === 'tripwire')!.shape = 'invented';
+      }
+      if (mutation === 'historical') {
+        const index = topic.findIndex(frame => frame.type === 'iteration-complete');
+        if (index === -1) topic.splice(topic.length - 1, 0, { type: 'abort' });
+        else topic.splice(index, 1);
+      }
+      if (mutation === 'reader') capture['observe-0']!.splice(1, 0, { type: 'iteration-start' });
+      const { verdict, drift } = checkCell(cell, capture, expectedCapture(plainOf(cell)));
+      expect(verdict.unlisted.length + verdict.stale.length + drift.length).toBeGreaterThan(0);
+    },
+  );
+
+  it.each(LAYOUTS)('rejects the boundary on plain: $backend / $topology', scope => {
+    const other: Cell = { ...cell, ...scope, engine: 'plain' };
+    const capture = clone(expectedCapture(other));
+    capture.topic = capturedTopic();
+    const { verdict, drift } = checkCell(
+      other,
+      capture,
+      other.engine === 'plain' ? undefined : expectedCapture(plainOf(other)),
+    );
+    expect(verdict.unlisted.length + verdict.stale.length + drift.length).toBeGreaterThan(0);
+  });
+});
+
 describe('checkCell with the real observations', () => {
   it('passes every grid cell whose capture matches its observations', () => {
     for (const scenario of SCENARIO_NAMES) {
@@ -34,7 +182,7 @@ describe('checkCell with the real observations', () => {
               {
                 reader: 'live',
                 kind: 'stale-symptom',
-                detail: expect.stringContaining('no pinned fault symptom reproduced'),
+                detail: 'COR-1561: no pinned fault symptom reproduced',
               },
             ]);
           } else {
@@ -82,17 +230,20 @@ describe('checkCell with the real observations', () => {
   it('fails stale when a listed difference is fixed in just one of the cells it applies to', () => {
     const fixed = durable('redis');
     const untouched = durable('valkey');
-    // The durable topic's extra iteration-complete frames are listed for every layout.
+    // Remove both listed engine markers to make the topic agree with the control.
     expect(types(expectedCapture(fixed).topic)).toContain('iteration-complete');
+    expect(types(expectedCapture(fixed).topic)).toContain('iteration-start');
 
     const capture = clone(expectedCapture(fixed));
-    capture.topic = capture.topic!.filter(f => f.type !== 'iteration-complete');
+    capture.topic = capture.topic!.filter(f => f.type !== 'iteration-complete' && f.type !== 'iteration-start');
     const fixedCheck = checkCell(fixed, capture, expectedCapture(plainOf(fixed)));
     const untouchedCheck = checkCell(untouched, expectedCapture(untouched), expectedCapture(plainOf(untouched)));
 
     expect(fixedCheck.verdict.unlisted).toEqual([]);
     expect(fixedCheck.verdict.stale.map(d => `${d.ticket} ${d.reader} vs ${d.against}`).sort()).toEqual([
       'COR-1557 topic vs live',
+      'COR-1557 topic vs live',
+      'COR-1557 topic vs plain',
       'COR-1557 topic vs plain',
     ]);
     expect(fixedCheck.drift.map(d => d.reader)).toEqual(['topic']);

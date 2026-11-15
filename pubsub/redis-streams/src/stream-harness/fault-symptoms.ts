@@ -11,6 +11,29 @@ export interface Symptom {
   observed: Frame[];
 }
 
+export interface RetryTrace {
+  node: string;
+  pid: number;
+  sequence: number;
+  boundary: 'dispatch' | 'handle' | 'nonretryable' | 'result' | 'nack' | 'model';
+  delivery: string;
+  eventId: string;
+  workflowRunId: string;
+  attempt: number;
+  invocation?: string;
+  errorId?: string;
+  agentRunId?: string;
+  ok?: boolean;
+  retry?: boolean;
+  requestNumber?: number;
+}
+
+export interface RetryEvidence {
+  runId: string;
+  modelRequests: number;
+  records: RetryTrace[];
+}
+
 const FAULTS = ['pause-5s', 'pause-60s', 'connection-reset'];
 const REPLAY = {
   ticket: 'COR-1561',
@@ -19,10 +42,22 @@ const REPLAY = {
     'caching-pubsub.ts:294-305,422-454; replay-duplicate-current.txt: successful append loses reply, unindexed delivery is backfilled again',
 } as const;
 const VALKEY = {
+  ticket: 'COR-1561',
+  cause: 'plain-layer',
+  evidence:
+    'caching-pubsub.ts:294-305,422-454; COR-1561 Valkey trace: failed indexed writes publish unindexed live chunks and leave replay holes',
+} as const;
+const THREAD_PUMP = {
   ticket: 'COR-1562',
+  cause: 'plain-layer',
+  evidence:
+    'thread-stream-runtime.ts:3826-3839,3891,3924-3930; COR-1562 trace: rejected publish terminates the plain thread pump',
+} as const;
+const VALKEY_STALL = {
+  ticket: 'UNATTRIBUTED_VALKEY_STALL',
   cause: 'untraced',
   evidence:
-    'grid.ts:279; p4-fault-grid.txt: Valkey garbled/missing text, timed-out caller and unavailable history; root cause not yet traced',
+    'p4-fault-grid.txt: exact reader-specific Valkey partial/timeout/unavailable-history envelopes; caller-stall cause not established by cache corruption or thread-pump trace',
 } as const;
 const APPROVAL = {
   ticket: 'UNFILED_APPROVAL_ORDER',
@@ -176,12 +211,101 @@ function partialValkey(frames: Frame[], reader: ReaderName, cell: Cell, answer: 
   );
 }
 
+const NONRETRYABLE_REDELIVERY = {
+  ticket: 'COR-1574',
+  cause: 'engine' as const,
+  evidence:
+    'execution-fence.ts:90-107; workflow-event-processor/index.ts:5058-5080; ' +
+    'joined delivery/handle/model trace: non-retryable failure returned retry, nack completed, same event called model twice',
+};
+
+function tracedRedelivery(cell: Cell, evidence?: RetryEvidence): boolean {
+  if (
+    cell.scenario !== 'pause-60s' ||
+    cell.engine !== 'evented' ||
+    cell.backend !== 'redis' ||
+    cell.topology !== 'single' ||
+    !evidence ||
+    evidence.modelRequests !== 2
+  )
+    return false;
+  const failures = evidence.records.filter(record => record.boundary === 'nonretryable');
+  if (failures.length !== 1) return false;
+  const failure = failures[0]!;
+  if (failure.errorId !== 'DURABLE_AGENT_EXECUTION_UNVERIFIED' || failure.agentRunId !== evidence.runId) return false;
+  const records = evidence.records.filter(record => record.eventId === failure.eventId);
+  const boundaries = [
+    'dispatch',
+    'handle',
+    'model',
+    'nonretryable',
+    'result',
+    'nack',
+    'dispatch',
+    'handle',
+    'model',
+    'result',
+  ];
+  if (
+    records.length !== boundaries.length ||
+    evidence.records.filter(record => record.boundary === 'model').length !== 2
+  )
+    return false;
+  if (
+    records.some(
+      (record, index) =>
+        record.boundary !== boundaries[index] ||
+        !record.eventId ||
+        !record.workflowRunId ||
+        record.node !== failure.node ||
+        record.pid !== failure.pid ||
+        record.workflowRunId !== failure.workflowRunId ||
+        !Number.isSafeInteger(record.sequence) ||
+        record.sequence <= 0 ||
+        (index > 0 && record.sequence <= records[index - 1]!.sequence),
+    )
+  )
+    return false;
+  const first = records.slice(0, 6);
+  const second = records.slice(6);
+  if (!first[0]!.delivery || !second[0]!.delivery || first[0]!.delivery === second[0]!.delivery) return false;
+  for (const [attempt, delivery] of [first, second].entries()) {
+    const invocation = delivery[1]!.invocation;
+    if (!invocation || (attempt === 1 && invocation === first[1]!.invocation)) return false;
+    if (
+      delivery.some(
+        record =>
+          record.attempt !== attempt + 1 ||
+          record.delivery !== delivery[0]!.delivery ||
+          (!['dispatch', 'nack'].includes(record.boundary) && record.invocation !== invocation),
+      )
+    )
+      return false;
+  }
+  return (
+    first[2]!.requestNumber === 1 &&
+    second[2]!.requestNumber === 2 &&
+    first[4]!.ok === false &&
+    first[4]!.retry === true &&
+    second[3]!.ok === true
+  );
+}
+
+function redeliveryFrames(actual: Frame[], expected: Frame[], reader: ReaderName): boolean {
+  if (actual.length !== expected.length + 3) return false;
+  if (actual[1]?.type !== 'step-start' || actual[2]?.type !== 'text-start' || actual[3]?.type !== 'text-delta')
+    return false;
+  if (diffFrames(expected.slice(1, 3), actual.slice(1, 3))) return false;
+  if (actual[3].shape !== (reader === 'topic' ? 'This ans' : 'This ans ans')) return false;
+  return !diffFrames(expected, [actual[0]!, ...actual.slice(4)]);
+}
+
 /**
  * Authorized fault allowances are grammars, not captures copied into expected
  * output. Only a fully validated reader is projected; its original frames and
  * attribution remain in the report. All other frames use the exact comparator.
  */
-export function projectSymptoms(cell: Cell, capture: RunCapture, expected: RunCapture) {
+export function projectSymptoms(cell: Cell, capture: RunCapture, expected: RunCapture, retryEvidence?: RetryEvidence) {
   const projected = { ...capture };
   const symptoms: Symptom[] = [];
   const accept = (reader: ReaderName, attribution: Omit<Symptom, 'reader' | 'observed' | 'cell'>) => {
@@ -208,18 +332,27 @@ export function projectSymptoms(cell: Cell, capture: RunCapture, expected: RunCa
 
   if (FAULTS.includes(cell.scenario) && cell.backend !== 'memory') {
     const answer = expected.live!.find(frame => frame.type === 'text-delta')!.shape!;
+    const redelivery = tracedRedelivery(cell, retryEvidence);
     for (const reader of READERS) {
       const actual = capture[reader];
       const reference = expected[reader]!;
       if (!actual || !diffFrames(reference, actual)) continue;
+      if (redelivery && redeliveryFrames(actual, reference, reader)) {
+        accept(reader, NONRETRYABLE_REDELIVERY);
+        continue;
+      }
       if (reader === 'live' && cell.engine === 'plain') continue;
       if (cell.backend === 'redis' && reader === 'topic') continue;
       if (cell.backend === 'valkey') {
-        if (
-          sameExceptText(actual, reference, text => valkeyText(text, answer)) ||
-          partialValkey(actual, reader, cell, answer)
-        ) {
+        if (sameExceptText(actual, reference, text => valkeyText(text, answer))) {
           accept(reader, VALKEY);
+        } else if (partialValkey(actual, reader, cell, answer)) {
+          const threadPump =
+            cell.engine === 'plain' &&
+            cell.topology === 'single' &&
+            reader === 'thread' &&
+            actual.at(-1)?.type === '(threw)';
+          accept(reader, threadPump ? THREAD_PUMP : VALKEY_STALL);
         }
         continue;
       }

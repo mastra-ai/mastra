@@ -95,3 +95,96 @@ jobs:
         working-directory: pubsub/redis-streams
         env:
           NODE_OPTIONS: '--max_old_space_size=8192'
+
+  stream-harness:
+    name: Stream scenario evidence (Redis + Valkey)
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-26.04
+    # Measured fault grids: up to 5700s; chunks/lifecycle: 754s.
+    # 150 minutes includes ~42 minutes for setup and runtime variation.
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.7-pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:8-alpine
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      valkey:
+        image: valkey/valkey:9-alpine
+        ports:
+          - 6383:6379
+        options: >-
+          --health-cmd "valkey-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      toxiproxy:
+        image: ghcr.io/shopify/toxiproxy:2.12.0
+        ports:
+          - 8474:8474
+          - 8661:8661
+          - 8663:8663
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+      REDIS_URL: redis://127.0.0.1:6381
+      VALKEY_URL: redis://127.0.0.1:6383
+      POSTGRES_CONNECTION_STRING: postgres://postgres:postgres@127.0.0.1:5436/postgres
+      TOXIPROXY_URL: http://127.0.0.1:8474
+      STREAM_HARNESS_EVIDENCE_DIR: ${{ runner.temp }}/stream-harness-evidence
+      NODE_OPTIONS: '--max_old_space_size=8192'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+      - name: Build harness dependencies
+        run: pnpm turbo build --filter @mastra/redis-streams... --concurrency=1
+      - name: Typecheck qualification tests and fixtures
+        run: pnpm exec tsc --noEmit -p pubsub/redis-streams/tsconfig.qualification.json
+      - name: Verify harness guards
+        working-directory: pubsub/redis-streams
+        run: pnpm exec vitest run src/stream-harness/compare.test.ts src/stream-harness/expected.test.ts src/stream-harness/fault-symptoms.test.ts src/stream-harness/normalise.test.ts src/stream-harness/observations.test.ts src/stream-harness/report.test.ts --maxWorkers=1 --retry=0 --reporter=dot
+      # Actions owns these services; do not run package pretest/posttest Compose hooks.
+      - name: Run serial stream scenarios and retain evidence
+        working-directory: pubsub/redis-streams
+        run: pnpm run test:stream-harness:ci
+      - name: Upload stream evidence including partial captures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: stream-harness-evidence
+          path: ${{ runner.temp }}/stream-harness-evidence
+          if-no-files-found: error
+          retention-days: 7

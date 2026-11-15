@@ -25,6 +25,8 @@
  *   {"cmd":"scanKeys","id","runId","threadId"}                        -> frames(keys)
  *   {"cmd":"exit"}
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { createInterface } from 'node:readline';
 
@@ -33,9 +35,10 @@ import { Agent } from '@mastra/core/agent';
 import { DurableAgent, EventedAgent } from '@mastra/core/agent/durable';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
-import type { PubSub } from '@mastra/core/events';
+import type { EventCallback, PubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { WorkflowEventProcessor } from '@mastra/core/workflows/evented';
 import { createNodeServer } from '@mastra/deployer/server';
 import { LibSQLStore } from '@mastra/libsql';
 import { ValkeyServerCache } from '@mastra/valkey';
@@ -45,6 +48,7 @@ import { z } from 'zod';
 
 import { nodeRedisPreset, RedisServerCache } from '../../../stores/redis/src/cache';
 import { RedisStreamsPubSub } from '../src/index';
+import type { RetryTrace } from '../src/stream-harness/fault-symptoms';
 import {
   classifyInterruptedText,
   fromChunk,
@@ -77,6 +81,74 @@ async function glideClient(url: string): Promise<any> {
 
 function emit(event: Record<string, unknown>) {
   process.stdout.write(`${JSON.stringify({ node: NODE_ID, ...event })}\n`);
+}
+
+type Delivery = Pick<RetryTrace, 'delivery' | 'eventId' | 'workflowRunId' | 'attempt' | 'invocation'>;
+const deliveryScope = new AsyncLocalStorage<Delivery>();
+let traceSequence = 0;
+let modelRequests = 0;
+function retryTrace(boundary: RetryTrace['boundary'], extra: Partial<RetryTrace> = {}) {
+  const delivery = deliveryScope.getStore();
+  if (!delivery) return;
+  emit({
+    type: 'retry-trace',
+    record: { ...delivery, node: NODE_ID, pid: process.pid, sequence: ++traceSequence, boundary, ...extra },
+  });
+}
+
+// Observe both joins independently; never associate a request by wall-clock proximity.
+const handle = WorkflowEventProcessor.prototype.handle;
+WorkflowEventProcessor.prototype.handle = function (event) {
+  const delivery = deliveryScope.getStore();
+  if (!delivery || event.id !== delivery.eventId || event.runId !== delivery.workflowRunId) {
+    return handle.call(this, event);
+  }
+  return deliveryScope.run({ ...delivery, invocation: randomUUID() }, async () => {
+    retryTrace('handle');
+    const result = await handle.call(this, event);
+    retryTrace('result', result);
+    return result;
+  });
+};
+
+function traceTransport(transport: PubSub) {
+  const subscribe = transport.subscribe.bind(transport);
+  const unsubscribe = transport.unsubscribe.bind(transport);
+  const callbacks = new Map<string, Map<EventCallback, EventCallback>>();
+  transport.subscribe = (topic, callback, options) => {
+    let byCallback = callbacks.get(topic);
+    if (!byCallback) callbacks.set(topic, (byCallback = new Map()));
+    let wrapped = byCallback.get(callback);
+    if (!wrapped) {
+      wrapped = (event, ack, nack, extend) => {
+        if (event.type !== 'workflow.step.run') return callback(event, ack, nack, extend);
+        const delivery: Delivery = {
+          delivery: randomUUID(),
+          eventId: event.id,
+          workflowRunId: event.runId,
+          attempt: event.deliveryAttempt ?? 1,
+        };
+        return deliveryScope.run(delivery, () => {
+          retryTrace('dispatch');
+          const tracedNack = nack
+            ? async () => {
+                await nack();
+                retryTrace('nack');
+              }
+            : undefined;
+          return callback(event, ack, tracedNack, extend);
+        });
+      };
+      byCallback.set(callback, wrapped);
+    }
+    return subscribe(topic, wrapped, options);
+  };
+  transport.unsubscribe = async (topic, callback) => {
+    const byCallback = callbacks.get(topic);
+    await unsubscribe(topic, byCallback?.get(callback) ?? callback);
+    byCallback?.delete(callback);
+    if (!byCallback?.size) callbacks.delete(topic);
+  };
 }
 
 const tools = {
@@ -181,8 +253,20 @@ async function main() {
   // Reads the run topic's replay log; only getHistory is used.
   const tap = new CachingPubSub(new EventEmitterPubSub(), tapCache);
 
+  traceTransport(transport);
   const cleanupTimeoutMs = CLEANUP_MS ? Number(CLEANUP_MS) : undefined;
-  const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${LLM_URL}/v1` });
+  const openai = createOpenAI({
+    apiKey: 'aimock-test-key',
+    baseURL: `${LLM_URL}/v1`,
+    fetch: (input, init) => {
+      const requestNumber = ++modelRequests;
+      const delivery = deliveryScope.getStore();
+      // An unjoined request is evidence of a missing join, never of zero calls.
+      emit({ type: 'model-request', requestNumber, delivery, pid: process.pid });
+      retryTrace('model', { requestNumber });
+      return fetch(input, init);
+    },
+  });
   const base = new Agent({
     id: 'harness-agent',
     name: 'Harness Agent',
@@ -207,6 +291,32 @@ async function main() {
     agents: { 'harness-agent': agent as any },
     ...(PORT ? { server: { port: Number(PORT) } } : {}),
   });
+  const diagnosticLogger = mastra.getLogger();
+  const logError = diagnosticLogger.error.bind(diagnosticLogger);
+  diagnosticLogger.error = (message, ...args: unknown[]) => {
+    if (message === 'WorkflowEventProcessor.handle: error processing event') {
+      const detail = args[0];
+      if (detail && typeof detail === 'object' && 'error' in detail) {
+        const error = detail.error;
+        if (
+          error &&
+          typeof error === 'object' &&
+          'isNonRetryable' in error &&
+          error.isNonRetryable === true &&
+          'id' in error &&
+          typeof error.id === 'string' &&
+          'details' in error &&
+          error.details &&
+          typeof error.details === 'object' &&
+          'runId' in error.details &&
+          typeof error.details.runId === 'string'
+        ) {
+          retryTrace('nonretryable', { errorId: error.id, agentRunId: error.details.runId });
+        }
+      }
+    }
+    logError(message, ...args);
+  };
   const registered: any = mastra.getAgent('harness-agent' as any);
 
   const threads = new Map<string, { raw: RawFrame[]; unsubscribe: () => void; done: Promise<void> }>();

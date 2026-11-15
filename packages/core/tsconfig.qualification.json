@@ -1,0 +1,6 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src/loop/test-utils/aimock/scenarios/parity-sub-agent-delegation.scenario.test.ts"],
+  "exclude": ["node_modules"]
+}

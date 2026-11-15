@@ -6,10 +6,12 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished } from 'vites
 import { getFreePort, makeStorageDir } from '../../test-fixtures/harness';
 import { formatVerdict } from './compare';
 import { checkCell } from './expected';
+import type { RetryEvidence } from './fault-symptoms';
 import { httpAbort, httpObserve } from './http-observe';
 import { HarnessNode } from './node';
 import type { NodeOptions } from './node';
 import { normalise, withoutInterruptedText } from './normalise';
+import { writeCellEvidence } from './report';
 import { ABORT_ANSWER, SCENARIO_GROUPS, getScenario } from './scenarios';
 import type { Scenario, ScenarioGroup } from './scenarios';
 import { createProxy } from './toxiproxy';
@@ -20,6 +22,7 @@ const AGENT_ID = 'harness-agent';
 const RESOURCE = 'harness-user';
 const skipRedis = process.env.SKIP_REDIS_TESTS === '1';
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const retryEvidence = new WeakMap<RunCapture, RetryEvidence>();
 
 /** The processes a scenario runs on; `reader` is `publisher` in the single topology. */
 interface Nodes {
@@ -60,13 +63,20 @@ function startStream(publisher: HarnessNode, scenario: Scenario, runId: string, 
 /**
  * Attaches `observe()` once the first step has started on the publisher, and
  * (durable, evented) once the run's snapshot is persisted, so the observer
- * sees the same run state on every run. The model's first token is 500ms out,
- * so the observer is attached before any text exists.
+ * sees the same run state on every run. Preparation-rejected input has no
+ * workflow snapshot, so that scenario observes without the snapshot gate.
+ * The model's first token is 500ms out, before which the observer attaches.
  */
-async function observeMid(reader: HarnessNode, started: Promise<unknown>, runId: string, timeoutMs = 8_000) {
+async function observeMid(
+  reader: HarnessNode,
+  started: Promise<unknown>,
+  runId: string,
+  timeoutMs = 8_000,
+  afterPersisted = true,
+) {
   await started;
   return reader.frames(
-    { cmd: 'observe', runId, reader: 'observe-mid', afterPersisted: true, timeoutMs },
+    { cmd: 'observe', runId, reader: 'observe-mid', afterPersisted, timeoutMs },
     'observe-mid',
     timeoutMs + 5_000,
   );
@@ -92,7 +102,7 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     const runId = randomUUID();
     const stopThread = await subscribeThread(nodes.reader, `thread-${runId}`);
     const turn = startStream(nodes.publisher, scenario, runId, `thread-${runId}`);
-    const mid = observeMid(nodes.reader, turn.event('step-started'), runId);
+    const mid = observeMid(nodes.reader, turn.event('step-started'), runId, 8_000, scenario.name !== 'input-tripwire');
     const live = await turn.live;
     const observe = await mid;
     const capture: RunCapture = {
@@ -317,12 +327,21 @@ const FLOWS: Record<NonNullable<Scenario['flow']>, (nodes: Nodes, scenario: Scen
     );
     if (liveResult.status === 'rejected') throw liveResult.reason;
     if (observeResult.status === 'rejected') throw observeResult.reason;
-    return {
+    const capture: RunCapture = {
       live: liveResult.value,
       'observe-mid': observeResult.value,
       ...(await readBack(nodes, runId)),
       thread: await stopThread(35_000),
     };
+    const nodeEvents = [...new Set([nodes.publisher, nodes.reader])].flatMap(node => node.events);
+    const evidence: RetryEvidence = {
+      runId,
+      modelRequests: nodeEvents.filter(event => event.type === 'model-request').length,
+      records: nodeEvents.filter(event => event.type === 'retry-trace').map(event => event.record),
+    };
+    retryEvidence.set(capture, evidence);
+    console.log('RETRY-EVIDENCE', JSON.stringify(evidence));
+    return capture;
   },
   async 'publisher-death'(nodes, scenario) {
     const runId = randomUUID();
@@ -493,14 +512,34 @@ export function defineGrid(group: ScenarioGroup) {
           async name => {
             const scenario = getScenario(name);
             const cell: Cell = { scenario: name, engine, backend, topology };
+            writeCellEvidence(cell, { stage: 'started', value: { group } });
             let own: Nodes | undefined;
             let capture: RunCapture;
             let proxy: Awaited<ReturnType<typeof createProxy>> | undefined;
             let cleanupPromise: Promise<PromiseSettledResult<unknown>[]> | undefined;
             const cleanup = () => (cleanupPromise ??= Promise.allSettled([stopNodes(own), proxy?.close()]));
+            let nodesRecorded = false;
+            const recordNodes = () => {
+              if (nodesRecorded) return;
+              const nodes = own ?? shared;
+              writeCellEvidence(cell, {
+                stage: 'nodes',
+                value: {
+                  publisher: nodes && { events: nodes.publisher.events, stderr: nodes.publisher.stderr },
+                  reader:
+                    nodes && nodes.reader !== nodes.publisher
+                      ? { events: nodes.reader.events, stderr: nodes.reader.stderr }
+                      : undefined,
+                },
+              });
+              nodesRecorded = true;
+            };
             onTestFinished(async () => {
+              // Capture partial child output even when Vitest interrupts capture assembly.
+              recordNodes();
               const results = await cleanup();
               const errors = results.filter(result => result.status === 'rejected').map(result => result.reason);
+              writeCellEvidence(cell, { stage: 'cleanup', value: { errors: errors.map(String) } });
               if (errors.length) throw new AggregateError(errors, 'Failed to clean up harness cell');
             });
             try {
@@ -515,15 +554,37 @@ export function defineGrid(group: ScenarioGroup) {
                 shared ??= await startNodes(topology, common(engine, backend));
               }
               capture = await FLOWS[scenario.flow ?? 'turn'](own ?? shared!, scenario);
+              writeCellEvidence(cell, { stage: 'raw', value: capture });
+              if (process.env.STREAM_HARNESS_VERBOSE) console.log('RAW-CAPTURE', JSON.stringify({ cell, capture }));
+            } catch (error) {
+              writeCellEvidence(cell, { stage: 'error', value: { message: String(error) } });
+              throw error;
             } finally {
+              recordNodes();
+              if (process.env.STREAM_HARNESS_VERBOSE) {
+                const nodes = own ?? shared;
+                console.log(
+                  'NODE-EVIDENCE',
+                  JSON.stringify({
+                    cell,
+                    time: new Date().toISOString(),
+                    publisher: nodes && { events: nodes.publisher.events, stderr: nodes.publisher.stderr },
+                    reader:
+                      nodes && nodes.reader !== nodes.publisher
+                        ? { events: nodes.reader.events, stderr: nodes.reader.stderr }
+                        : undefined,
+                  }),
+                );
+              }
               await cleanup();
             }
-            if (process.env.STREAM_HARNESS_VERBOSE) console.log('RAW-CAPTURE', JSON.stringify({ cell, capture }));
             if (scenario.ignoreText) capture = withoutInterruptedText(capture, ABORT_ANSWER);
             if (engine === 'plain') plain.set(name, capture);
             if (process.env.STREAM_HARNESS_VERBOSE) console.log('CAPTURE', JSON.stringify({ cell, capture }));
 
-            const { verdict, drift: drifted, symptoms, rawDifferences } = checkCell(cell, capture, plain.get(name));
+            const classified = checkCell(cell, capture, plain.get(name), retryEvidence.get(capture));
+            writeCellEvidence(cell, { stage: 'classified', value: classified });
+            const { verdict, drift: drifted, symptoms, rawDifferences } = classified;
             if (symptoms) console.log('PINNED-SYMPTOMS', JSON.stringify({ cell, symptoms, rawDifferences }));
             const drift = drifted.map(d => `  DRIFT ${d.reader} [${d.kind}] ${d.detail}`);
             const report = [formatVerdict(cell, verdict), ...drift].join('\n');

@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.test.json",
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true
+  },
+  "include": [
+    "src/stream-harness/compare.test.ts",
+    "src/stream-harness/expected.test.ts",
+    "src/stream-harness/fault-symptoms.test.ts",
+    "src/stream-harness/normalise.test.ts",
+    "src/stream-harness/observations.test.ts",
+    "src/stream-harness/report.test.ts",
+    "test-fixtures/stream-harness-ci.ts",
+    "src/stream-harness/grid.ts",
+    "test-fixtures/stream-harness-node.entry.ts",
+    "test-fixtures/qualification-public-import.mjs",
+    "test-fixtures/qualification-harness.mjs",
+    "test-fixtures/qualification-delegation.ts"
+  ],
+  "exclude": ["node_modules", "test-fixtures/cli-project/**"]
+}

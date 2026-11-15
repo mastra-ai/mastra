@@ -1,7 +1,7 @@
 import { compareRun, diffFrames, judgeCell } from './compare';
 import type { Verdict } from './compare';
 import { projectSymptoms } from './fault-symptoms';
-import type { Symptom } from './fault-symptoms';
+import type { RetryEvidence, Symptom } from './fault-symptoms';
 import type { Attribution, Observation } from './known-differences';
 import { BASELINES, FACT_BASELINES, OBSERVATIONS } from './known-differences';
 import { getScenario, readersOf } from './scenarios';
@@ -92,13 +92,42 @@ export function observationFor(cell: Cell, reader: ReaderName): Observation | un
   return found[0];
 }
 
+// COR-1557: retained lifecycle/full-grid captures from #28530 (1bac054f7a9).
+// Offsets refer to the historical topic sequence, before any insertions.
+function iterationStartPositions(cell: Cell): number[] | undefined {
+  if (cell.engine === 'plain') return;
+  const capturedLayout =
+    (cell.topology === 'single' && ['memory', 'redis', 'valkey'].includes(cell.backend)) ||
+    (cell.topology === 'split' && ['redis', 'valkey'].includes(cell.backend));
+  if (!capturedLayout) return;
+  switch (cell.scenario) {
+    case 'tool-approval':
+      return [1, 16];
+    case 'run-id-reuse':
+    case 'tool-throws':
+    case 'tool-undefined':
+      return [1, 9];
+    case 'abort':
+    case 'direct-abort':
+    case 'structured-output':
+    case 'structured-invalid':
+      return [1];
+    case 'input-tripwire':
+      return [1];
+  }
+}
+
 /** What every reader of a cell is expected to deliver: the baseline, unless an observation says otherwise. */
 export function expectedCapture(cell: Cell): RunCapture {
   const capture: RunCapture = {};
   for (const reader of readersOf(getScenario(cell.scenario))) {
     const baseline = baselineFrames(cell.scenario, reader);
     const observation = observationFor(cell, reader);
-    capture[reader] = observation ? parseFrames(observation.frames, baseline) : baseline;
+    const frames = observation ? parseFrames(observation.frames, baseline) : baseline;
+    const positions = reader === 'topic' ? iterationStartPositions(cell) : undefined;
+    capture[reader] = positions
+      ? frames.flatMap((frame, index) => (positions.includes(index) ? [{ type: 'iteration-start' }, frame] : [frame]))
+      : frames;
   }
   return capture;
 }
@@ -115,19 +144,39 @@ export function knownDifferencesFor(cell: Cell): KnownDifference[] {
   const expected = expectedCapture(cell);
   const plainCell: Cell = { ...cell, engine: 'plain' };
   const plain = cell.engine === 'plain' ? undefined : expectedCapture(plainCell);
-  return compareRun(cell, expected, plain).map(difference => {
+  return compareRun(cell, expected, plain).flatMap(difference => {
     const own = observationFor(cell, difference.reader);
     const attribution: Attribution | undefined =
       difference.against === 'live'
         ? (own?.againstLive ?? own ?? observationFor(cell, 'live'))
         : (own?.againstPlain ?? own ?? observationFor(plainCell, difference.reader));
     if (!attribution) throw new Error(`no observation explains ${difference.reader} vs ${difference.against}`);
-    return {
+    const historical = {
       ...difference,
       ticket: attribution.ticket,
       cause: attribution.cause,
       evidence: attribution.evidence,
     };
+    if (difference.reader !== 'topic' || !iterationStartPositions(cell)) return [historical];
+
+    const baseline = baselineFrames(cell.scenario, 'topic');
+    const frames = own ? parseFrames(own.frames, baseline) : baseline;
+    const reference = difference.against === 'live' ? expected.live! : plain!.topic!;
+    const originalDifference = diffFrames(reference, frames);
+    // A sequence row can contain both the historical divergence and the new boundary.
+    // Preserve both causes rather than replacing the historical attribution.
+    if (difference.kind !== 'sequence' || originalDifference?.detail === difference.detail) return [historical];
+    return [
+      ...(originalDifference ? [historical] : []),
+      {
+        ...difference,
+        ticket: 'COR-1557',
+        cause: 'engine' as const,
+        evidence:
+          'iteration-start replay boundary from #28530 (1bac054f7a9), durable/evented run topic only ' +
+          '(agent/streams/events.ts:80-89; agent/durable/workflows/steps/llm-execution.ts:311).',
+      },
+    ];
   });
 }
 
@@ -140,10 +189,16 @@ export interface CellCheck {
 }
 
 /** Compare original frames first; keep every authorized symptom visible. */
-export function checkCell(cell: Cell, capture: RunCapture, plain?: RunCapture): CellCheck {
+export function checkCell(
+  cell: Cell,
+  capture: RunCapture,
+  plain?: RunCapture,
+  retryEvidence?: RetryEvidence,
+): CellCheck {
   const rawDifferences = compareRun(cell, capture, plain);
   const expected = expectedCapture(cell);
-  const own = projectSymptoms(cell, capture, expected);
+  // A traced exception cannot stand in for the required plain-engine comparison.
+  const own = projectSymptoms(cell, capture, expected, plain ? retryEvidence : undefined);
   const plainCell: Cell = { ...cell, engine: 'plain' };
   const reference =
     plain && cell.engine !== 'plain' ? projectSymptoms(plainCell, plain, expectedCapture(plainCell)) : undefined;
@@ -156,7 +211,7 @@ export function checkCell(cell: Cell, capture: RunCapture, plain?: RunCapture): 
     drift.push({
       reader: 'live',
       kind: 'stale-symptom',
-      detail: `${cell.backend === 'redis' ? 'COR-1561' : 'COR-1562'}: no pinned fault symptom reproduced`,
+      detail: 'COR-1561: no pinned fault symptom reproduced',
     });
   }
   const symptoms = [...own.symptoms, ...(reference?.symptoms ?? [])];

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { checkCell, expectedCapture } from './expected';
+import type { RetryEvidence, RetryTrace } from './fault-symptoms';
 import type { Cell, Frame, ReaderName, RunCapture } from './types';
 
 const cell: Cell = { scenario: 'pause-5s', engine: 'plain', backend: 'redis', topology: 'split' };
@@ -80,21 +81,44 @@ describe('authorized transport symptoms', () => {
     expect(checkCell(durable, capture, plain).verdict.stale.map(entry => entry.ticket)).toContain('COR-1557');
   });
 
-  it('pins Valkey missing history and stalled caller as untraced, not as a diagnosed Redis replay', () => {
+  it('attributes Valkey cache/live corruption to COR-1561, not the thread-pump ticket', () => {
+    const valkey: Cell = { ...cell, engine: 'durable', backend: 'valkey' };
+    const capture = captureFor(valkey);
+    const frame = textFrame(capture, 'live');
+    frame.shape = frame.shape!.replace('This answer ', 'This ans');
+    const plain = captureFor({ ...valkey, engine: 'plain' });
+    expect(pass(valkey, capture, plain)).toBe(true);
+    expect(checkCell(valkey, capture, plain).symptoms).toEqual(
+      expect.arrayContaining([expect.objectContaining({ ticket: 'COR-1561', cause: 'plain-layer', reader: 'live' })]),
+    );
+    capture.live = [];
+    expect(pass(valkey, capture, plain)).toBe(false);
+  });
+
+  it('does not attribute an unexplained Valkey caller stall to cache corruption or thread-pump termination', () => {
     const valkey: Cell = { ...cell, engine: 'durable', backend: 'valkey' };
     const capture = captureFor(valkey);
     capture.live = [...capture.live!.slice(0, 4), { type: '(timeout)' }];
     textFrame(capture, 'live').shape = 'This';
-    capture.topic = [];
-    capture['observe-0'] = [];
-    capture['http-observe'] = [{ type: '(http 404)', shape: '{"error":"Run not found"}' }];
-    const plain = captureFor({ ...valkey, engine: 'plain' });
-    expect(pass(valkey, capture, plain)).toBe(true);
-    expect(checkCell(valkey, capture, plain).symptoms).toEqual(
-      expect.arrayContaining([expect.objectContaining({ ticket: 'COR-1562', cause: 'untraced', reader: 'live' })]),
-    );
-    capture.live = [];
-    expect(pass(valkey, capture, plain)).toBe(false);
+    const check = checkCell(valkey, capture, captureFor({ ...valkey, engine: 'plain' }));
+    expect(check.symptoms).toEqual([
+      expect.objectContaining({ ticket: 'UNATTRIBUTED_VALKEY_STALL', cause: 'untraced', reader: 'live' }),
+    ]);
+  });
+
+  it('limits COR-1562 to the observed plain single-process Valkey thread-pump termination', () => {
+    const valkey: Cell = { ...cell, backend: 'valkey', topology: 'single' };
+    const capture = captureFor(valkey);
+    capture.thread = [
+      ...capture.thread!.slice(0, 4),
+      { type: '(threw)', shape: 'isError=true keys=message type=object message="timed out" id=-' },
+    ];
+    textFrame(capture, 'thread').shape = 'This';
+    expect(checkCell(valkey, capture).symptoms).toEqual([
+      expect.objectContaining({ ticket: 'COR-1562', cause: 'plain-layer', reader: 'thread' }),
+    ]);
+    capture.thread!.at(-1)!.shape = 'unrelated termination';
+    expect(pass(valkey, capture)).toBe(false);
   });
 
   it.each(['unknown error', 'timed out but unrelated', 'kaboom'])(
@@ -193,6 +217,188 @@ describe('authorized transport symptoms', () => {
     const capture = captureFor(restarted);
     capture.live!.splice(4, 0, { type: 'step-start' }, { type: 'text-start' }, { type: 'text-delta', shape: 'This' });
     expect(pass(restarted, capture, captureFor({ ...restarted, engine: 'plain' }))).toBe(false);
+  });
+});
+
+describe('COR-1574 joined redelivery classification', () => {
+  const retried: Cell = { scenario: 'pause-60s', engine: 'evented', backend: 'redis', topology: 'single' };
+
+  function fixture() {
+    const capture = captureFor(retried);
+    for (const [reader, frames] of Object.entries(capture)) {
+      frames.splice(
+        1,
+        0,
+        { ...frames[1]! },
+        { ...frames[2]! },
+        {
+          type: 'text-delta',
+          shape: reader === 'topic' ? 'This ans' : 'This ans ans',
+        },
+      );
+    }
+    const boundaries: RetryTrace['boundary'][] = [
+      'dispatch',
+      'handle',
+      'model',
+      'nonretryable',
+      'result',
+      'nack',
+      'dispatch',
+      'handle',
+      'model',
+      'result',
+    ];
+    const evidence: RetryEvidence = {
+      runId: 'agent-run',
+      modelRequests: 2,
+      records: boundaries.map((boundary, index) => ({
+        node: 'publisher',
+        pid: 123,
+        sequence: index + 1,
+        boundary,
+        delivery: index < 6 ? 'delivery-one' : 'delivery-two',
+        eventId: 'step-event',
+        workflowRunId: 'workflow-run',
+        attempt: index < 6 ? 1 : 2,
+        ...(!['dispatch', 'nack'].includes(boundary) ? { invocation: index < 6 ? 'handle-one' : 'handle-two' } : {}),
+        ...(boundary === 'model' ? { requestNumber: index < 6 ? 1 : 2 } : {}),
+        ...(boundary === 'nonretryable'
+          ? { errorId: 'DURABLE_AGENT_EXECUTION_UNVERIFIED', agentRunId: 'agent-run' }
+          : {}),
+        ...(boundary === 'result' ? (index < 6 ? { ok: false, retry: true } : { ok: true }) : {}),
+      })),
+    };
+    const plain = captureFor({ ...retried, engine: 'plain' });
+    return { capture, evidence, plain };
+  }
+
+  it('attributes the observed second response only with the joined failure, retry settlement and model requests', () => {
+    const { capture, evidence, plain } = fixture();
+    const original = structuredClone({ capture, evidence });
+    const check = checkCell(retried, capture, plain, evidence);
+    expect(check.verdict).toEqual({ unlisted: [], stale: [] });
+    expect(check.drift).toEqual([]);
+    expect(check.symptoms).toHaveLength(Object.keys(capture).length);
+    expect(check.symptoms!.every(symptom => symptom.ticket === 'COR-1574' && symptom.cause === 'engine')).toBe(true);
+    expect(check.rawDifferences!.length).toBeGreaterThan(0);
+    expect({ capture, evidence }).toEqual(original);
+    for (const symptom of check.symptoms!) expect(symptom.observed).toEqual(original.capture[symptom.reader]);
+  });
+
+  const mutations: { name: string; mutate: (evidence: RetryEvidence) => void }[] = [
+    {
+      name: 'an unjoined extra model request',
+      mutate: e => {
+        e.modelRequests = 3;
+      },
+    },
+    {
+      name: 'a missing retry settlement',
+      mutate: e => {
+        e.records.splice(4, 1);
+      },
+    },
+    {
+      name: 'a terminal rather than retryable settlement',
+      mutate: e => {
+        e.records[4]!.retry = false;
+      },
+    },
+    {
+      name: 'a missing completed nack',
+      mutate: e => {
+        e.records.splice(5, 1);
+      },
+    },
+    {
+      name: 'a different redelivered event',
+      mutate: e => {
+        e.records[6]!.eventId = 'other-event';
+      },
+    },
+    {
+      name: 'an unrelated agent run',
+      mutate: e => {
+        e.records[3]!.agentRunId = 'other-run';
+      },
+    },
+    {
+      name: 'a different ownership error',
+      mutate: e => {
+        e.records[3]!.errorId = 'OTHER_ERROR';
+      },
+    },
+    {
+      name: 'a model request outside its handler invocation',
+      mutate: e => {
+        e.records[8]!.invocation = 'unjoined';
+      },
+    },
+    {
+      name: 'a reused delivery identity',
+      mutate: e => {
+        for (const r of e.records) r.delivery = 'same-delivery';
+      },
+    },
+    {
+      name: 'a reused handler invocation',
+      mutate: e => {
+        for (const r of e.records.slice(6)) r.invocation = 'handle-one';
+      },
+    },
+    {
+      name: 'an out-of-order settlement',
+      mutate: e => {
+        e.records[5]!.sequence = 4;
+      },
+    },
+    {
+      name: 'a restarted request counter',
+      mutate: e => {
+        e.records[8]!.requestNumber = 1;
+      },
+    },
+    {
+      name: 'a different workflow run',
+      mutate: e => {
+        e.records[8]!.workflowRunId = 'other-workflow';
+      },
+    },
+  ];
+  it.each(mutations)('rejects $name', ({ mutate }) => {
+    const { capture, evidence, plain } = fixture();
+    mutate(evidence);
+    const check = checkCell(retried, capture, plain, evidence);
+    expect(check.symptoms?.some(symptom => symptom.ticket === 'COR-1574') ?? false).toBe(false);
+    expect(check.verdict.unlisted.length + check.verdict.stale.length + check.drift.length).toBeGreaterThan(0);
+  });
+
+  it.each([{ engine: 'durable' }, { scenario: 'pause-5s' }, { backend: 'valkey' }, { topology: 'split' }] as const)(
+    'does not extend the pin to another cell: %j',
+    change => {
+      const { capture, evidence, plain } = fixture();
+      const check = checkCell({ ...retried, ...change }, capture, plain, evidence);
+      expect(check.symptoms?.some(symptom => symptom.ticket === 'COR-1574') ?? false).toBe(false);
+    },
+  );
+
+  it('requires a plain reference even when retry causality is complete', () => {
+    const { capture, evidence } = fixture();
+    expect(() => checkCell(retried, capture, undefined, evidence)).toThrow(
+      'no plain live capture to compare pause-60s / evented / redis / single against',
+    );
+  });
+
+  it.each(['no evidence', 'missing terminal', 'invented text'] as const)('leaves the capture red with %s', mutation => {
+    const { capture, evidence, plain } = fixture();
+    if (mutation === 'missing terminal') capture.live!.pop();
+    if (mutation === 'invented text') capture.live![3]!.shape = 'invented response';
+    const check = checkCell(retried, capture, plain, mutation === 'no evidence' ? undefined : evidence);
+    expect(check.verdict.unlisted.length + check.verdict.stale.length + check.drift.length).toBeGreaterThan(0);
+    if (mutation === 'missing terminal' || mutation === 'invented text') {
+      expect(check.symptoms?.some(symptom => symptom.reader === 'live')).toBe(false);
+    } else expect(check.symptoms?.some(symptom => symptom.ticket === 'COR-1574') ?? false).toBe(false);
   });
 });
 
