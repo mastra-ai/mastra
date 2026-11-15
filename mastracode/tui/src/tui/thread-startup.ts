@@ -76,6 +76,7 @@ export async function resumeThreadOnStartup(
     }
   }
 
+  if (!isCurrent()) return;
   state.pendingNewThread = true;
 }
 

@@ -1569,6 +1569,7 @@ export class MastraTUI {
       // User cancelled at the mode-selection step.
       return;
     }
+    if (this.stopped) return;
 
     return new Promise(resolve => {
       const dialog = new LoginDialogComponent(this.state.ui, providerId, (success, message) => {
@@ -1602,6 +1603,10 @@ export class MastraTUI {
           this.state.ui.hideOverlay();
 
           const { PROVIDER_DEFAULT_MODELS } = await import('@mastra/code-sdk/auth/storage');
+          if (this.stopped) {
+            resolve();
+            return;
+          }
           const defaultModel = PROVIDER_DEFAULT_MODELS[providerId as keyof typeof PROVIDER_DEFAULT_MODELS];
           if (defaultModel) {
             await this.state.session.model.switch(defaultModel);
@@ -1679,6 +1684,7 @@ export class MastraTUI {
         onLogin: (providerId: string, done: () => void) => {
           this.performLogin(providerId).then(async () => {
             try {
+              if (this.stopped) return;
               const updatedAccess = await this.buildProviderAccess();
               const updatedHasAccess = Object.values(updatedAccess).some(Boolean);
               component.updateModePacks(getAvailableModePacks(updatedAccess, savedSettings.customModelPacks));
@@ -1692,7 +1698,7 @@ export class MastraTUI {
         },
         onSelectModel: async (title: string, modeColor?: string): Promise<string | undefined> => {
           const availableModels = await this.state.controller.listAvailableModels();
-          if (availableModels.length === 0) return undefined;
+          if (this.stopped || availableModels.length === 0) return undefined;
 
           return new Promise<string | undefined>(resolveModel => {
             const selector = new ModelSelectorComponent({
@@ -1783,6 +1789,7 @@ export class MastraTUI {
     await applyCurrentThreadPack({ state: this.state }, { packId: activeModePackId });
     if (this.stopped) return;
     await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+    if (this.stopped) return;
     this.state.fallbackStatus = undefined;
 
     updateStatusLine(this.state);
