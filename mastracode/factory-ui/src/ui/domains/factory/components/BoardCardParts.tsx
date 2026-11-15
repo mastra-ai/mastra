@@ -49,7 +49,6 @@ export function WorkItemSourceIcon({
   subscriptions,
 }: {
   item: WorkItem;
-  /** The thread's subscriptions, fresher than the card's last sync once a session follows its request. */
   subscriptions?: readonly PullRequestSubscription[];
 }) {
   const request = cardChangeRequest(item);

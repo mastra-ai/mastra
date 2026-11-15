@@ -40,7 +40,10 @@ export function useRefreshThreadSubscriptions(
   useEffect(() => {
     const seen = previous.current;
     previous.current = { busy, notificationIds, sessionKey };
+
+    // another session's values, nothing to compare against — the new key fetches on its own
     if (seen.sessionKey !== sessionKey) return;
+
     const runSettled = seen.busy && !busy;
     const newNotification = seen.notificationIds !== notificationIds;
     if (!runSettled && !newNotification) return;

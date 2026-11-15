@@ -64,7 +64,6 @@ const otherPullRequestSubscription: PullRequestSubscription = {
 
 const sessionRef = { sessionId: SESSION_ID, branch: 'factory/item-1', threadId: THREAD_ID, startedBy: 'user-1' };
 
-/** The Review card a pull request opens: its source is the pull request itself. */
 function pullRequestCard() {
   return {
     id: 'work-item-pull-request',
@@ -89,7 +88,6 @@ function pullRequestCard() {
   };
 }
 
-/** A card worked from a GitHub issue, being built in this session; `null` leaves its issue without a URL. */
 function issueCard(url: string | null = ISSUE_URL) {
   return {
     ...pullRequestCard(),
@@ -195,7 +193,6 @@ function renderThreadRoute(
   return renderWithProviders(<RouterProvider router={router} />, client);
 }
 
-/** The docked session panel, once its overview has drawn. */
 async function findSessionPanel(name: 'Card' | 'Pull requests' = 'Card') {
   const panel = await screen.findByTestId('workspace-files-card');
   await within(panel).findByRole('region', { name });
@@ -207,7 +204,6 @@ const linksTo = (container: HTMLElement, url: string) =>
     .queryAllByRole('link')
     .filter(link => link.getAttribute('href')?.toLowerCase() === url.toLowerCase());
 
-/** Links the session panel owns now, which the header and the composer no longer repeat. */
 async function expectOnlyInPanel(url: string) {
   expect(linksTo(await findPageHeader(), url)).toHaveLength(0);
   expect(linksTo(await screen.findByRole('region', { name: 'Thread composer' }), url)).toHaveLength(0);
@@ -254,14 +250,14 @@ function issueCardWithSources(sources: NonNullable<WorkItemRow['sources']>) {
   };
 }
 
-describe('ThreadPage session panel', () => {
+describe('ThreadPage pull request link placement', () => {
   // Wide enough to dock the panel beside the conversation.
   beforeEach(() => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
   });
   afterEach(() => vi.restoreAllMocks());
 
-  describe('when the session reviews a pull request card', () => {
+  describe('when the current Factory session reviews a pull request', () => {
     it("shows the reviewed pull request with the branch under Workspace and lists the thread's other ones under Pull requests", async () => {
       stubThreadRoute([pullRequestCard()], [otherPullRequestSubscription]);
       renderThreadRoute();
@@ -432,7 +428,7 @@ describe('ThreadPage session panel', () => {
     });
   });
 
-  describe('when the session works an issue card', () => {
+  describe('when the current Factory session is ordinary work', () => {
     it("titles the panel with the card and links its issue, with the thread's pull request below", async () => {
       stubThreadRoute([issueCard()], [pullRequestSubscription]);
       renderThreadRoute();
@@ -559,15 +555,6 @@ describe('ThreadPage session panel', () => {
       expect(within(panel).getByRole('link', { name: 'Open ENG-123' })).toHaveAttribute('href', url);
     });
 
-    it('lists no source link for a card without a URL', async () => {
-      stubThreadRoute([issueCard(null)], []);
-      renderThreadRoute();
-
-      const panel = await findSessionPanel();
-      expect(within(panel).queryByRole('heading', { name: /^Pull requests/ })).not.toBeInTheDocument();
-      expect(within(panel).queryByRole('link', { name: `Open Issue #${ISSUE_NUMBER}` })).not.toBeInTheDocument();
-    });
-
     it('draws nothing in the card section for a card with no URL, labels or description', async () => {
       stubThreadRoute([{ ...issueCard(null), description: null }], []);
       server.use(
@@ -577,8 +564,10 @@ describe('ThreadPage session panel', () => {
       );
       renderThreadRoute();
 
-      const card = within(await findSessionPanel()).getByRole('region', { name: 'Card' });
+      const panel = await findSessionPanel();
+      const card = within(panel).getByRole('region', { name: 'Card' });
       await waitFor(() => expect(card).toBeEmptyDOMElement());
+      expect(within(panel).queryByRole('heading', { name: /^Pull requests/ })).not.toBeInTheDocument();
     });
 
     it('graphs the stays that brought the card to its stage and reads each out as you step through them', async () => {

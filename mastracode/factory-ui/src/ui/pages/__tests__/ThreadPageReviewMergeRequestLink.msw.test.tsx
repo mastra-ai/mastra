@@ -179,7 +179,6 @@ function renderThreadRoute() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-/** The docked session panel, once its overview has drawn. */
 async function findSessionPanel() {
   const panel = await screen.findByTestId('workspace-files-card');
   await within(panel).findByRole('region', { name: 'Card' });
@@ -191,14 +190,14 @@ const linksTo = (container: HTMLElement, url: string) =>
     .queryAllByRole('link')
     .filter(link => link.getAttribute('href') === url);
 
-describe('ThreadPage session panel on GitLab', () => {
+describe('ThreadPage merge request link placement', () => {
   // Wide enough to dock the panel beside the conversation.
   beforeEach(() => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(() => new DOMRect(0, 0, 1200, 800));
   });
   afterEach(() => vi.restoreAllMocks());
 
-  describe('when the session reviews a GitLab merge request', () => {
+  describe('when the current Factory session reviews a GitLab merge request', () => {
     it('lists the reviewed and subscribed merge requests as MRs, asking GitLab, not GitHub, for subscriptions', async () => {
       const { githubSubscriptionRequests } = stubThreadRoute(createWireWorkItem('pull-request'), [
         subscribedMergeRequest,
@@ -219,7 +218,7 @@ describe('ThreadPage session panel on GitLab', () => {
       expect(githubSubscriptionRequests).not.toHaveBeenCalled();
     });
 
-    it('lists the reviewed merge request once when GitLab already lists it', async () => {
+    it('shows the active review exactly once when GitLab already lists it', async () => {
       stubThreadRoute(createWireWorkItem('pull-request'), [
         { ...subscribedMergeRequest, pullRequestNumber: MERGE_REQUEST_IID, url: MERGE_REQUEST_URL },
       ]);
@@ -231,7 +230,7 @@ describe('ThreadPage session panel on GitLab', () => {
     });
   });
 
-  describe('when the session works a GitLab issue', () => {
+  describe('when the current Factory session is ordinary GitLab work', () => {
     it('links the issue by its number, without the project path the session already works in', async () => {
       const { githubSubscriptionRequests } = stubThreadRoute(createWireWorkItem('issue'), [subscribedMergeRequest]);
       renderThreadRoute();

@@ -28,7 +28,7 @@ interface WorkspaceViewerPanelProps {
   workspacePath: string;
   onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
-  /** False keeps the panel from reading changes, which would wake an idle sandbox. */
+  /** False keeps the overview from reading changes, which would wake an idle sandbox. */
   readsChanges?: boolean;
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
@@ -38,9 +38,9 @@ interface WorkspaceViewerPanelProps {
 
 type WorkspacePanelView =
   | { type: 'overview'; returned?: boolean }
-  | { type: 'changes' }
   | { type: 'files'; selectedPath?: string }
-  | { type: 'file'; path: string };
+  | { type: 'file'; path: string }
+  | { type: 'changes' };
 
 const viewPanelClass = 'flex h-auto min-h-0 grow flex-col overflow-hidden';
 
@@ -71,20 +71,22 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
   page,
 }: WorkspaceViewerPanelProps) {
   const session = useUserSessionQuery(sessionId);
+  const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
+  const selectedFilePath = view.type === 'file' ? view.path : undefined;
   const [fileQuery, setFileQuery] = useState('');
   const [changesScope, setChangesScope] = useState<WorkspaceChangesScope>('branch');
   // Files and changes views wake the sandbox, so the overview may then read changes freely.
   const [visitedSandbox, setVisitedSandbox] = useState(false);
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible && (readsChanges || visitedSandbox) });
-  const repositories = useFactoryQuery(factoryProjectId).data?.repositories;
+  const factory = useFactoryQuery(factoryProjectId);
   const { repository: sessionRepository, provider } = useSessionRepository();
-  const repositoryProviders: RepositoryProviders | undefined = repositories
-    ? Object.fromEntries(repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
+  const repositoryProviders: RepositoryProviders | undefined = factory.data
+    ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
     : undefined;
-  const file = useWorkspaceFile(workspacePath, view.type === 'file' ? view.path : undefined, {
+  const file = useWorkspaceFile(workspacePath, selectedFilePath, {
     enabled: visible && view.type === 'file',
     select: selectWorkspaceFilePreview,
   });
@@ -126,7 +128,7 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
       onOpen={() => show(noChanges ? { type: 'files' } : { type: 'changes' })}
       autoFocus={view.type === 'overview' && view.returned}
       action={
-        sessionId && session.data?.capabilities?.recreateSandbox ? (
+        canRecreateSandbox && sessionId ? (
           <RecreateSandboxAction
             target={{ sessionId, factoryId: factoryProjectId, workspacePath }}
             changes={changes.data}

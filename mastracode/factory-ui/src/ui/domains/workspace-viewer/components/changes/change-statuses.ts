@@ -17,5 +17,10 @@ export const CHANGE_STATUSES: Record<
   copied: { Icon: IconSquarePlus, label: 'Copied', letter: 'C', className: 'text-success-indicator' },
   deleted: { Icon: IconSquareMinus, label: 'Deleted', letter: 'D', className: 'text-destructive-indicator' },
   renamed: { Icon: IconArrowRightSquare, label: 'Renamed', letter: 'R', className: 'text-info-indicator' },
-  conflicted: { Icon: IconExclamationTriangle, label: 'Conflict', letter: '!', className: 'text-destructive-indicator' },
+  conflicted: {
+    Icon: IconExclamationTriangle,
+    label: 'Conflict',
+    letter: '!',
+    className: 'text-destructive-indicator',
+  },
 };

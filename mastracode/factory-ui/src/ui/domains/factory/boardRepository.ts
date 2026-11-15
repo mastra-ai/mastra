@@ -51,15 +51,15 @@ export function cardRepositorySlug(
 }
 
 /** The linked repository a card's source lives in, else the board's primary repository. */
-export function cardProjectRepositoryId<Primary extends string | undefined>(
+export function cardProjectRepositoryId<Fallback extends string | undefined>(
   repositories: LinkedRepositoryPayload[],
   card: {
     source: string;
     metadata?: Record<string, unknown>;
     workItem?: { metadata: Record<string, unknown> | null };
   },
-  primary: Primary,
-): string | Primary {
+  fallback: Fallback,
+): string | Fallback {
   const metadata = { ...card.metadata, ...card.workItem?.metadata };
-  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? primary;
+  return findUniqueRepositoryByProviderId(repositories, card.source, metadata)?.projectRepositoryId ?? fallback;
 }

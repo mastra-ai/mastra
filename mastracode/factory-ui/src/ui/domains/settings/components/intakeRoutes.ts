@@ -3,7 +3,6 @@ import type { RuleGroup } from '@mastra/factory/rules/rule-group';
 import type { FilterBarOption } from '@mastra/playground-ui/components/FilterBar';
 
 import type { InstalledBoardInfo, IntakeRouteInfo, IntakeRouteInput, IntakeRoutePatch } from '../../../../api/types';
-import { phaseLabel, phaseName } from '../../factory/boardStages';
 
 type IntakeRouteWrite =
   | { kind: 'create'; route: IntakeRouteInput }
@@ -18,6 +17,13 @@ export function catchesEveryArrival(route: IntakeRouteInfo): boolean {
   );
 }
 
+export function phaseName(board: InstalledBoardInfo | undefined, phaseKey: string | null): string | undefined {
+  if (!board) return undefined;
+  const key = phaseKey ?? board.initialPhase;
+  const phase = board.phases.find(candidate => candidate.id === key);
+  return phase ? (phase.name ?? phase.title) : undefined;
+}
+
 export function boardName(board: InstalledBoardInfo): string {
   return board.name ?? board.title;
 }
@@ -26,7 +32,7 @@ export function boardName(board: InstalledBoardInfo): string {
 export function describeTarget(route: IntakeRouteInfo, boards: readonly InstalledBoardInfo[]): string {
   const board = boards.find(candidate => candidate.id === route.target.boardKey);
   if (!board) return `${route.target.boardKey} (not installed)`;
-  const phase = phaseLabel(board, route.target.phaseKey ?? board.initialPhase);
+  const phase = phaseName(board, route.target.phaseKey) ?? route.target.phaseKey ?? board.initialPhase;
   return `${boardName(board)} › ${phase}`;
 }
 
@@ -34,7 +40,7 @@ export function describeTarget(route: IntakeRouteInfo, boards: readonly Installe
 export function phaseOptions(board: InstalledBoardInfo | undefined): Record<string, FilterBarOption[]> {
   if (!board) return {};
   return {
-    'closedIssue.phase': board.phases.map(phase => ({ value: phase.id, label: phaseName(phase) })),
+    'closedIssue.phase': board.phases.map(phase => ({ value: phase.id, label: phase.name ?? phase.title })),
   };
 }
 
@@ -119,7 +125,7 @@ export function sendNewCardsTo(
   const catchAll = routes.find(catchesEveryArrival);
   const fromKey = catchAll?.target.boardKey;
   const from = boards.find(board => board.id === fromKey);
-  const landing = phaseLabel(to, to.initialPhase);
+  const landing = phaseName(to, to.initialPhase) ?? to.initialPhase;
   const catchAllName = `Everything else goes to ${boardName(to)} › ${landing}`.slice(0, MAX_ROUTE_NAME);
   const writes: IntakeRouteWrite[] = [];
 

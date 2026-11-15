@@ -9,14 +9,10 @@ import { chatHeaderStyle, headerCapsuleClass } from './chatPageHeader';
 import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 
 interface ChatPageLayoutProps {
-  /** What the page shows, as the header's heading. The sidebar already gives the way back, so there is no trail. */
   title?: ReactNode;
-  /** A control right after the title, such as a switcher between sibling sessions. */
   titleMenu?: ReactNode;
-  /** Sits between the title and the actions, centered on the header; the title truncates before reaching it. */
   headerCenter?: ReactNode;
   headerActions?: ReactNode;
-  /** Takes the header actions out of the header into a panel docked under them, which unfolds from their capsule. */
   dockActions?: (actions: ReactNode) => ReactNode;
   children: ReactNode;
 }

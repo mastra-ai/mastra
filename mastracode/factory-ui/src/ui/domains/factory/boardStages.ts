@@ -51,7 +51,7 @@ export function itemStageOptions(item: WorkItem, board: BoardInfo | undefined): 
   if (!board) return [];
   return board.phases
     .filter(phase => pullRequestMayEnter(board, item, phase.id))
-    .map(phase => ({ id: phase.id, label: phaseName(phase) }));
+    .map(phase => ({ id: phase.id, label: phase.name ?? phase.title }));
 }
 
 /** Whether a card may enter `stage` on `board`, by the parts its phases play in the pull request loop. */
@@ -67,7 +67,6 @@ export function pullRequestMayEnter(
   return stage !== review || cardHasPullRequest(item);
 }
 
-/** Servers older than phase names send only the deprecated `title`. */
 export function phaseName(phase: Pick<InstalledPhaseInfo, 'name' | 'title'>): string {
   return phase.name ?? phase.title;
 }

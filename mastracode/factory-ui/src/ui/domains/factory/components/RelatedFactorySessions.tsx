@@ -20,12 +20,10 @@ import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
 import { ThreadSubscriptionsRefresh } from './ThreadSubscriptionsRefresh';
 
 interface OpenSessionContext {
-  /** The context this session runs in, and its name. */
   context: string;
   label: string;
   /** Every session the card holds, one per context. */
   sessions: CardContextSession[];
-  /** The session the card works in now, when that is another one. */
   workingSession?: CardContextSession;
 }
 
@@ -52,7 +50,6 @@ function openSessionContext(
   return { ...open, workingSession: sessions.find(candidate => candidate.current) };
 }
 
-/** A card's session gets a title only when the card holds several, as the label of the switcher between them. */
 export function FactorySessionPage({ children }: { children: ReactNode }) {
   const { factoryId, sessionId, threadId } = useParams<{ factoryId: string; sessionId: string; threadId: string }>();
   const { session, isUserThread, title: sessionTitle } = useOpenSession();

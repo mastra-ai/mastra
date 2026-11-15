@@ -37,7 +37,6 @@ export function CardStageBar({
   openContext,
 }: {
   item: WorkItem;
-  /** The session's cards, which the move reads the card's latest revision from. */
   sessionItems: readonly WorkItem[];
   board: InstalledBoardInfo;
   factory: FactoryProject;
@@ -60,13 +59,9 @@ export function CardStageBar({
   const sessionStatus = useItemSessionStatuses({ factoryProjectId: factory.id, items: [item], parkedSessionIds }).get(
     item.id,
   );
-  // As on the board, a live session or an effect automation works through holds back moves that would start another run.
   const { owner } = boardCardState({ decision: effectByItem.get(item.id), sessionStatus });
   const stages = cardStages(item, board);
-  // The clock answers "how long has Factory been at it". A card waiting in a resting phase such as Intake,
-  // or finished in a terminal one, has nothing running, so its stage shows no time.
   const enteredAt = stages?.current.kind === 'working' ? enteredCurrentStageAt(item, stages.current.id) : undefined;
-  // Draws again only when the label changes, about once a minute.
   const elapsed = useClock(now => (enteredAt === undefined ? undefined : elapsedLabel(enteredAt, now)));
   if (!stages) return null;
 

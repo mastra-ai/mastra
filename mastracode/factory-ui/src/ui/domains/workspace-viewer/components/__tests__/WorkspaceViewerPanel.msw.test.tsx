@@ -261,7 +261,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await screen.findByRole('button', { name: /^Changes(,|$)/ });
+      await screen.findByRole('button', { name: /^Changes/ });
       expect(treeRequests).toEqual([]);
 
       await openFiles(user);
@@ -491,8 +491,9 @@ describe('WorkspaceViewerPanel', () => {
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
       await screen.findByText('+4');
-      expect(screen.getByRole('region', { name: 'Workspace' })).toHaveTextContent(/\+4\s*−1/);
-      await user.click(screen.getByRole('button', { name: /^Changes(,|$)/ }));
+      const changesButton = screen.getByRole('button', { name: /Changes/ });
+      expect(changesButton).toHaveTextContent('−1');
+      await user.click(changesButton);
 
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
       await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
@@ -526,7 +527,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
 
       expect((await within(changesPanel).findByText('from')).parentElement).toHaveTextContent('from src/helper.ts');
@@ -553,7 +554,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
 
       expect(await within(changesPanel).findByText('new mode 100755')).toBeInTheDocument();
@@ -573,7 +574,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
 
       expect(await within(changesPanel).findByText('Diff unavailable')).toBeInTheDocument();
@@ -597,7 +598,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
       await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
 
@@ -629,7 +630,7 @@ describe('WorkspaceViewerPanel', () => {
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
-      const changesButton = await screen.findByRole('button', { name: /^Changes(,|$)/ });
+      const changesButton = await screen.findByRole('button', { name: /Changes/ });
       await screen.findByText('+4');
       await user.click(changesButton);
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
@@ -646,8 +647,8 @@ describe('WorkspaceViewerPanel', () => {
       expect(within(changesPanel).queryByText('+4')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Back to overview' }));
 
+      expect(await screen.findByText('Unavailable')).toBeInTheDocument();
       expect(screen.queryByText('+4')).not.toBeInTheDocument();
-      expect(await screen.findByRole('button', { name: 'Changes, unavailable' })).toHaveTextContent('Unavailable');
     });
 
     it('remembers the diff layout picked from the options menu', async () => {
@@ -661,7 +662,7 @@ describe('WorkspaceViewerPanel', () => {
       );
       const user = userEvent.setup();
       const openChanges = async () => {
-        await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+        await user.click(await screen.findByRole('button', { name: /Changes/ }));
         const changesPanel = await screen.findByTestId('workspace-changes-panel');
         await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
         return changesPanel;

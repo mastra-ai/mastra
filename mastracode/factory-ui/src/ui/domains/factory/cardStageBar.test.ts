@@ -56,7 +56,6 @@ function sourceRow(sourceType: string, externalId: string, url: string, metadata
   } satisfies WorkItemSourceRow;
 }
 
-/** An issue card with pull request #34 attached, as the board sends it once the builder opens one. */
 function issueWithPullRequest(stages: string[]): WorkItem {
   return {
     ...card('github-issue', stages),

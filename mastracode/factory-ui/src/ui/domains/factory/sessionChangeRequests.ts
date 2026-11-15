@@ -6,7 +6,6 @@ import { referenceLabel } from './services/relationships';
 import type { WorkItem } from './services/workItems';
 import { isPullRequestSource } from './services/workItems';
 
-/** A pull or merge request a session links to, from its card or from the thread's subscriptions. */
 export interface SessionChangeRequest {
   url: string;
   provider: ChangeRequestProvider;
@@ -14,7 +13,6 @@ export interface SessionChangeRequest {
   status: PullRequestStatus | undefined;
 }
 
-/** "#5" on GitHub, "!7" on GitLab: the number as its code host writes it. */
 export function changeRequestNumberLabel(request: Pick<SessionChangeRequest, 'provider' | 'number'>) {
   if (request.number === undefined) return undefined;
   return `${request.provider === 'gitlab' ? '!' : '#'}${request.number}`;
@@ -41,7 +39,6 @@ export function changeRequestLinkLabel(reference: string, status: PullRequestSta
   return status === undefined || status === 'open' ? `Open ${reference}` : `Open ${reference} ${status}`;
 }
 
-/** The repository a request's URL names: `owner/repo` on GitHub, the project path on GitLab. */
 export function changeRequestRepository(url: string): string | undefined {
   try {
     const path = new URL(url).pathname;
@@ -64,7 +61,6 @@ function sessionRequest(
   };
 }
 
-/** A pull request card's own pull request. GitLab hosts vary, so only the card's URL names a merge request. */
 export function ownChangeRequest(
   item: WorkItem,
   repositorySlug: string | undefined,

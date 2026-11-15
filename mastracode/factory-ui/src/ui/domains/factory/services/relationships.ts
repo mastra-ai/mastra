@@ -77,7 +77,7 @@ export function workItemIdentifier(item: IdentifiableItem): string | undefined {
   return undefined;
 }
 
-export interface CodeHostReference {
+interface CodeHostReference {
   kind: 'Issue' | 'PR' | 'MR';
   sigil: '#' | '!';
   number: string | number;

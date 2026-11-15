@@ -34,7 +34,6 @@ export interface CardChangeRequest {
   number: number | undefined;
   state: string | undefined;
   metadata: Record<string, unknown>;
-  /** Epoch milliseconds. */
   syncedAt: number | undefined;
 }
 
@@ -69,14 +68,12 @@ export function cardChangeRequests(item: ChangeRequestCard): CardChangeRequest[]
   return isPullRequestSource(item.source) ? [fromLegacyCard(item)] : [];
 }
 
-/** Mirrors the server's `reviewedPullRequest` pick. */
 export function cardChangeRequest(item: ChangeRequestCard): CardChangeRequest | undefined {
   if (isPullRequestSource(item.source)) return cardChangeRequests(item)[0];
   const attached = attachedPullRequestSource(item);
   return attached ? fromSource(attached) : undefined;
 }
 
-/** Slugs are case-insensitive, and the card and subscriptions can disagree on case. */
 export function changeRequestKey(url: string): string {
   try {
     const parsed = new URL(url);

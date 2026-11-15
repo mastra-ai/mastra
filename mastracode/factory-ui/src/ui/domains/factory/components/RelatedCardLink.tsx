@@ -22,7 +22,6 @@ export function RelatedCardLink({
   subscriptions,
 }: {
   item: WorkItem;
-  /** Undefined when the board catalog couldn't be read: the link then names no phase rather than guess one. */
   boards: readonly InstalledBoardInfo[] | undefined;
   factoryId: string;
   repository: string | undefined;

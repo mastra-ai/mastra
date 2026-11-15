@@ -158,11 +158,14 @@ interface WorkspaceFileBrowserProps {
   onFolderOpenChange: (path: string, open: boolean) => void;
   showHidden: boolean;
   onShowHiddenChange: (showHidden: boolean) => void;
-  /** Lifted to the panel so coming back from a file finds the same results. */
   query: string;
   onQueryChange: (query: string) => void;
 }
 
+/**
+ * The session's checkouts, read live from its sandbox one folder at a time.
+ * Refresh refetches every folder on screen.
+ */
 export function WorkspaceFileBrowser({
   workspacePath,
   visible = true,
@@ -199,10 +202,9 @@ export function WorkspaceFileBrowser({
   // A symlinked folder opens its target and every folder above it.
   const select = (id: string) => {
     if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
-    const target = id.slice(FOLDER_LINK_ID.length);
-    [...foldersAbove(target), target].forEach(folder => onFolderOpenChange(folder, true));
+    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
+    segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
   };
-  const { showingResults } = finder;
 
   let content: ReactNode;
   if (root.isLoading) {
@@ -215,48 +217,23 @@ export function WorkspaceFileBrowser({
     content = <TreeMessage>No files</TreeMessage>;
   }
 
-  let body: ReactNode;
-  if (finder.finding) {
-    body = <FileFinderResults workspacePath={workspacePath} finder={finder} changes={marks.files} />;
-  } else if (content) {
-    body = <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>;
-  } else {
-    body = (
-      <ScrollArea className="min-h-0 flex-1">
-        <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
-          {entries.map(entry => (
-            <WorkspaceTreeItem
-              key={entry.path}
-              entry={entry}
-              workspacePath={workspacePath}
-              showHidden={showHidden}
-              openFolders={openFolders}
-              onFolderOpenChange={onFolderOpenChange}
-              marks={marks}
-            />
-          ))}
-        </Tree>
-      </ScrollArea>
-    );
-  }
-
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
-      <div className="border-border flex min-h-10 items-center gap-0.5 border-b px-1.5 py-1">
+      <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
         <SearchInput
           size="sm"
           label="Go to file"
           placeholder="Go to file"
-          className="mr-1 min-w-0 flex-1"
+          className="min-w-0 flex-1"
           value={query}
           onValueChange={onQueryChange}
           onFocus={finder.prefetch}
           onKeyDown={finder.onKeyDown}
           role="combobox"
           aria-autocomplete="list"
-          aria-expanded={showingResults}
-          aria-controls={showingResults ? finder.listboxId : undefined}
-          aria-activedescendant={showingResults ? finder.optionId(finder.active) : undefined}
+          aria-expanded={finder.showingResults}
+          aria-controls={finder.showingResults ? finder.listboxId : undefined}
+          aria-activedescendant={finder.showingResults ? finder.optionId(finder.active) : undefined}
           autoComplete="off"
           spellCheck={false}
         />
@@ -264,6 +241,7 @@ export function WorkspaceFileBrowser({
           <TooltipTrigger
             render={
               <Button
+                className="ml-auto"
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => onShowHiddenChange(!showHidden)}
@@ -276,24 +254,37 @@ export function WorkspaceFileBrowser({
           />
           <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
         </Tooltip>
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                onClick={refresh}
-                disabled={isRefreshing}
-                aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
-              >
-                {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
-              </Button>
-            }
-          />
-          <TooltipContent>Refresh</TooltipContent>
-        </Tooltip>
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          onClick={refresh}
+          disabled={isRefreshing}
+          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+        >
+          {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
+        </Button>
       </div>
-      {body}
+      {finder.finding ? (
+        <FileFinderResults workspacePath={workspacePath} finder={finder} changes={marks.files} />
+      ) : content ? (
+        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
+            {entries.map(entry => (
+              <WorkspaceTreeItem
+                key={entry.path}
+                entry={entry}
+                workspacePath={workspacePath}
+                showHidden={showHidden}
+                openFolders={openFolders}
+                onFolderOpenChange={onFolderOpenChange}
+                marks={marks}
+              />
+            ))}
+          </Tree>
+        </ScrollArea>
+      )}
     </aside>
   );
 }

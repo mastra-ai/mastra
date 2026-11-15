@@ -254,7 +254,7 @@ describe('WorkspaceFiles', () => {
       const toggle = screen.getByRole('button', { name: 'Session panel' });
       expect(card).not.toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'true');
-      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes(,|$)/ })).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
 
       toggle.focus();
       await user.tab();
@@ -270,7 +270,7 @@ describe('WorkspaceFiles', () => {
       const user = userEvent.setup();
       const { client, changesRequests } = renderPanel();
 
-      await screen.findByRole('button', { name: /^Changes(,|$)/ });
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
       await waitForMutationsIdle(client);
       expect(changesRequests).toEqual([]);
 
@@ -278,14 +278,16 @@ describe('WorkspaceFiles', () => {
       await user.click(toggle);
       await user.click(toggle);
 
-      await waitFor(() => expect(changesRequests).toEqual([WORKSPACE]));
+      expect(await screen.findByRole('button', { name: 'Changes, 0 files' })).toBeInTheDocument();
+      expect(changesRequests).toEqual([WORKSPACE]);
     });
 
     it('reads changes on open while a run has the sandbox awake', async () => {
       stubContainerWidth(1200);
       const { changesRequests } = renderPanel({ busy: true });
 
-      await waitFor(() => expect(changesRequests).toEqual([WORKSPACE]));
+      expect(await screen.findByRole('button', { name: 'Changes, 0 files' })).toBeInTheDocument();
+      expect(changesRequests).toEqual([WORKSPACE]);
     });
 
     it('shows the branch change counts in the overview once the viewer has been to Changes', async () => {

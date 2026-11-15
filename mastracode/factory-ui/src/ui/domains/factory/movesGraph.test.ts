@@ -6,7 +6,6 @@ import { movesGraph } from './movesGraph';
 const minute = 60_000;
 const now = Date.parse('2026-07-10T12:00:00.000Z');
 
-/** Stays back to back, ending now, the last one still open. */
 function history(stays: Array<[stage: string, minutes: number]>) {
   let cursor = now - stays.reduce((total, [, minutes]) => total + minutes * minute, 0);
   return stays.map(([stage, minutes], index) => {
@@ -45,7 +44,6 @@ describe('movesGraph', () => {
   it('lets stays that ran at the same time share the axis', () => {
     const start = now - 120 * minute;
     const time = (minutes: number) => new Date(start + minutes * minute).toISOString();
-    // Building started while Planning was still open; Planning closed alone, Building handed over to PR review.
     const { lanes, stays } = movesGraph(
       [
         { stage: 'planning', enteredAt: time(0), exitedAt: time(60), by: 'user-1' },

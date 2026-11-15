@@ -70,7 +70,7 @@ describe('ChatPageLayout', () => {
     expect(screen.queryByRole('button', { name: 'Search and navigate' })).not.toBeInTheDocument();
   });
 
-  it('reopens a fully collapsed desktop sidebar from the top-left toggle, which stands alone in the header', async () => {
+  it('reopens a fully collapsed desktop sidebar from the top-left toggle', async () => {
     mockMobileViewport(false);
 
     render(

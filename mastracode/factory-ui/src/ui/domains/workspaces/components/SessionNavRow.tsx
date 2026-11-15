@@ -110,7 +110,6 @@ export function SessionNavRow({
   changingVisibility?: boolean;
   /** The change request the session's card is, or links to. */
   pullRequest?: CardChangeRequest;
-  /** Its reconciled state; absent while unknown. */
   pullRequestStatus?: PullRequestStatus;
   repository?: string;
   /** The card's last stage move, or the session's start when there is no card; shown on the second line. */
@@ -165,7 +164,7 @@ export function SessionNavRow({
         <SessionSourceIcon
           source={source}
           provider={pullRequest?.provider}
-          status={statusAt === 'icon' ? pullRequestStatus : undefined}
+          pullRequestStatus={statusAt === 'icon' ? pullRequestStatus : undefined}
         />
       ) : null}
       <Sidebar.NavLabel
@@ -174,10 +173,8 @@ export function SessionNavRow({
             <SessionMetaLine
               id={timeId}
               time={time}
-              reference={
-                pullRequest?.number === undefined ? undefined : changeRequestReference(pullRequest, repository)
-              }
-              provider={pullRequest?.provider}
+              pullRequest={pullRequest}
+              repository={repository}
               status={statusAt === 'line' ? pullRequestStatus : undefined}
             />
           )
@@ -323,17 +320,18 @@ const TIME_EVENT_LABELS: Record<SessionRowTime['event'], string> = {
 function SessionMetaLine({
   id,
   time,
-  reference,
-  provider,
+  pullRequest,
+  repository,
   status,
 }: {
   id: string;
   time: SessionRowTime;
-  reference: string | undefined;
-  provider: ChangeRequestProvider | undefined;
+  pullRequest: CardChangeRequest | undefined;
+  repository: string | undefined;
   /** Omitted when the leading icon already shows the change request's state. */
   status: PullRequestStatus | undefined;
 }) {
+  const reference = pullRequest?.number === undefined ? undefined : changeRequestReference(pullRequest, repository);
   const ago = relativeTime(time.at);
   return (
     <>
@@ -343,7 +341,7 @@ function SessionMetaLine({
       </time>
       {status || reference ? (
         <span aria-hidden className="flex items-center gap-0.5 tabular-nums">
-          {status ? <PullRequestStatusIcon status={status} provider={provider} decorative /> : null}
+          {status ? <PullRequestStatusIcon status={status} provider={pullRequest?.provider} decorative /> : null}
           {reference}
         </span>
       ) : null}
@@ -354,17 +352,17 @@ function SessionMetaLine({
 function SessionSourceIcon({
   source,
   provider,
-  status,
+  pullRequestStatus,
 }: {
   source: SessionSource;
   provider: ChangeRequestProvider | undefined;
-  status: PullRequestStatus | undefined;
+  pullRequestStatus?: PullRequestStatus;
 }) {
   if (source === 'user') {
     return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
   }
-  if (status) {
-    return <PullRequestStatusIcon status={status} provider={provider} decorative className="size-3.5" />;
+  if (pullRequestStatus) {
+    return <PullRequestStatusIcon status={pullRequestStatus} provider={provider} decorative className="size-3.5" />;
   }
   return <SourceIcon source={source} className="size-3.5" />;
 }

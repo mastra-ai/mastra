@@ -8,7 +8,7 @@ import { useId } from 'react';
 import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
 
-/** Private-session entry point shared by the sidebar row's end and the session title in the header. */
+/** Private-session entry point shared by the sidebar and session header. */
 export function SessionSharingPopover({
   name,
   placement = 'sidebar',

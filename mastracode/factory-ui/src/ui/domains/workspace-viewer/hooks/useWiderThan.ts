@@ -1,7 +1,9 @@
 import { useLayoutEffect, useState } from 'react';
 import type { RefObject } from 'react';
 
-// jsdom reports no root font size, and a NaN threshold would compare false forever.
+// Resolved per measurement so zoom and root font-size changes are reflected on the next
+// container resize. Unstyled documents (jsdom) report no font size, and a NaN threshold
+// would compare false forever.
 const DEFAULT_ROOT_FONT_SIZE = 16;
 
 function remToPx(rem: number) {
@@ -9,7 +11,8 @@ function remToPx(rem: number) {
   return rem * (rootFontSize || DEFAULT_ROOT_FONT_SIZE);
 }
 
-/** `revision` counts crossings since the first enabled measurement, so 0 is the layout the page painted with. */
+/** Container query in JS — tracks the element's own width, so a resized sidebar counts too.
+ * `revision` counts crossings since the first enabled measurement, so 0 is the layout the page painted with. */
 export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number, enabled = true, slackPx = 0) {
   const [state, setState] = useState<{ wider: boolean; revision: number }>();
 

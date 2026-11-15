@@ -24,7 +24,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The default board, by its own names: starters speak of its rest phase and the choices triage leaves. */
 function prompts(board: BoardInfo): Record<StarterKind, string> {
   const boardName = board.name ?? board.title;
-  const rest = `${phaseLabel(board, board.initialPhase)} on the ${boardName} board`;
+  const restPhase = board.phases.find(phase => phase.id === board.initialPhase);
+  const rest = `${restPhase?.name ?? restPhase?.title ?? board.initialPhase} on the ${boardName} board`;
   const choices = new Intl.ListFormat('en', { type: 'disjunction' }).format(
     triageDecisions(board).map(({ label }) => label),
   );

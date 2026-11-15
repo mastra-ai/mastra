@@ -6,6 +6,7 @@ const EDGE_REM = 0.5;
 const CARD_MIN_REM = 21;
 const CARD_MAX_REM = 34;
 
+// JS gates mounts at the two container thresholds; CSS below owns the panel geometry.
 export const DOCK_MIN_REM = COLUMN_REM + 2 * GUTTER_REM + 2 * EDGE_REM + CARD_MIN_REM;
 export const RAIL_MIN_REM = 58;
 
@@ -35,12 +36,16 @@ export const threadGeometryClass = [
 ].join(' ');
 export const chatColumnClass = '[--chat-column:var(--thread-column)] [--chat-edge:var(--thread-edge)]';
 
-/** Gives back most of the shell's gutter, so the composer sits a touch wider than the transcript. */
+/** The composer sits a touch wider than the transcript, at every width: it keeps the
+ * reading column but gives back most of its gutter, so it reads as the page's input
+ * rather than another message. */
 export const composerColumnClass = 'px-1 md:px-1';
 
-/** Concentric with the pill rows inside: their radius plus the `p-1.5` inset and the 1px border. */
+/** Concentric with the pill rows it wraps: their radius (`h-control-sm` ÷ 2) plus the
+ * 6px inset (`p-1.5`) and the 1px border that sit between them and the card edge. */
 export const cardRadiusClass = 'rounded-[calc(var(--spacing-control-sm)/2+7px)]';
 
+/** How much of the chat each view asks the card for; the card animates between them. */
 export const cardHeightClass = {
   compact: 'h-auto',
   full: 'h-(--card-room)',
@@ -68,7 +73,6 @@ export const panelStateAttributes = (docked: boolean, moving: boolean) => ({
   'data-panel-moving': moving || undefined,
 });
 
-/** The dock shifts back across a gutter so its actions hold still while the card unfolds under them. */
 export const reservedSpaceClass = {
   viewport: '[[data-panel-docked]_&]:pe-[calc(var(--chat-edge)+var(--workspace-files-inset))]',
   header: 'pe-3 [[data-panel-docked]_&]:pe-[calc(--spacing(3)+var(--workspace-files-header-inset))]',

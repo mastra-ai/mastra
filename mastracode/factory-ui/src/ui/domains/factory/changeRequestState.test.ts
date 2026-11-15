@@ -47,9 +47,7 @@ describe('changeRequestStatus', () => {
   });
 
   it('keeps the source when it synced after the subscription', () => {
-    expect(changeRequestStatus(request({ state: 'closed' }), [subscription('open', '2026-07-19T10:00:00.000Z')])).toBe(
-      'closed',
-    );
+    expect(changeRequestStatus(request(), [subscription('closed', '2026-07-19T10:00:00.000Z')])).toBe('open');
   });
 
   it('treats a merge as final, whichever side heard of it', () => {

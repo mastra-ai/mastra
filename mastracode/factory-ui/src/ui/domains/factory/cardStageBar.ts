@@ -16,22 +16,17 @@ type MoveBlock = 'board' | 'pull-request';
 
 export interface StageStep {
   phase: Phase;
-  /** Absent when the card can move there now. */
   blocked?: 'pull-request';
 }
 
 export interface CardStages {
   current: Phase;
-  /** The nearest track phases either way that the card can enter, which the bar's arrows offer. */
   previous: StageStep | undefined;
   next: StageStep | undefined;
-  /** The track phases the card can enter, with its own when it sits on the track, in board order. */
   track: Phase[];
-  /** The phases that stop work on the card that it can enter, with its own when it is stopped. */
   stop: Phase[];
 }
 
-/** Terminal phases other than the one that completes a card: Canceled, Dropped. */
 function isStopPhase(board: BoardInfo, phase: Phase): boolean {
   const completed = board.flow?.completed ?? board.phases.find(candidate => candidate.kind === 'terminal')?.id;
   return phase.kind === 'terminal' && phase.id !== completed;
@@ -56,8 +51,6 @@ export function cardStages(item: WorkItem, board: BoardInfo | undefined): CardSt
     for (const phase of phases) {
       const blocked = blockOf(board, item, current.id, phase.id);
       if (!blocked) return { phase };
-      // Review waiting on the pull request the card hasn't opened yet is still where it goes next, so it
-      // stays, held, and says what it waits for.
       if (ahead && blocked === 'pull-request' && !isPullRequestSource(item.source)) return { phase, blocked };
     }
     return undefined;
@@ -89,7 +82,6 @@ export function stageDescription(
   board: BoardInfo,
   item: WorkItem,
   phase: Phase,
-  /** The context of the session on screen, so its own phase reads as "this session". */
   openContext?: string,
   session: StageSession = {},
 ): string {
@@ -116,7 +108,6 @@ export function enteredCurrentStageAt(item: WorkItem, stage: string): number | u
   return Number.isNaN(at) ? undefined : at;
 }
 
-/** How long a card has sat somewhere, as "46m"; under a minute reads "<1m" rather than ticking seconds. */
 export function elapsedLabel(from: number, to: number): string {
   return to - from < 60_000 ? '<1m' : formatDuration(to - from);
 }

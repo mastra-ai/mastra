@@ -5,7 +5,6 @@ import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
-import { phaseLabel } from '../boardStages';
 import type { RunQueueResponse } from '../services/decisions';
 import { factoryAttentionTargetPath } from '../services/attention';
 
@@ -27,13 +26,10 @@ export function RunQueueIndicator({ factoryId, queue }: { factoryId: string; que
   const catalog = useBoardCatalog(factoryId);
   if (!queue || queue.queuedCount === 0) return null;
 
-  const phaseName = (board: string | null, phase: string | null) =>
-    phase === null
-      ? undefined
-      : phaseLabel(
-          catalog.data?.find(definition => definition.id === board),
-          phase,
-        );
+  const phaseName = (board: string | null, phase: string | null) => {
+    const found = catalog.data?.find(definition => definition.id === board)?.phases.find(entry => entry.id === phase);
+    return found?.name ?? found?.title ?? phase;
+  };
   const running = queue.slots ? `, ${queue.slots.inUse} running on this server` : '';
   const unlisted = queue.queuedCount - queue.queued.length;
 

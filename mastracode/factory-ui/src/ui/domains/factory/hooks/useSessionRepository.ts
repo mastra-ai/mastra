@@ -5,7 +5,7 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { ChangeRequestProvider } from '../services/githubSubscriptions';
 
-export interface SessionRepository {
+interface SessionRepository {
   repository: LinkedRepositoryPayload | undefined;
   provider: ChangeRequestProvider;
   loading: boolean;

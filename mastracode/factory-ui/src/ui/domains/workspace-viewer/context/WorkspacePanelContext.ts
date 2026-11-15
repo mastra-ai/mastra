@@ -12,7 +12,6 @@ export interface WorkspacePanelApi {
   workspacePath?: string;
   threadId?: string;
   canDock: boolean;
-  /** From an open, close, fold or unfold until the dock's card settles; a resize alone never animates. */
   moving: boolean;
   onDockSettled: () => void;
   /** Whether the overview may read changes without waking an idle sandbox nobody asked for. */

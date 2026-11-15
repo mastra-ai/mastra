@@ -5,7 +5,6 @@ import { sourceExternalId } from '@mastra/factory/work-items/source-external-id'
 import { isValid } from 'date-fns';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { phaseName } from './boardStages';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
 const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
@@ -67,26 +66,23 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'workItem' |
 export function changeRequestNumberForItem(
   item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
 ): number | undefined {
+  const metadata = sourceMetadata(item);
   if (item.source === 'github-pr') return githubNumberForItem(item);
   if (item.source !== 'gitlab-pr') return;
-  return positiveIid(sourceMetadata(item).gitlabMergeRequestIid);
+  const iid = metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? iid : undefined;
 }
 
-function positiveIid(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
-}
-
-/** Mirrors how the server keys a GitLab card that has no key yet. */
 export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   const metadata = sourceMetadata(item);
+  if (item.source === 'gitlab-issue' && typeof metadata.identifier === 'string') return metadata.identifier;
   if (item.source === 'gitlab-issue') {
-    if (typeof metadata.identifier === 'string') return metadata.identifier;
-    const iid = positiveIid(metadata.gitlabIssueIid);
-    return iid === undefined ? undefined : `#${iid}`;
+    const iid = metadata.gitlabIssueIid;
+    return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `#${iid}` : undefined;
   }
   if (item.source !== 'gitlab-pr') return;
-  const iid = changeRequestNumberForItem(item);
-  return iid === undefined ? undefined : `!${iid}`;
+  const iid = metadata.gitlabMergeRequestIid;
+  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
 }
 
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
@@ -245,7 +241,7 @@ export function phaseContext(phase: Pick<ContextPhase, 'context' | 'role'>): str
 /** A context named after its one phase, else by its well-known name, else by its key. */
 export function contextLabel(context: string, phases: readonly ContextPhase[] | undefined): string {
   const running = phases?.filter(phase => phaseContext(phase) === context) ?? [];
-  if (running.length === 1) return phaseName(running[0]);
+  if (running.length === 1) return running[0].name ?? running[0].title;
   return CONTEXT_LABELS[context] ?? context.charAt(0).toUpperCase() + context.slice(1);
 }
 

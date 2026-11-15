@@ -11,6 +11,7 @@ import { DOCK_MIN_REM, panelStateAttributes, threadGeometryClass, threadGeometry
 import { WorkspacePanelContext, WorkspacePanelDockableContext } from './WorkspacePanelContext';
 import type { WorkspacePanelPage } from './WorkspacePanelContext';
 
+/** Owns the box the card measures itself against, and shares its state with the session header. */
 export function WorkspaceFilesProvider({ page, children }: { page?: WorkspacePanelPage; children: ReactNode }) {
   const { workspacePath, threadId } = useThreadWorkspacePath();
   const hasWorkspace = Boolean(workspacePath);
@@ -30,10 +31,14 @@ export function WorkspaceFilesProvider({ page, children }: { page?: WorkspacePan
   const [awakeWorkspace, setAwakeWorkspace] = useState<string>();
   if (busy && workspacePath && awakeWorkspace !== workspacePath) setAwakeWorkspace(workspacePath);
 
+  // Wide layouts reserve the panel from the first paint. Narrow layouts start
+  // with a closed popover; an explicit toggle lasts until the layout changes.
   const panelToggle = toggled?.layoutRevision === layoutRevision ? toggled : undefined;
   const open = panelToggle?.open ?? canDock;
-  // Reading changes runs git in the sandbox, which resumes a paused VM.
-  const readsChanges = panelToggle?.open === true || (hasWorkspace && awakeWorkspace === workspacePath);
+  // Reading changes runs git in the sandbox, which resumes a paused VM. A dock
+  // that opened by default waits until the viewer opens it or a run here has
+  // the sandbox awake.
+  const readsChanges = panelToggle?.open === true || (Boolean(workspacePath) && awakeWorkspace === workspacePath);
   const setOpen = (next: boolean) => setToggled({ layoutRevision, open: next });
 
   const crossed = settled.layoutRevision !== layoutRevision;
@@ -41,7 +46,7 @@ export function WorkspaceFilesProvider({ page, children }: { page?: WorkspacePan
   const folding = panelToggle === undefined && !canDock && crossed && openBeforeNarrowing && !reducedMotion;
   const dockable = (canDock || folding) && hasWorkspace;
   const moving = dockable && !reducedMotion && (crossed || settled.toggled !== toggled);
-  const claimsSpace = open && canDock && hasWorkspace;
+  const claimsSpace = open && canDock && Boolean(workspacePath);
   const onDockSettled = () =>
     setSettled(current =>
       current.layoutRevision === layoutRevision && current.toggled === toggled ? current : { layoutRevision, toggled },

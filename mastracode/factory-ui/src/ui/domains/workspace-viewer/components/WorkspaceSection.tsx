@@ -15,14 +15,14 @@ import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
-export interface WorkspaceBranch {
+interface WorkspaceBranch {
   branch: string;
   baseBranch: string;
   repository?: string;
   provider?: RepositoryProvider;
 }
 
-export interface WorkspaceChangeStats {
+interface WorkspaceChangeStats {
   files: number;
   additions?: number;
   deletions?: number;

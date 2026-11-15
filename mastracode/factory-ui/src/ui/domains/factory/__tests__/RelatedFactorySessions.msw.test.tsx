@@ -70,7 +70,6 @@ function workItem(url: string | undefined) {
   };
 }
 
-/** Serves `item` as the session's card; it is sent as wire JSON, so any card shape goes. */
 function stubHeader(item: unknown) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
@@ -87,7 +86,6 @@ function stubHeader(item: unknown) {
         projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [listedRepository(REPOSITORY_ID, 'acme/app')] }],
       }),
     ),
-    // The stage bar reads the intake config to pick a repository for a card that leaves for a working phase.
     http.get(`${TEST_BASE_URL}/web/intake/config`, () => HttpResponse.json({ config: {} })),
   );
 }
@@ -151,7 +149,6 @@ describe('FactorySessionPage', () => {
 
   describe("the stage bar follows the card's own board", () => {
     const to = (...phases: string[]) => phases.map(phase => ({ outcome: null, to: phase }));
-    /** A board someone drew in the UI: none of Work's phase names, and its own moves. */
     const launchBoard: InstalledBoardInfo = {
       id: 'launch',
       name: 'Launch',
@@ -195,7 +192,6 @@ describe('FactorySessionPage', () => {
       };
     }
 
-    /** Serves the card as the server holds it, and answers its move with `result`. */
     function stubLaunchCard(stage: string, result: (body: Record<string, unknown>) => Record<string, unknown>) {
       let card = launchCard(stage);
       const moves: Record<string, unknown>[] = [];
