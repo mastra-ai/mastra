@@ -79,6 +79,9 @@ export class BaseResource {
       if (signal?.aborted) {
         throw signal.reason ?? new DOMException('This operation was aborted', 'AbortError');
       }
+      // Set once the current attempt produced a response the server accepted, so a
+      // failure while reading its body is never mistaken for a transient error.
+      let responseReceived = false;
       try {
         const response = await fetchFn(`${baseUrl.replace(/\/$/, '')}${fullPath}`, {
           ...fetchOptions,
@@ -121,14 +124,25 @@ export class BaseResource {
           throw new MastraClientError(response.status, response.statusText, errorMessage, parsedBody);
         }
 
+        responseReceived = true;
+
         if (options.stream) {
           return response as unknown as T;
         }
 
-        const data = await response.json();
-        return data as T;
+        // 204/205 have no body by spec and a 2xx may legitimately be empty; an empty
+        // body is a successful no-op, not a parse failure. Read the text first so an
+        // empty body never throws.
+        const body = await response.text();
+        return (body === '' ? undefined : JSON.parse(body)) as T;
       } catch (error) {
         lastError = error as Error;
+
+        // The server already processed this request, so repeating it can duplicate a
+        // side effect the server applied. Surface the failure instead of retrying.
+        if (responseReceived) {
+          throw error;
+        }
 
         // Aborted requests must not be retried
         if (signal?.aborted || (error as Error)?.name === 'AbortError') {

@@ -356,6 +356,54 @@ describe('BaseResource', () => {
     });
   });
 
+  describe('successful responses', () => {
+    const respondWith = (status: number, body: string, contentType = 'application/json') => {
+      server.on('request', (_req, res) => {
+        requestCount++;
+        res.writeHead(status, { 'Content-Type': contentType });
+        res.end(body);
+      });
+    };
+
+    it('resolves 204 No Content as undefined without retrying', async () => {
+      respondWith(204, '');
+
+      // `resource` is configured with 2 retries, so a repeat would show up as 3 requests
+      await expect(resource.request('/test', { method: 'DELETE' })).resolves.toBeUndefined();
+      expect(requestCount).toBe(1);
+    });
+
+    it('resolves 205 Reset Content as undefined without retrying', async () => {
+      respondWith(205, '');
+
+      await expect(resource.request('/test', { method: 'DELETE' })).resolves.toBeUndefined();
+      expect(requestCount).toBe(1);
+    });
+
+    it('resolves an empty 200 body as undefined without retrying', async () => {
+      respondWith(200, '');
+
+      await expect(resource.request('/test')).resolves.toBeUndefined();
+      expect(requestCount).toBe(1);
+    });
+
+    it('does not retry a 200 whose body cannot be parsed', async () => {
+      respondWith(200, '<html>Service Unavailable</html>', 'text/html');
+
+      // The server already accepted the request, so the parse failure is reported
+      // once instead of repeating a request the server already applied
+      await expect(resource.request('/test')).rejects.toBeInstanceOf(SyntaxError);
+      expect(requestCount).toBe(1);
+    });
+
+    it('resolves a JSON body', async () => {
+      respondWith(200, JSON.stringify({ ok: true }));
+
+      await expect(resource.request('/test')).resolves.toEqual({ ok: true });
+      expect(requestCount).toBe(1);
+    });
+  });
+
   describe('abort signals', () => {
     const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
 
