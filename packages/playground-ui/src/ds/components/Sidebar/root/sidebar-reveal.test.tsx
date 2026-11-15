@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider } from '..';
 import { AppShell } from '@/ds/new/layout/app-shell';
@@ -21,28 +22,32 @@ beforeAll(() => {
 
 afterEach(() => cleanup());
 
-function renderApp(page = <p>Agent overview</p>) {
-  render(
+const navigationSidebar = (
+  <Sidebar>
+    <Sidebar.Nav>
+      <Sidebar.NavList>
+        <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+      </Sidebar.NavList>
+    </Sidebar.Nav>
+  </Sidebar>
+);
+
+function app(page: ReactNode, sidebar: ReactNode) {
+  return (
     <SidebarProvider>
-      <AppShell
-        mobileHeader={<Sidebar.MobileTrigger />}
-        sidebar={
-          <Sidebar>
-            <Sidebar.Nav>
-              <Sidebar.NavList>
-                <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
-              </Sidebar.NavList>
-            </Sidebar.Nav>
-          </Sidebar>
-        }
-      >
+      <AppShell mobileHeader={<Sidebar.MobileTrigger />} sidebar={sidebar}>
         {page}
       </AppShell>
-    </SidebarProvider>,
+    </SidebarProvider>
   );
+}
+
+function renderApp(page: ReactNode = <p>Agent overview</p>) {
+  const view = render(app(page, navigationSidebar));
   const panel = document.querySelector('[data-sidebar-reveal-layer="panel"]');
   if (!panel) throw new Error('Sidebar reveal panel was not rendered');
   Object.defineProperty(panel, 'offsetWidth', { configurable: true, value: PANEL_WIDTH });
+  return view;
 }
 
 function touch(type: 'touchstart' | 'touchmove' | 'touchend', target: Element, x: number, timeStamp: number, y = 300) {
@@ -235,6 +240,31 @@ describe('Sidebar mobile reveal', () => {
       fireEvent.click(trigger());
 
       expect(screen.getByText('Agent overview').closest('[inert]')).not.toBeNull();
+    });
+  });
+
+  describe('when navigation is open while a toast is showing outside the app', () => {
+    it('keeps the toast out of reach until navigation closes', () => {
+      render(<button type="button">Dismiss toast</button>);
+      renderApp();
+      const dismiss = screen.getByText('Dismiss toast');
+
+      fireEvent.click(trigger());
+      expect(dismiss.closest('[inert]')).not.toBeNull();
+
+      fireEvent.click(scrim());
+      expect(dismiss.closest('[inert]')).toBeNull();
+    });
+  });
+
+  describe('when the app drops the sidebar while navigation is open', () => {
+    it('leaves the page usable', () => {
+      const { rerender } = renderApp();
+      fireEvent.click(trigger());
+
+      rerender(app(<p>Agent overview</p>, undefined));
+
+      expect(screen.getByText('Agent overview').closest('[inert]')).toBeNull();
     });
   });
 });

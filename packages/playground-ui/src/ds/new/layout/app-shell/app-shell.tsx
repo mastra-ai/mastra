@@ -1,6 +1,5 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
-import { useMaybeSidebar } from '@/ds/components/Sidebar';
 import { cn } from '@/lib/utils';
 
 import './app-shell.css';
@@ -14,7 +13,6 @@ export interface AppShellProps extends Omit<ComponentPropsWithRef<'div'>, 'child
 
 export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, sidebar, ...props }: AppShellProps) {
   const animatesEdgeToEdge = edgeToEdge !== undefined;
-  const sidebarOpen = useMaybeSidebar()?.openMobile ?? false;
 
   return (
     <div
@@ -30,7 +28,6 @@ export function AppShell({ children, className, edgeToEdge, mobileHeader, ref, s
       {sidebar}
       <div
         data-slot="app-shell-content"
-        inert={sidebarOpen}
         className="flex h-full min-h-0 min-w-0 flex-col"
         data-sidebar-reveal-layer="page"
       >

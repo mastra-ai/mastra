@@ -33,6 +33,12 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
     };
   }, [scopeRef]);
 
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    if (!openMobile || !root) return;
+    return inertOutside(root);
+  }, [openMobile]);
+
   useRevealGesture({
     scopeRef,
     open: openMobile,
@@ -100,4 +106,21 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
       />
     </div>
   );
+}
+
+function inertOutside(root: Element) {
+  const marked: Element[] = [];
+  let node = root;
+  while (node !== document.body && node.parentElement) {
+    const parent = node.parentElement;
+    for (const sibling of parent.children) {
+      if (sibling === node || sibling.hasAttribute('inert')) continue;
+      sibling.setAttribute('inert', '');
+      marked.push(sibling);
+    }
+    node = parent;
+  }
+  return () => {
+    for (const element of marked) element.removeAttribute('inert');
+  };
 }
