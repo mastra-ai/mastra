@@ -81,16 +81,19 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
       threadId,
       resourceId,
     };
+    messageList.add(userMsg, 'input');
 
     const getThreadContextSpy = vi.spyOn(om, 'getThreadContext');
+    const persistSpy = vi.spyOn(om, 'persistMessages');
     const gatewayModel = createMockGatewayModel('mastra', true);
+    const state: Record<string, unknown> = {};
 
     const result = await processor.processInputStep({
       messageList,
       messages: [userMsg],
       requestContext,
       stepNumber: 0,
-      state: {},
+      state,
       steps: [],
       systemMessages: [],
       model: gatewayModel as any,
@@ -105,6 +108,18 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     expect(gatewayModel.isGatewayMemoryManaged).toHaveBeenCalledOnce();
     // getThreadContext is called before the gateway check (to validate context exists)
     expect(getThreadContextSpy).toHaveBeenCalled();
+    await processor.processOutputResult({
+      messageList,
+      messages: [],
+      requestContext,
+      state,
+      result: { text: 'V1 response' } as any,
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    });
+    expect(persistSpy).not.toHaveBeenCalled();
   });
 
   it('processOutputResult returns messageList unchanged when gateway flag was stored in state', async () => {
@@ -231,6 +246,92 @@ describe('ObservationalMemoryProcessor — gateway skip', () => {
     expect(state.__isGatewayMemoryManaged).toBe(false);
     const { messages: saved } = await storage.listMessages({ threadId, perPage: false });
     expect(saved.map(message => message.id)).toEqual(expect.arrayContaining(['v2-user', 'v2-assistant']));
+  });
+
+  it('saves the open V2 turn before a later V1 Gateway step skips local memory', async () => {
+    const { MessageList } = await import('@mastra/core/agent');
+    const { RequestContext } = await import('@mastra/core/di');
+    const storage = createInMemoryStorage();
+    await storage.saveThread({
+      thread: { id: threadId, resourceId, title: 'Test', createdAt: new Date(), updatedAt: new Date(), metadata: {} },
+    });
+    const engine = new ObservationalMemory({
+      storage,
+      observation: { messageTokens: 100_000, model: 'test-model' },
+      reflection: { observationTokens: 100_000, model: 'test-model' },
+      scope: 'thread',
+    });
+    const inputProcessor = new ObservationalMemoryProcessor(engine, createStubMemoryProvider());
+    const outputProcessor = new ObservationalMemoryProcessor(engine, createStubMemoryProvider());
+    const state: Record<string, unknown> = {};
+    const requestContext = new RequestContext();
+    requestContext.set('MastraMemory', { thread: { id: threadId }, resourceId });
+    const messageList = new MessageList({ threadId, resourceId });
+    const userMessage: MastraDBMessage = {
+      id: 'v2-user',
+      role: 'user',
+      content: { format: 2, parts: [{ type: 'text', text: 'Hello' }] },
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+    };
+    messageList.add(userMessage, 'input');
+
+    const inputArgs = {
+      messageList,
+      messages: [userMessage],
+      requestContext,
+      state,
+      steps: [],
+      systemMessages: [],
+      retryCount: 0,
+      abort: (() => {
+        throw new Error('aborted');
+      }) as any,
+    };
+    const v2Model = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [
+      new MastraGateway({ apiKey: 'msk-gateway-test' }),
+    ]);
+    await inputProcessor.processInputStep({ ...inputArgs, stepNumber: 0, model: v2Model as any });
+    const activeTurn = state.__omTurn as { ended: boolean };
+    expect(activeTurn.ended).toBe(false);
+
+    const v2Assistant: MastraDBMessage = {
+      id: 'v2-assistant',
+      role: 'assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'Hello back' }] },
+      createdAt: new Date(),
+      threadId,
+      resourceId,
+    };
+    messageList.add(v2Assistant, 'response');
+
+    const v1Model = new ModelRouterLanguageModel('mastra/openai/gpt-4o', [new MastraGateway({ apiKey: 'msk_legacy' })]);
+    await inputProcessor.processInputStep({ ...inputArgs, messages: [], stepNumber: 1, model: v1Model as any });
+
+    expect(activeTurn.ended).toBe(true);
+    expect(state.__omTurn).toBeUndefined();
+    expect(state.__isGatewayMemoryManaged).toBe(true);
+
+    const v1Assistant: MastraDBMessage = {
+      ...v2Assistant,
+      id: 'v1-assistant',
+      content: { format: 2, parts: [{ type: 'text', text: 'V1 response' }] },
+    };
+    messageList.add(v1Assistant, 'response');
+    await outputProcessor.processOutputResult({
+      messageList,
+      messages: [v1Assistant],
+      requestContext,
+      state,
+      result: { text: 'V1 response', finishReason: 'stop', steps: [] } as any,
+      retryCount: 0,
+      abort: inputArgs.abort,
+    });
+
+    const { messages: saved } = await storage.listMessages({ threadId, perPage: false });
+    expect(saved.map(message => message.id)).toEqual(expect.arrayContaining(['v2-user', 'v2-assistant']));
+    expect(saved.map(message => message.id)).not.toContain('v1-assistant');
   });
 
   it('does NOT skip when model is a non-mastra gateway', async () => {

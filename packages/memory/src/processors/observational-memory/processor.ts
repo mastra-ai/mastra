@@ -228,6 +228,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // the local memory path. Keep this per model rather than in RequestContext
     // so the decision cannot leak to child agents during delegation.
     if (await isGatewayMemoryManaged(model)) {
+      const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+      if (activeTurn && !activeTurn.ended) {
+        // A prior V2 step may still own a local turn. Persist it before V1 takes over.
+        await activeTurn.end();
+      }
+      if (this.turn === activeTurn) this.turn = undefined;
+      state.__omTurn = undefined;
       state[GATEWAY_STATE_KEY] = true;
       omDebug(`[OM:processInputStep:GATEWAY] V1 gateway handles OM — skipping local processing`);
       return messageList;
@@ -363,7 +370,8 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
                 );
                 if (!previous || previous.toolInvocation.state !== 'result') return true;
                 const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
-                  { status?: string } | undefined;
+                  | { status?: string }
+                  | undefined;
                 const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
                 return (
                   previousTask?.status === 'running' &&
