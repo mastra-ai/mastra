@@ -105,6 +105,16 @@ export interface WorkspaceTreeListing {
   entries: WorkspaceTreeEntry[];
 }
 
+export interface WorkspaceFileIndex {
+  workspacePath: string;
+  /** False when this process holds no sandbox for the session, so nothing was read. */
+  available: boolean;
+  /** Tracked and untracked files git doesn't ignore, workspace-relative, in each checkout's order. */
+  paths: string[];
+  /** Files are left out: a checkout's list hit the size cap, or a checkout couldn't be listed. */
+  truncated: boolean;
+}
+
 export type WorkspaceChangeStatus =
   | 'modified'
   | 'added'
@@ -655,19 +665,20 @@ async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: 
 
 /**
  * The real absolute location of each path (relative to `root`), following
- * every symlink, or `''` when it doesn't exist; plus `root`'s own. Paths go in
- * as positional arguments and come back NUL-separated.
+ * every symlink, or `''` when it fails `test` (exists, or is a file); plus
+ * `root`'s own. Paths go in as positional arguments and come back NUL-separated.
  */
 async function realPaths(
   sandbox: ExecutableSandbox,
   root: string,
   paths: string[],
+  test: '-e' | '-f' = '-e',
 ): Promise<{ root: string; paths: string[] }> {
   const result = await sandbox.executeCommand(
     'sh',
     [
       '-c',
-      'cd "$1" && shift && printf \'%s\\0\' "$(pwd -P)" && for p; do printf \'%s\\0\' "$([ -e "$p" ] && readlink -f -- "$p")"; done',
+      `cd "$1" && shift && printf '%s\\0' "$(pwd -P)" && for p; do printf '%s\\0' "$([ ${test} "$p" ] && readlink -f -- "$p")"; done`,
       'sh',
       root,
       ...paths,
@@ -799,6 +810,116 @@ export async function listSessionWorkspaceTree(
     )
     .toSorted((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
   return { ...listing, available: true, entries };
+}
+
+const MAX_FILE_INDEX_BYTES = 4 * 1024 * 1024;
+/** Prints gitlinks and symlinks as NUL-terminated `<mode> …\t<path>` records; it lstats only untracked entries, which are few. */
+const SPECIAL_ENTRIES_SCRIPT = `
+set -e
+cd "$1"
+staged=$(mktemp)
+untracked=$(mktemp)
+trap 'rm -f "$staged" "$untracked"' EXIT
+git ls-files -z --stage >"$staged"
+git ls-files -z --others --exclude-standard >"$untracked"
+grep -z '^1[26]0000 ' "$staged" || [ $? -eq 1 ]
+xargs -0 sh -c 'for p; do if [ -L "$p" ]; then printf "120000 untracked\\t%s\\0" "$p"; fi; done' sh <"$untracked"
+`;
+
+async function refusedLinks(sandbox: ExecutableSandbox, layout: SessionLayout, links: string[]): Promise<Set<string>> {
+  if (links.length === 0) return new Set();
+  const real = await realPaths(sandbox, layout.root, links, '-f');
+  const targets = links.map((_, i) => treePathOf(layout, real.root, real.paths[i] ?? ''));
+  const ignored = await ignoredTreePaths(
+    sandbox,
+    layout,
+    targets.filter((target): target is string => target !== undefined),
+  );
+  return new Set(
+    links.filter((_, i) => {
+      const target = targets[i];
+      return target === undefined || ignored.has(target);
+    }),
+  );
+}
+
+async function checkoutFiles(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+  repo: SessionLayoutRepository,
+): Promise<{ paths: string[]; truncated: boolean }> {
+  const options = { timeout: 30_000, maxRetainedBytes: Infinity };
+  const [listed, deleted, special] = await Promise.all([
+    sandbox.executeCommand(
+      'sh',
+      [
+        '-c',
+        BOUNDED_OUTPUT_SCRIPT,
+        'mastracode-bounded',
+        String(MAX_FILE_INDEX_BYTES + 1),
+        'git',
+        '-C',
+        repo.dir,
+        'ls-files',
+        '-z',
+        '--cached',
+        '--others',
+        '--exclude-standard',
+      ],
+      options,
+    ),
+    sandbox.executeCommand('git', ['-C', repo.dir, 'ls-files', '-z', '--deleted'], options),
+    sandbox.executeCommand('sh', ['-c', SPECIAL_ENTRIES_SCRIPT, 'mastracode-special-entries', repo.dir], options),
+  ]);
+  for (const result of [listed, deleted, special]) {
+    if (result.exitCode !== 0) throw new Error(`Unable to list files: ${result.stderr.trim() || 'git failed'}`);
+  }
+  const truncated = Buffer.byteLength(listed.stdout) > MAX_FILE_INDEX_BYTES;
+  // A cut list ends inside a path; only whole ones are kept.
+  const whole = truncated ? listed.stdout.slice(0, listed.stdout.lastIndexOf('\0') + 1) : listed.stdout;
+  const records = special.stdout.split('\0');
+  const entriesOfMode = (mode: string) =>
+    records.filter(record => record.startsWith(`${mode} `)).map(record => record.slice(record.indexOf('\t') + 1));
+  const unopenable = new Set([...deleted.stdout.split('\0'), ...entriesOfMode('160000')]);
+  // A conflicted file is listed once per stage; an untracked repository as its folder, ending in `/`.
+  const paths = new Set(
+    whole
+      .split('\0')
+      .filter(
+        path =>
+          path &&
+          !path.endsWith('/') &&
+          !unopenable.has(path) &&
+          !path.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment)),
+      ),
+  );
+  const links = [...new Set(entriesOfMode('120000'))].filter(path => paths.has(path));
+  const refused = await refusedLinks(
+    sandbox,
+    layout,
+    links.map(path => `${repo.prefix}${path}`),
+  );
+  return {
+    paths: Array.from(paths, path => `${repo.prefix}${path}`).filter(path => !refused.has(path)),
+    truncated,
+  };
+}
+
+// Passive like every session read: no sandbox in this process means `available: false`, never a new sandbox.
+export async function listSessionWorkspaceFiles(session: SourceControlSession): Promise<WorkspaceFileIndex> {
+  const handle = await sessionSandbox(session);
+  if (!handle) return { workspacePath: session.sessionId, available: false, paths: [], truncated: false };
+  const { layout, sandbox } = handle;
+  const settled = await Promise.allSettled(layout.repos.map(repo => checkoutFiles(sandbox, layout, repo)));
+  const checkouts = settled.flatMap(checkout => (checkout.status === 'fulfilled' ? [checkout.value] : []));
+  const failed = settled.find((checkout): checkout is PromiseRejectedResult => checkout.status === 'rejected');
+  if (failed && checkouts.length === 0) throw failed.reason;
+  return {
+    workspacePath: session.sessionId,
+    available: true,
+    paths: checkouts.flatMap(checkout => checkout.paths),
+    truncated: failed !== undefined || checkouts.some(checkout => checkout.truncated),
+  };
 }
 
 /**
@@ -1372,6 +1493,22 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
                 ? 404
                 : 500;
           return c.json({ error: message }, status);
+        }
+      },
+    }),
+    registerApiRoute('/web/workspace/files', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await listSessionWorkspaceFiles(session));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return c.json({ error: message }, message.includes('not available') ? 403 : 500);
         }
       },
     }),
