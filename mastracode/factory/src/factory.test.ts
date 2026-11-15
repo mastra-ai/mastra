@@ -3370,6 +3370,16 @@ describe('MastraFactory.finalize', () => {
   });
 
   it('does not start metrics when finalize() finishes after shutdown() began', async () => {
+    let releaseControllerFinalize!: () => void;
+    const controllerFinalize = new Promise<void>(resolve => {
+      releaseControllerFinalize = resolve;
+    });
+    prepareMock.mockResolvedValueOnce({
+      base: { controller: controllerMock },
+      mastraArgs: {},
+      finalize: vi.fn(() => controllerFinalize),
+    } as never);
+
     const factory = new MastraFactory({
       secretEncryption,
       storage: fakeStorage(),
@@ -3378,14 +3388,16 @@ describe('MastraFactory.finalize', () => {
     await factory.prepare();
     const start = vi.spyOn(factoryMetrics(), 'start');
     try {
-      // finalize() suspends at the controller finalize, so shutdown() sets its flag first and
-      // finalize() resumes into a process that has already cleaned up.
+      // finalize() parks on the controller's finalize until shutdown() has completed, so it
+      // resumes into a process that already cleaned up. Without the guard, metrics would start here.
       const finalize = factory.finalize();
       await factory.shutdown();
+      releaseControllerFinalize();
       await finalize;
 
       expect(start).not.toHaveBeenCalled();
     } finally {
+      releaseControllerFinalize();
       start.mockRestore();
     }
   });
