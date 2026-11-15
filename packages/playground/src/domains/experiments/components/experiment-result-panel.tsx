@@ -26,6 +26,7 @@ import { ClipboardPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
+import { savedConversation } from '../utils/conversation-playback';
 import { replayContext, replayUsage } from '../utils/replay';
 import {
   getMissingTextNotice,
@@ -39,6 +40,7 @@ import type { ComparisonMetric } from './comparison/comparison-metric-list';
 import { ComparisonPayload } from './comparison/comparison-payload';
 import { ComparisonSection, sectionStackClass } from './comparison/comparison-section';
 import { itemMetrics } from './comparison/item-metrics';
+import { ExperimentConversation } from './experiment-conversation';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 import { ReplayResult } from './replay-result';
 import { ToolMockReportSection } from './tool-mock-report-section';
@@ -110,7 +112,7 @@ export function ExperimentResultPanel({
 }: ExperimentResultPanelProps) {
   const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Experiment result ${result?.id ?? ''}`);
   const content = result ? (
-    <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+    <ExperimentResultPanelBody key={result.id} result={result} onClose={onClose} {...bodyProps} />
   ) : itemId ? (
     <>
       <DataPanel.Header>
@@ -185,6 +187,7 @@ function ExperimentResultPanelBody({
     traceId: feedbackTraceId,
     queryOptions: { enabled: !!feedbackTraceId },
   });
+  const conversation = savedConversation(result.output);
   const isConversation = replayContext(result.output)?.mode === 'conversation';
   const { usage: traceUsage, isLoading: isUsageLoading } = useExperimentResultUsage(
     isConversation ? undefined : result.traceId,
@@ -381,22 +384,37 @@ function ExperimentResultPanelBody({
         </DataPanel.HeaderActions>
       </DataPanel.Header>
 
-      {feedbackTraceId ? (
-        <Tabs<'details' | 'feedback'> defaultTab="details" className="grid h-full min-h-0 grid-rows-[auto_1fr]">
+      {conversation || feedbackTraceId ? (
+        <Tabs<'conversation' | 'details' | 'feedback'>
+          defaultTab={conversation ? 'conversation' : 'details'}
+          className="grid h-full min-h-0 grid-rows-[auto_1fr]"
+        >
           <DataPanel.Header>
             <TabList variant="pill-ghost" size="sm">
+              {conversation && <Tab value="conversation">Conversation</Tab>}
               <Tab value="details">Details</Tab>
-              <Tab value="feedback">
-                Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
-              </Tab>
+              {feedbackTraceId && (
+                <Tab value="feedback">
+                  Feedback{traceFeedback?.pagination?.total != null && <> ({traceFeedback.pagination.total})</>}
+                </Tab>
+              )}
             </TabList>
           </DataPanel.Header>
+          {conversation && (
+            <TabContent value="conversation" flush>
+              <DataPanel.Content>
+                <ExperimentConversation conversation={conversation} input={result.input} onShowTrace={onShowTrace} />
+              </DataPanel.Content>
+            </TabContent>
+          )}
           <TabContent value="details" flush>
             {details}
           </TabContent>
-          <TabContent value="feedback" flush>
-            <DataPanel.Content>{feedbackTabSlot!({ traceId: feedbackTraceId })}</DataPanel.Content>
-          </TabContent>
+          {feedbackTraceId && feedbackTabSlot && (
+            <TabContent value="feedback" flush>
+              <DataPanel.Content>{feedbackTabSlot({ traceId: feedbackTraceId })}</DataPanel.Content>
+            </TabContent>
+          )}
         </Tabs>
       ) : (
         details

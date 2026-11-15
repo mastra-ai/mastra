@@ -1,11 +1,16 @@
 import { isReplayRecord, replayContext, replayUserMessage } from './replay';
+import { getResultErrorMessage, getResultToolCalls } from './result-output';
 
 /** Read only the saved result envelope. Gaps stay indexed, so an interrupted run cannot shift alignment. */
 export function savedConversation(output: unknown) {
   const context = replayContext(output);
   if (context?.mode !== 'conversation' || !isReplayRecord(output) || !Array.isArray(output.turns)) return undefined;
   if (!Number.isSafeInteger(context.turnCount) || context.turnCount < 1) return undefined;
-  return { count: context.turnCount, turns: output.turns.filter(isReplayRecord) };
+  return {
+    count: context.turnCount,
+    turns: output.turns.filter(isReplayRecord),
+    error: getResultErrorMessage({ targetType: 'agent', output }),
+  };
 }
 
 export function savedTurn(conversation: ReturnType<typeof savedConversation>, index: number, input: unknown) {
@@ -21,7 +26,7 @@ export function savedTurn(conversation: ReturnType<typeof savedConversation>, in
     input: replayUserMessage(turn?.input ?? sourceInput),
     text: typeof output?.text === 'string' ? output.text : '',
     object: output?.object,
-    toolCount: Array.isArray(output?.toolCalls) ? output.toolCalls.length : 0,
+    toolCalls: getResultToolCalls({ targetType: 'agent', output }),
     error,
   };
 }

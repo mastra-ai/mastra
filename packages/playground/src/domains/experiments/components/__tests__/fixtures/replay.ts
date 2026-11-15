@@ -1,4 +1,4 @@
-import type { DatasetExperimentResult } from '@mastra/client-js';
+import type { DatasetExperimentResult, MastraClient } from '@mastra/client-js';
 
 export const replayResult = {
   input: [
@@ -33,7 +33,10 @@ export const replayResult = {
 } satisfies Pick<DatasetExperimentResult, 'input' | 'output' | 'groundTruth' | 'toolMockReport'>;
 
 export const conversationResult = {
-  input: { type: 'conversation', turns: [] },
+  input: {
+    type: 'conversation',
+    turns: [{ input: 'Remember Ada' }, { input: 'Check my order' }, { input: 'Has it shipped?' }],
+  },
   groundTruth: null,
   output: {
     replay: { mode: 'conversation', sourceThreadId: 'golden', turnCount: 3 },
@@ -68,4 +71,40 @@ export const conversationResult = {
     error: { message: 'Provider disconnected' },
   },
   toolMockReport: replayResult.toolMockReport,
+} satisfies Pick<DatasetExperimentResult, 'input' | 'output' | 'groundTruth' | 'toolMockReport'>;
+
+export const noMcpServers: Awaited<ReturnType<MastraClient['getMcpServers']>> = { servers: [], totalCount: 0 };
+
+/** Caller-run experiments (including the NFL demo) save tool payloads directly. */
+export const flatConversationResult = {
+  ...conversationResult,
+  output: {
+    ...conversationResult.output,
+    replay: { ...conversationResult.output.replay, turnCount: 1 },
+    turns: [
+      {
+        ...conversationResult.output.turns[1],
+        turnIndex: 0,
+        output: {
+          ...replayResult.output,
+          toolCalls: replayResult.output.toolCalls.map(call => call.payload),
+          toolResults: replayResult.output.toolResults.map(result => result.payload),
+        },
+      },
+    ],
+  },
+} satisfies Pick<DatasetExperimentResult, 'input' | 'output' | 'groundTruth' | 'toolMockReport'>;
+
+export const unstartedConversationResult = {
+  ...conversationResult,
+  output: { ...conversationResult.output, turns: [], error: { message: 'Memory is required' } },
+} satisfies Pick<DatasetExperimentResult, 'input' | 'output' | 'groundTruth' | 'toolMockReport'>;
+
+export const structuredConversationResult = {
+  ...flatConversationResult,
+  output: {
+    ...flatConversationResult.output,
+    error: null,
+    turns: [{ turnIndex: 0, input: 'Check my order', output: { object: { status: 'ready' } } }],
+  },
 } satisfies Pick<DatasetExperimentResult, 'input' | 'output' | 'groundTruth' | 'toolMockReport'>;

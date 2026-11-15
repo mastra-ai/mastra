@@ -3,6 +3,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { noMcpServers } from '../../__tests__/fixtures/replay';
 import { CompareMetricsMenu } from '../compare-metrics-menu';
 import { ExperimentsComparison } from '../experiments-comparison';
 import {
@@ -67,6 +68,7 @@ const experimentsBase = `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments
 
 beforeEach(() => {
   server.use(
+    http.get('*/api/mcp/v0/servers', () => HttpResponse.json(noMcpServers)),
     http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(comparisonResponse)),
     http.get(`${experimentsBase}/${BASELINE_ID}`, () => HttpResponse.json(makeExperiment(BASELINE_ID, 1))),
     http.get(`${experimentsBase}/${CONTENDER_ID}`, () => HttpResponse.json(makeExperiment(CONTENDER_ID, 2))),
@@ -174,6 +176,15 @@ describe('experiments comparison table', () => {
     afterEach(() => {
       vi.useRealTimers();
       vi.restoreAllMocks();
+    });
+
+    it('shows recorded tool details through the read-only chat renderer', async () => {
+      const playback = await openPlayback(conversationComparison);
+      fireEvent.click(playback.getByRole('button', { name: 'Go to turn 2' }));
+      fireEvent.click(playback.getAllByRole('button', { name: /lookupOrder/i })[0]);
+      expect(playback.getByText(/No recorded result/)).toBeTruthy();
+      expect(playback.queryByRole('textbox')).toBeNull();
+      expect(playback.queryByRole('button', { name: /send|approve|retry/i })).toBeNull();
     });
 
     it('opens paused without revealing saved assistant responses or opening the dataset drawer', async () => {

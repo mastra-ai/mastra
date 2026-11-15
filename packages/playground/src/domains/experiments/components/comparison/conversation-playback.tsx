@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Pause, Play, RotateCcw, SkipBack, SkipForward } from 'lucide-react';
 import { savedTurn } from '../../utils/conversation-playback';
 import type { savedConversation } from '../../utils/conversation-playback';
-import { ConversationPlaybackMessage } from './conversation-playback-message';
+import { ExperimentConversationTurn } from '../experiment-conversation-turn';
 import { useConversationPlayback } from './use-conversation-playback';
 
 type Conversation = NonNullable<ReturnType<typeof savedConversation>>;
@@ -105,8 +105,8 @@ export function ConversationPlayback({
                     )}
                   </div>
                   <div className="grid grid-cols-2 divide-x divide-border">
-                    <ConversationPlaybackMessage turn={left} fraction={fraction} />
-                    <ConversationPlaybackMessage turn={right} fraction={fraction} />
+                    <ExperimentConversationTurn turn={left} fraction={fraction} />
+                    <ExperimentConversationTurn turn={right} fraction={fraction} />
                   </div>
                 </section>
               );

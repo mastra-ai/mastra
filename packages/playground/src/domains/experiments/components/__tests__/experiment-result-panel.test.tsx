@@ -14,6 +14,13 @@ import {
   workflowResult,
 } from './fixtures/experiment-results';
 import {
+  conversationResult,
+  flatConversationResult,
+  noMcpServers,
+  unstartedConversationResult,
+  structuredConversationResult,
+} from './fixtures/replay';
+import {
   metricsCapableCapabilities,
   metricsUnavailableCapabilities,
   traceSpans,
@@ -46,6 +53,7 @@ const makeResult = (overrides: Partial<DatasetExperimentResult> = {}): DatasetEx
 // The panel prefetches trace feedback (needs-review dot) and the trace itself (usage rows).
 beforeEach(() => {
   server.use(
+    http.get('*/api/mcp/v0/servers', () => HttpResponse.json(noMcpServers)),
     http.get('*/api/observability/feedback', () =>
       HttpResponse.json({ feedback: [], pagination: { total: 0, page: 0, perPage: 50, hasMore: false } }),
     ),
@@ -133,6 +141,57 @@ describe('ExperimentResultPanel output', () => {
       const output = screen.getByRole('region', { name: 'Output' });
       expect(within(output).getByText('No final text response after 2 tool calls')).toBeTruthy();
       expect(output.textContent).not.toContain('toolCalls');
+    });
+  });
+});
+
+describe('ExperimentResultPanel conversation', () => {
+  describe('when the conversation fails before its first turn', () => {
+    it('explains the failure while keeping the unexecuted user prompts visible', async () => {
+      renderPanel(makeResult({ ...unstartedConversationResult, targetType: 'agent' }));
+      const conversation = within(await screen.findByRole('tabpanel', { name: 'Conversation' }));
+      expect(conversation.getByRole('alert').textContent).toBe('Memory is required');
+      expect(conversation.getByText('Has it shipped?')).toBeTruthy();
+      expect(conversation.getAllByText('This turn was not executed.')).toHaveLength(3);
+    });
+  });
+
+  describe('when the conversation has structured output instead of text', () => {
+    it('shows the saved object', async () => {
+      renderPanel(makeResult({ ...structuredConversationResult, targetType: 'agent' }));
+      const conversation = await screen.findByRole('tabpanel', { name: 'Conversation' });
+      expect(conversation.textContent).toContain('"status": "ready"');
+    });
+  });
+
+  describe('when a caller-run conversation stores tool payloads directly', () => {
+    it('allows inspection of the recorded tool result', async () => {
+      renderPanel(makeResult({ ...flatConversationResult, targetType: 'agent' }));
+      fireEvent.click(await screen.findByRole('button', { name: /lookupOrder/i }));
+      expect(screen.getByText(/No recorded result/)).toBeTruthy();
+    });
+  });
+
+  describe('when a saved conversation contains completed, interrupted, and unexecuted turns', () => {
+    it('opens the full read-only conversation and preserves turn diagnostics under Details', async () => {
+      renderPanel(makeResult({ ...conversationResult, targetType: 'agent' }));
+
+      const conversation = within(await screen.findByRole('tabpanel', { name: 'Conversation' }));
+      expect(conversation.getByText('Remembered Grace')).toBeTruthy();
+      expect(conversation.getByText('Please confirm the order number')).toBeTruthy();
+      expect(conversation.queryByText('Previous question')).toBeNull();
+      expect(conversation.getByText('Interrupted: Provider disconnected')).toBeTruthy();
+      expect(conversation.getByText('This turn was not executed.')).toBeTruthy();
+      expect(conversation.queryByRole('textbox')).toBeNull();
+      expect(conversation.queryByRole('button', { name: /send|approve|retry/i })).toBeNull();
+
+      fireEvent.click(conversation.getByRole('button', { name: /lookupOrder/i }));
+      expect(conversation.getByText(/No recorded result/)).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Details' }));
+      expect(screen.getByText('Similarity: 0')).toBeTruthy();
+      fireEvent.click(screen.getByRole('button', { name: /Turn 2: Interrupted/ }));
+      expect(screen.getByText('Similarity: Judge unavailable')).toBeTruthy();
     });
   });
 });

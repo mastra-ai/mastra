@@ -52,17 +52,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Stream chunks keep the call details in `payload`; read them from there. */
-function chunkPayloads(value: unknown): Record<string, unknown>[] {
+/** Runner results wrap tool payloads in stream chunks; caller-run experiments may save them directly. */
+function toolPayloads(value: unknown): Record<string, unknown>[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap(chunk => (isRecord(chunk) && isRecord(chunk.payload) ? [chunk.payload] : []));
+  return value.filter(isRecord).map(chunk => (isRecord(chunk.payload) ? chunk.payload : chunk));
 }
 
 /** Agent tool calls in call order, each joined with its result by `toolCallId`. */
 export function getResultToolCalls(result: ResultOutputSource): ResultToolCall[] {
   if (result.targetType !== 'agent' || !isRecord(result.output)) return [];
-  const results = new Map(chunkPayloads(result.output.toolResults).map(payload => [payload.toolCallId, payload]));
-  return chunkPayloads(result.output.toolCalls).flatMap(call => {
+  const results = new Map(toolPayloads(result.output.toolResults).map(payload => [payload.toolCallId, payload]));
+  return toolPayloads(result.output.toolCalls).flatMap(call => {
     if (typeof call.toolName !== 'string') return [];
     const toolResult = results.get(call.toolCallId);
     return [
