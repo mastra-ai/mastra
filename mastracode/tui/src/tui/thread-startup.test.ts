@@ -381,6 +381,32 @@ describe('resumeThreadOnStartup', () => {
     expect(state.pendingNewThread).toBe(false);
   });
 
+  it('does not mark a pending thread when the caller stopped while the only saved thread was tried', async () => {
+    const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
+    let current = true;
+    const switchThread = vi.fn(async () => {
+      current = false;
+      throw new ThreadLockError('thread-latest', 1234);
+    });
+    const state = {
+      projectInfo: { rootPath: '/tmp/project' },
+      pendingNewThread: false,
+      session: {
+        thread: {
+          getId: vi.fn(() => null),
+          list: vi.fn().mockResolvedValue([latest]),
+          switch: switchThread,
+        },
+      },
+    } as any;
+    state.local = { controller: state.controller, session: state.session };
+
+    await resumeThreadOnStartup(state, undefined, () => current);
+
+    expect(switchThread).toHaveBeenCalledTimes(1);
+    expect(state.pendingNewThread).toBe(false);
+  });
+
   it('resumes the latest unlocked thread for the current directory', async () => {
     const latest = createThread('thread-latest', 'Latest thread', '2026-08-28T11:00:00Z');
     const older = createThread('thread-older', 'Older thread', '2026-08-28T10:00:00Z');

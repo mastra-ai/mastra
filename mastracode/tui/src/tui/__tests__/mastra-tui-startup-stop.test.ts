@@ -13,6 +13,10 @@ const mocks = vi.hoisted(() => ({
   showInfo: vi.fn(),
   resumeThreadOnStartup: vi.fn(),
   OnboardingInlineComponent: vi.fn(),
+  promptAuthMode: vi.fn(),
+  LoginDialogComponent: vi.fn(),
+  ModelSelectorComponent: vi.fn(),
+  updateStatusLine: vi.fn(),
 }));
 
 function stopIfAt(stage: string): void {
@@ -89,7 +93,22 @@ vi.mock('../overlay.js', async importOriginal => ({
 
 vi.mock('../status-line.js', async importOriginal => ({
   ...(await importOriginal<typeof import('../status-line.js')>()),
-  updateStatusLine: vi.fn(),
+  updateStatusLine: mocks.updateStatusLine,
+}));
+
+vi.mock('../components/login-mode-selector.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../components/login-mode-selector.js')>()),
+  promptAuthMode: mocks.promptAuthMode,
+}));
+
+vi.mock('../components/login-dialog.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../components/login-dialog.js')>()),
+  LoginDialogComponent: mocks.LoginDialogComponent,
+}));
+
+vi.mock('../components/model-selector.js', async importOriginal => ({
+  ...(await importOriginal<typeof import('../components/model-selector.js')>()),
+  ModelSelectorComponent: mocks.ModelSelectorComponent,
 }));
 
 import { AssistantRenderRegistry } from '../assistant-render-registry.js';
@@ -115,6 +134,7 @@ type StartupTui = {
   removeOptimisticUserMessage: ReturnType<typeof vi.fn>;
   refreshModelAuthStatus: ReturnType<typeof vi.fn>;
   applyOnboardingResult: (result: unknown) => Promise<void>;
+  performLogin: (providerId: string) => Promise<void>;
   init: () => Promise<void>;
   run: () => Promise<void>;
   stop: () => void;
@@ -491,6 +511,8 @@ describe('MastraTUI startup stopped part-way', () => {
     expect(mocks.saveSettings).toHaveBeenCalledTimes(1);
     expect(mocks.applyCurrentThreadPack).toHaveBeenCalledTimes(1);
     expect(tui.state.session.thread.setSetting).toHaveBeenCalledTimes(1);
+    expect(mocks.updateStatusLine).toHaveBeenCalledTimes(1);
+    expect(tui.refreshModelAuthStatus).toHaveBeenCalledTimes(1);
   });
 
   it('does not save settings or apply the pack when stopped while onboarding saves yolo', async () => {
@@ -512,6 +534,101 @@ describe('MastraTUI startup stopped part-way', () => {
 
     expect(mocks.applyCurrentThreadPack).toHaveBeenCalledTimes(1);
     expect(tui.state.session.thread.setSetting).not.toHaveBeenCalled();
+  });
+
+  it('does not refresh the status line or model auth when stopped while onboarding clears the fallback status', async () => {
+    const { tui } = createStartupTui('fallback-clear');
+    useOnboardingResult(tui);
+    tui.state.session.thread.setSetting = vi.fn(async () => stopIfAt('fallback-clear'));
+
+    await tui.applyOnboardingResult(onboardingResult);
+
+    expect(tui.state.session.thread.setSetting).toHaveBeenCalledTimes(1);
+    expect(mocks.updateStatusLine).not.toHaveBeenCalled();
+    expect(tui.refreshModelAuthStatus).not.toHaveBeenCalled();
+  });
+
+  it('logs in and switches to the default model when nothing stops it', async () => {
+    const { tui } = createStartupTui('');
+    useLogin(tui);
+
+    await tui.performLogin('anthropic');
+
+    expect(mocks.LoginDialogComponent).toHaveBeenCalledTimes(1);
+    expect(tui.state.authStorage.login).toHaveBeenCalledTimes(1);
+    expect(tui.state.session.model.switch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not open the login dialog when stopped while the login mode is chosen', async () => {
+    const { tui } = createStartupTui('auth-mode');
+    useLogin(tui);
+
+    await tui.performLogin('anthropic');
+
+    expect(mocks.promptAuthMode).toHaveBeenCalledTimes(1);
+    expect(mocks.LoginDialogComponent).not.toHaveBeenCalled();
+    expect(tui.state.authStorage.login).not.toHaveBeenCalled();
+  });
+
+  it('does not switch models or report the login when stopped while logging in', async () => {
+    const { tui } = createStartupTui('login');
+    useLogin(tui);
+
+    await tui.performLogin('anthropic');
+
+    expect(tui.state.authStorage.login).toHaveBeenCalledTimes(1);
+    expect(tui.state.ui.hideOverlay).toHaveBeenCalled();
+    expect(tui.state.session.model.switch).not.toHaveBeenCalled();
+    expect(mocks.showInfo).not.toHaveBeenCalled();
+  });
+
+  it('refreshes provider access after an onboarding login when nothing stops it', async () => {
+    const { tui } = createStartupTui('');
+    const component = await openRealOnboarding(tui);
+    tui.performLogin = vi.fn(async () => {});
+    const done = vi.fn();
+
+    component.options.onLogin('anthropic', done);
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+
+    expect(tui.buildProviderAccess).toHaveBeenCalledTimes(2);
+    expect(component.updateModePacks).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not refresh provider access when stopped during an onboarding login', async () => {
+    const { tui } = createStartupTui('');
+    const component = await openRealOnboarding(tui);
+    tui.performLogin = vi.fn(async () => tui.stop());
+    const done = vi.fn();
+
+    component.options.onLogin('anthropic', done);
+    await vi.waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+
+    expect(tui.buildProviderAccess).toHaveBeenCalledTimes(1);
+    expect(component.updateModePacks).not.toHaveBeenCalled();
+    expect(component.updateHasProviderAccess).not.toHaveBeenCalled();
+  });
+
+  it('opens the onboarding model selector when nothing stops it', async () => {
+    const { tui } = createStartupTui('');
+    const component = await openRealOnboarding(tui);
+
+    void component.options.onSelectModel('Build');
+    await vi.waitFor(() => expect(mocks.ModelSelectorComponent).toHaveBeenCalledTimes(1));
+  });
+
+  it('does not open the onboarding model selector when stopped while models are listed', async () => {
+    const { tui } = createStartupTui('model-list');
+    const component = await openRealOnboarding(tui);
+
+    const picked = await Promise.race([
+      component.options.onSelectModel('Build'),
+      new Promise(resolve => setTimeout(() => resolve('still waiting'), 50)),
+    ]);
+
+    expect(tui.state.controller.listAvailableModels).toHaveBeenCalledTimes(1);
+    expect(mocks.ModelSelectorComponent).not.toHaveBeenCalled();
+    expect(picked).toBeUndefined();
   });
 
   it('detaches the input handler when stopped', async () => {
@@ -577,4 +694,49 @@ function useOnboardingResult(tui: StartupTui): void {
   tui.state.session.state = { get: () => ({}), set: vi.fn(async () => stopIfAt('onboarding-yolo')) };
   tui.state.session.thread.setSetting = vi.fn(async () => {});
   tui.refreshModelAuthStatus = vi.fn(async () => {});
+}
+
+function useLogin(tui: StartupTui): void {
+  tui.state.ui.hideOverlay = vi.fn();
+  tui.state.authStorage = { login: vi.fn(async () => stopIfAt('login')), isLoggedIn: () => false };
+  tui.state.session.model = { switch: vi.fn(async () => {}) };
+  mocks.promptAuthMode.mockImplementation(async () => {
+    stopIfAt('auth-mode');
+    return 'oauth';
+  });
+  mocks.LoginDialogComponent.mockImplementation(function () {
+    return { signal: undefined, showAuth: vi.fn(), showPrompt: vi.fn(), showProgress: vi.fn() };
+  });
+}
+
+type OnboardingOptions = {
+  onLogin: (providerId: string, done: () => void) => void;
+  onSelectModel: (title: string) => Promise<string | undefined>;
+};
+
+async function openRealOnboarding(tui: StartupTui) {
+  delete (tui as Partial<StartupTui>).showOnboarding;
+  tui.buildProviderAccess = vi.fn(async () => ({}));
+  tui.state.controller = {
+    listAvailableModels: vi.fn(async () => {
+      stopIfAt('model-list');
+      return [{ id: 'model-a' }];
+    }),
+  };
+  const component = {
+    options: undefined as unknown as OnboardingOptions,
+    updateModePacks: vi.fn(),
+    updateHasProviderAccess: vi.fn(),
+  };
+  mocks.OnboardingInlineComponent.mockImplementation(function (options: OnboardingOptions) {
+    component.options = options;
+    return component;
+  });
+  mocks.ModelSelectorComponent.mockImplementation(function () {
+    return {};
+  });
+
+  void (tui.showOnboarding as unknown as () => Promise<void>)();
+  await vi.waitFor(() => expect(mocks.OnboardingInlineComponent).toHaveBeenCalledTimes(1));
+  return component;
 }
