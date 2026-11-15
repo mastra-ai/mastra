@@ -42,6 +42,7 @@ import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
 import type { FactoryIntegration, IntegrationContext } from './integrations/base.js';
 import type * as platformGithubModule from './integrations/platform/github/integration.js';
+import { factoryMetrics } from './metrics/index.js';
 import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-source.js';
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
@@ -3365,6 +3366,27 @@ describe('MastraFactory.finalize', () => {
       expect(reconcile).not.toHaveBeenCalled();
     } finally {
       reconcile.mockRestore();
+    }
+  });
+
+  it('does not start metrics when finalize() finishes after shutdown() began', async () => {
+    const factory = new MastraFactory({
+      secretEncryption,
+      storage: fakeStorage(),
+      metrics: { groups: ['process'] },
+    });
+    await factory.prepare();
+    const start = vi.spyOn(factoryMetrics(), 'start');
+    try {
+      // finalize() suspends at the controller finalize, so shutdown() sets its flag first and
+      // finalize() resumes into a process that has already cleaned up.
+      const finalize = factory.finalize();
+      await factory.shutdown();
+      await finalize;
+
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      start.mockRestore();
     }
   });
 
