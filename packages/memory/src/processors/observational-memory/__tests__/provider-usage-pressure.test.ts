@@ -535,7 +535,8 @@ describe('provider-reported context pressure', () => {
     const store = new InMemoryStore();
     await run(20, true, false, { store, messageTokens: 1_000_000 });
     const resumed = await run(3, true, false, { store });
-    expect(resumed.observations, 'observer calls once the replayed reasoning is measured').toBeGreaterThan(0);
+    // The first resumed request bills ~42k tokens; its measurement must make the very next step observe.
+    expect(resumed.observationCounts[1], 'observer calls before the second resumed request').toBeGreaterThan(0);
   }, 60_000);
 
   it('keeps one measurement of the provider-added prompt while observations rewrite the system block', async () => {
