@@ -34,6 +34,15 @@ export class BaseResource {
   }
 
   /**
+   * Retry count for a request that only reads server state even though its HTTP method is not a
+   * read method, such as a query sent as POST. It keeps the read default unless the client was
+   * configured with an explicit `retries` count, which always wins.
+   */
+  protected readRetries(): number {
+    return this.options.retries ?? DEFAULT_RETRIES;
+  }
+
+  /**
    * Makes an HTTP request to the API with retries and exponential backoff
    * @param path - The API endpoint path (without prefix, e.g., '/agents')
    * @param options - Optional request configuration
