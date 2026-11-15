@@ -37,40 +37,46 @@ function workspaceFileUrl(workspacePath: string | undefined, path: string | unde
 }
 
 export function isPlanReadablePath(path: string | undefined): path is string {
-  return Boolean(path?.startsWith('.artifacts/'));
+  return Boolean(
+    path &&
+    /^(?:[^/.][^/]*\/)?\.artifacts\/.+/.test(path) &&
+    !path.includes('..') &&
+    !path.includes('\\') &&
+    !path.includes('\0'),
+  );
 }
 
 /**
- * Resolve a submitted plan `path` to a workspace-relative `.artifacts/…` path the
- * session file route accepts. Relative `.artifacts/*` paths pass through; an
- * absolute path (e.g. `/leadrvision/.artifacts/plans/issue.md`) is normalized
- * against the authoritative `rootPath` from `/web/workspace/rendered/list`
- * (the confined absolute `.artifacts` root). Traversal, wrong-root, backslash,
- * and NUL inputs are rejected rather than guessed — including for relative
- * `.artifacts/*` paths — though the backend still enforces its own
- * `assertRelativePath`/symlink guards.
+ * Resolve submitted plan paths beneath the workspace or a repository checkout's
+ * `.artifacts` root. Relative paths pass through; absolute paths are normalized
+ * only against an authoritative `rootPath` from `/web/workspace/rendered/list`.
+ * Traversal, wrong-root, backslash, and NUL inputs are rejected; the backend
+ * still enforces its own path and symlink guards.
  */
-export function normalizePlanPath(path: string | undefined, rootPath: string | undefined): string | undefined {
+export function normalizePlanPath(
+  path: string | undefined,
+  rootPath: string | undefined,
+  root = '.artifacts',
+): string | undefined {
   if (!path) return undefined;
   // Reject malformed inputs before any pass-through so relative and absolute
   // paths share the same traversal/backslash/NUL guards.
   if (path.includes('\\') || path.includes('\0')) return undefined;
   if (path.split('/').includes('..')) return undefined;
-  if (path.startsWith('.artifacts/')) return path;
+  if (!path.startsWith('/')) return isPlanReadablePath(path) ? path : undefined;
   // Only absolute posix paths are normalization candidates.
-  if (!path.startsWith('/')) return undefined;
   if (!rootPath) return undefined;
   const base = rootPath.endsWith('/') ? rootPath.slice(0, -1) : rootPath;
   if (path !== base && !path.startsWith(`${base}/`)) return undefined;
   const remainder = path.slice(base.length).replace(/^\/+/, '');
-  const relative = remainder ? `.artifacts/${remainder}` : '.artifacts';
+  const relative = remainder ? `${root}/${remainder}` : root;
   return isPlanReadablePath(relative) ? relative : undefined;
 }
 
 function planFileUrl(workspacePath: string | undefined, path: string | undefined) {
   if (!workspacePath || !isPlanReadablePath(path)) return undefined;
-  // The session file route only approves `.artifacts/*` reads without a thread
-  // file listing; Factory plans always live under `.artifacts/plans/`.
+  // The session file route accepts `.artifacts/*` at the workspace root or
+  // inside a repository checkout; the backend verifies the actual checkout.
   return `/web/workspace/file?${new URLSearchParams({ workspacePath, path })}`;
 }
 
