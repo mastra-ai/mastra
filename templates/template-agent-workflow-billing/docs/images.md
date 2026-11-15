@@ -33,13 +33,13 @@ Reusing an operation's exact key and input returns its saved result. A different
 
 Agent output contains `result.object.artifacts`; a completed kit contains `result.output.artifacts`. Each reference includes an opaque ID, safe filename, dimensions, byte count and SHA-256 digest. Binary image data stays outside billing JSON.
 
-From the template directory, replace `ARTIFACT_ID` with the reference's `id` and run this command. It reads the synthetic local owner's private profile without printing its credential, downloads from the running local server, and creates `bird.png` with owner-only permissions. Choose a new output filename for each download; an existing file is never overwritten. The optional third argument sets the local server URL when its port differs.
+From the template directory, replace `ARTIFACT_ID` with the reference's `id` and run this command. It reads the synthetic local owner's private profile without printing its credential, downloads from the running local server, and creates `bird.png` with owner-only permissions. Choose a new output filename for each download; an existing file is never overwritten. The optional third argument sets the local server URL when its port differs. For the [Autumn sandbox walkthrough](autumn.md#test-autumn-sandbox-in-studio), append `data/autumn-sandbox/profile.json` as a fourth argument on the first line, before `<<'NODE'`.
 
 ```sh
 node --input-type=module - ARTIFACT_ID bird.png http://127.0.0.1:4111 <<'NODE'
 import { readFile, open } from 'node:fs/promises';
 
-const [artifactId, output, baseUrl = 'http://127.0.0.1:4111'] = process.argv.slice(2);
+const [artifactId, output, baseUrl = 'http://127.0.0.1:4111', profileFile = 'data/local-profiles.json'] = process.argv.slice(2);
 if (!/^[a-f0-9-]{36}$/i.test(artifactId ?? '') || !output) {
   throw new Error('Provide an artifact ID and a new output filename.');
 }
@@ -47,8 +47,8 @@ const base = new URL(baseUrl);
 if (base.protocol !== 'http:' || base.hostname !== '127.0.0.1' || base.username || base.password) {
   throw new Error('Use the local server at http://127.0.0.1:PORT.');
 }
-const manifest = JSON.parse(await readFile('data/local-profiles.json', 'utf8'));
-const owner = manifest.profiles.owner;
+const manifest = JSON.parse(await readFile(profileFile, 'utf8'));
+const owner = manifest.profiles?.owner ?? manifest;
 const response = await fetch(new URL(
   `/billing/workspaces/${encodeURIComponent(owner.workspaceId)}/artifacts/${artifactId}`,
   base,

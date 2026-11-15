@@ -14,6 +14,8 @@ We built this template to provide a starting point for billing in Mastra, with c
 - Set `BILLING_STUDIO_ENABLED=true` to enable the Studio Assistant. Local setup creates the credential used to authenticate in Studio.
 - Optional **[Autumn credentials](https://app.useautumn.com)**: configure `AUTUMN_SECRET_KEY`, trusted customer/feature bindings, and JWT identity as described in the [Autumn guide](docs/autumn.md). The default local provider needs no Autumn credentials.
 
+For the **Autumn sandbox experience in production mode**, follow the [Autumn integration guide](docs/autumn.md#test-autumn-sandbox-in-studio) instead of the local quickstart below. It covers account, plan and credit setup, JWT provisioning and renewal, and testing in Studio. `BILLING_MODE=production` enables verified JWT identity; the Autumn sandbox key keeps billing in sandbox.
+
 ## Quickstart 🚀
 
 1. **Clone the template**

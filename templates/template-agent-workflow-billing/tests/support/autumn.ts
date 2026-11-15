@@ -15,6 +15,7 @@ export async function autumnFixture() {
   const logs: Record<string, unknown>[] = [];
   const hooks: { afterReserve?: () => Promise<void>; beforeFinalize?: () => Promise<void> } = {};
   const behavior = {
+    environment: 'sandbox',
     balance: 10,
     consumed: 0,
     dropReserve: false,
@@ -67,7 +68,7 @@ export async function autumnFixture() {
     requests.push({ path, body, version: req.headers['x-api-version'] as string | undefined });
     let status = 200;
     let output: unknown;
-    if (path.includes('customers.')) output = { ...customer, id: body.customer_id };
+    if (path.includes('customers.')) output = { ...customer, id: body.customer_id, env: behavior.environment };
     else if (path === '/v1/billing.attach')
       output = { customer_id: body.customer_id, payment_url: behavior.checkoutUrl };
     else if (path === '/v1/billing.open_customer_portal')
