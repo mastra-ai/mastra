@@ -205,7 +205,7 @@ The file is named after a SHA-256 hash of its content, so the same bytes are alw
 - A file deleted from the sandbox, or lost with a sandbox that was recycled, is written again on the next turn that runs with a live sandbox.
 - Within one request, a file is placed once, however many times the model is called.
 
-A stopped sandbox isn't started just to look at a file of the thread history. A stopped sandbox keeps its files, so the note still points at the file, and the path comes from the sandbox's own `workingDirectory` rather than from asking the sandbox.
+A stopped sandbox isn't started to check a file of the thread history. It keeps its files, and the note still names the path the file was given. That path comes from the sandbox's own `workingDirectory` rather than from asking the sandbox. A file Mastra downloads from a link is written on the turn that needs it, which starts the sandbox.
 
 The path keeps nothing of the original name but its extension. A path that looks like the name invites the model to retype one from the other, and to ask the sandbox for a file that doesn't exist. The name stays available in the note.
 
