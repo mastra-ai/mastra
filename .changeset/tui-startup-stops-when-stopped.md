@@ -2,4 +2,4 @@
 'mastracode': patch
 ---
 
-**Fixed startup carrying on after you stop Mastra Code.** If you press Ctrl+C while Mastra Code is still starting, startup now stops. Before, it kept going: it took the terminal back, resumed and locked a thread, connected MCP servers, applied the startup model pack, ran SessionStart hooks and sent the startup prompt, even though Mastra Code was shutting down.
+**Fixed startup carrying on after you stop Mastra Code.** If you press Ctrl+C while Mastra Code is still starting, startup now stops. Before, it kept going even though Mastra Code was shutting down. It could take the terminal back, resume and lock a thread, clone a thread from another resource, and connect MCP servers. It could also apply the startup model pack, open onboarding, run SessionStart hooks and send the startup prompt. Text you typed is also no longer submitted after Mastra Code stops.

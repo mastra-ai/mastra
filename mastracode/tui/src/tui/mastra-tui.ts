@@ -431,12 +431,12 @@ export class MastraTUI {
         await this.submitUserInput(this.state.options.initialMessage);
       }
     }
-    if (this.stopped) return;
 
     // Main interactive loop — never blocks on streaming,
     // so the editor stays responsive for queued follow-ups.
-    while (true) {
+    while (!this.stopped) {
       const userInput = await this.getUserInput();
+      if (this.stopped) return;
       // allow space as transparent continue (for recovering from api errors manually)
       if (!userInput.trim() && userInput !== ' ') continue;
       await this.submitUserInput(userInput);
@@ -483,6 +483,7 @@ export class MastraTUI {
 
       const optimisticMessageId = this.renderOptimisticUserMessage(content, images);
       const allowed = await this.runUserPromptHook(userInput);
+      if (this.stopped) return;
       if (!allowed) {
         this.removeOptimisticUserMessage(optimisticMessageId);
         return;
@@ -613,10 +614,14 @@ export class MastraTUI {
       return;
     }
 
-    pendingThread.then(send).catch((error: unknown) => {
-      this.removeOptimisticUserMessage(optimisticMessageId);
-      showSessionError(this.state, error);
-    });
+    pendingThread
+      .then(() => {
+        if (!this.stopped) send();
+      })
+      .catch((error: unknown) => {
+        this.removeOptimisticUserMessage(optimisticMessageId);
+        showSessionError(this.state, error);
+      });
   }
 
   private signalMessage(content: string, images?: Array<{ data: string; mimeType: string }>): void {
@@ -724,6 +729,11 @@ export class MastraTUI {
       this.cleanupKeyHandlers();
       this.cleanupKeyHandlers = undefined;
     }
+
+    // Typed input must not reach the agent once stopped.
+    this.state.editor.onSubmit = undefined;
+    this.pendingUserInputResolve = undefined;
+    this.queuedUserInput = [];
 
     if (this.cleanupPluginReloadListener) {
       this.cleanupPluginReloadListener();
@@ -1625,6 +1635,7 @@ export class MastraTUI {
     }));
 
     const access = await this.buildProviderAccess();
+    if (this.stopped) return;
     const hasProviderAccess = Object.values(access).some(Boolean);
 
     const savedSettings = loadSettings();
@@ -1724,6 +1735,7 @@ export class MastraTUI {
     const modes = this.state.controller.listModes();
 
     await this.state.session.state.set({ yolo: result.yolo });
+    if (this.stopped) return;
 
     const settings = loadSettings();
     settings.onboarding.completedAt = new Date().toISOString();
@@ -1769,6 +1781,7 @@ export class MastraTUI {
 
     saveSettings(settings);
     await applyCurrentThreadPack({ state: this.state }, { packId: activeModePackId });
+    if (this.stopped) return;
     await this.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
     this.state.fallbackStatus = undefined;
 
