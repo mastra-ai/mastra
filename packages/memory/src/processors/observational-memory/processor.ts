@@ -22,6 +22,7 @@ import { contextPressure, countToolDefinitionTokens, snapshotContextRequest } fr
 import type { ContextRequest, ContextUsageAnchor } from './context-pressure';
 import { omDebug } from './debug';
 import { getOmFailureMetadata } from './error';
+import { ProviderAddedCosts, providerAddedKey, readReportedProviderAdded } from './fixed-prompt-cost';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
@@ -93,6 +94,20 @@ const GATEWAY_STATE_KEY = '__isGatewayModel';
 
 /** Step number OM last recovered from a context-overflow error, so each step retries at most once. */
 const CONTEXT_OVERFLOW_STEP_KEY = '__omContextOverflowStep';
+
+/** A request snapshot plus what the provider-added prompt is measured from. */
+type MeasuredRequest = ContextRequest & { messageTokens: number; replaysReasoning: boolean };
+
+// Per engine (one per Memory), so the measurement outlives a single call and dies with the process.
+const providerAddedCostsByEngine = new WeakMap<object, ProviderAddedCosts>();
+function providerAddedCosts(engine: object): ProviderAddedCosts {
+  let costs = providerAddedCostsByEngine.get(engine);
+  if (!costs) {
+    costs = new ProviderAddedCosts();
+    providerAddedCostsByEngine.set(engine, costs);
+  }
+  return costs;
+}
 
 /** Check if the model is routed through a Mastra gateway (duck-type check to avoid cross-package instanceof issues). */
 function isMastraGatewayModel(model: ProcessInputStepArgs['model']): boolean {
@@ -248,6 +263,13 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
       // The prompt-stage hook has no tools; keep their size for this step's request snapshot.
       state.__omToolTokens = countToolDefinitionTokens(args.tools, args.activeTools, this.engine.getTokenCounter());
+      state.__omProviderAddedKey = providerAddedKey({
+        model: model ? `${model.provider}/${model.modelId}` : '',
+        tools: args.tools,
+        activeTools: args.activeTools,
+        toolChoice: args.toolChoice,
+        providerOptions: args.providerOptions,
+      });
 
       // Repro capture setup
       const reproCaptureEnabled = isOmReproCaptureEnabled();
@@ -524,7 +546,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     });
   }
 
-  processLLMRequest(args: ProcessLLMRequestArgs): void {
+  async processLLMRequest(args: ProcessLLMRequestArgs): Promise<void> {
     delete args.state.__omContextRequest;
     if (
       !args.messageList ||
@@ -532,19 +554,34 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       parseMemoryRequestContext(args.requestContext)?.memoryConfig?.readOnly
     )
       return;
-    args.state.__omContextRequest = snapshotContextRequest(
-      args.messageList,
-      args.stepNumber,
-      `${args.model.provider}/${args.model.modelId}`,
-      this.engine.getTokenCounter(),
-      typeof args.state.__omToolTokens === 'number' ? args.state.__omToolTokens : 0,
-    );
+    const counter = this.engine.getTokenCounter();
+    const request: MeasuredRequest = {
+      ...snapshotContextRequest(
+        args.messageList,
+        args.stepNumber,
+        `${args.model.provider}/${args.model.modelId}`,
+        counter,
+        typeof args.state.__omToolTokens === 'number' ? args.state.__omToolTokens : 0,
+        typeof args.state.__omProviderAddedKey === 'string' ? args.state.__omProviderAddedKey : '',
+      ),
+      messageTokens: await counter.countMessagesAsync(args.messageList.get.all.db()),
+      // Replayed reasoning is billed by the provider but counted as 0 locally, so a request carrying it
+      // cannot tell the provider-added prompt apart from the reasoning.
+      replaysReasoning: args.prompt.some(
+        message => Array.isArray(message.content) && message.content.some(part => part.type === 'reasoning'),
+      ),
+    };
+    args.state.__omContextRequest = request;
   }
 
   async processOutputStep(args: ProcessOutputStepArgs): Promise<MessageList> {
-    const request = args.state.__omContextRequest as ContextRequest | undefined;
+    const request = args.state.__omContextRequest as MeasuredRequest | undefined;
     delete args.state.__omContextRequest;
     delete args.state.__omContextAnchor;
+    const costs = providerAddedCosts(this.engine);
+    const reported = readReportedProviderAdded(args.usage);
+    if (request?.providerAddedKey && reported !== undefined)
+      costs.record(request.providerAddedKey, { tokens: reported, source: 'reported' });
     const inputTokens = args.usage?.inputTokens;
     const outputTokens = args.usage?.outputTokens;
     if (
@@ -558,8 +595,21 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       outputTokens < 0
     )
       return args.messageList;
+    const { messageTokens, replaysReasoning, ...anchored } = request;
+    // Measure the provider-added prompt once per configuration, from a request that carries no reasoning.
+    if (anchored.providerAddedKey && !replaysReasoning)
+      costs.record(anchored.providerAddedKey, {
+        tokens: Math.max(0, inputTokens - messageTokens - anchored.systemTokens),
+        source: 'first-step',
+      });
+    const measured = anchored.providerAddedKey ? costs.get(anchored.providerAddedKey) : undefined;
+    anchored.fixedTokens = anchored.systemTokens + (measured?.tokens ?? anchored.toolTokens);
+    anchored.providerAddedSource = measured?.source ?? 'estimate';
+    omDebug(
+      `[OM:pressure] step ${args.stepNumber} fixed prompt ${anchored.fixedTokens} (system ${anchored.systemTokens}, provider-added ${anchored.fixedTokens - anchored.systemTokens}, fixedCostSource: ${anchored.providerAddedSource})`,
+    );
     const anchor: ContextUsageAnchor = {
-      request,
+      request: anchored,
       inputTokens,
       outputTokens,
       outputEstimate: await this.engine.getTokenCounter().countMessagesAsync(args.messageList.get.all.db()),

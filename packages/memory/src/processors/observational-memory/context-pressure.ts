@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { MastraDBMessage, MessageList } from '@mastra/core/agent';
-import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/core/schema';
+import { toolDefinitions } from './fixed-prompt-cost';
+import type { ProviderAddedSource } from './fixed-prompt-cost';
 import type { TokenCounter } from './token-counter';
 
 export type ContextRequest = {
@@ -8,7 +9,14 @@ export type ContextRequest = {
   model: string;
   parts: string[];
   system: string;
+  /** Everything in the request that is not message content: system messages plus the provider-added prompt. */
   fixedTokens: number;
+  systemTokens: number;
+  /** Local estimate of the tool definitions; used only until the provider-added prompt is measured. */
+  toolTokens: number;
+  /** Identifies the provider-added prompt; see providerAddedKey. */
+  providerAddedKey: string;
+  providerAddedSource: ProviderAddedSource;
 };
 
 export type ContextUsageAnchor = {
@@ -47,17 +55,7 @@ export function countToolDefinitionTokens(
 ): number {
   if (!tools) return 0;
   try {
-    const definitions = Object.entries(tools)
-      .filter(([name]) => !activeTools || activeTools.includes(name))
-      .map(([name, tool]) => {
-        const { description, inputSchema, parameters } = (tool ?? {}) as Record<string, unknown>;
-        const schema = inputSchema ?? parameters;
-        const jsonSchema = isStandardSchemaWithJSON(schema)
-          ? standardSchemaToJSONSchema(schema, { io: 'input' })
-          : ((schema as { jsonSchema?: unknown } | undefined)?.jsonSchema ?? schema);
-        return { name, description, parameters: jsonSchema };
-      });
-    return counter.countString(JSON.stringify(definitions));
+    return counter.countString(JSON.stringify(toolDefinitions(tools, activeTools)));
   } catch {
     // Pressure is a safeguard; an unserializable tool must not stop the run.
     return 0;
@@ -70,17 +68,23 @@ export function snapshotContextRequest(
   model: string,
   counter: TokenCounter,
   toolTokens = 0,
+  providerAddedKey = '',
 ): ContextRequest {
   // Tagged system messages (e.g. the observations block) are part of the prompt the provider
   // counts, so they belong to the overhead as well as to the invalidation hash.
   const system = messageList.getAllSystemMessages();
+  const systemTokens = counter.countString(JSON.stringify(system));
   return {
     step,
     model,
     parts: parts(messageList.get.all.db()),
     system: hash(system),
     // Keep full-prompt pressure separate from the unobserved-message budget.
-    fixedTokens: counter.countString(JSON.stringify(system)) + toolTokens,
+    fixedTokens: systemTokens + toolTokens,
+    systemTokens,
+    toolTokens,
+    providerAddedKey,
+    providerAddedSource: 'estimate',
   };
 }
 
