@@ -212,6 +212,28 @@ describe('semantic recall embedding reuse across saves', () => {
     expect(rows().map(row => row.vector[1])).toContain('other-embedder'.length);
   });
 
+  it('caches vectors under the embedder that produced them when it changes mid-save', async () => {
+    const original = makeEmbedder();
+    original.embedder.provider = 'fastembed';
+    const { memory, rows, make } = await setup();
+    memory.setEmbedder(original.embedder as any);
+    let releaseFirstEmbed!: () => void;
+    (memory as any).firstEmbed = new Promise<void>(resolve => (releaseFirstEmbed = resolve));
+
+    const firstSave = memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });
+    for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+    const replacement = makeEmbedder({ modelId: 'other-embedder' });
+    memory.setEmbedder(replacement.embedder as any);
+    releaseFirstEmbed();
+    await firstSave;
+
+    memory.setEmbedder(original.embedder as any);
+    await memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });
+
+    expect(replacement.stats.inputs).toEqual([]);
+    expect(rows().map(row => row.vector[1])).toEqual(['counting-embedder'.length, 'counting-embedder'.length]);
+  });
+
   it('keeps indexing raw-string content', async () => {
     const { memory, stats, rows, make } = await setup();
     const messages = texts.map(text => ({ ...make(randomUUID(), text), content: text }));

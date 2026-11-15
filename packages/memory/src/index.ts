@@ -1514,16 +1514,23 @@ ${workingMemory}`;
    * returned only for a call that reached the embedder.
    */
   private async embedMessageChunks(chunks: string[]) {
-    const owner = this.chunkEmbeddingCacheOwner;
-    if (owner.embedder !== this.embedder || owner.embedderOptions !== this.embedderOptions) {
-      this.chunkEmbeddingCache.clear();
-      this.chunkEmbeddingCacheOwner = { embedder: this.embedder, embedderOptions: this.embedderOptions };
-    }
+    // The embedder and options that produce these vectors, read once: embedValues can wait (for
+    // fastembed's first download) while setEmbedder swaps them, and the vectors must be cached
+    // under the embedder that made them.
+    const producer = { embedder: this.embedder, embedderOptions: this.embedderOptions };
     const key = (await this.hasher).h64(JSON.stringify(chunks));
+    if (producer.embedder !== this.embedder || producer.embedderOptions !== this.embedderOptions) {
+      return this.embedValues(chunks, producer);
+    }
+    const owner = this.chunkEmbeddingCacheOwner;
+    if (owner.embedder !== producer.embedder || owner.embedderOptions !== producer.embedderOptions) {
+      this.chunkEmbeddingCache.clear();
+      this.chunkEmbeddingCacheOwner = producer;
+    }
     const cached = this.chunkEmbeddingCache.get(key);
     if (cached) return { embeddings: await cached };
 
-    const result = this.embedValues(chunks);
+    const result = this.embedValues(chunks, producer);
     // Concurrent writers of the same chunks share this call. A failed call, or one without exactly
     // one embedding per chunk, is not kept, so the next write asks the embedder again.
     const embeddings = result.then(({ embeddings }) => {
@@ -1539,12 +1546,15 @@ ${workingMemory}`;
   }
 
   /** Sends texts to the embedder through the AI SDK version that matches its spec. */
-  private async embedValues(values: string[]) {
-    if (typeof this.embedder === `undefined`) {
+  private async embedValues(
+    values: string[],
+    { embedder, embedderOptions }: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = this,
+  ) {
+    if (typeof embedder === `undefined`) {
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
     // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
-    const isFastEmbed = this.embedder.provider === `fastembed`;
+    const isFastEmbed = embedder.provider === `fastembed`;
     if (isFastEmbed && this.firstEmbed instanceof Promise) {
       // so wait for the first one
       await this.firstEmbed;
@@ -1552,34 +1562,34 @@ ${workingMemory}`;
 
     const options = { values, maxRetries: 3 };
     // Options share a public union; select the SDK-specific options alongside the model version.
-    const model = this.embedder;
+    const model = embedder;
     let promise;
     switch (model.specificationVersion) {
       case 'v4':
         promise = embedManyV7({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
           model,
         });
         break;
       case 'v3':
         promise = embedManyV6({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
           model,
         });
         break;
       case 'v2':
         promise = embedManyV5({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
           model,
         });
         break;
       default:
         promise = embedMany({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
           model,
         });
         break;
