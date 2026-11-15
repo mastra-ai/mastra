@@ -9,6 +9,8 @@ export type ProviderAddedCost = { tokens: number; source: Exclude<ProviderAddedS
 /** Bump when what goes into the key changes, so old measurements are never reused. */
 const KEY_FORMAT_VERSION = 1;
 const MAX_ENTRIES = 64;
+/** Request fields a provider's usage split may report that are prompt the provider adds, not conversation. */
+const PROVIDER_ADDED_FIELDS = ['instructions', 'tools'] as const;
 
 /** The tool definitions a request sends, as the provider receives them. */
 export function toolDefinitions(tools: Record<string, unknown> | undefined, activeTools: string[] | undefined) {
@@ -68,16 +70,17 @@ export function providerAddedKey(request: {
 }
 
 /**
- * The tokens a response reports for request fields that are not messages (instructions, tools), when the
- * provider's own usage carries that split (OpenAI Responses `attribution.request_fields`). Mastra keeps the
- * normalized usage's source under `raw`, and the provider SDK keeps the provider's usage under its `raw`.
+ * The tokens a response reports for the instructions and tools request fields, when the provider's own usage
+ * carries that split (OpenAI Responses `attribution.request_fields`). Mastra keeps the normalized usage's source
+ * under `raw`, and the provider SDK keeps the provider's usage under its `raw`. Any other field (messages,
+ * reasoning, or one added later) is left out, so its tokens stay in measured pressure.
  */
 export function readReportedProviderAdded(usage: unknown): number | undefined {
   const fields = (usage as { raw?: { raw?: { attribution?: { request_fields?: unknown } } } } | undefined)?.raw?.raw
     ?.attribution?.request_fields;
   if (!fields || typeof fields !== 'object') return undefined;
-  const counts = Object.values(fields as Record<string, unknown>).map(
-    field => (field as { input_tokens?: unknown } | undefined)?.input_tokens,
+  const counts = PROVIDER_ADDED_FIELDS.filter(name => name in fields).map(
+    name => ((fields as Record<string, unknown>)[name] as { input_tokens?: unknown } | undefined)?.input_tokens,
   );
   if (counts.length === 0) return undefined;
   let total = 0;
