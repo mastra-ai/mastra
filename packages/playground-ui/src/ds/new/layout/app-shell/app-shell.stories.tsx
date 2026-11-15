@@ -148,7 +148,15 @@ export const CollapsedSidebar: Story = {
 };
 
 export const Mobile: Story = {
-  parameters: { viewport: { defaultViewport: 'mobile1' } },
+  parameters: {
+    viewport: { defaultViewport: 'mobile1' },
+    docs: {
+      description: {
+        story:
+          'Below `lg` the sidebar sits under the page. Swipe the page right or tap the menu button to slide the page aside; swipe left, tap the tinted strip, or press Escape to close.',
+      },
+    },
+  },
   render: () => (
     <TooltipProvider>
       <SidebarProvider>
