@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { identifierSchema } from '../billing/contracts.js';
+import { identifierSchema } from '../billing/contracts/core.js';
 export const briefSchema = z.string().trim().min(1).max(2000);
 export const artifactSchema = z
   .strictObject({
     id: z.uuid(),
+    downloadPath: z.string().max(512).optional(),
     executionId: identifierSchema,
     accountId: identifierSchema,
     workspaceId: identifierSchema,
@@ -20,7 +21,11 @@ export const artifactSchema = z
       .max(8 * 1024 * 1024),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
   })
-  .refine(value => value.width === 1024 || value.height === 1024);
+  .refine(value => value.width === 1024 || value.height === 1024)
+  .transform(artifact => ({
+    ...artifact,
+    downloadPath: `/billing/workspaces/${encodeURIComponent(artifact.workspaceId)}/artifacts/${artifact.id}`,
+  }));
 export type Artifact = z.infer<typeof artifactSchema>;
 export const imageOutputSchema = z.strictObject({ artifacts: z.tuple([artifactSchema]) });
 export const kitInputSchema = z.strictObject({

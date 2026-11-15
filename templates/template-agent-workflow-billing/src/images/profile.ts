@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BillingError } from '../billing/contracts.js';
+import { BillingError } from '../billing/contracts/core.js';
 
 const profileSchema = z.strictObject({
   model: z.string().trim().min(1).max(128),

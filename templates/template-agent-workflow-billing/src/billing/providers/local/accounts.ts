@@ -1,7 +1,7 @@
 import { resolve } from 'node:path';
-import { BillingError } from './contracts.js';
-import { billingDatabaseUrl } from './environment.js';
-import { readLocalProfiles } from './local-profiles.js';
+import { BillingError } from '../../contracts/core.js';
+import { billingDatabaseUrl } from '../../configuration/environment.js';
+import { readLocalProfiles } from './profiles.js';
 
 /** Resolve prepared development identities into generic local credit seeds, without accessing SQL. */
 export async function localDemoAccounts(environment: NodeJS.ProcessEnv, credits: number) {

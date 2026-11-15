@@ -4,7 +4,7 @@ import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
-import { BillingRecovery } from '../../src/billing/recovery.js';
+import { BillingRecovery } from '../../src/billing/runtime/recovery.js';
 import { BillingDatabase } from '../../src/billing/storage/database.js';
 import { modelBoundary, runtimeFixture, operationBarrier } from '../support/mastra.js';
 import { independentClient, temporaryDatabase } from '../support/billing.js';

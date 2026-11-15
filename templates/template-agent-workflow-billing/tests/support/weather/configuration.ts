@@ -1,5 +1,5 @@
 import { weatherDefinitions } from './resources.js';
-import { billingConfigurationSchema } from '../../../src/billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../../../src/billing/configuration/policy.js';
 
 export function weatherConfiguration(
   workspaceIds?: string | readonly string[],

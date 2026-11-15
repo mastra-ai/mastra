@@ -1,7 +1,7 @@
-import { BillingDatabase } from '../storage/database.js';
-import { retainCatalog } from '../storage/catalog.js';
-import { reservationRequestSchema, finalizationRequestSchema } from '../reservations.js';
-import type { BillingProvider } from './contracts.js';
+import { BillingDatabase } from '../../storage/database.js';
+import { retainCatalog } from '../../storage/catalog.js';
+import { reservationRequestSchema, finalizationRequestSchema } from '../../contracts/reservations.js';
+import type { BillingProvider } from '../../contracts/provider.js';
 import type {
   CheckoutRequest,
   CommercialSnapshot,
@@ -18,11 +18,11 @@ import type {
   UsageDelivery,
   UsageEvent,
   UsageBinding,
-} from '../contracts.js';
-import { organizationProfileSchema, parseInput } from '../contracts.js';
-import { localAccountSeedSchema } from '../policy-configuration.js';
-import type { BillingConfiguration, LocalAccountSeed } from '../policy-configuration.js';
-import { LocalBillingStorage } from '../storage/libsql.js';
+} from '../../contracts/core.js';
+import { organizationProfileSchema, parseInput } from '../../contracts/core.js';
+import { localAccountSeedSchema } from '../../configuration/policy.js';
+import type { BillingConfiguration, LocalAccountSeed } from '../../configuration/policy.js';
+import { LocalBillingStorage } from './storage.js';
 
 export const localCapabilities: ProviderCapabilities = Object.freeze({
   entitlements: true,

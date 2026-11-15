@@ -1,5 +1,5 @@
-import { BillingError } from '../contracts.js';
-import type { AdmissionIdentity } from '../accounting.js';
+import { BillingError } from '../contracts/core.js';
+import type { AdmissionIdentity } from '../runtime/accounting.js';
 import { BillingDatabase } from './database.js';
 import type { OrganizationStorage } from './organizations.js';
 

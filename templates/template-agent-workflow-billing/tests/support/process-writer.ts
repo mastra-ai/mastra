@@ -1,6 +1,6 @@
 import { fork } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import type { UsageEvent } from '../../src/billing/contracts.js';
+import type { UsageEvent } from '../../src/billing/contracts/core.js';
 
 interface Message {
   type: string;

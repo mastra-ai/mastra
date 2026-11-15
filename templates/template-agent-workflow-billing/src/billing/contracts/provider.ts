@@ -1,4 +1,4 @@
-import type { ReservationProtocol } from '../reservations.js';
+import type { ReservationProtocol } from './reservations.js';
 import type {
   ProviderCapabilities,
   OrganizationBillingProfile,
@@ -15,7 +15,7 @@ import type {
   HostedSession,
   RawWebhookRequest,
   ProviderNotification,
-} from '../contracts.js';
+} from './core.js';
 
 /** Contract implemented by every billing driver. Credentials remain driver-owned. */
 export interface BillingProvider {

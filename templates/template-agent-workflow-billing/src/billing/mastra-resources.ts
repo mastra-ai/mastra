@@ -1,10 +1,10 @@
 import { z } from 'zod';
-import type { ExecutionScope } from './execution-scope.js';
+import type { ExecutionScope } from './runtime/execution-scope.js';
 import type { Agent, AgentExecutionOptionsBase } from '@mastra/core/agent';
 import type { FullOutput } from '@mastra/core/stream';
 import type { AnyWorkflow, Workflow, Step } from '@mastra/core/workflows';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import { boundedJson, boundedJsonSchema, fingerprint } from './accounting.js';
+import { BillingError, identifierSchema, parseInput } from './contracts/core.js';
+import { boundedJson, boundedJsonSchema, fingerprint } from './runtime/accounting.js';
 
 export type AnyAgent = Agent<string, any, any, any, any>;
 export type AgentOutput<A> = A extends Agent<string, any, infer Output, any, any> ? Output : never;

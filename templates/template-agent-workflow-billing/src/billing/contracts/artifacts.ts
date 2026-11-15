@@ -1,6 +1,6 @@
 import type { z } from 'zod';
-import type { AdmissionIdentity } from './accounting.js';
-import type { ExecutionScope } from './execution-scope.js';
+import type { AdmissionIdentity } from '../runtime/accounting.js';
+import type { ExecutionScope } from '../runtime/execution-scope.js';
 
 /** Private downloads are authorized by billing before any bytes are returned. */
 export interface ArtifactReader {

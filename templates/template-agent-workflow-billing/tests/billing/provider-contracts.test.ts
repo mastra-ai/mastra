@@ -2,7 +2,7 @@ import { rawConfigurationFile } from '../support/configuration-files.js';
 import { providerContractFixture } from '../support/provider-contracts.js';
 import { stat } from 'node:fs/promises';
 import { afterEach, describe, expect, it } from 'vitest';
-import { initializeBilling } from '../../src/billing/setup.js';
+import { initializeBilling } from '../../src/billing/configuration/providers.js';
 import { configuration, independentClient, temporaryDatabase, usage } from '../support/billing.js';
 
 const cleanups: (() => void | Promise<void>)[] = [];

@@ -1,6 +1,6 @@
 import type { FullOutput } from '@mastra/core/stream';
 import type { AnyWorkflow } from '@mastra/core/workflows';
-import type { BillingResponse } from './accounting.js';
+import type { BillingResponse } from '../runtime/accounting.js';
 import type {
   AgentResource,
   WorkflowResource,
@@ -8,7 +8,7 @@ import type {
   NativeWorkflowResult,
   WorkflowProjection,
   WorkflowOutput,
-} from './mastra-resources.js';
+} from '../mastra-resources.js';
 type Receipt = BillingResponse['billing'];
 export type GenerationResponse<Output> =
   | {

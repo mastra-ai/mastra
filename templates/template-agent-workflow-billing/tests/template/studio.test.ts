@@ -1,10 +1,10 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { configuredOrganizations } from '../../src/billing/environment.js';
+import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { studioComposition } from '../support/studio-composition.js';
 import { createStudioBillingWrapper } from '../../src/studio-with-billing/index.js';
 import { createBilling } from '../../src/billing/integration.js';
 import { imageConfiguration } from '../support/image-configuration.js';
-import { readConfigurationFile } from '../../src/billing/configuration-file.js';
+import { readConfigurationFile } from '../../src/billing/configuration/files.js';
 import { afterEach, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, chmod, stat } from 'node:fs/promises';
@@ -93,6 +93,9 @@ async function studioDefinitions(server: Server) {
     expect((await fetch(server.url + path, { headers: { authorization: 'Bearer invalid' } })).status).toBe(401);
     expect((await server.call(path)).status).toBe(200);
   }
+  const agents = await server.call('/api/agents');
+  expect(agents.body['studio-assistant'].name).toBe('Image Assistant');
+  expect(agents.body['image-agent'].name).toBe('Image Generation');
   const listed = await server.call('/api/tools');
   for (const id of toolIds) {
     expect(listed.body).toHaveProperty(id);

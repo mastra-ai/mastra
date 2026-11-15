@@ -1,6 +1,6 @@
 import { transitionCredits, transitionImageCredits } from './credit-transitions.js';
 import { randomUUID } from 'node:crypto';
-import { finalizationRequestSchema, reservationRequestSchema } from '../reservations.js';
+import { finalizationRequestSchema, reservationRequestSchema } from '../../contracts/reservations.js';
 import type { Transaction } from '@libsql/client/node';
 import { z } from 'zod';
 import {
@@ -10,7 +10,7 @@ import {
   organizationProfileSchema,
   parseInput,
   usageEventSchema,
-} from '../contracts.js';
+} from '../../contracts/core.js';
 import type {
   CommercialGrant,
   CommercialSnapshot,
@@ -20,11 +20,11 @@ import type {
   ReconciliationResult,
   UsageDelivery,
   UsageEvent,
-} from '../contracts.js';
-import { localAccountSeedSchema } from '../policy-configuration.js';
-import type { LocalAccountSeed } from '../policy-configuration.js';
-import { BillingDatabase } from './database.js';
-import { requireProvider } from './accounts.js';
+} from '../../contracts/core.js';
+import { localAccountSeedSchema } from '../../configuration/policy.js';
+import type { LocalAccountSeed } from '../../configuration/policy.js';
+import { BillingDatabase } from '../../storage/database.js';
+import { requireProvider } from '../../storage/accounts.js';
 
 function publicInteger(value: unknown): number {
   if (typeof value !== 'bigint' || value < 0n || value > BigInt(Number.MAX_SAFE_INTEGER))

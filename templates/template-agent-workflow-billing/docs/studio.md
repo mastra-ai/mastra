@@ -1,69 +1,66 @@
 # Billing in Studio
 
-Set `BILLING_STUDIO_ENABLED=true` in `.env`, then run `npm run dev` and open <http://127.0.0.1:4111/tools>. Local setup and the authenticated CLI remain available. `npm run build` includes Studio when this flag is set; `npm start` serves the built Studio. Rebuild after changing the flag.
+Set `BILLING_STUDIO_ENABLED=true`, run `npm run dev` and open [Studio](http://127.0.0.1:4111). `npm run build` includes Studio with this flag; `npm start` serves the built UI. Rebuild after changing it. Follow the [README](../README.md) for local profiles or [Autumn](autumn.md#test-autumn-sandbox-in-studio) for sandbox JWTs.
+
+With `BILLING_STUDIO_ENABLED=false`, the bundled conversation agent and billing Playground tools are not registered. Billing HTTP endpoints and the server-side facade still work and native paid routes remain blocked. Ordinary native resources retain their own routes. The flag does not remove the Studio UI from the development server or turn off billing.
 
 ## Authentication
 
-Open **Settings → Mastra Connection → Headers**, add `Authorization` with value `Bearer <credential>`, then select **Save configuration**. For local mode use the owner credential from the private `data/local-profiles.json`. For Autumn use a JWT from your configured issuer. The token must have a valid signature, issuer, audience, subject and expiration and match a previously provisioned, active local principal. Expired tokens must be replaced in Settings.
+In **Settings → Mastra Connection → Headers**, add `Authorization: Bearer <credential>` and save. Local mode uses `profiles.owner.credential` from `data/local-profiles.json`; Autumn uses a verified JWT. Expired JWTs must be replaced in Settings. Keys and Autumn secrets stay on the server.
 
-The Studio shell and authentication capabilities are public so Settings remains reachable. Tool and agent definitions require authentication. The browser stores custom headers; use a dedicated demonstration profile and keep the token and Settings screen out of recordings. API keys, signing keys and Autumn credentials stay on the server. Studio request context cannot select a different identity.
+Local setup creates John, Emma and Alex with separate personal organizations and 30 simulated credits each. Existing profiles, credentials and spending are preserved. Use each person's own credential. The optional `X-Billing-Workspace` header selects an authorized shared workspace; otherwise the user's personal workspace is resolved. Request Context cannot change identity or payer.
 
-Autumn mode requires `BILLING_MODE=production`, `BILLING_PROVIDER=autumn`, `BILLING_IDENTITY_CONFIG_FILE`, `AUTUMN_SECRET_KEY` and trusted `AUTUMN_CONFIG_FILE`. `BILLING_CONFIG_FILE` is optional when using the bundled policies. Follow the [Autumn sandbox walkthrough](autumn.md#test-autumn-sandbox-in-studio) for the included JWT setup, renewal and Studio commands, or provision your own trusted JWT principals and personal/shared workspace membership. Customer IDs come from server bindings, never from Studio request context.
+## Chat and approval
 
-Local setup creates John (`profiles.owner`), Emma (`profiles.member`), and Alex (`profiles.outsider`) with separate personal organizations and balances. Use each person's own credential and workspace ID. To share an allowance, explicitly convert the owner's workspace and invite the other person through the organization APIs. Setup never creates shared membership automatically or renames existing profiles, including previously saved Mary profiles. It preserves credentials and spent balances.
+Open **Agents → Image Assistant**. It calls **Image Generation** (`image-agent`, one credit) or **Image Kit** (`image-kit`, three credits). These technical IDs, including the conversation ID `studio-assistant`, are retained for saved history and operations. Conversation consumes no template credits but still uses the operator's text-model account.
 
-## Run billed actions
+1. Ask for one image. The business tool calls the billing facade; the gateway authenticates, checks access and reserves one credit before invoking the business agent.
+2. Successful durable output confirms the reservation. The tool returns an `operationId`, artifact metadata and a receipt. A rejected reservation returns `insufficient_credits` without business compute.
+3. For a kit, the gateway reserves three credits and the workflow saves three prompts before suspension. Review them and select **Approve**. Only complete success confirms three credits; nested agents have no separate charge.
+4. **Decline** explicitly cancels the saved workflow. Treat the hold as released only after the receipt says so. Pending/uncertain settlement is not a confirmed refund.
 
-Open a tool and choose **Playground**. The **Form** and **JSON** views use the same schemas. Every tool takes `workspaceId`, which is checked against the authenticated user's current membership.
+**Stop** and disconnect end conversation activity, not admitted business work. Reopen history and ask to query saved operations; omit `operationId` to recover the latest twenty initiating operations for this conversation/resource. Querying does not generate again. Explicitly ask to cancel business work when intended. A new generation tool call creates new work.
 
-| Tool                        | Input beyond workspaceId                                        | Result                                                          |
-| --------------------------- | --------------------------------------------------------------- | --------------------------------------------------------------- |
-| `billing-account`           | None                                                            | Owner-only provider balance, consumption and pending operations |
-| `billing-image-generate`    | `idempotencyKey`, `brief`                                       | Private image reference and billing receipt                     |
-| `billing-image-kit-start`   | `idempotencyKey`, `brief`                                       | Saved prompts with `executionId`; reservation held              |
-| `billing-image-kit-status`  | `executionId`                                                   | Private kit status and receipt                                  |
-| `billing-image-kit-approve` | `executionId`, `idempotencyKey`, `approval: {"approved": true}` | Completed kit and one capture                                   |
-| `billing-image-kit-cancel`  | `executionId`, `idempotencyKey`                                 | Cancellation and reservation release                            |
+History and operations belong to the exact user/workspace/agent/thread. Membership and ownership are checked on every request/action. Another member of the payer workspace cannot read the creator's private results. Attachments, message editing, forks, raw traces/storage and direct native paid execution stay closed. Ordinary agents cannot address protected threads. These protections survive disabling the wrapper.
 
-For local mode, read `profiles.owner.workspaceId` from `data/local-profiles.json` and paste that exact value into `workspaceId`. Replace `YOUR_OWNER_WORKSPACE_ID` below before submitting to `billing-image-generate`:
+## Tools Playground
 
-```json
-{
-  "workspaceId": "YOUR_OWNER_WORKSPACE_ID",
-  "idempotencyKey": "image-001",
-  "brief": "A small blue bird in a quiet forest"
-}
+Billing tools remain available alongside chat. Each requires `workspaceId`, validated against current membership.
+
+| Tool                        | Additional input                                                | Purpose                                          |
+| --------------------------- | --------------------------------------------------------------- | ------------------------------------------------ |
+| `billing-account`           | None                                                            | Owner's provider balance and pending settlement. |
+| `billing-image-generate`    | `idempotencyKey`, `brief`                                       | One paid image.                                  |
+| `billing-image-kit-start`   | `idempotencyKey`, `brief`                                       | Save prompts and hold three credits.             |
+| `billing-image-kit-status`  | `executionId`                                                   | Read current state/receipt.                      |
+| `billing-image-kit-approve` | `executionId`, `idempotencyKey`, `approval: {"approved": true}` | Resume saved work.                               |
+| `billing-image-kit-cancel`  | `executionId`, `idempotencyKey`                                 | Cancel saved work.                               |
+
+Repeat the same key/input to replay saved work without another charge. A changed input conflicts. Tool errors are structured failures, not successful receipts. In Autumn, `providerUsageIncludingHolds` includes held units and `consumedUnits` is null; settled receipts distinguish actual consumption. A new local account goes from 30 to 29 after one image, to 26 available while the kit is held, and remains at 26 after successful kit settlement.
+
+## Simulate denied access
+
+For a repeatable credit denial without spending 30 credits, use a separate local test database and profiles:
+
+1. Copy the template into a separate demo directory; keep its `.env` in local mode and set Studio enabled.
+2. Before the first `npm run setup`, set `balance: 0` instead of `balance: 30` in `scripts/setup.ts`, and use `localDemoAccounts(process.env, 0)` in `src/mastra/index.ts`. Setup initializes these new profiles with zero credits. The declarative `plans` block does not grant funds. Existing accounts are never refilled or overwritten by changed seeds.
+3. Start Studio, authenticate using that copy's owner credential and ask Image Assistant to generate an image. Expect tool error `insufficient_credits`, no generated image and no business-model execution. Conversation itself may still incur text-model costs.
+
+Alternatively, in Autumn sandbox set the test customer's credit-pool balance to zero, disable unlimited/overage, then submit a new image operation. Restore the test allowance afterward. Existing saved operation keys replay earlier results, so use a new request.
+
+To test missing subscription, add `access: { subscription: 'pro' }` to the image resource's existing credit policy, declare its logical key and provider binding, then use a customer without that active subscription. Expect `forbidden` before business execution. Re-test with a matching active subscription and sufficient credits. For subscription-only access, use a generic business agent with ordinary output as described in the [billing guide](billing.md#subscription-only-access); the bundled private-image persistence still requires a prepaid hold. Use an isolated database/profile for local seed changes.
+
+## Download results
+
+Each image includes a private `downloadPath` such as `/billing/workspaces/WORKSPACE_ID/artifacts/ARTIFACT_ID`. Image Assistant can show this link. Ordinary browser links do not inherit Studio's custom Authorization header, so they may return 401. Use an authenticated frontend fetch or the included CLI:
+
+```sh
+npm run images -- download ARTIFACT_ID bird.png
+# For Autumn sandbox:
+npm run images -- download ARTIFACT_ID bird.png --profile-file data/autumn-sandbox/profile.json
 ```
 
-The image agent costs one credit. The kit saves three prompts for the same subject as book and website illustrations, in order: Notion-inspired, 3D, and vector illustration. Review `result.pending.approval.prompts` before approving. The kit costs three credits only after all images persist. Copy its `executionId` into status, approval or cancellation. The creator alone can access the private result after a restart. Nested image calls have no separate charge.
-
-Artifact references are metadata. A browser image URL does not inherit Studio's saved authorization header. The Playground result shows JSON image metadata and a billing receipt. Use the runnable authenticated download in the [image guide](images.md) to save and open the PNG; the tool result has no inline image control.
-
-Repeat the exact input and idempotency key to replay its saved result. The receipt keeps its original `billedUnits` and sets `replayed: true`; it does not represent a new charge. Use a new key for new work. Schema errors are rejected before execution. Tool failures return a safe `error` object; they must not be interpreted as successful work.
-
-The **Studio Assistant** also supports native text chat, persistent history, structured tool results and native approval controls. Direct native execution of billed agents/workflows, raw storage/traces, attachments, message editing and forks remain closed. Existing **Tools → Playground** actions remain available. Ordinary agents retain their native routes and the application's ordinary authentication configuration.
-
-## Balances and receipts
-
-Use `billing-account` before and after execution. Read the initial available balance as B, even on an existing account. A new successful image leaves B − 1. Starting the kit then shows B − 4 available while three credits are held and only one credit has been confirmed; completing it keeps B − 4 available and confirms four credits in total. Replay changes neither figure. In local mode `consumedUnits` shows the one- and four-credit totals. In Autumn mode `consumedUnits` remains null and `providerUsageIncludingHolds` includes holds; use settled receipts and matching provider evidence for confirmation, rather than treating that meter as confirmed consumption. Fresh local accounts start at 30; existing balances are never reset for a demo. `mode` identifies local simulation or Autumn; `authority` identifies provider reservations. Meters show the provider's balance and consumption at `observedAt`, with `pendingOperations` separately identifying unresolved work. `allowance` is `null`; there is no application-owned paid grant ledger.
-
-A suspended kit holds its reservation without a confirmed charge. Successful completion confirms that same reservation; cancellation releases it. Unknown finalization stays pending or uncertain until positive matching evidence arrives. Replaying a receipt never creates another financial operation. Metered local policies use the separate outbox and may reflect consumption after background delivery.
-
-Studio custom headers and tool testing are described in the [Mastra Studio documentation](https://mastra.ai/docs/studio/overview).
-
-## Native text conversations
-
-Open **Agents → Studio Assistant** after saving your authorization header. Ask “Generate one private illustration of a blue bird in a quiet forest.” The conversation itself consumes no billing credits; its text model still uses the operator's model account. A business image tool result contains `operationId`, a private artifact reference and the existing billing receipt. Only that receipt establishes financial success.
-
-Ask for a three-style illustration kit. Its start tool saves the three prompts and holds the workflow reservation. The assistant requests native approval with the `image-kit-resume` tool. Review the saved prompts, then use **Approve** or **Decline**. Approval resumes the exact persisted business suspension. Decline explicitly cancels that workflow even though native tool execution is skipped. Nested image agents remain included in the single three-credit parent charge. To cancel later, explicitly ask to cancel the operation.
-
-**Stop** or closing the live conversation subscription stops further conversational dispatch. It does not cancel admitted business work or release its reservation. Reopen the saved conversation and ask the assistant to query its saved operations. If the first result was lost, omit `operationId`: the agent query action and workflow query tool return up to twenty initiating operations owned by this conversation, with their current state and receipts. Use the returned `operationId` for an explicit query or cancellation. A pending or uncertain operation is reported as such; retrying its original native tool invocation cannot run paid compute again. A new tool call creates new work. Automatic assistant output after Stop is not promised. A stopped native approval card is finalized as a conversation error, so reloading offers a new message instead of stale approval controls; its business operation remains separately queryable.
-
-The optional `X-Billing-Workspace` header chooses a shared workspace; without it, identity resolves the user's personal workspace. Live membership and permission are checked for each request and business action. Conversation history and operation results belong to the exact creator/workspace/agent/thread tuple, including within a shared payer. Editable Request Context cannot change the identity or payer. Changing the workspace header starts a separate ownership scope; it does not grant access to an existing conversation.
-
-Ordinary agents may share that storage, but their native execution, history and subscription routes cannot address a protected conversation's thread, resource, run or stored message identity. This protection remains active in the prepared integration when Studio is disabled or the conversation wrapper is removed. Ordinary agents retain their own memory behavior and application authentication. Shared-memory thread lists require an explicit ordinary resource; global memory listings stay closed. New private resources use a reserved server namespace; existing persisted resource mappings remain readable. An existing native thread without a billing conversation owner cannot be adopted by a decorated agent—start a new conversation instead.
-
-Mastra memory stores transcript content in the existing persistent application storage. Billing keeps only immutable ownership, native message/tool-call references and operation identities. Removing a native Stop snapshot does not remove the billing link. Existing databases upgrade additively; no reset or balance refill occurs.
+The command saves an owner-only PNG, never overwrites an existing file and does not consume credits. `--url http://127.0.0.1:PORT` selects a different local port. For another local creator, use `--profile member` or `--profile outsider`. Downloads require live membership, exact creator ownership and positive settlement; another member's credential does not grant access. Missing/corrupt files return 410 and never trigger regeneration. Physical storage is described in the [README](../README.md).
 
 ## Compose your own conversation agent
 
@@ -76,7 +73,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Memory } from '@mastra/memory';
 import { z } from 'zod';
 import { createBilling } from '../billing/integration.js';
-import { localDemoAccounts } from '../billing/local-accounts.js';
+import { localDemoAccounts } from '../billing/providers/local/accounts.js';
 import { registerApplicationShutdown } from '../billing/lifecycle.js';
 import { createStudioBillingWrapper } from '../studio-with-billing/index.js';
 
@@ -170,4 +167,4 @@ registerApplicationShutdown(integration.close);
 
 `agentTool(id)` provides execute/query actions. Both agent and workflow queries accept an optional `operationId`; omitting it recovers the latest twenty initiating operations for this conversation and resource without repeating execution. `workflowTools(id, { approvalSteps })` provides start/query/resume/cancel tools using registered schemas and validates resumable step IDs before serving. Mutating tools derive their request key from the persisted native invocation, never model-provided idempotency. Neither agents nor tools access SQL. Additional Mastra options, custom server routes, middleware and API prefixes stay in the normal constructor/server settings.
 
-Use the pinned compatible `@mastra/memory` dependency and retain the template lockfile when installing. Existing Core, libSQL and CLI versions are not upgraded by the wrapper. External JSON file configuration is described in the [Autumn guide](autumn.md#configuration); scalar secrets remain environment variables.
+Keep the lockfile and the compatible `@mastra/memory` version. Revalidate native chat, history, Stop/reconnect, tool approval and route isolation before framework upgrades; see [compatibility](architecture.md#mastra-compatibility).

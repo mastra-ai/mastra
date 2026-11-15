@@ -3,7 +3,7 @@ import { readFile, writeFile, stat, realpath } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { importJWK, SignJWT } from 'jose';
-import { configuredOrganizations } from '../../src/billing/environment.js';
+import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { autumnFixture } from '../support/autumn.js';
 import { imageBoundary } from '../support/images.js';
 import { command, sanitizedEnvironment, serve, templateCopy } from '../support/template.js';
@@ -130,6 +130,26 @@ it('documented commands preserve local state, bill a Studio image and renew expi
   expect(history).toContain('"billedUnits":1');
   expect(history).toContain('"executionStatus":"completed"');
   expect(boundary.images).toHaveLength(1);
+  expect(f.remote.behavior.consumed).toBe(1);
+  const artifactId = history.match(/\/billing\/workspaces\/[^"\\]+\/artifacts\/([a-f0-9-]{36})/)?.[1];
+  expect(artifactId).toBeTruthy();
+  await command(
+    f.root,
+    [
+      'run',
+      'images',
+      '--',
+      'download',
+      artifactId!,
+      'sandbox.png',
+      '--profile-file',
+      'data/autumn-sandbox/profile.json',
+      '--url',
+      server.url,
+    ],
+    sanitizedEnvironment(),
+  );
+  expect(await readFile(resolve(f.root, 'sandbox.png'))).toEqual(boundary.png);
   expect(f.remote.behavior.consumed).toBe(1);
   const openingAfterImage = (await server.call(usagePath)).body;
   expect(openingAfterImage.meters[0].confirmedBalance).toBe(9);

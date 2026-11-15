@@ -1,15 +1,16 @@
 import { parseArgs } from 'node:util';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, open } from 'node:fs/promises';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from '../src/billing/contracts.js';
-import { localPaths, readLocalProfiles } from '../src/billing/local-profiles.js';
+import { BillingError, identifierSchema, parseInput } from '../src/billing/contracts/core.js';
+import { localPaths, readLocalProfiles } from '../src/billing/providers/local/profiles.js';
 import { briefSchema, kitInputSchema, approvalSchema } from '../src/images/schemas.js';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     profile: { type: 'string', default: 'owner' },
+    'profile-file': { type: 'string' },
     workspace: { type: 'string' },
     url: { type: 'string', default: `http://127.0.0.1:${process.env.BILLING_PORT ?? 4111}` },
     json: { type: 'string' },
@@ -18,9 +19,14 @@ const { values, positionals } = parseArgs({
   },
 });
 const profileName = parseInput(z.enum(['owner', 'member', 'outsider']), values.profile);
-const manifest = await readLocalProfiles(process.cwd());
-const profile = manifest?.profiles[profileName];
-if (!manifest?.ready || !profile) throw new BillingError('state_unavailable');
+const manifest = values['profile-file'] ? undefined : await readLocalProfiles(process.cwd());
+const profile = values['profile-file']
+  ? parseInput(
+      z.object({ workspaceId: identifierSchema, credential: z.string().min(1).max(8192) }),
+      JSON.parse(await readFile(values['profile-file'], 'utf8')),
+    )
+  : manifest?.profiles[profileName];
+if (!profile || (!values['profile-file'] && !manifest?.ready)) throw new BillingError('state_unavailable');
 const endpoint = parseInput(
   z.url().refine(value => {
     const u = new URL(value);
@@ -36,7 +42,7 @@ const endpoint = parseInput(
   }),
   values.url,
 );
-const workspace = parseInput(identifierSchema, values.workspace ?? manifest.profiles[profileName]?.workspaceId);
+const workspace = parseInput(identifierSchema, values.workspace ?? profile.workspaceId);
 const key = parseInput(identifierSchema, values.key ?? randomUUID());
 const base = `/billing/workspaces/${workspace}`;
 async function request(path: string, body?: unknown) {
@@ -66,10 +72,30 @@ async function input() {
   }
 }
 let result: unknown;
-const [action, executionId] = positionals;
-if (positionals.length > (['status', 'resume', 'cancel'].includes(action) ? 2 : 1))
+const [action, executionId, output] = positionals;
+if (positionals.length > (action === 'download' ? 3 : ['status', 'resume', 'cancel'].includes(action) ? 2 : 1))
   throw new BillingError('invalid_input');
-if (action === 'generate')
+if (action === 'download') {
+  const id = parseInput(z.uuid(), executionId);
+  const filename = parseInput(z.string().min(1), output);
+  const response = await fetch(`${endpoint.replace(/\/$/, '')}${base}/artifacts/${id}`, {
+    headers: { authorization: `Bearer ${profile.credential}` },
+    redirect: 'error',
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!response.ok || response.headers.get('content-type') !== 'image/png') {
+    await response.body?.cancel();
+    throw new BillingError('state_unavailable');
+  }
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const file = await open(filename, 'wx', 0o600);
+  try {
+    await file.writeFile(bytes);
+  } finally {
+    await file.close();
+  }
+  result = { saved: filename, bytes: bytes.length };
+} else if (action === 'generate')
   result = await request(`${base}/agents/image-agent/generate`, {
     prompt: parseInput(briefSchema, ((await input()) as { brief?: unknown }).brief),
   });

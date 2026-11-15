@@ -1,11 +1,11 @@
-import { readConfigurationFile } from '../configuration-file.js';
+import { readConfigurationFile } from '../../configuration/files.js';
 import { createHash } from 'node:crypto';
 // autumn-js 1.5.72 imports fzstd without declaring it. The pinned MIT fzstd
 // dependency supplies that intrinsic SDK runtime dependency on clean installs.
 import { Autumn, HTTPClient } from 'autumn-js';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput, quantitySchema } from '../contracts.js';
-import type { BillingProvider } from './contracts.js';
+import { BillingError, identifierSchema, parseInput, quantitySchema } from '../../contracts/core.js';
+import type { BillingProvider } from '../../contracts/provider.js';
 import type {
   ProviderAccount,
   CommercialSnapshot,
@@ -14,11 +14,11 @@ import type {
   PreparedHostedSession,
   UsageEvent,
   ReconciliationRequest,
-} from '../contracts.js';
-import { reservationRequestSchema, finalizationRequestSchema } from '../reservations.js';
-import type { ReservationProtocol } from '../reservations.js';
-import { BillingDatabase } from '../storage/database.js';
-import { AutumnAccountStorage } from '../storage/autumn-accounts.js';
+} from '../../contracts/core.js';
+import { reservationRequestSchema, finalizationRequestSchema } from '../../contracts/reservations.js';
+import type { ReservationProtocol } from '../../contracts/reservations.js';
+import { BillingDatabase } from '../../storage/database.js';
+import { AutumnAccountStorage } from './storage.js';
 
 export const bindingSchema = z
   .strictObject({
@@ -531,7 +531,7 @@ export class AutumnBillingProvider implements BillingProvider {
 /** Resolve only Autumn-owned secrets and bindings; no fallback to local billing. */
 export async function openAutumnProvider(options: {
   storage: { url: string };
-  configuration: import('../policy-configuration.js').BillingConfiguration;
+  configuration: import('../../configuration/policy.js').BillingConfiguration;
   environment: NodeJS.ProcessEnv;
 }): Promise<BillingProvider> {
   const bindings = readConfigurationFile(options.environment, 'AUTUMN_CONFIG_FILE');

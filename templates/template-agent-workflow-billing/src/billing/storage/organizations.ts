@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Row, Transaction } from '@libsql/client/node';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from '../contracts.js';
+import { BillingError, identifierSchema, parseInput } from '../contracts/core.js';
 import { hashSecret, generateSecret, identitySchema } from '../identity.js';
 import type { Identity, IdentityDirectory } from '../identity.js';
 import { BillingDatabase } from './database.js';

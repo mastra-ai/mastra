@@ -6,11 +6,11 @@ import { pathToFileURL } from 'node:url';
 import { Autumn, HTTPClient } from 'autumn-js';
 import { createLocalJWKSet, exportJWK, generateKeyPair, importJWK, jwtVerify, SignJWT } from 'jose';
 import { z } from 'zod';
-import { identifierSchema } from '../src/billing/contracts.js';
-import { configuredOrganizations } from '../src/billing/environment.js';
+import { identifierSchema } from '../src/billing/contracts/core.js';
+import { configuredOrganizations } from '../src/billing/configuration/environment.js';
 import { JwtIdentityAdapter, jwtIdentityConfigurationSchema } from '../src/billing/identity.js';
 import { OrganizationService } from '../src/billing/organizations.js';
-import { bindingSchema } from '../src/billing/providers/autumn.js';
+import { bindingSchema } from '../src/billing/providers/autumn/index.js';
 import { OrganizationStorage } from '../src/billing/storage/organizations.js';
 import { privateDirectory } from '../src/billing/storage/private-files.js';
 

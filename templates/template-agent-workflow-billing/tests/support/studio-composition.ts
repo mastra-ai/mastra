@@ -30,10 +30,10 @@ import {
 import { EXECUTE_TOOL_ROUTE } from '@mastra/server/handlers/tools';
 import { z } from 'zod';
 import { createBilling } from '../../src/billing/integration.js';
-import { localDemoAccounts } from '../../src/billing/local-accounts.js';
+import { localDemoAccounts } from '../../src/billing/providers/local/accounts.js';
 import { createBillingApp } from '../../src/billing/server/routes.js';
 import { createStudioBillingWrapper } from '../../src/studio-with-billing/index.js';
-import { createStudioAssistantAgent } from '../../src/mastra/agents/studio-assistant.js';
+import { createImageAssistantAgent } from '../../src/mastra/agents/image-assistant.js';
 import { billingSocket } from './http.js';
 
 /** Real generic application using the native public handler, schema transforms and a custom API prefix. */
@@ -128,7 +128,7 @@ export async function studioComposition(
     },
   });
   const wrapper = createStudioBillingWrapper({ integration });
-  const original = createStudioAssistantAgent(
+  const original = createImageAssistantAgent(
     { analyze: wrapper.agentTool('analysis'), ...wrapper.workflowTools('report', { approvalSteps: ['review'] }) },
     environment,
   );

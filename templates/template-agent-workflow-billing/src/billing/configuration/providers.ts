@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { BillingError, identifierSchema } from './contracts.js';
-import type { BillingProvider } from './providers/contracts.js';
-import { parseBillingConfiguration } from './policy-configuration.js';
-import { openAutumnProvider, autumnCapabilities } from './providers/autumn.js';
-import { openLocalProvider, localCapabilities } from './providers/local.js';
+import { BillingError, identifierSchema } from '../contracts/core.js';
+import type { BillingProvider } from '../contracts/provider.js';
+import { parseBillingConfiguration } from './policy.js';
+import { openAutumnProvider, autumnCapabilities } from '../providers/autumn/index.js';
+import { openLocalProvider, localCapabilities } from '../providers/local/index.js';
 
 const drivers = {
   local: { capabilities: localCapabilities, open: openLocalProvider },

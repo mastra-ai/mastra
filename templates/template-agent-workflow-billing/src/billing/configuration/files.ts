@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { bindingSchema } from './providers/autumn.js';
-import { jwtIdentityConfigurationSchema } from './identity.js';
-import { billingConfigurationSchema } from './policy-configuration.js';
-import { BillingError } from './contracts.js';
+import { bindingSchema } from '../providers/autumn/index.js';
+import { jwtIdentityConfigurationSchema } from '../identity.js';
+import { billingConfigurationSchema } from './policy.js';
+import { BillingError } from '../contracts/core.js';
 
 /** Read an explicitly selected external JSON object relative to the application root. */
 export function readConfigurationFile(environment: NodeJS.ProcessEnv, name: string): unknown {

@@ -59,7 +59,7 @@ export function createImageKit(dependencies: ImageKitDependencies) {
       return { ...inputData, artifacts };
     },
   });
-  return createWorkflow({
+  const workflow = createWorkflow({
     id: 'image-kit',
     inputSchema: kitInputSchema,
     outputSchema: kitOutputSchema,
@@ -70,4 +70,6 @@ export function createImageKit(dependencies: ImageKitDependencies) {
     .then(approval)
     .then(generate)
     .commit();
+  workflow.name = 'Image Kit';
+  return workflow;
 }

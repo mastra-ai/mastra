@@ -10,19 +10,19 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
 import { z } from 'zod';
-import type { BillingProvider } from '../../src/billing/providers/contracts.js';
+import type { BillingProvider } from '../../src/billing/contracts/provider.js';
 
 import type { BillingContext } from '../../src/billing/organizations.js';
 import { MastraBilling } from '../../src/billing/mastra.js';
 import { agentResource, workflowResource } from '../../src/billing/mastra-resources.js';
-import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
-import type { BillingConfiguration } from '../../src/billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/configuration/policy.js';
+import type { BillingConfiguration } from '../../src/billing/configuration/policy.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
 import { WorkflowStorage } from '../../src/billing/storage/workflows.js';
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
-import { LocalBillingProvider } from '../../src/billing/providers/local.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
+import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
 
 export async function modelBoundary() {
   const waiting: ServerResponse[] = [];

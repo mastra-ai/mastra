@@ -1,7 +1,7 @@
-import { BillingGateway } from '../../src/billing/gateway.js';
-import { initializeBilling } from '../../src/billing/setup.js';
+import { BillingGateway } from '../../src/billing/runtime/gateway.js';
+import { initializeBilling } from '../../src/billing/configuration/providers.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
-import type { UsageEvent } from '../../src/billing/contracts.js';
+import type { UsageEvent } from '../../src/billing/contracts/core.js';
 import { identityFixture } from './identity.js';
 
 export async function providerContractFixture() {

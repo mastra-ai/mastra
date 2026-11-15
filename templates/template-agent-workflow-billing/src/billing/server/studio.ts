@@ -3,10 +3,10 @@ import { createTool } from '@mastra/core/tools';
 import type { MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
-import { BillingError, identifierSchema } from '../contracts.js';
+import { BillingError, identifierSchema } from '../contracts/core.js';
 import type { BillingHttpGateway } from '../mastra.js';
 import type { OrganizationService } from '../organizations.js';
-import type { CommercialService } from '../commercial.js';
+import type { CommercialService } from '../runtime/commercial.js';
 import type { ResourceAction } from '../resource-catalog.js';
 
 const selectionSchema = z.strictObject({ workspaceId: identifierSchema });

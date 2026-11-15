@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { agentExecutionInputSchema } from '../../src/billing/agent-execution.js';
-import { BillingGateway } from '../../src/billing/gateway.js';
-import type { UsageEvent } from '../../src/billing/contracts.js';
-import type { BoundedExecutor, ExecutorOutcome, Json } from '../../src/billing/accounting.js';
-import { boundedJsonSchema } from '../../src/billing/accounting.js';
+import { agentExecutionInputSchema } from '../../src/billing/runtime/agent-execution.js';
+import { BillingGateway } from '../../src/billing/runtime/gateway.js';
+import type { UsageEvent } from '../../src/billing/contracts/core.js';
+import type { BoundedExecutor, ExecutorOutcome, Json } from '../../src/billing/runtime/accounting.js';
+import { boundedJsonSchema } from '../../src/billing/runtime/accounting.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
-import { LocalBillingProvider } from '../../src/billing/providers/local.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
+import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
 import { configuration, independentClient, temporaryDatabase } from '../support/billing.js';
 import { accountingWorker } from '../support/accounting.js';
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { BillingError } from '../billing/contracts.js';
+import { BillingError } from '../billing/contracts/core.js';
 import { isPreparedBillingIntegration } from '../billing/integration.js';
 import type { AnyAgent } from '../billing/mastra-resources.js';
 import { StudioAgentRuntime } from './studio-agent-decorator.js';

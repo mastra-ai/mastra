@@ -1,15 +1,15 @@
 import { removeConversationMigration } from '../support/billing.js';
 import { configurationFile } from '../support/configuration-files.js';
-import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
 import { afterEach, expect, it } from 'vitest';
 import { readFile, writeFile, unlink, symlink, link, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
-import { LocalBillingProvider } from '../../src/billing/providers/local.js';
+import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
 import { imageConfiguration } from '../support/image-configuration.js';
 import { weatherConfiguration } from '../support/weather/configuration.js';
 import { usage, temporaryDatabase, independentClient } from '../support/billing.js';
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
 import { imageFixture, imageBoundary, pngFixture } from '../support/images.js';
 import { autumnFixture } from '../support/autumn.js';
 import { createBillingApplication } from '../../src/billing/application.js';

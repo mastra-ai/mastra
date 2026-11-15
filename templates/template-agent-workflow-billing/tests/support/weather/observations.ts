@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { parseInput } from '../../../src/billing/contracts.js';
+import { parseInput } from '../../../src/billing/contracts/core.js';
 
 export const observationsSchema = z.strictObject({
   location: z.string().trim().min(1).max(120),

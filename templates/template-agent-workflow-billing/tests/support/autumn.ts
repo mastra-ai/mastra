@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import { once } from 'node:events';
-import { BillingGateway } from '../../src/billing/gateway.js';
-import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { BillingGateway } from '../../src/billing/runtime/gateway.js';
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
 import { AccountingStorage } from '../../src/billing/storage/accounting.js';
-import type { ExecutorOutcome } from '../../src/billing/accounting.js';
+import type { ExecutorOutcome } from '../../src/billing/runtime/accounting.js';
 import { identityFixture } from './identity.js';
 
 // Only the external Autumn API is controlled. SDK, HTTP socket, authentication,

@@ -1,5 +1,5 @@
 import { inflateSync } from 'node:zlib';
-import { BillingError } from '../billing/contracts.js';
+import { BillingError } from '../billing/contracts/core.js';
 export const maxImageBytes = 8 * 1024 * 1024;
 export function crc32(bytes: Uint8Array) {
   let crc = 0xffffffff;

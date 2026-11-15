@@ -1,5 +1,5 @@
 import { Mastra } from '@mastra/core/mastra';
-import { configuredOrganizations } from '../../../src/billing/environment.js';
+import { configuredOrganizations } from '../../../src/billing/configuration/environment.js';
 import { createBillingServer, enforceBillingBoundary } from '../../../src/billing/server/boundary.js';
 
 const organizations = await configuredOrganizations();

@@ -1,14 +1,14 @@
-import { validateConfigurationFiles } from './configuration-file.js';
+import { validateConfigurationFiles } from './configuration/files.js';
 import { Mastra } from '@mastra/core/mastra';
 import { z } from 'zod';
 import { createBillingStudio } from './server/studio.js';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
+import { BillingError, identifierSchema, parseInput } from './contracts/core.js';
 import { initializeMastraBilling } from './mastra-setup.js';
 import { createBillingServer, enforceBillingBoundary } from './server/boundary.js';
-import { configuredOrganizations, billingDatabaseUrl, readBillingConfiguration } from './environment.js';
+import { configuredOrganizations, billingDatabaseUrl, readBillingConfiguration } from './configuration/environment.js';
 import { materializeResources, validateResourceCatalog } from './resource-catalog.js';
 import type { ResourceCatalog, ResourceDefinition } from './resource-catalog.js';
-import type { BillingProvider } from './providers/contracts.js';
+import type { BillingProvider } from './contracts/provider.js';
 import { Lifecycle } from './lifecycle.js';
 
 /** Composition options for a billing-protected Mastra application. */

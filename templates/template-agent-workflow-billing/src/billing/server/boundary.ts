@@ -1,4 +1,4 @@
-import type { BillingServerOptions } from './contracts.js';
+import type { BillingServerOptions } from '../contracts/server.js';
 import type { MiddlewareHandler } from 'hono';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ServerConfig } from '@mastra/core/server';

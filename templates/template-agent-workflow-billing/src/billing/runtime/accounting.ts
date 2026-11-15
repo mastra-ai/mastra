@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, accountSchema, identifierSchema, quantitySchema, timestampSchema } from './contracts.js';
-import type { CommercialSnapshot } from './contracts.js';
-import type { BillingConfiguration } from './policy-configuration.js';
+import { BillingError, accountSchema, identifierSchema, quantitySchema, timestampSchema } from '../contracts/core.js';
+import type { CommercialSnapshot } from '../contracts/core.js';
+import type { BillingConfiguration } from '../configuration/policy.js';
 
 export type ResourceConfiguration = BillingConfiguration['resourcePolicies'][number];
 export type BillingPolicy = ResourceConfiguration['policy'];

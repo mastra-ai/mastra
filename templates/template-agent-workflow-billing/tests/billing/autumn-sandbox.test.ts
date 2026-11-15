@@ -4,8 +4,8 @@ import { once } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { Autumn } from 'autumn-js';
 import { it } from 'vitest';
-import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
-import type { ReservationRequest } from '../../src/billing/reservations.js';
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
+import type { ReservationRequest } from '../../src/billing/contracts/reservations.js';
 import { temporaryDatabase } from '../support/billing.js';
 
 // This gate consumes at most two sandbox credits; it never refunds, purchases,

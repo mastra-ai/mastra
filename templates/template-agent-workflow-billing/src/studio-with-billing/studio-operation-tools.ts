@@ -3,12 +3,12 @@ import type { PublicSchema } from '@mastra/core/schema';
 import { createTool } from '@mastra/core/tools';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { z } from 'zod';
-import { BillingError, identifierSchema } from '../billing/contracts.js';
-import { boundedJson, fingerprint } from '../billing/accounting.js';
-import type { Json } from '../billing/accounting.js';
+import { BillingError, identifierSchema } from '../billing/contracts/core.js';
+import { boundedJson, fingerprint } from '../billing/runtime/accounting.js';
+import type { Json } from '../billing/runtime/accounting.js';
 import type { ConversationOperation } from '../billing/storage/conversations.js';
-import { outsideParentExecution } from '../billing/invocation-context.js';
-import { outsideExecution } from '../billing/execution-scope.js';
+import { outsideParentExecution } from '../billing/runtime/invocation-context.js';
+import { outsideExecution } from '../billing/runtime/execution-scope.js';
 import type { StudioAgentRuntime } from './studio-agent-decorator.js';
 import type { StudioConversation } from './studio-wrapper-contracts.js';
 

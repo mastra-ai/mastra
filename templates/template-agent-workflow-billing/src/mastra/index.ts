@@ -1,8 +1,8 @@
 import { Mastra } from '@mastra/core/mastra';
 import { createStudioBillingWrapper } from '../studio-with-billing/index.js';
-import { createStudioAssistantAgent } from './agents/studio-assistant.js';
+import { createImageAssistantAgent } from './agents/image-assistant.js';
 import { createBilling } from '../billing/integration.js';
-import { localDemoAccounts } from '../billing/local-accounts.js';
+import { localDemoAccounts } from '../billing/providers/local/accounts.js';
 import { registerApplicationShutdown } from '../billing/lifecycle.js';
 import { ImageService } from '../images/service.js';
 import { createImageAgent } from './agents/image-agent.js';
@@ -47,7 +47,7 @@ const studioWrapper =
   process.env.BILLING_STUDIO_ENABLED === 'true' ? createStudioBillingWrapper({ integration }) : undefined;
 if (studioWrapper)
   studioWrapper.decorateAgent(
-    createStudioAssistantAgent({
+    createImageAssistantAgent({
       image: studioWrapper.agentTool('image-agent'),
       ...studioWrapper.workflowTools('image-kit', { approvalSteps: ['approval'] }),
     }),

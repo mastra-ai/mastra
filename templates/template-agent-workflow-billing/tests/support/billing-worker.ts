@@ -1,6 +1,6 @@
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
-import { BillingError } from '../../src/billing/contracts.js';
-import type { UsageEvent } from '../../src/billing/contracts.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
+import { BillingError } from '../../src/billing/contracts/core.js';
+import type { UsageEvent } from '../../src/billing/contracts/core.js';
 import { createClient } from '@libsql/client/node';
 
 const storage = await LocalBillingStorage.open({ url: process.argv[2] });

@@ -1,7 +1,7 @@
-import type { ExecutionScope } from '../billing/execution-scope.js';
+import type { ExecutionScope } from '../billing/runtime/execution-scope.js';
 import { z } from 'zod';
 import { resourceAction } from '../billing/resource-catalog.js';
-import { identifierSchema } from '../billing/contracts.js';
+import { identifierSchema } from '../billing/contracts/core.js';
 import { imageOutputSchema, briefSchema, kitInputSchema, approvalSchema } from '../images/schemas.js';
 import type { ImageService } from '../images/service.js';
 

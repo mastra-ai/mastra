@@ -13,7 +13,7 @@ export interface ImageGenerator {
 export function createImageAgent(environment: NodeJS.ProcessEnv, images: ImageGenerator) {
   return new Agent({
     id: 'image-agent',
-    name: 'Image Agent',
+    name: 'Image Generation',
     instructions:
       'Generate the requested image using the generateImage tool exactly once. The tool uses the approved server-owned brief and configured image profile. Do not invent artifacts, paths or URLs. After the tool succeeds, give a short confirmation.',
     model: {

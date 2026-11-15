@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { BillingError } from './contracts.js';
+import { BillingError } from '../contracts/core.js';
 import type { MeasurementCollector } from './measurement.js';
 
 export interface ExecutionScope {

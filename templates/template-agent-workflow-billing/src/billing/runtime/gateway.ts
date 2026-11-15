@@ -1,10 +1,10 @@
-import { prepaid } from './reservations.js';
+import { prepaid } from '../contracts/reservations.js';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { BillingProvider } from './providers/contracts.js';
-import type { CommercialSnapshot } from './contracts.js';
-import { parseBillingConfiguration } from './policy-configuration.js';
+import { BillingError, identifierSchema, parseInput } from '../contracts/core.js';
+import type { BillingProvider } from '../contracts/provider.js';
+import type { CommercialSnapshot } from '../contracts/core.js';
+import { parseBillingConfiguration } from '../configuration/policy.js';
 import {
   eligible,
   executionRequestSchema,
@@ -15,9 +15,9 @@ import {
   snapshotSchema,
 } from './accounting.js';
 import type { BillingResponse, BoundedExecutor } from './accounting.js';
-import { OrganizationService } from './organizations.js';
-import type { BillingContext } from './organizations.js';
-import { AccountingStorage } from './storage/accounting.js';
+import { OrganizationService } from '../organizations.js';
+import type { BillingContext } from '../organizations.js';
+import { AccountingStorage } from '../storage/accounting.js';
 
 const runtimeId = randomUUID();
 

@@ -1,7 +1,7 @@
-import { transitionImageCredits } from './credit-transitions.js';
+import { transitionImageCredits } from '../providers/local/credit-transitions.js';
 import { createHash } from 'node:crypto';
 import type { Transaction } from '@libsql/client/node';
-import { BillingError } from '../contracts.js';
+import { BillingError } from '../contracts/core.js';
 
 // This development schema deliberately does not import older paid-source data.
 // Existing files must match its complete version, checksum and SQL definition.

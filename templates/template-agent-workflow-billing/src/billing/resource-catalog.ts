@@ -1,18 +1,18 @@
-import type { BillingProvider } from './providers/contracts.js';
+import type { BillingProvider } from './contracts/provider.js';
 import { z } from 'zod';
-import type { ExecutionScope } from './execution-scope.js';
+import type { ExecutionScope } from './runtime/execution-scope.js';
 import type { AgentProjection } from './mastra-resources.js';
-import type { ArtifactReader } from './artifacts.js';
+import type { ArtifactReader } from './contracts/artifacts.js';
 import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { FullOutput } from '@mastra/core/stream';
 import type { BillingContext } from './organizations.js';
 import type { BillingHttpGateway, MastraBilling } from './mastra.js';
 import { AgentResource, workflowResource } from './mastra-resources.js';
 import type { AnyAgent, AgentOutput, WorkflowResource } from './mastra-resources.js';
-import { BillingError, identifierSchema } from './contracts.js';
-import { billingConfigurationSchema, billingPolicySchema } from './policy-configuration.js';
-import type { BillingConfiguration } from './policy-configuration.js';
-import { validateProviderConfiguration } from './setup.js';
+import { BillingError, identifierSchema } from './contracts/core.js';
+import { billingConfigurationSchema, billingPolicySchema } from './configuration/policy.js';
+import type { BillingConfiguration } from './configuration/policy.js';
+import { validateProviderConfiguration } from './configuration/providers.js';
 import { Lifecycle } from './lifecycle.js';
 
 export interface ResourceDependencies {

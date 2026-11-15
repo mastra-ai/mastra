@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { Context, MiddlewareHandler } from 'hono';
-import { BillingError, identifierSchema } from '../billing/contracts.js';
+import { BillingError, identifierSchema } from '../billing/contracts/core.js';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { ConversationStorage } from '../billing/storage/conversations.js';
 import type { StudioAgentRuntime } from './studio-agent-decorator.js';

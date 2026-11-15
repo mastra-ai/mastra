@@ -1,7 +1,7 @@
 import { constants } from 'node:fs';
 import { open, lstat, mkdir } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
-import { BillingError } from '../contracts.js';
+import { BillingError } from '../contracts/core.js';
 
 function requirePrivateFilePlatform() {
   if (!['darwin', 'linux'].includes(process.platform) || typeof process.getuid !== 'function') {

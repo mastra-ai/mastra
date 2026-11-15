@@ -1,5 +1,5 @@
 import { createClient } from '@libsql/client/node';
-import { BillingError } from '../../src/billing/contracts.js';
+import { BillingError } from '../../src/billing/contracts/core.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';
 

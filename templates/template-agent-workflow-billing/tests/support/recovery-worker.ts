@@ -1,9 +1,9 @@
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
 import { RecoveryStorage } from '../../src/billing/storage/recovery.js';
-import type { UsageEvent } from '../../src/billing/contracts.js';
+import type { UsageEvent } from '../../src/billing/contracts/core.js';
 import { independentClient } from './billing.js';
 import { runtimeFixture } from './mastra.js';
-import { AutumnBillingProvider } from '../../src/billing/providers/autumn.js';
+import { AutumnBillingProvider } from '../../src/billing/providers/autumn/index.js';
 import { JwtIdentityAdapter } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';
 import { OrganizationStorage } from '../../src/billing/storage/organizations.js';

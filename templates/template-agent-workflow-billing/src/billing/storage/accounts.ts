@@ -1,5 +1,5 @@
 import type { Row } from '@libsql/client/node';
-import { accountSchema, BillingError } from '../contracts.js';
+import { accountSchema, BillingError } from '../contracts/core.js';
 
 export function accountFromRow(row: Row) {
   return accountSchema.parse({

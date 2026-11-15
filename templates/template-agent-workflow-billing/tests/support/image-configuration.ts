@@ -1,4 +1,4 @@
-import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/configuration/policy.js';
 
 /** Logical billing keys used by the image policies, independent of payment provider IDs. */
 export const imageBillingKeys = {

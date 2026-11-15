@@ -1,7 +1,11 @@
-import { commercialCatalogSchema, catalogReferenceSchema, resolveAllowance } from '../../src/billing/catalog.js';
+import {
+  commercialCatalogSchema,
+  catalogReferenceSchema,
+  resolveAllowance,
+} from '../../src/billing/configuration/catalog.js';
 import { describe, expect, it } from 'vitest';
-import { parseBillingConfiguration } from '../../src/billing/policy-configuration.js';
-import { localCapabilities } from '../../src/billing/providers/local.js';
+import { parseBillingConfiguration } from '../../src/billing/configuration/policy.js';
+import { localCapabilities } from '../../src/billing/providers/local/index.js';
 import { configuration } from '../support/billing.js';
 
 describe('billing policy configuration', () => {

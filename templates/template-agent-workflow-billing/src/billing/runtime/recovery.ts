@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { BillingError, parseInput } from './contracts.js';
-import type { BillingProvider } from './providers/contracts.js';
+import { BillingError, parseInput } from '../contracts/core.js';
+import type { BillingProvider } from '../contracts/provider.js';
 
-import { RecoveryStorage } from './storage/recovery.js';
+import { RecoveryStorage } from '../storage/recovery.js';
 
 export class BillingRecovery {
   private active: Promise<void> | undefined;

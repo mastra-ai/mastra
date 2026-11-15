@@ -6,12 +6,12 @@ import {
   applicationMode,
   billingDatabaseUrl,
   readBillingConfiguration,
-} from '../src/billing/environment.js';
-import { BillingError } from '../src/billing/contracts.js';
-import { initializeBilling } from '../src/billing/setup.js';
-import { billingConfigurationSchema } from '../src/billing/policy-configuration.js';
-import { localPaths, readLocalProfiles, writeLocalProfiles } from '../src/billing/local-profiles.js';
-import type { LocalProfiles } from '../src/billing/local-profiles.js';
+} from '../src/billing/configuration/environment.js';
+import { BillingError } from '../src/billing/contracts/core.js';
+import { initializeBilling } from '../src/billing/configuration/providers.js';
+import { billingConfigurationSchema } from '../src/billing/configuration/policy.js';
+import { localPaths, readLocalProfiles, writeLocalProfiles } from '../src/billing/providers/local/profiles.js';
+import type { LocalProfiles } from '../src/billing/providers/local/profiles.js';
 
 export async function setupLocal(environment: NodeJS.ProcessEnv) {
   const root = environment.MASTRA_PROJECT_ROOT!;

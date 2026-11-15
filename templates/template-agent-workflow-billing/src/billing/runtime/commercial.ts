@@ -1,11 +1,11 @@
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
-import type { BillingProvider } from './providers/contracts.js';
-import type { HostedSession } from './contracts.js';
-import type { BillingContext, OrganizationService } from './organizations.js';
+import { BillingError, identifierSchema, parseInput } from '../contracts/core.js';
+import type { BillingProvider } from '../contracts/provider.js';
+import type { HostedSession } from '../contracts/core.js';
+import type { BillingContext, OrganizationService } from '../organizations.js';
 import { fingerprint } from './accounting.js';
-import type { BillingConfiguration } from './policy-configuration.js';
-import { CommercialStorage } from './storage/commercial.js';
+import type { BillingConfiguration } from '../configuration/policy.js';
+import { CommercialStorage } from '../storage/commercial.js';
 
 const checkoutSchema = z.strictObject({ product: identifierSchema, returnUrl: z.url().max(2083) });
 const portalSchema = checkoutSchema.omit({ product: true });

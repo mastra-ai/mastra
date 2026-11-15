@@ -6,10 +6,10 @@ import type { AnyWorkflow } from '@mastra/core/workflows';
 import type { z } from 'zod';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { BillingError } from './contracts.js';
-import { billingConfigurationSchema } from './policy-configuration.js';
-import type { BillingProvider } from './providers/contracts.js';
-import type { ArtifactReader } from './artifacts.js';
+import { BillingError } from './contracts/core.js';
+import { billingConfigurationSchema } from './configuration/policy.js';
+import type { BillingProvider } from './contracts/provider.js';
+import type { ArtifactReader } from './contracts/artifacts.js';
 import type { AnyAgent, AgentOutput, AgentResource, WorkflowResource } from './mastra-resources.js';
 import type { MastraBilling } from './mastra.js';
 import type {
@@ -19,12 +19,12 @@ import type {
   ResourceDependencies,
 } from './resource-catalog.js';
 import { materializeResources, validateResourceCatalog } from './resource-catalog.js';
-import { configuredOrganizations, billingDatabaseUrl, readBillingConfiguration } from './environment.js';
+import { configuredOrganizations, billingDatabaseUrl, readBillingConfiguration } from './configuration/environment.js';
 import { initializeMastraBilling } from './mastra-setup.js';
 import { createBillingStudio } from './server/studio.js';
 import { createBillingServer } from './server/boundary.js';
 import { ExecutionArtifacts } from './storage/artifacts.js';
-import { validateConfigurationFiles } from './configuration-file.js';
+import { validateConfigurationFiles } from './configuration/files.js';
 import { ConversationStorage } from './storage/conversations.js';
 import { protectConversationMemory, studioChatFailure } from '../studio-with-billing/studio-chat-proxy.js';
 import type { StudioServerWrapper } from '../studio-with-billing/studio-wrapper-contracts.js';

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { identifierSchema, positiveQuantitySchema } from './contracts.js';
+import { identifierSchema, positiveQuantitySchema } from '../contracts/core.js';
 
 export const catalogReferenceSchema = z.strictObject({ key: identifierSchema, version: identifierSchema });
 export const allowanceSchema = z

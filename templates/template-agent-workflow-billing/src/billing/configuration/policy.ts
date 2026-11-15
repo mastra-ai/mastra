@@ -1,14 +1,14 @@
 import { z } from 'zod';
-import { prepaid, reservationBudgetSchema, workflowSuspensionTtlMs } from './reservations.js';
+import { prepaid, reservationBudgetSchema, workflowSuspensionTtlMs } from '../contracts/reservations.js';
 import {
   BillingError,
   identifierSchema,
   positiveQuantitySchema,
   quantitySchema,
   timestampSchema,
-} from './contracts.js';
+} from '../contracts/core.js';
 import { commercialCatalogSchema } from './catalog.js';
-import type { ProviderCapabilities } from './contracts.js';
+import type { ProviderCapabilities } from '../contracts/core.js';
 
 const fundingSchema = z.enum(['prepaid', 'metered']);
 const unitSchema = z.enum(['credits', 'tasks', 'tokens', 'milliseconds', 'custom']);

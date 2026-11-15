@@ -2,12 +2,12 @@ import { mkdir } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { identifierSchema, parseInput } from './contracts.js';
-import { readConfigurationFile, validateConfigurationFiles } from './configuration-file.js';
-import { JwtIdentityAdapter } from './identity.js';
-import type { JwtIdentityOptions } from './identity.js';
-import { OrganizationService } from './organizations.js';
-import { OrganizationStorage } from './storage/organizations.js';
+import { identifierSchema, parseInput } from '../contracts/core.js';
+import { readConfigurationFile, validateConfigurationFiles } from './files.js';
+import { JwtIdentityAdapter } from '../identity.js';
+import type { JwtIdentityOptions } from '../identity.js';
+import { OrganizationService } from '../organizations.js';
+import { OrganizationStorage } from '../storage/organizations.js';
 
 export function applicationMode(environment: NodeJS.ProcessEnv) {
   const explicit = parseInput(z.enum(['local', 'production']).optional(), environment.BILLING_MODE);

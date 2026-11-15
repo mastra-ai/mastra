@@ -1,6 +1,6 @@
-import type { ArtifactReader } from '../artifacts.js';
+import type { ArtifactReader } from './artifacts.js';
 import type { OrganizationService } from '../organizations.js';
-import type { CommercialService } from '../commercial.js';
+import type { CommercialService } from '../runtime/commercial.js';
 import type { BillingHttpGateway } from '../mastra.js';
 
 /** Services shared by the HTTP router and Mastra server boundary. */

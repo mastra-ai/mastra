@@ -1,7 +1,7 @@
-import { configuredOrganizations } from '../../src/billing/environment.js';
+import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { ConversationStorage } from '../../src/billing/storage/conversations.js';
 import { removeConversationMigration } from '../support/billing.js';
-import { LocalBillingProvider } from '../../src/billing/providers/local.js';
+import { LocalBillingProvider } from '../../src/billing/providers/local/index.js';
 import { createImageApplication } from '../support/image-application.js';
 import { readFile, stat, writeFile, unlink, link, symlink } from 'node:fs/promises';
 import { unlinkSync } from 'node:fs';
@@ -10,14 +10,14 @@ import { syncBuiltinESMExports } from 'node:module';
 import { privateWorkflowFiles, verifyPrivateFiles, privateDirectory } from '../../src/billing/storage/private-files.js';
 import { join } from 'node:path';
 import { setupLocal } from '../../scripts/setup.js';
-import { readLocalProfiles } from '../../src/billing/local-profiles.js';
+import { readLocalProfiles } from '../../src/billing/providers/local/profiles.js';
 import { imageBoundary } from '../support/images.js';
 import { billingSocket } from '../support/http.js';
 import { createBillingApp } from '../../src/billing/server/routes.js';
 import { setTimeout } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { initializeBilling } from '../../src/billing/setup.js';
-import { LocalBillingStorage } from '../../src/billing/storage/libsql.js';
+import { initializeBilling } from '../../src/billing/configuration/providers.js';
+import { LocalBillingStorage } from '../../src/billing/providers/local/storage.js';
 import { configuration, independentClient, temporaryDatabase, usage } from '../support/billing.js';
 import { processWriter } from '../support/process-writer.js';
 

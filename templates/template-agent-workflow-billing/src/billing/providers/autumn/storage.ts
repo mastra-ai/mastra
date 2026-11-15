@@ -1,9 +1,9 @@
 import type { Transaction } from '@libsql/client/node';
 import { randomUUID } from 'node:crypto';
-import type { ProviderAccount } from '../contracts.js';
-import { BillingError, accountSchema, organizationProfileSchema, parseInput } from '../contracts.js';
-import { accountFromRow } from './accounts.js';
-import type { BillingDatabase } from './database.js';
+import type { ProviderAccount } from '../../contracts/core.js';
+import { BillingError, accountSchema, organizationProfileSchema, parseInput } from '../../contracts/core.js';
+import { accountFromRow } from '../../storage/accounts.js';
+import type { BillingDatabase } from '../../storage/database.js';
 
 /** Local account identity and immutable Autumn payer links, never remote balances. */
 export class AutumnAccountStorage {

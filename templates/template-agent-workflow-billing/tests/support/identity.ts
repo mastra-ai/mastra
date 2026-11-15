@@ -1,5 +1,5 @@
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
-import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../../src/billing/configuration/policy.js';
 import type { JwtIdentityOptions } from '../../src/billing/identity.js';
 import { JwtIdentityAdapter } from '../../src/billing/identity.js';
 import { OrganizationService } from '../../src/billing/organizations.js';

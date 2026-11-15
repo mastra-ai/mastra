@@ -3,7 +3,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { z } from 'zod';
 import { resourceAction } from '../../../src/billing/resource-catalog.js';
 import type { ResourceDependencies, ResourceDefinition } from '../../../src/billing/resource-catalog.js';
-import { identifierSchema } from '../../../src/billing/contracts.js';
+import { identifierSchema } from '../../../src/billing/contracts/core.js';
 import { observationsSchema, reportApprovalSchema, weatherPrompt, validateWeatherPrompt } from './observations.js';
 const selectionSchema = z.strictObject({ workspaceId: identifierSchema });
 const operationSchema = selectionSchema.extend({ idempotencyKey: identifierSchema });

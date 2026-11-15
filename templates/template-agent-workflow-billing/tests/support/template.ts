@@ -1,4 +1,4 @@
-import { configuredOrganizations } from '../../src/billing/environment.js';
+import { configuredOrganizations } from '../../src/billing/configuration/environment.js';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client';
 import { expect } from 'vitest';
-import { readLocalProfiles } from '../../src/billing/local-profiles.js';
+import { readLocalProfiles } from '../../src/billing/providers/local/profiles.js';
 
 export const templateRoot = fileURLToPath(new URL('../../', import.meta.url));
 export const observations = {

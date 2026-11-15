@@ -4,7 +4,7 @@ import { setTimeout } from 'node:timers/promises';
 import { createClient } from '@libsql/client/node';
 import type { Client, Transaction } from '@libsql/client/node';
 import { z } from 'zod';
-import { BillingError } from '../contracts.js';
+import { BillingError } from '../contracts/core.js';
 import { migrateStorage } from './migrations.js';
 
 const storageOptionsSchema = z.strictObject({

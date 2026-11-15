@@ -3,7 +3,7 @@ import { lstat, open, rename, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
+import { BillingError, identifierSchema, parseInput } from '../../contracts/core.js';
 
 const profileSchema = z.strictObject({
   name: z.string().min(1).max(100),

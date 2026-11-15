@@ -1,5 +1,5 @@
-import { BillingError } from '../contracts.js';
-import { allowanceSchema, offerSchema, commercialCatalogSchema } from '../catalog.js';
+import { BillingError } from '../contracts/core.js';
+import { allowanceSchema, offerSchema, commercialCatalogSchema } from '../configuration/catalog.js';
 import type { BillingDatabase } from './database.js';
 
 export async function retainCatalog(database: BillingDatabase, input: unknown): Promise<void> {

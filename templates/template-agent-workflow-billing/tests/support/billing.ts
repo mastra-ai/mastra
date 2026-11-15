@@ -3,8 +3,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createClient } from '@libsql/client/node';
-import type { ProviderAccount, UsageEvent } from '../../src/billing/contracts.js';
-import { billingConfigurationSchema } from '../../src/billing/policy-configuration.js';
+import type { ProviderAccount, UsageEvent } from '../../src/billing/contracts/core.js';
+import { billingConfigurationSchema } from '../../src/billing/configuration/policy.js';
 
 export function configuration() {
   return billingConfigurationSchema.parse({

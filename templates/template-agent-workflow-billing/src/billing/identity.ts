@@ -2,7 +2,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { createLocalJWKSet, jwtVerify } from 'jose';
 import type { JSONWebKeySet } from 'jose';
 import { z } from 'zod';
-import { BillingError, identifierSchema, parseInput } from './contracts.js';
+import { BillingError, identifierSchema, parseInput } from './contracts/core.js';
 
 export const identitySchema = z.strictObject({ id: identifierSchema, displayName: z.string().trim().min(1).max(100) });
 export type Identity = Readonly<z.infer<typeof identitySchema>>;

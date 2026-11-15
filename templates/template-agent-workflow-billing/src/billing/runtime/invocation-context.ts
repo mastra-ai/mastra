@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AdmissionIdentity } from './accounting.js';
-import type { SafeGenerateOptions } from './mastra-resources.js';
+import type { SafeGenerateOptions } from '../mastra-resources.js';
 import type { MeasurementCollector } from './measurement.js';
 
 // All facade invocations in this process share parent execution scope, including

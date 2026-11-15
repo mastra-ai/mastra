@@ -86,6 +86,30 @@ it('personal image quickstart is repeatable and shared billing remains isolated'
   );
   expect(generatedCli.output).toContain('\"replayed\": true');
   expect(generatedCli.output).toContain('\"billedUnits\": 1');
+  const artifact = generated.body.result.object.artifacts[0];
+  expect(artifact.downloadPath).toBe(`${base}/artifacts/${artifact.id}`);
+  const downloadArgs = ['run', 'images', '--', 'download', artifact.id, 'bird.png', '--url', server.url];
+  expect((await command(copy.root, downloadArgs, env)).code).toBe(0);
+  const downloaded = await readFile(join(copy.root, 'bird.png'));
+  expect(createHash('sha256').update(downloaded).digest('hex')).toBe(artifact.sha256);
+  expect((await stat(join(copy.root, 'bird.png'))).mode & 0o777).toBe(0o600);
+  expect((await command(copy.root, downloadArgs, env, false)).code).not.toBe(0);
+  expect(await readFile(join(copy.root, 'bird.png'))).toEqual(downloaded);
+  const deniedArgs = [
+    'run',
+    'images',
+    '--',
+    'download',
+    artifact.id,
+    'outsider.png',
+    '--url',
+    server.url,
+    '--profile',
+    'outsider',
+  ];
+  const deniedDownload = await command(copy.root, deniedArgs, env, false);
+  expect(deniedDownload.code).not.toBe(0);
+  await expect(readFile(join(copy.root, 'outsider.png'))).rejects.toMatchObject({ code: 'ENOENT' });
   expect(model.models).toHaveLength(2);
   expect(model.models[0].body.model).toBe('gpt-6-luna');
   expect(model.models[0].path).toBe('/v1/responses');

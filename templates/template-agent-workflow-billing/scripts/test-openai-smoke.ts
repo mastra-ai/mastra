@@ -3,7 +3,7 @@ import { createImageAgent } from '../src/mastra/agents/image-agent.js';
 import { imageAdapters } from '../src/mastra/image-adapters.js';
 import { ImageService } from '../src/images/service.js';
 import { ExecutionArtifacts } from '../src/billing/storage/artifacts.js';
-import { billingConfigurationSchema } from '../src/billing/policy-configuration.js';
+import { billingConfigurationSchema } from '../src/billing/configuration/policy.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';

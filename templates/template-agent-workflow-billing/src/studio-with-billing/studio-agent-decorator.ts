@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { AnyAgent } from '../billing/mastra-resources.js';
-import { BillingError, identifierSchema } from '../billing/contracts.js';
+import { BillingError, identifierSchema } from '../billing/contracts/core.js';
 import type { StudioBillingIntegration, StudioConversation } from './studio-wrapper-contracts.js';
 
 /** Trusted association survives native queued/idle stream re-entry without editable RequestContext. */

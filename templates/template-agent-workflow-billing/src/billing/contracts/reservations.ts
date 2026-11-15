@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { accountSchema, identifierSchema, positiveQuantitySchema, quantitySchema } from './contracts.js';
+import { accountSchema, identifierSchema, positiveQuantitySchema, quantitySchema } from './core.js';
 
 export function workflowSuspensionTtlMs(policy: { readonly suspendedReservationTtlMs?: number }) {
   return policy.suspendedReservationTtlMs ?? 1_800_000;
