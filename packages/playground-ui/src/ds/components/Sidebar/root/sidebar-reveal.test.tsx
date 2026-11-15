@@ -251,6 +251,7 @@ describe('Sidebar mobile reveal', () => {
 
       fireEvent.click(trigger());
       expect(dismiss.closest('[inert]')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Agents' }).closest('[inert]')).toBeNull();
 
       fireEvent.click(scrim());
       expect(dismiss.closest('[inert]')).toBeNull();
