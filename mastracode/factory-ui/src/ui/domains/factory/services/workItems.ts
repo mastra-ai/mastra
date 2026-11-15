@@ -331,13 +331,13 @@ export async function listWorkItems(
     | { scope: 'sessions' }
     | { started: 'false'; q: string }
     | { source: string[] }
-    | { workItemId: string[] },
+    | { workItemId: string[]; scope?: 'sessions' },
 ): Promise<BoardSnapshot> {
   const params = new URLSearchParams(
     'source' in only
       ? only.source.map(source => ['source', source])
       : 'workItemId' in only
-        ? only.workItemId.map(id => ['workItemId', id])
+        ? [...only.workItemId.map(id => ['workItemId', id]), ...(only.scope ? [['scope', only.scope]] : [])]
         : only,
   );
   // No id and no source asked for: no card. Sent bare, the request would read the whole project.

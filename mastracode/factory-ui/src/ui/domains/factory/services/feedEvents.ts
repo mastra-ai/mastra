@@ -1,3 +1,6 @@
+import { readFeedFrame } from '@mastra/factory/feed-frame';
+import type { FeedFrame } from '@mastra/factory/feed-frame';
+
 import { readSSE } from '../../../lib/readSSE';
 import { RequestError } from './request';
 
@@ -7,7 +10,7 @@ const FEED_SILENCE_LIMIT_MS = 60_000;
 export async function streamFeedEvents(
   baseUrl: string,
   factoryProjectId: string,
-  handlers: { onEvent: () => void; onConnected: () => void },
+  handlers: { onEvent: (frame: FeedFrame) => void; onConnected: () => void },
   signal: AbortSignal,
 ): Promise<void> {
   const silence = new AbortController();
@@ -34,9 +37,18 @@ export async function streamFeedEvents(
       },
     });
     await readSSE(response.body.pipeThrough(heardBytes, { signal: closedOrSilent }), (event, data) => {
-      if (event === 'feed') handlers.onEvent();
+      if (event === 'feed') handlers.onEvent(parseFrame(data));
     });
   } finally {
     clearTimeout(silenceTimer);
+  }
+}
+
+/** A frame this browser cannot read could have changed any card. */
+function parseFrame(data: string): FeedFrame {
+  try {
+    return readFeedFrame(JSON.parse(data));
+  } catch {
+    return {};
   }
 }

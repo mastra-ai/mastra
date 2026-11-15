@@ -275,7 +275,7 @@ describe('FeedEventsProvider, on the board', () => {
     await waitForMutationsIdle(rendered.client);
   });
 
-  it('reads nothing but the safety re-read on a board idle for minutes, then polls once the stream drops', async () => {
+  it('reads nothing but the safety re-read of decisions and runs on a board idle for minutes, then polls once the stream drops', async () => {
     const stream = pushableFeedStream(PROJECT_ID);
     server.use(stream.handler);
     const { requests } = boardEndpoints();
@@ -289,7 +289,7 @@ describe('FeedEventsProvider, on the board', () => {
     // Runs have no timer of their own: they are read with the board, at most once a minute.
     const safetyRereads = requests.runs - connected.runs;
     expect(safetyRereads).toBeLessThanOrEqual(5);
-    expect(requests).toEqual(moreRefreshes(connected, safetyRereads));
+    expect(requests).toEqual({ ...moreRefreshes(connected, safetyRereads), cards: connected.cards });
 
     server.use(http.get(FEED_URL, () => new HttpResponse(null, { status: 503 })));
     stream.close();
