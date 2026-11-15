@@ -105,6 +105,23 @@ describe('Sidebar mobile reveal', () => {
     });
   });
 
+  describe('when the page is nudged right a few pixels and released', () => {
+    it('springs back closed', () => {
+      renderApp();
+      swipe(
+        screen.getByText('Agent overview'),
+        [
+          [20, 0],
+          [30, 16],
+          [45, 200],
+        ],
+        220,
+      );
+
+      expect(navigation()).toBeNull();
+    });
+  });
+
   describe('when the page is flicked right in a single frame', () => {
     it('opens navigation even though the drag was short', () => {
       renderApp();

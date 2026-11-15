@@ -10,6 +10,7 @@ const DURATION_VAR = '--sidebar-reveal-duration';
 
 const LOCK_DISTANCE_PX = 8;
 const TURN_DISTANCE_PX = 8;
+const COMMIT_DISTANCE_PX = 40;
 const VELOCITY_WINDOW_MS = 100;
 const MIN_SETTLE_MS = 120;
 const MAX_SETTLE_MS = 400;
@@ -22,6 +23,7 @@ type Track = {
   startY: number;
   target: Element | undefined;
   locked: boolean;
+  startedOpen: boolean;
   origin: number;
   offset: number;
   heading: number;
@@ -70,7 +72,8 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
     let track: Track | undefined;
 
     const release = (ended: Track, velocity: number) => {
-      const endsOpen = ended.heading > 0;
+      const committed = Math.abs(ended.offset - ended.origin) >= COMMIT_DISTANCE_PX;
+      const endsOpen = committed ? ended.heading > 0 : ended.startedOpen;
       const distance = Math.abs((endsOpen ? ended.width : 0) - ended.offset);
       const speedTowardTarget = endsOpen ? velocity : -velocity;
       setRevealVar(ended.layers, DURATION_VAR, `${settleDuration(distance, speedTowardTarget)}ms`);
@@ -91,6 +94,7 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       if (ownsHorizontalSwipe(current.target, scope, dx)) return 'ignored';
 
       current.locked = true;
+      current.startedOpen = !opening;
       current.width = width;
       current.startX += Math.sign(dx) * LOCK_DISTANCE_PX;
       current.origin = liveOffset(layerNamed(layers, 'scrim')) ?? (opening ? 0 : width);
@@ -116,6 +120,7 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
         startY: touch.clientY,
         target: event.target instanceof Element ? event.target : undefined,
         locked: false,
+        startedOpen: false,
         origin: 0,
         offset: 0,
         heading: 0,
