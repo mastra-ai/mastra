@@ -588,6 +588,7 @@ test('gh retry: which GitHub errors are transient', () => {
     'Get "https://api.github.com/x": read tcp: connection reset by peer',
     'Get "https://api.github.com/x": net/http: TLS handshake timeout',
     'Get "https://api.github.com/x": unexpected EOF',
+    'Get "https://api.github.com/x": EOF',
   ];
   const permanent = [
     'gh: Not Found (HTTP 404)',

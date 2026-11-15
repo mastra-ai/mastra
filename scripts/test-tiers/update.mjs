@@ -284,7 +284,7 @@ export function compareFiles(pages) {
  */
 export function isTransientGhError(error) {
   const text = `${error?.stderr ?? ''}\n${error?.message ?? ''}`;
-  return /HTTP 5\d\d|HTTP 429|rate limit|timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection reset|unexpected EOF/i.test(
+  return /HTTP 5\d\d|HTTP 429|rate limit|timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection reset|\bEOF\b/i.test(
     text,
   );
 }
