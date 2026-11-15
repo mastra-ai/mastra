@@ -412,6 +412,48 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
         [`${sha256(first)}.txt`, `${sha256(decoded)}.txt`].sort(),
       );
     });
+
+    it('starts the sandbox to write the bytes of a link Mastra downloads on a stopped turn', async () => {
+      const remoteBytes = Buffer.from('%PDF remote report');
+      const server = createServer((request, response) => {
+        const found = request.url === '/report.pdf';
+        response.writeHead(found ? 200 : 404, { 'Content-Type': 'application/pdf' });
+        response.end(found ? remoteBytes : 'Not found');
+      });
+      server.listen(0, '127.0.0.1');
+      await once(server, 'listening');
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('Missing test server port');
+
+      try {
+        const { sandbox, agent, prompts, workspace } = createLocalHarness();
+        const first = Buffer.from('sent on the first turn');
+
+        await agent.generate([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
+        await workspace.stop();
+
+        // The bytes of a link are only known once Mastra downloads them, so they are not the stored base64 a
+        // file of the turn matches: the turn that needs them starts the sandbox and writes them.
+        await agent.generate(
+          [
+            userMessage(
+              text('Two'),
+              file(new URL(`http://127.0.0.1:${address.port}/report.pdf`), 'report.pdf', 'application/pdf'),
+            ),
+          ],
+          { memory: MEMORY },
+        );
+
+        expect(sandbox.status).toBe('running');
+        expect(filePartsIn(prompts.at(-1))).toEqual([]);
+        expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual(
+          [`${sha256(first)}.txt`, `${sha256(remoteBytes)}.pdf`].sort(),
+        );
+      } finally {
+        server.closeAllConnections();
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+    });
   });
 
   describe('files sent by a signal', () => {
