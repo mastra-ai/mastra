@@ -572,6 +572,13 @@ export async function listSessionRenderedPath(
   const empty: WorkspaceRenderedListing = { workspacePath: session.sessionId, root: safeRoot, rootPath, entries: [] };
   if (!handle) return empty;
 
+  // Do not enumerate a checkout reached through a symlink: even listing would
+  // expose names and metadata outside the session's physical workspace.
+  const physical = await realPaths(handle.sandbox, handle.layout.root, [safeRoot]);
+  if (physical.paths[0] && physical.paths[0] !== posixPath.join(physical.root, safeRoot)) {
+    throw new Error('Path is not available in this session');
+  }
+
   // One round trip: emit "type\tsize\tmtime\tpath" per entry. `safeRoot` comes
   // from a fixed allowlist so interpolating it (quoted) is safe. The listing is
   // parsed line by line, so retain all of it rather than the default 1 MiB tail.
