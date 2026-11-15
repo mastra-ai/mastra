@@ -21,7 +21,9 @@ import { DraftSessionCreateError, isSessionNotFound } from '../domains/workspace
 import { useHandoffPrompt } from '../domains/chat/hooks/useHandoffPrompt';
 import { failedDraftState } from '../domains/chat/services/handoffFiles';
 import { FactorySessionPage } from '../domains/factory/components/RelatedFactorySessions';
-import { SessionPanelSummary } from '../domains/factory/components/SessionPanelSummary';
+import { SessionPanelOverview } from '../domains/factory/components/SessionPanelOverview';
+import { SessionPanelSubject } from '../domains/factory/components/SessionPanelSubject';
+import type { WorkspacePanelPage } from '../domains/workspace-viewer/context/WorkspacePanelContext';
 import { WorkspaceFilesProvider } from '../domains/workspace-viewer/context/WorkspaceFilesProvider';
 import { useThreadWorkspacePath } from '../domains/workspace-viewer/hooks/useThreadWorkspacePath';
 import { useWiderThan } from '../domains/workspace-viewer/hooks/useWiderThan';
@@ -32,10 +34,12 @@ import { newUserSessionPath } from '../domains/workspaces/services/factoryPaths'
 
 import '../domains/chat/components/chat-enter.css';
 
-const threadShellClass = cn(
-  chatColumnClass,
-  '[--chat-inset-end:var(--workspace-files-inset,0px)] [--chat-gutter:0.25rem]',
-);
+const threadShellClass = cn(chatColumnClass, '[--chat-gutter:0.25rem]');
+
+const SESSION_PANEL: WorkspacePanelPage = {
+  subject: lead => <SessionPanelSubject lead={lead} />,
+  overview: workspace => <SessionPanelOverview workspace={workspace} />,
+};
 
 export function ThreadPage() {
   const { factoryId, threadId } = useParams<{ factoryId: string; threadId?: string }>();
@@ -56,7 +60,7 @@ export function ThreadPage() {
   return (
     <ChatSessionBoundary threadId={threadId}>
       <PageTitle />
-      <WorkspaceFilesProvider summary={<SessionPanelSummary />}>
+      <WorkspaceFilesProvider page={SESSION_PANEL}>
         <ThreadPageMain workspacePath={workspace.workspacePath} threadId={workspace.threadId} />
       </WorkspaceFilesProvider>
     </ChatSessionBoundary>
@@ -93,9 +97,6 @@ function ThreadPageMain({
   workspacePath: string | undefined;
   threadId: string | undefined;
 }) {
-  useGlobalShortcuts();
-  useRouteThreadSync();
-  useHandoffPrompt();
   const railBoxRef = useRef<HTMLDivElement>(null);
   const { wider: railFits } = useWiderThan(railBoxRef, RAIL_MIN_REM);
 
@@ -117,6 +118,9 @@ function ThreadPageMain({
 }
 
 function ThreadSessionEffects({ workspacePath, children }: { workspacePath: string | undefined; children: ReactNode }) {
+  useGlobalShortcuts();
+  useRouteThreadSync();
+  useHandoffPrompt();
   const { busy, transcript } = useChatTranscript();
   useInvalidateWorkspaceChangesOnRunCompletion(workspacePath, busy);
   useRefreshWorkspaceFilesOnToolCalls(workspacePath, transcript.entries);

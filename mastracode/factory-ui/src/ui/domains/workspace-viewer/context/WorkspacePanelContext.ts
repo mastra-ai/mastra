@@ -1,20 +1,30 @@
 import { createContext } from 'react';
 import type { ReactNode } from 'react';
 
-import type { WorkspacePanelSize } from '../layout';
+export interface WorkspacePanelPage {
+  subject: (lead: ReactNode | undefined) => ReactNode;
+  overview: (workspace: (changeRequest?: ReactNode) => ReactNode) => ReactNode;
+}
 
 export interface WorkspacePanelApi {
   open: boolean;
   setOpen: (open: boolean) => void;
   workspacePath?: string;
   threadId?: string;
-  size: WorkspacePanelSize;
-  setSize: (size: WorkspacePanelSize) => void;
   canDock: boolean;
+  /** From an open, close, fold or unfold until the dock's card settles; a resize alone never animates. */
+  moving: boolean;
+  onDockSettled: () => void;
   /** Whether the overview may read changes without waking an idle sandbox nobody asked for. */
   readsChanges: boolean;
-  /** What the page shows above the overview, e.g. the card the session works. */
-  summary?: ReactNode;
+  page?: WorkspacePanelPage;
 }
 
 export const WorkspacePanelContext = createContext<WorkspacePanelApi | undefined>(undefined);
+
+/** Apart from the panel state so the page frame skips toggles; also true while an outgrown card folds back. */
+export const WorkspacePanelDockableContext = createContext<boolean | undefined>(undefined);
+
+export function workspacePanelKey({ workspacePath, threadId }: Pick<WorkspacePanelApi, 'workspacePath' | 'threadId'>) {
+  return `${workspacePath}|${threadId}`;
+}

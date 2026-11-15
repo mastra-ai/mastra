@@ -7,22 +7,14 @@ import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
-import { useWorkspacePullRequestStatuses } from '../../../../hooks/useWorkspacePullRequestStatuses';
-import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useOpenNewUserSession } from '../hooks/useOpenNewUserSession';
 import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
 import { filterSessionRows } from '../services/sessionFilters';
-import {
-  collapsedRowsKeepingActive,
-  groupSessionRows,
-  orderGroupHeadings,
-  sessionGroupHeadings,
-} from '../services/sessionGroups';
+import { groupSessionRows, orderGroupHeadings, sessionGroupHeadings } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
-import { pullRequestMergeTargets } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
 import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
@@ -40,8 +32,7 @@ import {
 } from './sessionPropertyOptions';
 
 export function SessionsSection() {
-  const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
   const openNewUserSession = useOpenNewUserSession();
   const {
     view,
@@ -69,12 +60,6 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
-  const liveStatusBySessionId = useWorkspacePullRequestStatuses({
-    baseUrl,
-    targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
-    enabled: chatSessionOpen,
-  });
 
   const emptyMessage = emptyListMessage({
     rowCount: rows.length,
@@ -179,10 +164,6 @@ export function SessionsSection() {
                   level={level}
                   compact={view.compact}
                   disabled={deletion.deleting}
-                  liveStatus={
-                    liveStatusBySessionId[entry.session.sessionId] ??
-                    (entry.pullRequest?.knownMerged ? 'merged' : undefined)
-                  }
                   onDelete={deletion.requestDeletion}
                   subItems={subItems}
                 />

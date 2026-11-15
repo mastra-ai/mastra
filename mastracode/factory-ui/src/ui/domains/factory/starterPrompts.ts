@@ -1,5 +1,6 @@
 import type { WorkItemStarters } from '../../../api/types';
 import type { BoardInfo } from './boardFlow';
+import { phaseLabel } from './boardStages';
 import { triageDecisions } from './cardPrimaryAction';
 
 export type StarterKind = 'unblock' | 'feedback' | 'review' | 'decide' | 'triage' | 'bug' | 'sweep' | 'stale';
@@ -23,8 +24,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** The default board, by its own names: starters speak of its rest phase and the choices triage leaves. */
 function prompts(board: BoardInfo): Record<StarterKind, string> {
   const boardName = board.name ?? board.title;
-  const restPhase = board.phases.find(phase => phase.id === board.initialPhase);
-  const rest = `${restPhase?.name ?? restPhase?.title ?? board.initialPhase} on the ${boardName} board`;
+  const rest = `${phaseLabel(board, board.initialPhase)} on the ${boardName} board`;
   const choices = new Intl.ListFormat('en', { type: 'disjunction' }).format(
     triageDecisions(board).map(({ label }) => label),
   );
@@ -73,7 +73,7 @@ export function starterPrompts({
   if (!board) return [];
   const texts = prompts(board);
   const { failed, changesRequested, review, undecided, untriaged, unplannedBugs, sweep, stale } = starters;
-  const restTitle = board.phases.find(phase => phase.id === board.initialPhase)?.title ?? board.initialPhase;
+  const restTitle = phaseLabel(board, board.initialPhase);
   const facts: Array<[StarterKind, StarterFact | false | undefined]> = [
     ['unblock', failed > 0 && { label: 'Failed runs', value: failed, action: upTo(failed, 'Debug and retry') }],
     [

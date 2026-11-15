@@ -159,6 +159,9 @@ export const queryKeys = {
   workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
   workspaceTree: (workspacePath: string | undefined, path: string) =>
     ['workspace-tree', workspacePath ?? null, path] as const,
+  // Under the tree's prefix so a tree refresh refreshes it; the object never equals a folder path.
+  workspaceFileIndex: (workspacePath: string | undefined) =>
+    ['workspace-tree', workspacePath ?? null, { index: 'files' }] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
   workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
     ['workspace-file', workspacePath ?? null, filePath ?? null] as const,

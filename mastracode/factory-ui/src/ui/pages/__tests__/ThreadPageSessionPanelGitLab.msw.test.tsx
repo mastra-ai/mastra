@@ -41,6 +41,7 @@ const subscribedMergeRequest: PullRequestSubscription = {
   pullRequestNumber: SUBSCRIBED_IID,
   status: 'open',
   url: SUBSCRIBED_URL,
+  updatedAt: '2026-09-20T00:00:00.000Z',
 };
 
 function createWireWorkItem(type: 'pull-request' | 'issue') {
@@ -163,6 +164,10 @@ function stubThreadRoute(workItem: unknown, subscriptions: PullRequestSubscripti
       githubSubscriptionRequests();
       return HttpResponse.json({ subscriptions: [] });
     }),
+    http.get(`${TEST_BASE_URL}/web/gitlab/issues/:issueId`, () => HttpResponse.json({ description: null })),
+    http.get(`${TEST_BASE_URL}/web/gitlab/projects/:repository/prs/:number`, () =>
+      HttpResponse.json({ description: null }),
+    ),
   );
   return { githubSubscriptionRequests };
 }
@@ -174,7 +179,7 @@ function renderThreadRoute() {
   return renderWithProviders(<RouterProvider router={router} />);
 }
 
-/** The docked session panel, once the card summary has drawn. */
+/** The docked session panel, once its overview has drawn. */
 async function findSessionPanel() {
   const panel = await screen.findByTestId('workspace-files-card');
   await within(panel).findByRole('region', { name: 'Card' });
@@ -236,7 +241,8 @@ describe('ThreadPage session panel on GitLab', () => {
         'href',
         `https://gitlab.com/${PROJECT_PATH}/-/issues/3`,
       );
-      expect(within(panel).queryByText(PROJECT_PATH, { exact: false })).not.toBeInTheDocument();
+      expect(within(panel).queryByText(`${PROJECT_PATH}#3`, { exact: false })).not.toBeInTheDocument();
+      expect(within(panel).getByRole('region', { name: 'Workspace' })).toHaveTextContent(PROJECT_PATH);
       const mergeRequest = await within(panel).findByRole('link', { name: `Open MR !${SUBSCRIBED_IID}` });
       expect(mergeRequest).toHaveAttribute('href', SUBSCRIBED_URL);
       expect(linksTo(await screen.findByRole('region', { name: 'Thread composer' }), SUBSCRIBED_URL)).toHaveLength(0);

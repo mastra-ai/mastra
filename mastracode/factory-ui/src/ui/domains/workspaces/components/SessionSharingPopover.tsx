@@ -7,7 +7,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Lock, Users } from 'lucide-react';
 import { useId } from 'react';
 
-/** Private-session entry point shared by the sidebar and session header. */
+/** Private-session entry point shared by the sidebar row's end and the session title in the header. */
 export function SessionSharingPopover({
   name,
   placement = 'sidebar',
@@ -42,7 +42,7 @@ export function SessionSharingPopover({
           )
         }
       />
-      <PopoverContent align="end" aria-labelledby={titleId}>
+      <PopoverContent align={inHeader ? 'start' : 'end'} aria-labelledby={titleId}>
         <EmptyState
           iconSlot={<EmptyStateIllustration name="locked" />}
           titleSlot={<span id={titleId}>This session is private</span>}

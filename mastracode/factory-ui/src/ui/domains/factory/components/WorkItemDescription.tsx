@@ -1,11 +1,11 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
 import { useUpdateWorkItemMutation } from '../../../../hooks/useWorkItems';
 import type { WorkItem } from '../services/workItems';
+import { DescriptionMarkdown } from './DescriptionMarkdown';
 
 const MAX_DESCRIPTION_LENGTH = 8000;
 
@@ -86,9 +86,7 @@ export function WorkItemDescription({
 
   return (
     <div className="flex flex-col gap-1">
-      <MarkdownRenderer className="text-foreground text-caption max-w-none [&>*:first-child]:mt-0">
-        {item.description}
-      </MarkdownRenderer>
+      <DescriptionMarkdown titleLevel="h3">{item.description}</DescriptionMarkdown>
       <Button
         type="button"
         variant="ghost"

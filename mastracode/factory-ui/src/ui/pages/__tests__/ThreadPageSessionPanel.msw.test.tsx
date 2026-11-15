@@ -1,5 +1,6 @@
 import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
-import { screen, within } from '@testing-library/react';
+import type { QueryClient } from '@tanstack/react-query';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -9,6 +10,7 @@ import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { sessionCardsWhileBoardLoads } from '../../../../e2e/ui/session-cards';
+import { createQueryClient } from '../../../query-client';
 import type { PullRequestSubscription } from '../../domains/factory/services/githubSubscriptions';
 import { createAppRoutes } from '../../router';
 
@@ -25,6 +27,7 @@ const OTHER_PULL_REQUEST_URL = `https://github.com/mastra-ai/mastra/pull/${OTHER
 const MALFORMED_PULL_REQUEST_URL = 'https://github.com/mastra-ai/mastra/pull/20340';
 const NON_POSITIVE_PULL_REQUEST_URL = 'https://github.com/mastra-ai/mastra/pull/0';
 const AC = `${TEST_BASE_URL}/api/agent-controller/code`;
+const ISSUE_BODY = 'The header link points at the old pull request after a rebase.';
 
 const workspaceSession = {
   id: 'row-1',
@@ -47,6 +50,7 @@ const pullRequestSubscription: PullRequestSubscription = {
   pullRequestNumber: PULL_REQUEST_NUMBER,
   status: 'open',
   url: PULL_REQUEST_URL,
+  updatedAt: '2026-07-29T00:00:00.000Z',
 };
 
 const otherPullRequestSubscription: PullRequestSubscription = {
@@ -55,6 +59,7 @@ const otherPullRequestSubscription: PullRequestSubscription = {
   pullRequestNumber: OTHER_PULL_REQUEST_NUMBER,
   status: 'open',
   url: OTHER_PULL_REQUEST_URL,
+  updatedAt: '2026-07-29T00:00:00.000Z',
 };
 
 const sessionRef = { sessionId: SESSION_ID, branch: 'factory/item-1', threadId: THREAD_ID, startedBy: 'user-1' };
@@ -172,15 +177,25 @@ function stubThreadRoute(workItems: unknown[], subscriptions: unknown[]) {
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions })),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:repository/issues/:number`, ({ params }) =>
+      HttpResponse.json({ number: Number(params.number), description: ISSUE_BODY }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/github/projects/:repository/prs/:number`, ({ params }) =>
+      HttpResponse.json({ number: Number(params.number), description: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/issues/:identifier`, () => HttpResponse.json({ description: null })),
   );
 }
 
-function renderThreadRoute(path = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`) {
+function renderThreadRoute(
+  path = `/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${THREAD_ID}`,
+  client?: QueryClient,
+) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(<RouterProvider router={router} />, client);
 }
 
-/** The docked session panel, once its summary has drawn. */
+/** The docked session panel, once its overview has drawn. */
 async function findSessionPanel(name: 'Card' | 'Pull requests' = 'Card') {
   const panel = await screen.findByTestId('workspace-files-card');
   await within(panel).findByRole('region', { name });
@@ -247,39 +262,98 @@ describe('ThreadPage session panel', () => {
   afterEach(() => vi.restoreAllMocks());
 
   describe('when the session reviews a pull request card', () => {
-    it("heads the panel with the reviewed pull request and lists the thread's other ones under Links", async () => {
+    it("shows the reviewed pull request with the branch under Workspace and lists the thread's other ones under Pull requests", async () => {
       stubThreadRoute([pullRequestCard()], [otherPullRequestSubscription]);
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      const card = within(panel).getByRole('region', { name: 'Card' });
-      const reviewed = await within(card).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
-      expect(reviewed).toHaveAttribute('href', PULL_REQUEST_URL);
-      const title = within(card).getByRole('heading', { level: 2 });
-      expect(reviewed.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(await within(card).findByRole('link', { name: `Open PR #${OTHER_PULL_REQUEST_NUMBER}` })).toHaveAttribute(
+      const workspace = within(panel).getByRole('region', { name: 'Workspace' });
+      expect(await within(workspace).findByText(sessionRef.branch)).toBeInTheDocument();
+      expect(await within(workspace).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` })).toHaveAttribute(
+        'href',
+        PULL_REQUEST_URL,
+      );
+      expect(await within(panel).findByRole('link', { name: `Open PR #${OTHER_PULL_REQUEST_NUMBER}` })).toHaveAttribute(
         'href',
         OTHER_PULL_REQUEST_URL,
       );
-      // The reviewed pull request is the card itself, so Links counts only the other one.
-      expect(within(card).getByRole('heading', { name: 'Links 1' })).toBeInTheDocument();
+      // The reviewed pull request is the card itself, so the list counts only the other one.
+      expect(within(panel).getByRole('heading', { name: 'Pull requests 1' })).toBeInTheDocument();
       await expectOnlyInPanel(PULL_REQUEST_URL);
       await expectOnlyInPanel(OTHER_PULL_REQUEST_URL);
     });
 
     it.each([
-      ['Merged', { state: 'merged' }],
-      ['Draft', { state: 'open', draft: true }],
-    ])('marks the reviewed pull request %s beside its reference', async (status, state) => {
+      ['merged', { state: 'merged' }],
+      ['draft', { state: 'open', draft: true }],
+    ])('marks the reviewed pull request link %s', async (status, state) => {
       const card = pullRequestCard();
       stubThreadRoute([{ ...card, metadata: { ...card.metadata, ...state } }], []);
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      const cardRegion = within(panel).getByRole('region', { name: 'Card' });
-      await within(cardRegion).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
-      expect(within(cardRegion).getByText(status)).toBeInTheDocument();
-      expect(within(cardRegion).queryByRole('heading', { name: /^Links/ })).not.toBeInTheDocument();
+      const workspace = within(panel).getByRole('region', { name: 'Workspace' });
+      expect(
+        await within(workspace).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER} ${status}` }),
+      ).toHaveAttribute('href', PULL_REQUEST_URL);
+    });
+
+    it("marks the reviewed pull request link merged once the thread hears it merged, before the card's next sync", async () => {
+      stubThreadRoute(
+        [pullRequestCard()],
+        [{ ...pullRequestSubscription, status: 'merged', updatedAt: '2026-07-30T00:00:00.000Z' }],
+      );
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      const workspace = within(panel).getByRole('region', { name: 'Workspace' });
+      expect(
+        await within(workspace).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER} merged` }),
+      ).toHaveAttribute('href', PULL_REQUEST_URL);
+    });
+
+    it('marks the reviewed pull request link merged when a run settles while Changes is open', async () => {
+      const encoder = new TextEncoder();
+      let emit: (event: { type: string }) => void = () => {};
+      stubThreadRoute([pullRequestCard()], [pullRequestSubscription]);
+      server.use(
+        http.get(
+          `${AC}/sessions/:sessionId/stream`,
+          () =>
+            new Response(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  emit = event => controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+                },
+                cancel() {},
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+      );
+      const user = userEvent.setup();
+      renderThreadRoute(undefined, createQueryClient());
+
+      const panel = await findSessionPanel();
+      await within(panel).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
+      emit({ type: 'agent_start' });
+      await screen.findByText('Thinking');
+
+      await user.click(within(panel).getByRole('button', { name: /^Changes(,|$)/ }));
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () =>
+          HttpResponse.json({
+            subscriptions: [{ ...pullRequestSubscription, status: 'merged', updatedAt: '2026-07-30T00:00:00.000Z' }],
+          }),
+        ),
+      );
+      emit({ type: 'agent_end' });
+      await waitFor(() => expect(screen.queryByText('Thinking')).not.toBeInTheDocument());
+      await user.click(within(panel).getByRole('button', { name: 'Back to overview' }));
+
+      expect(
+        await within(panel).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER} merged` }),
+      ).toBeInTheDocument();
     });
 
     it('names the reviewed pull request by its number alone, leaving its author and age to GitHub', async () => {
@@ -305,11 +379,9 @@ describe('ThreadPage session panel', () => {
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      const cardRegion = within(panel).getByRole('region', { name: 'Card' });
-      const reviewed = await within(cardRegion).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
+      const reviewed = await within(panel).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
       expect(reviewed).toHaveTextContent(new RegExp(`^PR #${PULL_REQUEST_NUMBER}$`));
-      expect(within(cardRegion).queryByText(/mastra-platform/)).not.toBeInTheDocument();
-      expect(within(cardRegion).queryByText(/mastra-ai\/mastra/)).not.toBeInTheDocument();
+      expect(within(panel).queryByText(/mastra-platform/)).not.toBeInTheDocument();
     });
 
     it.each([
@@ -346,7 +418,7 @@ describe('ThreadPage session panel', () => {
       expect(linksTo(panel, url)).toHaveLength(0);
     });
 
-    it('still lists the reviewed pull request when the subscriptions request fails', async () => {
+    it('still lists the reviewed pull request when the subscriptions request fails, and says the rest could not load', async () => {
       stubThreadRoute([pullRequestCard()], []);
       server.use(http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => new HttpResponse(null, { status: 500 })));
       renderThreadRoute();
@@ -356,26 +428,37 @@ describe('ThreadPage session panel', () => {
         'href',
         PULL_REQUEST_URL,
       );
+      expect(within(panel).getByText("Couldn't load pull requests.")).toBeInTheDocument();
     });
   });
 
   describe('when the session works an issue card', () => {
-    it("links the issue beside its title, with the thread's pull request under Links", async () => {
+    it("titles the panel with the card and links its issue, with the thread's pull request below", async () => {
       stubThreadRoute([issueCard()], [pullRequestSubscription]);
       renderThreadRoute();
 
       const panel = await findSessionPanel();
       const card = within(panel).getByRole('region', { name: 'Card' });
-      expect(within(card).getByRole('heading', { name: 'Track the pull request link' })).toBeInTheDocument();
+      expect(within(panel).getByRole('heading', { level: 2, name: 'Track the pull request link' })).toBeInTheDocument();
       const issue = within(card).getByRole('link', { name: `Open Issue #${ISSUE_NUMBER}` });
       expect(issue).toHaveAttribute('href', ISSUE_URL);
       expect(issue).toHaveAttribute('target', '_blank');
-      expect(issue.querySelector('[data-source="github-issue"]')).toBeInTheDocument();
-      const pullRequest = await within(card).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
+      const pullRequest = await within(panel).findByRole('link', { name: `Open PR #${PULL_REQUEST_NUMBER}` });
       expect(issue.compareDocumentPosition(pullRequest) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      // The issue is the card itself, so Links counts only what the work touched.
-      expect(within(card).getByRole('heading', { name: 'Links 1' })).toBeInTheDocument();
+      // The issue is the card itself, so the list counts only what the work opened.
+      expect(within(panel).getByRole('heading', { name: 'Pull requests 1' })).toBeInTheDocument();
       await expectOnlyInPanel(PULL_REQUEST_URL);
+    });
+
+    it("previews the issue's body, then what the card adds for its runs", async () => {
+      stubThreadRoute([{ ...issueCard(), description: 'Start from the header link.' }], []);
+      renderThreadRoute();
+
+      const panel = await findSessionPanel();
+      const card = within(panel).getByRole('region', { name: 'Card' });
+      expect(await within(card).findByText(ISSUE_BODY)).toBeInTheDocument();
+      expect(within(card).getByRole('heading', { name: 'Added in Factory' })).toBeInTheDocument();
+      expect(within(card).getByText('Start from the header link.')).toBeInTheDocument();
     });
 
     it('links each pull request the card carries, the open one first and a merged one marked', async () => {
@@ -386,11 +469,10 @@ describe('ThreadPage session panel', () => {
       const open = await within(panel).findByRole('link', { name: 'Open PR #5' });
       const merged = within(panel).getByRole('link', { name: 'Open PR #4 merged' });
       expect(open).toHaveAttribute('href', 'https://github.com/mastra-ai/mastra/pull/5');
-      expect(merged).toHaveTextContent('Merged');
       expect(open.compareDocumentPosition(merged) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it("leaves a pull request that has its own Review card to that card's link", async () => {
+    it("leaves a pull request that has its own Review card to that card's link, with the status the thread last heard", async () => {
       const card = issueCardWithSources([pullRequestSource(5, 'open')]);
       const reviewCard = {
         ...pullRequestCard(),
@@ -406,11 +488,23 @@ describe('ThreadPage session panel', () => {
         sessions: {},
         metadata: { number: 5 },
       };
-      stubThreadRoute([card, reviewCard], []);
+      stubThreadRoute(
+        [card, reviewCard],
+        [
+          {
+            ...pullRequestSubscription,
+            pullRequestNumber: 5,
+            url: 'https://github.com/mastra-ai/mastra/pull/5',
+            status: 'merged',
+          },
+        ],
+      );
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      const row = await within(panel).findByRole('link', { name: 'Open Review: PR #5: Review the fix' });
+      const row = await within(panel).findByRole('link', {
+        name: 'Open Review: PR #5: Review the fix, Review, Merged pull request',
+      });
       // The section heading already says it is a card, so the row names only which one.
       expect(row).toHaveTextContent(/^PR #5/);
       expect(within(panel).queryByRole('link', { name: 'Open PR #5' })).not.toBeInTheDocument();
@@ -438,7 +532,7 @@ describe('ThreadPage session panel', () => {
         renderThreadRoute();
 
         const panel = await findSessionPanel();
-        expect(await within(panel).findByRole('link', { name: /^Open .*: Follow-up work$/ })).toHaveAttribute(
+        expect(await within(panel).findByRole('link', { name: /^Open .*: Follow-up work, Building$/ })).toHaveAttribute(
           'href',
           live
             ? `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`
@@ -462,9 +556,7 @@ describe('ThreadPage session panel', () => {
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      const link = within(panel).getByRole('link', { name: 'Open ENG-123' });
-      expect(link).toHaveAttribute('href', url);
-      expect(link.querySelector('[data-source="linear-issue"]')).toBeInTheDocument();
+      expect(within(panel).getByRole('link', { name: 'Open ENG-123' })).toHaveAttribute('href', url);
     });
 
     it('lists no source link for a card without a URL', async () => {
@@ -472,8 +564,21 @@ describe('ThreadPage session panel', () => {
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      expect(within(panel).queryByRole('heading', { name: /^Links/ })).not.toBeInTheDocument();
+      expect(within(panel).queryByRole('heading', { name: /^Pull requests/ })).not.toBeInTheDocument();
       expect(within(panel).queryByRole('link', { name: `Open Issue #${ISSUE_NUMBER}` })).not.toBeInTheDocument();
+    });
+
+    it('draws nothing in the card section for a card with no URL, labels or description', async () => {
+      stubThreadRoute([{ ...issueCard(null), description: null }], []);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/projects/:repository/issues/:number`, ({ params }) =>
+          HttpResponse.json({ number: Number(params.number), description: '' }),
+        ),
+      );
+      renderThreadRoute();
+
+      const card = within(await findSessionPanel()).getByRole('region', { name: 'Card' });
+      await waitFor(() => expect(card).toBeEmptyDOMElement());
     });
 
     it('graphs the stays that brought the card to its stage and reads each out as you step through them', async () => {
@@ -494,10 +599,10 @@ describe('ThreadPage session panel', () => {
       renderThreadRoute();
 
       const panel = await findSessionPanel();
-      // The stage bar already shows Building, where the card is now, so the moves are the six stays before it.
+      // The current stay counts as no move: the stage bar already shows Building.
       expect(within(panel).getByRole('heading', { name: 'Moves 6' })).toBeInTheDocument();
       const moves = within(panel).getByRole('slider', { name: 'Moves' });
-      expect(moves).toHaveAttribute('aria-valuetext', expect.stringMatching(/^Planning, 1h, entered /));
+      expect(moves).toHaveAttribute('aria-valuetext', expect.stringMatching(/^Building, .+ so far, entered /));
 
       await user.click(moves);
       await user.keyboard('{Home}');
@@ -541,10 +646,41 @@ describe('ThreadPage session panel', () => {
         'href',
         PULL_REQUEST_URL,
       );
-      expect(within(panel).getByRole('link', { name: /^Open .*: Follow-up work$/ })).toHaveAttribute(
+      expect(within(panel).getByRole('link', { name: /^Open .*: Follow-up work, Building$/ })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/work`,
       );
+    });
+  });
+
+  describe('when a read fails', () => {
+    it("says the card couldn't load instead of showing a session without one", async () => {
+      stubThreadRoute([], []);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ error: 'unavailable' }, { status: 500 }),
+        ),
+      );
+      renderThreadRoute();
+
+      const card = within(await findSessionPanel()).getByRole('region', { name: 'Card' });
+      expect(card).toHaveTextContent("Couldn't load the card.");
+    });
+
+    it('names no phase it would have to guess when the board catalog fails', async () => {
+      const card = { ...issueCard(), stageHistory: [] };
+      const followUp = { ...issueCard(null), id: 'related-item', parentWorkItemId: card.id, title: 'Follow-up work' };
+      stubThreadRoute([card, { ...followUp, sessions: {} }], []);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/boards`, () =>
+          HttpResponse.json({ error: 'unavailable' }, { status: 500 }),
+        ),
+      );
+      renderThreadRoute();
+
+      const activity = within(await findSessionPanel()).getByRole('region', { name: 'Card activity' });
+      expect(within(activity).getByRole('link', { name: /^Open .*: Follow-up work$/ })).toBeInTheDocument();
+      expect(activity).toHaveTextContent("Couldn't load the board, so phases aren't shown.");
     });
   });
 

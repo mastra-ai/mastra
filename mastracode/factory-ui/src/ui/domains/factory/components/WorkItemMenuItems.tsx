@@ -5,7 +5,7 @@ import type { ReactElement } from 'react';
 import { externalLinkLabel } from '../boardItems';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { boardLoop } from '../boardFlow';
-import { itemBoard, itemStageOptions } from '../boardStages';
+import { itemBoard, itemStageOptions, phaseName } from '../boardStages';
 import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
 import { awaitsTriageDecision, triageDecisions } from '../cardPrimaryAction';
@@ -62,7 +62,7 @@ export function WorkItemMenuItems({
   const stages = custom
     ? (board?.phases
         .filter(phase => targets.some(target => target.to === phase.id))
-        .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
+        .map(phase => ({ id: phase.id, label: phaseName(phase), kind: phase.kind })) ?? [])
     : itemStageOptions(item, board).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
   const decisions = triageDecisions(board);

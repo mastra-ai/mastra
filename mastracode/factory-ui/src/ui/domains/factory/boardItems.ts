@@ -1,13 +1,18 @@
+import { metadataLabels } from '@mastra/factory/work-items/card-labels';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '@mastra/factory/rules/types';
 import { workItemBranch, workItemThreadTitle } from '@mastra/factory/work-item-branch';
 import { sourceExternalId } from '@mastra/factory/work-items/source-external-id';
 import { isValid } from 'date-fns';
 
 import type { InstalledPhaseInfo } from '../../../api/types';
-import { relativeTime } from '../../../lib/date/relativeTime';
+import { phaseName } from './boardStages';
 import type { WorkItem, WorkItemSessionRef, WorkItemSource } from './services/workItems';
 
-export const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
+const HIDDEN_CARD_LABELS = new Set([AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL]);
+
+export function cardLabels(metadata: Record<string, unknown>): string[] {
+  return metadataLabels(metadata).filter(label => !HIDDEN_CARD_LABELS.has(label.toLowerCase()));
+}
 
 export const SOURCE_LABELS: Record<WorkItemSource, string> = {
   'github-issue': 'Issue',
@@ -62,19 +67,26 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'workItem' |
 export function changeRequestNumberForItem(
   item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
 ): number | undefined {
-  const metadata = sourceMetadata(item);
   if (item.source === 'github-pr') return githubNumberForItem(item);
   if (item.source !== 'gitlab-pr') return;
-  const iid = metadata.gitlabMergeRequestIid;
-  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? iid : undefined;
+  return positiveIid(sourceMetadata(item).gitlabMergeRequestIid);
 }
 
+function positiveIid(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
+}
+
+/** Mirrors how the server keys a GitLab card that has no key yet. */
 export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   const metadata = sourceMetadata(item);
-  if (item.source === 'gitlab-issue' && typeof metadata.identifier === 'string') return metadata.identifier;
+  if (item.source === 'gitlab-issue') {
+    if (typeof metadata.identifier === 'string') return metadata.identifier;
+    const iid = positiveIid(metadata.gitlabIssueIid);
+    return iid === undefined ? undefined : `#${iid}`;
+  }
   if (item.source !== 'gitlab-pr') return;
-  const iid = metadata.gitlabMergeRequestIid;
-  return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
+  const iid = changeRequestNumberForItem(item);
+  return iid === undefined ? undefined : `!${iid}`;
 }
 
 /** The human issue key a Linear card carries (`ENG-123`), when it has one. */
@@ -126,35 +138,6 @@ function nonEmptyString(value: unknown): string | undefined {
 }
 
 export type PullRequestStatus = 'draft' | 'open' | 'closed' | 'merged';
-
-export const PULL_REQUEST_STATUS_LABELS: Record<PullRequestStatus, string> = {
-  draft: 'Draft pull request',
-  open: 'Open pull request',
-  closed: 'Closed pull request',
-  merged: 'Merged pull request',
-};
-
-export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'metadata' | 'stages'>): PullRequestStatus {
-  const metadata = sourceMetadata(item);
-  if (metadata.state === 'merged' || metadata.merged === true) return 'merged';
-  if (metadata.state === 'closed') return 'closed';
-  if (metadata.state === 'open') return metadata.draft === true ? 'draft' : 'open';
-  if (item.stages.includes('done')) return 'merged';
-  if (item.stages.includes('canceled')) return 'closed';
-  return metadata.draft === true ? 'draft' : 'open';
-}
-
-/** Status of a pull request attached to an issue card, read from that source alone. */
-export function pullRequestStatusForSource(source: {
-  state: string | null;
-  metadata: Record<string, unknown> | null;
-}): PullRequestStatus {
-  const metadata = source.metadata ?? {};
-  const state = source.state ?? metadata.state;
-  if (state === 'merged' || metadata.merged === true) return 'merged';
-  if (state === 'closed') return 'closed';
-  return metadata.draft === true ? 'draft' : 'open';
-}
 
 /**
  * Source key for a GitHub issue or pull request. Numbers repeat across a
@@ -213,17 +196,6 @@ export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metada
   );
 }
 
-export function workItemMeta(item: WorkItem): readonly string[] {
-  const metadata = sourceMetadata(item);
-  const author = typeof metadata.author === 'string' ? metadata.author : undefined;
-  const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
-  const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
-  const key = workItemKey(item);
-  if (key === undefined) return [SOURCE_LABELS[item.source], age];
-  const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
-  return [key, ...(owner ? [owner] : []), age];
-}
-
 /**
  * Branch + thread title for a card's session, shared with the server's runs
  * (`workItemBranch`), so the title click and a later run converge on one
@@ -273,7 +245,7 @@ export function phaseContext(phase: Pick<ContextPhase, 'context' | 'role'>): str
 /** A context named after its one phase, else by its well-known name, else by its key. */
 export function contextLabel(context: string, phases: readonly ContextPhase[] | undefined): string {
   const running = phases?.filter(phase => phaseContext(phase) === context) ?? [];
-  if (running.length === 1) return running[0].name ?? running[0].title;
+  if (running.length === 1) return phaseName(running[0]);
   return CONTEXT_LABELS[context] ?? context.charAt(0).toUpperCase() + context.slice(1);
 }
 

@@ -3,19 +3,23 @@ import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode, RefObject } from 'react';
 
-import { composerColumnClass } from '../../workspace-viewer/layout';
+import { composerColumnClass, reservedSpaceClass, reservedSpaceTransitionClass } from '../../workspace-viewer/layout';
 import { ActivityLine } from './ActivityLine';
+import { chatHeaderRoomPx } from './chatPageHeader';
 import { ComposerPanel } from './ComposerPanel';
 import { SessionPreparationOverlay } from './SessionPreparationOverlay';
 import { TaskPanel } from './TaskPanel';
 import { Transcript } from './Transcript';
+import type { TranscriptTail } from './Transcript';
 import { TranscriptHistoryLoader } from './TranscriptHistoryLoader';
 import { ChatMessageBoundary } from '../context/ChatSessionProvider';
 import { useChatMessagePreparation } from '../context/useChatMessagePreparation';
 import { useChatTranscript } from '../context/useChatTranscript';
 
+const PREVIOUS_TURN_PEEK_PX = 64;
+const activityTail: TranscriptTail = stretchLive => <ActivityLine stretchLive={stretchLive} />;
+
 interface SessionChatSurfaceProps {
-  header?: ReactNode;
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
@@ -27,7 +31,6 @@ interface SessionChatSurfaceProps {
 }
 
 export function SessionChatSurface({
-  header,
   secondaryBar,
   emptyState,
   composerLabel,
@@ -48,19 +51,23 @@ export function SessionChatSurface({
         defaultScrollPosition: busy ? 'end' : 'last-anchor',
         preserveScrollOnPrepend: true,
         onReachStart: canLoadMore ? loadMore.load : undefined,
+        scrollPreviousItemPeek: chatHeaderRoomPx + PREVIOUS_TURN_PEEK_PX,
       }}
     >
-      {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
-      {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
+      {secondaryBar && <ChatShell.Bar className="not-empty:mt-(--chat-header-room)">{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
-        <ChatShell.Viewport className="transition-[var(--workspace-files-transition,padding)]">
+        <ChatShell.Viewport
+          className={cn('transition-[padding]', reservedSpaceClass.viewport, reservedSpaceTransitionClass)}
+        >
           <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
-            {contentOverlay}
+            {/* A fixed slot: mounting the rail straight into this box would restyle the whole transcript beside it. */}
+            <div className="contents">{contentOverlay}</div>
             <ChatShell.Content
               role="region"
               aria-label="Conversation"
               aria-busy={preparing}
-              className="relative gap-0 pt-6"
+              // A sibling selector, not `:has()`: under `:has()` every new message would restyle the whole transcript.
+              className="relative gap-0 pt-[calc(var(--chat-header-room,0px)+1.5rem)] [[data-slot=chat-shell-bar]:not(:empty)~[data-slot=message-scroller]_&]:pt-6"
             >
               <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
               <ChatShell.Transcript className="flex-1">
@@ -68,7 +75,7 @@ export function SessionChatSurface({
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
                   {transcript.entries.length === 0 && emptyState}
-                  <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
+                  <Transcript tail={activityTail} />
                 </ChatMessageBoundary>
               </ChatShell.Transcript>
             </ChatShell.Content>

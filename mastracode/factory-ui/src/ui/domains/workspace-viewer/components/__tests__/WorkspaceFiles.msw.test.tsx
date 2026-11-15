@@ -1,4 +1,5 @@
-import { act, screen, waitFor } from '@testing-library/react';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -8,13 +9,13 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { WorkspaceChangePatches } from '../../../../../api/types';
 import { queryKeys } from '../../../../../api/keys';
+import { ChatPageLayout } from '../../../chat/components/ChatPageLayout';
 import { ChatTranscriptContext } from '../../../chat/context/ChatTranscriptContext';
 import type { ChatTranscriptApi } from '../../../chat/context/ChatTranscriptContext';
 import { initialTranscript } from '../../../chat/services/transcript';
 import type { FactoryUserSession } from '../../../workspaces/services/user-sessions';
 import { WorkspaceFilesProvider } from '../../context/WorkspaceFilesProvider';
-import { useWorkspacePanel } from '../../context/useWorkspacePanel';
-import { WorkspaceFilesSurface } from '../WorkspaceFilesSurface';
+import { useWorkspacePanelDockActions } from '../../hooks/useWorkspacePanelDockActions';
 import { WorkspaceFilesToggle } from '../WorkspaceFilesToggle';
 
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
@@ -55,9 +56,13 @@ class PanelResizeObserver implements ResizeObserver {
   }
 }
 
-function ExpansionProbe() {
-  const { size } = useWorkspacePanel();
-  return <output data-testid="workspace-panel-size">{size}</output>;
+function SessionFrame() {
+  const dockActions = useWorkspacePanelDockActions();
+  return (
+    <ChatPageLayout headerActions={<WorkspaceFilesToggle />} dockActions={dockActions}>
+      {null}
+    </ChatPageLayout>
+  );
 }
 
 beforeEach(() => {
@@ -83,7 +88,17 @@ function stubContainerWidth(width: number) {
 afterEach(() => {
   HTMLElement.prototype.getBoundingClientRect = originalGetBoundingClientRect;
   vi.stubGlobal('ResizeObserver', originalResizeObserver);
+  vi.restoreAllMocks();
 });
+
+function resizeChat(width: number) {
+  const banner = screen.getByRole('banner');
+  for (const observer of PanelResizeObserver.instances) {
+    const chat = Array.from(observer.observed).find(target => target.contains(banner));
+    if (chat) return act(() => observer.resize(chat, width));
+  }
+  throw new Error('Nothing observes the chat that holds the page header');
+}
 
 function transcriptApi(busy: boolean): ChatTranscriptApi {
   return {
@@ -145,11 +160,11 @@ function renderPanel({ busy = false }: { busy?: boolean } = {}) {
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
           element={
             <ChatTranscriptContext.Provider value={transcriptApi(busy)}>
-              <WorkspaceFilesProvider>
-                <WorkspaceFilesToggle />
-                <WorkspaceFilesSurface />
-                <ExpansionProbe />
-              </WorkspaceFilesProvider>
+              <SidebarProvider storageKey="workspace-files-test">
+                <WorkspaceFilesProvider>
+                  <SessionFrame />
+                </WorkspaceFilesProvider>
+              </SidebarProvider>
             </ChatTranscriptContext.Provider>
           }
         />
@@ -195,10 +210,11 @@ describe('WorkspaceFiles on a user session route', () => {
           <Route
             path="/factories/:factoryId/user/threads/:threadId"
             element={
-              <WorkspaceFilesProvider>
-                <WorkspaceFilesToggle />
-                <WorkspaceFilesSurface />
-              </WorkspaceFilesProvider>
+              <SidebarProvider storageKey="workspace-files-test">
+                <WorkspaceFilesProvider>
+                  <SessionFrame />
+                </WorkspaceFilesProvider>
+              </SidebarProvider>
             }
           />
         </Routes>
@@ -214,7 +230,7 @@ describe('WorkspaceFiles', () => {
     it('keeps the loaded workspace usable when refreshing session details fails', async () => {
       stubContainerWidth(1200);
       const { client } = renderPanel({ busy: true });
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+      expect(await screen.findByText('factory/issue-1')).toBeInTheDocument();
       await waitForMutationsIdle(client);
 
       server.use(
@@ -225,8 +241,8 @@ describe('WorkspaceFiles', () => {
       await act(() => client.invalidateQueries({ queryKey: queryKeys.userSession(WORKSPACE) }));
       await waitForMutationsIdle(client);
 
-      expect(screen.getByRole('button', { name: 'Files' })).toBeEnabled();
-      expect(screen.getByRole('button', { name: /^Changes\s?No changes/ })).toBeEnabled();
+      expect(screen.getByRole('button', { name: /^Changes(,|$)/ })).toBeEnabled();
+      expect(screen.getByText('factory/issue-1')).toBeInTheDocument();
     });
 
     it('opens the overview immediately and lets the header toggle close it', async () => {
@@ -238,7 +254,11 @@ describe('WorkspaceFiles', () => {
       const toggle = screen.getByRole('button', { name: 'Session panel' });
       expect(card).not.toHaveAttribute('inert');
       expect(toggle).toHaveAttribute('aria-pressed', 'true');
-      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes(,|$)/ })).toBeEnabled());
+
+      toggle.focus();
+      await user.tab();
+      expect(within(card).getByRole('button', { name: 'Copy branch name' })).toHaveFocus();
 
       await user.click(toggle);
       expect(card).toHaveAttribute('inert');
@@ -250,7 +270,7 @@ describe('WorkspaceFiles', () => {
       const user = userEvent.setup();
       const { client, changesRequests } = renderPanel();
 
-      await waitFor(() => expect(screen.getByRole('button', { name: /^Changes/ })).toBeEnabled());
+      await screen.findByRole('button', { name: /^Changes(,|$)/ });
       await waitForMutationsIdle(client);
       expect(changesRequests).toEqual([]);
 
@@ -258,19 +278,17 @@ describe('WorkspaceFiles', () => {
       await user.click(toggle);
       await user.click(toggle);
 
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
-      expect(changesRequests).toEqual([WORKSPACE]);
+      await waitFor(() => expect(changesRequests).toEqual([WORKSPACE]));
     });
 
     it('reads changes on open while a run has the sandbox awake', async () => {
       stubContainerWidth(1200);
       const { changesRequests } = renderPanel({ busy: true });
 
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
-      expect(changesRequests).toEqual([WORKSPACE]);
+      await waitFor(() => expect(changesRequests).toEqual([WORKSPACE]));
     });
 
-    it('shows the branch change counts on the overview once the viewer has been to Changes', async () => {
+    it('shows the branch change counts in the overview once the viewer has been to Changes', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client } = renderPanel();
@@ -287,38 +305,113 @@ describe('WorkspaceFiles', () => {
       );
 
       await waitForMutationsIdle(client);
-      await user.click(await screen.findByRole('button', { name: /^Changes/ }));
-      await user.click(await screen.findByRole('button', { name: 'Back to workspace' }));
+      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(screen.getByRole('button', { name: 'Back to overview' }));
 
-      const changesRow = await screen.findByRole('button', { name: /^Changes/ });
-      await waitFor(() => expect(changesRow).toHaveTextContent(/\+3\s*−2/));
+      await waitFor(() => expect(screen.getByRole('region', { name: 'Workspace' })).toHaveTextContent(/\+3\s*−2/));
     });
   });
 
   describe('when the chat crosses the dock threshold', () => {
-    it('resets the popover to the compact overview', async () => {
+    it('folds the docked card into its capsule, then hands over to a compact popover', async () => {
       stubContainerWidth(1200);
       const user = userEvent.setup();
       const { client } = renderPanel();
 
       await waitForMutationsIdle(client);
-      await user.click(await screen.findByRole('button', { name: /^Changes/ }));
+      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
       await waitForMutationsIdle(client);
-      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('full');
+      expect(screen.getByRole('button', { name: 'Back to overview' })).toBeInTheDocument();
 
-      const observer = PanelResizeObserver.instances.find(instance => instance.observed.size > 0);
-      const container = observer ? Array.from(observer.observed).at(0) : undefined;
-      if (!observer || !container) throw new Error('Workspace panel container was not observed');
+      resizeChat(900);
 
-      act(() => observer.resize(container, 900));
-
-      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
+      const card = screen.getByTestId('workspace-files-card');
+      expect(card).toHaveAttribute('inert');
       expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'false');
+
+      const surface = card.parentElement;
+      if (!surface) throw new Error('The docked card has no surface');
+      fireEvent.transitionEnd(surface);
+      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
-      expect(screen.getByTestId('workspace-panel-size')).toHaveTextContent('compact');
+      expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+    });
+
+    it('unfolds the card it was folding when the chat widens again, still on the view it showed', async () => {
+      stubContainerWidth(1200);
+      const user = userEvent.setup();
+      const { client } = renderPanel();
+
+      await waitForMutationsIdle(client);
+      await user.click(await screen.findByRole('button', { name: /^Changes(,|$)/ }));
+      await user.click(screen.getByRole('tab', { name: 'Files' }));
+
+      resizeChat(900);
+      const card = screen.getByTestId('workspace-files-card');
+      expect(card).toHaveAttribute('inert');
+
+      resizeChat(1200);
+
+      expect(screen.getByTestId('workspace-files-card')).toBe(card);
+      expect(card).not.toHaveAttribute('inert');
+      expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(card).getByRole('tab', { name: 'Files' })).toHaveAttribute('aria-selected', 'true');
+    });
+
+    it('unfolds the card open once a narrow chat widens past the threshold', async () => {
+      stubContainerWidth(900);
+      renderPanel();
+      await screen.findByRole('button', { name: 'Session panel' });
+      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+
+      resizeChat(1200);
+
+      expect(screen.getByTestId('workspace-files-card')).not.toHaveAttribute('inert');
+      expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('hands a card the viewer closed straight over to the header, whose popover then opens alone', async () => {
+      stubContainerWidth(1200);
+      const user = userEvent.setup();
+      const { client } = renderPanel();
+
+      await waitForMutationsIdle(client);
+      await user.click(await screen.findByRole('button', { name: 'Session panel' }));
+      expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'false');
+      expect(screen.getByTestId('workspace-files-card')).toHaveAttribute('inert');
+
+      resizeChat(900);
+
+      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Session panel' }));
+
+      expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
+      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
+    });
+
+    it('hands over without folding when the viewer prefers reduced motion', async () => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        matches: query === '(prefers-reduced-motion: reduce)',
+        media: query,
+        onchange: null,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        addListener: () => {},
+        removeListener: () => {},
+        dispatchEvent: () => false,
+      }));
+      stubContainerWidth(1200);
+      const { client } = renderPanel();
+
+      await waitForMutationsIdle(client);
+      expect(await screen.findByTestId('workspace-files-card')).not.toHaveAttribute('inert');
+
+      resizeChat(900);
+
+      expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
     });
   });
 
@@ -329,12 +422,12 @@ describe('WorkspaceFiles', () => {
       const { changesRequests } = renderPanel();
 
       expect(screen.queryByTestId('workspace-files-card')).not.toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: /^Files/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^Changes(,|$)/ })).not.toBeInTheDocument();
       expect(changesRequests).toEqual([]);
 
       await user.click(screen.getByRole('button', { name: 'Session panel' }));
 
-      expect(await screen.findByRole('button', { name: /^Changes\s?No changes/ })).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Changes(,|$)/ })).toBeInTheDocument();
     });
   });
 });

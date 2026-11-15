@@ -1,6 +1,7 @@
-import { skipToken, useQuery } from '@tanstack/react-query';
+import { queryOptions, skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
+import type { ApiClient } from '../api/client';
 import { queryKeys } from '../api/keys';
 import type {
   ArtifactListing,
@@ -9,6 +10,7 @@ import type {
   WorkspaceChanges,
   WorkspaceChangesScope,
   WorkspaceFile,
+  WorkspaceFileIndex,
   WorkspaceTreeListing,
   WorkspaceRenderedListing,
 } from '../api/types';
@@ -141,6 +143,22 @@ export function useWorkspaceTree(
   });
 }
 
+export function workspaceFileIndexQueryOptions(client: ApiClient, workspacePath: string | undefined) {
+  const url = workspacePath ? `/web/workspace/files?${new URLSearchParams({ workspacePath })}` : undefined;
+  return queryOptions({
+    queryKey: queryKeys.workspaceFileIndex(workspacePath),
+    queryFn: url ? () => client.get<WorkspaceFileIndex>(url) : skipToken,
+  });
+}
+
+export function useWorkspaceFileIndex(
+  workspacePath: string | undefined,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
+  const { client } = useApiConfig();
+  return useQuery({ ...workspaceFileIndexQueryOptions(client, workspacePath), enabled });
+}
+
 export function useWorkspaceFile<TData = WorkspaceFile>(
   workspacePath: string | undefined,
   filePath: string | undefined,
@@ -176,12 +194,16 @@ export function usePlanFile(
   });
 }
 
-export function useWorkspaceChanges(workspacePath: string | undefined, { enabled = true }: { enabled?: boolean } = {}) {
+export function useWorkspaceChanges<TData = WorkspaceChanges>(
+  workspacePath: string | undefined,
+  { enabled = true, select }: { enabled?: boolean; select?: (changes: WorkspaceChanges) => TData } = {},
+) {
   const { client } = useApiConfig();
   const url = workspaceChangesUrl(workspacePath);
-  return useQuery<WorkspaceChanges>({
+  return useQuery<WorkspaceChanges, Error, TData>({
     queryKey: queryKeys.workspaceChanges(workspacePath),
     enabled,
+    select,
     queryFn: url ? () => client.get<WorkspaceChanges>(url) : skipToken,
   });
 }

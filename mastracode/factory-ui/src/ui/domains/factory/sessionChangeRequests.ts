@@ -1,75 +1,110 @@
 import type { PullRequestStatus } from './boardItems';
-import { changeRequestNumberForItem, pullRequestStatusForItem } from './boardItems';
+import type { CardChangeRequest } from './changeRequestState';
+import { cardChangeRequest, cardChangeRequests, changeRequestKey, changeRequestStatus } from './changeRequestState';
 import type { ChangeRequestProvider, PullRequestSubscription } from './services/githubSubscriptions';
+import { referenceLabel } from './services/relationships';
 import type { WorkItem } from './services/workItems';
-import { cardPullRequestLinks, isPullRequestSource } from './services/workItems';
+import { isPullRequestSource } from './services/workItems';
 
 /** A pull or merge request a session links to, from its card or from the thread's subscriptions. */
 export interface SessionChangeRequest {
   url: string;
   provider: ChangeRequestProvider;
   number?: number;
-  status: PullRequestStatus;
+  status: PullRequestStatus | undefined;
 }
 
-/** "PR #5" on GitHub, "MR !7" on GitLab. */
-export function changeRequestReference(request: Pick<SessionChangeRequest, 'provider' | 'number'>): string {
+/** "#5" on GitHub, "!7" on GitLab: the number as its code host writes it. */
+export function changeRequestNumberLabel(request: Pick<SessionChangeRequest, 'provider' | 'number'>) {
+  if (request.number === undefined) return undefined;
+  return `${request.provider === 'gitlab' ? '!' : '#'}${request.number}`;
+}
+
+export function changeRequestReference(
+  request: Pick<SessionChangeRequest, 'provider' | 'number'> & { url?: string },
+  contextRepository?: string,
+): string {
   const kind = request.provider === 'gitlab' ? 'MR' : 'PR';
   if (request.number === undefined) return kind;
-  return `${kind} ${request.provider === 'gitlab' ? '!' : '#'}${request.number}`;
+  return referenceLabel(
+    {
+      kind,
+      sigil: request.provider === 'gitlab' ? '!' : '#',
+      number: request.number,
+      repository: request.url === undefined ? undefined : changeRequestRepository(request.url),
+    },
+    contextRepository,
+  );
 }
 
-/** Host and path, lowercased: repository slugs are case-insensitive, and the card and subscriptions can disagree on case. */
-function changeRequestKey(url: string): string {
+export function changeRequestLinkLabel(reference: string, status: PullRequestStatus | undefined): string {
+  return status === undefined || status === 'open' ? `Open ${reference}` : `Open ${reference} ${status}`;
+}
+
+/** The repository a request's URL names: `owner/repo` on GitHub, the project path on GitLab. */
+export function changeRequestRepository(url: string): string | undefined {
   try {
-    const parsed = new URL(url);
-    return `${parsed.host}${parsed.pathname}`.replace(/\/+$/, '').toLowerCase();
+    const path = new URL(url).pathname;
+    const end = path.search(/\/(?:pull|-\/merge_requests)\//);
+    return end > 0 ? path.slice(1, end) : undefined;
   } catch {
-    return url.toLowerCase();
+    return undefined;
   }
 }
 
-/** A pull request card's own pull request. GitLab hosts vary, so only the card's URL names a merge request. */
-export function ownChangeRequest(item: WorkItem, repositorySlug: string | undefined): SessionChangeRequest | undefined {
-  if (!isPullRequestSource(item.source)) return undefined;
-  const provider = item.source === 'gitlab-pr' ? 'gitlab' : 'github';
-  const number = changeRequestNumberForItem(item);
-  const url =
-    item.url ??
-    (provider === 'github' && repositorySlug && number !== undefined
-      ? `https://github.com/${repositorySlug}/pull/${number}`
-      : undefined);
-  if (!url) return undefined;
-  return { url, provider, ...(number === undefined ? {} : { number }), status: pullRequestStatusForItem(item) };
+function sessionRequest(
+  request: CardChangeRequest & { url: string },
+  subscriptions: readonly PullRequestSubscription[],
+): SessionChangeRequest {
+  return {
+    url: request.url,
+    provider: request.provider,
+    ...(request.number === undefined ? {} : { number: request.number }),
+    status: changeRequestStatus(request, subscriptions),
+  };
 }
 
-/**
- * Every pull or merge request the session links to, each once: the card's own, those attached to
- * the card, then the ones the thread subscribes to. URLs shown elsewhere, such as a related card
- * that reviews a pull request, are left out.
- */
+/** A pull request card's own pull request. GitLab hosts vary, so only the card's URL names a merge request. */
+export function ownChangeRequest(
+  item: WorkItem,
+  repositorySlug: string | undefined,
+  subscriptions: readonly PullRequestSubscription[] = [],
+): SessionChangeRequest | undefined {
+  const request = isPullRequestSource(item.source) ? cardChangeRequest(item) : undefined;
+  if (!request) return undefined;
+  const url =
+    request.url ??
+    (request.provider === 'github' && repositorySlug && request.number !== undefined
+      ? `https://github.com/${repositorySlug}/pull/${request.number}`
+      : undefined);
+  return url === undefined ? undefined : sessionRequest({ ...request, url }, subscriptions);
+}
+
+function linked(request: CardChangeRequest): request is CardChangeRequest & { url: string } {
+  return request.url !== undefined;
+}
+
 export function sessionChangeRequests({
   item,
-  repositorySlug,
   subscriptions,
   provider,
   shownElsewhere = [],
 }: {
   item?: WorkItem;
-  repositorySlug?: string;
   subscriptions: readonly PullRequestSubscription[];
   provider: ChangeRequestProvider;
-  shownElsewhere?: readonly (string | null | undefined)[];
+  shownElsewhere?: readonly (string | undefined)[];
 }): SessionChangeRequest[] {
-  const own = item ? ownChangeRequest(item, repositorySlug) : undefined;
+  const carried = (item ? cardChangeRequests(item) : [])
+    .filter(linked)
+    .map(request => sessionRequest(request, subscriptions))
+    .toReversed()
+    .toSorted(
+      (a, b) =>
+        Number(b.status === 'open' || b.status === 'draft') - Number(a.status === 'open' || a.status === 'draft'),
+    );
   const candidates: SessionChangeRequest[] = [
-    ...(own ? [own] : []),
-    ...(item ? cardPullRequestLinks(item) : []).map(link => ({
-      url: link.url,
-      provider: link.provider,
-      ...(link.number === undefined ? {} : { number: link.number }),
-      status: link.state,
-    })),
+    ...carried,
     ...subscriptions.map(subscription => ({
       url: subscription.url,
       provider,

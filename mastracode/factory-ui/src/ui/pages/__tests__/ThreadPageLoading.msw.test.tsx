@@ -166,14 +166,14 @@ describe('ThreadPage loading shell', () => {
     expect(conversation).not.toContainElement(composer);
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Session panel' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('status', { name: 'Loading workspace details' })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading overview' })).toBeInTheDocument();
     expect(onChanges).not.toHaveBeenCalled();
     expect(send).toBeDisabled();
     await user.type(textarea, 'Draft written while opening the session');
 
     // Panel details and chat history resolve independently; neither remounts the input.
     sessionGate.resolve();
-    expect(await screen.findByRole('button', { name: 'Files' })).toBeInTheDocument();
+    expect(await screen.findByText(userSession.branch)).toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Message' })).toBe(textarea);
     expect(textarea).toHaveValue('Draft written while opening the session');
     expect(send).toBeDisabled();

@@ -1,9 +1,10 @@
 import { DEFAULT_BOARD_ID } from '@mastra/factory/boards/default-board';
 import { relatedCardIndex } from '@mastra/factory/work-items/related-cards';
 import type { PullRequestFacts } from '@mastra/factory/work-items/related-cards';
-import { githubNumberForItem, sourceMetadata, workItemKey } from '../boardItems';
+import { githubNumberForItem, SOURCE_LABELS, sourceCreatedAt, sourceMetadata, workItemKey } from '../boardItems';
+import { relativeTime } from '../../../../lib/date/relativeTime';
 import { rememberedBoardPath } from './boardViews';
-import type { WorkItem } from './workItems';
+import type { WorkItem, WorkItemSource } from './workItems';
 import { isPullRequestSource } from './workItems';
 
 /** Intake candidates carry a source and metadata but no card, so identifiers work on both. */
@@ -57,8 +58,9 @@ export function relationshipPath(
   return rememberedBoardPath(factoryId, item.board ?? DEFAULT_BOARD_ID);
 }
 
-export function relationshipLabel(item: WorkItem): string {
-  const reference = workItemReferenceLabel(item) ?? item.title;
+export function relationshipLabel(item: WorkItem, contextRepository?: string): string {
+  const reference =
+    workItemIdentifier(item) === undefined ? item.title : workItemReferenceLabel(item, contextRepository);
   return isPullRequestSource(item.source) ? `Review: ${reference}` : `Work item: ${reference}`;
 }
 
@@ -75,11 +77,51 @@ export function workItemIdentifier(item: IdentifiableItem): string | undefined {
   return undefined;
 }
 
-export function workItemReferenceLabel(item: IdentifiableItem): string | undefined {
+export interface CodeHostReference {
+  kind: 'Issue' | 'PR' | 'MR';
+  sigil: '#' | '!';
+  number: string | number;
+  repository: string | undefined;
+}
+
+export function repositoryElsewhere(
+  repository: string | undefined,
+  contextRepository: string | undefined,
+): string | undefined {
+  return repository !== undefined && repository.toLowerCase() !== contextRepository?.toLowerCase()
+    ? repository
+    : undefined;
+}
+
+export function referenceLabel(
+  { kind, sigil, number, repository }: CodeHostReference,
+  contextRepository?: string,
+): string {
+  return `${kind} ${repositoryElsewhere(repository, contextRepository) ?? ''}${sigil}${number}`;
+}
+
+const CODE_HOST_REFERENCES: Partial<Record<WorkItemSource, Pick<CodeHostReference, 'kind' | 'sigil'>>> = {
+  'github-issue': { kind: 'Issue', sigil: '#' },
+  'gitlab-issue': { kind: 'Issue', sigil: '#' },
+  'github-pr': { kind: 'PR', sigil: '#' },
+  'gitlab-pr': { kind: 'MR', sigil: '!' },
+};
+
+export function workItemReferenceLabel(item: IdentifiableItem, contextRepository?: string): string {
+  const codeHost = CODE_HOST_REFERENCES[item.source];
   const identifier = workItemIdentifier(item);
-  if (identifier === undefined) return;
-  if (item.source === 'github-pr') return `PR ${identifier}`;
-  if (item.source === 'gitlab-pr') return `MR ${identifier}`;
-  if (item.source === 'github-issue') return `Issue ${identifier}`;
-  return identifier;
+  if (!codeHost) return identifier ?? SOURCE_LABELS[item.source];
+  const key = /^(.+\/[^#!/]+)?[#!](\d+)$/.exec(identifier ?? '');
+  if (!key) return codeHost.kind;
+  return referenceLabel({ ...codeHost, number: key[2], repository: key[1] }, contextRepository);
+}
+
+export function workItemMeta(item: WorkItem, contextRepository?: string): readonly string[] {
+  const metadata = sourceMetadata(item);
+  const author = typeof metadata.author === 'string' ? metadata.author : undefined;
+  const assignee = typeof metadata.assignee === 'string' ? metadata.assignee : undefined;
+  const age = relativeTime(sourceCreatedAt(metadata) ?? item.createdAt);
+  if (workItemIdentifier(item) === undefined) return [SOURCE_LABELS[item.source], age];
+  const owner = githubNumberForItem(item) === undefined ? (assignee ?? author) : author;
+  return [workItemReferenceLabel(item, contextRepository), ...(owner ? [owner] : []), age];
 }

@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   inferredParentWorkItemId,
   relatedWorkItemIndex,
   relationshipLabel,
   relationshipPath,
+  workItemMeta,
   workItemReferenceLabel,
 } from './relationships';
 import type { WorkItem } from './workItems';
@@ -154,13 +155,57 @@ describe('Factory work item relationships', () => {
   });
 
   it.each([
-    { source: 'jira-issue', identifier: 'ENG-42' },
-    { source: 'gitlab-issue', identifier: 'acme/app#7' },
-    { source: 'incidentio-follow-up', identifier: 'INC-42' },
-  ] as const)('names a $source card by its key', ({ source, identifier }) => {
+    { source: 'jira-issue', identifier: 'ENG-42', label: 'Work item: ENG-42' },
+    { source: 'gitlab-issue', identifier: 'acme/app#7', label: 'Work item: Issue acme/app#7' },
+    { source: 'incidentio-follow-up', identifier: 'INC-42', label: 'Work item: INC-42' },
+  ] as const)('names a $source card by its key', ({ source, identifier, label }) => {
     const item = workItem({ id: `${source}-1`, source, metadata: { identifier } });
 
-    expect(relationshipLabel(item)).toBe(`Work item: ${identifier}`);
+    expect(relationshipLabel(item)).toBe(label);
+  });
+
+  it.each([
+    { source: 'github-issue', key: 'acme/app#42', inside: 'Issue #42', outside: 'Issue acme/app#42' },
+    { source: 'github-pr', key: 'acme/app#42', inside: 'PR #42', outside: 'PR acme/app#42' },
+    { source: 'gitlab-issue', key: 'group/sub/app#7', inside: 'Issue #7', outside: 'Issue group/sub/app#7' },
+    { source: 'gitlab-pr', key: 'group/sub/app!7', inside: 'MR !7', outside: 'MR group/sub/app!7' },
+  ] as const)(
+    'drops the repository from a $source reference only inside that repository',
+    ({ source, key, inside, outside }) => {
+      const item = workItem({
+        id: `${source}-keyed`,
+        source,
+        workItem: {
+          provider: 'github',
+          key,
+          url: null,
+          title: key,
+          state: 'open',
+          labels: [],
+          author: null,
+          metadata: {},
+        },
+      });
+      const repository = key.split(/[#!]/)[0];
+
+      expect(workItemReferenceLabel(item, repository.toUpperCase())).toBe(inside);
+      expect(workItemReferenceLabel(item, 'acme/other')).toBe(outside);
+      expect(workItemReferenceLabel(item)).toBe(outside);
+    },
+  );
+
+  it('keeps keys that name no repository, and names a card without one by its source', () => {
+    expect(
+      workItemReferenceLabel(
+        workItem({ id: 'linear', source: 'linear-issue', metadata: { identifier: 'ENG-1' } }),
+        'acme/app',
+      ),
+    ).toBe('ENG-1');
+    expect(
+      workItemReferenceLabel(workItem({ id: 'card', source: 'manual', metadata: { cardNumber: 5 } }), 'acme/app'),
+    ).toBe('#5');
+    expect(workItemReferenceLabel(workItem({ id: 'pr', source: 'github-pr' }))).toBe('PR');
+    expect(workItemReferenceLabel(workItem({ id: 'slack', source: 'slack-thread' }))).toBe('Slack');
   });
 
   it.each([
@@ -170,6 +215,90 @@ describe('Factory work item relationships', () => {
     const item = workItem({ id: `${source}-legacy`, source, sourceKey });
 
     expect(relationshipLabel(item)).toBe(label);
+  });
+});
+
+describe('workItemMeta', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-02T12:00:30.000Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  const pullRequest = (metadata: Record<string, unknown> = {}) =>
+    workItem({
+      id: 'pr-22765',
+      source: 'github-pr',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', ...metadata },
+    });
+
+  it('ages the card from when the issue/PR was opened upstream, not when the factory imported it', () => {
+    expect(workItemMeta(pullRequest({ sourceCreatedAt: '2026-08-30T12:00:00.000Z' }))).toEqual([
+      'PR #22765',
+      'LekoArts',
+      '3d',
+    ]);
+  });
+
+  it('falls back to the factory import time when the source date is unknown or not a timestamp', () => {
+    expect(workItemMeta(pullRequest())).toEqual(['PR #22765', 'LekoArts', 'just now']);
+    expect(workItemMeta(pullRequest({ sourceCreatedAt: 'not-a-date' }))).toEqual(['PR #22765', 'LekoArts', 'just now']);
+  });
+
+  it('shows the assignee instead of the reporter on Jira and incident.io cards', () => {
+    const jira = workItem({
+      id: 'jira',
+      source: 'jira-issue',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { identifier: 'ENG-42', author: 'Grace', assignee: 'Ada' },
+    });
+    const incident = workItem({
+      id: 'incident',
+      source: 'incidentio-follow-up',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
+    });
+    expect(workItemMeta(jira)).toEqual(['ENG-42', 'Ada', 'just now']);
+    expect(workItemMeta(incident)).toEqual(['INC-42', 'Grace Hopper', 'just now']);
+  });
+
+  it('names GitLab merge requests by IID and hand-filed cards by their card number', () => {
+    const mergeRequest = workItem({
+      id: 'mr',
+      source: 'gitlab-pr',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' },
+    });
+    const manual = workItem({
+      id: 'manual',
+      source: 'manual',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { cardNumber: 12 },
+    });
+    expect(workItemMeta(mergeRequest)).toEqual(['MR !5', 'Rhys', 'just now']);
+    expect(workItemMeta(manual)).toEqual(['#12', 'just now']);
+  });
+
+  it('names a card from another repository with that repository', () => {
+    const item = workItem({
+      id: 'pr-keyed',
+      source: 'github-pr',
+      createdAt: '2026-09-02T12:00:00.000Z',
+      metadata: { author: 'LekoArts' },
+      workItem: {
+        provider: 'github',
+        key: 'acme/app#3',
+        url: null,
+        title: 'Keyed',
+        state: 'open',
+        labels: [],
+        author: 'LekoArts',
+        metadata: { githubPullRequestNumber: 3 },
+      },
+    });
+    expect(workItemMeta(item, 'acme/app')).toEqual(['PR #3', 'LekoArts', 'just now']);
+    expect(workItemMeta(item, 'acme/web')).toEqual(['PR acme/app#3', 'LekoArts', 'just now']);
   });
 });
 

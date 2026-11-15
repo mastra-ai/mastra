@@ -1,9 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 import type { RefObject } from 'react';
 
-// Resolved per measurement so zoom and root font-size changes are reflected on the next
-// container resize. Unstyled documents (jsdom) report no font size, and a NaN threshold
-// would compare false forever.
+// jsdom reports no root font size, and a NaN threshold would compare false forever.
 const DEFAULT_ROOT_FONT_SIZE = 16;
 
 function remToPx(rem: number) {
@@ -11,17 +9,20 @@ function remToPx(rem: number) {
   return rem * (rootFontSize || DEFAULT_ROOT_FONT_SIZE);
 }
 
-/** Container query in JS — tracks the element's own width, so a resized sidebar counts too. */
-export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number) {
-  const [state, setState] = useState({ wider: false, revision: 0 });
+/** `revision` counts crossings since the first enabled measurement, so 0 is the layout the page painted with. */
+export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number, enabled = true, slackPx = 0) {
+  const [state, setState] = useState<{ wider: boolean; revision: number }>();
 
   useLayoutEffect(() => {
     const element = ref.current;
-    if (!element) return;
+    if (!element || !enabled) return;
 
     const measure = (width: number) => {
-      const wider = width >= remToPx(minRem);
-      setState(current => (current.wider === wider ? current : { wider, revision: current.revision + 1 }));
+      const wider = width >= remToPx(minRem) + slackPx;
+      setState(current => {
+        if (!current) return { wider, revision: 0 };
+        return current.wider === wider ? current : { wider, revision: current.revision + 1 };
+      });
     };
 
     measure(element.getBoundingClientRect().width);
@@ -34,7 +35,7 @@ export function useWiderThan(ref: RefObject<HTMLElement | null>, minRem: number)
     observer.observe(element);
 
     return () => observer.disconnect();
-  }, [ref, minRem]);
+  }, [ref, minRem, enabled, slackPx]);
 
-  return state;
+  return { wider: state?.wider ?? false, revision: state?.revision ?? 0 };
 }

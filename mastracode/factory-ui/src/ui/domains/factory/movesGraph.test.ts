@@ -22,7 +22,7 @@ function history(stays: Array<[stage: string, minutes: number]>) {
 }
 
 describe('movesGraph', () => {
-  it('folds days in Intake so a pull request review keeps most of the axis', () => {
+  it('draws every stay as long as it lasted, so days in Intake dwarf a short review', () => {
     const { stays } = movesGraph(
       history([
         ['intake', 4 * 24 * 60],
@@ -33,33 +33,20 @@ describe('movesGraph', () => {
       now,
     );
 
-    // Each wait draws a quarter of the 20 working minutes: 5 + 20 + 5.
+    const total = 4 * 24 * 60 + 20 + 60;
     expect(stays.map(stay => stay.width)).toEqual([
-      expect.closeTo(1 / 6),
-      expect.closeTo(2 / 3),
-      expect.closeTo(1 / 6),
+      expect.closeTo((4 * 24 * 60) / total),
+      expect.closeTo(20 / total),
+      expect.closeTo(60 / total),
     ]);
-    expect(stays.map(stay => stay.waiting)).toEqual([true, false, true]);
+    expect(stays.map(stay => stay.working)).toEqual([false, true, false]);
   });
 
-  it('draws every stay as long as it lasted when the card has only waited', () => {
-    const { stays } = movesGraph(
-      history([
-        ['intake', 30],
-        ['done', 90],
-      ]),
-      workBoardInfo,
-      now,
-    );
-
-    expect(stays.map(stay => stay.width)).toEqual([expect.closeTo(1 / 4), expect.closeTo(3 / 4)]);
-  });
-
-  it('lets stays that ran at the same time share the axis, stepping only where the card moved', () => {
+  it('lets stays that ran at the same time share the axis', () => {
     const start = now - 120 * minute;
     const time = (minutes: number) => new Date(start + minutes * minute).toISOString();
     // Building started while Planning was still open; Planning closed alone, Building handed over to PR review.
-    const { lanes, stays, risers } = movesGraph(
+    const { lanes, stays } = movesGraph(
       [
         { stage: 'planning', enteredAt: time(0), exitedAt: time(60), by: 'user-1' },
         { stage: 'execute', enteredAt: time(30), exitedAt: time(90), by: 'user-1' },
@@ -75,7 +62,6 @@ describe('movesGraph', () => {
       [0.25, 0.5],
       [0.75, 0.25],
     ]);
-    expect(risers).toEqual([{ at: 0.75, from: 1, to: 2 }]);
   });
 
   it('stacks the phases in board order, whatever order the card met them in, with retired ones last', () => {

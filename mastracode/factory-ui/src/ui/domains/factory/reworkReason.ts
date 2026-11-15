@@ -3,6 +3,7 @@ import type { AuditActorType } from '@mastra/factory/storage/domains/audit/actor
 
 import type { InstalledPhaseInfo } from '../../../api/types';
 import type { AuditEvent } from './services/audit';
+import { phaseName } from './boardStages';
 import type { WorkItem } from './services/workItems';
 
 const STAGE_MOVED_ACTION = 'factory.work_item.stage_moved';
@@ -61,7 +62,7 @@ export function reworkReason(
   const reason = findings ?? (move.cause || undefined);
   return {
     fromPhase: move.from,
-    fromLabel: fromPhase?.name ?? fromPhase?.title ?? move.from,
+    fromLabel: fromPhase ? phaseName(fromPhase) : move.from,
     ...(reason ? { reason } : {}),
     movedBy: move.movedBy,
   };

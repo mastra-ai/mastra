@@ -85,10 +85,8 @@ function ids(stages: CardStages | undefined) {
     current: stages.current.id,
     previous: stages.previous && { id: stages.previous.phase.id, blocked: stages.previous.blocked },
     next: stages.next && { id: stages.next.phase.id, blocked: stages.next.blocked },
-    forward: stages.forward.map(phase => phase.id),
-    back: stages.back.map(phase => phase.id),
+    track: stages.track.map(phase => phase.id),
     stop: stages.stop.map(phase => phase.id),
-    notes: stages.notes,
   };
 }
 
@@ -98,29 +96,24 @@ describe('cardStages', () => {
       current: 'pr-review',
       previous: { id: 'execute', blocked: undefined },
       next: { id: 'done', blocked: undefined },
-      forward: ['done'],
-      back: ['intake', 'planning', 'execute'],
+      track: ['intake', 'planning', 'execute', 'pr-review', 'done'],
       stop: ['canceled'],
-      notes: [],
     });
   });
 
-  it("names the phases a board declares no move to, such as an older Work board's Triage", () => {
+  it("leaves out the phases a board declares no move to, such as an older Work board's Triage", () => {
     const stages = ids(cardStages(issueWithPullRequest(['pr-review']), workBoardInfo));
 
-    expect(stages.back).not.toContain('triage');
-    expect(stages.notes).toEqual(["Triage can't be reached from Review"]);
+    expect(stages.track).not.toContain('triage');
   });
 
-  it('holds an issue card without a pull request out of Review, and says why', () => {
+  it('holds an issue card without a pull request out of Review', () => {
     expect(ids(cardStages(card('github-issue', ['execute']), work))).toEqual({
       current: 'execute',
       previous: { id: 'planning', blocked: undefined },
       next: { id: 'pr-review', blocked: 'pull-request' },
-      forward: ['done'],
-      back: ['planning'],
+      track: ['planning', 'execute', 'done'],
       stop: ['canceled'],
-      notes: ["Intake can't be reached from Building", 'Review needs a pull request'],
     });
   });
 
@@ -129,10 +122,8 @@ describe('cardStages', () => {
       current: 'pr-review',
       previous: { id: 'intake', blocked: undefined },
       next: { id: 'done', blocked: undefined },
-      forward: ['done'],
-      back: ['intake'],
+      track: ['intake', 'pr-review', 'done'],
       stop: ['canceled'],
-      notes: ["Pull request cards don't enter Planning and Building"],
     });
   });
 
@@ -148,10 +139,8 @@ describe('cardStages', () => {
       current: 'canceled',
       previous: undefined,
       next: undefined,
-      forward: [],
-      back: ['intake', 'pr-review'],
-      stop: [],
-      notes: ["Planning, Building, and Done can't be reached from Canceled"],
+      track: ['intake', 'pr-review'],
+      stop: ['canceled'],
     });
   });
 
@@ -160,10 +149,8 @@ describe('cardStages', () => {
       current: 'preparing',
       previous: undefined,
       next: { id: 'shipping', blocked: undefined },
-      forward: ['shipping'],
-      back: [],
+      track: ['preparing', 'shipping'],
       stop: [],
-      notes: ["Queued and Shipped can't be reached from Preparing"],
     });
   });
 
@@ -187,9 +174,26 @@ describe('stageDescription', () => {
   });
 
   it('expects the open pull request to finish the card, and parks or stops it otherwise', () => {
-    expect(stageDescription(work, issueWithPullRequest(['pr-review']), phase('done'))).toBe(
+    const pullRequestCard = issueWithPullRequest(['pr-review']);
+    expect(stageDescription(work, pullRequestCard, phase('done'), undefined, { repository: 'acme/app' })).toBe(
       'Usually automatic when PR #34 merges',
     );
+    expect(stageDescription(work, pullRequestCard, phase('done'))).toBe('Usually automatic when PR acme/app#34 merges');
+    expect(
+      stageDescription(work, pullRequestCard, phase('done'), undefined, {
+        repository: 'acme/app',
+        subscriptions: [
+          {
+            id: 'subscription-34',
+            repoFullName: 'acme/app',
+            pullRequestNumber: 34,
+            status: 'merged',
+            url: 'https://github.com/acme/app/pull/34',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    ).toBe('Marks it done');
     expect(stageDescription(work, card('github-issue', ['execute']), phase('done'))).toBe('Marks it done');
     expect(stageDescription(work, card('github-issue', ['execute']), phase('intake'))).toBe(
       'Parks it until someone moves it on',

@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
+import { phaseKindOf } from '../boardFlow';
+import type { BoardInfo } from '../boardFlow';
 import type { WorkItemSource } from '../services/workItems';
 import { boardStage, stageTone } from '../stages';
 import type { BuiltinStageId, StageTone } from '../stages';
@@ -151,6 +153,11 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
 /** The `kind` to draw a phase with: built-in boards get each phase's own art, other boards are drawn by kind. */
 export function phaseIconKind(boardId: string, kind: BoardPhaseKind): BoardPhaseKind | undefined {
   return boardId === 'work' || boardId === 'review' ? undefined : kind;
+}
+
+export function boardPhaseIconKind(board: BoardInfo | undefined, stage: string): BoardPhaseKind | undefined {
+  const kind = phaseKindOf(board, stage);
+  return board && kind ? phaseIconKind(board.id, kind) : undefined;
 }
 
 function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {

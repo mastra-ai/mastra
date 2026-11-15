@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { releaseBoard, workBoard } from '../../../../e2e/ui/board-catalog';
 import {
@@ -11,7 +11,6 @@ import {
   itemSessionSpec,
   metadataLabelColors,
   persistedSourceKeys,
-  workItemMeta,
 } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
@@ -41,60 +40,9 @@ function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-describe('workItemMeta', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-09-02T12:00:30.000Z'));
-  });
-  afterEach(() => vi.useRealTimers());
-
-  it('ages the card from when the issue/PR was opened upstream, not when the factory imported it', () => {
-    const item = workItem({
-      metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: '2026-08-30T12:00:00.000Z' },
-    });
-    expect(workItemMeta(item)).toEqual(['#22765', 'LekoArts', '3d']);
-  });
-
-  it('falls back to the factory import time when the source date is unknown', () => {
-    expect(workItemMeta(workItem())).toEqual(['#22765', 'LekoArts', 'just now']);
-  });
-
-  it('falls back to the factory import time when the source date is not a valid timestamp', () => {
-    const item = workItem({
-      metadata: { githubPullRequestNumber: 22765, author: 'LekoArts', sourceCreatedAt: 'not-a-date' },
-    });
-    expect(workItemMeta(item)).toEqual(['#22765', 'LekoArts', 'just now']);
-  });
-
-  it('shows the Jira assignee instead of the reporter', () => {
-    const item = workItem({
-      source: 'jira-issue',
-      sourceKey: 'jira-issue-1',
-      metadata: { identifier: 'ENG-42', author: 'Grace', assignee: 'Ada' },
-    });
-    expect(workItemMeta(item)).toEqual(['ENG-42', 'Ada', 'just now']);
-  });
-
-  it('shows the incident.io identifier and assignee like other issue sources', () => {
-    const item = workItem({
-      source: 'incidentio-follow-up',
-      sourceKey: 'incidentio:follow-up:01HFOLLOWUP',
-      metadata: { identifier: 'INC-42', author: 'Ada Lovelace', assignee: 'Grace Hopper' },
-    });
-    expect(workItemMeta(item)).toEqual(['INC-42', 'Grace Hopper', 'just now']);
-  });
-
-  it('names a GitLab merge request by its IID and links to GitLab', () => {
-    expect(
-      workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
-    ).toEqual(['!5', 'Rhys', 'just now']);
+describe('externalLinkLabel', () => {
+  it('links a GitLab merge request to GitLab', () => {
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
-  });
-
-  it('names a card filed by hand by its card number', () => {
-    expect(
-      workItemMeta(workItem({ source: 'manual', sourceKey: null, url: null, metadata: { cardNumber: 12 } })),
-    ).toEqual(['#12', 'just now']);
   });
 });
 

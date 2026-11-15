@@ -6,8 +6,10 @@ import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { MessageSquare } from 'lucide-react';
 import { Link } from 'react-router';
 
-import { externalLinkLabel, PULL_REQUEST_STATUS_LABELS, pullRequestStatusForItem } from '../boardItems';
-import { relationshipLabel, workItemReferenceLabel } from '../services/relationships';
+import { externalLinkLabel } from '../boardItems';
+import { CHANGE_REQUEST_STATUS_LABELS, cardChangeRequest, changeRequestStatus } from '../changeRequestState';
+import type { PullRequestSubscription } from '../services/githubSubscriptions';
+import { relationshipLabel, workItemIdentifier, workItemReferenceLabel } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
@@ -19,18 +21,27 @@ export function RelatedWorkItemLink({
   item,
   href,
   kind,
+  contextRepository,
+  subscriptions,
 }: {
   item: WorkItem;
   href: string;
   kind: 'board' | 'external' | 'session';
+  contextRepository?: string;
+  subscriptions?: readonly PullRequestSubscription[];
 }) {
   const live = kind === 'session';
   const external = kind === 'external';
-  const reference = workItemReferenceLabel(item);
-  const relation = relationshipLabel(item);
+  const reference =
+    workItemIdentifier(item) === undefined ? undefined : workItemReferenceLabel(item, contextRepository);
+  const relation = relationshipLabel(item, contextRepository);
   const titleSuffix = reference === undefined ? '' : `: ${item.title}`;
-  const pullRequestStatus = isPullRequestSource(item.source) ? pullRequestStatusForItem(item) : undefined;
-  const statusLabel = pullRequestStatus === undefined ? undefined : PULL_REQUEST_STATUS_LABELS[pullRequestStatus];
+  const pullRequest = isPullRequestSource(item.source) ? cardChangeRequest(item) : undefined;
+  const pullRequestStatus = pullRequest && changeRequestStatus(pullRequest, subscriptions);
+  const statusLabel =
+    pullRequest && pullRequestStatus
+      ? CHANGE_REQUEST_STATUS_LABELS[pullRequest.provider][pullRequestStatus]
+      : undefined;
   let ariaLabel = `Open ${relation}${titleSuffix}`;
   if (live) ariaLabel = `Open live session for ${relation}${titleSuffix}`;
   if (external) ariaLabel = `${externalLinkLabel(item.source)}: ${relation}${titleSuffix}`;
@@ -38,10 +49,10 @@ export function RelatedWorkItemLink({
 
   const content = (
     <>
-      {pullRequestStatus === undefined ? (
-        <SourceIcon source={item.source} className="size-3" />
+      {pullRequest && pullRequestStatus ? (
+        <PullRequestStatusIcon status={pullRequestStatus} provider={pullRequest.provider} size={12} decorative />
       ) : (
-        <PullRequestStatusIcon status={pullRequestStatus} size={12} decorative />
+        <SourceIcon source={item.source} className="size-3" />
       )}
       <Txt as="span" variant="meta" className="min-w-0 flex-1 truncate">
         {reference ?? item.title}

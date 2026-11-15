@@ -106,7 +106,7 @@ describe('Recreate sandbox in the workspace panel', () => {
     const counts = installHandlers({ capabilities });
     const { client } = renderPanel();
 
-    await screen.findByRole('button', { name: /Changes/ });
+    await screen.findByRole('button', { name: /^Changes(,|$)/ });
     await waitForMutationsIdle(client);
     expect(counts.session).toBe(1);
     expect(screen.queryByRole('button', { name: /Recreate sandbox/ })).toBeNull();
@@ -116,7 +116,7 @@ describe('Recreate sandbox in the workspace panel', () => {
     const counts = installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     const { client } = renderPanel(null);
 
-    await screen.findByRole('button', { name: /Changes/ });
+    await screen.findByRole('button', { name: /^Changes(,|$)/ });
     await waitForMutationsIdle(client);
     expect(counts.session).toBe(0);
     expect(screen.queryByRole('button', { name: /Recreate sandbox/ })).toBeNull();

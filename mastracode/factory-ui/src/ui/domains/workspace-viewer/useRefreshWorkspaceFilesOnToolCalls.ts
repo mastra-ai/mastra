@@ -59,5 +59,6 @@ export function useRefreshWorkspaceFilesOnToolCalls(
     if (!ids.some(id => !previous.ids.has(id))) return;
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath) });
     void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceFileScope(workspacePath) });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
   }, [queryClient, transcript, workspacePath]);
 }

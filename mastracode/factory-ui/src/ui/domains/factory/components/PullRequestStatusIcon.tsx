@@ -1,27 +1,30 @@
 import { PullRequestIcon } from '@mastra/playground-ui/components/PullRequestIcon';
 
-import { PULL_REQUEST_STATUS_LABELS } from '../boardItems';
 import type { PullRequestStatus } from '../boardItems';
+import { CHANGE_REQUEST_STATUS_LABELS } from '../changeRequestState';
+import type { ChangeRequestProvider } from '../services/githubSubscriptions';
 
 export function PullRequestStatusIcon({
   status,
+  provider = 'github',
   size = 16,
   className,
   decorative,
 }: {
   status: PullRequestStatus;
+  provider?: ChangeRequestProvider;
   size?: number;
   className?: string;
   decorative?: boolean;
 }) {
-  const label = PULL_REQUEST_STATUS_LABELS[status];
   return (
     <PullRequestIcon
+      data-source={provider === 'gitlab' ? 'gitlab-pr' : 'github-pr'}
       status={status}
       size={size}
       className={className}
       role={decorative ? undefined : 'img'}
-      aria-label={decorative ? undefined : label}
+      aria-label={decorative ? undefined : CHANGE_REQUEST_STATUS_LABELS[provider][status]}
       aria-hidden={decorative || undefined}
     />
   );

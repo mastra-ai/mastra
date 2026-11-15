@@ -1,3 +1,5 @@
+import { queryOptions, skipToken } from '@tanstack/react-query';
+
 /** Which source-control provider serves the subscriptions route. */
 export type ChangeRequestProvider = 'github' | 'gitlab';
 
@@ -6,6 +8,7 @@ export interface PullRequestSubscription {
   repoFullName: string;
   pullRequestNumber: number;
   status: 'open' | 'closed' | 'merged';
+  updatedAt?: string;
   url: string;
 }
 
@@ -15,6 +18,20 @@ export function pullRequestSubscriptionsQueryKey(
   provider: ChangeRequestProvider = 'github',
 ) {
   return [provider, 'subscriptions', sessionId, threadId] as const;
+}
+
+export function pullRequestSubscriptionsQuery(
+  baseUrl: string,
+  sessionId: string,
+  threadId: string | undefined,
+  provider: ChangeRequestProvider,
+  enabled: boolean,
+) {
+  return queryOptions({
+    queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
+    queryFn:
+      enabled && threadId ? () => listPullRequestSubscriptions(baseUrl, sessionId, threadId, provider) : skipToken,
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -34,6 +51,7 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
     Number.isInteger(value.pullRequestNumber) &&
     value.pullRequestNumber > 0 &&
     isPullRequestStatus(value.status) &&
+    (value.updatedAt === undefined || typeof value.updatedAt === 'string') &&
     typeof value.url === 'string'
   );
 }
@@ -42,7 +60,7 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
  * Change-request subscriptions for a thread. GitHub and GitLab serve the same
  * wire shape from their own routes, so the provider only picks the route.
  */
-export async function listPullRequestSubscriptions(
+async function listPullRequestSubscriptions(
   baseUrl: string,
   sessionId: string,
   threadId: string,

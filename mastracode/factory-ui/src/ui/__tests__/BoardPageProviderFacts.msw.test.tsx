@@ -92,7 +92,7 @@ it.each(['board', 'list'])(
 
     const card = await screen.findByTestId('work-item-card');
     expect(card).toHaveTextContent('Repair source facts');
-    expect(card).toHaveTextContent('acme/app#73');
+    expect(card).toHaveTextContent('Issue #73');
     expect(card).toHaveTextContent('reporter');
     expect(within(card).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(card).getByText('customer-visible')).toBeVisible();
@@ -107,7 +107,7 @@ it.each(['board', 'list'])(
       .map(reporter => reporter.closest('[data-slot="metadata"]'))
       .filter(Boolean);
     expect(sourceFacts).toHaveLength(1);
-    expect(sourceFacts[0]).toHaveTextContent('acme/app#73');
+    expect(sourceFacts[0]).toHaveTextContent('Issue #73');
     expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(details).getByText('customer-visible')).toBeVisible();
     expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(

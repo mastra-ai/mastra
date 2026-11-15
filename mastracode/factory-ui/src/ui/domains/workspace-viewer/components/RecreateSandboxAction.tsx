@@ -8,8 +8,6 @@ import type { WorkspaceChanges } from '../../../../api/types';
 import { useRecreateSessionSandbox } from '../../workspaces/hooks/useRecreateSessionSandbox';
 import type { RecreateSandboxTarget } from '../../workspaces/hooks/useRecreateSessionSandbox';
 
-export type { RecreateSandboxTarget };
-
 interface RecreateSandboxActionProps {
   target: RecreateSandboxTarget;
   changes?: WorkspaceChanges;
@@ -39,9 +37,8 @@ export function RecreateSandboxAction({ target, ...changesState }: RecreateSandb
 
   return (
     <>
-      <Button className="w-full justify-start" size="sm" variant="ghost" onClick={() => setDialogOpen(true)}>
+      <Button size="icon-sm" variant="ghost" tooltip="Recreate sandbox" onClick={() => setDialogOpen(true)}>
         <RotateCcw />
-        <span>Recreate sandbox</span>
       </Button>
       <AlertDialog open={open} onOpenChange={setDialogOpen}>
         <AlertDialog.Content>

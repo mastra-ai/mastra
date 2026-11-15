@@ -1,3 +1,6 @@
+import type { SessionPullRequestTarget } from '../../../../hooks/useSessionPullRequestSubscriptions';
+import { cardChangeRequest, changeRequestStatus } from '../../factory/changeRequestState';
+import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { relatedWorkItemIndex } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isPullRequestSource } from '../../factory/services/workItems';
@@ -7,16 +10,18 @@ export interface SessionWorkItem {
   /** The session context the card filed this session under (`triage`, `work`, …). */
   context: string;
   threadId: string;
-  pullRequest: WorkItem | undefined;
+  pullRequest: CardChangeRequest | undefined;
 }
 
 export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMap<string, SessionWorkItem> {
   const relatedItemsFor = relatedWorkItemIndex(workItems);
-  const latestPullRequestFor = (item: WorkItem): WorkItem | undefined => {
-    if (isPullRequestSource(item.source)) return item;
-    return relatedItemsFor(item)
+  const pullRequestFor = (item: WorkItem): CardChangeRequest | undefined => {
+    const own = cardChangeRequest(item);
+    if (own) return own;
+    const latest = relatedItemsFor(item)
       .filter(related => isPullRequestSource(related.source))
       .toSorted((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+    return latest && cardChangeRequest(latest);
   };
 
   return new Map(
@@ -26,7 +31,7 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
         ([a], [b]) => Number(a === 'plan') - Number(b === 'plan'),
       );
       if (sessionRefs.length === 0) return [];
-      const pullRequest = latestPullRequestFor(item);
+      const pullRequest = pullRequestFor(item);
       const seen = new Set<string>();
       return sessionRefs.flatMap(([context, sessionRef]) => {
         if (seen.has(sessionRef.sessionId)) return [];
@@ -35,4 +40,17 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
       });
     }),
   );
+}
+
+export function sessionPullRequestTargets(
+  sessionIds: readonly string[],
+  index: ReadonlyMap<string, SessionWorkItem>,
+): SessionPullRequestTarget[] {
+  return sessionIds.flatMap(sessionId => {
+    const entry = index.get(sessionId);
+    const pullRequest = entry?.pullRequest;
+    const status = pullRequest && changeRequestStatus(pullRequest);
+    if (!entry || !pullRequest || status === 'merged' || status === 'closed') return [];
+    return [{ sessionId, threadId: entry.threadId, provider: pullRequest.provider }];
+  });
 }

@@ -10,6 +10,7 @@ import { History } from 'lucide-react';
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { SYSTEM_ACTOR_NAME } from '../auditPresentation';
 import type { BoardInfo } from '../boardFlow';
+import { phaseLabel } from '../boardStages';
 import type { AuditActorProfile, AuditEvent } from '../services/audit';
 import { ASSIGNED_ACTION, CREATED_ACTION } from '../workItemActivity';
 import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivity';
@@ -64,9 +65,8 @@ function agentRationale(event: AuditEvent): string | undefined {
 /** "Move to Review rejected: <reason>", naming the phase from the card's own board: phase ids repeat across boards. */
 function RejectedMove({ event, board }: { event: AuditEvent; board: BoardInfo | undefined }) {
   const to = metadataString(event, 'to');
-  const phase = to === undefined ? undefined : board?.phases.find(phase => phase.id === to);
   const reason = metadataString(event, 'reason') ?? metadataString(event, 'code');
-  const text = `Move to ${phase?.name ?? phase?.title ?? to ?? 'another phase'} rejected${reason ? `: ${reason}` : ''}`;
+  const text = `Move to ${to === undefined ? 'another phase' : phaseLabel(board, to)} rejected${reason ? `: ${reason}` : ''}`;
   const rationale = agentRationale(event);
   return (
     <span className="min-w-0 truncate" title={rationale ? `${text}\n\nWhy it was asked: ${rationale}` : text}>

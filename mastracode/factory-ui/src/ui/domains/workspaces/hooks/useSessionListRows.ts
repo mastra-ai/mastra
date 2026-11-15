@@ -4,14 +4,16 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useSessionPullRequestSubscriptions } from '../../../../hooks/useSessionPullRequestSubscriptions';
 import { useSidebarWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { buildFactorySessionRow, buildUserSessionRow, linkFollowedCards, oneRowPerCard } from '../services/sessionRows';
 import type { OneRowPerCardOptions, SessionListRow } from '../services/sessionRows';
-import { sessionWorkItemIndex } from '../services/sessionWorkItems';
+import { sessionPullRequestTargets, sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
 export function useSessionListRows(
@@ -37,6 +39,16 @@ export function useSessionListRows(
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceIds: allSessionRows(query.data).map(session => session.sessionId),
   });
+  const { baseUrl, sessionId: chatSessionId, sessionEnabled } = useChatSessionContext();
+  const workItemBySessionId = sessionWorkItemIndex(sessionCards.data?.workItems ?? []);
+  const subscriptionsBySessionId = useSessionPullRequestSubscriptions({
+    baseUrl,
+    targets: sessionPullRequestTargets(
+      (query.data?.workspaces ?? []).map(session => session.sessionId),
+      workItemBySessionId,
+    ),
+    enabled: sessionEnabled && Boolean(routeSessionId) && Boolean(chatSessionId),
+  });
 
   const loadState = {
     hasRepositories: (factory.data?.repositories.length ?? 0) > 0,
@@ -46,7 +58,6 @@ export function useSessionListRows(
   };
   if (!factoryId) return { rows: [], ...loadState };
 
-  const workItemBySessionId = sessionWorkItemIndex(sessionCards.data?.workItems ?? []);
   const parkedSessions = new Set(sessionCards.data?.parkedSessionIds);
   const factoryRows = (query.data?.workspaces ?? []).flatMap(session => {
     const workItem = workItemBySessionId.get(session.sessionId);
@@ -68,6 +79,10 @@ export function useSessionListRows(
         context: workItem?.context,
         threadId: workItem?.threadId,
         pullRequest: workItem?.pullRequest,
+        subscriptions: subscriptionsBySessionId[session.sessionId],
+        repositorySlug: factory.data?.repositories.find(
+          repository => repository.projectRepositoryId === session.projectRepositoryId,
+        )?.slug,
         factoryId,
         routeSessionId,
         running,

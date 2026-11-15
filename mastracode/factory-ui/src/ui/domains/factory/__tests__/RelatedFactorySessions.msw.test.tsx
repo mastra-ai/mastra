@@ -5,6 +5,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { workBoardCatalog } from '../../../../../e2e/ui/board-catalog';
 import { listedRepository } from '../../../../../e2e/ui/factory-projects';
@@ -13,6 +14,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../e2e/ui/render
 import { sessionCardsWhileBoardLoads } from '../../../../../e2e/ui/session-cards';
 
 import type { BoardCatalogResponse, InstalledBoardInfo } from '../../../../api/types';
+import { ChatSessionTestProvider } from '../../chat/context/ChatSessionTestProvider';
 import { WorkspaceFilesProvider } from '../../workspace-viewer/context/WorkspaceFilesProvider';
 import { FactorySessionPage } from '../components/RelatedFactorySessions';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -98,9 +100,11 @@ function renderHeader() {
           <Route
             path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
             element={
-              <WorkspaceFilesProvider>
-                <FactorySessionPage>{null}</FactorySessionPage>
-              </WorkspaceFilesProvider>
+              <ChatSessionTestProvider threadId={THREAD_ID} deferUntilMessagesReady={false}>
+                <WorkspaceFilesProvider>
+                  <FactorySessionPage>{null}</FactorySessionPage>
+                </WorkspaceFilesProvider>
+              </ChatSessionTestProvider>
             }
           />
         </Routes>
@@ -206,7 +210,7 @@ describe('FactorySessionPage', () => {
         http.post(
           `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items/${card.id}/transition`,
           async ({ request }) => {
-            const body = (await request.json()) as Record<string, unknown>;
+            const body = z.record(z.string(), z.unknown()).parse(await request.json());
             moves.push(body);
             const answer = result(body);
             if (answer.status === 'accepted') card = launchCard(String(body.stage), Number(answer.revision));
@@ -228,18 +232,18 @@ describe('FactorySessionPage', () => {
       await user.click(within(stageBar).getByRole('button', { name: 'Change stage from Writing' }));
 
       const menu = await screen.findByRole('menu');
-      expect(within(menu).getByText('Factory works on it in this session')).toBeInTheDocument();
-      const items = (group: string) =>
-        within(within(menu).getByRole('group', { name: group }))
-          .getAllByRole('menuitem')
-          .map(item => item.getAttribute('aria-label'));
-      expect(items('Forward')).toEqual(['Move to Proofing']);
-      expect(items('Back')).toEqual(['Move to Drafting']);
-      expect(items('Stop')).toEqual(['Move to Shelved']);
-      expect(within(menu).getByRole('menuitem', { name: 'Move to Proofing' })).toHaveTextContent(
+      expect(
+        within(menu)
+          .getAllByRole('menuitemradio')
+          .map(item => item.getAttribute('aria-label')),
+      ).toEqual(['Move to Drafting', 'Writing, current stage', 'Move to Proofing', 'Move to Shelved']);
+      expect(within(menu).getByRole('menuitemradio', { name: 'Writing, current stage' })).toHaveAttribute(
+        'aria-checked',
+        'true',
+      );
+      expect(within(menu).getByRole('menuitemradio', { name: 'Move to Proofing' })).toHaveTextContent(
         'Factory works on it in the Proofing session',
       );
-      expect(within(menu).getByText("Published can't be reached from Writing")).toBeInTheDocument();
     });
 
     it('moves the card on to the next phase', async () => {
@@ -275,17 +279,17 @@ describe('FactorySessionPage', () => {
       renderHeader();
 
       await user.click(await screen.findByRole('button', { name: 'Change stage from Writing' }));
-      await user.click(await screen.findByRole('menuitem', { name: 'Move to Proofing' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Move to Proofing' }));
 
       expect(await screen.findByText('Proofing needs an editor to sign off first')).toBeInTheDocument();
       expect(await screen.findByRole('button', { name: 'Change stage from Writing' })).toBeInTheDocument();
     });
 
     it.each([
-      ['writing', 'Writing', 'a phase Factory works in', '46m'],
-      ['drafting', 'Drafting', 'a phase the card waits in', undefined],
-      ['published', 'Published', 'a phase the card ends in', undefined],
-    ])('times the card in %s only when it is %s', async (stage, name, _kind, elapsed) => {
+      { stage: 'writing', name: 'Writing', kind: 'a phase Factory works in', elapsed: '46m' },
+      { stage: 'drafting', name: 'Drafting', kind: 'a phase the card waits in', elapsed: undefined },
+      { stage: 'published', name: 'Published', kind: 'a phase the card ends in', elapsed: undefined },
+    ])('times the card in $name only when it is $kind', async ({ stage, name, elapsed }) => {
       stubLaunchCard(stage, () => ({}));
       renderHeader();
 
@@ -329,15 +333,43 @@ describe('FactorySessionPage', () => {
       );
       renderHeader();
 
-      const proofing = await screen.findByRole('button', { name: 'Move to Proofing' });
-      await waitFor(() => expect(proofing).toBeDisabled());
+      const proofing = await screen.findByRole('button', {
+        name: "Move to Proofing, Another run can't start while this card is busy.",
+      });
+      expect(proofing).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Move back to Drafting' })).toBeEnabled();
       await user.click(screen.getByRole('button', { name: 'Change stage from Writing' }));
 
       const menu = await screen.findByRole('menu');
-      expect(within(menu).getByRole('menuitem', { name: 'Move to Proofing' })).toHaveAttribute('aria-disabled', 'true');
-      expect(within(menu).getByRole('menuitem', { name: 'Move to Shelved' })).not.toHaveAttribute('aria-disabled');
-      expect(within(menu).getByText("Another run can't start while this card is busy.")).toBeInTheDocument();
+      const heldMove = within(menu).getByRole('menuitemradio', { name: 'Move to Proofing' });
+      expect(heldMove).toHaveAttribute('aria-disabled', 'true');
+      expect(heldMove).toHaveTextContent("Another run can't start while this card is busy.");
+      expect(within(menu).getByRole('menuitemradio', { name: 'Move to Shelved' })).not.toHaveAttribute('aria-disabled');
+    });
+
+    it("holds back moves that would start a run while the card's session works", async () => {
+      const user = userEvent.setup();
+      stubLaunchCard('writing', () => ({}));
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+          HttpResponse.json({ runs: [{ runId: 'run-1', resourceId: SESSION_ID, threadId: THREAD_ID }] }),
+        ),
+      );
+      renderHeader();
+
+      const proofing = await screen.findByRole('button', {
+        name: "Move to Proofing, Another run can't start while this card is busy.",
+      });
+      expect(proofing).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Move back to Drafting' })).toBeEnabled();
+      await user.click(screen.getByRole('button', { name: 'Change stage from Writing' }));
+
+      const menu = await screen.findByRole('menu');
+      expect(within(menu).getByRole('menuitemradio', { name: 'Move to Proofing' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(within(menu).getByRole('menuitemradio', { name: 'Move to Shelved' })).not.toHaveAttribute('aria-disabled');
     });
   });
 
@@ -393,9 +425,11 @@ describe('FactorySessionPage', () => {
               <Route
                 path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
                 element={
-                  <WorkspaceFilesProvider>
-                    <FactorySessionPage>{null}</FactorySessionPage>
-                  </WorkspaceFilesProvider>
+                  <ChatSessionTestProvider threadId={threadId} deferUntilMessagesReady={false}>
+                    <WorkspaceFilesProvider>
+                      <FactorySessionPage>{null}</FactorySessionPage>
+                    </WorkspaceFilesProvider>
+                  </ChatSessionTestProvider>
                 }
               />
             </Routes>

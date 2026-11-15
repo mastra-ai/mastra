@@ -1,65 +1,28 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import {
-  ArrowLeft,
-  Eye,
-  EyeOff,
-  File,
-  FileCode,
-  FileJson,
-  FileText,
-  Folder,
-  FolderOpen,
-  FolderSymlink,
-  Image,
-  NotepadText,
-  RefreshCw,
-} from 'lucide-react';
-import { useIsFetching, useQueryClient } from '@tanstack/react-query';
+import { Eye, EyeOff, FolderSymlink, RefreshCw } from 'lucide-react';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 
 import { queryKeys } from '../../../../api/keys';
 import { WakeSandbox } from './WakeSandbox';
 import type { WorkspaceTreeEntry } from '../../../../api/types';
-import { useWorkspaceTree } from '../../../../hooks/use-fs';
+import { useWorkspaceChanges, useWorkspaceTree } from '../../../../hooks/use-fs';
 import { treeRowContainmentClass } from '../layout';
-
-function getFileIcon(path: string): ReactNode {
-  const ext = path.split('.').pop()?.toLowerCase();
-  switch (ext) {
-    case 'ts':
-    case 'tsx':
-    case 'js':
-    case 'jsx':
-      return <FileCode className="text-badge-blue-indicator" />;
-    case 'json':
-      return <FileJson className="text-badge-amber-indicator" />;
-    case 'md':
-    case 'mdx':
-      return <FileText className="text-muted-foreground" />;
-    case 'png':
-    case 'jpg':
-    case 'jpeg':
-    case 'gif':
-    case 'svg':
-    case 'webp':
-      return <Image className="text-muted-foreground" />;
-    default:
-      return <File className="text-muted-foreground" />;
-  }
-}
-
-function getFolderIcon(isOpen: boolean): ReactNode {
-  return isOpen ? (
-    <FolderOpen className="text-badge-amber-indicator" />
-  ) : (
-    <Folder className="text-badge-amber-indicator" />
-  );
-}
+import { CHANGE_STATUSES } from './changes/change-statuses';
+import { ChangeStatusLetter } from './changes/ChangeStatusLetter';
+import { changeMarks, NO_CHANGE_MARKS } from './files/change-marks';
+import type { ChangeMarks } from './files/change-marks';
+import { getFileIcon, getFolderIcon } from './files/file-icons';
+import { FileFinderResults } from './files/FileFinderResults';
+import { foldersAbove } from './files/folders-above';
+import { useFileFinder } from './files/useFileFinder';
 
 function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
   return (
@@ -97,6 +60,7 @@ interface TreeLevelProps {
   showHidden: boolean;
   openFolders: Record<string, boolean>;
   onFolderOpenChange: (path: string, open: boolean) => void;
+  marks: ChangeMarks;
 }
 
 /** The contents of one open folder: fetched only once it is open. */
@@ -152,12 +116,24 @@ function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: Worksp
         <Tree.FolderTrigger>
           <Tree.Icon>{getFolderIcon(isOpen)}</Tree.Icon>
           <Tree.Label>{entry.name}</Tree.Label>
+          {props.marks.folders.has(entry.path) ? (
+            <span
+              role="img"
+              aria-label="Holds branch changes"
+              title="Holds branch changes"
+              className={cn(
+                'mr-1.5 ml-auto size-1.5 shrink-0 rounded-full bg-current',
+                CHANGE_STATUSES.modified.className,
+              )}
+            />
+          ) : null}
         </Tree.FolderTrigger>
         <Tree.FolderContent>{isOpen ? <FolderChildren path={entry.path} {...props} /> : null}</Tree.FolderContent>
       </Tree.Folder>
     );
   }
 
+  const status = props.marks.files.get(entry.path);
   return (
     <Tree.File id={entry.path} className={treeRowContainmentClass}>
       <Tree.Icon>{getFileIcon(entry.name)}</Tree.Icon>
@@ -165,6 +141,7 @@ function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: Worksp
         {entry.name}
         <LinkTarget target={entry.symlinkTarget} />
       </Tree.Label>
+      {status ? <ChangeStatusLetter status={status} /> : null}
     </Tree.File>
   );
 }
@@ -178,13 +155,11 @@ interface WorkspaceFileBrowserProps {
   onFolderOpenChange: (path: string, open: boolean) => void;
   showHidden: boolean;
   onShowHiddenChange: (showHidden: boolean) => void;
-  onBack: () => void;
+  /** Lifted to the panel so coming back from a file finds the same results. */
+  query: string;
+  onQueryChange: (query: string) => void;
 }
 
-/**
- * The session's checkouts, read live from its sandbox one folder at a time.
- * Refresh refetches every folder on screen.
- */
 export function WorkspaceFileBrowser({
   workspacePath,
   visible = true,
@@ -194,20 +169,37 @@ export function WorkspaceFileBrowser({
   onFolderOpenChange,
   showHidden,
   onShowHiddenChange,
-  onBack,
+  query,
+  onQueryChange,
 }: WorkspaceFileBrowserProps) {
   const queryClient = useQueryClient();
+  const marks = useWorkspaceChanges(workspacePath, { enabled: visible, select: changeMarks }).data ?? NO_CHANGE_MARKS;
   const root = useWorkspaceTree(workspacePath, '', { enabled: visible });
-  const isRefreshing = useIsFetching({ queryKey: queryKeys.workspaceTreeScope(workspacePath) }) > 0;
-  const refresh = () =>
-    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+  const indexHash = hashKey(queryKeys.workspaceFileIndex(workspacePath));
   const entries = (root.data?.entries ?? []).filter(entry => showHidden || !isHidden(entry));
+  const openFound = (path: string) => {
+    if (!showHidden && path.split('/').some(segment => segment.startsWith('.'))) onShowHiddenChange(true);
+    foldersAbove(path).forEach(folder => onFolderOpenChange(folder, true));
+    onFileSelect(path);
+  };
+  const finder = useFileFinder({ workspacePath, visible, query, onQueryChange, boost: marks.files, onOpen: openFound });
+  // The index refetches with the tree, but only shows while finding.
+  const isRefreshing =
+    useIsFetching({
+      queryKey: queryKeys.workspaceTreeScope(workspacePath),
+      predicate: query => finder.finding || query.queryHash !== indexHash,
+    }) > 0;
+  const refresh = () => {
+    void queryClient.refetchQueries({ queryKey: queryKeys.workspaceTreeScope(workspacePath), type: 'active' });
+    void queryClient.invalidateQueries({ queryKey: queryKeys.workspaceChanges(workspacePath), exact: true });
+  };
   // A symlinked folder opens its target and every folder above it.
   const select = (id: string) => {
     if (!id.startsWith(FOLDER_LINK_ID)) return onFileSelect(id);
-    const segments = id.slice(FOLDER_LINK_ID.length).split('/');
-    segments.forEach((_, i) => onFolderOpenChange(segments.slice(0, i + 1).join('/'), true));
+    const target = id.slice(FOLDER_LINK_ID.length);
+    [...foldersAbove(target), target].forEach(folder => onFolderOpenChange(folder, true));
   };
+  const { showingResults } = finder;
 
   let content: ReactNode;
   if (root.isLoading) {
@@ -220,21 +212,55 @@ export function WorkspaceFileBrowser({
     content = <TreeMessage>No files</TreeMessage>;
   }
 
+  let body: ReactNode;
+  if (finder.finding) {
+    body = <FileFinderResults workspacePath={workspacePath} finder={finder} changes={marks.files} />;
+  } else if (content) {
+    body = <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>;
+  } else {
+    body = (
+      <ScrollArea className="min-h-0 flex-1">
+        <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
+          {entries.map(entry => (
+            <WorkspaceTreeItem
+              key={entry.path}
+              entry={entry}
+              workspacePath={workspacePath}
+              showHidden={showHidden}
+              openFolders={openFolders}
+              onFolderOpenChange={onFolderOpenChange}
+              marks={marks}
+            />
+          ))}
+        </Tree>
+      </ScrollArea>
+    );
+  }
+
   return (
     <aside className="flex min-h-0 w-full min-w-0 grow flex-col" aria-label="Workspace files">
-      <div className="flex min-h-10 items-center gap-1.5 px-1.5 py-1">
-        <Button size="icon-sm" variant="ghost" onClick={onBack} aria-label="Back to workspace">
-          <ArrowLeft />
-        </Button>
-        <NotepadText className="text-muted-foreground" size={14} />
-        <Txt tone="ink" as="h2" variant="column">
-          Files
-        </Txt>
+      <div className="border-border flex min-h-10 items-center gap-0.5 border-b px-1.5 py-1">
+        <SearchInput
+          size="sm"
+          label="Go to file"
+          placeholder="Go to file"
+          className="mr-1 min-w-0 flex-1"
+          value={query}
+          onValueChange={onQueryChange}
+          onFocus={finder.prefetch}
+          onKeyDown={finder.onKeyDown}
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={showingResults}
+          aria-controls={showingResults ? finder.listboxId : undefined}
+          aria-activedescendant={showingResults ? finder.optionId(finder.active) : undefined}
+          autoComplete="off"
+          spellCheck={false}
+        />
         <Tooltip>
           <TooltipTrigger
             render={
               <Button
-                className="ml-auto"
                 size="icon-sm"
                 variant="ghost"
                 onClick={() => onShowHiddenChange(!showHidden)}
@@ -247,34 +273,24 @@ export function WorkspaceFileBrowser({
           />
           <TooltipContent>{showHidden ? 'Hide hidden files' : 'Show hidden files'}</TooltipContent>
         </Tooltip>
-        <Button
-          size="icon-sm"
-          variant="ghost"
-          onClick={refresh}
-          disabled={isRefreshing}
-          aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
-        >
-          {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
-        </Button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                onClick={refresh}
+                disabled={isRefreshing}
+                aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
+              >
+                {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+              </Button>
+            }
+          />
+          <TooltipContent>Refresh</TooltipContent>
+        </Tooltip>
       </div>
-      {content ? (
-        <div className="flex min-h-0 flex-1 items-center justify-center p-4 text-center">{content}</div>
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">
-          <Tree className="p-1.5" selectedId={selectedFilePath} onSelect={select}>
-            {entries.map(entry => (
-              <WorkspaceTreeItem
-                key={entry.path}
-                entry={entry}
-                workspacePath={workspacePath}
-                showHidden={showHidden}
-                openFolders={openFolders}
-                onFolderOpenChange={onFolderOpenChange}
-              />
-            ))}
-          </Tree>
-        </ScrollArea>
-      )}
+      {body}
     </aside>
   );
 }

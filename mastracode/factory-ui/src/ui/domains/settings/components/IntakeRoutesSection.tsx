@@ -47,6 +47,7 @@ import {
 } from '../../../../hooks/useIntakeRoutes';
 import { useSourceSuggestions } from '../../../../hooks/useSourceSuggestions';
 import type { RouteWrite } from '../../../../hooks/useIntakeRoutes';
+import { phaseLabel } from '../../factory/boardStages';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
 import { NEW_CARD_ROUTES_ANCHOR } from '../settingsSections';
 import { ConditionRows } from './ConditionRows';
@@ -56,7 +57,6 @@ import {
   catchesEveryArrival,
   describeTarget,
   MOVE_EVENTS,
-  phaseName,
   phaseOptions,
   placesNewCards,
   reorderWithin,
@@ -343,7 +343,7 @@ function PhaseLabel({ board, phaseKey }: { board: InstalledBoardInfo; phaseKey: 
     <span className="flex items-center gap-1.5">
       {phase && <BoardStageIcon stage={phase.id} kind={phaseIconKind(board.id, phase.kind)} decorative />}
       <Txt as="span" variant="caption">
-        {phaseName(board, phaseKey) ?? phaseKey}
+        {phaseLabel(board, phaseKey)}
       </Txt>
     </span>
   );
@@ -626,7 +626,7 @@ function RouteCard({
       <RuleCardOutcome label={destinationLabel}>
         {readOnly ? (
           <Badge size="sm">
-            {scope.kind === 'moves' && board ? (phaseName(board, phaseKey) ?? phaseKey) : describeTarget(route, boards)}
+            {scope.kind === 'moves' && board ? phaseLabel(board, phaseKey) : describeTarget(route, boards)}
           </Badge>
         ) : (
           <>
@@ -1052,7 +1052,7 @@ function RouteList({
               </Txt>
               {readOnly ? (
                 <Badge size="sm">
-                  {boardName(fallback)} › {phaseName(fallback, fallback.initialPhase) ?? fallback.initialPhase}
+                  {boardName(fallback)} › {phaseLabel(fallback, fallback.initialPhase)}
                 </Badge>
               ) : (
                 <>

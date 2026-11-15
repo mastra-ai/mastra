@@ -1,4 +1,5 @@
-import { boardIdOf, boardLoop, phaseKindOf } from './boardFlow';
+import type { InstalledPhaseInfo } from '../../../api/types';
+import { boardIdOf, boardLoop, phaseKindOf, phaseOf } from './boardFlow';
 import type { BoardInfo } from './boardFlow';
 import { cardHasPullRequest, isPullRequestSource } from './services/workItems';
 import type { WorkItem } from './services/workItems';
@@ -50,7 +51,7 @@ export function itemStageOptions(item: WorkItem, board: BoardInfo | undefined): 
   if (!board) return [];
   return board.phases
     .filter(phase => pullRequestMayEnter(board, item, phase.id))
-    .map(phase => ({ id: phase.id, label: phase.name ?? phase.title }));
+    .map(phase => ({ id: phase.id, label: phaseName(phase) }));
 }
 
 /** Whether a card may enter `stage` on `board`, by the parts its phases play in the pull request loop. */
@@ -66,8 +67,14 @@ export function pullRequestMayEnter(
   return stage !== review || cardHasPullRequest(item);
 }
 
-export function itemStageLabel(item: WorkItem, stage: string, board: BoardInfo | undefined): string {
-  return itemStageOptions(item, board).find(candidate => candidate.id === stage)?.label ?? stageLabel(stage);
+/** Servers older than phase names send only the deprecated `title`. */
+export function phaseName(phase: Pick<InstalledPhaseInfo, 'name' | 'title'>): string {
+  return phase.name ?? phase.title;
+}
+
+export function phaseLabel(board: BoardInfo | undefined, stage: string): string {
+  const phase = phaseOf(board, stage);
+  return phase ? phaseName(phase) : stageLabel(stage);
 }
 
 /** Furthest phase the item currently sits in; items with no known phase read as the board's first, like its columns. */
@@ -82,5 +89,5 @@ export function currentItemStage(item: WorkItem, board: BoardInfo | undefined): 
 
 export function currentItemStageLabel(item: WorkItem, board: BoardInfo | undefined): string {
   const stage = currentItemStage(item, board);
-  return stage === undefined ? '' : itemStageLabel(item, stage, board);
+  return stage === undefined ? '' : phaseLabel(board, stage);
 }

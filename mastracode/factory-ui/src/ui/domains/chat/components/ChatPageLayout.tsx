@@ -4,6 +4,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
 
+import { reservedSpaceClass, reservedSpaceTransitionClass } from '../../workspace-viewer/layout';
+import { chatHeaderStyle, headerCapsuleClass } from './chatPageHeader';
 import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 
 interface ChatPageLayoutProps {
@@ -14,8 +16,8 @@ interface ChatPageLayoutProps {
   /** Sits between the title and the actions, centered on the header; the title truncates before reaching it. */
   headerCenter?: ReactNode;
   headerActions?: ReactNode;
-  /** Floats over the page's top-right corner, beside the header rather than under it: the docked session panel. */
-  aside?: ReactNode;
+  /** Takes the header actions out of the header into a panel docked under them, which unfolds from their capsule. */
+  dockActions?: (actions: ReactNode) => ReactNode;
   children: ReactNode;
 }
 
@@ -24,50 +26,55 @@ export function ChatPageLayout({
   titleMenu,
   headerCenter,
   headerActions,
-  aside,
+  dockActions,
   children,
 }: ChatPageLayoutProps) {
   const slots = useSidebarHeaderSlots({
     breadcrumbs: title ? (
-      <div className="flex min-w-0 items-center gap-0.5">
+      <div className="h-control-sm flex min-w-0 items-center gap-0.5">
         <Txt as="h1" variant="label" tone="ink" className="min-w-0 truncate px-3">
           {title}
         </Txt>
         {titleMenu}
       </div>
     ) : undefined,
-    headerActions,
+    triggerClassName: 'size-control-sm rounded-full [&>svg]:size-4',
   });
-  const actions = slots.headerActions && (
-    <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{slots.headerActions}</div>
-  );
+  const hasHeader = Boolean(slots.breadcrumbs || headerActions);
+  const dock = headerActions && dockActions ? dockActions(headerActions) : undefined;
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col">
-      {slots.breadcrumbs || actions ? (
-        // No rule underneath: the header is the conversation's top row. A docked panel sets
-        // `--workspace-files-header-inset`, so the row ends beside the panel instead of running under it.
-        <div
-          data-slot="chat-page-header"
-          className="shrink-0 pe-(--workspace-files-header-inset) transition-[var(--workspace-files-transition,padding)]"
-        >
-          <Header
-            border={false}
+    <div className="relative flex h-full min-h-0 flex-col" style={hasHeader ? chatHeaderStyle : undefined}>
+      {hasHeader ? (
+        // Spans the page, unpadded: the docked card sizes itself in this layer's `cq` units.
+        <div className="[container-type:size] pointer-events-none absolute inset-0 z-20">
+          <div
+            data-slot="chat-page-header"
             className={cn(
-              'min-h-header-default overflow-hidden',
+              'grid items-center gap-x-2 ps-3 pt-(--chat-header-top) transition-[padding]',
+              reservedSpaceClass.header,
+              reservedSpaceTransitionClass,
               // Equal side tracks keep the center on the row's midline, whatever the title holds.
-              headerCenter && '@container grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]',
+              headerCenter ? 'grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)_auto]',
             )}
           >
-            {/* One shape with or without the center, so controls in the actions keep their state when the stage bar arrives. */}
-            <div className="flex min-w-0 flex-1 items-center gap-2">{slots.breadcrumbs}</div>
-            {headerCenter ? <div className="flex items-center">{headerCenter}</div> : null}
-            <div className="flex min-w-0 justify-end">{actions}</div>
-          </Header>
+            <Header border={false} className={cn('grid grid-cols-subgrid px-0', dock ? 'col-[1/-2]' : 'col-span-full')}>
+              {/* One shape with or without the center, so the actions keep their state when the stage bar arrives. */}
+              <div className="flex min-w-0 items-center">
+                {slots.breadcrumbs && <div className={headerCapsuleClass}>{slots.breadcrumbs}</div>}
+              </div>
+              {headerCenter ? <div className="flex items-center">{headerCenter}</div> : null}
+              {dock ? null : (
+                <div className="flex min-w-0 justify-end">
+                  {headerActions && <div className={cn(headerCapsuleClass, 'shrink-0')}>{headerActions}</div>}
+                </div>
+              )}
+            </Header>
+            {dock}
+          </div>
         </div>
       ) : null}
       <PageLayout variant="fit">{children}</PageLayout>
-      {aside}
     </div>
   );
 }

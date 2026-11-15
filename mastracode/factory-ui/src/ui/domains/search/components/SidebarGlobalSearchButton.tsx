@@ -12,7 +12,6 @@ export function SidebarGlobalSearchButton() {
     <Sidebar.SearchTrigger
       aria-label="Search and navigate"
       shortcut={shortcutLabel}
-      className="hidden md:inline-flex"
       onClick={event => openSearch(event.currentTarget)}
     >
       <Search />
