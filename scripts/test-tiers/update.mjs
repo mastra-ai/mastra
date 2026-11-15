@@ -278,11 +278,42 @@ export function compareFiles(pages) {
   return files.length >= COMPARE_FILE_CAP ? null : files;
 }
 
+/**
+ * Whether a failed `gh api` call is worth repeating: a GitHub 5xx, a rate limit, or a dropped or
+ * timed-out connection. A 404, a bad flag or bad JSON fails the same way every time.
+ */
+export function isTransientGhError(error) {
+  const text = `${error?.stderr ?? ''}\n${error?.message ?? ''}`;
+  return /HTTP 5\d\d|HTTP 429|rate limit|timed? ?out|ETIMEDOUT|ECONNRESET|ECONNREFUSED|EAI_AGAIN|connection reset|unexpected EOF/i.test(
+    text,
+  );
+}
+
+export const GH_RETRY_DELAYS_MS = [5_000, 20_000, 60_000];
+const sleepSync = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/** Calls fn, repeating it after each delay while it throws a transient GitHub error. */
+export function retryTransient(fn, delays = GH_RETRY_DELAYS_MS, sleep = sleepSync) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return fn();
+    } catch (error) {
+      if (attempt >= delays.length || !isTransientGhError(error)) throw error;
+      console.warn(
+        `gh api failed (${String(error.stderr ?? error.message).trim()}); retrying in ${delays[attempt]} ms`,
+      );
+      sleep(delays[attempt]);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 // GitHub glue (not unit tested; exercised only in the workflow).
 
 const repo = process.env.GITHUB_REPOSITORY ?? 'mastra-ai/mastra';
-const gh = (...args) => execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 1 << 28 });
+// A --paginate call is repeated whole, so a retry never mixes pages from two attempts.
+const gh = (...args) =>
+  retryTransient(() => execFileSync('gh', ['api', ...args], { encoding: 'utf8', maxBuffer: 1 << 28 }));
 const ghJson = (...args) =>
   gh('--paginate', ...args)
     .trim()
