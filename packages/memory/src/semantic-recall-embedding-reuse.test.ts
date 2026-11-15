@@ -218,10 +218,19 @@ describe('semantic recall embedding reuse across saves', () => {
     const { memory, rows, make } = await setup();
     memory.setEmbedder(original.embedder as any);
     let releaseFirstEmbed!: () => void;
-    (memory as any).firstEmbed = new Promise<void>(resolve => (releaseFirstEmbed = resolve));
+    const firstEmbed = new Promise<void>(resolve => (releaseFirstEmbed = resolve));
+    let reachedFirstEmbed!: () => void;
+    const waitingOnFirstEmbed = new Promise<void>(resolve => (reachedFirstEmbed = resolve));
+    // The save reads firstEmbed only once it is about to embed, after the cache key is computed.
+    Object.defineProperty(memory, 'firstEmbed', {
+      get() {
+        reachedFirstEmbed();
+        return firstEmbed;
+      },
+    });
 
     const firstSave = memory.saveMessages({ messages: [make(randomUUID(), 'same text')] });
-    for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve));
+    await waitingOnFirstEmbed;
     const replacement = makeEmbedder({ modelId: 'other-embedder' });
     memory.setEmbedder(replacement.embedder as any);
     releaseFirstEmbed();
