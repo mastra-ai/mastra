@@ -9,6 +9,13 @@ On phones and tablets, the default sidebar (`mobileMode="takeover"`) now sits un
 - Swipes that start in content that scrolls sideways, or on sliders and other controls that handle their own drags, are left to that content.
 - With reduced motion turned on, the sidebar opens and closes without sliding.
 
-`AppShell` slides its content automatically. `mobileMode="drawer"` is unchanged.
+`AppShell` slides its content automatically. A `Sidebar` rendered outside `AppShell` has no page to slide, so either move the page into `AppShell` or keep the previous drawer:
+
+```tsx
+<AppShell sidebar={<Sidebar>{nav}</Sidebar>}>{page}</AppShell>
+
+// or, without AppShell
+<Sidebar mobileMode="drawer">{nav}</Sidebar>
+```
 
 On desktop, dragging the sidebar's edge no longer restyles the whole page on every move, so resizing stays smooth beside long pages. The live width is set on the sidebar panel itself, so `var(--sidebar-width)` read outside the sidebar keeps the initial width.
