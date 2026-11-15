@@ -508,8 +508,16 @@ const workItemListQuerySchema = z
   .object({
     /** Repeatable. Narrows the list to the cards that hold these sessions and the cards related to them. */
     sessionId: z.array(sessionSchema.shape.sessionId).optional(),
-    /** `sessions` narrows the list to the cards that hold any session and the cards related to them. */
+    /**
+     * `sessions` narrows the list to the cards that hold any session and the cards related to them.
+     * Each card comes with the `version` a `cards=false` read names it by.
+     */
     scope: z.enum(['sessions']).optional(),
+    /**
+     * With `scope=sessions`: `false` sends no card body. The answer names each listed card by the
+     * `version` of its body instead, for a reader that keeps the cards between reads.
+     */
+    cards: z.enum(['false']).optional(),
     /** `false` narrows the list to the cards that hold no session, most recently updated first. */
     started: z.enum(['false']).optional(),
     /** With `started=false`: words that must all be in the card's title, key, number or source id. */
@@ -536,6 +544,10 @@ const workItemListQuerySchema = z
   .refine(query => !(query.scope && query.sessionId), {
     path: ['scope'],
     message: 'Send scope or sessionId, not both',
+  })
+  .refine(query => !query.cards || query.scope !== undefined, {
+    path: ['cards'],
+    message: 'Send cards=false only with scope=sessions',
   })
   .refine(query => !(query.started && (query.scope || query.sessionId)), {
     path: ['started'],
@@ -1282,8 +1294,13 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: projectPathSchema,
     querySchema: workItemListQuerySchema,
     responseSchema: z.object({
-      /** Every listed card, or with `removedIds` only the cards changed since the `since` sent. */
+      /**
+       * Every listed card, or with `removedIds` only the cards changed since the `since` sent, or
+       * with `cards` none.
+       */
       workItems: z.array(cardSchema),
+      /** With `cards=false`: every listed card, in the list's order, named by the `version` of its body. */
+      cards: z.array(cardStampSchema).optional(),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
       /** With `started=false`: how many cards matched, of which `workItems` holds the first `limit`. */

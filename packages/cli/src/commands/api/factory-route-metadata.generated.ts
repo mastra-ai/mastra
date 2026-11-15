@@ -424,6 +424,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "id"
     ],
     "queryParams": [
+      "cards",
       "limit",
       "q",
       "scope",
@@ -4150,23 +4151,26 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "scope": {
           "$ref": "#/$defs/__schema1"
         },
-        "started": {
+        "cards": {
           "$ref": "#/$defs/__schema2"
         },
-        "q": {
+        "started": {
           "$ref": "#/$defs/__schema3"
         },
-        "limit": {
+        "q": {
           "$ref": "#/$defs/__schema4"
         },
-        "source": {
+        "limit": {
           "$ref": "#/$defs/__schema5"
         },
+        "source": {
+          "$ref": "#/$defs/__schema6"
+        },
         "workItemId": {
-          "$ref": "#/$defs/__schema7"
+          "$ref": "#/$defs/__schema8"
         },
         "since": {
-          "$ref": "#/$defs/__schema9"
+          "$ref": "#/$defs/__schema10"
         }
       },
       "$defs": {
@@ -4192,37 +4196,43 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         },
         "__schema3": {
           "type": "string",
-          "maxLength": 200
+          "enum": [
+            "false"
+          ]
         },
         "__schema4": {
-          "type": "string"
+          "type": "string",
+          "maxLength": 200
         },
         "__schema5": {
+          "type": "string"
+        },
+        "__schema6": {
           "minItems": 1,
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema6"
+            "$ref": "#/$defs/__schema7"
           }
         },
-        "__schema6": {
+        "__schema7": {
           "type": "string",
           "minLength": 1,
           "maxLength": 512
         },
-        "__schema7": {
+        "__schema8": {
           "minItems": 1,
           "maxItems": 100,
           "type": "array",
           "items": {
-            "$ref": "#/$defs/__schema8"
+            "$ref": "#/$defs/__schema9"
           }
         },
-        "__schema8": {
+        "__schema9": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
         },
-        "__schema9": {
+        "__schema10": {
           "type": "string",
           "pattern": "^\\d{1,15}$"
         }
@@ -4290,6 +4300,24 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               }
             },
             "additionalProperties": {}
+          }
+        },
+        "cards": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "version"
+            ]
           }
         },
         "runningSessionIds": {

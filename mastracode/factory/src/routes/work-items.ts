@@ -197,6 +197,8 @@ function listQueryError(field: PropertyKey | undefined): string {
   switch (field) {
     case 'scope':
       return 'invalid_scope';
+    case 'cards':
+      return 'invalid_cards';
     case 'started':
       return 'invalid_started';
     case 'q':
@@ -507,6 +509,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const query = FACTORY_ROUTE_CONTRACTS.workItemList.querySchema.safeParse({
             sessionId: context.req.queries('sessionId'),
             scope: context.req.query('scope'),
+            cards: context.req.query('cards'),
             started: context.req.query('started'),
             q: context.req.query('q'),
             limit: context.req.query('limit'),
@@ -517,11 +520,11 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           // A filter that fails to parse must not widen to the whole board.
           if (!query.success) return c.json({ error: listQueryError(query.error.issues[0]?.path[0]) }, 400);
           await workItems.ensureReady();
-          const { sessionId: sessionIds, scope, started, q, limit, source, workItemId: ids, since } = query.data;
+          const { sessionId: sessionIds, scope, cards, started, q, limit, source, workItemId: ids } = query.data;
           const list = await workItems.listSharedSince({
             orgId: resolved.orgId,
             factoryProjectId: resolved.factoryProjectId,
-            since,
+            since: query.data.since,
           });
           const board = list.items;
           const unstarted = started ? unstartedCards(board, q ?? '', limit) : undefined;
@@ -545,9 +548,16 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
               'Cache-Control': 'no-store',
             });
           }
+          // A reader that keeps the cards asks which of them changed: an answer the size of their ids.
+          if (cards === 'false') {
+            const named = items.map(card => ({ id: card.id, version: wireVersion(card) }));
+            const names = { cards: named, workItems: [], runningSessionIds: running, parkedSessionIds: parked };
+            return sendRevalidated(context, namedBody(names));
+          }
+          // A reader that keeps cards between reads holds each body by the version an answer names it by.
+          const toWire = ids || scope ? toVersionedWireWorkItem : toWireWorkItem;
           const snapshot = part
-            ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
-              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
+            ? scopedSnapshot(part, toWire, running, parked, unstarted?.total)
             : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           return sendRevalidated(context, snapshot);

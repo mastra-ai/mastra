@@ -2687,6 +2687,100 @@ describe('run activity on the work-item listing', () => {
       expect((await stopped.json()).runningSessionIds).toEqual([]);
     });
 
+    describe('asked by a reader that keeps the cards (&cards=false)', () => {
+      const namesPath = () => `${sessionsPath()}&cards=false`;
+      const names = async (res: Response) =>
+        FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json());
+
+      it('names every listed card by the version the list sends its body with, and sends no body', async () => {
+        await startRun('session-first');
+        await createCard('unstarted');
+        await startRun('session-second');
+        const app = buildApp(
+          orgUser,
+          undefined,
+          undefined,
+          new Set(['session-first']),
+          undefined,
+          new Set(['session-second']),
+        );
+        const listed = await (await app.request(sessionsPath())).json();
+
+        const res = await app.request(namesPath());
+
+        expect(res.status).toBe(200);
+        const body = await res.json();
+        expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(body)).toEqual(body);
+        expect(body.cards).toEqual([
+          { id: expect.any(String), version: expect.any(String) },
+          { id: expect.any(String), version: expect.any(String) },
+        ]);
+        expect(body).toEqual({
+          cards: listed.workItems.map(({ id, version }: { id: string; version: string }) => ({ id, version })),
+          workItems: [],
+          runningSessionIds: ['session-first'],
+          parkedSessionIds: ['session-second'],
+        });
+      });
+
+      it('gives a changed card another version, the one its read by id sends, and leaves the others theirs', async () => {
+        const mine = await startRun('session-mine');
+        const other = await startRun('session-other');
+        const app = buildApp(orgUser);
+        const versions = async () =>
+          new Map((await names(await app.request(namesPath()))).cards?.map(card => [card.id, card.version]));
+        const before = await versions();
+
+        await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+
+        const after = await versions();
+        expect(after.get(other.id)).toBe(before.get(other.id));
+        expect(after.get(mine.id)).not.toBe(before.get(mine.id));
+        const [byId] = (await (await app.request(`${boardPath()}?workItemId=${mine.id}`)).json()).workItems;
+        expect(byId).toMatchObject({ title: 'Renamed', version: after.get(mine.id) });
+      });
+
+      it('answers 304 until a listed card or its activity changes', async () => {
+        const mine = await startRun('session-mine');
+        const unstarted = await createCard('unstarted');
+        const running = new Set<string>();
+        const app = buildApp(orgUser, undefined, undefined, running);
+        const readAgain = (etag: string) => app.request(namesPath(), { headers: { 'if-none-match': etag } });
+        const first = await app.request(namesPath());
+        expect(first.headers.get('cache-control')).toBe('private, no-cache');
+
+        await json('PATCH', `/web/factory/work-items/${unstarted.id}`, { title: 'Renamed elsewhere' });
+        const unchanged = await readAgain(first.headers.get('etag')!);
+        expect(unchanged.status).toBe(304);
+        expect(await unchanged.text()).toBe('');
+
+        await json('PATCH', `/web/factory/work-items/${mine.id}`, { title: 'Renamed' });
+        const renamed = await readAgain(first.headers.get('etag')!);
+        expect(renamed.status).toBe(200);
+
+        running.add('session-mine');
+        const started = await readAgain(renamed.headers.get('etag')!);
+        expect(started.status).toBe(200);
+        expect((await names(started)).runningSessionIds).toEqual(['session-mine']);
+      });
+
+      it('names a card once it holds a session, and no longer once it is deleted', async () => {
+        const mine = await startRun('session-mine');
+        const joining = await createCard('joining');
+        const app = buildApp(orgUser);
+        const namedIds = async () => (await names(await app.request(namesPath()))).cards?.map(card => card.id);
+        expect(await namedIds()).toEqual([mine.id]);
+
+        await json('PATCH', `/web/factory/work-items/${joining.id}`, {
+          sessions: { review: { sessionId: 'session-review', branch: 'factory/joining', threadId: 'thread-review' } },
+        });
+        expect((await namedIds())?.toSorted()).toEqual([mine.id, joining.id].toSorted());
+
+        await json('DELETE', `/web/factory/work-items/${mine.id}`);
+        expect(await namedIds()).toEqual([joining.id]);
+      });
+    });
+
     it.each([
       ['an unknown scope', '?scope=everything'],
       ['a scope combined with session ids', '?scope=sessions&sessionId=session-mine'],
@@ -2912,6 +3006,9 @@ describe('run activity on the work-item listing', () => {
     ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
     ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
     ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
+    ['card names asked of the whole board', '?cards=false', 'invalid_cards'],
+    ['card names asked of one session’s cards', '?cards=false&sessionId=session-mine', 'invalid_cards'],
+    ['a wish for the bodies, which the list sends unasked', '?scope=sessions&cards=true', 'invalid_cards'],
   ])('refuses %s rather than sending the whole board', async (_case, query, error) => {
     await createCard('github-issue:1');
 
