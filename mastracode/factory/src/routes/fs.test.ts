@@ -499,6 +499,29 @@ describe('live session file tree', () => {
   const names = (listing: { entries: Array<{ name: string; type: string }> }) =>
     listing.entries.map(entry => `${entry.type === 'directory' ? 'd' : 'f'} ${entry.name}`);
 
+  it('reads a submitted plan in a checkout of a multi-repository session', async () => {
+    const { parent } = await seedHostCheckouts(['acme/mastra', 'acme/website']);
+    const planPath = 'mastra/.artifacts/plans/issue-30361.md';
+    await mkdir(join(parent, 'mastra', '.artifacts', 'plans'), { recursive: true });
+    await writeFile(join(parent, planPath), '# Approved scope\n');
+
+    const listing = await listSessionRenderedPath(makeSession(), 'mastra/.artifacts');
+    expect(listing.rootPath).toBe(join(parent, 'mastra', '.artifacts'));
+    expect(listing.entries).toContainEqual(expect.objectContaining({ path: 'plans/issue-30361.md' }));
+    await expect(readSessionWorkspaceFile(makeSession(), planPath)).resolves.toMatchObject({
+      path: planPath,
+      content: '# Approved scope\n',
+    });
+    await expect(listSessionRenderedPath(makeSession(), 'unrelated/.artifacts')).rejects.toThrow(
+      'Root is not approved for rendered workspace access',
+    );
+    await writeFile(join(parent, 'mastra', '.env'), 'SECRET=123');
+    await symlink(join(parent, 'mastra', '.env'), join(parent, 'mastra', '.artifacts', 'plans', 'secret.md'));
+    await expect(readSessionWorkspaceFile(makeSession(), 'mastra/.artifacts/plans/secret.md')).rejects.toThrow(
+      'Path is not available in this session',
+    );
+  });
+
   it('lists one directory, folders first, without git internals or ignored entries', async () => {
     await seedHostCheckouts();
 
