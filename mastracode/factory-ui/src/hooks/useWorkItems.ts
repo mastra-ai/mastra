@@ -36,6 +36,7 @@ import type {
   WorkItem,
   WorkItemStageEntry,
 } from '../ui/domains/factory/services/workItems';
+import { readNamedCards, snapshotKeepingHeld } from './cardsByVersion';
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   if (!factoryProjectId) throw new Error('No Factory selected');
@@ -68,15 +69,48 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 // Module-level so React Query can cache the derived value instead of rebuilding it per render.
 const selectCards = (board: BoardSnapshot) => board.workItems;
 
+/**
+ * Reads the cards holding a session, with the cards related to them. A tab that holds them asks
+ * the server to name them: only the cards it does not hold at the version named are downloaded,
+ * by id, and a read that changes nothing answers the snapshot held.
+ */
+async function readSessionCards(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal: AbortSignal,
+  client: QueryClient,
+): Promise<BoardSnapshot> {
+  const key = queryKeys.workItemsWithSessions(factoryProjectId);
+  const held = client.getQueryData<BoardSnapshot>(key) !== undefined;
+  const {
+    cards: named,
+    workItems: sent,
+    ...listing
+  } = await listWorkItems(
+    baseUrl,
+    factoryProjectId,
+    signal,
+    held ? { scope: 'sessions', cards: 'false' } : { scope: 'sessions' },
+  );
+  // The cards came unnamed: the first read asked for them, and a server too old to name them sends them.
+  if (!named) return replaceEqualDeep(client.getQueryData<BoardSnapshot>(key), { ...listing, workItems: sent });
+  const versions = new Map(named.map(card => [card.id, card.version]));
+  const cards = await readNamedCards(client, baseUrl, factoryProjectId, versions, [], signal);
+  return snapshotKeepingHeld(client.getQueryData<BoardSnapshot>(key), listing, [...cards.values()]);
+}
+
 /** The cards holding a session, with the cards related to them, and the sessions parked on them. */
 export function sessionCardsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
   return queryOptions({
     queryKey: queryKeys.workItemsWithSessions(factoryProjectId),
     queryFn: factoryProjectId
-      ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal, { scope: 'sessions' })
+      ? ({ signal, client }) => readSessionCards(baseUrl, factoryProjectId, signal, client)
       : skipToken,
     // The feed provider refreshes this. A hidden tab holds no stream and polls nothing, so refresh immediately on return.
     refetchOnWindowFocus: true,
+    // `readSessionCards` shares cards by id. React Query shares by index, which would rebuild
+    // every card after an added or removed one.
+    structuralSharing: false,
   });
 }
 
@@ -102,37 +136,6 @@ export interface BoardPhasesSnapshot extends BoardSnapshot {
   matchingTotal: number;
   /** How many cards the board holds, whatever the view. */
   boardTotal: number;
-}
-
-/** The most ids one `workItemId` read may name. */
-const CARDS_PER_READ = 100;
-
-/** The cards among `ids` the server still holds, read by id. */
-async function readCards(baseUrl: string, factoryProjectId: string, ids: string[], signal: AbortSignal) {
-  const reads: Promise<BoardSnapshot>[] = [];
-  for (let start = 0; start < ids.length; start += CARDS_PER_READ) {
-    const workItemId = ids.slice(start, start + CARDS_PER_READ);
-    reads.push(listWorkItems(baseUrl, factoryProjectId, signal, { workItemId }));
-  }
-  return (await Promise.all(reads)).flatMap(read => read.workItems);
-}
-
-/**
- * The card the tab holds for each id of `versions`, from whichever read cached it. Where several
- * reads hold a card, the one whose body is the version named wins.
- */
-function heldCards(client: QueryClient, factoryProjectId: string, versions: ReadonlyMap<string, string>) {
-  const held = new Map<string, WorkItem>();
-  const snapshots = client.getQueriesData<BoardSnapshot>({ queryKey: queryKeys.workItems(factoryProjectId) });
-  for (const [, snapshot] of snapshots) {
-    for (const card of snapshot?.workItems ?? []) {
-      const version = versions.get(card.id);
-      if (version === undefined) continue;
-      const holder = held.get(card.id);
-      if (!holder || (card.version === version && holder.version !== version)) held.set(card.id, card);
-    }
-  }
-  return held;
 }
 
 /**
@@ -162,28 +165,7 @@ async function readBoardPhases(
     ...answer.related,
   ];
   const versions = new Map(named.map(card => [card.id, card.version]));
-  const read = new Map(answer.workItems?.map(card => [card.id, card]));
-  const heldAtAnswer = heldCards(client, factoryProjectId, versions);
-  const stale = [...versions].flatMap(([id, version]) =>
-    read.has(id) || heldAtAnswer.get(id)?.version === version ? [] : [id],
-  );
-  if (stale.length > 0) {
-    for (const card of await readCards(baseUrl, factoryProjectId, stale, signal)) {
-      if (versions.has(card.id)) read.set(card.id, card);
-    }
-  }
-  // Read again: the cards held carry the changes made here while the server answered.
-  const held = heldCards(client, factoryProjectId, versions);
-  const cards = new Map<string, WorkItem>();
-  // A card the server holds no body of was deleted since the listing: no phase shows it, and the
-  // older body the tab holds is not it.
-  const deleted = new Set(stale.filter(id => !read.has(id)));
-  for (const id of versions.keys()) {
-    if (deleted.has(id)) continue;
-    const body = read.get(id);
-    const card = body ? replaceEqualDeep(held.get(id), body) : held.get(id);
-    if (card) cards.set(id, card);
-  }
+  const cards = await readNamedCards(client, baseUrl, factoryProjectId, versions, answer.workItems ?? [], signal);
   const answered = answer.item;
   const listing = {
     phases: answer.phases.map(listed => ({
@@ -199,15 +181,8 @@ async function readBoardPhases(
     runningSessionIds: answer.runningSessionIds,
     parkedSessionIds: answer.parkedSessionIds,
   };
-  const workItems = [...cards.values()];
   const previous = client.getQueryData<BoardPhasesSnapshot>(queryKeys.boardPhasesView(factoryProjectId, request));
-  if (!previous) return { ...listing, workItems };
-  const { workItems: previousCards, ...previousListing } = previous;
-  const sameCards =
-    workItems.length === previousCards.length && workItems.every((card, i) => card === previousCards[i]);
-  const sharedListing = replaceEqualDeep(previousListing, listing);
-  if (sameCards && sharedListing === previousListing) return previous;
-  return { ...sharedListing, workItems: sameCards ? previousCards : workItems };
+  return snapshotKeepingHeld(previous, listing, [...cards.values()]);
 }
 
 /**

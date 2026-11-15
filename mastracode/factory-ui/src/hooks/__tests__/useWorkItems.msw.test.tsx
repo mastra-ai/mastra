@@ -322,6 +322,102 @@ describe('useSessionWorkItemsQuery', () => {
   });
 });
 
+describe('useSidebarWorkItemsQuery', () => {
+  const card = (number: number, title = `Card ${number}`) => ({ ...wireItem, id: `item-${number}`, title });
+
+  /** Serves the cards holding a session as the server does, and records what the tab asked for. */
+  function serveSessionCards(cards: Array<typeof wireItem>) {
+    const project = {
+      cards,
+      parkedSessionIds: new Array<string>(),
+      reads: new Array<'bodies' | 'names' | string[]>(),
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
+        const asked = new URL(request.url).searchParams;
+        const ids = asked.getAll('workItemId');
+        const activity = { runningSessionIds: [], parkedSessionIds: project.parkedSessionIds };
+        if (ids.length > 0) {
+          project.reads.push(ids.toSorted());
+          const workItems = project.cards.filter(listed => ids.includes(listed.id)).map(versionedCard);
+          return HttpResponse.json({ workItems, ...activity });
+        }
+        const workItems = project.cards.map(versionedCard);
+        if (asked.get('cards') !== 'false') {
+          project.reads.push('bodies');
+          return HttpResponse.json({ workItems, ...activity });
+        }
+        project.reads.push('names');
+        const names = workItems.map(({ id, version }) => ({ id, version }));
+        return HttpResponse.json({ cards: names, workItems: [], ...activity });
+      }),
+    );
+    return project;
+  }
+  /** What a feed frame does to the sidebar. */
+  const refresh = (client: QueryClient) => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) });
+  const titles = (snapshot: BoardSnapshot | undefined) => snapshot?.workItems.map(held => held.title);
+
+  it('downloads the cards once, then only asks which changed while none does', async () => {
+    const project = serveSessionCards([card(1), card(2)]);
+    const { result, client } = renderHookWithProviders(() => useSidebarWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1', 'Card 2']));
+    const snapshot = result.current.data;
+
+    await act(() => refresh(client));
+
+    expect(project.reads).toEqual(['bodies', 'names']);
+    // Nothing changed: whatever renders the sidebar has nothing to render again.
+    expect(client.getQueryData(queryKeys.workItemsWithSessions(PROJECT_ID))).toBe(snapshot);
+  });
+
+  it('downloads only the cards that changed or appeared, and keeps every other card the object it held', async () => {
+    const project = serveSessionCards([card(1), card(2), card(3)]);
+    const { result, client } = renderHookWithProviders(() => useSidebarWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1', 'Card 2', 'Card 3']));
+    const held = (number: number) => result.current.data?.workItems.find(item => item.id === `item-${number}`);
+    const [first, third] = [held(1), held(3)];
+
+    project.cards = [card(4), card(1), card(2, 'Renamed'), card(3)];
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 4', 'Card 1', 'Renamed', 'Card 3']));
+    expect(project.reads).toEqual(['bodies', 'names', ['item-2', 'item-4']]);
+    expect(held(1)).toBe(first);
+    expect(held(3)).toBe(third);
+  });
+
+  it('stops listing a card the server no longer names and marks a session parked, without downloading any card', async () => {
+    const project = serveSessionCards([card(1), card(2)]);
+    const { result, client } = renderHookWithProviders(() => useSidebarWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1', 'Card 2']));
+
+    project.cards = [card(2)];
+    project.parkedSessionIds = ['session-parked'];
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 2']));
+    expect(result.current.data?.parkedSessionIds).toEqual(['session-parked']);
+    expect(project.reads).toEqual(['bodies', 'names']);
+  });
+
+  it('shows what changed on a server that names no card and sends them all', async () => {
+    let title = 'Card 1';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [card(1, title)] }),
+      ),
+    );
+    const { result, client } = renderHookWithProviders(() => useSidebarWorkItemsQuery(PROJECT_ID));
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Card 1']));
+
+    title = 'Renamed';
+    await act(() => refresh(client));
+
+    await waitFor(() => expect(titles(result.current.data)).toEqual(['Renamed']));
+  });
+});
+
 describe('useBoardPhasesQuery', () => {
   const cardId = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, '0')}`;
   /** A card on the wire. Every write here lands in the same millisecond: when a card changed says nothing of what it holds. */
@@ -374,7 +470,7 @@ describe('useBoardPhasesQuery', () => {
     expect(project.listings.map(asked => asked.get('cards'))).toEqual(['true', null]);
     expect(project.cardReads).toEqual([]);
     // Nothing changed: whatever renders the board has nothing to render again.
-    expect(result.current.data).toBe(snapshot);
+    expect(client.getQueryData(queryKeys.boardPhasesView(PROJECT_ID, VIEW))).toBe(snapshot);
   });
 
   it('downloads only the cards that changed or appeared, and keeps every other card the object it held', async () => {

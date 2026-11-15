@@ -316,11 +316,20 @@ export interface BoardSnapshot {
 }
 
 /**
+ * A list read's answer. `cards` answers a `cards: 'false'` read: every listed card in order,
+ * named by the version of its body, while `workItems` holds none.
+ */
+export interface WorkItemListAnswer extends BoardSnapshot {
+  cards?: WorkItemListResponse['cards'];
+}
+
+/**
  * List a part of the org's work items for a Factory project: never the whole of them.
  * `sessionId` and `scope: 'sessions'` ask for the cards holding that session or any session, with
  * the cards related to them; `started: 'false'` for the most recently updated cards holding no
  * session whose text has every word of `q`; `source` for the cards filed from those source ids or
- * URLs; `workItemId` for the cards with those ids.
+ * URLs; `workItemId` for the cards with those ids. `cards: 'false'` asks the server to name the
+ * cards holding a session without sending them; one too old to name them sends them.
  */
 export async function listWorkItems(
   baseUrl: string,
@@ -329,10 +338,11 @@ export async function listWorkItems(
   only:
     | { sessionId: string }
     | { scope: 'sessions' }
+    | { scope: 'sessions'; cards: 'false' }
     | { started: 'false'; q: string }
     | { source: string[] }
     | { workItemId: string[] },
-): Promise<BoardSnapshot> {
+): Promise<WorkItemListAnswer> {
   const params = new URLSearchParams(
     'source' in only
       ? only.source.map(source => ['source', source])
@@ -342,11 +352,12 @@ export async function listWorkItems(
   );
   // No id and no source asked for: no card. Sent bare, the request would read the whole project.
   if (params.size === 0) return { workItems: [], runningSessionIds: [], parkedSessionIds: [] };
-  const { workItems, runningSessionIds, parkedSessionIds, total } = await requestJson<
+  const { workItems, cards, runningSessionIds, parkedSessionIds, total } = await requestJson<
     Partial<Omit<WorkItemListResponse, 'workItems'>> & { workItems: WireWorkItem[] }
   >(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items?${params}`, { signal });
   return {
     workItems: workItems.map(fromWireWorkItem),
+    ...(cards === undefined ? {} : { cards }),
     runningSessionIds: runningSessionIds ?? [],
     parkedSessionIds: parkedSessionIds ?? [],
     ...(total === undefined ? {} : { total }),
