@@ -40,6 +40,9 @@ const getSidebarScope = () => {
   return scope;
 };
 
+const widthOf = (scope: HTMLElement) =>
+  scope.querySelector<HTMLElement>('[data-slot="sidebar-panel"]')?.style.getPropertyValue('--sidebar-width');
+
 describe('Sidebar resize handle gesture', () => {
   const renderCollapsedSidebar = () => {
     mockMatchMedia(false);
@@ -190,8 +193,6 @@ describe('Sidebar resize handle keyboard', () => {
     );
     return { scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
-
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
 
   it('narrows the sidebar a step at a time', () => {
     const { scope, separator } = renderSidebar();
@@ -358,7 +359,6 @@ describe('Sidebar minimum width raised at runtime', () => {
       </Sidebar>
     </SidebarProvider>
   );
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
 
   it('widens a narrower sidebar, then returns it to the width the user chose', () => {
     mockMatchMedia(false);
@@ -423,8 +423,6 @@ describe('Sidebar dragging the resize handle', () => {
     );
     return { ...view, scope: getSidebarScope(), separator: screen.getByRole('separator') };
   };
-
-  const widthOf = (scope: HTMLElement) => scope.style.getPropertyValue('--sidebar-width');
   const press = (separator: HTMLElement, clientX: number, pointerId = 1, button = 0) =>
     fireEvent(separator, pointerEvent('pointerdown', { button, pointerId, clientX }));
   const move = (clientX: number, pointerId = 1) =>
@@ -972,7 +970,39 @@ describe('Sidebar', () => {
     expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
   });
 
-  it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {
+  it('leaves Escape to the page while the phone sidebar is closed over an open view', async () => {
+    mockMatchMedia(true);
+    render(
+      <Sidebar.Provider storageKey="sidebar-hidden-view-escape-test">
+        <Sidebar.MobileTrigger />
+        <SidebarStackFixture />
+      </Sidebar.Provider>,
+    );
+    const backToMain = { name: 'Back to main navigation: Account settings' };
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+    await screen.findByRole('button', backToMain);
+    fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
+
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    document.dispatchEvent(escape);
+
+    expect(escape.defaultPrevented).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
+    expect(screen.getByRole('button', backToMain)).toBeDefined();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+
+    await waitFor(() =>
+      expect(screen.getByText('Grouped navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe(
+        'false',
+      ),
+    );
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
+  });
+
+  it('shows group titles without the desktop toggle and returns focus to the same menu button after the takeover closes', async () => {
     mockMatchMedia(true);
     render(
       <Sidebar.Provider storageKey="sidebar-mobile-test">
@@ -991,12 +1021,12 @@ describe('Sidebar', () => {
     const mobileTrigger = screen.getByRole('button', { name: 'Open navigation menu' });
     fireEvent.click(mobileTrigger);
 
-    expect(screen.getByRole('dialog', { name: 'Navigation' }).getAttribute('data-mobile-mode')).toBe('takeover');
+    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
     expect(screen.getByText('Observability')).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
     expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
 
     await waitFor(() =>
       expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('false'),

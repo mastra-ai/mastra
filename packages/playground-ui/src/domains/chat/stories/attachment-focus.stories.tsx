@@ -52,7 +52,7 @@ function AttachmentFocusChat({ factory = false, hiddenPanel = false }: { factory
             </ChatShell.Dock>
           </ChatShell.Viewport>
           {hiddenPanel && (
-            // Match WorkspaceFilesSurface's closed geometry: fade and shrink inside the stage.
+            // A folded side panel stays mounted over the stage, inert and invisible.
             <div
               aria-hidden
               inert

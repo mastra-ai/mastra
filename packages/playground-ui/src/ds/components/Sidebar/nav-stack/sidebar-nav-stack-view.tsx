@@ -29,10 +29,10 @@ export function SidebarNavStackView({
   className,
   ...props
 }: SidebarNavStackViewProps) {
-  const { state } = useSidebar();
+  const { state, isMobile, openMobile } = useSidebar();
   const { activeValue, closeView } = useSidebarNavStack();
   const open = activeValue === value;
-  const active = state !== 'collapsed' && open;
+  const active = state !== 'collapsed' && open && (!isMobile || openMobile);
   const backRef = React.useRef<HTMLButtonElement>(null);
   const wasOpenRef = React.useRef(open);
 

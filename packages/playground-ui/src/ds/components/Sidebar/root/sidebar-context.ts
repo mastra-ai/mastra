@@ -22,6 +22,8 @@ type SidebarContextValue = {
   expand: () => void;
   commit: () => void;
   setGestureActive: (active: boolean) => void;
+  scopeRef: React.RefObject<HTMLDivElement | null>;
+  panelRef: React.RefCallback<HTMLDivElement>;
   LinkComponent?: LinkComponent;
 };
 

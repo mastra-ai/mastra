@@ -34,7 +34,6 @@ export function SidebarMobileTrigger({
         'inline-flex size-10 items-center justify-center rounded-md',
         // compound selector, not `in-*` — its `:where()` ties with a consumer's later `.inline-flex`
         "[[data-sidebar-mobile='false']_&]:hidden",
-        "[[data-sidebar-mobile-present='true']_&]:invisible",
         quietTextHover,
         'hover:bg-fill-subtle',
         focusRing,

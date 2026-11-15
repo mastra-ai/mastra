@@ -708,7 +708,7 @@ export const Mobile: Story = {
   },
   render: () => (
     <MobileFrame>
-      <Sidebar className="border-r border-border bg-background">
+      <Sidebar mobileMode="drawer" className="border-r border-border bg-background">
         <Sidebar.Nav>
           <Sidebar.NavSection>
             <Sidebar.NavHeader>Workspace</Sidebar.NavHeader>

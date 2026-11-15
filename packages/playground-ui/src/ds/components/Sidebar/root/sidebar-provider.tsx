@@ -107,6 +107,11 @@ export function SidebarProvider({
   stateRef.current = state;
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
+  const panelRef = React.useRef<HTMLDivElement | null>(null);
+  const [initialShownWidth] = React.useState(() =>
+    initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax),
+  );
+  const shownWidthRef = React.useRef(initialShownWidth);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -130,9 +135,15 @@ export function SidebarProvider({
     }
   }, [isMobile, openMobile, setOpenMobile]);
 
+  // The live width goes on the panel, not the scope: a variable changed on the scope restyles the whole app.
   const writeCssVar = React.useCallback((px: number) => {
-    const el = scopeRef.current;
-    if (el) el.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+    shownWidthRef.current = px;
+    panelRef.current?.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
+  }, []);
+
+  const attachPanel = React.useCallback((el: HTMLDivElement | null) => {
+    panelRef.current = el;
+    el?.style.setProperty(SIDEBAR_WIDTH_VAR, `${shownWidthRef.current}px`);
   }, []);
 
   // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
@@ -238,6 +249,8 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      scopeRef,
+      panelRef: attachPanel,
       LinkComponent,
     }),
     [
@@ -255,6 +268,7 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
+      attachPanel,
       LinkComponent,
     ],
   );
@@ -265,7 +279,7 @@ export function SidebarProvider({
   );
 
   const scopeStyle: SidebarScopeStyle = {
-    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax)}px`,
+    [SIDEBAR_WIDTH_VAR]: `${initialShownWidth}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,
     display: 'contents',
   };
@@ -276,6 +290,7 @@ export function SidebarProvider({
       data-sidebar-scope
       data-sidebar-state={state}
       data-sidebar-mobile={isMobile ? 'true' : 'false'}
+      data-sidebar-mobile-open={openMobile ? 'true' : 'false'}
       data-sidebar-mobile-present={mobileDrawerPresent ? 'true' : 'false'}
       style={scopeStyle}
       suppressHydrationWarning
