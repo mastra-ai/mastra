@@ -420,6 +420,16 @@ describe('S3Filesystem', () => {
       expect(config.owner).toEqual({ uid: 2001, gid: 2002 });
     });
 
+    it('copies owner so later mutation cannot rewrite the mount config', () => {
+      const owner = { uid: 2001, gid: 2002 };
+      const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1', owner });
+
+      const config = fs.getMountConfig();
+      owner.uid = 9999;
+
+      expect(config.owner).toEqual({ uid: 2001, gid: 2002 });
+    });
+
     it('excludes owner if not set', () => {
       const fs = new S3Filesystem({ bucket: 'test', region: 'us-east-1' });
 

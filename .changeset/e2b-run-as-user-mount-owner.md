@@ -10,7 +10,7 @@ E2B sandboxes can run agent commands as a second, unprivileged OS user, and S3 a
 
 `S3Filesystem` and `GCSFilesystem` take an `owner` option, `{ uid, gid }`. It sets the ownership of the files inside the mount, so a command user other than the one that mounts can read and write them. Without it, the mount keeps probing the default user's uid and gid.
 
-Together, the two options let an agent work as a user that cannot read the credentials mounted into the sandbox or become root:
+Together, the two options let agent commands run as a user that cannot read the credentials staged for a mount or become root:
 
 ```ts
 const workspace = new Workspace({
@@ -24,5 +24,7 @@ const workspace = new Workspace({
   sandbox: new E2BSandbox({ user: 'agent' }),
 })
 ```
+
+These options change command identity and mount ownership, not every operation: file tools and other files-API calls still run as the template's default user, which keeps the privileges mounting needs.
 
 The `user` must already exist in the sandbox template.

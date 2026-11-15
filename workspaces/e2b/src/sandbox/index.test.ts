@@ -1427,8 +1427,15 @@ describe('E2BSandbox', () => {
       const handle = await sandbox.processes.spawn('node server.js');
       expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
 
+      // Record the call count first: re-reading the last call would find the
+      // spawn above even if kill issued no cleanup command at all.
+      const beforeKill = mockSandbox.commands.run.mock.calls.length;
       await handle.kill();
-      expect(mockSandbox.commands.run.mock.calls.at(-1)![1]).toMatchObject({ user: 'agent' });
+
+      const killCalls = mockSandbox.commands.run.mock.calls.slice(beforeKill);
+      expect(killCalls).toHaveLength(1);
+      expect(killCalls[0]![0]).toContain('pgrep -P');
+      expect(killCalls[0]![1]).toMatchObject({ user: 'agent' });
     });
 
     it('leaves the user unset so the template default applies', async () => {

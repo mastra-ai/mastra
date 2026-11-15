@@ -241,6 +241,16 @@ describe('GCSFilesystem', () => {
       expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
     });
 
+    it('copies owner so later mutation cannot rewrite the mount config', () => {
+      const owner = { uid: 3001, gid: 3002 };
+      const fs = new GCSFilesystem({ bucket: 'test', owner });
+
+      const config = fs.getMountConfig();
+      owner.uid = 9999;
+
+      expect(config.owner).toEqual({ uid: 3001, gid: 3002 });
+    });
+
     it('excludes owner if not set', () => {
       const fs = new GCSFilesystem({ bucket: 'test' });
 
