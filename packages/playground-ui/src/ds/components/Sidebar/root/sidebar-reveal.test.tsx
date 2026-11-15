@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider } from '..';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { AppShell } from '@/ds/new/layout/app-shell';
 
 const PANEL_WIDTH = 300;
@@ -231,6 +232,31 @@ describe('Sidebar mobile reveal', () => {
 
       expect(navigation()).toBeNull();
       await waitFor(() => expect(document.activeElement).toBe(trigger()));
+    });
+  });
+
+  describe('when navigation is open and Escape is pressed in a menu opened from it', () => {
+    it('closes the menu and leaves navigation open', async () => {
+      render(
+        app(
+          <p>Agent overview</p>,
+          <Sidebar>
+            <DropdownMenu>
+              <DropdownMenu.Trigger>Workspace</DropdownMenu.Trigger>
+              <DropdownMenu.Content aria-label="Workspace">
+                <DropdownMenu.Item>Settings</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </Sidebar>,
+        ),
+      );
+      fireEvent.click(trigger());
+      fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
+
+      fireEvent.keyDown(await screen.findByRole('menuitem', { name: 'Settings' }), { key: 'Escape' });
+
+      await waitFor(() => expect(screen.queryByRole('menu', { name: 'Workspace' })).toBeNull());
+      expect(navigation()).not.toBeNull();
     });
   });
 

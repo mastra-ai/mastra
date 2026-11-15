@@ -1,5 +1,5 @@
-import { useEffect, useLayoutEffect, useRef } from 'react';
-import type { MouseEvent, ReactNode } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, MouseEvent, ReactNode } from 'react';
 import { flushSync } from 'react-dom';
 import { useSidebar } from './sidebar-context';
 import { REVEAL_EASE, useRevealGesture } from './use-reveal-gesture';
@@ -20,9 +20,8 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
   const { scopeRef, openMobile, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent } = useSidebar();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
-  const wasOpenRef = useRef(false);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const scope = scopeRef.current;
     if (!scope) return;
     scope.setAttribute('data-sidebar-reveal', '');
@@ -33,10 +32,22 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
     };
   }, [scopeRef]);
 
-  useLayoutEffect(() => {
+  const returnFocus = useEffectEvent((root: Element) => {
+    const focused = document.activeElement;
+    if (!focused || focused === document.body || root.contains(focused)) {
+      mobileTriggerRef.current?.focus({ preventScroll: true });
+    }
+  });
+
+  useEffect(() => {
     const root = rootRef.current;
     if (!openMobile || !root) return;
-    return inertOutside(root);
+    const releaseOutside = inertOutside(root);
+    panelRef.current?.focus({ preventScroll: true });
+    return () => {
+      releaseOutside();
+      returnFocus(root);
+    };
   }, [openMobile]);
 
   useRevealGesture({
@@ -49,34 +60,16 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
     },
   });
 
-  useEffect(() => {
-    if (openMobile) {
-      wasOpenRef.current = true;
-      panelRef.current?.focus({ preventScroll: true });
-      return;
-    }
-    if (!wasOpenRef.current) return;
-    wasOpenRef.current = false;
-    const focused = document.activeElement;
-    if (!focused || focused === document.body || rootRef.current?.contains(focused)) {
-      mobileTriggerRef.current?.focus({ preventScroll: true });
-    }
-  }, [openMobile, mobileTriggerRef]);
-
-  useEffect(() => {
-    if (!openMobile) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || event.defaultPrevented) return;
-      event.preventDefault();
-      setOpenMobile(false);
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => window.removeEventListener('keydown', closeOnEscape);
-  }, [openMobile, setOpenMobile]);
+  const closeOnEscape = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape' || event.defaultPrevented) return;
+    event.preventDefault();
+    setOpenMobile(false);
+  };
 
   return (
     <div
       ref={rootRef}
+      onKeyDown={closeOnEscape}
       role={openMobile ? 'dialog' : undefined}
       aria-modal={openMobile || undefined}
       aria-label={openMobile ? 'Navigation' : undefined}
