@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider } from '..';
@@ -257,6 +258,21 @@ describe('Sidebar mobile reveal', () => {
 
       await waitFor(() => expect(screen.queryByRole('menu', { name: 'Workspace' })).toBeNull());
       expect(navigation()).not.toBeNull();
+    });
+  });
+
+  describe('when navigation is open and Tab runs past either end', () => {
+    it('keeps focus cycling inside navigation', async () => {
+      const user = userEvent.setup();
+      renderApp();
+      fireEvent.click(trigger());
+      scrim().focus();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Agents' }));
+
+      await user.tab({ shift: true });
+      expect(document.activeElement).toBe(scrim());
     });
   });
 

@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import './sidebar-reveal.css';
 
 const REVEAL_EASE_VAR = '--sidebar-reveal-ease';
+const TABBABLE = 'a[href], button, input, select, textarea, summary, [tabindex]';
 
 type SidebarRevealProps = {
   children: ReactNode;
@@ -20,6 +21,7 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
   const { scopeRef, openMobile, mobileTriggerRef, setOpenMobile, setMobileDrawerPresent } = useSidebar();
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+  const scrimRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const scope = scopeRef.current;
@@ -78,6 +80,7 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
       aria-hidden={!openMobile || undefined}
       className="in-data-[sidebar-mobile-present=false]:invisible"
     >
+      <span tabIndex={0} className="sr-only" onFocus={() => scrimRef.current?.focus()} />
       <div
         ref={panelRef}
         data-sidebar-reveal-layer="panel"
@@ -91,14 +94,26 @@ export function SidebarReveal({ children, className, onClick }: SidebarRevealPro
         <div className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-2">{children}</div>
       </div>
       <button
+        ref={scrimRef}
         type="button"
         aria-label="Close navigation menu"
         data-sidebar-reveal-layer="scrim"
         onClick={() => setOpenMobile(false)}
         className={cn('fixed inset-0 z-2 bg-fill', focusRingInset)}
       />
+      <span tabIndex={0} className="sr-only" onFocus={() => focusFirstIn(panelRef.current)} />
     </div>
   );
+}
+
+function focusFirstIn(container: HTMLElement | null) {
+  if (!container) return;
+  for (const candidate of container.querySelectorAll(TABBABLE)) {
+    if (!(candidate instanceof HTMLElement) || candidate.tabIndex < 0) continue;
+    candidate.focus();
+    if (document.activeElement === candidate) return;
+  }
+  container.focus();
 }
 
 function inertOutside(root: Element) {
