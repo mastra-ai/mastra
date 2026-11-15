@@ -1502,13 +1502,59 @@ ${workingMemory}`;
     return result;
   }
 
+  // Message writes reuse the vectors of chunks they already embedded, so a repeated text (the same
+  // reply in another thread, a re-saved message) isn't sent to the embedder again. Keyed by the
+  // exact chunks, so a different chunk size is a miss, and emptied when the embedder or its options
+  // change. Holds only vectors: each message still gets its own row id and metadata.
+  private chunkEmbeddingCache = new LRUCache<bigint, Promise<number[][]>>({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
+  private chunkEmbeddingCacheOwner: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = {};
+
+  /**
+   * Embeds one message's chunks, reusing vectors already produced for the same chunks. Usage is
+   * returned only for a call that reached the embedder.
+   */
+  private async embedMessageChunks(chunks: string[]) {
+    // The embedder and options that produce these vectors, read once: embedValues can wait (for
+    // fastembed's first download) while setEmbedder swaps them, and the vectors must be cached
+    // under the embedder that made them.
+    const producer = { embedder: this.embedder, embedderOptions: this.embedderOptions };
+    const key = (await this.hasher).h64(JSON.stringify(chunks));
+    if (producer.embedder !== this.embedder || producer.embedderOptions !== this.embedderOptions) {
+      return this.embedValues(chunks, producer);
+    }
+    const owner = this.chunkEmbeddingCacheOwner;
+    if (owner.embedder !== producer.embedder || owner.embedderOptions !== producer.embedderOptions) {
+      this.chunkEmbeddingCache.clear();
+      this.chunkEmbeddingCacheOwner = producer;
+    }
+    const cached = this.chunkEmbeddingCache.get(key);
+    if (cached) return { embeddings: await cached };
+
+    const result = this.embedValues(chunks, producer);
+    // Concurrent writers of the same chunks share this call. A failed call, or one without exactly
+    // one embedding per chunk, is not kept, so the next write asks the embedder again.
+    const embeddings = result.then(({ embeddings }) => {
+      if (embeddings.length !== chunks.length) evict();
+      return embeddings;
+    });
+    const evict = () => {
+      if (this.chunkEmbeddingCache.get(key) === embeddings) this.chunkEmbeddingCache.delete(key);
+    };
+    embeddings.catch(evict);
+    this.chunkEmbeddingCache.set(key, embeddings);
+    return result;
+  }
+
   /** Sends texts to the embedder through the AI SDK version that matches its spec. */
-  private async embedValues(values: string[]) {
-    if (typeof this.embedder === `undefined`) {
+  private async embedValues(
+    values: string[],
+    { embedder, embedderOptions }: Pick<MastraMemory, 'embedder' | 'embedderOptions'> = this,
+  ) {
+    if (typeof embedder === `undefined`) {
       throw new Error(`Tried to embed message content but this Memory instance doesn't have an attached embedder.`);
     }
     // for fastembed multiple initial calls to embed will fail if the model hasn't been downloaded yet.
-    const isFastEmbed = this.embedder.provider === `fastembed`;
+    const isFastEmbed = embedder.provider === `fastembed`;
     if (isFastEmbed && this.firstEmbed instanceof Promise) {
       // so wait for the first one
       await this.firstEmbed;
@@ -1516,34 +1562,34 @@ ${workingMemory}`;
 
     const options = { values, maxRetries: 3 };
     // Options share a public union; select the SDK-specific options alongside the model version.
-    const model = this.embedder;
+    const model = embedder;
     let promise;
     switch (model.specificationVersion) {
       case 'v4':
         promise = embedManyV7({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
           model,
         });
         break;
       case 'v3':
         promise = embedManyV6({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
           model,
         });
         break;
       case 'v2':
         promise = embedManyV5({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
           model,
         });
         break;
       default:
         promise = embedMany({
           ...options,
-          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          ...(embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
           model,
         });
         break;
@@ -1595,9 +1641,7 @@ ${workingMemory}`;
 
     return buildMessageEmbeddingRows({
       items,
-      // No content cache here: within a run the embedded-messages record already stops a second
-      // embedding of the same message, and across runs a message is saved once.
-      embed: this.isSelfEmbedding ? undefined : chunks => this.embedValues(chunks),
+      embed: this.isSelfEmbedding ? undefined : chunks => this.embedMessageChunks(chunks),
       maxChunkChars: resolveMaxChunkChars({ maxChunkChars: this.configuredMaxChunkChars, embedder: this.embedder }),
       loadThreadMetadata: threadIds => this.loadThreadMetadata(threadIds),
       embeddedMessages,
