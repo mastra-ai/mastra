@@ -138,8 +138,9 @@ export function liveSessionsTouchingTheFeed(
   const liveSessions = new LiveSessions(controller);
   liveSessions.onRunChanged(session => {
     const { factoryOrgId, factoryProjectId } = session.state.get();
+    const frame = { cards: [], sessions: [session.identity.getId()] };
     if (factoryOrgId && factoryProjectId) {
-      touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId }, { cards: [] });
+      touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId }, frame);
       return;
     }
     // Only a Factory run carries its project in state, and a recovered one can come back without it: its row names it.
@@ -147,7 +148,7 @@ export function liveSessionsTouchingTheFeed(
       .getBySessionId(session.identity.getId())
       .then(row => {
         if (row?.factoryProjectId) {
-          touchFeed(eventBus, { orgId: row.orgId, factoryProjectId: row.factoryProjectId }, { cards: [] });
+          touchFeed(eventBus, { orgId: row.orgId, factoryProjectId: row.factoryProjectId }, frame);
         }
       })
       .catch(error => console.warn('[factory] Unable to find the board of a session run.', error));

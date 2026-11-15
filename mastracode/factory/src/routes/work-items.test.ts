@@ -2651,6 +2651,24 @@ describe('run activity on the work-item listing', () => {
       expect((await listedIds(res)).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
     });
 
+    it('with workItemId, lists the named cards it holds and the cards related to them, and drops the rest', async () => {
+      const mine = await startRun('session-mine');
+      const pullRequest = await createCard('pr-7', {
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-7' },
+        metadata: { number: 7, headBranch: 'factory/session-mine' },
+      });
+      const unrelated = await createCard('unrelated');
+      await startRun('session-other');
+      const app = buildApp(orgUser, undefined, undefined, new Set(['session-mine']));
+
+      const res = await app.request(`${sessionsPath()}&workItemId=${unrelated.id}&workItemId=${mine.id}`);
+
+      expect(res.status).toBe(200);
+      const body = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(await res.json());
+      expect(body.workItems.map(item => item.id).toSorted()).toEqual([mine.id, pullRequest.id].toSorted());
+      expect(body.runningSessionIds).toEqual(['session-mine']);
+    });
+
     it('answers 304 through writes to cards holding no session, and sends the list again once a listed card changes', async () => {
       const mine = await startRun('session-mine');
       const unstarted = await createCard('unstarted');
@@ -2909,7 +2927,6 @@ describe('run activity on the work-item listing', () => {
       'invalid_work_item_id',
     ],
     ['ids combined with sources', `?workItemId=${PROJECT_ID}&source=github-issue:1`, 'invalid_work_item_id'],
-    ['ids combined with a scope', `?workItemId=${PROJECT_ID}&scope=sessions`, 'invalid_work_item_id'],
     ['ids combined with unstarted cards', `?workItemId=${PROJECT_ID}&started=false`, 'invalid_work_item_id'],
     ['ids combined with session ids', `?workItemId=${PROJECT_ID}&sessionId=session-mine`, 'invalid_work_item_id'],
   ])('refuses %s rather than sending the whole board', async (_case, query, error) => {

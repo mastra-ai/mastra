@@ -342,6 +342,8 @@ describe('direct touches on the board feed stream', () => {
     ['no card', { cards: [] }, { cards: [] }],
     ['cards it cannot read', { cards: 'card-1' }, {}],
     ['a list holding something else', { cards: ['card-1', 7] }, {}],
+    ['a run of a session', { cards: [], sessions: ['session-1'] }, { cards: [], sessions: ['session-1'] }],
+    ['sessions it cannot read', { cards: [], sessions: 'session-1' }, { cards: [] }],
   ])('forwards a touch naming %s as a frame naming the same, or nothing', async (_, data, frame) => {
     const seed = await createFactoryStorageForTests();
     const { project } = await seedProjectItem(seed);

@@ -182,6 +182,13 @@ function sessionCards(board: readonly Card[], sessionIds: readonly string[]): Ca
   return withRelatedCards(board, card => Object.values(card.sessions).some(session => wanted.has(session.sessionId)));
 }
 
+/** The cards among `ids`, and the cards related to them, that the scope of every session holds, in board order. */
+function sessionCardsAmong(board: readonly Card[], ids: readonly string[]): Card[] {
+  const named = new Set(ids);
+  const scoped = new Set(allSessionCards(board));
+  return withRelatedCards(board, card => named.has(card.id)).filter(card => scoped.has(card));
+}
+
 /** The cards that hold any session, and the cards related to them, in board order. */
 function allSessionCards(board: readonly Card[]): Card[] {
   let cards = cardsInSessions.get(board);
@@ -528,7 +535,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const part =
             unstarted?.cards ??
             (scope
-              ? allSessionCards(board)
+              ? ids
+                ? sessionCardsAmong(board, ids)
+                : allSessionCards(board)
               : sessionIds
                 ? sessionCards(board, sessionIds)
                 : source
@@ -547,7 +556,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           }
           const snapshot = part
             ? // A reader asks for cards by id to hold the bodies a phases answer names by version.
-              scopedSnapshot(part, ids ? toVersionedWireWorkItem : toWireWorkItem, running, parked, unstarted?.total)
+              scopedSnapshot(
+                part,
+                ids && !scope ? toVersionedWireWorkItem : toWireWorkItem,
+                running,
+                parked,
+                unstarted?.total,
+              )
             : boardSnapshot(board, toWireWorkItem, running, parked, list.cursor);
           // Every open tab refetches its list on each feed frame; most frames leave it unchanged.
           return sendRevalidated(context, snapshot);

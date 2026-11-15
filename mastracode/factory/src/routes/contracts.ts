@@ -520,7 +520,8 @@ const workItemListQuerySchema = z
     source: z.array(z.string().min(1).max(512)).min(1).max(100).optional(),
     /**
      * Repeatable. Narrows the list to the cards with these ids; an id no card has lists nothing.
-     * Each card comes with the `version` the phases read names it by.
+     * Each card comes with the `version` the phases read names it by. With `scope=sessions`, the
+     * named cards the scope holds and the cards related to them, without `version`.
      */
     workItemId: z.array(uuidSchema).min(1).max(100).optional(),
     /**
@@ -549,9 +550,9 @@ const workItemListQuerySchema = z
     path: ['source'],
     message: 'Send source without started, scope or sessionId',
   })
-  .refine(query => !(query.workItemId && (query.source || query.started || query.scope || query.sessionId)), {
+  .refine(query => !(query.workItemId && (query.source || query.started || query.sessionId)), {
     path: ['workItemId'],
-    message: 'Send workItemId without source, started, scope or sessionId',
+    message: 'Send workItemId without source, started or sessionId',
   })
   // A narrowed list is not the board a cursor names, so it answers as it does without one.
   .transform(query =>
