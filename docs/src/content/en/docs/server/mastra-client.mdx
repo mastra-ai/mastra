@@ -184,7 +184,7 @@ You can also call `.stream()` with an array of message objects that include `rol
 
 `MastraClient` accepts optional parameters like `retries`, `backoffMs`, and `headers` to control request behavior. These parameters are useful for controlling retry behavior and including diagnostic metadata.
 
-By default, retries apply to read requests only. `GET`, `HEAD`, and `OPTIONS` are retried on failure, while `POST`, `PUT`, `PATCH`, and `DELETE` are sent once unless you set `retries` explicitly, so a failed write cannot repeat a state-changing request such as an agent generation or workflow start.
+By default, retries apply to read requests only. `GET`, `HEAD`, and `OPTIONS` are retried on failure, while `POST`, `PUT`, `PATCH`, and `DELETE` are sent once unless you set `retries` explicitly, so a failed write can't repeat a state-changing request such as an agent generation or workflow start.
 
 ```typescript title="lib/mastra-client.ts"
 import { MastraClient } from '@mastra/client-js'
