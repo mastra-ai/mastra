@@ -4644,6 +4644,8 @@ export class DurableAgent<
     // cleanup() path — mirroring observe().
     let streamCleanup: (() => void) | undefined;
     const cleanupOwnedRegistryState = () => {
+      // A warm resume reuses the registry entry but replaces its execution fence.
+      if (registryEntry.executionFence !== executionFence) return;
       if (this.#runRegistry.get(runId) === registryEntry) {
         this.#runRegistry.cleanup(runId);
       }

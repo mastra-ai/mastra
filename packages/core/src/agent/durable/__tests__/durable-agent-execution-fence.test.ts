@@ -820,6 +820,88 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    it.each([false, true])(
+      'keeps a warm resumed execution alive (clean up recovery reader=%s)',
+      async cleanupRecovery => {
+        const storage = createStorage(backend);
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('abandoned answer');
+        const resumedToolEntered = gate();
+        const releaseResumedTool = gate();
+        const lookup = createTool({
+          id: 'lookup',
+          description: 'Wait for confirmation before looking up the answer.',
+          inputSchema: z.object({}),
+          resumeSchema: z.object({ confirmed: z.boolean() }),
+          suspendSchema: z.object({ question: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async (_input, context) => {
+            if (!context?.agent?.resumeData) {
+              return context?.agent?.suspend({ question: 'Continue?' });
+            }
+            resumedToolEntered.open();
+            await releaseResumedTool.opened;
+            return { answer: 'confirmed' };
+          },
+        });
+        const agentA = buildAgent({ model: original.model, storage, cache, tools: { lookup } });
+        const started = await agentA.stream('Look up the answer.');
+        const startedStream = collect(started.fullStream);
+        const { runId } = started;
+        let recovered: Awaited<ReturnType<typeof agentA.recover>> | undefined;
+        let resumed: Awaited<ReturnType<typeof agentA.resume>> | undefined;
+        let recoveredStream: ReturnType<typeof collect> | undefined;
+        let resumedStream: ReturnType<typeof collect> | undefined;
+        try {
+          await original.entered;
+          await waitForCheckpoint(storage, runId);
+          // The checkpoint survives the originating process; recover and resume run in its replacement.
+          globalRunRegistry.clear();
+          __resetExecutionFencesForTests();
+          const replacement = toolCallThenTextModel('lookup', {}, 'confirmed answer');
+          const agentB = buildAgent({
+            model: replacement.model,
+            storage,
+            cache,
+            tools: { lookup },
+            cleanupTimeoutMs: 0,
+          });
+          recovered = await agentB.recover(runId, { force: true });
+          recoveredStream = collect(recovered.fullStream);
+          await vi.waitFor(() =>
+            expect(recoveredStream!.chunks.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true),
+          );
+          const recoveryEntry = globalRunRegistry.get(runId)!;
+          await recoveryEntry.workflowExecution;
+          const recoveryFence = recoveryEntry.executionFence;
+          await recoveryFence?.whenSettled;
+          resumed = await agentB.resume(runId, { confirmed: true }, { toolCallId: 'call-1' });
+          resumedStream = collect(resumed.fullStream);
+          await resumedToolEntered.opened;
+          const resumedEntry = globalRunRegistry.get(runId)!;
+          expect(resumedEntry).toBe(recoveryEntry);
+          expect(resumedEntry.executionFence).not.toBe(recoveryFence);
+          const clearTopic = vi.spyOn(agentB.pubsub, 'clearTopic');
+          if (cleanupRecovery) recovered.cleanup();
+          await new Promise(resolve => setTimeout(resolve, 20));
+          expect.soft(globalRunRegistry.get(runId) === resumedEntry).toBe(true);
+          expect.soft(clearTopic).not.toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId));
+          releaseResumedTool.open();
+          await vi.waitFor(() => expect(resumedStream!.chunks.some(chunk => chunk.type === 'finish')).toBe(true));
+          expect(await resumed.output.text).toBe('confirmed answer');
+        } finally {
+          releaseResumedTool.open();
+          original.release();
+          await startedStream.stop();
+          await recoveredStream?.stop();
+          await resumedStream?.stop();
+          resumed?.cleanup();
+          recovered?.cleanup();
+          started.cleanup();
+        }
+      },
+    );
+
     it('recover() refuses a run a live foreign owner holds; recover({ force: true }) takes it over and releases the lease when done', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });
