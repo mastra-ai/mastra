@@ -18,7 +18,6 @@ import type {
   MastraModelGatewayInterface,
 } from './gateways/base.js';
 import { defaultGateways } from './gateways/defaults.js';
-import { isExpectedMissingAuthError } from './gateways/gateway-manager.js';
 import { GatewayManager } from './gateways/index.js';
 import { gatewayServesObservationalMemory } from './gateways/mastra.js';
 import { isOpenRouterModel, prepareToolsForMastraGateway } from './mastra-gateway-provider-tools.js';
@@ -313,23 +312,19 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
    * processing for gateway models (the Observational Memory processor) use this to tell the two
    * apart.
    *
-   * Returns `false` for a model that isn't on the Mastra gateway, and for a credential that is
-   * missing (`MASTRA_GATEWAY_NO_API_KEY`, an unset environment variable) — the model call reports
-   * that error itself. Any other failure to resolve the credential is thrown, matching the
-   * contract of `GatewayManager.hasAuth`. The model call resolves its credential through this same
-   * path, so answering "local" when the lookup failed is how the gateway and the local store both
-   * end up saving the same conversation.
+   * Returns `false` for a model that isn't on the Mastra gateway. A credential that cannot be
+   * resolved is thrown rather than reported as local memory: the model call resolves its
+   * credential through this same path, so answering "local" when the lookup failed is how the
+   * gateway and the local store both end up saving the same conversation. That includes a missing
+   * credential (`MASTRA_GATEWAY_NO_API_KEY`, an unset environment variable) — the gateway may
+   * serve memory as soon as the credential resolves, so the ownership check stops the run instead
+   * of guessing.
    */
   async isGatewayMemoryManaged(): Promise<boolean> {
     if (this.gatewayId !== 'mastra') return false;
-    try {
-      const resolved = this.#manager.resolveModelId(this.config.routerId);
-      const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
-      return gatewayServesObservationalMemory(auth.apiKey);
-    } catch (error) {
-      if (isExpectedMissingAuthError(error)) return false;
-      throw error;
-    }
+    const resolved = this.#manager.resolveModelId(this.config.routerId);
+    const auth = await this.resolveAuth(resolved.providerId, resolved.modelId);
+    return gatewayServesObservationalMemory(auth.apiKey);
   }
 
   /** @internal */

@@ -13,8 +13,9 @@
  * The gateway serves Observational Memory for a Gateway project key, so neither the
  * local storage nor the gateway may double up. A Gateway organization key is served
  * by a gateway without the memory API, so memory has to stay local. A credential the
- * gateway cannot resolve is thrown, not read as local ownership, so a failed lookup
- * can never make the two sides store the same thread.
+ * gateway cannot resolve — including one it reports as missing — is thrown, not read
+ * as local ownership, so a failed lookup can never make the two sides store the same
+ * thread.
  */
 
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
@@ -155,6 +156,34 @@ describe('local memory for a gateway model (#30391)', () => {
 
     // The failure reaches the caller, and no reply is written locally. A swallowed lookup used
     // to finish the run and store the model's answer here.
+    const store = await memory.storage.getStore('memory');
+    const stored = await store!.listMessages({ threadId, resourceId, perPage: false });
+    const assistantParts = stored.messages
+      .filter(message => message.role === 'assistant')
+      .flatMap(message => message.content.parts);
+    expect(assistantParts.filter(part => part.type === 'text')).toHaveLength(0);
+  });
+
+  it('writes nothing locally when the ownership lookup reports a missing credential', async () => {
+    const { model } = createActorModel();
+    let lookups = 0;
+    const lateCredentialGateway: MastraModelGatewayInterface = {
+      ...createMastraGateway('msk_live_project_key', model),
+      getApiKey: async () => {
+        lookups += 1;
+        if (lookups === 1) throw new Error('Missing MASTRA_GATEWAY_API_KEY environment variable');
+        return 'msk_live_project_key';
+      },
+    };
+    const { agent, memory } = createGatewayAgent(lateCredentialGateway);
+
+    // A credential that is only missing for the ownership lookup does not make the step local:
+    // the model call resolves it again, succeeds with a project key, and the gateway serves the
+    // thread — so local memory must not write it too.
+    await expect(
+      agent.generate('Remember the word PELICAN', { memory: { thread: threadId, resource: resourceId } }),
+    ).rejects.toThrow('Missing MASTRA_GATEWAY_API_KEY');
+
     const store = await memory.storage.getStore('memory');
     const stored = await store!.listMessages({ threadId, resourceId, perPage: false });
     const assistantParts = stored.messages
