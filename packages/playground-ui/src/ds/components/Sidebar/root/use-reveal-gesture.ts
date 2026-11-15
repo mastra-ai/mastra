@@ -69,6 +69,7 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
   useEffect(() => {
     const scope = scopeRef.current;
     if (!scope) return;
+    const settles = settleRef;
     let track: Track | undefined;
 
     const release = (ended: Track, velocity: number) => {
@@ -170,6 +171,7 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       scope.removeEventListener('touchmove', onTouchMove);
       scope.removeEventListener('touchend', onTouchEnd);
       scope.removeEventListener('touchcancel', onTouchEnd);
+      settles.current++;
       const layers = revealLayers(scope);
       clearRevealVar(layers, DRAG_VAR);
       clearRevealVar(layers, DURATION_VAR);
