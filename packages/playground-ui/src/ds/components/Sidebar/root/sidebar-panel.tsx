@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import type { CSSProperties, KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useSidebar } from './sidebar-context';
 import { SidebarReveal } from './sidebar-reveal';
 import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
@@ -12,6 +12,8 @@ export type SidebarPanelProps = {
   className?: string;
   mobileMode?: 'drawer' | 'takeover';
 };
+
+type SidebarPanelStyle = CSSProperties & { '--sidebar-width': string };
 
 const KEYBOARD_STEP = 10;
 const DRAG_THRESHOLD = 5;
@@ -207,7 +209,6 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
             className,
           )}
         >
-
           <VisuallyHidden asChild>
             <DrawerTitle>Navigation</DrawerTitle>
           </VisuallyHidden>
@@ -223,10 +224,12 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   }
 
   const currentWidth = isCollapsed ? collapsedWidth : width;
+  const panelStyle: SidebarPanelStyle = { '--sidebar-width': `${currentWidth}px` };
   return (
     <div
       ref={panelRef}
       data-slot="sidebar-panel"
+      style={panelStyle}
       className={cn(
         'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',

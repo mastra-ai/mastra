@@ -23,7 +23,7 @@ type SidebarContextValue = {
   commit: () => void;
   setGestureActive: (active: boolean) => void;
   scopeRef: React.RefObject<HTMLDivElement | null>;
-  panelRef: React.RefCallback<HTMLDivElement>;
+  panelRef: React.RefObject<HTMLDivElement | null>;
   LinkComponent?: LinkComponent;
 };
 
