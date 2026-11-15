@@ -2,4 +2,4 @@
 '@mastra/couchbase': patch
 ---
 
-Couchbase vector queries now reject a metadata filter instead of ignoring it. Couchbase vector search cannot narrow results by metadata, so a query with a filter used to return results the filter should have excluded. Queries without a filter, or with an empty one, work as before.
+Couchbase vector queries now log a warning the first time a metadata filter is passed. Couchbase vector search can't narrow results by metadata, so the filter is ignored, as before. The warning makes that visible instead of silent.
