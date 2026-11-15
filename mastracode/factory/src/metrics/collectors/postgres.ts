@@ -100,8 +100,10 @@ export function postgresStatsCollector(
       const slowest = [...current]
         .map(([id, now]) => {
           const then = before.get(id);
-          // Not in the previous sample: no baseline yet (the totals are lifetime), so skip it.
-          if (!then) return { id, calls: 0, time: 0 };
+          // Not in the previous sample: the totals are lifetime, so everything it counted happened
+          // since then. Rank it as-is instead of dropping it, or a query first seen in this sample
+          // could never be logged.
+          if (!then) return { id, calls: now.calls, time: now.time };
           // Fewer calls than before means the stats were reset: everything counted is new.
           const reset = then.calls > now.calls;
           return {
