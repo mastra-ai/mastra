@@ -1,8 +1,8 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowTopBottom } from '@/ds/icons/central/IconArrowTopBottom';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
-import { IconSortArrowUpDown } from '@/ds/icons/central/IconSortArrowUpDown';
 import { Icon } from '@/ds/icons/Icon';
 import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ export type TableSortButtonProps = Omit<ComponentProps<'button'>, 'type'> & {
 const sortIcons = {
   ascending: IconArrowUp,
   descending: IconArrowDown,
-  none: IconSortArrowUpDown,
+  none: IconArrowTopBottom,
 } satisfies Record<TableSortDirection, LucideIcon>;
 
 export function TableSortButton({ direction = 'none', className, children, ...props }: TableSortButtonProps) {

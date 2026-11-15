@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { RoutingNote } from './RoutingNote';
 import { parseLabels } from './routing';
 import type { Factory } from './routing';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /** `labels` empty: the factory takes all issues. */
 export type NewJiraRoute = { factoryProjectId: string; labels: string[] };
@@ -54,7 +54,7 @@ export function NewJiraFactoryFields({
           disabled={adding}
           className="w-56 max-w-full"
         />
-        <Button size="sm" icon={<IconPlusLarge />} disabled={adding || !labelsReady} onClick={add}>
+        <Button size="sm" icon={<IconPlusMedium />} disabled={adding || !labelsReady} onClick={add}>
           {adding ? 'Adding…' : 'Add'}
         </Button>
       </div>

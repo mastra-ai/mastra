@@ -29,7 +29,7 @@ import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Txt } from '@/ds/components/Txt';
 import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const EMPTY_KEYS: readonly string[] = [];
 
@@ -190,7 +190,7 @@ export function TraceColumnsMenu({
               ))}
               {withMetadata && (
                 <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
-                  <IconPlusLarge aria-hidden />
+                  <IconPlusMedium aria-hidden />
                   Add metadata column
                 </DropdownMenu.Item>
               )}

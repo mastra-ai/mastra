@@ -8,7 +8,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import { ButtonsGroup, ButtonsGroupText } from './buttons-group';
 import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
-import { IconClipboard } from '@/ds/icons/central/IconClipboard';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconScissors1 } from '@/ds/icons/central/IconScissors1';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
@@ -140,7 +140,7 @@ export const VerticalWithIcons: Story = {
         Cut
       </Button>
       <Button>
-        <IconClipboard />
+        <IconClipboard2 />
         Paste
       </Button>
     </ButtonsGroup>

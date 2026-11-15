@@ -1,6 +1,6 @@
 import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
@@ -40,7 +40,7 @@ export function DeleteExperimentsButton({ experimentIds, onDeleted }: DeleteExpe
         size="sm"
         variant="destructive-ghost"
         disabled={count === 0}
-        icon={<IconTrashCan />}
+        icon={<TrashIcon />}
         onClick={() => setOpen(true)}
       >
         Delete
@@ -55,7 +55,7 @@ export function DeleteExperimentsButton({ experimentIds, onDeleted }: DeleteExpe
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            <Button icon={<IconTrashCan />} variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+            <Button icon={<TrashIcon />} variant="destructive" onClick={handleDelete} disabled={isDeleting}>
               {isDeleting ? 'Deleting…' : count === 1 ? 'Delete experiment' : 'Delete experiments'}
             </Button>
           </AlertDialog.Footer>

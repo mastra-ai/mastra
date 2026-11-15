@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { SquareDot } from 'lucide-react';
 import { DiffStat } from '../DiffStat';
 import type { DiffStatProps } from '../DiffStat';
 import { Txt } from '../Txt';
 import { CodeDiff } from './code-diff';
 import { CodeDiffList } from './code-diff-list';
 import { IconArrowRightSquare } from '@/ds/icons/central/IconArrowRightSquare';
+import { IconChanges } from '@/ds/icons/central/IconChanges';
 import { IconSquarePlus } from '@/ds/icons/central/IconSquarePlus';
 
 const meta: Meta<typeof CodeDiff> = {
@@ -95,7 +95,7 @@ function LineCounts(counts: DiffStatProps) {
   );
 }
 
-const modifiedIcon = <SquareDot role="img" aria-label="Modified" className="text-warning-indicator" />;
+const modifiedIcon = <IconChanges role="img" aria-label="Modified" className="text-warning-indicator" />;
 
 export const WithFileHeader: Story = {
   args: {

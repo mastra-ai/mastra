@@ -1,5 +1,4 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import { BellPlusIcon } from 'lucide-react';
 import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
@@ -15,6 +14,7 @@ import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { cn } from '@/lib/utils';
 
@@ -34,7 +34,7 @@ export function AlertAction({
   if ('href' in action) {
     return (
       <MetricsCard.Action label={label} className={onCardHover} render={<LinkComponent href={action.href} />}>
-        <BellPlusIcon />
+        <IconBell2 />
       </MetricsCard.Action>
     );
   }
@@ -77,7 +77,7 @@ export function AlertMenu({
   return (
     <DropdownMenu>
       <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip={label} aria-label={label} className={onCardHover}>
-        <BellPlusIcon />
+        <IconBell2 />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="max-w-80">
         <DropdownMenu.Label>Create alert from</DropdownMenu.Label>
@@ -119,7 +119,7 @@ function DisabledAlertAction({ label, reason }: { label: string; reason: string 
             className={cn('inline-flex', onCardHover)}
           >
             <Button variant="ghost" size="icon-sm" disabled aria-hidden="true" tabIndex={-1}>
-              <BellPlusIcon />
+              <IconBell2 />
             </Button>
           </span>
         }

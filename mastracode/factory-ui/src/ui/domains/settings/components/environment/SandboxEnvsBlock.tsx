@@ -28,7 +28,7 @@ import { useSandboxEnvMutations, useSandboxEnvsQuery } from '../../../../../hook
 import { relativeTime } from '../../../../../lib/date/relativeTime';
 import type { SandboxEnv, SandboxEnvAppliesTo } from '../../../workspaces/services/sandbox-envs';
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 const MASK = '••••••••••••';
 
@@ -59,7 +59,7 @@ export function AddSandboxEnvButton({ factoryId }: { factoryId: string }) {
 
   return (
     <>
-      <Button size="sm" icon={<IconPlusLarge />} disabled={!data?.writable} onClick={() => setOpen(true)}>
+      <Button size="sm" icon={<IconPlusMedium />} disabled={!data?.writable} onClick={() => setOpen(true)}>
         Add variable
       </Button>
       {open && data && <SandboxEnvDialog envs={data.envs} mutations={mutations} onClose={() => setOpen(false)} />}

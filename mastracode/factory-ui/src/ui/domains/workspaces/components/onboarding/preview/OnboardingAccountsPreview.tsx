@@ -6,9 +6,9 @@ import { SketchLabel } from './SketchLabel';
 import { OnboardingModelLabel } from './OnboardingModelLabel';
 import { OnboardingPersonalConnectionStatus } from './OnboardingPersonalConnectionStatus';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconKey2 } from '@mastra/playground-ui/icons/central/IconKey2';
 
 function workAccountLabel(personalWork: boolean, local: boolean) {
   if (personalWork) return 'Work owner’s account';
@@ -39,11 +39,11 @@ export function OnboardingAccountsPreview({
   const sourceLabel = workSourceLabel(personalWork, local);
   return (
     <section key={modelScope} aria-label="Account setup preview" className="onboarding-account-labels relative h-full">
-      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <IconKey1 /> : <IconBuildings />} />
+      <AccountSource x={shared ? 148 : 28} label={sourceLabel} icon={personalWork ? <IconKey2 /> : <IconBuildings />} />
       {!shared && (
         <>
-          <AccountSource x={148} label="Personal" icon={<IconKey1 />} />
-          <AccountSource x={268} label="Personal" icon={<IconKey1 />} />
+          <AccountSource x={148} label="Personal" icon={<IconKey2 />} />
+          <AccountSource x={268} label="Personal" icon={<IconKey2 />} />
         </>
       )}
       <SessionIllustration x={148} label="Team" />

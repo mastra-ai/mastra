@@ -20,7 +20,7 @@ import {
   PlanTitle,
 } from './plan';
 import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 const planMarkdown = `## Implementation
@@ -171,7 +171,7 @@ export const WithStatusAndActions: Story = {
                 <IconBubbleText />
               </Button>
               <Button type="button" variant="primary" size="icon-sm" tooltip="Approve plan" aria-label="Approve plan">
-                <IconCheckmark1 />
+                <IconCheckmark2Medium />
               </Button>
             </PlanActionGroup>
           </PlanControls>

@@ -1,12 +1,12 @@
 import { useMastraClient } from '@mastra/react';
 import { makeSSOLoginRequest } from '@mastra/react/hooks/auth';
-import { TimerOffIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { EmptyState } from '@/ds/components/EmptyState';
 import type { EmptyStateProps } from '@/ds/components/EmptyState';
 import { IconArrowBoxRight } from '@/ds/icons/central/IconArrowBoxRight';
+import { IconClockSnooze } from '@/ds/icons/central/IconClockSnooze';
 import { toast } from '@/lib/toast';
 
 export type SessionExpiredProps = {
@@ -31,7 +31,7 @@ export function SessionExpired({ variant }: SessionExpiredProps) {
   return (
     <EmptyState
       variant={variant}
-      iconSlot={<TimerOffIcon />}
+      iconSlot={<IconClockSnooze />}
       titleSlot="Session Expired"
       descriptionSlot="Your session has expired. Please log in again to continue."
       actionSlot={

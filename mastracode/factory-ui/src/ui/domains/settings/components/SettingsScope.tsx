@@ -3,13 +3,13 @@ import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import type { LucideIcon } from 'lucide-react';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
 import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
-import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
 import { IconUserDuo } from '@mastra/playground-ui/icons/central/IconUserDuo';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 export type SettingsScope = 'personal' | 'factory' | 'org' | 'deployment';
 
 const SCOPE_BADGE: Record<SettingsScope, { label: string; variant: BadgeVariant; icon: LucideIcon }> = {
-  personal: { label: 'Personal', variant: 'neutral', icon: IconCirclePerson },
+  personal: { label: 'Personal', variant: 'neutral', icon: IconUser },
   factory: { label: 'Factory-wide', variant: 'blue', icon: IconBuildings },
   org: { label: 'Org-wide', variant: 'blue', icon: IconUserDuo },
   deployment: { label: 'Deployment-wide', variant: 'blue', icon: IconServer },

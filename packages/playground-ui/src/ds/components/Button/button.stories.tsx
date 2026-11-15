@@ -6,9 +6,9 @@ import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const ALL_VARIANTS: ButtonVariant[] = [
@@ -95,7 +95,7 @@ export const Disabled: Story = {
 
 export const WithIcon: Story = {
   args: {
-    icon: <IconPlusLarge />,
+    icon: <IconPlusMedium />,
     children: 'Add Item',
   },
 };
@@ -105,7 +105,7 @@ export const WithIconSizes: Story = {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-4">
         {(['sm', 'md', 'lg'] as const).map(size => (
-          <Button key={size} size={size} icon={<IconPlusLarge />}>
+          <Button key={size} size={size} icon={<IconPlusMedium />}>
             Add item
           </Button>
         ))}
@@ -135,14 +135,14 @@ export const IconBesideText: Story = {
     <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
         <div key={size} className="flex items-center gap-2">
-          <Button size={size} icon={<IconPlusLarge />}>
+          <Button size={size} icon={<IconPlusMedium />}>
             Add item
           </Button>
           <Button size={`icon-${size}`} tooltip="Settings">
             <IconSettingsGear1 />
           </Button>
           <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         </div>
       ))}
@@ -220,7 +220,7 @@ export const VariantSizeMatrix: Story = {
             lg
           </Button>
           <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
-            <IconTrashCan />
+            <TrashIcon />
             with icon
           </Button>
         </Fragment>

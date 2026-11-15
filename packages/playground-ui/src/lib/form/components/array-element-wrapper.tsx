@@ -8,8 +8,8 @@ import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 
@@ -72,7 +72,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
               addButtonRef?.current?.focus();
             }}
           >
-            <IconTrashCan />
+            <TrashIcon />
           </Button>
         )}
       </div>
@@ -88,7 +88,7 @@ export function ArrayElementWrapper({ children, onRemove, index }: ArrayElementW
                 setExpanded(false);
                 triggerRef.current?.focus();
               }}
-              icon={<IconCheckmark1 />}
+              icon={<IconCheckmark2Medium />}
             >
               Done
             </Button>

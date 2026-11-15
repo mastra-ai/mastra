@@ -16,8 +16,6 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cardRuleGroupSchema } from '@mastra/factory/rules/rule-group';
 import { SettingsContainer, SettingsGroup, SettingsRow, SettingsTitle } from '@mastra/playground-ui/new/settings';
-
-import { Flag } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -42,7 +40,8 @@ import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { IconFlag2 } from '@mastra/playground-ui/icons/central/IconFlag2';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 
 const NO_SKILL = '__none__';
 /** Free-text fields share one width, so short values don't stretch across the page. */
@@ -202,7 +201,7 @@ export function PhaseConfig({
   );
   const remove = onRemove && (
     <div>
-      <Button variant="ghost" icon={<IconTrashCan />} onClick={onRemove}>
+      <Button variant="ghost" icon={<TrashIcon />} onClick={onRemove}>
         Remove {phase.name}
       </Button>
     </div>
@@ -414,7 +413,7 @@ export function PhaseConfig({
           </SettingsSubsection>
         </PhaseStep>
 
-        <PhaseStep icon={<Flag />} title="Ends">
+        <PhaseStep icon={<IconFlag2 />} title="Ends">
           <PhaseField
             title="Exit tool"
             description="Ends the phase when it succeeds. Leave empty for none."

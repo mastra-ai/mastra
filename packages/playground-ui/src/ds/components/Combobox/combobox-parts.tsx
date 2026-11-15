@@ -8,7 +8,7 @@ import type { ComboboxVariant } from './combobox-styles';
 import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
@@ -302,7 +302,7 @@ function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.
       <span className={comboboxStyles.itemContent}>{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>
-          <IconCheckmark1 className={comboboxStyles.checkIcon} />
+          <IconCheckmark2Medium className={comboboxStyles.checkIcon} />
         </BaseCombobox.ItemIndicator>
       </span>
     </BaseCombobox.Item>

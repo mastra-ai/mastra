@@ -14,12 +14,12 @@ import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
 import { IconBug } from '@mastra/playground-ui/icons/central/IconBug';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconCirclePerson } from '@mastra/playground-ui/icons/central/IconCirclePerson';
 import { IconColorPalette } from '@mastra/playground-ui/icons/central/IconColorPalette';
 import { IconInboxEmpty } from '@mastra/playground-ui/icons/central/IconInboxEmpty';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -42,7 +42,7 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
       {
         id: 'account',
         label: SETTINGS_SECTION_LABELS.account,
-        icon: IconCirclePerson,
+        icon: IconUser,
         searchText: 'my account profile identity email authentication session log out sign out user',
       },
       {

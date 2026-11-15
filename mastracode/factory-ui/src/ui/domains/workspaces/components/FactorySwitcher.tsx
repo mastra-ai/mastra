@@ -6,9 +6,9 @@ import { Factory as FactoryIcon } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -58,13 +58,13 @@ export function FactorySwitcher() {
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{factory.name}</span>
             </span>
-            {factory.id === activeFactory?.id && <IconCheckmark1 aria-label="Active factory" />}
+            {factory.id === activeFactory?.id && <IconCheckmark2Medium aria-label="Active factory" />}
           </DropdownMenu.Item>
         ))}
 
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
-          <IconPlusLarge />
+          <IconPlusMedium />
           <span>Create factory</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>

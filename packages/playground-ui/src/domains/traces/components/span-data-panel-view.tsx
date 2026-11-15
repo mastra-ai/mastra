@@ -1,6 +1,5 @@
 import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
 import type { UsageStats } from '@mastra/core/observability';
-import { MessageSquareReplyIcon } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord, SpanTab } from '../types';
@@ -37,6 +36,7 @@ import { Notice } from '@/ds/components/Notice';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { IconCircleX } from '@/ds/icons/central/IconCircleX';
 import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
@@ -121,7 +121,7 @@ export function SpanDataPanelView({
     { value: 'input', name: 'Input', icon: <IconFileArrowRightIn /> },
     { value: 'output', name: 'Output', icon: <IconFileArrowRightOut />, attention: span?.error != null },
     ...(feedbackTabSlot
-      ? [{ value: 'feedback' as const, name: 'Feedback', icon: <MessageSquareReplyIcon />, badge: feedbackTabBadge }]
+      ? [{ value: 'feedback' as const, name: 'Feedback', icon: <IconBubbleSparkle />, badge: feedbackTabBadge }]
       : []),
   ];
 

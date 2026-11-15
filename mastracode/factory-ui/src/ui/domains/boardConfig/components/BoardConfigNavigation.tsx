@@ -21,12 +21,12 @@ import { movePhase } from '../boardDraft';
 import { AddPhaseButton } from './AddPhaseButton';
 import { IconArrowRightLeft } from '@mastra/playground-ui/icons/central/IconArrowRightLeft';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /**
  * The factory's skills no phase runs, then the board switcher and the open board's pages: General, Card moves,
@@ -116,14 +116,14 @@ function BoardSwitcher({ factoryId, boardId }: { factoryId: string; boardId: str
           >
             <IconKanbanView />
             <span className="min-w-0 flex-1 truncate">{other.id === boardId ? title : other.title}</span>
-            {other.id === boardId && <IconCheckmark1 aria-label="Open board" />}
+            {other.id === boardId && <IconCheckmark2Medium aria-label="Open board" />}
           </DropdownMenu.Item>
         ))}
         {response?.canEdit && (
           <>
             <DropdownMenu.Separator />
             <DropdownMenu.Item render={<Link to={newBoardPath(factoryId)} onClick={() => overlays.close('sidebar')} />}>
-              <IconPlusLarge />
+              <IconPlusMedium />
               New board
             </DropdownMenu.Item>
           </>

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-
-import { ClipboardPlus } from 'lucide-react';
 import type { ExperimentResultsSelection } from '../hooks/use-experiment-results-selection';
 import { ExperimentResultsTagPicker } from './experiment-results-tag-picker';
 
@@ -30,7 +29,7 @@ export function ExperimentResultsBulkActions({ selection }: ExperimentResultsBul
       </Button>
       {!isEmpty && (
         <>
-          <Button size="sm" disabled={busy} onClick={selection.flagSelectedForReview} icon={<ClipboardPlus />}>
+          <Button size="sm" disabled={busy} onClick={selection.flagSelectedForReview} icon={<IconClipboard2 />}>
             Request review
           </Button>
           <ExperimentResultsTagPicker

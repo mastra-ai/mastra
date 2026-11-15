@@ -14,7 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
@@ -104,7 +104,7 @@ export const ChatThreads = ({
         <div className="flex items-center gap-1 pt-[3px]">
           <ThreadListNewItem render={<Link href={newThreadLink} />}>
             <Icon>
-              <IconPlusLarge />
+              <IconPlusMedium />
             </Icon>
             New Thread
           </ThreadListNewItem>

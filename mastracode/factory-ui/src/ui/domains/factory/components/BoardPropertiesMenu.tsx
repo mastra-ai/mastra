@@ -1,5 +1,4 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
-import { LayersPlus } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
@@ -11,11 +10,12 @@ import { BoardFilterSubmenu } from './BoardFilterSubmenu';
 import { boardFilterSummary } from './boardFilterFields';
 import type { BoardFilterField } from './boardFilterFields';
 import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
-import { IconSortArrowUpDown } from '@mastra/playground-ui/icons/central/IconSortArrowUpDown';
 import { IconFilter1 } from '@mastra/playground-ui/icons/central/IconFilter1';
 import { IconFilterAsc } from '@mastra/playground-ui/icons/central/IconFilterAsc';
 import { IconFilterDesc } from '@mastra/playground-ui/icons/central/IconFilterDesc';
 import { IconUserEdit } from '@mastra/playground-ui/icons/central/IconUserEdit';
+import { IconArrowTopBottom } from '@mastra/playground-ui/icons/central/IconArrowTopBottom';
+import { IconLayersThree } from '@mastra/playground-ui/icons/central/IconLayersThree';
 
 const SORT_ICONS: Record<BoardSort, LucideIcon> = {
   recent: IconHistory,
@@ -52,7 +52,7 @@ export function BoardPropertiesMenu({
     >
       <DropdownMenu.RadioSub
         label="Sort"
-        icon={<IconSortArrowUpDown aria-hidden />}
+        icon={<IconArrowTopBottom aria-hidden />}
         options={boardSortOptions(currentUserId).map(option => {
           const Icon = SORT_ICONS[option.value];
           return { ...option, icon: <Icon aria-hidden /> };
@@ -74,7 +74,7 @@ export function BoardPropertiesMenu({
         <>
           <DropdownMenu.Separator />
           <DropdownMenu.Item onClick={view.saveAsView}>
-            <LayersPlus aria-hidden />
+            <IconLayersThree aria-hidden />
             <span>Save as view</span>
           </DropdownMenu.Item>
         </>

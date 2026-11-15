@@ -3,11 +3,10 @@ import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowBoxLeft } from '@mastra/playground-ui/icons/central/IconArrowBoxLeft';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 import { IconSettingsGear1 } from '@mastra/playground-ui/icons/central/IconSettingsGear1';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import type { AuthenticatedUser, CurrentUser } from '@mastra/react/hooks/auth';
-
-import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useLogout } from '../hooks';
@@ -101,7 +100,7 @@ export function UserMenu({ user }: UserMenuProps) {
                     isActive ? 'bg-fill-hover' : 'hover:bg-fill-subtle'
                   } ${isSwitching ? 'cursor-not-allowed opacity-50' : ''}`}
                 >
-                  {isSwitching && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                  {isSwitching && <IconLoadingCircle className="h-3.5 w-3.5 animate-spin" />}
                   <Txt as="span" variant="body" className="flex-1 capitalize">
                     {role.name}
                   </Txt>

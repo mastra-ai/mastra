@@ -5,7 +5,7 @@ import { useState } from 'react';
 import { NewJiraFactoryFields } from './NewJiraFactoryFields';
 import type { NewJiraRoute } from './NewJiraFactoryFields';
 import type { Factory } from './routing';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 /** Routes a Jira project to one more factory, with the labels it starts with. */
 export function AddJiraFactory({
@@ -35,7 +35,7 @@ export function AddJiraFactory({
               factory.name
             ) : (
               <>
-                <IconPlusLarge className="size-3.5" aria-hidden />
+                <IconPlusMedium className="size-3.5" aria-hidden />
                 Add factory
               </>
             )}

@@ -5,7 +5,6 @@ import {
   parseSkillSource,
 } from '@mastra/react/hooks/workspace';
 import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
-import { Loader2 } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import {
@@ -26,9 +25,10 @@ import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
 import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
 import { IconPackage } from '@/ds/icons/central/IconPackage';
 import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
@@ -227,7 +227,7 @@ export function WorkspaceAddSkillDialog({
                 >
                   {isLoadingPopular || isSearching ? (
                     <div className="flex items-center justify-center py-5">
-                      <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                      <IconLoadingCircle className="size-6 animate-spin text-muted-foreground" />
                     </div>
                   ) : displaySkills.length === 0 ? (
                     <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
@@ -265,7 +265,7 @@ export function WorkspaceAddSkillDialog({
                                       variant="meta"
                                       className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                     >
-                                      <IconCheckmark1 className="size-2.5" />
+                                      <IconCheckmark2Medium className="size-2.5" />
                                       Installed
                                     </Txt>
                                   )}
@@ -342,7 +342,7 @@ export function WorkspaceAddSkillDialog({
 
                     {isLoadingPreview ? (
                       <div className="flex flex-1 items-center justify-center">
-                        <Loader2 className="size-6 animate-spin text-muted-foreground" />
+                        <IconLoadingCircle className="size-6 animate-spin text-muted-foreground" />
                       </div>
                     ) : previewContent ? (
                       <ScrollArea className="flex-1">

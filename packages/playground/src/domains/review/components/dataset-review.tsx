@@ -26,8 +26,8 @@ import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMe
 import { IconDotGrid1x3Horizontal } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Horizontal';
 import { IconGauge } from '@mastra/playground-ui/icons/central/IconGauge';
 import { IconSparklesTwo } from '@mastra/playground-ui/icons/central/IconSparklesTwo';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useMastraClient } from '@mastra/react';
@@ -533,7 +533,7 @@ export function DatasetReview({
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item onSelect={handleBulkRemove}>
                     <Icon size="xs">
-                      <IconTrashCan />
+                      <TrashIcon />
                     </Icon>
                     Remove from queue
                   </DropdownMenu.Item>

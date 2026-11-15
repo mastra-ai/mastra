@@ -12,7 +12,7 @@ import { Field, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { useLinkComponent } from '@/lib/framework';
 import { toast } from '@/utils/toast';
@@ -327,7 +327,7 @@ export function SaveAsDatasetItemDialog({
               Cancel
             </Button>
             <Button
-              icon={<IconCheckmark1 />}
+              icon={<IconCheckmark2Medium />}
               type="submit"
               variant="default"
               disabled={addItem.isPending || trajectoryLoading || !isSelectedDatasetListed}

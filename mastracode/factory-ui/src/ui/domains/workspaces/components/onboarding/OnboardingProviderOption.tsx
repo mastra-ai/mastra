@@ -1,11 +1,11 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useId } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
 /**
  * One provider in the list: instant subtle hover like the repositories, a check on the lane's provider.
@@ -61,7 +61,7 @@ export function OnboardingProviderOption({
           </Txt>
         )}
       </span>
-      {selected && <IconCheckmark1 aria-hidden="true" className="size-4 shrink-0" />}
+      {selected && <IconCheckmark2Medium aria-hidden="true" className="size-4 shrink-0" />}
     </button>
   );
 }

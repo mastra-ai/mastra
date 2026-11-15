@@ -4,7 +4,7 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useDatasets, useDatasetsByIds } from '@mastra/react/hooks/datasets';
@@ -236,7 +236,7 @@ export default function Experiments() {
     <PageLayout
       breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       headerActions={
-        <Button variant="primary" size="sm" icon={<IconPlusLarge />} onClick={() => setRunDialogOpen(true)}>
+        <Button variant="primary" size="sm" icon={<IconPlusMedium />} onClick={() => setRunDialogOpen(true)}>
           New experiment
         </Button>
       }

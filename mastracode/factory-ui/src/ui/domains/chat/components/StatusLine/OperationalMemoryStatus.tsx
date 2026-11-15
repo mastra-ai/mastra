@@ -4,7 +4,7 @@ import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
 import { omWork } from '../../services/om';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 
 const messageLabel: Record<OMWork, string> = {
   idle: 'Message window until next observation',
@@ -65,7 +65,7 @@ export function OperationalMemoryStatus() {
         {showMsg && (
           <TokenBudgetDetail
             description="Read into memory once full"
-            icon={<IconBubble2 />}
+            icon={<IconBubbleWide />}
             label="Messages"
             threshold={om.threshold}
             tokens={om.pendingTokens}

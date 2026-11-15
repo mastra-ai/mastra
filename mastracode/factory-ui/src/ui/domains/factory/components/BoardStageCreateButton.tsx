@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { BoardStageId } from '../stages';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function BoardStageCreateButton({
   stage,
@@ -25,7 +25,7 @@ export function BoardStageCreateButton({
       aria-controls={`new-work-item-${stage.id}`}
       onClick={onOpen}
     >
-      <IconPlusLarge size={13} aria-hidden />
+      <IconPlusMedium size={13} aria-hidden />
     </Button>
   );
 }

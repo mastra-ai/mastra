@@ -21,7 +21,6 @@ import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
 import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
 import { IconImages1 } from '@mastra/playground-ui/icons/central/IconImages1';
-import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
 import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
 import { IconFolderLink } from '@mastra/playground-ui/icons/central/IconFolderLink';
 import { IconNotepad } from '@mastra/playground-ui/icons/central/IconNotepad';
@@ -35,7 +34,7 @@ function getFileIcon(path: string): ReactNode {
     case 'jsx':
       return <IconScript className="text-badge-blue-indicator" />;
     case 'json':
-      return <IconJson className="text-badge-amber-indicator" />;
+      return <IconFileText className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
       return <IconFileText className="text-muted-foreground" />;

@@ -11,7 +11,7 @@ import { Txt } from '../Txt';
 import { PageLayout } from './index';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconBox2 } from '@/ds/icons/central/IconBox2';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { MainCard } from '@/ds/new/layout/app-shell';
 import { PageHeader } from '@/ds/new/layout/page-header';
 
@@ -54,7 +54,7 @@ const pageHeader = (
     <PageHeader.Description>Agents, workflows and tools available in this workspace.</PageHeader.Description>
     <PageHeader.Action>
       <Button variant="primary">
-        <IconPlusLarge />
+        <IconPlusMedium />
         Create resource
       </Button>
     </PageHeader.Action>

@@ -12,6 +12,7 @@ import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/compo
 import { IconCalendar1 } from '@mastra/playground-ui/icons/central/IconCalendar1';
 import { IconCircleCheck } from '@mastra/playground-ui/icons/central/IconCircleCheck';
 import { IconCircleRecord } from '@mastra/playground-ui/icons/central/IconCircleRecord';
+import { IconClipboard2 } from '@mastra/playground-ui/icons/central/IconClipboard2';
 import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 import { IconFingerPrint1 } from '@mastra/playground-ui/icons/central/IconFingerPrint1';
 import { IconLab } from '@mastra/playground-ui/icons/central/IconLab';
@@ -22,7 +23,6 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { getShortId } from '@mastra/playground-ui/utils/id';
 import { useTraceFeedback } from '@mastra/react/hooks/traces';
-import { ClipboardPlus } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
@@ -319,7 +319,7 @@ function ExperimentResultPanelBody({
     <>
       <DataPanel.Header>
         {canFlag && (
-          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<IconClipboard2 />}>
             Request review
           </Button>
         )}

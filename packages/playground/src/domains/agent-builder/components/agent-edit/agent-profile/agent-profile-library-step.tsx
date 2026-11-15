@@ -1,8 +1,8 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { AgentStepContainer } from './agent-step-container';
@@ -53,13 +53,13 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
         {isInLibrary ? (
           <p className="flex items-center gap-2 text-placeholder" data-testid="agent-builder-library-added">
             <Icon>
-              <IconCheckmark1 />
+              <IconCheckmark2Medium />
             </Icon>
             Added to your library
           </p>
         ) : (
           <Button
-            icon={<IconPlusLarge />}
+            icon={<IconPlusMedium />}
             variant="primary"
             onClick={() => requestChange('public')}
             disabled={isStreaming}

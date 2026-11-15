@@ -1,6 +1,6 @@
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -37,7 +37,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
         className="flex items-center gap-1.5"
         data-testid="agent-builder-autosave-saved"
       >
-        <IconCheckmark1 className="h-3.5 w-3.5" />
+        <IconCheckmark2Medium className="h-3.5 w-3.5" />
         Saved
       </Txt>
     );

@@ -1,5 +1,4 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
-import { ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
@@ -26,9 +25,10 @@ import { Txt } from '@/ds/components/Txt';
 import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
 import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconClipboard2 } from '@/ds/icons/central/IconClipboard2';
 import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { Icon } from '@/ds/icons/Icon';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { formatDate } from '@/utils/date-format';
 
 type FeedbackThreadProps = {
@@ -114,7 +114,7 @@ function FeedbackItems({
                 onSelect={() => onMarkReviewed?.(feedbackId)}
               >
                 <Icon size="xs">
-                  <ClipboardCheck />
+                  <IconClipboard2 />
                 </Icon>
                 Mark reviewed
               </DropdownMenu.Item>
@@ -122,7 +122,7 @@ function FeedbackItems({
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
                 <Icon size="xs">
-                  <IconTrashCan />
+                  <TrashIcon />
                 </Icon>
                 Delete feedback
               </DropdownMenu.Item>
@@ -304,7 +304,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button icon={<IconTrashCan />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<TrashIcon />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

@@ -5,7 +5,7 @@ import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
@@ -28,7 +28,7 @@ export function MarkdownTable({ node, children }: ComponentProps<'table'> & Extr
             }}
             aria-label="Copy table as markdown"
           >
-            {isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
+            {isCopied ? <IconCheckmark2Medium /> : <IconSquareBehindSquare1 />}
             {isCopied ? 'Copied!' : 'Copy table as markdown'}
           </Button>
           <DropdownMenu>

@@ -6,11 +6,11 @@ import { flushSync } from 'react-dom';
 import { collapsedRowsKeepingActive } from '../services/sessionGroups';
 import type { SessionGroup, SessionGroupIcon } from '../services/sessionGroups';
 import type { SessionListRow } from '../services/sessionRows';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 import { IconCircleDashed } from '@mastra/playground-ui/icons/central/IconCircleDashed';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
 import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 
 const GROUP_ROW_INCREMENT = 20;
 
@@ -19,8 +19,8 @@ type ToggleName = 'more' | 'less';
 const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <IconKanbanView />,
   review: <IconPullRequest />,
-  user: <IconBubble2 />,
-  slack: <IconBubble2 />,
+  user: <IconBubbleWide />,
+  slack: <IconBubbleWide />,
   status: <IconCircleDashed />,
   owner: <IconUser />,
   all: null,

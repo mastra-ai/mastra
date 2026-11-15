@@ -7,10 +7,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 import { Txt } from '@/ds/components/Txt';
 import { AgentIcon } from '@/ds/icons/AgentIcon';
 import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowSplitUp } from '@/ds/icons/central/IconArrowSplitUp';
 import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { IconDirection1 } from '@/ds/icons/central/IconDirection1';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
-import { IconSplit } from '@/ds/icons/central/IconSplit';
 import { McpServerIcon } from '@/ds/icons/McpServerIcon';
 import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
@@ -103,7 +103,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   workflow_step: { label: 'Step', Icon: WorkflowIcon },
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
-  classifier: { label: 'Classifier', Icon: IconSplit },
+  classifier: { label: 'Classifier', Icon: IconArrowSplitUp },
   memory: { label: 'Memory', Icon: MemoryIcon },
   mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },

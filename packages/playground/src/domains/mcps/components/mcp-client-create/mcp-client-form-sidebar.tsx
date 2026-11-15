@@ -5,10 +5,10 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
-import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { Controller, useWatch } from 'react-hook-form';
 import type { UseFormReturn } from 'react-hook-form';
@@ -209,7 +209,7 @@ export function MCPClientFormSidebar({
                     </div>
                   ))}
                   {!readOnly && (
-                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<IconPlusLarge />}>
+                    <Button size="sm" onClick={addEnvVar} className="w-fit" icon={<IconPlusMedium />}>
                       Add variable
                     </Button>
                   )}
@@ -265,7 +265,7 @@ export function MCPClientFormSidebar({
             ) : (
               <>
                 <Icon>
-                  <IconCheckmark1 />
+                  <IconCheckmark2Medium />
                 </Icon>
                 {submitLabel}
               </>

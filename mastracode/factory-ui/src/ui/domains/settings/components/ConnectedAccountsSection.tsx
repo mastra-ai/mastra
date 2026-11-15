@@ -1,6 +1,5 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -10,6 +9,7 @@ import { SettingsContainer, SettingsSkeleton } from '@mastra/playground-ui/new/s
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 import { IntegrationItem } from './IntegrationItem';
 import { RetryRow } from './common/ConnectionStateRows';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 
 const slack = { provider: 'slack', name: 'Slack' } as const;
 
@@ -64,7 +64,7 @@ export function ConnectedAccountsSection() {
         {...slack}
         description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
       >
-        <Button size="sm" icon={<IconChainLink1 />} disabled={!canConnect} onClick={connectSlack}>
+        <Button size="sm" icon={<IconChainLink3 />} disabled={!canConnect} onClick={connectSlack}>
           Connect Slack
         </Button>
       </IntegrationItem>

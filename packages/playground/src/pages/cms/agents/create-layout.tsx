@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { Outlet, useLocation } from 'react-router';
@@ -31,7 +31,7 @@ function CreateLayoutWrapper() {
       ) : (
         <>
           <Icon>
-            <IconCheckmark1 />
+            <IconCheckmark2Medium />
           </Icon>
           Create agent
         </>

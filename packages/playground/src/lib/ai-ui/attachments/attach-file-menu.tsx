@@ -12,7 +12,7 @@ import {
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Form } from '@mastra/playground-ui/components/Form';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useComposerAttachments } from './composer-attachments';
@@ -43,7 +43,7 @@ export const AttachFileMenu = () => {
       <ComposerAttachMenu
         onFiles={files => void addFiles(files)}
         size="icon-md"
-        actions={[{ label: 'From a URL…', icon: <IconChainLink1 />, onSelect: () => setUrlOpen(true) }]}
+        actions={[{ label: 'From a URL…', icon: <IconChainLink3 />, onSelect: () => setUrlOpen(true) }]}
       />
       <Dialog open={urlOpen} onOpenChange={setUrlOpen}>
         <DialogContent

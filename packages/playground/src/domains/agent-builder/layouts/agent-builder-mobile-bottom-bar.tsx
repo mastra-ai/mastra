@@ -2,11 +2,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { IconBlocks } from '@mastra/playground-ui/icons/central/IconBlocks';
 import { IconLibrary } from '@mastra/playground-ui/icons/central/IconLibrary';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
 import { IconStar } from '@mastra/playground-ui/icons/central/IconStar';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ServerCogIcon } from 'lucide-react';
 import { useMemo } from 'react';
 import { useLocation } from 'react-router';
 import { useBuilderAgentAccess } from '@/domains/agent-builder/hooks/use-builder-agent-access';
@@ -38,7 +38,7 @@ const libraryLink: MobileLink = {
 const infrastructureLink: MobileLink = {
   name: 'Infra',
   url: '/agent-builder/infrastructure',
-  icon: <ServerCogIcon className="size-5" />,
+  icon: <IconServer className="size-5" />,
 };
 
 export function AgentBuilderMobileBottomBar() {

@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Workflow } from 'lucide-react';
 import { useState, forwardRef } from 'react';
 import { getIsLinkActive, Sidebar, SidebarProvider, useSidebar } from '.';
 import type { SidebarProviderProps, SidebarSection } from '.';
@@ -30,20 +29,20 @@ import {
   WorkflowIcon,
   WorkspacesIcon,
 } from '@/ds/icons';
-import { IconBell } from '@/ds/icons/central/IconBell';
+import { IconBell2 } from '@/ds/icons/central/IconBell2';
 import { IconBook } from '@/ds/icons/central/IconBook';
 import { IconBrain } from '@/ds/icons/central/IconBrain';
-import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@/ds/icons/central/IconCalendarClock4';
 import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { IconHistory } from '@/ds/icons/central/IconHistory';
 import { IconHome } from '@/ds/icons/central/IconHome';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { IconMaintenance } from '@/ds/icons/central/IconMaintenance';
-import { IconPodcast1 } from '@/ds/icons/central/IconPodcast1';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
 import { IconServer1 } from '@/ds/icons/central/IconServer1';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
+import { IconSignalTower } from '@/ds/icons/central/IconSignalTower';
 import { IconSparklesTwo } from '@/ds/icons/central/IconSparklesTwo';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -319,7 +318,7 @@ export const Default: Story = {
             <Sidebar.NavList>
               <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <IconHome /> }} isActive />
               <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
         </Sidebar.Nav>
@@ -341,7 +340,7 @@ export const WithSections: Story = {
             <Sidebar.NavList>
               <Sidebar.NavLink link={{ name: 'Dashboard', url: '/', icon: <IconHome /> }} isActive />
               <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
 
@@ -389,16 +388,16 @@ export const WithNestedItems: Story = {
                     children: [
                       { name: 'Templates', url: '/agents/templates', icon: <IconSparklesTwo /> },
                       { name: 'Memory', url: '/agents/memory', icon: <IconBrain /> },
-                      { name: 'Channels', url: '/agents/channels', icon: <IconPodcast1 /> },
+                      { name: 'Channels', url: '/agents/channels', icon: <IconSignalTower /> },
                     ],
                   },
                   {
                     name: 'Workflows',
                     url: '/workflows',
-                    icon: <Workflow />,
+                    icon: <WorkflowIcon />,
                     children: [
                       { name: 'Runs', url: '/workflows/runs', icon: <IconHistory /> },
-                      { name: 'Schedules', url: '/workflows/schedules', icon: <IconCalendarClock /> },
+                      { name: 'Schedules', url: '/workflows/schedules', icon: <IconCalendarClock4 /> },
                     ],
                   },
                 ],
@@ -430,7 +429,7 @@ export const WithFooter: Story = {
             <Sidebar.NavList>
               <Sidebar.NavLink link={{ name: 'Home', url: '/', icon: <IconHome /> }} isActive />
               <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
         </Sidebar.Nav>
@@ -438,7 +437,7 @@ export const WithFooter: Story = {
         <Sidebar.Footer>
           <Sidebar.NavList>
             <Sidebar.NavLink link={{ name: 'Team', url: '/team', icon: <IconUserDuo /> }} />
-            <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <IconBell /> }} />
+            <Sidebar.NavLink link={{ name: 'Notifications', url: '/notifications', icon: <IconBell2 /> }} />
             <Sidebar.NavLink link={{ name: 'Settings', url: '/settings', icon: <IconSettingsGear1 /> }} />
           </Sidebar.NavList>
           <Sidebar.Trigger />
@@ -474,7 +473,7 @@ const SidebarBody = () => (
         <Sidebar.NavList>
           <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
           <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-          <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+          <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
         </Sidebar.NavList>
       </Sidebar.NavSection>
     </Sidebar.Nav>
@@ -562,7 +561,7 @@ export const Floating: Story = {
             <Sidebar.NavList>
               <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
               <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
         </Sidebar.Nav>
@@ -586,7 +585,7 @@ const ParityBody = () => (
         <Sidebar.NavList>
           <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
           <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-          <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+          <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
         </Sidebar.NavList>
       </Sidebar.NavSection>
     </Sidebar.Nav>
@@ -719,7 +718,7 @@ export const Mobile: Story = {
             <Sidebar.NavList>
               <Sidebar.NavLink link={{ name: 'Overview', url: '/', icon: <IconHome /> }} isActive />
               <Sidebar.NavLink link={{ name: 'Agents', url: '/agents', icon: <IconRobot /> }} />
-              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <Workflow /> }} />
+              <Sidebar.NavLink link={{ name: 'Workflows', url: '/workflows', icon: <WorkflowIcon /> }} />
             </Sidebar.NavList>
           </Sidebar.NavSection>
         </Sidebar.Nav>

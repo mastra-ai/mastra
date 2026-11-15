@@ -6,7 +6,7 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
 import { IconFloppyDisk1 } from '@mastra/playground-ui/icons/central/IconFloppyDisk1';
 import { IconPullRequest } from '@mastra/playground-ui/icons/central/IconPullRequest';
@@ -334,7 +334,7 @@ function EditLayoutWrapper() {
               </>
             ) : (
               <>
-                <IconCheckmark1 />
+                <IconCheckmark2Medium />
                 {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
               </>
             )}

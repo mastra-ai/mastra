@@ -1,4 +1,3 @@
-import { ListFilterPlusIcon, ListFilterPlus } from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
@@ -13,7 +12,8 @@ import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
 import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
 import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import {
   MENU_SIDE_OFFSET,
   menuEmptyClass,
@@ -168,7 +168,7 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
+        <Button size={size} disabled={disabled} icon={<IconFilter2 />}>
           {label}
         </Button>
       </PopoverTrigger>
@@ -266,7 +266,7 @@ export function PropertyFilterCreator({
                               'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
                             )}
                           >
-                            <IconPlusLarge />
+                            <IconPlusMedium />
                           </span>
                         )}
                       </FilterMenuButton>
@@ -304,7 +304,7 @@ export function PropertyFilterCreator({
               <Button icon={<IconCrossMedium />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button icon={<ListFilterPlus />} size="md" onClick={commit}>
+              <Button icon={<IconFilter2 />} size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>

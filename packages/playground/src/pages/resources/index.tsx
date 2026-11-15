@@ -1,7 +1,7 @@
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconBook } from '@mastra/playground-ui/icons/central/IconBook';
-import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
 import { IconCloudUpload } from '@mastra/playground-ui/icons/central/IconCloudUpload';
 import { IconEarth } from '@mastra/playground-ui/icons/central/IconEarth';
@@ -38,7 +38,7 @@ const resources = [
   {
     title: 'Community',
     description: 'Join the Mastra Discord community for help, discussion, and collaboration.',
-    icon: IconBubble2,
+    icon: IconBubbleWide,
     href: 'https://discord.gg/mastra-ai',
     external: true,
   },

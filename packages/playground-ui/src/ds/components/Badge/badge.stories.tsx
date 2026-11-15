@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Badge } from './Badge';
 import type { BadgeProps } from './Badge';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
 import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
 import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
@@ -102,7 +102,7 @@ export const Matrix: Story = {
         <Badge variant="neutral" icon={<IconTag />}>
           Neutral
         </Badge>
-        <Badge variant="success" icon={<IconCheckmark1 />}>
+        <Badge variant="success" icon={<IconCheckmark2Medium />}>
           Success
         </Badge>
         <Badge variant="destructive" icon={<IconExclamationCircle />}>

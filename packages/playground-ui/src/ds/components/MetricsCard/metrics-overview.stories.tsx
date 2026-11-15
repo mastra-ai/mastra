@@ -11,7 +11,7 @@ import type { ShareBarRow } from '../ShareBar';
 import { MetricsCard } from './metrics-card';
 import type { MetricsCardTitleMenuProps } from './metrics-card-title-menu';
 import { agentActivityByHour, count, ms, percent, traceVolume, usageBy, usd } from './metrics-story-data';
-import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
 import { IconCoins } from '@/ds/icons/central/IconCoins';
 import { IconHashtag } from '@/ds/icons/central/IconHashtag';
 import { IconRobot } from '@/ds/icons/central/IconRobot';
@@ -48,7 +48,7 @@ const kpis = [
   { label: 'Tokens', icon: <IconHashtag />, value: '39.4M', changePct: -15, detail: '76% input', prev: '46.4M' },
   {
     label: 'Threads',
-    icon: <IconChatBubbles />,
+    icon: <IconBubbleText />,
     value: '12',
     changePct: -14,
     detail: '7 active today',

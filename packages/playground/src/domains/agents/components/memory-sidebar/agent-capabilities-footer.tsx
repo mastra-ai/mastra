@@ -9,13 +9,13 @@ import { IconRobot } from '@mastra/playground-ui/icons/central/IconRobot';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 
+import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
-import { WorkflowIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';

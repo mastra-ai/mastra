@@ -3,17 +3,17 @@ import { useState } from 'react';
 import { ContextMenu } from './context-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
 import { IconArrowBoxLeft } from '@/ds/icons/central/IconArrowBoxLeft';
-import { IconBubble2 } from '@/ds/icons/central/IconBubble2';
+import { IconBubbleWide } from '@/ds/icons/central/IconBubbleWide';
 import { IconCloud } from '@/ds/icons/central/IconCloud';
 import { IconCreditCard1 } from '@/ds/icons/central/IconCreditCard1';
-import { IconEmail1 } from '@/ds/icons/central/IconEmail1';
-import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconEmail2 } from '@/ds/icons/central/IconEmail2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import { IconRescueRing } from '@/ds/icons/central/IconRescueRing';
 import { IconSettingsGear1 } from '@/ds/icons/central/IconSettingsGear1';
-import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { IconUser } from '@/ds/icons/central/IconUser';
 import { IconUserAdd } from '@/ds/icons/central/IconUserAdd';
 import { IconUserDuo } from '@/ds/icons/central/IconUserDuo';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof ContextMenu> = {
@@ -166,11 +166,11 @@ export const WithSubMenu: Story = {
       <ContextMenu.Trigger className={triggerClass}>Right click here</ContextMenu.Trigger>
       <ContextMenu.Content className="w-56">
         <ContextMenu.Item>
-          <IconEmail1 />
+          <IconEmail2 />
           <span>Email</span>
         </ContextMenu.Item>
         <ContextMenu.Item>
-          <IconBubble2 />
+          <IconBubbleWide />
           <span>Message</span>
         </ContextMenu.Item>
         <ContextMenu.Separator />
@@ -181,16 +181,16 @@ export const WithSubMenu: Story = {
           </ContextMenu.SubTrigger>
           <ContextMenu.SubContent>
             <ContextMenu.Item>
-              <IconEmail1 />
+              <IconEmail2 />
               <span>Email</span>
             </ContextMenu.Item>
             <ContextMenu.Item>
-              <IconBubble2 />
+              <IconBubbleWide />
               <span>Message</span>
             </ContextMenu.Item>
             <ContextMenu.Separator />
             <ContextMenu.Item>
-              <IconPlusLarge />
+              <IconPlusMedium />
               <span>More...</span>
             </ContextMenu.Item>
           </ContextMenu.SubContent>
@@ -220,7 +220,7 @@ export const States: Story = {
         </ContextMenu.Item>
         <ContextMenu.Separator />
         <ContextMenu.Item variant="destructive">
-          <IconTrashCan />
+          <TrashIcon />
           <span>Destructive item</span>
         </ContextMenu.Item>
       </ContextMenu.Content>
@@ -264,18 +264,18 @@ export const KitchenSink: Story = {
             </ContextMenu.SubTrigger>
             <ContextMenu.SubContent>
               <ContextMenu.Item>
-                <IconEmail1 />
+                <IconEmail2 />
                 <span>Email</span>
               </ContextMenu.Item>
               <ContextMenu.Item>
-                <IconBubble2 />
+                <IconBubbleWide />
                 <span>Message</span>
               </ContextMenu.Item>
             </ContextMenu.SubContent>
           </ContextMenu.Sub>
           <ContextMenu.Separator />
           <ContextMenu.Item variant="destructive">
-            <IconTrashCan />
+            <TrashIcon />
             <span>Destructive</span>
           </ContextMenu.Item>
         </ContextMenu.Content>

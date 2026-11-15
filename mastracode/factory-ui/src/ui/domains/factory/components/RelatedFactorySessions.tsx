@@ -23,7 +23,7 @@ import { genericExternalWorkItemUrl } from '../services/workItemPresentation';
 import { SourceIcon } from './BoardIcons';
 import { FactoryReviewPullRequestLinks } from './FactoryReviewPullRequestLinks';
 import { SessionContextMenu, cardSessionPath } from './SessionContextMenu';
-import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconChainLink3 } from '@mastra/playground-ui/icons/central/IconChainLink3';
 
 function latestLiveSession(item: WorkItem, livePaths: ReadonlySet<string>): WorkItemSessionRef | undefined {
   return Object.values(item.sessions)
@@ -287,7 +287,7 @@ function WorkItemActions({
               key={related.id}
               className="text-muted-foreground hover:bg-fill hover:text-foreground flex items-center gap-1.5 rounded-md px-2 py-1"
             >
-              <IconChainLink1 size={13} aria-hidden />
+              <IconChainLink3 size={13} aria-hidden />
               <Txt as="span" variant="caption" className="block">
                 {label}
               </Txt>
@@ -303,7 +303,7 @@ function WorkItemActions({
             aria-label={`Open ${label}: ${related.title}`}
             render={<Link to={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.threadId}`} />}
           >
-            <IconChainLink1 size={13} aria-hidden />
+            <IconChainLink3 size={13} aria-hidden />
             {label}
           </Button>
         );

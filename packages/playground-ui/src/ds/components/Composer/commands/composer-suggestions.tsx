@@ -2,7 +2,7 @@ import { Collapsible } from '@base-ui/react/collapsible';
 import { useEffect, useRef } from 'react';
 import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
 import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { cn } from '@/lib/utils';
 
 export interface ComposerSuggestionItem {
@@ -89,7 +89,7 @@ export function ComposerSuggestions({
                         )}
                         {item.active && (
                           <span className="flex shrink-0 items-center gap-1">
-                            <IconCheckmark1 size={13} aria-hidden />
+                            <IconCheckmark2Medium size={13} aria-hidden />
                             Current
                           </span>
                         )}

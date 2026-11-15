@@ -7,7 +7,7 @@ import { Field, FieldError } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
 import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
-import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
 import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
 
 function formatDays(ms: number): string {
@@ -149,7 +149,7 @@ export function CustomRangeEditor({
         </Button>
         <Button
           className="ml-auto"
-          icon={<IconCheckmark1 />}
+          icon={<IconCheckmark2Medium />}
           variant="primary"
           size="sm"
           onClick={apply}

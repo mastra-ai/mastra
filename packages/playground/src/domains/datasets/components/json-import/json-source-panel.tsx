@@ -5,8 +5,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { IconArrowOutOfBox } from '@mastra/playground-ui/icons/central/IconArrowOutOfBox';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
-
-import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useCallback, useState } from 'react';
 import { MAX_IMPORT_LABEL } from '../../utils/json-validation';
@@ -187,7 +186,7 @@ function FileCard({
   return (
     <div data-testid="json-file-card" className="rounded-lg border border-border">
       <div className="flex items-center gap-2 px-3 py-2">
-        <IconJson className="size-4 shrink-0 text-muted-foreground" />
+        <IconFileText className="size-4 shrink-0 text-muted-foreground" />
         <Txt as="span" variant="caption" tone="ink" font="mono" className="min-w-0 flex-1 truncate">
           {file.name}
         </Txt>

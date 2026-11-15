@@ -3,7 +3,7 @@ import { Steps } from './steps';
 import { Button } from '@/ds/components/Button';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { IconArrowUpRight } from '@/ds/icons/central/IconArrowUpRight';
-import { IconKey1 } from '@/ds/icons/central/IconKey1';
+import { IconKey2 } from '@/ds/icons/central/IconKey2';
 
 const meta: Meta<typeof Steps> = {
   title: 'Navigation/Steps/Guide',
@@ -31,7 +31,7 @@ export const Default: Story = {
       <Steps.Step title="Create an API key">
         <div>
           <Button variant="primary" size="md">
-            <IconKey1 />
+            <IconKey2 />
             Create API key
           </Button>
         </div>

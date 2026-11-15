@@ -2,7 +2,7 @@ import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { getShortId } from '@mastra/playground-ui/components/Text';
-import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
+import { TrashIcon } from '@mastra/playground-ui/icons/TrashIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
 import type { ExperimentListMetrics } from '@mastra/react/hooks/experiments';
@@ -162,7 +162,7 @@ function ExperimentRow({
             onDelete();
           }}
         >
-          <IconTrashCan className="size-4" />
+          <TrashIcon className="size-4" />
         </Button>
       </DataList.ActionsCell>
     </DataList.RowWrapper>

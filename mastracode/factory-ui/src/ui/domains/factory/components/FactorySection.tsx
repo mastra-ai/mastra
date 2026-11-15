@@ -14,8 +14,8 @@ import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
 import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -97,7 +97,7 @@ export function FactorySection() {
               />
             ))
           )}
-          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={IconPlusLarge} label="New board" />}
+          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={IconPlusMedium} label="New board" />}
         </Sidebar.NavList>
       </section>
       {features.data?.knowledge ? (

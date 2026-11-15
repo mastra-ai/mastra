@@ -32,10 +32,11 @@ import { ProviderLogo } from '@mastra/playground-ui/domains/llm';
 import { IconAlignmentLeft } from '@mastra/playground-ui/icons/central/IconAlignmentLeft';
 import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
-import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCheckmark2Medium } from '@mastra/playground-ui/icons/central/IconCheckmark2Medium';
 import { IconExclamationTriangle } from '@mastra/playground-ui/icons/central/IconExclamationTriangle';
 import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
 import { IconGlobe } from '@mastra/playground-ui/icons/central/IconGlobe';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 import { IconMaintenance } from '@mastra/playground-ui/icons/central/IconMaintenance';
 import { IconZap } from '@mastra/playground-ui/icons/central/IconZap';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
@@ -45,7 +46,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MastraDBMessageMetadata, RequireApprovalEntry } from '@mastra/react';
 import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers, MessageStatusRenderers, DynamicToolPart, ToolInvocationPart } from '@mastra/react/ui';
-import { Loader2, GlobeLockIcon } from 'lucide-react';
+import { GlobeLockIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext } from 'react-hook-form';
@@ -100,7 +101,9 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
           data-testid="agent-builder-chat-tool-approve"
           aria-label={`Approve ${toolName}`}
         >
-          <Icon>{pending === 'approve' ? <Loader2 className="animate-spin" /> : <IconCheckmark1 />}</Icon>
+          <Icon>
+            {pending === 'approve' ? <IconLoadingCircle className="animate-spin" /> : <IconCheckmark2Medium />}
+          </Icon>
           Approve
         </Button>
         <Button
@@ -112,7 +115,7 @@ const ToolApprovalPrompt = ({ toolCallId, toolName }: { toolCallId: string; tool
         >
           {pending === 'decline' && (
             <Icon>
-              <Loader2 className="animate-spin" />
+              <IconLoadingCircle className="animate-spin" />
             </Icon>
           )}
           Decline

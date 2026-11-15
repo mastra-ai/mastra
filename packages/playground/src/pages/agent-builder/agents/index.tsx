@@ -8,12 +8,12 @@ import { SearchInput, listSearchProps } from '@mastra/playground-ui/components/S
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
-import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconPlusMedium } from '@mastra/playground-ui/icons/central/IconPlusMedium';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useStoredAgents } from '@mastra/react/hooks/agents';
-import { useCurrentUser } from '@mastra/react/hooks/auth';
 
+import { useCurrentUser } from '@mastra/react/hooks/auth';
 import { useMemo, useState } from 'react';
 import {
   AgentBuilderList,
@@ -85,7 +85,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<IconPlusLarge />}
+                  icon={<IconPlusMedium />}
                 >
                   Create an agent
                 </Button>
@@ -117,7 +117,7 @@ export default function AgentBuilderAgentsPage() {
                 <Button
                   render={<FrameworkLink href="/agent-builder/agents/create" />}
                   variant="primary"
-                  icon={<IconPlusLarge />}
+                  icon={<IconPlusMedium />}
                 >
                   New agent
                 </Button>

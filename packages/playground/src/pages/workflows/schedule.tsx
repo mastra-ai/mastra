@@ -7,7 +7,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { IconArrowLeft } from '@mastra/playground-ui/icons/central/IconArrowLeft';
-import { IconCalendarClock } from '@mastra/playground-ui/icons/central/IconCalendarClock';
+import { IconCalendarClock4 } from '@mastra/playground-ui/icons/central/IconCalendarClock4';
 import { IconPause } from '@mastra/playground-ui/icons/central/IconPause';
 import { IconPlay } from '@mastra/playground-ui/icons/central/IconPlay';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
@@ -42,7 +42,7 @@ export default function SchedulePage() {
   const crumbs = [
     navCrumb('/workflows'),
     schedulesCrumb,
-    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: IconCalendarClock },
+    { id: 'schedule', label: decodeRouteParam(scheduleId), icon: IconCalendarClock4 },
   ];
   const { paths } = useLinkComponent();
   const { data: schedule, error } = useSchedule({ scheduleId: scheduleId, queryOptions: { enabled: !!scheduleId } });

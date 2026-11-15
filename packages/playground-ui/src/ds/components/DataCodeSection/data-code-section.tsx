@@ -12,7 +12,7 @@ import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/
 import { SearchInput } from '@/ds/components/SearchInput';
 import { IconAlignmentJustify } from '@/ds/icons/central/IconAlignmentJustify';
 import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
-import { IconExpand } from '@/ds/icons/central/IconExpand';
+import { IconExpand315 } from '@/ds/icons/central/IconExpand315';
 import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
@@ -192,7 +192,7 @@ export function DataCodeSection({
               </Button>
             )}
             <Button size="icon-md" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
-              <IconExpand />
+              <IconExpand315 />
             </Button>
           </ButtonsGroup>
         </div>
