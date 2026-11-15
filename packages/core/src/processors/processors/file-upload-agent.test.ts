@@ -391,6 +391,27 @@ describe.skipIf(process.platform === 'win32')('FileUploadProcessor through an ag
 
       expect(await fs.readFile(noted)).toEqual(bytes);
     });
+
+    it('writes a percent-encoded attachment sent on a turn with a stopped sandbox', async () => {
+      const { sandbox, agent, prompts, workspace } = createLocalHarness();
+      const first = Buffer.from('sent on the first turn');
+      const decoded = Buffer.from('hello world');
+
+      await agent.generate([userMessage(text('One'), file(first, 'first.txt', 'text/plain'))], { memory: MEMORY });
+      await workspace.stop();
+
+      // A percent-encoded data URL reaches the prompt as base64, so it is a file of this turn like any other.
+      await agent.generate(
+        [userMessage(text('Two'), file('data:text/plain,hello%20world', 'hello.txt', 'text/plain'))],
+        { memory: MEMORY },
+      );
+
+      expect(sandbox.status).toBe('running');
+      expect(filePartsIn(prompts.at(-1))).toEqual([]);
+      expect(await fs.readdir(path.join(tempDir, 'uploads', MEMORY.thread))).toEqual(
+        [`${sha256(first)}.txt`, `${sha256(decoded)}.txt`].sort(),
+      );
+    });
   });
 
   describe('files sent by a signal', () => {

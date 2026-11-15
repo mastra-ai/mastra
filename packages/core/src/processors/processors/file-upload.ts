@@ -5,6 +5,7 @@ import {
   categorizeFileData,
   parseDataUri,
   resolveFilePartMediaTypeAndData,
+  toBase64DataUri,
 } from '../../agent/message-list/prompt/image-utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { parseMemoryRequestContext } from '../../memory/types';
@@ -442,8 +443,10 @@ export function promptFiles(prompt: LanguageModelV2Prompt, lookUpNames: () => Ma
 
 /**
  * Base64 content of the inline files of the new messages, to tell a file of
- * this turn from one of the thread history in the prompt. A link Mastra
- * downloads has no base64 to match, so it isn't in the set.
+ * this turn from one of the thread history in the prompt. A percent-encoded
+ * data URL is re-encoded to base64 on its way into the prompt, so the payload
+ * of that form is what the prompt carries; a link Mastra downloads has no
+ * base64 to match, so it isn't in the set.
  *
  * @internal Shared with `UnsupportedFileHandler`.
  */
@@ -451,7 +454,11 @@ export function currentTurnContents(messageList: MessageList | undefined): Set<s
   const contents = new Set<string>();
   for (const { data } of messageList ? newFiles(messageList) : []) {
     const { isDataUri, base64Content } = parseDataUri(data);
-    if (isDataUri && !BASE64_DATA_URI.test(data)) continue;
+    if (isDataUri && !BASE64_DATA_URI.test(data)) {
+      const reEncoded = toBase64DataUri(data);
+      if (reEncoded) contents.add(parseDataUri(reEncoded).base64Content.replace(/\s+/g, ''));
+      continue;
+    }
     contents.add(base64Content.replace(/\s+/g, ''));
   }
   return contents;
