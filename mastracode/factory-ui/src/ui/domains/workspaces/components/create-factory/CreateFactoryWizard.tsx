@@ -32,15 +32,15 @@ const STEP_CHROME: Record<CreateFactoryFlowStep, StepChrome> = {
   },
   vcs: {
     title: 'Choose your codebase',
-    placeholder: 'Search repositories…',
+    placeholder: 'Search repositories',
   },
   'project-management': {
     title: 'Connect the work behind the code',
-    placeholder: 'Search options…',
+    placeholder: 'Search options',
   },
   'model-provider': {
     title: 'Choose your Factory model',
-    placeholder: 'Search models and providers…',
+    placeholder: 'Search models and providers',
   },
 };
 

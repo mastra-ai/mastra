@@ -314,7 +314,8 @@ export class PosthogExporter extends TrackingExporter<
   }
 
   private getFeedbackDistinctId(feedback: ExportedFeedback): string {
-    const userId = feedback.feedbackUserId ?? feedback.userId ?? feedback.metadata?.userId;
+    const userId =
+      feedback.feedbackUserId !== undefined ? feedback.feedbackUserId : (feedback.userId ?? feedback.metadata?.userId);
     if (userId) {
       return String(userId);
     }

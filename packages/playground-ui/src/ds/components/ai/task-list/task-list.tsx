@@ -1,5 +1,4 @@
 import type { TaskItem } from '@mastra/core/signals';
-import { ChevronDown } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { TaskGraphLines } from './task-graph';
@@ -8,6 +7,7 @@ import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll'
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -170,7 +170,7 @@ const LIST_INSET_Y = 10;
 
 /* A full layer minus one fade per edge; the fades are sized by mask-size, so their depth animates. */
 const edgeFades =
-  'mask-no-repeat [--fade-bottom:0.875rem] [--fade-top:0.875rem] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black_40%,transparent),linear-gradient(to_top,black_40%,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
+  'mask-no-repeat [--fade-bottom:0.875rem] [--fade-top:0.875rem] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black,transparent),linear-gradient(to_top,black,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
 const edgeFadesWhenScrolled = 'data-[overflow-y-end]:[--fade-bottom:2rem] data-[overflow-y-start]:[--fade-top:2rem]';
 
 const focusedTaskIndex = (tasks: TaskListItem[]) => {
@@ -278,7 +278,7 @@ export const TaskList = ({
             !open && 'group-hover/task-list:text-foreground',
           )}
         >
-          <ChevronDown
+          <IconChevronBottom
             className={cn('size-3.5 transition-[rotate]', taskGraphMotion, open ? 'rotate-180' : 'rotate-0')}
           />
         </button>

@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { BeforeInstallPromptEvent } from './usePwaInstall';
+import { takeCapturedInstallPrompt } from './installPromptCapture';
 import { INSTALL_BANNER_DISMISS_DURATION_MS } from './persistence';
 import { usePwaInstall } from './usePwaInstall';
 
@@ -41,6 +42,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  takeCapturedInstallPrompt();
   setUserAgent(originalUserAgent);
   window.matchMedia = originalMatchMedia;
 });

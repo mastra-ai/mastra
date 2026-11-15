@@ -9,6 +9,8 @@ export type {
   ChannelStaleToolApproval,
   ChannelStaleToolApprovalContext,
 } from './agent-controller-channels';
+export { toChatLogger } from './chat-logger';
+export type { ToChatLoggerOptions } from './chat-logger';
 export { ChannelSessionRejectedError } from './errors';
 export { ChatChannelProcessor } from './processor';
 export { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';

@@ -4,8 +4,6 @@ import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs'
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
-import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
-import type { WorkItem } from '../../factory/services/workItems';
 import type { RepositoryProviders } from './changes/tree/change-tree';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
@@ -17,7 +15,8 @@ interface WorkspaceViewerPanelProps {
   workspacePath: string;
   onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
-  workItem?: WorkItem;
+  /** False keeps the overview from reading changes, which would wake an idle sandbox. */
+  readsChanges?: boolean;
   factoryProjectId?: string;
   /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
   sessionId?: string;
@@ -27,14 +26,13 @@ type WorkspacePanelView =
   | { type: 'overview' }
   | { type: 'files'; selectedPath?: string }
   | { type: 'file'; path: string }
-  | { type: 'changes' }
-  | { type: 'feed' };
+  | { type: 'changes' };
 
 export function WorkspaceViewerPanel({
   workspacePath,
   onSizeChange,
   visible = true,
-  workItem,
+  readsChanges = true,
   factoryProjectId,
   sessionId,
 }: WorkspaceViewerPanelProps) {
@@ -44,7 +42,7 @@ export function WorkspaceViewerPanel({
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
   const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
+  const changes = useWorkspaceChanges(workspacePath, { enabled: visible && readsChanges });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
@@ -62,18 +60,6 @@ export function WorkspaceViewerPanel({
     setView({ type });
     onSizeChange?.('full');
   };
-  // The feed grows with the conversation, so an empty one is a composer rather than a void.
-  const showFeed = () => {
-    setView({ type: 'feed' });
-    onSizeChange?.('half');
-  };
-
-  if (view.type === 'feed' && workItem) {
-    return (
-      <WorkItemFeedPanel item={workItem} factoryProjectId={factoryProjectId} visible={visible} onBack={showOverview} />
-    );
-  }
-
   if (view.type === 'changes') {
     return (
       <WorkspaceChangesPanel
@@ -122,8 +108,6 @@ export function WorkspaceViewerPanel({
       changesError={changes.error ?? undefined}
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
-      commentCount={workItem?.commentCount}
-      onShowComments={workItem ? showFeed : undefined}
       recreateSandbox={
         canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
       }

@@ -32,7 +32,7 @@ import { Txt } from '@/ds/components/Txt';
 
 type UsageTotals = ReturnType<typeof useMetricsUsageTotals>;
 
-const PAGE_SIZE = 13;
+const PAGE_SIZE = 10;
 
 /** Busiest first; where a third click on a column's header returns to. */
 const DEFAULT_SORT: MetricsTableSort = { column: 'count', direction: 'desc' };

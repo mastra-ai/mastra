@@ -45,6 +45,7 @@ const CODE_SOURCE_EXCLUDED_FIELDS = new Set(['name']);
 const OWNED_FIELDS_BY_GROUP = {
   instructions: ['instructions'],
   tools: ['tools'],
+  model: ['modelList'],
 } as const;
 
 export interface SourceAgentsSourceControlConfig {
@@ -55,23 +56,24 @@ export interface SourceAgentsSourceControlConfig {
 function ownershipFromEditorConfig(editorConfig: unknown): {
   ownsInstructions: boolean;
   ownsTools: boolean;
+  ownsModel: boolean;
 } {
   if (editorConfig === false) {
-    return { ownsInstructions: false, ownsTools: false };
+    return { ownsInstructions: false, ownsTools: false, ownsModel: false };
   }
   if (editorConfig === undefined || editorConfig === null) {
-    return { ownsInstructions: true, ownsTools: true };
+    return { ownsInstructions: true, ownsTools: true, ownsModel: false };
   }
   if (typeof editorConfig !== 'object') {
-    return { ownsInstructions: false, ownsTools: false };
+    return { ownsInstructions: false, ownsTools: false, ownsModel: false };
   }
-  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const cfg = editorConfig as { instructions?: unknown; tools?: unknown; model?: unknown };
   const ownsInstructions = cfg.instructions === true;
   const toolsCfg = cfg.tools;
   const ownsTools =
     toolsCfg === true ||
     (typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true);
-  return { ownsInstructions, ownsTools };
+  return { ownsInstructions, ownsTools, ownsModel: cfg.model === true };
 }
 
 function snapshotFromVersion(version: AgentVersion): Record<string, unknown> {
@@ -92,12 +94,15 @@ function filterSourceSnapshot(
 ): Record<string, unknown> {
   const excludedByOwnership = new Set<string>();
   if (isCodeDefinedAgent) {
-    const { ownsInstructions, ownsTools } = ownershipFromEditorConfig(editorConfig);
+    const { ownsInstructions, ownsTools, ownsModel } = ownershipFromEditorConfig(editorConfig);
     if (!ownsInstructions) {
       for (const field of OWNED_FIELDS_BY_GROUP.instructions) excludedByOwnership.add(field);
     }
     if (!ownsTools) {
       for (const field of OWNED_FIELDS_BY_GROUP.tools) excludedByOwnership.add(field);
+    }
+    if (!ownsModel) {
+      for (const field of OWNED_FIELDS_BY_GROUP.model) excludedByOwnership.add(field);
     }
   }
 

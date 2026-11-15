@@ -85,7 +85,7 @@ describe('TraceDataPanelView — search highlighting', () => {
     );
 
   const search = (value: string) => {
-    fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value } });
+    fireEvent.change(screen.getByPlaceholderText('Search spans'), { target: { value } });
   };
 
   it('highlights matching span names in the timeline tree', () => {

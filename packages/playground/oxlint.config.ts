@@ -1,4 +1,4 @@
-import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 import rootConfig from '../../oxlint.config.ts';
 
@@ -92,6 +92,7 @@ export default defineConfig({
       files: ['src/**/*.{ts,tsx}'],
       rules: playgroundUiRules,
     },
+    copyRuleExclusions,
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
       rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
@@ -99,7 +100,7 @@ export default defineConfig({
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off' },
+      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],

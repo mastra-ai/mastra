@@ -4,8 +4,8 @@ import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListPa
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { GripVertical } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 
@@ -17,6 +17,8 @@ export interface AgentMetadataModelListProps {
   reorderModelList: (params: ReorderModelListParams) => Promise<{ message: string }>;
   /** False when the list comes from a function in code; renders it without edit controls */
   editable?: boolean;
+  /** True when viewing an immutable historical version */
+  readOnly?: boolean;
 }
 
 export const AgentMetadataModelList = ({
@@ -24,6 +26,7 @@ export const AgentMetadataModelList = ({
   updateModelInModelList,
   reorderModelList,
   editable = true,
+  readOnly = false,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
   const hasMultipleModels = modelConfigs.length > 1;
@@ -76,8 +79,8 @@ export const AgentMetadataModelList = ({
     }
   };
 
-  if (!editable) {
-    return <AgentMetadataReadOnlyModelList modelList={modelList} />;
+  if (!editable || readOnly) {
+    return <AgentMetadataReadOnlyModelList modelList={modelList} showDynamicListNote={!editable} />;
   }
 
   return (
@@ -108,11 +111,19 @@ export const AgentMetadataModelList = ({
   );
 };
 
-const AgentMetadataReadOnlyModelList = ({ modelList }: { modelList: AgentMetadataModelListType }) => (
+const AgentMetadataReadOnlyModelList = ({
+  modelList,
+  showDynamicListNote,
+}: {
+  modelList: AgentMetadataModelListType;
+  showDynamicListNote: boolean;
+}) => (
   <div className="flex flex-col gap-2">
-    <Txt variant="caption" tone="muted">
-      This model list is dynamically set and cannot be edited in Studio.
-    </Txt>
+    {showDynamicListNote && (
+      <Txt variant="caption" tone="muted">
+        This model list is dynamically set and cannot be edited in Studio.
+      </Txt>
+    )}
     {modelList.map(modelConfig => (
       <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-sidebar p-2">
         <Txt as="span" variant="caption" tone="ink" className="min-w-0 flex-1 truncate">
@@ -142,12 +153,12 @@ const AgentMetadataModelListItem = ({
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
   return (
-    <div className="state-layer rounded-lg bg-sidebar">
+    <div className="rounded-lg bg-sidebar state-layer">
       <div className="flex items-center gap-2 p-2">
         {showDragHandle && (
           <div {...dragHandleProps} className="shrink-0 cursor-grab text-muted-foreground active:cursor-grabbing">
             <Icon>
-              <GripVertical />
+              <IconDotGrid2x3 />
             </Icon>
           </div>
         )}

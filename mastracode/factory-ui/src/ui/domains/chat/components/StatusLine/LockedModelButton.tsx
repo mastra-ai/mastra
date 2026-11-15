@@ -2,7 +2,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
-import { ChevronDown } from 'lucide-react';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
 
 interface LockedModelButtonProps {
   modelId: string;
@@ -23,7 +23,7 @@ export function LockedModelButton({ modelId, reason }: LockedModelButtonProps) {
         )}
       >
         <span className="max-w-48 truncate">{label}</span>
-        <ChevronDown aria-hidden size={12} />
+        <IconChevronBottom aria-hidden size={12} />
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-64">
         {reason}

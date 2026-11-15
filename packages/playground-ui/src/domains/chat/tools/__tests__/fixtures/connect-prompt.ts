@@ -1,3 +1,4 @@
+import type { GetAgentResponse } from '@mastra/client-js';
 import type { ConnectPromptPayload, UserConnectSessionResponse, UserConnectionStatusResponse } from '@/domains/connect';
 
 /**
@@ -43,3 +44,36 @@ export const connectPromptStatusActive: UserConnectionStatusResponse = {
   status: 'active',
   scope: 'user',
 };
+
+const connectAgent = (tools: GetAgentResponse['tools']): GetAgentResponse => ({
+  id: 'connect-agent',
+  name: 'Connect Agent',
+  instructions: '',
+  tools,
+  workflows: {},
+  agents: {},
+  skills: [],
+  workspaceTools: [],
+  browserTools: [],
+  hasBrowser: false,
+  inputProcessors: [],
+  outputProcessors: [],
+  provider: 'openai',
+  modelId: 'gpt-4o-mini',
+  modelVersion: 'v2',
+  modelList: undefined,
+  defaultOptions: {},
+  defaultGenerateOptionsLegacy: {},
+  defaultStreamOptionsLegacy: {},
+});
+
+/** The agent before the user connects Linear: only the built-in prompt tool resolves. */
+export const connectAgentBeforeLinear = connectAgent({
+  request_connection: { id: 'request_connection', description: 'Ask the current user to connect a provider account.' },
+});
+
+/** The same agent once the Linear connection is active: Linear's tools resolve too. */
+export const connectAgentWithLinear = connectAgent({
+  ...connectAgentBeforeLinear.tools,
+  linear_list_issues: { id: 'linear_list_issues', description: 'List Linear issues.' },
+});

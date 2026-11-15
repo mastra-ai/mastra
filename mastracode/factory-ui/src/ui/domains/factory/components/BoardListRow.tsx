@@ -6,20 +6,21 @@ import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { EllipsisVertical, Maximize2 } from 'lucide-react';
 import type { MouseEvent, ReactNode, RefCallback } from 'react';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
 import { BOARD_LIST_ROW_LAYOUT_CLASS } from '../boardLayout';
+import { IconDotGrid1x3Vertical } from '@mastra/playground-ui/icons/central/IconDotGrid1x3Vertical';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
 // The row's details and actions buttons swap in for its timestamp on a mouse hover, keyboard focus anywhere in the
 // row, an open menu, or the selected row; touch always shows them.
 const REVEAL_ROW_CONTROLS =
-  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
+  'pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
 const HIDE_WHILE_ROW_CONTROLS_SHOW =
   'pointer-fine:group-hover/data-list-row:opacity-0 pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-0 pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-0';
 
@@ -128,7 +129,7 @@ export function BoardListRow({
             variant="meta"
             tone="muted"
             className={cn(
-              'pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden',
+              'pointer-events-none col-start-1 row-start-1 tabular-nums max-sm:hidden pointer-coarse:hidden',
               HIDE_WHILE_ROW_CONTROLS_SHOW,
             )}
           >
@@ -150,7 +151,7 @@ export function BoardListRow({
             }}
             className={REVEAL_ROW_CONTROLS}
           >
-            <Maximize2 size={13} aria-hidden />
+            <IconExpand45 size={13} aria-hidden />
           </Button>
           <DropdownMenu>
             <DropdownMenu.Trigger
@@ -165,7 +166,7 @@ export function BoardListRow({
                   onClick={stopRowClick}
                   className={REVEAL_ROW_CONTROLS}
                 >
-                  <EllipsisVertical size={13} aria-hidden />
+                  <IconDotGrid1x3Vertical size={13} aria-hidden />
                 </Button>
               }
             />

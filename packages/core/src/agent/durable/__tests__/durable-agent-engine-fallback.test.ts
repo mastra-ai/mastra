@@ -15,10 +15,16 @@
  * error — see workflows/evented/storage-capability-gate.test.ts.
  */
 
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createTextStreamModel } from '@internal/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
 import { noopLogger } from '../../../logger/noop-logger';
 import { Mastra } from '../../../mastra';
+import type { WorkflowsStorage } from '../../../storage/domains/workflows/base';
 import { MockStore } from '../../../storage/mock';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -49,6 +55,66 @@ function buildEventedAgent(id: string) {
 }
 
 describe('EventedAgent on storage without atomic concurrent updates', () => {
+  it.each(['sync', 'async'] as const)(
+    'keeps streaming with a warning when shared storage reports no fencing (%s)',
+    async probe => {
+      const pubsub = new UnixSocketPubSub(join(tmpdir(), `fencing-${randomUUID()}.sock`));
+      const storage = new MockStore();
+      const workflows: WorkflowsStorage = storage.stores.workflows;
+      const capability = vi.spyOn(workflows, 'supportsRunFencing');
+      if (probe === 'async') capability.mockResolvedValue(false);
+      else capability.mockReturnValue(false);
+      const agent = buildEventedAgent(`unfenced-${probe}`);
+      const warn = captureWarnings(agent);
+      let mastra: Mastra | undefined;
+      try {
+        mastra = new Mastra({ storage, pubsub, agents: { agent }, logger: { ...noopLogger, warn } });
+        for (let i = 0; i < 2; i++) {
+          const { output, cleanup } = await agent.stream('Hi');
+          try {
+            await output.consumeStream();
+            expect(await output.text).toBe('hello');
+          } finally {
+            await cleanup();
+          }
+        }
+        const warnings = warn.mock.calls.filter(([message]) => String(message).includes('storage-backed run fencing'));
+        expect(warnings).toHaveLength(1);
+        expect(String(warnings[0]![0])).toMatch(/API shutdown/);
+      } finally {
+        await mastra?.shutdown();
+        await pubsub.close();
+      }
+    },
+  );
+
+  it('keeps streaming with a private agent transport on a shared evented host', async () => {
+    const pubsub = new UnixSocketPubSub(join(tmpdir(), `mixed-bus-${randomUUID()}.sock`));
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'private-bus',
+        name: 'private-bus',
+        instructions: 'Say hello',
+        model: createTextStreamModel('hello'),
+        pubsub: new EventEmitterPubSub(),
+      }),
+    });
+    let mastra: Mastra | undefined;
+    try {
+      mastra = new Mastra({ storage: new MockStore(), pubsub, agents: { agent }, logger: false });
+      const { output, cleanup } = await agent.stream('Hi');
+      try {
+        await output.consumeStream();
+        expect(await output.text).toBe('hello');
+      } finally {
+        await cleanup();
+      }
+    } finally {
+      await mastra?.shutdown();
+      await pubsub.close();
+    }
+  });
+
   it('falls back to the default in-process engine with a warning and still streams', async () => {
     const agent = buildEventedAgent('non-atomic-store-agent');
 

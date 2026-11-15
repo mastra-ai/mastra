@@ -1,4 +1,5 @@
 import { SpanType, InternalSpans } from '@mastra/core/observability';
+import * as coreObservability from '@mastra/core/observability';
 import type {
   Span,
   SpanTypeMap,
@@ -27,6 +28,45 @@ import { ModelSpanTracker } from '../model-tracing';
 import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
+
+/** Replaces error text exported from traces that hide input or output. */
+export const REDACTED_ERROR_MESSAGE = '[REDACTED]';
+
+/**
+ * The error as exported from a trace that hides input or output: keeps what
+ * identifies the error (id, name, domain, category, stack frames) and drops
+ * text and free-form details, which can quote the hidden data.
+ */
+export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T, stackMessage?: string): T {
+  if (!errorInfo) return errorInfo;
+
+  const { id, name, domain, category, stack } = errorInfo;
+
+  return {
+    ...(id !== undefined ? { id } : {}),
+    ...(name !== undefined ? { name } : {}),
+    ...(domain !== undefined ? { domain } : {}),
+    ...(category !== undefined ? { category } : {}),
+    message: REDACTED_ERROR_MESSAGE,
+    ...(stack !== undefined
+      ? { stack: redactStackHeader(stack, stackMessage ?? errorInfo.message, errorInfo.name) }
+      : {}),
+  } as T;
+}
+
+/** Preserve stack frames only when they follow the complete captured message. */
+function redactStackHeader(stack: string, message: string, name = 'Error'): string {
+  const redactedHeader = `${name}: ${REDACTED_ERROR_MESSAGE}`;
+  const separator = `: ${message}`;
+  const separatorIndex = stack.indexOf(separator);
+
+  if (separatorIndex <= 0 || stack.slice(0, separatorIndex).includes('\n')) {
+    return redactedHeader;
+  }
+
+  const suffix = stack.slice(separatorIndex + separator.length);
+  return suffix === '' || suffix.startsWith('\n') ? `${redactedHeader}${suffix}` : redactedHeader;
+}
 
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
 type AnyBaseSpan = AnySpan & {
@@ -217,11 +257,36 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     category?: string;
     details?: Record<string, any>;
   };
+  protected errorStackMessage?: string;
   public metadata?: Record<string, any>;
   public requestContext?: Record<string, any>;
   public tags?: string[];
   public links?: SpanLink[];
   public traceState?: TraceState;
+  private localErrorCount: number | undefined = typeof coreObservability.claimSpanError === 'function' ? 0 : undefined;
+  private errorOccurrenceIds?: Set<string>;
+
+  public recordError(error: Error, options?: { occurrenceId?: string; origin?: 'new' | 'propagated' }): void {
+    if (this.isEvent || this.endTime) return;
+    if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+      this.localErrorCount = undefined;
+      return;
+    }
+    const id = coreObservability.claimSpanError?.(error, this.traceId, this.id, options);
+    // Preserve excluded origins so visible ancestors never claim their failures.
+    if (this.isExcluded || id === undefined || this.errorOccurrenceIds?.has(id)) return;
+    (this.errorOccurrenceIds ??= new Set()).add(id);
+    if (this.localErrorCount !== undefined) this.localErrorCount++;
+  }
+
+  public restoreErrorCount(cached: SpanSnapshot<TType>): void {
+    // A scalar without occurrence history cannot safely resume positive accounting.
+    this.localErrorCount =
+      typeof coreObservability.claimSpanError !== 'function' || (cached.errorCount && !cached.errorOccurrenceIds)
+        ? undefined
+        : cached.errorCount;
+    this.errorOccurrenceIds = cached.errorOccurrenceIds?.length ? new Set(cached.errorOccurrenceIds) : undefined;
+  }
   /** Entity type that created the span (e.g., agent, workflow) */
   public entityType?: EntityType;
   /** Entity ID that created the span */
@@ -628,6 +693,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
   }
 
+  /** Read at export time, not from the cached correlation context, so a service name set on update or end wins over the config. */
+  private resolveServiceName(): string | undefined {
+    const value = this.metadata?.serviceName;
+    return typeof value === 'string' ? value : this.observabilityInstance.getConfig().serviceName;
+  }
+
   /**
    * Build and cache the canonical correlation context for this live span.
    *
@@ -709,7 +780,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       requestId: getMetadataString('requestId'),
       environment: getMetadataString('environment') ?? this.observabilityInstance.getMastraEnvironment?.(),
       source: getMetadataString('source'),
-      serviceName: getMetadataString('serviceName') ?? this.observabilityInstance.getConfig().serviceName,
+      serviceName: this.resolveServiceName(),
       experimentId: getMetadataString('experimentId'),
     };
 
@@ -725,6 +796,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
     const correlation = this.getCorrelationContext();
+    const serviceName = this.resolveServiceName();
     // Measured once on the inference that streamed the first chunk and copied up as an attribute.
     const timeToFirstTokenMs = (this.attributes as { timeToFirstTokenMs?: unknown } | undefined)?.timeToFirstTokenMs;
 
@@ -742,7 +814,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       endTime: this.endTime,
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
-      errorInfo: this.errorInfo,
+      // An error's message, stack header and details often quote the data the flags hide.
+      errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo, this.errorStackMessage) : this.errorInfo,
+      ...(this.localErrorCount !== undefined ? { errorCount: this.localErrorCount } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
@@ -751,6 +825,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
       ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
+      ...(serviceName ? { serviceName } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
@@ -769,6 +844,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     return {
       ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
+      ...(this.errorOccurrenceIds ? { errorOccurrenceIds: [...this.errorOccurrenceIds] } : {}),
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };
   }

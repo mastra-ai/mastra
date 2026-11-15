@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Filter } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button';
 import { Dialog, DialogBody, DialogCancel, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../Dialog';
@@ -26,6 +25,7 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from './combobox-parts';
+import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
 
 type Option = { value: string; label: string; kind?: 'Agent' | 'Workflow' | 'Scorer'; description?: string };
 
@@ -210,7 +210,7 @@ export const CustomItems: Story = {
     const [value, setValue] = useState<Option | null>(null);
     return (
       <ComboboxRoot items={all} value={value} onValueChange={setValue} autoHighlight>
-        <ComboboxInput aria-label="Target" placeholder="Pick a target…" />
+        <ComboboxInput aria-label="Target" placeholder="Pick a target" />
         <ComboboxContent>
           <ComboboxEmpty>Nothing matches.</ComboboxEmpty>
           <ComboboxList>
@@ -267,7 +267,7 @@ export const Clear: Story = {
       <Field>
         <FieldLabel>Agent</FieldLabel>
         <ComboboxRoot items={agents} value={value} onValueChange={setValue} autoHighlight>
-          <ComboboxInput placeholder="Pick an agent…" showClear />
+          <ComboboxInput placeholder="Pick an agent" showClear />
           <ComboboxContent>
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
@@ -376,7 +376,7 @@ export const CompactTrigger: Story = {
             <ComboboxValue placeholder="Pick an agent" />
           </ComboboxTrigger>
           <ComboboxContent>
-            <ComboboxSearch placeholder="Search agents…" />
+            <ComboboxSearch placeholder="Search agents" />
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>
@@ -386,17 +386,17 @@ export const CompactTrigger: Story = {
             <ComboboxValue placeholder="Workflow" />
           </ComboboxTrigger>
           <ComboboxContent>
-            <ComboboxSearch placeholder="Search workflows…" />
+            <ComboboxSearch placeholder="Search workflows" />
             <ComboboxEmpty>No workflows found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>
         </ComboboxRoot>
         <ComboboxRoot items={agents} value={filter} onValueChange={setFilter} autoHighlight>
-          <ComboboxTrigger variant="ghost" size="icon-md" icon={<Filter />} aria-label="Filter by agent">
+          <ComboboxTrigger variant="ghost" size="icon-md" icon={<IconFilter1 />} aria-label="Filter by agent">
             <ComboboxValue placeholder="All agents" />
           </ComboboxTrigger>
           <ComboboxContent align="end">
-            <ComboboxSearch placeholder="Search agents…" />
+            <ComboboxSearch placeholder="Search agents" />
             <ComboboxEmpty>No agents found.</ComboboxEmpty>
             <OptionList />
           </ComboboxContent>

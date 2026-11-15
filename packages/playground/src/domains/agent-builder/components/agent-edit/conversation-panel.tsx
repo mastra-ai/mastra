@@ -204,7 +204,7 @@ const ConversationComposer = () => {
       disabled={isRunning}
       isRunning={isRunning}
       canSubmit={trimmed.length > 0 && !isRunning}
-      placeholder="Tell the builder what to change…"
+      placeholder="Tell the builder what to change"
       inputTestId="agent-builder-conversation-input"
       submitTestId="agent-builder-conversation-submit"
       containerTestId="agent-builder-conversation-composer"

@@ -3,16 +3,19 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import { IconChanges } from '@mastra/playground-ui/icons/central/IconChanges';
+import { IconColumns3 } from '@mastra/playground-ui/icons/central/IconColumns3';
+import { IconHistory } from '@mastra/playground-ui/icons/central/IconHistory';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useDataset, useDatasetItemVersion, useDatasetItemVersions } from '@mastra/react/hooks/datasets';
 import type { DatasetItemVersion } from '@mastra/react/hooks/datasets';
-import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
@@ -43,9 +46,16 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
       value: String(v.datasetVersion),
       label: (
         <span className="flex w-full items-center gap-2">
-          <span>
-            <b>v. {v.datasetVersion}</b> · {formatDate(date, 'date-time')}
-          </span>
+          <Metadata>
+            <Metadata.Item>
+              <b>v. {v.datasetVersion}</b>
+            </Metadata.Item>
+            <Metadata.Item>
+              <Txt as="span" variant="caption" tone="muted">
+                {formatDate(date, 'date-time')}
+              </Txt>
+            </Metadata.Item>
+          </Metadata>
           {v.isLatest ? (
             <Badge variant="blue" size="xs" className="ml-auto">
               Latest
@@ -169,11 +179,11 @@ function DatasetItemVersionsComparePage() {
           <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
-                <ColumnsIcon /> Default view
+                <IconColumns3 /> Default view
               </>
             ) : (
               <>
-                <GitCompareArrowsIcon /> Diff view
+                <IconChanges /> Diff view
               </>
             )}
           </Button>
@@ -262,7 +272,7 @@ function VersionSelect({
 }) {
   return (
     <div className="grid grid-cols-[auto_1fr] items-center gap-4">
-      <HistoryIcon className="size-4 opacity-50" />
+      <IconHistory className="size-4 opacity-50" />
       <Select value={value} onValueChange={onValueChange}>
         <SelectTrigger aria-label={label} className="w-full">
           <SelectValue placeholder={placeholder} className="flex-1" />

@@ -217,7 +217,7 @@ export function SchemaConfigSection({
             {sourceType === 'workflow' && (
               <Select value={selectedWorkflow ?? ''} onValueChange={setSelectedWorkflow} disabled={disabled}>
                 <SelectTrigger aria-label="Workflow" size="sm" className="w-48">
-                  <SelectValue placeholder="Select workflow..." />
+                  <SelectValue placeholder="Select workflow" />
                 </SelectTrigger>
                 <SelectContent>
                   {workflowsLoading ? (

@@ -342,7 +342,7 @@ describe('Threads page', () => {
       renderPage();
 
       await screen.findByRole('heading', { name: 'No threads for the last 7 days' });
-      expect(screen.getByPlaceholderText('Filter threads…')).toBeTruthy();
+      expect(screen.getByPlaceholderText('Filter threads')).toBeTruthy();
     });
   });
 

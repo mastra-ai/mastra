@@ -60,6 +60,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/requesty',
+          label: 'Requesty',
+        },
+        {
+          type: 'doc',
           id: 'gateways/vercel',
           label: 'Vercel',
         },
@@ -901,11 +906,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/requesty',
-          label: 'Requesty',
-        },
-        {
-          type: 'doc',
           id: 'providers/routing-run',
           label: 'routing.run',
         },
@@ -1128,6 +1128,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wallaby',
           label: 'Wallaby',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wally',
+          label: 'Wally',
         },
         {
           type: 'doc',

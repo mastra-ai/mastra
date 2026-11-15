@@ -1,4 +1,5 @@
 import { z } from 'zod/v4';
+import { findSuspendedStreamState } from '../../../loop/suspended-stream-state';
 import type { MastraMemory } from '../../../memory/memory';
 import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
@@ -6,6 +7,8 @@ import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
 import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { MessageList } from '../../message-list';
+import type { SerializedMessageListState } from '../../message-list/state';
 import type { AgentMethodType } from '../../types';
 import type { PrepareStreamRunScope } from './run-scope';
 import { CONVERTED_TOOLS_KEY } from './run-scope-keys';
@@ -23,6 +26,8 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   methodType: AgentMethodType;
   memory?: MastraMemory;
   backgroundTaskEnabled?: boolean;
+  /** The resume snapshot with its transcript hydrated from memory; set when resuming. */
+  getResumeSnapshot?: () => Promise<any>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -37,6 +42,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   methodType,
   memory: _memory,
   backgroundTaskEnabled,
+  getResumeSnapshot,
   runScope,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
@@ -45,6 +51,16 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
     outputSchema: prepareToolsStepOutputSchema,
     execute: async () => {
       const threadId = threadFromArgs?.id;
+
+      // The suspended call made against this transcript resumes before any input processor runs,
+      // and memory may no longer return the messages that loaded its tool (e.g. a ToolSearchProcessor
+      // result outside the `lastMessages` window).
+      const suspendedTranscript = findSuspendedStreamState(await getResumeSnapshot?.())?.streamState.messageList;
+      const runMessages = suspendedTranscript
+        ? new MessageList({ threadId, resourceId })
+            .deserialize(suspendedTranscript as SerializedMessageListState)
+            .get.all.db()
+        : undefined;
 
       const convertedTools = await capabilities.convertTools({
         toolsets: options?.toolsets,
@@ -66,6 +82,7 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         // Use the resolved execution model so provider-native placeholders
         // respect per-call and Studio model overrides.
         model: capabilities.llm.getModel(),
+        runMessages,
       });
 
       // Update the agent span with available tool names for observability

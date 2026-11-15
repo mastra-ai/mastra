@@ -3,6 +3,7 @@ import type { Page } from '@playwright/test';
 import { http, HttpResponse } from 'msw';
 
 import type { FactoryUserSession } from '../src/ui/domains/workspaces/services/user-sessions';
+import { listedRepository } from './ui/factory-projects';
 import { server } from './ui/msw-server';
 
 const slackThreadUrl = 'https://app.slack.com/client/T123/C123/thread/C123-1791936483.798759';
@@ -62,26 +63,14 @@ test.describe('Factory session navigation', () => {
       http.get('*/web/factory/projects', () =>
         HttpResponse.json({
           projects: [
-            { id: 'fp-1', name: 'Session links' },
-            { id: 'fp-2', name: 'Another Factory' },
-          ],
-        }),
-      ),
-      http.get('*/web/factory/projects/fp-1/source-control-connections', () =>
-        HttpResponse.json({
-          connections: [
             {
-              id: 'conn-1',
-              installationId: 'inst-1',
+              id: 'fp-1',
+              name: 'Session links',
               repositories: [
-                {
-                  id: 'repo-1',
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                  repository: { slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-                },
+                listedRepository('repo-1', 'mastra-ai/mastra', { branch: 'main', sandboxWorkdir: '/repo' }),
               ],
             },
+            { id: 'fp-2', name: 'Another Factory', repositories: [] },
           ],
         }),
       ),
@@ -131,10 +120,6 @@ test.describe('Factory session navigation', () => {
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
-        if (request.url().endsWith('/feed-events')) {
-          await route.fulfill({ contentType: 'text/event-stream', body: '' });
-          return;
-        }
         const response = await fetch(request.url(), { method: request.method() });
         await route.fulfill({
           status: response.status,

@@ -1,10 +1,9 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
-import { Settings2 } from 'lucide-react';
-
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../../hooks/useGitLabData';
@@ -17,6 +16,7 @@ import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export interface CreateFactoryRepositoryRowsProps {
   query: string;
@@ -89,7 +89,7 @@ export function CreateFactoryRepositoryRows({
       <GithubRepositoryResults query={query} onSelectRepository={onSelectRepository} />
       <CommandGroup heading="GitHub">
         <CommandPaletteItem
-          icon={<Settings2 />}
+          icon={<IconSettingsSliderHor />}
           title="Manage GitHub connection"
           subtitle="Add installations or grant access to more repositories"
           value="manage-github"
@@ -162,7 +162,12 @@ function GithubRepositoryResults({
           key={repo.id}
           icon={<GithubIcon />}
           title={repo.fullName}
-          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          subtitle={
+            <Metadata singleLine>
+              <Metadata.Item className="shrink-0">{repo.private ? 'Private' : 'Public'}</Metadata.Item>
+              <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+            </Metadata>
+          }
           value={`repo-${repo.id}`}
           onSelect={() => onSelectRepository(repo)}
         />
@@ -200,7 +205,12 @@ function GitLabRepositoryResults({
             key={repo.id}
             icon={<GitLabIcon />}
             title={repo.fullName}
-            subtitle={`GitLab · ${repo.defaultBranch}`}
+            subtitle={
+              <Metadata singleLine>
+                <Metadata.Item className="shrink-0">GitLab</Metadata.Item>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+              </Metadata>
+            }
             value={`gitlab-repo-${repo.id}`}
             onSelect={() => onSelectRepository(repo)}
           />

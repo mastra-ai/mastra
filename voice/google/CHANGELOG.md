@@ -1,5 +1,19 @@
 # @mastra/voice-google
 
+## 0.14.5
+
+### Patch Changes
+
+- dependencies updates: ([#29117](https://github.com/mastra-ai/mastra/pull/29117))
+  - Updated dependency [`@google-cloud/text-to-speech@^7.2.0` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/7.2.0) (from `^6.4.1`, in `dependencies`)
+
+## 0.14.5-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#29117](https://github.com/mastra-ai/mastra/pull/29117))
+  - Updated dependency [`@google-cloud/text-to-speech@^7.2.0` ↗︎](https://www.npmjs.com/package/@google-cloud/text-to-speech/v/7.2.0) (from `^6.4.1`, in `dependencies`)
+
 ## 0.14.4
 
 ### Patch Changes

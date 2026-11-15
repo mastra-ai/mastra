@@ -55,7 +55,10 @@ export class SandboxFeatureNotSupportedError extends WorkspaceError {
 
 export class SearchNotAvailableError extends WorkspaceError {
   constructor() {
-    super('Workspace does not have search configured (enable bm25 or provide vectorStore + embedder)', 'NO_SEARCH');
+    super(
+      'Workspace does not have search configured (enable bm25, or provide a vectorStore with an embedder or one that generates embeddings itself)',
+      'NO_SEARCH',
+    );
     this.name = 'SearchNotAvailableError';
   }
 }

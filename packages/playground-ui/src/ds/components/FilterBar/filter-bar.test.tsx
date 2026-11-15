@@ -85,7 +85,7 @@ function Harness({
       ) : (
         <FilterBar.Chips />
       )}
-      <FilterBar.Input placeholder="Filter…" />
+      <FilterBar.Input placeholder="Filter" />
     </FilterBar>
   );
 }
@@ -112,7 +112,7 @@ describe('FilterBar', () => {
       key('ArrowDown');
       key('Enter');
 
-      expect(input.placeholder).toBe('Value…');
+      expect(input.placeholder).toBe('Value');
       type('abc-123');
       key('Enter');
 
@@ -334,7 +334,7 @@ describe('FilterBar', () => {
       key('Enter');
       await screen.findByRole('option', { name: 'is' });
       expect(draftChip()?.textContent).toBe('Status');
-      expect(input.placeholder).toBe('Operator…');
+      expect(input.placeholder).toBe('Operator');
 
       key('Enter');
       await screen.findByRole('listbox', { name: 'Values' });
@@ -434,7 +434,7 @@ describe('FilterBar', () => {
               createItemId={fieldId => fieldId}
             >
               <FilterBar.Chips />
-              <FilterBar.Input placeholder="Filter…" />
+              <FilterBar.Input placeholder="Filter" />
             </FilterBar>
           );
         }
@@ -470,7 +470,7 @@ describe('FilterBar', () => {
               }}
             >
               <FilterBar.Chips />
-              <FilterBar.Input placeholder="Filter…" />
+              <FilterBar.Input placeholder="Filter" />
             </FilterBar>
           );
         }
@@ -503,7 +503,7 @@ describe('FilterBar', () => {
           return (
             <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
               <FilterBar.Chips renderChip={item => (item.id === 'hidden' ? null : <FilterBar.Chip item={item} />)} />
-              <FilterBar.Input placeholder="Filter…" />
+              <FilterBar.Input placeholder="Filter" />
             </FilterBar>
           );
         }
@@ -619,7 +619,7 @@ describe('FilterBar', () => {
         await screen.findByRole('option', { name: 'Running' });
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         key('Enter');
         expect(onChange).not.toHaveBeenCalled();
         const custom = await screen.findByRole('option', { name: 'custom' });
@@ -640,7 +640,7 @@ describe('FilterBar', () => {
         fireEvent.click(await screen.findByRole('option', { name: 'Running' }));
 
         type('custom');
-        await screen.findByText('No suggestions — press Enter to use your text.');
+        await screen.findByText('No suggestions. Press Enter to use your text.');
         fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
         expect(argAt(onChange, 0, 0)[0]).toMatchObject({ value: ['running', 'custom'] });
       });
@@ -870,7 +870,7 @@ describe('FilterBar', () => {
 
       await screen.findByRole('option', { name: 'Text' });
       key('Enter');
-      expect(input.placeholder).toBe('Value…');
+      expect(input.placeholder).toBe('Value');
 
       type('abc');
       key('Enter');
@@ -1091,7 +1091,7 @@ describe('FilterBar', () => {
                 <FilterBar.Chip key={item.id} item={item} />
               ),
             )}
-            <FilterBar.Input placeholder="Filter…" />
+            <FilterBar.Input placeholder="Filter" />
           </FilterBar>
         );
       }
@@ -1173,7 +1173,7 @@ describe('FilterBar', () => {
               <button onClick={() => setItems(INITIAL)}>Re-add</button>
               <FilterBar fields={FIELDS} operators={OPERATORS} value={items} onValueChange={setItems}>
                 <FilterBar.Chips />
-                <FilterBar.Input placeholder="Filter…" />
+                <FilterBar.Input placeholder="Filter" />
               </FilterBar>
             </>
           );
@@ -1362,15 +1362,17 @@ describe('FilterBar', () => {
       initial,
       onChange,
       maxDepth,
+      fields = FIELDS,
     }: {
       initial: FilterBarExpression;
       onChange?: (expression: FilterBarExpression) => void;
       maxDepth?: number;
+      fields?: FilterBarField[];
     }) {
       const [value, setValue] = useState<FilterBarExpression>(initial);
       return (
         <FilterBar
-          fields={FIELDS}
+          fields={fields}
           operators={OPERATORS}
           value={value}
           maxDepth={maxDepth}
@@ -1380,7 +1382,7 @@ describe('FilterBar', () => {
           }}
         >
           <FilterBar.Chips />
-          <FilterBar.Input placeholder="Filter…" />
+          <FilterBar.Input placeholder="Filter" />
         </FilterBar>
       );
     }
@@ -1401,6 +1403,47 @@ describe('FilterBar', () => {
         { id: 'd', fieldId: 'traceId', operatorId: 'is', value: 'abc' },
       ],
     };
+
+    describe('when a field is restricted to the root', () => {
+      it('offers the field in the root picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        getInput().focus();
+        expect(await screen.findByRole('option', { name: 'Contains text' })).toBeTruthy();
+      });
+
+      it('omits the field from the nested field editor', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getAllByRole('combobox', { name: 'Field: Tags' })[0]);
+        await screen.findByRole('option', { name: 'Trace ID' });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+
+      it('omits the field from the nested condition picker', async () => {
+        render(
+          <ExpressionHarness
+            initial={EXPRESSION}
+            fields={[...FIELDS, { id: 'search', label: 'Contains text', operators: ['is'], rootOnly: true }]}
+          />,
+        );
+        const editor = await openPopover();
+        fireEvent.click(within(editor).getByRole('button', { name: 'Condition' }));
+        const add = within(editor).getByPlaceholderText('Add condition');
+        fireEvent.focus(add);
+        fireEvent.change(add, { target: { value: 'Contains text' } });
+        expect(screen.queryByRole('option', { name: 'Contains text' })).toBeNull();
+      });
+    });
 
     describe('when the value is a flat list', () => {
       it('offers no advanced filter option and no chip', async () => {
@@ -1449,7 +1492,7 @@ describe('FilterBar', () => {
 
         const input = getInput();
         expect(input.dataset.target).toBe('g');
-        expect(input.placeholder).toBe('Add condition…');
+        expect(input.placeholder).toBe('Add condition');
         expect(editor.contains(input)).toBe(true);
         // No nested "Advanced filter…" option inside the popover.
         input.focus();
@@ -1500,7 +1543,7 @@ describe('FilterBar', () => {
         // The new group's input opens its typeahead, which aria-hides the rest of the popover.
         key('Escape');
         const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
-        await waitFor(() => expect(within(card).getByText('· 0 conditions')).toBeTruthy());
+        await waitFor(() => expect(within(card).getByText('0 conditions')).toBeTruthy());
 
         fireEvent.click(within(card).getByRole('radio', { name: 'Join with or' }));
         expect(onChange.mock.lastCall?.[0].nodes[1].nodes[2]).toMatchObject({ kind: 'group', logic: 'or' });
@@ -1586,7 +1629,7 @@ describe('FilterBar', () => {
         const editor = await screen.findByRole('group', { name: 'Conditions joined with or' });
         const input = getInput();
         expect(editor.contains(input)).toBe(true);
-        expect(input.placeholder).toBe('Add condition…');
+        expect(input.placeholder).toBe('Add condition');
       });
 
       it('clears items and groups together', () => {
@@ -1614,7 +1657,7 @@ describe('FilterBar', () => {
           createItemId={fieldId => fieldId}
         >
           <FilterBar.Chips />
-          <FilterBar.Input placeholder="Filter…" />
+          <FilterBar.Input placeholder="Filter" />
         </FilterBar>
       );
     }
@@ -1671,7 +1714,7 @@ describe('FilterBar', () => {
               createItemId={fieldId => fieldId}
             >
               <FilterBar.Chips />
-              <FilterBar.Input placeholder="Filter…" />
+              <FilterBar.Input placeholder="Filter" />
             </FilterBar>
           </>
         );

@@ -1,10 +1,12 @@
-import { Pause, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconPause } from '@/ds/icons/central/IconPause';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 
@@ -90,7 +92,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
-  summary: string;
+  summary: ReactNode;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -106,7 +108,7 @@ export function SnapshotTimeline({
   const statusParts = [
     `Snapshot ${snapshot.ordinal}/${totalCount}`,
     ...(snapshot.cutoffAt
-      ? [`as of ${selectedDate}`, `window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
+      ? [`As of ${selectedDate}`, `Window ${formatSnapshotWindow(snapshot.startedAt, snapshot.endedAt)}`]
       : [selectedDate]),
     traceLabel(snapshot.traceCount),
   ];
@@ -130,7 +132,7 @@ export function SnapshotTimeline({
             onClick={() => onPlayingChange(!isPlaying)}
             size="sm"
             type="button"
-            icon={isPlaying ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}
+            icon={isPlaying ? <IconPause aria-hidden="true" /> : <IconPlay aria-hidden="true" />}
           >
             {isPlaying ? 'Pause' : 'Play'}
           </Button>
@@ -141,7 +143,7 @@ export function SnapshotTimeline({
       </div>
       {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
-        {statusParts.join(' · ')}
+        {statusParts.join('. ')}
       </p>
     </section>
   );

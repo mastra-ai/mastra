@@ -12,6 +12,7 @@ import {
   surfaceShade,
   getContrastText,
 } from '../../theme.js';
+import { MAX_DISPLAYED_SHELL_OUTPUT } from '../../utils/bounded-output.js';
 import { getSpacingBetweenComponents } from '../chat-spacing.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
@@ -53,6 +54,22 @@ describe('completed shell/process background status', () => {
       }
     },
   );
+
+  it('keeps a bounded tail of streaming shell output', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command: 'example' },
+      { collapsedByDefault: false },
+      ui,
+    );
+    const chunk = 'x'.repeat(600 * 1024);
+    for (let i = 0; i < 4; i++) component.appendStreamingOutput(chunk);
+    component.appendStreamingOutput('last line\n');
+
+    const retained = (component as unknown as { streamingOutput: string }).streamingOutput;
+    expect(retained.length).toBe(MAX_DISPLAYED_SHELL_OUTPUT);
+    expect(retained.endsWith('last line\n')).toBe(true);
+  });
 
   it('marks nonzero shell exits as failed with and without background identity', () => {
     for (const background of [false, true]) {

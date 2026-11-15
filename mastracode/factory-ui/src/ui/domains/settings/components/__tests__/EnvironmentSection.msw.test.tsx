@@ -17,7 +17,7 @@ const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/env
 function useFactory() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] }),
+      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [] }] }),
     ),
   );
 }
@@ -55,9 +55,10 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
+    // The loading state already titles its card Environment, so wait for the loaded fields.
+    await screen.findByRole('textbox', { name: 'Working directory' });
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Environment', 'Builds', 'Danger zone']);
+    expect(headings).toEqual(['Environment', 'Environment variables', 'Builds', 'Danger zone']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));
@@ -99,7 +100,7 @@ describe('Environment settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
         factoryRequests++;
         return factoryRequests === 1
-          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] })
+          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme', repositories: [] }] })
           : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
       }),
     );
@@ -209,8 +210,8 @@ describe('Environment settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({
           projects: [
-            { id: FACTORY_ID, name: 'Acme' },
-            { id: 'factory-b', name: 'Beta' },
+            { id: FACTORY_ID, name: 'Acme', repositories: [] },
+            { id: 'factory-b', name: 'Beta', repositories: [] },
           ],
         }),
       ),

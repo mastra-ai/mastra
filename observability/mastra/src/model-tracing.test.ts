@@ -2080,6 +2080,54 @@ describe('ModelSpanTracker', () => {
       modelSpan.end();
     });
 
+    it('keeps the provider response model when the model call comes through the raw provider stream', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'requested-model', provider: 'test', streaming: true },
+      });
+
+      const tracker = new ModelSpanTracker(modelSpan);
+      tracker.startStep();
+      tracker.startInference({ modelId: 'requested-model', provider: 'gateway' });
+
+      // Core 1.82 wraps the raw provider stream: the serving model arrives in an
+      // earlier `response-metadata` chunk, while the raw `finish` chunk carries no
+      // model id, so the inference must remember the model it was told about.
+      const providerChunks = [
+        { type: 'response-metadata', payload: { id: 'resp-1', modelId: 'provider/served-model' } },
+        { type: 'text-delta', payload: { text: 'hi' } },
+        {
+          type: 'finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'stop' },
+            metadata: { providerMetadata: {} },
+          },
+        },
+      ];
+      await consumeStream(tracker.wrapInferenceStream(createMockStream(providerChunks)));
+
+      const processedChunks = [
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { totalTokens: 5 } },
+            stepResult: { reason: 'stop', warnings: [] },
+            metadata: { modelId: 'requested-model', provider: 'gateway' },
+          },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(processedChunks)));
+
+      const [inferenceSpan] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+      expect(inferenceSpan).toBeDefined();
+      expect(inferenceSpan!.attributes.model).toBe('requested-model');
+      expect(inferenceSpan!.attributes.responseModel).toBe('provider/served-model');
+
+      modelSpan.end();
+    });
+
     it('applies inference context (parameters / providerOptions / availableTools / tools / toolChoice / responseFormat) set via setInferenceContext', async () => {
       const modelSpan = tracing.startSpan({
         type: SpanType.MODEL_GENERATION,

@@ -1,12 +1,3 @@
-import {
-  ArrowLeftIcon,
-  ChevronRightIcon,
-  FilterIcon,
-  ListFilterPlusIcon,
-  PlusIcon,
-  ListFilterPlus,
-  X,
-} from 'lucide-react';
 import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ButtonHTMLAttributes } from 'react';
 import { PickMultiPanel } from './pick-multi-panel';
@@ -17,6 +8,12 @@ import { Combobox } from '@/ds/components/Combobox/combobox';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowLeft } from '@/ds/icons/central/IconArrowLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFilter1 } from '@/ds/icons/central/IconFilter1';
+import { IconFilter2 } from '@/ds/icons/central/IconFilter2';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 import {
   MENU_SIDE_OFFSET,
   menuEmptyClass,
@@ -171,7 +168,7 @@ export function PropertyFilterCreator({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size={size} disabled={disabled} icon={<ListFilterPlusIcon />}>
+        <Button size={size} disabled={disabled} icon={<IconFilter2 />}>
           {label}
         </Button>
       </PopoverTrigger>
@@ -197,10 +194,10 @@ export function PropertyFilterCreator({
                 className={cn(quietTextHover, controlStateColorTransition)}
                 onClick={reset}
               >
-                <ArrowLeftIcon className="size-4" />
+                <IconArrowLeft className="size-4" />
               </button>
-              <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} · is`}</Txt>
+              <IconFilter1 className="size-4 shrink-0 text-muted-foreground" />
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
@@ -269,7 +266,7 @@ export function PropertyFilterCreator({
                               'text-muted-foreground opacity-0 group-hover:opacity-100 group-focus:opacity-100',
                             )}
                           >
-                            <PlusIcon />
+                            <IconPlusMedium />
                           </span>
                         )}
                       </FilterMenuButton>
@@ -293,7 +290,7 @@ export function PropertyFilterCreator({
                   setError(undefined);
                 }}
                 placeholder={selectedField.placeholder ?? `Choose ${selectedField.label}`}
-                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}...`}
+                searchPlaceholder={`Search ${selectedField.label.toLowerCase()}`}
                 emptyText={selectedField.emptyText ?? 'No option found.'}
                 size="md"
                 aria-label={selectedField.label}
@@ -304,10 +301,10 @@ export function PropertyFilterCreator({
 
           {selectedField && (
             <div className="flex items-center justify-end gap-2">
-              <Button icon={<X />} variant="ghost" size="md" onClick={() => setOpen(false)}>
+              <Button icon={<IconCrossMedium />} variant="ghost" size="md" onClick={() => setOpen(false)}>
                 Cancel
               </Button>
-              <Button icon={<ListFilterPlus />} size="md" onClick={commit}>
+              <Button icon={<IconFilter2 />} size="md" onClick={commit}>
                 Add filter
               </Button>
             </div>
@@ -362,11 +359,11 @@ function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }:
             });
           }}
         >
-          {open && <ChevronRightIcon className="text-muted-foreground" />}
+          {open && <IconChevronRight className="text-muted-foreground" />}
           <span className="truncate">{field.label}</span>
           {!open && (
             <span className={cn(menuItemTrailingIconClass, 'text-muted-foreground')}>
-              <ChevronRightIcon />
+              <IconChevronRight />
             </span>
           )}
         </FilterMenuButton>

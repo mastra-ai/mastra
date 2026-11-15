@@ -1,5 +1,7 @@
 import type { TaskItem } from '@mastra/core/signals';
 
+import { PinnedKnowledgeActivity } from '../knowledge/pinned-knowledge';
+import { pinnedKnowledgeFromSignal } from '../knowledge/pinned-knowledge-data';
 import { NotificationSignalNotice } from './notification-signal-notice';
 import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
@@ -61,6 +63,9 @@ export const SignalBadge = ({ signal: value, defaultOpen }: SignalBadgeProps) =>
 
   if (value.type === 'state') {
     if (getTaskSignalData(value)) return null;
+
+    const pinned = pinnedKnowledgeFromSignal(value);
+    if (pinned) return <PinnedKnowledgeActivity pinned={pinned} defaultOpen={defaultOpen} />;
 
     const state = getStateLabel(value);
     return <SignalActivity kind="state" label={state.id} mode={state.mode} message={text} defaultOpen={defaultOpen} />;

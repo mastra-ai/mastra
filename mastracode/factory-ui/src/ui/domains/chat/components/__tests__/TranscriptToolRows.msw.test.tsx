@@ -1,5 +1,4 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
@@ -11,6 +10,7 @@ import type { TimelineEntry, ToolCall } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
+const PART_AT = new Date('2026-07-15T10:03:42.000Z');
 const ROW_HEIGHT = 40;
 
 function panelOf(element: Element): HTMLElement {
@@ -177,7 +177,7 @@ describe('TranscriptEntries tool rows', () => {
 
     const line = screen.getByRole('group', { name: 'Read a file, ran a command, wrote a file' });
     expect(within(line).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
-    expect(within(line).getByText('1 failed · 1 incomplete')).toBeInTheDocument();
+    expect(within(line).getByText('1 failed and 1 incomplete')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
 
     await expand(line);
@@ -341,7 +341,7 @@ describe('TranscriptEntries tool rows', () => {
     ]);
 
     const line = screen.getByRole('group', { name: 'Read a.ts, 1m 12s' });
-    expect(within(line).getByText('· 1m 12s')).toBeVisible();
+    expect(within(line).getByText('1m 12s')).toBeVisible();
   });
 
   it('keeps calls the reader opened in view, on the row they scrolled to, when a thought joins them', async () => {
@@ -765,54 +765,28 @@ describe('TranscriptEntries tool rows', () => {
     expect(assistantProse).toHaveClass('my-3');
   });
 
-  describe('local timestamps', () => {
-    const PART_AT = new Date('2026-07-15T10:03:42.000Z');
+  // The time a reader looks for lives in the message's action bar, so a call's line carries none of its own.
+  it.each([
+    {
+      line: 'Ran pnpm build',
+      parts: [{ ...doneTool('call-1', 'execute_command', { command: 'pnpm build' }), createdAt: PART_AT.getTime() }],
+    },
+    {
+      line: 'Read files, searched code',
+      parts: [
+        { ...doneTool('call-1', 'view'), createdAt: PART_AT.getTime() },
+        { ...doneTool('call-2', 'search_content'), createdAt: PART_AT.getTime() + 1000 },
+        { ...doneTool('call-3', 'view'), createdAt: PART_AT.getTime() + 2000 },
+      ],
+    },
+  ])('shows no time on the “$line” line, even when the reader hovers it', async ({ line: name, parts }) => {
+    const user = userEvent.setup();
+    renderEntries([assistantMessage('msg-1', parts)]);
 
-    function clockTime(line: HTMLElement, at: Date): HTMLElement {
-      const time = line.querySelector<HTMLElement>(`time[datetime="${at.toISOString()}"]`);
-      if (!time) throw new Error(`no clock for ${at.toISOString()}`);
-      return time;
-    }
+    const line = screen.getByRole('group', { name });
+    expect(line.querySelector('time')).toBeNull();
 
-    function localClock(date: Date): string {
-      const text = formatDate(date, 'time-seconds');
-      if (text === undefined) throw new Error(`${date.toISOString()} is not a valid date`);
-      return text;
-    }
-
-    it('names the moment core stamped on the call, in local time, when the reader hovers the line', async () => {
-      renderEntries([
-        assistantMessage('msg-1', [
-          { ...doneTool('call-1', 'execute_command', { command: 'pnpm build' }), createdAt: PART_AT.getTime() },
-        ]),
-      ]);
-
-      const line = screen.getByRole('group', { name: 'Ran pnpm build' });
-      const time = clockTime(line, PART_AT);
-      expect(time.textContent).toContain(localClock(PART_AT));
-
-      await userEvent.hover(within(line).getAllByRole('button')[0]);
-      expect(await screen.findByText(time.textContent ?? '', { selector: ':not(time)' })).toBeVisible();
-    });
-
-    it('falls back to the message time for calls core never stamped', () => {
-      renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'view')])]);
-
-      expect(clockTime(screen.getByRole('group', { name: 'Read src/index.ts' }), CREATED_AT)).toBeInTheDocument();
-    });
-
-    it('leads a line of several calls with the time its first call began', () => {
-      renderEntries([
-        assistantMessage('msg-1', [
-          { ...doneTool('call-1', 'view'), createdAt: PART_AT.getTime() },
-          { ...doneTool('call-2', 'search_content'), createdAt: PART_AT.getTime() + 1000 },
-          { ...doneTool('call-3', 'view'), createdAt: PART_AT.getTime() + 2000 },
-        ]),
-      ]);
-
-      const line = screen.getByRole('group', { name: 'Read files, searched code' });
-      expect(clockTime(line, PART_AT)).toBeInTheDocument();
-      expect(line.querySelector(`time[datetime="${new Date(PART_AT.getTime() + 2000).toISOString()}"]`)).toBeNull();
-    });
+    await user.hover(within(line).getAllByRole('button')[0]);
+    expect(screen.queryByRole('tooltip')).toBeNull();
   });
 });

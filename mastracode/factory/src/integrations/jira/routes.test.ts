@@ -48,7 +48,6 @@ function buildApp(
     authEnabled?: boolean;
     withJira?: boolean;
     withIntake?: boolean;
-    ingestFactoryIssues?: (input: unknown) => Promise<unknown>;
   } = {},
 ) {
   const app = new Hono();
@@ -62,7 +61,6 @@ function buildApp(
       jira: (options.withJira ?? true) ? jira : undefined,
       auth: fakeRouteAuth({ enabled: options.authEnabled ?? true }),
       intake: (options.withIntake ?? true) ? seed.intake : undefined,
-      ...(options.ingestFactoryIssues ? { ingestFactoryIssues: options.ingestFactoryIssues } : {}),
     }),
   );
   return app;
@@ -258,7 +256,7 @@ describe('issues route — Factory source bindings', () => {
   };
 
   const bind = (sourceId: string, factoryProjectId: string, board = 'work') =>
-    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId, board });
+    seed.intake.setBinding({ orgId: 'org1', integrationId: 'jira', sourceId, factoryProjectId });
 
   beforeEach(async () => {
     await seed.intake.saveConfig({
@@ -308,22 +306,6 @@ describe('issues route — Factory source bindings', () => {
     expect(listActiveJiraIssues).not.toHaveBeenCalled();
   });
 
-  it('withholds a source routed to the Factory without a board', async () => {
-    await seedProjects(2);
-    await seed.intake.setBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: '1',
-      factoryProjectId: projectA,
-    });
-
-    const res = await buildApp(org1()).request(`/web/jira/issues?factoryProjectId=${projectA}`);
-
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
-    expect(listActiveJiraIssues).not.toHaveBeenCalled();
-  });
-
   it('forwards the pagination cursor together with the scoped selection', async () => {
     await seedProjects(2);
     await bind('1', projectA);
@@ -344,48 +326,6 @@ describe('issues route — Factory source bindings', () => {
       { projectId: '1', include: null, exclude: [] },
       { projectId: '2', include: null, exclude: [] },
     ]);
-  });
-
-  it('ingests a board-scoped listing through the Factory rules', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request(
-      `/web/jira/issues?factoryProjectId=${projectA}`,
-    );
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).toHaveBeenCalledWith({
-      orgId: 'org1',
-      userId: 'u1',
-      factoryProjectId: projectA,
-      issues: [
-        expect.objectContaining({
-          id: '10001',
-          identifier: 'ENG-42',
-          title: 'Fix intake sync',
-          stateType: 'unstarted',
-          assignee: 'Ada',
-          author: 'Grace',
-          project: 'ENG',
-          site: null,
-          sourceId: '1',
-        }),
-      ],
-      intakeBoards: { '1': 'work' },
-    });
-  });
-
-  it('does not ingest an unscoped listing', async () => {
-    await seedProjects(2);
-    await bind('1', projectA);
-    const ingestFactoryIssues = vi.fn(async () => ({ status: 'committed', ingested: 1 }));
-
-    const res = await buildApp(org1(), { ingestFactoryIssues }).request('/web/jira/issues');
-
-    expect(res.status).toBe(200);
-    expect(ingestFactoryIssues).not.toHaveBeenCalled();
   });
 });
 
@@ -421,7 +361,6 @@ describe('issue detail route', () => {
       integrationId: 'jira',
       sourceId: '1',
       factoryProjectId: projectA,
-      board: 'work',
     });
   });
 

@@ -10,10 +10,18 @@ export function getPlansDir(): string {
 
 export interface LocalPlansOptions {
   factoryProjectId?: string | null;
+  /** Host-configured workspace-relative plans directory; wins over the default. */
+  plansDir?: string;
 }
 
 /** Workspace-relative directory the agent writes plan files into. */
 export function getLocalPlansRelativeDir(options: LocalPlansOptions = {}): string {
+  if (options.plansDir) {
+    const dir = path.normalize(options.plansDir);
+    let end = dir.length;
+    while (end > 0 && (dir[end - 1] === '/' || dir[end - 1] === '\\')) end--;
+    return dir.slice(0, end);
+  }
   return options.factoryProjectId ? path.join('.artifacts', 'plans') : path.join(DEFAULT_CONFIG_DIR, 'plans');
 }
 

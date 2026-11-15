@@ -1,5 +1,8 @@
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import type { MastraUser } from '@mastra/core/types';
+import { getRequestUser } from '@mastra/core/utils';
 
 import {
   createProjectConnectSession,
@@ -13,6 +16,7 @@ import {
 } from './client.js';
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { MastraConnectError } from './errors.js';
+import { invalidateConnection } from './tools.js';
 import { renderConnectPage } from './user-connect-page.js';
 
 /**
@@ -21,9 +25,13 @@ import { renderConnectPage } from './user-connect-page.js';
  */
 export interface UserConnectIdentityContext {
   /** Request-scoped context populated by the server (auth middleware, custom middleware). */
-  requestContext?: { get(key: string): unknown };
-  /** The authenticated user the server's auth pipeline stored on the request context, when present. */
-  user?: unknown;
+  requestContext?: RequestContext;
+  /**
+   * Authenticated end user, normalized via the auth provider's `toMastraUser()`
+   * (the same `user` a `DynamicArgument` callback receives). `undefined` when
+   * the request is unauthenticated.
+   */
+  user?: MastraUser;
 }
 
 export interface UserConnectRoutesOptions {
@@ -292,11 +300,11 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
 
   /** Resolves the caller's resource key or null when the request carries no usable identity. */
   const identify = async (c: RouteContext): Promise<string | null> => {
-    const requestContext = c.get?.('requestContext') as { get(key: string): unknown } | undefined;
+    const requestContext = c.get?.('requestContext') as RequestContext | undefined;
     let raw: unknown;
     if (options.resourceId) {
       try {
-        raw = await options.resourceId({ requestContext, user: requestContext?.get('user') });
+        raw = await options.resourceId({ requestContext, user: getRequestUser(requestContext) });
       } catch (error) {
         logRouteError(c, error);
         return null;
@@ -423,12 +431,24 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       path: `${basePath}/connections/:id/status`,
       method: 'GET',
       requiresAuth: true,
-      handler: gated(async (c, client) => {
+      handler: gated(async (c, client, resourceId) => {
         const id = String(c.req.param('id') ?? '');
         const connection = (await listVisibleConnections(client)).find(candidate => candidate.id === id);
         // 404 parity: an invisible connection (another resource's, another
         // project's, or nonexistent) is indistinguishable from an unknown id.
         if (!connection) return notFound(c, 'connection_not_found', 'Connection not found.');
+        // Polling is how the end user's browser learns the flow settled, so it
+        // is also when this process learns: tool resolutions pick the change up
+        // immediately instead of after the snapshot TTL. A global connection
+        // serves every user, so its change reaches every scope.
+        if (connection.status !== 'pending') {
+          invalidateConnection({
+            projectId,
+            ...(connectionScope(connection) === 'user' ? { resourceId } : {}),
+            connectionId: connection.id,
+            active: connection.status === 'active',
+          });
+        }
         return c.json({ id: connection.id, status: connection.status, scope: connectionScope(connection) });
       }),
     },
@@ -436,7 +456,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
       path: `${basePath}/connections/:id`,
       method: 'DELETE',
       requiresAuth: true,
-      handler: gated(async (c, client) => {
+      handler: gated(async (c, client, resourceId) => {
         const id = String(c.req.param('id') ?? '');
         const connection = (await listVisibleConnections(client)).find(candidate => candidate.id === id);
         if (!connection) return notFound(c, 'connection_not_found', 'Connection not found.');
@@ -448,6 +468,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
           });
         }
         await disconnectConnection(client, connection.id);
+        invalidateConnection({ projectId, resourceId, connectionId: connection.id, active: false });
         return c.body(null, 204);
       }),
     },

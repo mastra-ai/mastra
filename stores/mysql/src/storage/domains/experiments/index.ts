@@ -186,7 +186,7 @@ export class ExperimentsMySQL extends ExperimentsStorage {
           [datasetId],
         );
         const [itemRows] = await connection.execute(
-          `SELECT ${quoteIdentifier('metadata', 'column name')} FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ?`,
+          `SELECT ${quoteIdentifier('metadata', 'column name')} FROM ${formatTableName(TABLE_DATASET_ITEMS)} WHERE ${quoteIdentifier('id', 'column name')} = ? AND ${quoteIdentifier('datasetId', 'column name')} = ? FOR UPDATE`,
           [itemId, datasetId],
         );
         if (Array.isArray(itemRows)) {

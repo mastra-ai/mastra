@@ -43,7 +43,9 @@ beforeEach(() => {
   sessionStorage.setItem('mastracode.factory-create.repository', JSON.stringify(repo));
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: projectCreated ? [{ id: 'fp-new', name: 'Fresh Factory' }] : [] }),
+      HttpResponse.json({
+        projects: projectCreated ? [{ id: 'fp-new', name: 'Fresh Factory', repositories: [] }] : [],
+      }),
     ),
     http.post(`${TEST_BASE_URL}/web/factory/projects`, () => {
       projectCreated = true;

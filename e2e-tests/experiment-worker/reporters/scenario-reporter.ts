@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { Reporter } from 'vitest/reporters';
+import type { Reporter } from 'vitest/node';
 import { scenarios, type ScenarioDefinition } from '../scenarios/index.js';
 
 type TestCase = Parameters<NonNullable<Reporter['onTestCaseResult']>>[0];

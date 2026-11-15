@@ -1507,76 +1507,6 @@ describe('MastraStorageExporter', () => {
         await exporter.shutdown();
       });
 
-      it('onScoreEvent should forward to batchCreateScores', async () => {
-        mockObservabilityStore.batchCreateScores = vi.fn().mockResolvedValue(undefined);
-        const exporter = new MastraStorageExporter({ logger: mockLogger });
-        await exporter.init({ mastra: mockMastra });
-
-        const event: ScoreEvent = {
-          type: 'score',
-          score: {
-            scoreId: 'score-default-test',
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'trace-1',
-            scorerId: 'relevance',
-            score: 0.85,
-            experimentId: 'exp-1',
-          },
-        };
-
-        await exporter.onScoreEvent(event);
-        await exporter.flush();
-
-        expect(mockObservabilityStore.batchCreateScores).toHaveBeenCalledWith({
-          scores: [
-            expect.objectContaining({
-              scoreId: 'score-default-test',
-              traceId: 'trace-1',
-              scorerId: 'relevance',
-              score: 0.85,
-              experimentId: 'exp-1',
-            }),
-          ],
-        });
-
-        await exporter.shutdown();
-      });
-
-      it('onFeedbackEvent should forward to batchCreateFeedback', async () => {
-        mockObservabilityStore.batchCreateFeedback = vi.fn().mockResolvedValue(undefined);
-        const exporter = new MastraStorageExporter({ logger: mockLogger });
-        await exporter.init({ mastra: mockMastra });
-
-        const event: FeedbackEvent = {
-          type: 'feedback',
-          feedback: {
-            feedbackId: 'feedback-default-test',
-            timestamp: new Date('2026-01-01T00:00:00Z'),
-            traceId: 'trace-1',
-            source: 'user',
-            feedbackType: 'thumbs',
-            value: 1,
-          },
-        };
-
-        await exporter.onFeedbackEvent(event);
-        await exporter.flush();
-
-        expect(mockObservabilityStore.batchCreateFeedback).toHaveBeenCalledWith({
-          feedbacks: [
-            expect.objectContaining({
-              feedbackId: 'feedback-default-test',
-              traceId: 'trace-1',
-              feedbackSource: 'user',
-              feedbackType: 'thumbs',
-              value: 1,
-            }),
-          ],
-        });
-
-        await exporter.shutdown();
-      });
-
       it('onLogEvent should persist correlation context fields', async () => {
         mockObservabilityStore.batchCreateLogs = vi.fn().mockResolvedValue(undefined);
         const exporter = new MastraStorageExporter({ logger: mockLogger });
@@ -1997,3 +1927,65 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
     });
   },
 );
+
+describe('MastraStorageExporter service name', () => {
+  it('stores the configured service name on spans whose metadata does not set one', async () => {
+    const storage = new InMemoryStore();
+    const observability = new Observability({
+      configs: { default: { serviceName: 'checkout-api', exporters: [new MastraStorageExporter()] } },
+    });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    try {
+      const tracing = observability.getDefaultInstance()!;
+      const checkout = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'checkout agent' });
+      checkout.createChildSpan({ type: SpanType.GENERIC, name: 'charge card' }).end();
+      checkout.end();
+      const refund = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'refund agent',
+        metadata: { serviceName: 'refunds-api' },
+      });
+      refund.end();
+      await tracing.flush();
+
+      const store = (await storage.getStore('observability'))!;
+      const checkoutTrace = await store.getTrace({ traceId: checkout.traceId });
+      expect(checkoutTrace?.spans.map(span => span.serviceName)).toEqual(['checkout-api', 'checkout-api']);
+      const refundTrace = await store.getTrace({ traceId: refund.traceId });
+      expect(refundTrace?.spans.map(span => span.serviceName)).toEqual(['refunds-api']);
+      const filtered = await store.listTraces({ filters: { serviceName: 'checkout-api' } });
+      expect(filtered.spans.map(span => span.traceId)).toEqual([checkout.traceId]);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+
+  it('stores a service name set on update or end when the row is written at span end', async () => {
+    const storage = new InMemoryStore();
+    const observability = new Observability({
+      configs: {
+        default: { serviceName: 'checkout-api', exporters: [new MastraStorageExporter({ strategy: 'insert-only' })] },
+      },
+    });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    try {
+      const tracing = observability.getDefaultInstance()!;
+      const updated = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'updated agent' });
+      updated.update({ metadata: { serviceName: 'billing-api' } });
+      updated.end();
+      const ended = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'ended agent' });
+      ended.end({ metadata: { serviceName: 'refunds-api' } });
+      await tracing.flush();
+
+      const store = (await storage.getStore('observability'))!;
+      expect((await store.getTrace({ traceId: updated.traceId }))?.spans.map(span => span.serviceName)).toEqual([
+        'billing-api',
+      ]);
+      expect((await store.getTrace({ traceId: ended.traceId }))?.spans.map(span => span.serviceName)).toEqual([
+        'refunds-api',
+      ]);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+});

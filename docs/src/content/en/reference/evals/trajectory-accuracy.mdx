@@ -3,7 +3,6 @@ title: "Reference: Trajectory accuracy scorers | Evals"
 description: "Use trajectory accuracy scorers to compare an agent or workflow's tool and step sequence with an expected execution path or ordered trajectory."
 packages:
   - "@mastra/evals"
-  - "@mastra/core"
 ---
 
 # Trajectory accuracy scorers
@@ -25,7 +24,7 @@ When the target's `Mastra` instance has storage configured, the pipeline fetches
 
 For example, a workflow that calls an agent, which in turn calls tools, produces:
 
-```
+```text
 workflow_run
   └─ workflow_step (validate-input)
   └─ workflow_step (process-data)

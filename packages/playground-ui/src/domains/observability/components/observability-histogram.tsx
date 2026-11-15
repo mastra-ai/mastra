@@ -58,7 +58,7 @@ export function ObservabilityHistogram({
     <section aria-label={label} aria-busy={isLoading || isUpdating} className="shrink-0">
       {!isError && !isLoading && (
         <span className="sr-only">
-          {formatCount(ok + errors)} {resourceLabel.toLowerCase()} · {formatCount(errors)} errors
+          {formatCount(ok + errors)} {resourceLabel.toLowerCase()}, {formatCount(errors)} errors
         </span>
       )}
       {isError ? (

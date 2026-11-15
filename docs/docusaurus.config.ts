@@ -14,7 +14,7 @@ const SHARED_REMARK_PLUGINS = [
   [require('@docusaurus/remark-plugin-npm2yarn'), NPM2YARN_CONFIG],
 ] as const
 const ADMONITIONS_CONFIG = {
-  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta'],
+  keywords: ['note', 'tip', 'info', 'warning', 'danger', 'beta', 'alpha'],
 }
 
 // Search and "Ask AI" silently disappear when their credentials are missing at
@@ -75,6 +75,10 @@ const config: Config = {
       removeLegacyPostBuildHeadAttribute: true,
     },
     faster: true,
+    // No page shows git last-update dates, so skip reading git history. With
+    // `faster`, Docusaurus otherwise runs a full-history `git log` at build
+    // time, which stalls in blob-less CI clones while git fetches old files.
+    experimental_vcs: false,
   },
   // Custom fields for HubSpot and Analytics
   customFields: {

@@ -17,26 +17,20 @@ import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
+import { loose } from '../../routes/route.js';
 import type { RouteAuth } from '../../routes/route.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import { JiraApiError } from './api.js';
 import { scopeJiraSourcesToProject } from './binding-scope.js';
-import { jiraIssueFiledIn } from './claim.js';
 import { unfilteredJiraScopes } from './intake-jql.js';
 import { DEPLOYMENT_CONNECTION } from './integration.js';
 import type { JiraIntegration } from './integration.js';
-import type { JiraRulesIngress } from './rules.js';
 
 type RouteContext = Context;
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const ISSUE_KEY_RE = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
-
-/** Erase a route handler's path-parameterized context to a plain `Context`. */
-function loose(c: unknown): RouteContext {
-  return c as RouteContext;
-}
 
 /**
  * Non-secret diagnostic snapshot of every Jira feature gate, mirroring the
@@ -61,14 +55,8 @@ export interface MountJiraRoutesOptions {
    * project filter; when absent, only the disabled `status` route is served.
    */
   intake?: IntakeStorage;
-  /**
-   * Factory rules ingress for observed issues. When present, a board-scoped
-   * issue listing also materializes new cards through the Jira event rules —
-   * the same automatic intake Linear has.
-   */
-  ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
   /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
-  workItems?: Pick<WorkItemsStorage, 'getByClaimKey' | 'listBySource'>;
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
 
 /**
@@ -252,7 +240,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
               selectedIds,
             })
           : null;
-        const intakeBoards = projectScope?.intakeBoards ?? null;
         const scopes = projectScope?.scopes ?? unfilteredJiraScopes(selectedIds);
         if (scopes.length === 0) {
           return c.json({ issues: [], nextCursor: null });
@@ -276,15 +263,6 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
             updatedAt: issue.updatedAt,
             sourceId: issue.sourceId || null,
           }));
-          if (factoryProjectId && intakeBoards && options.ingestFactoryIssues) {
-            await options.ingestFactoryIssues({
-              orgId: resolved.tenant.orgId,
-              userId: resolved.tenant.userId,
-              factoryProjectId,
-              issues: issuePayload.map(issue => ({ ...issue, site: null })),
-              intakeBoards,
-            });
-          }
           return c.json({ issues: issuePayload, nextCursor });
         } catch (err) {
           return jiraFetchError(loose(c), err);
@@ -330,9 +308,13 @@ export function buildJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
           // Factory never filed, reads like one that doesn't exist (as on Linear).
           const routed =
             issue?.sourceId != null &&
-            issue.sourceId in projectScope.intakeBoards &&
+            projectScope.sourceIds.includes(issue.sourceId) &&
             (projectScope.takes(issue.sourceId, issue.labels) ||
-              (await jiraIssueFiledIn(workItems, { orgId: resolved.tenant.orgId, factoryProjectId, issueRef: issue.id })));
+              !!(await workItems?.getByProjectSource({
+                orgId: resolved.tenant.orgId,
+                factoryProjectId,
+                source: { integrationId: 'jira', type: 'issue', externalId: issue.id },
+              })));
           if (!issue || issue.identifier.toUpperCase() !== identifier.toUpperCase() || !routed) {
             return c.json({ error: 'issue_not_found' }, 404);
           }

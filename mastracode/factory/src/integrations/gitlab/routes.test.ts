@@ -105,14 +105,8 @@ describe('GitLab UI routes', () => {
     expect(body.pullRequests[0].externalId).toMatch(/^gitlab-pr:/);
     expect(target).toHaveBeenCalledWith({ orgId: 'org1', repositoryId: 'repo-1' });
     expect(list).toHaveBeenCalledWith(expect.objectContaining({ includeDrafts: false, cursor: '1' }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'Merge Request Hook',
-      instanceHost: 'gitlab.com',
-      payload: expect.objectContaining({
-        project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
-        object_attributes: expect.objectContaining({ iid: 5, action: 'open', author: { username: 'rhys' } }),
-      }),
-    }));
+    // The list is a read: the reconcile sweep files the card, a board poll never does.
+    expect(ingest).not.toHaveBeenCalled();
   });
 
   it('reports direct server configuration without exposing credentials', async () => {
@@ -286,7 +280,7 @@ describe('GitLab UI routes', () => {
       listBindings: vi
         .fn()
         .mockResolvedValue([
-          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1', board: 'work' },
+          { integrationId: 'gitlab', sourceId: legacyId, factoryProjectId: 'factory-1' },
         ]),
       migrateSourceIds: vi.fn().mockResolvedValue({
         migrations: [{ from: legacyId, to: canonicalId }],
@@ -355,29 +349,21 @@ describe('GitLab UI routes', () => {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId, 'other'] } }),
       listBindings: vi.fn().mockResolvedValue([
-        { integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' },
-        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId, board: 'planning' },
+        { integrationId: 'gitlab', sourceId, factoryProjectId },
+        { integrationId: 'gitlab', sourceId: 'other', factoryProjectId: 'another-factory' },
       ]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const ingest = vi.fn().mockResolvedValue({ status: 'committed' });
     const response = await buildApp(gitlab, orgUser(), intake, ingest).request(
-      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId + '&board=work',
+      '/web/gitlab/issues?factoryProjectId=' + factoryProjectId,
     );
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(decodeIssueReference(body.issues[0].externalId)).toMatchObject({ projectId: '10', issueIid: 42 });
     expect(gitlab.intake.listIssues).toHaveBeenCalledWith(expect.objectContaining({ sourceIds: [sourceId] }));
-    expect(ingest).toHaveBeenCalledWith(expect.objectContaining({
-      event: 'Issue Hook',
-      payload: expect.objectContaining({
-        project: expect.objectContaining({ id: 10, path_with_namespace: 'acme/app' }),
-        object_attributes: expect.objectContaining({ iid: 42, action: 'open', author: { username: 'grace' } }),
-      }),
-    }));
-    expect(ingest.mock.calls[0]?.[0].payload.object_attributes.assignees).toBeUndefined();
-    expect(ingest.mock.calls[1]?.[0].payload.object_attributes.author).toBeUndefined();
+    expect(ingest).not.toHaveBeenCalled();
   });
 
   it('loads details only for a selected GitLab source routed to the caller-owned Factory', async () => {
@@ -410,7 +396,7 @@ describe('GitLab UI routes', () => {
     const intake = {
       ensureReady: vi.fn(),
       getConfig: vi.fn().mockResolvedValue({ gitlab: { enabled: true, sourceIds: [sourceId] } }),
-      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId, board: 'work' }]),
+      listBindings: vi.fn().mockResolvedValue([{ integrationId: 'gitlab', sourceId, factoryProjectId }]),
     } as unknown as NonNullable<Parameters<typeof buildGitLabRoutes>[0]['intake']>;
 
     const response = await buildApp(gitlab, orgUser(), intake).request(

@@ -9,6 +9,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import { Mastra } from '../../mastra';
 import { getSnapshotMemoryInfo, InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
@@ -975,6 +976,66 @@ describe('suspended-run discovery', () => {
   });
 
   describe('agent.sendStreamResume() storage fallback', () => {
+    it('resumes a second approval on an instance holding the first approval (#28976)', async () => {
+      const storage = new InMemoryStore();
+      const pubsubA = new EventEmitterPubSub();
+      const pubsubB = new EventEmitterPubSub();
+      const createAgent = () =>
+        new Agent({
+          id: 'user-agent',
+          name: 'User Agent',
+          instructions: 'Call both tools.',
+          model: createParallelToolCallsModel(),
+          tools: { toolA: createApprovalTool('toolA'), toolB: createApprovalTool('toolB') },
+        });
+      const agentA = createAgent();
+      const agentB = createAgent();
+      new Mastra({ agents: { agent: agentA }, logger: false, storage, pubsub: pubsubA });
+      new Mastra({ agents: { agent: agentB }, logger: false, storage, pubsub: pubsubB });
+
+      try {
+        const memory = { thread: 'thread-cross-instance', resource: 'resource-cross-instance' };
+        const stream = await agentA.stream('do both', { memory });
+        for await (const _chunk of stream.fullStream) {
+          // Park the first approval on A.
+        }
+        expect((await agentB.listSuspendedRuns({ threadId: memory.thread })).runs[0]?.toolCalls[0]?.toolCallId).toBe(
+          'call-A',
+        );
+
+        expect(
+          await agentB.sendStreamResume({
+            threadId: memory.thread,
+            resourceId: memory.resource,
+            runId: stream.runId,
+            toolCallId: 'call-A',
+            resumeData: { approved: true },
+          }),
+        ).toMatchObject({ accepted: true });
+        await vi.waitFor(async () => {
+          expect((await agentA.listSuspendedRuns({ threadId: memory.thread })).runs[0]?.toolCalls[0]?.toolCallId).toBe(
+            'call-B',
+          );
+        });
+
+        expect(
+          await agentA.sendStreamResume({
+            threadId: memory.thread,
+            resourceId: memory.resource,
+            runId: stream.runId,
+            toolCallId: 'call-B',
+            resumeData: { approved: true },
+          }),
+        ).toMatchObject({ accepted: true });
+        await vi.waitFor(async () => {
+          expect((await agentA.listSuspendedRuns({ threadId: memory.thread })).runs).toHaveLength(0);
+        });
+      } finally {
+        await pubsubA.close();
+        await pubsubB.close();
+      }
+    }, 30000);
+
     it('resumes a tool-suspended run after a simulated restart', async () => {
       const storage = new InMemoryStore();
       const resumedTool = vi.fn();

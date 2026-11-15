@@ -16,6 +16,17 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
+export type {
+  KnowledgeActivityResponse,
+  KnowledgeChangeNotice,
+  KnowledgeGraphResponse,
+  KnowledgeInstanceSummary,
+  KnowledgeLinkCountsResponse,
+  KnowledgePageLinksResponse,
+  KnowledgePageResponse,
+  KnowledgeSearchResponse,
+  KnowledgeTreeResponse,
+} from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   MastraDBMessage,
@@ -99,3 +110,15 @@ export type {
   RouteResponseType,
   RouteTypes,
 } from './route-types.generated.js';
+
+export type { SignalWriteOptions } from './resources/signal-writes';
+export type {
+  CreateFeedbackBody,
+  CreateFeedbackResponse,
+  CreateScoreBody,
+  CreateScoreResponse,
+  DeleteFeedbackResponse,
+  DeleteScoresResponse,
+  DeleteTracesResponse,
+  ReplaceFeedbackBody,
+} from './resources/observability-route-types';

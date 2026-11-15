@@ -40,6 +40,11 @@ export {
   type ClassifierResultContext,
 } from './classifier';
 export {
+  type ClassifierOnDecision,
+  type ClassifierProcessorDecision,
+  type ClassifierProcessorErrorMetadata,
+} from './classifier-decision';
+export {
   ModelSelectionProcessor,
   type ModelSelectionProcessorOptions,
   type ModelSelectionSelectOptions,

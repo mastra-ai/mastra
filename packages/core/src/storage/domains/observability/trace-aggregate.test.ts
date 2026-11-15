@@ -126,6 +126,22 @@ describe('traceAggregateRequestSchema', () => {
       'tokens.cached.avg',
       'cost.sum',
       'cost.avg',
+      'timeToFirstToken.avg',
+      'timeToFirstToken.min',
+      'timeToFirstToken.max',
+      'timeToFirstToken.p50',
+      'timeToFirstToken.p90',
+      'timeToFirstToken.p95',
+      'timeToFirstToken.p99',
+      'timeToFirstToken.count',
+      'timeToFirstChunk.avg',
+      'timeToFirstChunk.min',
+      'timeToFirstChunk.max',
+      'timeToFirstChunk.p50',
+      'timeToFirstChunk.p90',
+      'timeToFirstChunk.p95',
+      'timeToFirstChunk.p99',
+      'timeToFirstChunk.count',
     ]);
   });
 

@@ -1,8 +1,8 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
@@ -12,6 +12,7 @@ import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachmen
 import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { PinnedKnowledgeActivity } from '@mastra/playground-ui/domains/chat/knowledge';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -128,17 +129,12 @@ export function MessageBubble({
   const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
   const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
   const modelLabel = modelId && (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <MessageMetadata tabIndex={0}>
-            {formatModelName(modelId)}
-            {credentialLabel && ` · ${credentialLabel}`}
-          </MessageMetadata>
-        }
-      />
-      <TooltipContent>{modelId}</TooltipContent>
-    </Tooltip>
+    <MessageMetadata>
+      <Metadata>
+        <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+        {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+      </Metadata>
+    </MessageMetadata>
   );
   const replyFooter = (text: string) => ({
     model: modelLabel,
@@ -161,7 +157,7 @@ export function MessageBubble({
         from="user"
         pending={steeringPending}
         attachments={attachments.length > 0 && <MessageAttachments parts={attachments} />}
-        avatar={sender && <SenderAvatar author={sender} />}
+        avatar={!origin && sender && <SenderAvatar author={sender} />}
         footer={
           <>
             {steeringStatus && (
@@ -175,7 +171,7 @@ export function MessageBubble({
                 {steeringStatus}
               </Txt>
             )}
-            {origin && <ChannelOriginBadge origin={origin} />}
+            {origin && <ChannelOriginBadge origin={origin} author={author} />}
             {messageActions}
           </>
         }
@@ -280,6 +276,7 @@ export function MessageBubble({
       );
     case 'signal': {
       const { row } = view;
+      if (row.kind === 'pinned') return <PinnedKnowledgeActivity pinned={row.pinned} />;
       if (row.kind === 'state') {
         return (
           <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
@@ -287,7 +284,15 @@ export function MessageBubble({
       }
       if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
       if (row.kind === 'reminder') {
-        return <SignalActivity kind="reminder" label="System reminder" message={row.text} appearance="inline" />;
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+            appearance="inline"
+          />
+        );
       }
       return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
     }

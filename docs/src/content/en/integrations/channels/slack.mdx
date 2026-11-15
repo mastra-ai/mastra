@@ -3,16 +3,73 @@ title: "Slack | Channels"
 description: "Connect a Mastra agent to Slack channels and direct messages, configure the Slack app and webhook route, and test threaded agent conversations."
 packages:
   - "@mastra/core"
+  - "@mastra/connect"
 ---
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import SlackConnectTools from "@site/src/components/connect/generated/slack.mdx";
 
 # Slack
 
-Add your agent to Slack so people can message it in shared channel threads or direct messages. When someone sends a message, Mastra runs your agent through the normal agent pipeline and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
+Use Slack with Mastra in two ways:
 
-## Installation
+- **Agent tools** let an agent act in Slack, for example to read conversations or send messages.
+- **Agent chat** lets people message your agent in Slack channel threads or direct messages. Mastra runs the agent for each message and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
+
+[Mastra Connect](/docs/mastra-platform/connect) sets up both and keeps Slack credentials on the Mastra platform. For agent chat, you can also create and manage your own Slack app instead.
+
+## Connect
+
+Before you start, complete the [Connect setup](/docs/mastra-platform/connect#get-started) to install `@mastra/connect` and configure your platform project.
+
+Slack tools and Slack chat use separate connections with different credentials, so one connection can't serve both:
+
+- `slack` authorizes a workspace for agent tools.
+- `slack-channels` stores an app configuration token for agent chat.
+
+To use both, add both connections.
+
+<SlackConnectTools />
+
+### Agent chat
+
+Slack chat uses an app configuration token, which lets Mastra create a Slack app for each agent. Mastra creates and manages these apps. It doesn't use a Slack app that you created yourself, such as one from the [self-managed setup](#self-managed-setup).
+
+Your server needs a public URL that Slack can reach for webhook delivery and OAuth callbacks. Mastra platform supplies this URL. When you host elsewhere, set `MASTRA_SERVER_URL` to your public server URL. For local development, use a public HTTPS tunnel.
+
+1. Open [Slack apps](https://api.slack.com/apps), then open **Your App Configuration Tokens**.
+
+1. Generate an app configuration token for the workspace where the agent will run.
+
+1. Run `mastra connect add slack-channels` and complete the authorization flow. The platform stores and rotates the configuration credential.
+
+1. Pass [`channels()`](/reference/connect/channels) to the `Mastra` constructor. It registers the Slack channel provider and its routes:
+
+   ```typescript title="src/mastra/index.ts"
+   import { Mastra } from '@mastra/core'
+   import { channels } from '@mastra/connect'
+   import { assistant } from './agents/assistant'
+
+   export const mastra = new Mastra({
+     agents: { assistant },
+     channels: await channels({ providers: ['slack'] }),
+   })
+   ```
+
+   The `slack` key in `channels()` refers to the `slack-channels` connection.
+
+1. Start your Mastra application.
+
+1. In Studio, connect the Slack channel to an agent. Mastra creates a Slack app and returns an authorization URL. Open it, choose the workspace, and approve the bot scopes.
+
+The [default Slack manifest](/reference/channels/slack-provider#default-manifest) lists the requested scopes and event subscriptions.
+
+## Self-managed setup
+
+Create a Slack app yourself and store its credentials in your Mastra environment. Use this path for agent chat when you want to control the Slack app directly.
+
+### Installation
 
 Install the Slack adapter from the Chat SDK:
 
@@ -39,7 +96,7 @@ export const yourAgent = new Agent({
 })
 ```
 
-## Create a Slack app
+### Create a Slack app
 
 To connect your agent, create a Slack app in the workspace where you want it to run. The Slack app controls your agent's display in Slack, its capabilities, and the events it receives.
 
@@ -157,7 +214,7 @@ This manifest configures:
 
 After the app is created, open **Install App**, select **Install to Workspace**, and approve the requested scopes.
 
-## Set Slack credentials
+### Set Slack credentials
 
 Set the Slack credentials in Mastra so it can verify Slack requests and send messages back to Slack.
 
@@ -175,7 +232,7 @@ SLACK_BOT_TOKEN=xoxb-your-bot-token
 
 Mastra reads these environment variables automatically.
 
-## Configure the webhook route
+### Configure the webhook route
 
 Slack sends channel activity to Mastra through webhooks. A webhook is an HTTP endpoint Slack calls when something happens, such as a new message, a mention, or a user selecting an interactive card.
 
@@ -215,7 +272,7 @@ Update the request URLs in Slack:
 1. Select **Save Changes**.
 1. If Slack asks you to reinstall the app, open **OAuth & Permissions** and select **Reinstall to Workspace**.
 
-## Try it in Slack
+### Try it in Slack
 
 Open a direct message with the Slack bot user and send a message. Direct messages work because the manifest includes the `message.im` event and `im:*` scopes.
 
@@ -243,7 +300,7 @@ For finer control, gate on the sender's identity. Every request carries the send
 
 ### Server authentication
 
-The Slack webhook route is exempt from Mastra's [server authentication](/docs/auth/overview). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. Keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
+The Slack webhook route is exempt from Mastra's [server authentication](/docs/auth/overview). Slack can't send a bearer token, so Mastra registers the channel webhook as a public route and verifies each request with the Slack signing secret instead. This holds even when you enable a provider like [`MastraAuthSimple`](/docs/auth/simple-auth): the rest of your API stays protected, but the webhook route relies on the signing secret rather than your server auth. With the self-managed setup, keep `SLACK_SIGNING_SECRET` set so the adapter can reject requests that Slack didn't sign.
 
 ### External channels
 
@@ -289,7 +346,7 @@ Mastra also turns this context into a short system message. The agent learns the
 
 ## Production deployment
 
-When you deploy the Mastra server, update both request URLs in the Slack app settings to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
+With the self-managed setup, update both request URLs in the Slack app settings to the production webhook URL when you deploy the Mastra server. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
 
 Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/channels#serverless-deployment) in the channels overview.
 

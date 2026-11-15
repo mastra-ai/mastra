@@ -6,7 +6,7 @@ import { formatDuration } from '@/utils/duration';
 export type TokenUsageRow = {
   label: 'Input' | 'Output';
   total: number;
-  /** Non-zero breakdown, e.g. `5,632 cached · 974 text`. */
+  /** Non-zero breakdown, e.g. `5,632 cached, 974 text`. */
   breakdown: string | undefined;
 };
 
@@ -25,7 +25,7 @@ function formatBreakdown(details: object | undefined): string | undefined {
     const value: unknown = (details as Record<string, unknown>)[key];
     return typeof value === 'number' && value > 0 ? [`${value.toLocaleString()} ${label}`] : [];
   });
-  return parts.length > 0 ? parts.join(' · ') : undefined;
+  return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
 /** One row per direction that reports a token count; null when neither does. */

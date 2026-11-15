@@ -135,16 +135,17 @@ describe('when the server answers aggregateTraces()', () => {
     serveCard({ empty: true });
     render(<DistinctIdsCard />);
 
-    expect(
-      await screen.findByText('No traces in this range set a resource, thread, user or session id.'),
-    ).toBeDefined();
+    expect(await screen.findByText('No data in this range')).toBeDefined();
   });
 
   it('loads after Retry when both requests failed', async () => {
     failThenServe(8);
-    render(<DistinctIdsCard />);
+    const { queryClient } = render(<DistinctIdsCard />);
 
     await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+    // The error shows as soon as one request fails, and Retry refetches only the requests the card
+    // has rendered as failed. Wait for both to settle, or Retry can leave the second one failed.
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText('Resources', LEGEND, { timeout: 5000 })).toBeDefined();

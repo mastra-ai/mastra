@@ -7,6 +7,10 @@ interface PlaygroundModelContextType {
   model: string;
   modelOverride?: string;
   modelWarning?: string;
+  /** The model the agent is configured with, before any pick in the composer. */
+  agentModel?: { provider: string; model: string };
+  /** Drops the composer pick so requests run on the agent's own model again. Set only while there is a pick. */
+  resetModel?: () => void;
   setProvider: (provider: string) => void;
   setModel: (provider: string, model: string) => void;
 }
@@ -46,10 +50,22 @@ export function PlaygroundModelProvider({
 
   const { provider, model, explicit } = selection;
   const modelOverride = explicit ? `${provider}/${model}` : undefined;
+  const agentModel = defaultProvider && defaultModel ? { provider: defaultProvider, model: defaultModel } : undefined;
+  const resetModel = explicit
+    ? () => setSelection({ provider: defaultProvider, model: defaultModel, explicit: false })
+    : undefined;
 
   return (
     <PlaygroundModelContext.Provider
-      value={{ provider, model, modelOverride, setProvider: selectProvider, setModel: selectModel }}
+      value={{
+        provider,
+        model,
+        modelOverride,
+        agentModel,
+        resetModel,
+        setProvider: selectProvider,
+        setModel: selectModel,
+      }}
     >
       {children}
     </PlaygroundModelContext.Provider>

@@ -46,8 +46,9 @@ export function ScoresCard() {
 
   return (
     <ChartCard {...layout} isUpdating={isPlaceholderData}>
-      <ChartArea isEmpty={!isLoading && scorers.length === 0} emptyMessage="No scores in this range.">
+      <ChartArea isEmpty={!isLoading && scorers.length === 0}>
         <MetricsLineChart
+          lineStyle="thin"
           data={data?.buckets ?? []}
           series={scorerSeries(scorers)}
           height="fill"

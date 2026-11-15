@@ -7,7 +7,7 @@ import { FeedbackThread } from '../feedback-thread';
 
 afterEach(() => cleanup());
 
-const getInput = () => screen.getByPlaceholderText('Leave feedback...') as HTMLInputElement;
+const getInput = () => screen.getByPlaceholderText('Leave feedback') as HTMLInputElement;
 const getSubmit = () => screen.getByRole('button', { name: 'Send feedback' }) as HTMLButtonElement;
 const type = (value: string) => fireEvent.change(getInput(), { target: { value } });
 const openActions = async () => {

@@ -30,8 +30,8 @@ function mockFactories() {
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'Primary Factory' },
-          { id: 'fp-2', name: 'Secondary Factory' },
+          { id: 'fp-1', name: 'Primary Factory', repositories: [] },
+          { id: 'fp-2', name: 'Secondary Factory', repositories: [] },
         ],
       }),
     ),

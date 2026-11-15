@@ -68,6 +68,10 @@ export const timingFeatures = [
     : []),
 ];
 
+/** Core before the fields rejects their trace and span predicates, so the feature is only declared when core plans them. */
+export const contextFieldFeatures: readonly 'trace-query-context-fields'[] =
+  'requestId' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {}) ? ['trace-query-context-fields'] : [];
+
 /**
  * Outcome fields follow the same rule: core before them rejects their predicates and strict rows,
  * so they are only returned and declared when core knows them.
@@ -100,6 +104,9 @@ const TRACE_FIELDS = {
   sessionId: { sql: 'r.sessionId', parameterType: 'String' },
   userId: { sql: 'r.userId', parameterType: 'String' },
   organizationId: { sql: 'r.organizationId', parameterType: 'String' },
+  requestId: { sql: 'r.requestId', parameterType: 'String' },
+  serviceName: { sql: 'r.serviceName', parameterType: 'String' },
+  experimentId: { sql: 'r.experimentId', parameterType: 'String' },
   startedAt: { sql: 'r.startedAt', parameterType: "DateTime64(3, 'UTC')" },
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
@@ -141,6 +148,9 @@ const SPAN_FIELDS = {
   sessionId: { sql: 's.sessionId', parameterType: 'String' },
   userId: { sql: 's.userId', parameterType: 'String' },
   organizationId: { sql: 's.organizationId', parameterType: 'String' },
+  requestId: { sql: 's.requestId', parameterType: 'String' },
+  serviceName: { sql: 's.serviceName', parameterType: 'String' },
+  experimentId: { sql: 's.experimentId', parameterType: 'String' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 // Direct querySpans policy is separate from trace-related span predicates.
@@ -151,9 +161,6 @@ const SPAN_QUERY_FIELDS = {
   parentSpanId: { sql: 's.parentSpanId', parameterType: 'String' },
   threadId: { sql: 's.threadId', parameterType: 'String' },
   resourceId: { sql: 's.resourceId', parameterType: 'String' },
-  requestId: { sql: 's.requestId', parameterType: 'String' },
-  serviceName: { sql: 's.serviceName', parameterType: 'String' },
-  experimentId: { sql: 's.experimentId', parameterType: 'String' },
   environment: { sql: 's.environment', parameterType: 'String' },
   executionSource: { sql: 's.executionSource', parameterType: 'String' },
   parentEntityType: { sql: 's.parentEntityType', parameterType: 'String' },
@@ -581,7 +588,10 @@ function compileClickHouseTraceScope(
       runId,
       sessionId,
       userId,
-      organizationId
+      organizationId,
+      requestId,
+      serviceName,
+      experimentId
     FROM ${TABLE_SPAN_EVENTS}
     WHERE isNotNull(traceId)
       AND traceId IN (${

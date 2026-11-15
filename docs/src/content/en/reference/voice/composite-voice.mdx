@@ -19,21 +19,21 @@ CompositeVoice supports both Mastra voice providers and AI SDK model providers
   content={[
   {
     name: 'input',
-    type: 'MastraVoice | TranscriptionModel',
+    type: 'IMastraVoice | TranscriptionModel',
     description:
       'Voice provider or AI SDK transcription model to use for speech-to-text operations. AI SDK models are automatically wrapped.',
     isOptional: true,
   },
   {
     name: 'output',
-    type: 'MastraVoice | SpeechModel',
+    type: 'IMastraVoice | SpeechModel',
     description:
       'Voice provider or AI SDK speech model to use for text-to-speech operations. AI SDK models are automatically wrapped.',
     isOptional: true,
   },
   {
     name: 'realtime',
-    type: 'MastraVoice',
+    type: 'IMastraVoice',
     description: 'Voice provider to use for real-time speech-to-speech operations',
     isOptional: true,
   },

@@ -219,7 +219,7 @@ describe('chat run errors', () => {
     ).toBeVisible();
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
-    await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
+    await user.click(await screen.findByRole('option', { name: /GPT-5\.4(?! Mini)/ }));
 
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
@@ -278,7 +278,7 @@ describe('chat run errors', () => {
       expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
 
       await user.click(await screen.findByRole('button', { name: 'Change model' }));
-      await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+      await user.click(await screen.findByRole('option', { name: /Claude Opus 4\.5/ }));
 
       await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
     },
@@ -293,6 +293,30 @@ describe('chat run errors', () => {
     );
 
     expect(screen.getByText('Provider access failed')).toBeVisible();
+  });
+
+  it('sends the organization to add credits on Mastra when a run runs out of gateway credits', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          canAddCredits: true,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const outOfCredits = failedReply(
+      "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      'AI_APICallError',
+      { statusCode: 402 },
+    );
+    renderWithProviders(<ErrorSession messages={[outOfCredits]} modelId="mastra/anthropic/claude-opus-5.5" />);
+
+    expect(screen.getByText('Out of Mastra Gateway credits')).toBeVisible();
+    const addCredits = await screen.findByRole('link', { name: 'Add credits' });
+    expect(addCredits).toHaveAttribute('href', 'https://projects.mastra.ai/add-credits/org-1');
+    expect(addCredits).toHaveAttribute('target', '_blank');
   });
 
   it('continues a timed-out run from the card', async () => {
@@ -406,6 +430,14 @@ describe('chat run errors', () => {
 });
 
 describe('chat run errors on an account limit', () => {
+  async function expectCredentialHolder(holder: string) {
+    const credential = await screen.findByText('Runs on Claude Pro/Max');
+    const metadata = credential.closest<HTMLElement>('[data-slot="metadata"]');
+    if (!metadata) throw new Error('Credential metadata is missing');
+    expect(credential).toBeVisible();
+    expect(within(metadata).getByText(holder)).toBeVisible();
+  }
+
   const rateLimited = failedReply(
     "This request would exceed your account's rate limit. Please try again later.",
     'AI_APICallError',
@@ -457,14 +489,14 @@ describe('chat run errors on an account limit', () => {
     stubCredential('organization');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+    await expectCredentialHolder('Shared by the organization');
   });
 
   it('tells the chat owner the limit belongs to their own subscription', async () => {
     stubCredential('personal');
     renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
-    expect(await screen.findByText('Runs on Claude Pro/Max · Damien Schneider (you)')).toBeVisible();
+    await expectCredentialHolder('Damien Schneider (you)');
   });
 
   it('does not name a credential on an older failure, which may predate a credential change', async () => {
@@ -494,7 +526,7 @@ describe('chat run errors on an account limit', () => {
     const { rerender } = renderWithProviders(
       <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
     );
-    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+    await expectCredentialHolder('Shared by the organization');
 
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));

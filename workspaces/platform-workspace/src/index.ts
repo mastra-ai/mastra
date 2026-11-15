@@ -29,6 +29,7 @@ export {
   type PlatformSandboxNetworkIsolation,
   type PlatformSandboxTemplate,
   type SandboxAddressRegistry,
+  type SandboxPortAuthCookie,
   type SandboxTemplatePending,
 } from './sandbox.js';
 export {

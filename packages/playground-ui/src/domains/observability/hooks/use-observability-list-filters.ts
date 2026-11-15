@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { effectiveTextSearch } from '../lib/text-search';
 import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
 import type { ZoomMemory } from '../lib/zoom-memory';
 import {
@@ -54,8 +55,9 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   url?: ObservabilityListUrlState,
   {
     sortFields,
+    withTextSearch = false,
     defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
-  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
+  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset; withTextSearch?: boolean } = {},
 ) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
@@ -84,14 +86,17 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const fromMs = dateFrom?.getTime();
   const toMs = dateTo?.getTime();
   // Rolling presets are resolved against "now" only when the range changes, so the query key
-  // (and the cursors issued for it) stays stable while the list scrolls.
+  // (and the cursors issued for it) stays stable while the list scrolls. Both ends share one `now`
+  // so a rolling preset spans exactly its length.
   const timeRange = useMemo(() => {
+    const now = new Date();
     const window = resolveTracesDateWindow(
       datePreset,
       fromMs === undefined ? undefined : new Date(fromMs),
       toMs === undefined ? undefined : new Date(toMs),
+      now,
     );
-    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, new Date());
+    return resolveTraceQueryTimeRange(window.dateFrom, window.dateTo, now);
   }, [datePreset, fromMs, toMs]);
 
   // react-router resolves even a functional update against the params of the last render, so writes
@@ -151,10 +156,23 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
     update(params => writeObservabilityListSort(params, next));
 
-  const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
+  const searchValue = withTextSearch ? (searchParams.get('textSearch') ?? undefined) : undefined;
+  const textSearch = effectiveTextSearch(searchValue);
+  const setTextSearch = (value: string | undefined) =>
+    update(next => {
+      if (value !== undefined) next.set('textSearch', value);
+      else next.delete('textSearch');
+      next.delete('page');
+      next.delete('traceId');
+      next.delete('spanId');
+    });
+  const contentFiltersApplied = !!textSearch || tokens.length > 0 || groups.length > 0;
   const filtersApplied = contentFiltersApplied || datePreset !== defaultDatePreset;
 
   return {
+    searchValue,
+    textSearch,
+    setTextSearch,
     datePreset,
     dateFrom,
     dateTo,

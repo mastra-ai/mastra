@@ -1,8 +1,8 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { MessageSquare } from 'lucide-react';
 import { Link } from 'react-router';
 
 import { externalLinkLabel, PULL_REQUEST_STATUS_LABELS, pullRequestStatusForItem } from '../boardItems';
@@ -11,6 +11,7 @@ import type { WorkItem } from '../services/workItems';
 import { isPullRequestSource } from '../services/workItems';
 import { SourceIcon } from './BoardIcons';
 import { PullRequestStatusIcon } from './PullRequestStatusIcon';
+import { IconBubbleWide } from '@mastra/playground-ui/icons/central/IconBubbleWide';
 
 const RELATED_ITEM_LINK_CLASS = `hover:text-foreground relative z-10 flex w-fit max-w-full items-center gap-1 rounded-sm hover:underline ${focusRing}`;
 
@@ -27,7 +28,7 @@ export function RelatedWorkItemLink({
   const external = kind === 'external';
   const reference = workItemReferenceLabel(item);
   const relation = relationshipLabel(item);
-  const titleSuffix = reference === undefined ? '' : ` — ${item.title}`;
+  const titleSuffix = reference === undefined ? '' : `: ${item.title}`;
   const pullRequestStatus = isPullRequestSource(item.source) ? pullRequestStatusForItem(item) : undefined;
   const statusLabel = pullRequestStatus === undefined ? undefined : PULL_REQUEST_STATUS_LABELS[pullRequestStatus];
   let ariaLabel = `Open ${relation}${titleSuffix}`;
@@ -46,7 +47,7 @@ export function RelatedWorkItemLink({
         {reference ?? item.title}
       </Txt>
       {live && (
-        <MessageSquare
+        <IconBubbleWide
           data-live-session-indicator
           size={11}
           className="text-badge-green-indicator shrink-0"
@@ -55,9 +56,12 @@ export function RelatedWorkItemLink({
       )}
     </>
   );
-  let tooltip = reference === undefined ? relation : `${relation} · ${item.title}`;
-  if (statusLabel !== undefined) tooltip = `${tooltip} · ${statusLabel}`;
-  if (live) tooltip = `${tooltip} · Live session`;
+  const tooltipParts = [
+    relation,
+    ...(reference === undefined ? [] : [item.title]),
+    ...(statusLabel === undefined ? [] : [statusLabel]),
+    ...(live ? ['Live session'] : []),
+  ];
   const link = external ? (
     <a
       href={href}
@@ -84,7 +88,11 @@ export function RelatedWorkItemLink({
     <Tooltip>
       <TooltipTrigger render={link} />
       <TooltipContent side="top" className="max-w-90">
-        <span className="wrap-anywhere whitespace-pre-wrap">{tooltip}</span>
+        <Metadata>
+          {tooltipParts.map((part, index) => (
+            <Metadata.Item key={index}>{part}</Metadata.Item>
+          ))}
+        </Metadata>
       </TooltipContent>
     </Tooltip>
   );

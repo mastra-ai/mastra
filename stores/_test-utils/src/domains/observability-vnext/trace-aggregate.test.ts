@@ -224,7 +224,7 @@ describe('trace-aggregate conformance cases', () => {
         expect('bucket' in row, testCase.name).toBe(testCase.request.interval !== undefined);
       }
       for (const measure of Object.keys(testCase.tolerance ?? {})) {
-        expect(measure, testCase.name).toMatch(/^duration\.p\d+$/);
+        expect(measure, testCase.name).toMatch(/^(duration|timeToFirstToken|timeToFirstChunk)\.p\d+$/);
         expect(testCase.request.measures, testCase.name).toContain(measure);
       }
     }

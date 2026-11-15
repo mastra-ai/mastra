@@ -1,4 +1,3 @@
-import { FileText } from 'lucide-react';
 import * as React from 'react';
 
 import type { ThreadRailTurn } from './thread-rail-turns';
@@ -6,6 +5,7 @@ import type { ThreadRailTurn } from './thread-rail-turns';
 import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { focusRing } from '@/ds/primitives/transitions';
 import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
@@ -80,33 +80,36 @@ export function ThreadRail({
     [messageScroller, onSelect],
   );
 
-  const showPreview = (index: number, element: HTMLElement) => {
-    const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
-    const itemRect = element.getBoundingClientRect();
-    const nextTurn = turns[index];
-    if (!nextTurn) return;
+  const showPreview = React.useCallback(
+    (index: number, element: HTMLElement) => {
+      const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
+      const itemRect = element.getBoundingClientRect();
+      const nextTurn = turns[index];
+      if (!nextTurn) return;
 
-    setPreviewState(current => {
-      const nextTop = itemRect.top + itemRect.height / 2 - railTop;
-      if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
-        return { ...current, top: nextTop };
-      }
+      setPreviewState(current => {
+        const nextTop = itemRect.top + itemRect.height / 2 - railTop;
+        if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
+          return { ...current, top: nextTop };
+        }
 
-      const previousTurn =
-        current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
-          ? current.currentTurn
-          : undefined;
+        const previousTurn =
+          current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
+            ? current.currentTurn
+            : undefined;
 
-      return {
-        currentTurn: nextTurn,
-        previousTurn,
-        index,
-        phase: 'entering',
-        top: nextTop,
-        transitionKey: current.transitionKey + 1,
-      };
-    });
-  };
+        return {
+          currentTurn: nextTurn,
+          previousTurn,
+          index,
+          phase: 'entering',
+          top: nextTop,
+          transitionKey: current.transitionKey + 1,
+        };
+      });
+    },
+    [turns],
+  );
 
   const hidePreview = () => {
     setPreviewState(current => {
@@ -258,7 +261,7 @@ const getRailItemTone = ({
   return 'bg-foreground/40';
 };
 
-function ThreadRailItem({
+const ThreadRailItem = React.memo(function ThreadRailItem({
   turn,
   index,
   distance,
@@ -297,7 +300,7 @@ function ThreadRailItem({
       />
     </div>
   );
-}
+});
 
 function ThreadRailPreview({
   id,
@@ -391,7 +394,7 @@ function ThreadRailPreviewContent({
               key={file}
               className="inline-flex max-w-44 items-center gap-1.5 truncate"
             >
-              <FileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
+              <IconFileText className="size-3.5 shrink-0 opacity-70" aria-hidden />
               {file}
             </Txt>
           ))}

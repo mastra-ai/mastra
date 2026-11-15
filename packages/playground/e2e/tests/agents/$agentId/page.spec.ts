@@ -12,14 +12,16 @@ test.describe('Agent detail page', () => {
 
       await expect(page).toHaveTitle(/Mastra Studio/);
 
+      // Thread history: either stored threads or the empty state on a fresh database
+      const emptyHistory = page.getByText('Your conversations will appear here');
+      await expect(page.getByTestId('thread-list').or(emptyHistory)).toBeAttached();
+      // With no threads yet the panel folds itself away; open it to reach New Thread.
+      if (await emptyHistory.count()) await page.getByRole('button', { name: 'Expand panel' }).click();
+
       // Thread sidebar
       const newChatButton = page.locator('a:has-text("New Thread")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
-      // Thread history: either stored threads or the empty state on a fresh database
-      await expect(
-        page.getByTestId('thread-list').or(page.getByText('Your conversations will appear here')),
-      ).toBeAttached();
 
       // The overview lives in a side panel toggled from the route header (starts collapsed)
       await expect(page.getByRole('tab', { name: 'Chat' })).toHaveAttribute('aria-selected', 'true');
@@ -45,7 +47,7 @@ test.describe('Agent detail page', () => {
       await expect(overview).not.toBeVisible();
 
       // The composer auto-focuses and swallows `]` as text, so move focus out of it first.
-      const composer = page.getByPlaceholder('Enter your message...');
+      const composer = page.getByPlaceholder('Enter your message');
       await expect(composer).toBeFocused();
       await composer.blur();
 

@@ -1,6 +1,8 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
+import { stringify } from 'superjson';
 
-const emptySchema = '{"type":"object"}';
+// The server sends schemas through superjson (server/utils.ts), so fixtures must too.
+const emptySchema = stringify({ type: 'object' });
 
 const stepDef = (id: string) => ({
   id,

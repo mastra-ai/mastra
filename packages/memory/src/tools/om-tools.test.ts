@@ -5,6 +5,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 import { Memory } from '../index';
 import {
+  formatMessageParts,
+  hasVisibleParts,
   listThreadsForResource,
   recallMessages,
   recallPart,
@@ -14,6 +16,275 @@ import {
 } from './om-tools';
 
 describe('om-tools', () => {
+  describe('hasVisibleParts', () => {
+    const message = (content: unknown) =>
+      ({
+        id: 'm',
+        role: 'assistant',
+        threadId: 't',
+        createdAt: new Date('2024-01-01T00:00:00Z'),
+        content,
+      }) as MastraDBMessage;
+    const withParts = (...parts: unknown[]) => message({ format: 2, parts });
+    const invocation = (toolInvocation: unknown) => ({ type: 'tool-invocation', toolInvocation });
+
+    it.each([
+      ['string content', message('hello'), true],
+      ['legacy content text', message({ format: 2, parts: [], content: 'hello' }), true],
+      ['no parts or content', message({ format: 2, parts: [] }), false],
+      ['text', withParts({ type: 'text', text: 'hello' }), true],
+      ['empty text', withParts({ type: 'text', text: '' }), false],
+      ['reasoning', withParts({ type: 'reasoning', reasoning: 'private', details: [] }), false],
+      ['redacted reasoning', withParts({ type: 'redacted-reasoning', data: 'private' }), false],
+      ['step start', withParts({ type: 'step-start' }), false],
+      ['data marker', withParts({ type: 'data-om-observation', data: {} }), false],
+      ['untyped part', withParts({ text: 'hello' }), false],
+      ['tool call with args', withParts(invocation({ state: 'call', toolName: 'lookup', args: {} })), true],
+      ['partial tool call', withParts(invocation({ state: 'partial-call', toolName: 'lookup', args: {} })), false],
+      ['tool call without args', withParts(invocation({ state: 'call', toolName: 'lookup' })), false],
+      ['tool result without args', withParts(invocation({ state: 'result', toolName: 'lookup', result: 1 })), true],
+      ['tool invocation without name', withParts(invocation({ state: 'result', args: {}, result: 1 })), false],
+      ['v5 tool call', withParts({ type: 'tool-call', toolName: 'lookup', input: {} }), true],
+      ['unnamed v5 tool result', withParts({ type: 'tool-result', output: 1 }), false],
+      ['image', withParts({ type: 'image', image: 'https://example.com/a.png' }), true],
+      ['unknown part type', withParts({ type: 'source', url: 'https://example.com' }), true],
+      ['only hidden parts', withParts({ type: 'reasoning', text: 'private' }, { type: 'step-start' }), false],
+      ['hidden then text', withParts({ type: 'reasoning', text: 'private' }, { type: 'text', text: 'hi' }), true],
+    ])('matches the formatter for %s', (_name, msg, visible) => {
+      expect(hasVisibleParts(msg)).toBe(visible);
+      expect(formatMessageParts(msg, 'low').length > 0).toBe(visible);
+    });
+
+    it('does not serialize tool results to decide visibility', () => {
+      const toJSON = vi.fn(() => ({ rows: 1 }));
+      const msg = withParts(invocation({ state: 'result', toolName: 'lookup', args: {}, result: { toJSON } }));
+
+      expect(hasVisibleParts(msg)).toBe(true);
+      expect(toJSON).not.toHaveBeenCalled();
+      formatMessageParts(msg, 'low');
+      expect(toJSON).toHaveBeenCalled();
+    });
+  });
+
+  describe('recalling visible content without stored reasoning', () => {
+    let memory: Memory;
+    const threadId = 'thread-visible-recall';
+    const resourceId = 'resource-visible-recall';
+    const hiddenParts = [
+      { type: 'reasoning', reasoning: 'private reasoning field', details: [] },
+      { type: 'reasoning', text: 'private reasoning text' },
+      { type: 'redacted-reasoning', data: 'private redacted data' },
+    ];
+
+    beforeEach(async () => {
+      memory = new Memory({ storage: new InMemoryStore() });
+      await memory.saveThread({
+        thread: {
+          id: threadId,
+          resourceId,
+          createdAt: new Date('2024-01-01T10:00:00Z'),
+          updatedAt: new Date('2024-01-01T10:04:00Z'),
+        },
+      });
+      // Seed the real store with persisted provider shapes, including older reasoning parts.
+      const store = await memory.getMemoryStore();
+      await store.saveMessages({
+        messages: [
+          {
+            id: 'visible-anchor',
+            role: 'user',
+            content: { format: 2, parts: [{ type: 'text', text: 'Question' }] },
+          },
+          {
+            id: 'mixed-reply',
+            role: 'assistant',
+            content: {
+              format: 2,
+              parts: [
+                ...hiddenParts,
+                { type: 'text', text: 'Public answer' },
+                {
+                  type: 'tool-invocation',
+                  toolInvocation: {
+                    state: 'result',
+                    toolCallId: 'lookup-result',
+                    toolName: 'lookup',
+                    args: { query: 'public' },
+                    result: 'Public tool result',
+                  },
+                },
+              ],
+            },
+          },
+          {
+            id: 'private-only',
+            role: 'assistant',
+            content: { format: 2, parts: [...hiddenParts, { type: 'step-start' }] },
+          },
+          {
+            id: 'visible-next',
+            role: 'assistant',
+            content: { format: 2, parts: [{ type: 'text', text: 'Next public answer' }] },
+          },
+        ].map((message, index) => ({
+          ...message,
+          threadId,
+          resourceId,
+          createdAt: new Date(Date.parse('2024-01-01T10:00:00Z') + index * 60_000),
+        })) as MastraDBMessage[],
+      });
+    });
+
+    it.each([0, 1, 2])('does not return a hidden part at its stored index %i', async partIndex => {
+      await expect(recallPart({ memory, threadId, resourceId, cursor: 'mixed-reply', partIndex })).rejects.toThrow(
+        'Available indices: 3, 4, 4',
+      );
+    });
+
+    it('preserves stored indices for visible text and tool results', async () => {
+      const text = await recallPart({ memory, threadId, resourceId, cursor: 'mixed-reply', partIndex: 3 });
+      expect(text).toMatchObject({ messageId: 'mixed-reply', partIndex: 3, type: 'text', text: 'Public answer' });
+      const tool = await recallPart({ memory, threadId, resourceId, cursor: 'mixed-reply', partIndex: 4 });
+      expect(tool).toMatchObject({ messageId: 'mixed-reply', partIndex: 4, type: 'tool-result' });
+      expect(tool.text).toContain('Public tool result');
+    });
+
+    it.each(['low', 'high'] as const)('omits reasoning in %s detail through every paging entry point', async detail => {
+      const results = [
+        await recallMessages({ memory, threadId, resourceId, cursor: 'visible-anchor', detail }),
+        await recallMessages({ memory, threadId, resourceId, cursor: 'visible-next', page: -1, detail }),
+        await recallThreadFromStart({ memory, threadId, resourceId, detail }),
+        await recallThreadFromStart({ memory, threadId, resourceId, detail, anchor: 'end' }),
+      ];
+      for (const result of results) {
+        expect(result.messages).not.toMatch(/private|\[redacted-reasoning\]|\[step-start\]/);
+      }
+      expect(results.map(result => result.count)).toEqual(detail === 'low' ? [2, 2, 3, 3] : [1, 1, 3, 3]);
+      expect(results[0].messages).toContain('[p3] Public answer');
+      if (detail === 'low') {
+        expect(results[0].messages).toContain('[p4] [Tool Result: lookup]');
+        expect(results[0].messages).toContain('Public tool result');
+      }
+    });
+
+    it.each(['low', 'high'] as const)('cannot reveal reasoning with an explicit %s detail filter', async detail => {
+      const results = [
+        await recallMessages({ memory, threadId, resourceId, cursor: 'visible-anchor', detail, partType: 'reasoning' }),
+        await recallThreadFromStart({ memory, threadId, resourceId, detail, partType: 'reasoning' }),
+      ];
+      for (const result of results) {
+        expect(result.messages).not.toContain('private');
+        expect(result.messages).toContain('no message parts matched');
+      }
+    });
+
+    it('skips reasoning-only messages when continuing to the next visible message', async () => {
+      const result = await recallPart({ memory, threadId, resourceId, cursor: 'mixed-reply', partIndex: 5 });
+      expect(result).toMatchObject({ messageId: 'visible-next', partIndex: 0, type: 'text' });
+      expect(result.text).toContain('Next public answer');
+      expect(result.text).not.toContain('private');
+    });
+
+    describe('with long runs of hidden messages', () => {
+      const runThreadId = 'thread-hidden-runs';
+      const hidden = (id: string) => ({
+        id,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'reasoning', text: 'private run' }, { type: 'step-start' }] },
+      });
+      const visible = (id: string) => ({
+        id,
+        role: 'assistant',
+        content: { format: 2, parts: [{ type: 'text', text: `Public ${id}` }] },
+      });
+
+      beforeEach(async () => {
+        await memory.saveThread({
+          thread: {
+            id: runThreadId,
+            resourceId,
+            createdAt: new Date('2024-01-02T00:00:00Z'),
+            updatedAt: new Date('2024-01-02T00:00:00Z'),
+          },
+        });
+        const run = (prefix: string, count: number) =>
+          Array.from({ length: count }, (_, i) => hidden(`${prefix}-${i}`));
+        const store = await memory.getMemoryStore();
+        await store.saveMessages({
+          messages: [visible('a'), ...run('h1', 4), visible('b'), ...run('h2', 60), visible('c')].map(
+            (message, index) => ({
+              ...message,
+              threadId: runThreadId,
+              resourceId,
+              createdAt: new Date(Date.parse('2024-01-02T00:00:00Z') + index * 1000),
+            }),
+          ) as MastraDBMessage[],
+        });
+      });
+
+      it('pages from a cursor past hidden messages', async () => {
+        const forward = await recallMessages({ memory, threadId: runThreadId, resourceId, cursor: 'a', limit: 1 });
+        expect(forward).toMatchObject({ count: 1, hasNextPage: true });
+        expect(forward.messages).toContain('Public b');
+
+        const backward = await recallMessages({
+          memory,
+          threadId: runThreadId,
+          resourceId,
+          cursor: 'c',
+          page: -1,
+          limit: 1,
+        });
+        expect(backward).toMatchObject({ count: 1, hasPrevPage: true });
+        expect(backward.messages).toContain('Public b');
+      });
+
+      it('browses the thread from either end past hidden messages', async () => {
+        const start = await recallThreadFromStart({ memory, threadId: runThreadId, resourceId, limit: 1, page: 2 });
+        expect(start).toMatchObject({ count: 1, hasNextPage: true, hasPrevPage: true });
+        expect(start.messages).toContain('Public b');
+
+        const end = await recallThreadFromStart({
+          memory,
+          threadId: runThreadId,
+          resourceId,
+          limit: 1,
+          anchor: 'end',
+        });
+        expect(end).toMatchObject({ count: 1, hasPrevPage: true });
+        expect(end.messages).toContain('Public c');
+      });
+
+      it('continues to the next visible message past more than 50 hidden messages', async () => {
+        const result = await recallPart({ memory, threadId: runThreadId, resourceId, cursor: 'b', partIndex: 1 });
+        expect(result).toMatchObject({ messageId: 'c', partIndex: 0, type: 'text' });
+        expect(result.text).toContain('Public c');
+      });
+    });
+
+    it('does not offer reasoning as a recall filter', () => {
+      const schema = standardSchemaToJSONSchema(recallTool().inputSchema as any) as {
+        properties: { partType: { enum: string[] } };
+      };
+      expect(schema.properties.partType.enum).toEqual(['text', 'tool-call', 'tool-result', 'image', 'file']);
+    });
+
+    it('keeps stale reasoning filters safe when resumed tool calls skip schema validation', async () => {
+      const result = await recallTool().execute?.({ mode: 'messages', partType: 'reasoning' }, {
+        memory,
+        agent: { threadId, resourceId },
+        resumeData: { stale: true },
+      } as any);
+      expect(result).toMatchObject({ messages: '(no message parts matched the current filters)' });
+    });
+
+    it('rejects direct recall of a reasoning-only message', async () => {
+      await expect(recallPart({ memory, threadId, resourceId, cursor: 'private-only', partIndex: 0 })).rejects.toThrow(
+        'has no visible content',
+      );
+    });
+  });
+
   describe('recallMessages', () => {
     let memory: Memory;
     const threadId = 'thread-om-tools';
@@ -292,7 +563,7 @@ describe('om-tools', () => {
       expect(result.messages).toContain('[msg-3]');
     });
 
-    it('should return a visible-parts empty message when paged messages have no renderable parts', async () => {
+    it('should exclude messages with no renderable parts from the page count', async () => {
       await memory.saveMessages({
         messages: [
           {
@@ -318,7 +589,7 @@ describe('om-tools', () => {
         limit: 1,
       });
 
-      expect(result.count).toBe(1);
+      expect(result.count).toBe(0);
       expect(result.messages).toBe('(no visible message parts found for this page)');
     });
 

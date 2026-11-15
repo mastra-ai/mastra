@@ -108,6 +108,42 @@ export const Tables: Story = {
   },
 };
 
+const FACTORY_TABLE = `One factory, **Acme Platform**, with 19 cards.
+
+| Board | Stage | Cards |
+| --- | --- | --- |
+| Work | Intake | 4 (one is linked to a GitHub issue) |
+| Work | Triage | 2 |
+| Work | Planning | 2 |
+| Work | Building | 2 |
+| Work | Review | 2 |
+| Work | PR review | 1 (linked to a PR) |
+| Work | Done / Canceled | 2 / 1 |
+| Review | Intake / Reviewing / Done | 1 / 1 / 1 (all linked to PRs) |`;
+
+export const ChatTable: Story = {
+  args: {
+    children: FACTORY_TABLE,
+  },
+};
+
+export const ChatTableWithActions: Story = {
+  args: {
+    ...ChatTable.args,
+    tableActions: true,
+  },
+};
+
+export const SingleColumnTable: Story = {
+  args: {
+    children: `| Stage |
+| --- |
+| Intake |
+| Planning |
+| Building |`,
+  },
+};
+
 export const ComplexDocument: Story = {
   args: {
     children: `# Getting Started with Mastra

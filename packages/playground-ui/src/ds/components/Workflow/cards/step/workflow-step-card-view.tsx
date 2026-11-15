@@ -9,6 +9,7 @@ import { WorkflowTypeBadge } from '../workflow-type-badge';
 import { ActivityWick } from '@/ds/components/Activity';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Metadata } from '@/ds/components/Metadata';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
@@ -160,7 +161,11 @@ export function WorkflowStepCardView(props: WorkflowStepCardViewProps) {
               )}
               {capabilities.length > 0 && (
                 <Txt as="span" variant="meta" tone="muted">
-                  {capabilities.join(' · ')}
+                  <Metadata>
+                    {capabilities.map(capability => (
+                      <Metadata.Item key={capability}>{capability}</Metadata.Item>
+                    ))}
+                  </Metadata>
                 </Txt>
               )}
             </span>

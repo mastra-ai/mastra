@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Txt } from '../components/Txt/Txt';
 import { ARRIVING_CLASS, ARRIVING_MS } from './animations';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
+import { IconArrowDown } from '@/ds/icons/central/IconArrowDown';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
 import { cn } from '@/lib/utils';
 import '@/ds/components/Arrival/arrival.css';
 
@@ -34,7 +35,7 @@ const DemoButton = ({ onClick, children }: { onClick: () => void; children: Reac
   <button
     type="button"
     onClick={onClick}
-    className="state-layer w-fit cursor-pointer rounded-md border border-border bg-card px-2.5 py-1 text-label text-foreground"
+    className="w-fit cursor-pointer rounded-md border border-border bg-card state-layer px-2.5 py-1 text-label text-foreground"
   >
     {children}
   </button>
@@ -82,7 +83,7 @@ const stateSpecimens: UtilitySpecimen[] = [
     tokens: ['state-layer'],
     note: 'Hover: the rung lands on top of the fill, never in it',
     demo: (
-      <div className="state-layer flex h-24 items-center justify-center rounded-lg bg-card shadow-raised">
+      <div className="flex h-24 items-center justify-center rounded-lg bg-card state-layer shadow-raised">
         <Txt variant="label">Reach for this one</Txt>
       </div>
     ),
@@ -163,7 +164,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Ascending: drawn from the bottom up, the way it points',
     demo: (
       <div className="flex h-16 items-center justify-center rounded-md bg-background">
-        <ArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
+        <IconArrowUp className="animate-sort-arrow-up size-icon-lg text-foreground" />
       </div>
     ),
   },
@@ -172,7 +173,7 @@ const animationSpecimens: UtilitySpecimen[] = [
     note: 'Descending: the same reveal, top down',
     demo: (
       <div className="flex h-16 items-center justify-center rounded-md bg-background">
-        <ArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
+        <IconArrowDown className="animate-sort-arrow-down size-icon-lg text-foreground" />
       </div>
     ),
   },

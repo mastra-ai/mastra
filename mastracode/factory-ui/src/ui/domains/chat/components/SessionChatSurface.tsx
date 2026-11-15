@@ -1,3 +1,4 @@
+import { TranscriptAnnotations } from '@mastra/playground-ui/components/ai/annotations';
 import { ChatShell } from '@mastra/playground-ui/components/ChatShell';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode, RefObject } from 'react';
@@ -18,7 +19,8 @@ interface SessionChatSurfaceProps {
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
-  composerFooter?: ReactNode;
+  /** Leads the status row above the composer. */
+  composerStatus?: ReactNode;
   className?: string;
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
@@ -30,7 +32,7 @@ export function SessionChatSurface({
   secondaryBar,
   emptyState,
   composerLabel,
-  composerFooter,
+  composerStatus,
   className,
   contentRef,
   contentOverlay,
@@ -53,26 +55,31 @@ export function SessionChatSurface({
       {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
       {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
-        <ChatShell.Viewport>
-          <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
+        <ChatShell.Viewport className="transition-[var(--workspace-files-transition,padding)]">
           <div ref={contentRef} className="relative flex min-h-full min-w-0 flex-1 flex-col">
             {contentOverlay}
-            <ChatShell.Content className="gap-0 pt-6">
-              <ChatShell.Column className="flex-1">
+            <ChatShell.Content
+              role="region"
+              aria-label="Conversation"
+              aria-busy={preparing}
+              className="relative gap-0 pt-6"
+            >
+              <SessionPreparationOverlay historyInitializing={historyInitializing} preparing={preparing} />
+              <ChatShell.Transcript className="flex-1">
+                <TranscriptAnnotations />
                 <ChatMessageBoundary showPreparation={false}>
                   <TranscriptHistoryLoader />
                   {transcript.entries.length === 0 && emptyState}
                   <Transcript tail={stretchLive => <ActivityLine stretchLive={stretchLive} />} />
                 </ChatMessageBoundary>
-              </ChatShell.Column>
+              </ChatShell.Transcript>
             </ChatShell.Content>
             <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
-                <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">
-                  <ComposerPanel />
-                  {composerFooter}
+                <div role="region" aria-label={composerLabel}>
+                  <ComposerPanel statusLead={composerStatus} />
                 </div>
               </ChatShell.Column>
             </ChatShell.Dock>

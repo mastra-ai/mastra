@@ -3,6 +3,7 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
 import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
@@ -18,6 +19,7 @@ import type { Workspace } from '../../../workspace/workspace';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { SaveQueueManager } from '../../save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../../signals';
+import type { AgentStreamPublisher } from '../../streams/publisher';
 import type { AgentMethodType } from '../../types';
 import { createMapResultsStep } from './map-results-step';
 import { createPrepareMemoryStep } from './prepare-memory-step';
@@ -44,6 +46,7 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   requireToolApproval?: RequireToolApproval;
   toolCallConcurrency?: ToolCallConcurrency;
   eagerToolExecution?: boolean;
+  streamPublisher?: AgentStreamPublisher;
   resumeContext?: {
     resumeData: any;
     snapshot: any;
@@ -87,6 +90,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   requireToolApproval,
   toolCallConcurrency,
   eagerToolExecution,
+  streamPublisher,
   resumeContext,
   agentId,
   actor,
@@ -115,9 +119,11 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   // workflow registers. Prepare-stream and the agentic loop deliberately do
   // not share runtime state — each owns its own per-run scratch space.
   const runScope = createRunScope();
-  const memoryAuthorizationChecks = new Map<MastraFGAPermissionInput, Promise<void>>();
+  // Keyed by permission and thread: approval for one thread must not cover another.
+  const memoryAuthorizationChecks = new Map<string, Promise<void>>();
   const authorizeMemory = (permission: MastraFGAPermissionInput, threadId: string) => {
-    const existingCheck = memoryAuthorizationChecks.get(permission);
+    const key = JSON.stringify([permission, threadId]);
+    const existingCheck = memoryAuthorizationChecks.get(key);
     if (existingCheck) return existingCheck;
 
     const check = checkThreadFGA({
@@ -130,12 +136,23 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
       permission,
       actor,
     }).catch(error => {
-      memoryAuthorizationChecks.delete(permission);
+      memoryAuthorizationChecks.delete(key);
       throw error;
     });
-    memoryAuthorizationChecks.set(permission, check);
+    memoryAuthorizationChecks.set(key, check);
     return check;
   };
+
+  // Hydrated once: prepare-tools-step restores processor-loaded tools from the
+  // suspended transcript, and stream-step resumes the loop from it.
+  let resumeSnapshot: Promise<any> | undefined;
+  const getResumeSnapshot = resumeContext
+    ? () =>
+        (resumeSnapshot ??= hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
+          logger: capabilities.logger,
+          runId,
+        }))
+    : undefined;
 
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
@@ -148,6 +165,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    getResumeSnapshot,
     runScope,
   });
 
@@ -175,7 +193,9 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     requireToolApproval,
     toolCallConcurrency,
     eagerToolExecution,
+    streamPublisher,
     resumeContext,
+    getResumeSnapshot,
     agentId,
     agentVersionId,
     resolvedScopes,

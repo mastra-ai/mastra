@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { remove } from 'fs-extra/esm';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DevBundler } from './DevBundler';
@@ -255,6 +256,21 @@ describe('DevBundler', () => {
         );
       } finally {
         await remove(tmpDir);
+      }
+    });
+
+    it('writes analysis output under the provided output directory, not the cwd', async () => {
+      const devBundler = new DevBundler();
+      const { getWatcherInputOptions } = await import('@mastra/deployer/build');
+
+      const tmpDir = '.test-tmp-root/.mastra';
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+
+        const options = vi.mocked(getWatcherInputOptions).mock.lastCall?.[3];
+        expect(options?.outputDir).toBe(join(tmpDir, '.build'));
+      } finally {
+        await remove('.test-tmp-root');
       }
     });
 

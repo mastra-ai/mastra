@@ -444,6 +444,29 @@ describe('createVectorQueryTool', () => {
     });
   });
 
+  describe('fractional topK with a reranker', () => {
+    it('rounds topK down instead of returning no results', async () => {
+      vi.mocked(vectorQuerySearch).mockResolvedValueOnce({
+        results: [1, 2, 3].map(i => ({ id: String(i), metadata: { text: `doc ${i}` }, score: i / 3 })),
+      } as any);
+      const tool = createVectorQueryTool({
+        id: 'test',
+        model: mockModel,
+        indexName: 'testIndex',
+        vectorStoreName: 'testStore',
+        reranker: { model: { getRelevanceScore: async () => 1 } },
+      });
+
+      const result = await tool.execute(
+        { queryText: 'foo', topK: 2.5 },
+        { mastra: mockMastra as any, requestContext: new RequestContext() },
+      );
+
+      expect(vectorQuerySearch).toHaveBeenLastCalledWith(expect.objectContaining({ topK: 2 }));
+      expect(result.relevantContext).toHaveLength(2);
+    });
+  });
+
   describe('dynamic vectorStore (multi-tenant schema support)', () => {
     it('should support vectorStore as a function that receives requestContext', async () => {
       // Simulate multi-tenant setup where each tenant has a different schema

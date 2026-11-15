@@ -273,6 +273,35 @@ describe('Thread', () => {
     });
   });
 
+  describe('when the user edits the composer after dictating', () => {
+    beforeEach(() => installFakeSpeechRecognition());
+    afterEach(() => uninstallFakeSpeechRecognition());
+
+    it('keeps the edit', async () => {
+      server.use(...baseHandlers());
+      await act(async () => {
+        renderThread([]);
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Start dictation' }));
+      await screen.findByRole('button', { name: 'Stop dictation' });
+      act(() => {
+        lastRecognition?.onresult?.({
+          resultIndex: 0,
+          results: [{ 0: { transcript: 'Accept the newer address.' }, isFinal: true }],
+        });
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Stop dictation' }));
+      const composer = screen.getByRole<HTMLTextAreaElement>('textbox');
+      await waitFor(() => expect(composer.value).toBe('Accept the newer address. '));
+
+      await act(async () => {
+        fireEvent.change(composer, { target: { value: 'Accept the newer address. Thanks' } });
+      });
+
+      expect(composer.value).toBe('Accept the newer address. Thanks');
+    });
+  });
+
   describe('when no suggested prompts are provided for an empty thread', () => {
     it('renders the default welcome state', async () => {
       server.use(...baseHandlers());
@@ -693,7 +722,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from composer' } });
     });
@@ -717,7 +746,7 @@ describe('Thread', () => {
       rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
     });
@@ -727,7 +756,7 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     expect(secondThreadTextarea.value).toBe('');
 
     await act(async () => {
@@ -739,13 +768,13 @@ describe('Thread', () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('first thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('first thread draft');
 
     await act(async () => {
       rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
     });
 
-    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('second thread draft');
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message').value).toBe('second thread draft');
   });
 
   it('does not send when the composer is empty', async () => {
@@ -762,7 +791,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -786,7 +815,7 @@ describe('Thread', () => {
         renderThread([]);
       });
 
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       await act(async () => {
         fireEvent.change(textarea, { target: { value: 'composing text' } });
         fireEvent.keyDown(textarea, { key: 'Enter', isComposing: true });
@@ -832,16 +861,15 @@ describe('Thread', () => {
       Object.defineProperty(files[2], 'text', { value: async () => 'discard' });
       const mounted = renderThread([]);
       fireEvent.click(await screen.findByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const input = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!input) throw new Error('File picker input is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const input = screen.getByLabelText('Files');
       fireEvent.change(input, { target: { files } });
       await screen.findByRole('button', { name: 'Preview settings.ini' });
       await screen.findByRole('button', { name: 'Preview discard.txt' });
       fireEvent.click(screen.getByRole('button', { name: 'Remove discard.txt' }));
       expect(screen.queryByRole('button', { name: 'Preview discard.txt' })).toBeNull();
       await waitFor(() => expect(screen.queryByLabelText('Public URL')).toBeNull());
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Read both files' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Read both files' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() =>
         expect(sentTexts).toEqual([
@@ -915,18 +943,18 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([]);
         });
-        const textarea = screen.getByPlaceholderText('Enter your message...');
+        const textarea = screen.getByPlaceholderText('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Read my attachment' } });
         fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
         if (inspection === 'file classification') {
-          fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-          const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-          if (!picker) throw new Error('File picker is missing');
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+          const picker = screen.getByLabelText('Files');
           const file = new File(['pending file contents'], 'notes.unknown');
           Object.defineProperty(file, 'text', { value: async () => 'pending file contents' });
           fireEvent.change(picker, { target: { files: [file] } });
           expect(probe).toHaveBeenCalledOnce();
         } else {
+          fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
           const input = await screen.findByLabelText('Public URL');
           fireEvent.change(input, { target: { value: url } });
           const form = input.closest('form');
@@ -972,12 +1000,11 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Add a local file' }));
-      const picker = document.querySelector<HTMLInputElement>('input[type="file"]');
-      if (!picker) throw new Error('File picker is missing');
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'Files' }));
+      const picker = screen.getByLabelText('Files');
       fireEvent.change(picker, { target: { files: [new File([new Uint8Array([80, 75, 3, 4])], 'leads.xlsx')] } });
       await screen.findByRole('button', { name: 'Remove leads.xlsx' });
 
@@ -1006,7 +1033,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([]);
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
       await waitFor(() => expect(requests).toBe(1));
@@ -1029,7 +1056,7 @@ describe('Thread', () => {
       await act(async () => {
         renderThread([], { modelSettings: { chatWithGenerate: true } });
       });
-      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+      const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
       fireEvent.change(textarea, { target: { value: 'Read my spreadsheet' } });
 
       fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1056,7 +1083,7 @@ describe('Thread', () => {
         await act(async () => {
           renderThread([], { modelSettings });
         });
-        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+        const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
         fireEvent.change(textarea, { target: { value: 'Summarize my notes' } });
 
         fireEvent.click(screen.getByRole('button', { name: 'Send' }));
@@ -1081,6 +1108,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest('form');
@@ -1088,7 +1116,7 @@ describe('Thread', () => {
       fireEvent.submit(form);
 
       const attachments = await screen.findByTestId('composer-attachments');
-      const draft = screen.getByPlaceholderText('Enter your message...');
+      const draft = screen.getByPlaceholderText('Enter your message');
       const composerBox = draft.closest('[data-slot="composer-box"]');
       expect(composerBox).not.toBeNull();
       expect(composerBox?.contains(attachments)).toBe(true);
@@ -1105,6 +1133,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
+      fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
       const input = await screen.findByLabelText('Public URL');
       fireEvent.change(input, { target: { value: url } });
       const form = input.closest<HTMLFormElement>('form');
@@ -1117,7 +1146,7 @@ describe('Thread', () => {
     });
   });
 
-  it('attaches a URL from the popover without sending the chat message', async () => {
+  it('attaches a URL from the menu dialog without sending the chat message', async () => {
     const captured: Captured[] = [];
     server.use(
       ...baseHandlers(),
@@ -1139,6 +1168,8 @@ describe('Thread', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Add attachment' }));
     });
 
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'From a URL…' }));
+
     const urlInput = await screen.findByLabelText('Public URL');
     await act(async () => {
       fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
@@ -1151,14 +1182,14 @@ describe('Thread', () => {
       await new Promise(resolve => setTimeout(resolve, 80));
     });
 
-    // The attachment chip row appears and the popover closes.
+    // The attachment chip row appears and the dialog closes.
     await waitFor(() => {
       expect(screen.getByTestId('composer-attachments')).toBeTruthy();
     });
     await waitFor(() => {
       expect(screen.queryByLabelText('Public URL')).toBeFalsy();
     });
-    // Submitting the popover form must not bubble into the composer form and send a chat message.
+    // Submitting the dialog form must not bubble into the composer form and send a chat message.
     expect(captured).toHaveLength(0);
   });
 
@@ -1212,7 +1243,7 @@ describe('Thread', () => {
     it('replaces cancel with send while drafting and restores cancel after clearing the draft', () => {
       expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
-      const textarea = screen.getByPlaceholderText('Enter your message...');
+      const textarea = screen.getByPlaceholderText('Enter your message');
       fireEvent.change(textarea, { target: { value: '   ' } });
       expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
@@ -1226,7 +1257,7 @@ describe('Thread', () => {
     });
 
     it('does not cancel the run when Send is double-clicked', async () => {
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), {
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), {
         target: { value: 'Continue with the new instructions' },
       });
       const primaryAction = screen.getByRole('button', { name: 'Send' });
@@ -1267,7 +1298,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'long running' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1323,6 +1354,182 @@ const taskCook: TaskItem = {
   activeForm: 'Cooking meal',
 };
 
+describe('Thread annotations', () => {
+  const REPLY = 'Open rows drop the frame and keep a subtle rounded hover.';
+  const history = () => [userMessage('Which table style should we use?'), assistantMessage(REPLY)];
+
+  beforeEach(() => {
+    window.MASTRA_AGENT_SIGNALS = 'false';
+    server.resetHandlers();
+  });
+
+  afterEach(() => {
+    document.getSelection()?.removeAllRanges();
+  });
+
+  const selectFromReply = async (length: number) => {
+    const paragraph = await screen.findByText(REPLY);
+    const text = paragraph.firstChild;
+    if (!(text instanceof Text)) throw new Error('The reply has no text node');
+    fireEvent.pointerDown(paragraph);
+    const range = document.createRange();
+    range.setStart(text, 0);
+    range.setEnd(text, length);
+    document.getSelection()?.removeAllRanges();
+    document.getSelection()?.addRange(range);
+    fireEvent.pointerUp(paragraph);
+  };
+
+  const markers = () =>
+    Array.from(screen.getByTestId('thread-message-column').querySelectorAll('[data-slot="annotation-marker"]')).map(
+      marker => marker.textContent,
+    );
+
+  const renderCapturingThread = async () => {
+    const captured: Captured[] = [];
+    server.use(
+      ...baseHandlers(),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        captured.push({ url: request.url, body: await captureBody(request) });
+        return sseResponse();
+      }),
+    );
+    await act(async () => {
+      renderThread(history());
+    });
+    return captured;
+  };
+
+  const addToChat = async () => {
+    await selectFromReply('Open rows'.length);
+    fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+  };
+
+  const textarea = () => screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
+
+  describe('when part of a reply is added to the chat', () => {
+    let captured: Captured[];
+
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
+    });
+
+    it('numbers the passage in the transcript', () => {
+      expect(markers()).toEqual(['1']);
+    });
+
+    it('counts the annotation in the composer', () => {
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+    });
+
+    it('focuses the message box', () => {
+      expect(document.activeElement).toBe(textarea());
+    });
+
+    describe('when the person types a message and sends it', () => {
+      beforeEach(() => {
+        fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
+        fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      });
+
+      it('reaches the agent as a blockquote ahead of the typed message', async () => {
+        await waitFor(() => expect(captured).toHaveLength(1));
+        expect(JSON.stringify(captured[0].body.messages)).toContain(
+          JSON.stringify('1. > Open rows\n\nWhy this one?').slice(1, -1),
+        );
+      });
+
+      it('clears the annotation from the composer', async () => {
+        await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
+      });
+
+      it('removes the number from the transcript', async () => {
+        await waitFor(() => expect(markers()).toEqual([]));
+      });
+    });
+  });
+
+  describe('when the person sends an annotation without typing', () => {
+    let captured: Captured[];
+
+    beforeEach(async () => {
+      captured = await renderCapturingThread();
+      await addToChat();
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    });
+
+    it('sends the quoted passage on its own', async () => {
+      await waitFor(() => expect(captured).toHaveLength(1));
+      expect(JSON.stringify(captured[0].body.messages)).toContain(JSON.stringify('1. > Open rows'));
+    });
+
+    it('clears the annotation from the composer', async () => {
+      await waitFor(() => expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull());
+    });
+  });
+
+  describe('when the server rejects the message with the annotation', () => {
+    beforeEach(async () => {
+      let requests = 0;
+      server.use(
+        ...baseHandlers(),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+          requests++;
+          return HttpResponse.json({ error: 'Request body too large' }, { status: 413 });
+        }),
+      );
+      await act(async () => {
+        renderThread(history());
+      });
+      await addToChat();
+      fireEvent.change(textarea(), { target: { value: 'Why this one?' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await waitFor(() => expect(requests).toBeGreaterThan(0));
+    });
+
+    it('tells the person the message could not be sent', async () => {
+      expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
+    }, 10_000);
+
+    it('puts the typed text back in the composer', async () => {
+      await waitFor(() => expect(textarea().value).toBe('Why this one?'), { timeout: 5000 });
+    }, 10_000);
+
+    it('puts the annotation back in the composer', async () => {
+      expect(await screen.findByRole('button', { name: '1 annotation' }, { timeout: 5000 })).toBeTruthy();
+    }, 10_000);
+
+    it('puts the annotation back on the transcript', async () => {
+      await waitFor(() => expect(markers()).toEqual(['1']), { timeout: 5000 });
+    }, 10_000);
+  });
+
+  describe('when the person opens another thread before sending the annotation', () => {
+    beforeEach(async () => {
+      server.use(...baseHandlers());
+      let rendered: ReturnType<typeof render> | undefined;
+      await act(async () => {
+        rendered = render(renderThreadTree(history(), { threadId: 'thread-1' }));
+      });
+      await addToChat();
+      await screen.findByRole('button', { name: '1 annotation' });
+
+      await act(async () => {
+        rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));
+      });
+    });
+
+    it('starts the other thread with an empty composer annotation list', () => {
+      expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+    });
+
+    it('starts the other thread without annotation bubbles', () => {
+      expect(markers()).toEqual([]);
+    });
+  });
+});
+
 describe('TaskPanel', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';
@@ -1359,7 +1566,7 @@ describe('TaskPanel', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'track these tasks' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -1547,7 +1754,7 @@ describe('Thread signal-path user-message reconciliation', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });

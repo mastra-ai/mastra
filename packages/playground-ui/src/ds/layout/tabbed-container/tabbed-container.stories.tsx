@@ -253,7 +253,12 @@ export const SearchPerTab: Story = {
             label="Runs"
             columns="auto minmax(0,1fr) auto"
             fit="container"
-            search={{ label: 'Search runs', placeholder: 'Search runs', value: runSearch, onSearch: setRunSearch }}
+            search={{
+              label: 'Search runs',
+              placeholder: 'Search runs',
+              value: runSearch,
+              onSearch: setRunSearch,
+            }}
           >
             <DataList.Top>
               <DataList.TopCell>ID</DataList.TopCell>

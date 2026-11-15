@@ -462,7 +462,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
       const widget = await renderWidget(latencyWidget, scope);
       const recorder = recordRequests();
       pickIn(widget.root, 'Workflow latency');
-      expect(await within(widget.root).findByText('No workflow runs in this range.')).toBeDefined();
+      expect(await within(widget.root).findByText('No data in this range')).toBeDefined();
       await settle(recorder);
       recorder.stop();
       expect(recorder.sent).toHaveLength(1);
@@ -568,7 +568,7 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
 
       it('pages the rows', async () => {
         const { widget } = await toolsView();
-        expect(within(widget.root).getAllByRole('row')).toHaveLength(14);
+        expect(within(widget.root).getAllByRole('row')).toHaveLength(11);
         expect(within(widget.root).getByRole('button', { name: 'Next' })).toBeDefined();
       });
 
@@ -775,8 +775,8 @@ describe('Latency switching views, drawn at real size', () => {
       side.sent = recorder.sent;
     }
     expect(widget.sent.toSorted()).toEqual(card.sent.toSorted());
-    expect(within(widget.root).getByText('No workflow runs in this range.')).toBeTruthy();
-    expect(within(card.root).getByText('No workflow runs in this range.')).toBeTruthy();
+    expect(within(widget.root).getByText('No data in this range')).toBeTruthy();
+    expect(within(card.root).getByText('No data in this range')).toBeTruthy();
     await expectSameView(card, widget, 'Agent latency');
     expect(widget.sent).toHaveLength(1);
   });

@@ -24,20 +24,21 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
-import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
 import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
+import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
-import { SlackFeedPublisher } from './feed-publisher.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
-import { createShareFileTool, isSlackThread } from './share-file-tool.js';
+import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
+import { DEFAULT_SLACK_TOOL_SETTINGS, slackToolSettingsSchema } from './tool-settings.js';
+import type { SlackToolSettings } from './tool-settings.js';
 
 /** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
@@ -78,10 +79,27 @@ export interface SlackIntegrationConfig {
    * ```
    */
   adapterOptions?: SlackAdapterChannelConfig;
+  /**
+   * What sessions started from Slack may do with the Slack tools. By default a
+   * session can read and post only in its own channel, and can't send DMs.
+   *
+   * @example
+   * ```ts
+   * new SlackIntegration({
+   *   signingSecret,
+   *   // Any channel the app is in, and DMs to anyone in the workspace.
+   *   tools: { channels: 'all', directMessages: 'anyone' },
+   * });
+   * ```
+   */
+  tools?: Partial<SlackToolSettings>;
 }
 
-/** Slack renders the status inline next to the app name; keep it to one short line. */
-const MAX_STATUS_LENGTH = 80;
+/**
+ * Slack renders the status inline next to the app name, and rejects a status
+ * (sent as its loading message) of 51 characters or more.
+ */
+const MAX_STATUS_LENGTH = 50;
 
 /**
  * Turns a tool's `description` arg ("Listing the repo root") into a status
@@ -97,10 +115,10 @@ function describeToolCall(args: unknown): string | undefined {
     .map(part => part.replace(/\s+/g, ' ').trim())
     .find(Boolean);
   if (!line) return undefined;
-  const text = line.length > MAX_STATUS_LENGTH ? `${line.slice(0, MAX_STATUS_LENGTH - 1)}…` : line;
   // Drop the sentence-case capital ("Listing" → "listing") but leave acronyms
   // and identifiers ("PR lookup", "CI status") alone.
-  return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
+  const status = `is ${/^[A-Z][a-z]/.test(line) ? line.charAt(0).toLowerCase() + line.slice(1) : line}`;
+  return status.length > MAX_STATUS_LENGTH ? `${status.slice(0, MAX_STATUS_LENGTH - 1)}…` : status;
 }
 
 /**
@@ -161,6 +179,7 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #toolSettings: SlackToolSettings;
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
@@ -193,6 +212,9 @@ export class SlackIntegration implements FactoryIntegration {
       throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
     }
     this.#config = config;
+    // An explicit `undefined` means "use the default", not "unset it".
+    const granted = Object.fromEntries(Object.entries(config.tools ?? {}).filter(([, value]) => value !== undefined));
+    this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...granted });
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
     const textHidden = this.#textHidden;
     this.processors = {
@@ -216,15 +238,20 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
-   * whose session is linked to a Slack thread. The tools find the thread to
-   * post into when they are called.
+   * On runs whose session is linked to a Slack thread: `attach_file`,
+   * `reply_in_thread` when reply text is hidden, and the Slack read, post,
+   * search, lookup and DM tools. The tools find the thread to post into when
+   * they are called.
    */
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
-    if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    const slackThread = await slackThreadOf(requestContext, this.#deps);
+    if (!slackThread) return {};
+    const chat = this.#channels?.()?.sdk;
+    const sessionThreadId = slackThread.threadId;
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId, settings: this.#toolSettings }) : {}),
     };
   }
 
@@ -266,14 +293,11 @@ export class SlackIntegration implements FactoryIntegration {
       projects: ctx.storage.projects,
       sourceControls,
       modelDefaults: ctx.storage.modelDefaults,
+      modelCredentials: ctx.storage.modelCredentials,
+      voiceSettings: ctx.storage.voiceSettings,
       workItems: ctx.runtime?.workItems,
-      feed: ctx.feed,
       adapterOptions: this.#adapterOptions,
     });
-  }
-
-  feedPublisher(ctx: IntegrationContext): WorkItemFeedPublisher {
-    return new SlackFeedPublisher({ controller: ctx.controller });
   }
 
   routes(ctx: IntegrationContext): ApiRoute[] {

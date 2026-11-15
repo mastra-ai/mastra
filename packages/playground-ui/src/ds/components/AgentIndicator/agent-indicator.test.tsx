@@ -3,7 +3,7 @@ import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentIndicator } from './agent-indicator';
 import { frameParts } from './paint';
-import { agentIndicatorStates, poses } from './poses';
+import { agentIndicatorStates, poses, restsAfterSeconds } from './poses';
 import { FRAME } from './shapes';
 
 const firstStroke = (container: HTMLElement) => {
@@ -82,6 +82,40 @@ describe('AgentIndicator', () => {
         expect(frame.every(Number.isFinite), state).toBe(true);
       }
     }
+  });
+
+  it('keeps moving in every state that never comes to rest', () => {
+    const restless = agentIndicatorStates.filter(state => !Object.hasOwn(restsAfterSeconds, state));
+
+    for (const state of restless) {
+      const { container, unmount } = render(<AgentIndicator state={state} />);
+      const still = container.innerHTML;
+      let changed = false;
+      for (let sample = 0; sample < 6; sample++) {
+        vi.advanceTimersByTime(400);
+        changed ||= container.innerHTML !== still;
+      }
+      expect(changed, state).toBe(true);
+      unmount();
+    }
+  });
+
+  it.each(['searching', 'skill-searching'] as const)('keeps the %s lens circular as it scans', state => {
+    const { container } = render(<AgentIndicator state={state} />);
+    const lens = container.querySelector('circle[data-part="ring"]');
+    expect(lens).not.toBeNull();
+    expect(lens?.closest('[mask]')).toBeNull();
+    const radius = lens?.getAttribute('r');
+    const centers = new Set<string | null | undefined>();
+
+    for (let sample = 0; sample < 16; sample++) {
+      vi.advanceTimersByTime(120);
+      expect(lens?.getAttribute('r')).toBe(radius);
+      expect(Number(lens?.getAttribute('r'))).toBeGreaterThan(0);
+      expect(Number(lens?.getAttribute('stroke-width'))).toBeGreaterThan(0);
+      centers.add(lens?.getAttribute('cx'));
+    }
+    expect(centers.size).toBeGreaterThan(1);
   });
 
   it('draws its state on the first paint', () => {

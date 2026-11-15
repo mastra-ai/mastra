@@ -41,10 +41,11 @@ function untilAborted(signal: AbortSignal): Promise<void> {
   });
 }
 
-function makeWorkflows(probe: Probe) {
+function makeWorkflows(probe: Probe, storageVersion: 1 | 2 = 1) {
   const doubler = createWorkflow({
     id: 'doubler',
     description: 'Doubles a number',
+    options: { storageVersion },
     inputSchema: z.object({ n: z.number() }),
     outputSchema: z.object({ doubled: z.number() }),
   })
@@ -61,6 +62,7 @@ function makeWorkflows(probe: Probe) {
   const report = createWorkflow({
     id: 'report',
     description: 'Builds a report slowly',
+    options: { storageVersion },
     inputSchema: z.object({ topic: z.string() }),
     outputSchema: z.object({ report: z.string() }),
   })
@@ -82,6 +84,7 @@ function makeWorkflows(probe: Probe) {
   const approval = createWorkflow({
     id: 'approval',
     description: 'Prepares a release, then asks who approves it',
+    options: { storageVersion },
     inputSchema: z.object({ release: z.string() }),
     outputSchema: z.object({ outcome: z.string() }),
   })
@@ -115,6 +118,7 @@ function makeWorkflows(probe: Probe) {
   const opaque = createWorkflow({
     id: 'opaque',
     description: 'Waits for a structured answer',
+    options: { storageVersion },
     inputSchema: z.object({}),
     outputSchema: z.object({ got: z.string() }),
   })
@@ -135,6 +139,7 @@ function makeWorkflows(probe: Probe) {
   const boom = createWorkflow({
     id: 'boom',
     description: 'Always fails',
+    options: { storageVersion },
     inputSchema: z.object({}),
     outputSchema: z.object({}),
   })
@@ -153,6 +158,7 @@ function makeWorkflows(probe: Probe) {
   const hang = createWorkflow({
     id: 'hang',
     description: 'Runs until cancelled',
+    options: { storageVersion },
     inputSchema: z.object({}),
     outputSchema: z.object({}),
   })
@@ -186,6 +192,7 @@ function makeWorkflows(probe: Probe) {
   const interview = createWorkflow({
     id: 'interview',
     description: 'Asks two questions',
+    options: { storageVersion },
     inputSchema: z.object({ answers: z.array(z.string()) }),
     outputSchema: z.object({ answers: z.array(z.string()) }),
   })
@@ -197,6 +204,7 @@ function makeWorkflows(probe: Probe) {
   const poll = createWorkflow({
     id: 'poll',
     description: 'Asks the same question twice',
+    options: { storageVersion },
     inputSchema: z.object({ answers: z.array(z.string()) }),
     outputSchema: z.object({ answers: z.array(z.string()) }),
   })
@@ -208,6 +216,7 @@ function makeWorkflows(probe: Probe) {
   const shaped = createWorkflow({
     id: 'shaped',
     description: 'Echoes its parsed input',
+    options: { storageVersion },
     inputSchema: shapedInput,
     outputSchema: z.object({ label: z.string() }),
   })
@@ -228,6 +237,7 @@ function makeWorkflows(probe: Probe) {
   const signoff = createWorkflow({
     id: 'signoff',
     description: 'Asks to go ahead, then works',
+    options: { storageVersion },
     inputSchema: z.object({}),
     outputSchema: z.object({}),
   })
@@ -321,11 +331,13 @@ function makeAgents(probe: Probe) {
 }
 
 // Both stores a server picks on its own: in memory, or Mastra's background tasks. Either way the
-// workflows keep their runs in Mastra storage, which resuming a run needs.
+// workflows keep their runs in Mastra storage, which resuming a run needs, in either storage version.
 describe.each([
-  { store: 'in-memory', backgroundTasks: false },
-  { store: 'Mastra background tasks', backgroundTasks: true },
-])('MCPServer workflow and agent tasks ($store)', ({ backgroundTasks }) => {
+  { store: 'in-memory', backgroundTasks: false, storageVersion: 1 },
+  { store: 'Mastra background tasks', backgroundTasks: true, storageVersion: 1 },
+  { store: 'in-memory, storage v2', backgroundTasks: false, storageVersion: 2 },
+  { store: 'Mastra background tasks, storage v2', backgroundTasks: true, storageVersion: 2 },
+] as const)('MCPServer workflow and agent tasks ($store)', ({ backgroundTasks, storageVersion }) => {
   let served: ServedHTTP | undefined;
   let mastra: Mastra | undefined;
   const clients: Client[] = [];
@@ -340,7 +352,7 @@ describe.each([
 
   async function start(tasks: MCPServerConfig['tasks']) {
     const probe: Probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0, shapedInputs: [] };
-    const workflows = makeWorkflows(probe);
+    const workflows = makeWorkflows(probe, storageVersion);
     const server = new MCPServer({
       id: 'tasks',
       name: 'Tasks',
@@ -399,7 +411,28 @@ describe.each([
       const { result } = await call('run_doubler', { n: 21 });
       expect(result.resultType).not.toBe('task');
       expect(result.isError).toBe(false);
-      expect(JSON.parse(result.content[0].text)).toMatchObject({ status: 'success', result: { doubled: 42 } });
+      const answer = {
+        status: 'success',
+        input: { n: 21 },
+        steps: {
+          input: { n: 21 },
+          double: {
+            status: 'success',
+            output: { doubled: 42 },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
+        result: { doubled: 42 },
+      };
+      expect(JSON.parse(result.content[0].text)).toEqual(answer);
+      // The plain run_ tool also includes the run id and execution path.
+      const { result: plain } = await call('run_doubler', { n: 21 }, { tasks: false });
+      expect(JSON.parse(plain.content[0].text)).toEqual({
+        ...answer,
+        runId: expect.any(String),
+        stepExecutionPath: ['double'],
+      });
     });
 
     it("answers an 'auto' run that fails within the window with isError, as its task would, unlike a client without tasks", async () => {
@@ -470,7 +503,28 @@ describe.each([
 
       await tasks.update(result.taskId, { [key]: { action: 'accept', content: { approver: 'bob' } } });
       const done = await waitFor(tasks, result.taskId, 'completed');
-      expect(JSON.parse(text(done))).toMatchObject({ status: 'success', result: { outcome: 'v2 approved by bob' } });
+      expect(JSON.parse(text(done))).toEqual({
+        status: 'success',
+        input: { release: 'v2' },
+        steps: {
+          input: { release: 'v2' },
+          prepare: {
+            status: 'success',
+            output: { release: 'v2' },
+            startedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+          ask: {
+            status: 'success',
+            output: { outcome: 'v2 approved by bob' },
+            resumePayload: { approver: 'bob' },
+            startedAt: expect.any(Number),
+            resumedAt: expect.any(Number),
+            endedAt: expect.any(Number),
+          },
+        },
+        result: { outcome: 'v2 approved by bob' },
+      });
 
       const run = await onlyRun(workflows.approval);
       expect(run.status).toBe('success');

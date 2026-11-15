@@ -1,5 +1,4 @@
 import type { SpanInputMessage } from '@mastra/core/observability';
-import { MessagesSquareIcon, ScrollTextIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
@@ -9,7 +8,10 @@ import { getPromptChanges, touchesSystemPrompt } from './span-prompt-impact';
 import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { DiffStat } from '@/ds/components/DiffStat';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconScript } from '@/ds/icons/central/IconScript';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber } from '@/lib/cost';
 import { pluralize } from '@/lib/string';
@@ -41,12 +43,20 @@ function textOf(message: unknown): string {
 }
 
 /** A one-line name for a message: what it is when we can tell (a skills catalog), else its first line. */
-function describeMessage(message: unknown): { title: string; meta: string } {
+function describeMessage(message: unknown): { title: string; meta: ReactNode } {
   const text = textOf(message);
   const size = `${formatCompactNumber(text.length)} chars`;
   const catalog = parseAvailableSkills(text);
   if (catalog && !catalog.before.trim() && !catalog.after.trim()) {
-    return { title: 'Skills catalog', meta: `${pluralize(catalog.skills.length, 'skill')} · ${size}` };
+    return {
+      title: 'Skills catalog',
+      meta: (
+        <Metadata>
+          <Metadata.Item>{pluralize(catalog.skills.length, 'skill')}</Metadata.Item>
+          <Metadata.Item>{size}</Metadata.Item>
+        </Metadata>
+      ),
+    };
   }
   const firstLine = text
     .split('\n')
@@ -120,7 +130,7 @@ function DiffRow({
 }: {
   sign: Sign;
   title: ReactNode;
-  meta?: string;
+  meta?: ReactNode;
   defaultOpen?: boolean;
   children?: ReactNode;
 }) {
@@ -197,7 +207,20 @@ function Clipped({ children }: { children: ReactNode }) {
 function MessageRow({ sign, message, tag }: { sign: Sign; message: SpanInputMessage; tag?: string }) {
   const { title, meta } = describeMessage(message);
   return (
-    <DiffRow sign={sign} title={tag ? `${title} · ${tag}` : title} meta={meta}>
+    <DiffRow
+      sign={sign}
+      title={
+        tag ? (
+          <Metadata singleLine>
+            <Metadata.Item>{title}</Metadata.Item>
+            <Metadata.Item className="shrink-0">{tag}</Metadata.Item>
+          </Metadata>
+        ) : (
+          title
+        )
+      }
+      meta={meta}
+    >
       <Clipped>
         <SpanPayloadMessages value={[message]} />
       </Clipped>
@@ -298,15 +321,13 @@ export function SpanPromptChanges({ span }: { span: SpanRecord }) {
     <div className="flex min-w-0 flex-col gap-3">
       {system.length > 0 && (
         <DiffCard
-          icon={<ScrollTextIcon />}
+          icon={<IconScript />}
           title="System prompt"
           changes={system}
           kept={keptSystemMessages(span, system)}
         />
       )}
-      {conversation.length > 0 && (
-        <DiffCard icon={<MessagesSquareIcon />} title="Conversation" changes={conversation} />
-      )}
+      {conversation.length > 0 && <DiffCard icon={<IconBubbleText />} title="Conversation" changes={conversation} />}
     </div>
   );
 }

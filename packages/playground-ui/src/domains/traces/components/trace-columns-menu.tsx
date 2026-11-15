@@ -1,4 +1,3 @@
-import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import {
@@ -29,6 +28,8 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { Form } from '@/ds/components/Form';
 import { Txt } from '@/ds/components/Txt';
+import { IconColumns3 } from '@/ds/icons/central/IconColumns3';
+import { IconPlusMedium } from '@/ds/icons/central/IconPlusMedium';
 
 const EMPTY_KEYS: readonly string[] = [];
 
@@ -121,8 +122,8 @@ export function TraceColumnsMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenu.Trigger disabled={disabled} variant="ghost" size="icon-md" tooltip="Columns">
-          <Columns3Icon aria-hidden />
+        <DropdownMenu.Trigger disabled={disabled} size="icon-sm" tooltip="Columns">
+          <IconColumns3 aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
@@ -189,7 +190,7 @@ export function TraceColumnsMenu({
               ))}
               {withMetadata && (
                 <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
-                  <PlusIcon aria-hidden />
+                  <IconPlusMedium aria-hidden />
                   Add metadata column
                 </DropdownMenu.Item>
               )}
@@ -223,8 +224,8 @@ export function TraceColumnsMenu({
                       setMetadataError(undefined);
                     }}
                     allowCustomValue
-                    placeholder="Select a metadata key…"
-                    searchPlaceholder="Search metadata keys…"
+                    placeholder="Select a metadata key"
+                    searchPlaceholder="Search metadata keys"
                     emptyText="No metadata keys observed. Type one to add it."
                   />
                   <FieldError>{metadataError}</FieldError>

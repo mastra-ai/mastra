@@ -17,8 +17,8 @@ describe('sessionRowStatus', () => {
     expect(sessionRowStatus({ running: true, initializing: false })).toBe('working');
   });
 
-  it('lets a live run outrank a card waiting on a person, and runs no marker when idle', () => {
-    expect(sessionRowStatus({ running: true, initializing: false, attention: true })).toBe('working');
+  it('shows a run parked on a prompt as waiting while it is still in flight, and runs no marker when idle', () => {
+    expect(sessionRowStatus({ running: true, initializing: false, attention: true })).toBe('ready');
     expect(sessionRowStatus({ running: false, initializing: false, attention: true })).toBe('ready');
     expect(sessionRowStatus({ running: false, initializing: false })).toBeUndefined();
   });

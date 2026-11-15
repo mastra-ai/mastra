@@ -52,7 +52,7 @@ async function openCombobox() {
   const trigger = await screen.findByRole('combobox');
   expect(trigger.textContent).toContain('Add tag');
   fireEvent.click(trigger);
-  return screen.findByPlaceholderText('Search or create tag...');
+  return screen.findByPlaceholderText('Search or create tag');
 }
 
 function selectOption(option: HTMLElement) {

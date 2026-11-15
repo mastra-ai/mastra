@@ -13,7 +13,7 @@
     },
     "build:lib": {
       "dependsOn": ["^build"],
-      "outputs": ["dist/**"],
+      "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": [
         "src/**",
         "tsdown.config.ts",

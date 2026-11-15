@@ -1,4 +1,3 @@
-import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { reviewCommands } from './commands';
@@ -17,6 +16,10 @@ import {
 } from '@/ds/components/Composer';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
+import { IconStop } from '@/ds/icons/central/IconStop';
 
 const composerStatus: Record<Phase, string> = {
   complete: 'Ready',
@@ -170,7 +173,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
                     aria-label={`Remove ${file.filename}`}
                     onClick={() => removeFile(file.id)}
                   >
-                    <X />
+                    <IconCrossMedium />
                   </Button>
                 </div>
               ))}
@@ -180,7 +183,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
             {...commands.inputProps}
             ref={messageInput}
             aria-label="Message"
-            placeholder="Ask a follow-up, or / for commands…"
+            placeholder="Ask a follow-up, or / for commands"
             onKeyDown={handleComposerKeyDown}
           />
           <ComposerActions>
@@ -192,7 +195,7 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
               tooltip="Add attachments"
               onClick={() => fileInput.current?.click()}
             >
-              <Paperclip />
+              <IconPaperclip1 />
             </Button>
             <Txt variant="meta" role="status" aria-live="polite">
               {reading ? 'Reading attachments…' : composerStatus[phase ?? 'complete']}
@@ -208,11 +211,11 @@ export function ConversationComposer({ phase, busy, onSend, onStop }: Conversati
                     messageInput.current?.focus();
                   }}
                 >
-                  <Square />
+                  <IconStop />
                 </Button>
               ) : (
                 <Button type="submit" size="icon-sm" variant="primary" aria-label="Send message" disabled={!canSend}>
-                  <ArrowUp />
+                  <IconArrowUp />
                 </Button>
               )}
             </div>

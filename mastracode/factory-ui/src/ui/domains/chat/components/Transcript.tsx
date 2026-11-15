@@ -14,6 +14,7 @@ import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
+  isEndedPrompt,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
@@ -30,6 +31,7 @@ import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
+import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
 import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
@@ -63,15 +65,25 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   // Pinned: these reach every entry, and a fresh pair each token would redraw the lot.
   const onApprove = useCallback(
     async (toolCallId: string, approved: boolean, promptId: string) => {
-      await approve({ toolCallId, approved });
-      resolvePrompt(promptId);
+      const done = await approve({ toolCallId, approved }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [approve, resolvePrompt],
   );
   const onRespond = useCallback(
     async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
-      await respond({ toolCallId, resumeData });
-      resolvePrompt(promptId);
+      const done = await respond({ toolCallId, resumeData }).then(
+        () => true,
+        // The mutation already reported it. Drop a prompt whose run has ended;
+        // keep any other so the card stays truthful.
+        isEndedPrompt,
+      );
+      if (done) resolvePrompt(promptId);
     },
     [respond, resolvePrompt],
   );
@@ -152,61 +164,63 @@ export function TranscriptEntries({
   );
 
   return (
-    <ActivityDisclosureProvider>
-      {turnGroups.map((group, index) => {
-        const isLiveTurn = index === turnGroups.length - 1;
-        const runningTurn = isLiveTurn && running;
-        // The first turn opens at the top of the transcript already, so room under it
-        // would buy no travel — only empty scroll below a fresh thread.
-        const holdsRoom =
-          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
+    <FactoryKnowledgeLinks>
+      <ActivityDisclosureProvider>
+        {turnGroups.map((group, index) => {
+          const isLiveTurn = index === turnGroups.length - 1;
+          const runningTurn = isLiveTurn && running;
+          // The first turn opens at the top of the transcript already, so room under it
+          // would buy no travel — only empty scroll below a fresh thread.
+          const holdsRoom =
+            runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
 
-        const steps = replySteps(group);
-        const replyEnd = steps.at(-1);
-        const reply = turnReply(steps, runningTurn);
-        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
+          const steps = replySteps(group);
+          const replyEnd = steps.at(-1);
+          const reply = turnReply(steps, runningTurn);
+          const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
-        return (
-          <ChatShell.Turn
-            key={group.key}
-            opensTurn={group.opensTurn}
-            holdsRoom={holdsRoom}
-            restored={group.key === restoredTurnKey}
-          >
-            <ActivityWorkingDirectory path={directories[index]}>
-              <TurnRevealScope>
-                {group.entries.map(entry => {
-                  const gap = gaps.get(entry.id);
-                  return (
-                    <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                      {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
-                      <TranscriptEntryContent
-                        entry={entry}
-                        suspensions={suspensions}
-                        reply={entry === replyEnd ? reply : undefined}
-                        activity={activityByEntry.get(entry.id)}
-                        redundantSuspension={
-                          entry.kind === 'suspension' &&
-                          entry.toolName !== 'request_access' &&
-                          canonicalToolCallIds.has(entry.toolCallId)
-                        }
-                        isSubmitting={isSubmitting}
-                        viewerId={viewerId}
-                        owner={owner}
-                        onApprove={onApprove}
-                        onRespond={onRespond}
-                      />
-                    </TranscriptItem>
-                  );
-                })}
-              </TurnRevealScope>
-              {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
-            </ActivityWorkingDirectory>
-          </ChatShell.Turn>
-        );
-      })}
-      {turnGroups.length === 0 && tail?.(false)}
-    </ActivityDisclosureProvider>
+          return (
+            <ChatShell.Turn
+              key={group.key}
+              opensTurn={group.opensTurn}
+              holdsRoom={holdsRoom}
+              restored={group.key === restoredTurnKey}
+            >
+              <ActivityWorkingDirectory path={directories[index]}>
+                <TurnRevealScope>
+                  {group.entries.map(entry => {
+                    const gap = gaps.get(entry.id);
+                    return (
+                      <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                        {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
+                        <TranscriptEntryContent
+                          entry={entry}
+                          suspensions={suspensions}
+                          reply={entry === replyEnd ? reply : undefined}
+                          activity={activityByEntry.get(entry.id)}
+                          redundantSuspension={
+                            entry.kind === 'suspension' &&
+                            entry.toolName !== 'request_access' &&
+                            canonicalToolCallIds.has(entry.toolCallId)
+                          }
+                          isSubmitting={isSubmitting}
+                          viewerId={viewerId}
+                          owner={owner}
+                          onApprove={onApprove}
+                          onRespond={onRespond}
+                        />
+                      </TranscriptItem>
+                    );
+                  })}
+                </TurnRevealScope>
+                {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
+              </ActivityWorkingDirectory>
+            </ChatShell.Turn>
+          );
+        })}
+        {turnGroups.length === 0 && tail?.(false)}
+      </ActivityDisclosureProvider>
+    </FactoryKnowledgeLinks>
   );
 }
 

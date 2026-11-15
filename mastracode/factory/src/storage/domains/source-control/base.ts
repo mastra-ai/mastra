@@ -1,5 +1,5 @@
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
-import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
+import type { CollectionListOptions, CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
 import { FACTORY_PROJECTS_SCHEMA } from '../projects/base.js';
 
@@ -307,6 +307,13 @@ export interface ProjectRepository {
   updatedAt: Date;
 }
 
+/** A project's connection with its installation and its links, each link with the repository behind it. */
+export interface ProjectConnectionWithRepositories extends ProjectSourceControlConnection {
+  installation: SourceControlInstallation;
+  /** `repository` is null when the repository row is gone or belongs to an installation outside the organization. */
+  repositories: Array<ProjectRepository & { repository: SourceControlRepository | null }>;
+}
+
 export interface ExternalRepositoryProjectTarget {
   orgId: string;
   factoryProjectId: string;
@@ -451,8 +458,22 @@ export type TransferSourceControlSessionOwnerResult =
   | { status: 'updated'; session: SourceControlSession }
   | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
+export interface LinkedRepositoriesChange {
+  integrationId: string;
+  /** False when another replica made the write. */
+  local: boolean;
+}
+
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
+  /**
+   * Fires after the set of repositories linked to projects may have changed
+   * for this integration, on this replica or (once the factory has wired the
+   * event bus) another one. Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: () => void): () => void;
+  /** False once the factory failed to share these changes between replicas. */
+  linkedRepositoryChangesShared(): boolean;
   readonly installations: {
     list(args: { orgId: string }): Promise<SourceControlInstallation[]>;
     get(args: { orgId: string; id: string }): Promise<SourceControlInstallation | null>;
@@ -479,6 +500,18 @@ export interface SourceControlStorageHandle {
   };
   readonly connections: {
     list(args: { orgId: string; factoryProjectId: string }): Promise<ProjectSourceControlConnection[]>;
+    /**
+     * This integration's connections to any of the projects, oldest first, each with its installation and its links
+     * (oldest first, with their repositories). It takes four queries however many projects, connections or links
+     * there are, plus one when a repository sits under an installation no connection uses. A connection whose
+     * installation is gone, such as after the GitHub App was uninstalled, is left out,
+     * so one orphaned row cannot fail the read. Only installations of `orgId` are returned, so the result stays
+     * inside the organization even when a project id from another one is passed.
+     */
+    listWithRepositories(args: {
+      orgId: string;
+      factoryProjectIds: string[];
+    }): Promise<ProjectConnectionWithRepositories[]>;
     get(args: { orgId: string; id: string }): Promise<ProjectSourceControlConnection | null>;
     create(args: CreateProjectSourceControlConnectionInput): Promise<ProjectSourceControlConnection>;
     delete(args: { orgId: string; id: string }): Promise<boolean>;
@@ -729,6 +762,10 @@ function toBuildStatus(value: string | null): ProjectRepositoryBuildStatus {
   return value === 'configured' || value === 'failed' ? value : 'unbuilt';
 }
 
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
+}
+
 /** Oldest first; ties (same millisecond) break on id so re-runs see one order. */
 function byCreatedAt(a: ProjectRepositoryDbRow, b: ProjectRepositoryDbRow): number {
   return a.created_at.getTime() - b.created_at.getTime() || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
@@ -798,8 +835,49 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 }
 
 export class SourceControlStorage extends FactoryStorageDomain {
+  readonly #linkedRepositoryListeners = new Set<(change: LinkedRepositoriesChange) => void>();
+  #linkedRepositoryChangesShared = false;
+
   constructor() {
     super('source-control');
+  }
+
+  /**
+   * Fires after a write that can change which repositories are linked to
+   * projects (connections, links, installation moves and removals), so a
+   * reader can keep that set in memory instead of re-reading it on a timer.
+   * Registering a repository does not fire: a provider sync upserts every
+   * repository of an installation, and only a link makes one of them count.
+   * Returns a function that removes the listener.
+   */
+  onLinkedRepositoriesChanged(listener: (change: LinkedRepositoriesChange) => void): () => void {
+    this.#linkedRepositoryListeners.add(listener);
+    return () => this.#linkedRepositoryListeners.delete(listener);
+  }
+
+  /**
+   * Whether changes made on other replicas reach this one's listeners. False
+   * until a subscription to them is in place, so readers re-read the set
+   * rather than keep one that may miss another replica's change.
+   */
+  get linkedRepositoryChangesShared(): boolean {
+    return this.#linkedRepositoryChangesShared;
+  }
+
+  /** Records whether other replicas' changes can be heard, so readers know whether to keep the set. */
+  setLinkedRepositoryChangesShared(shared: boolean): void {
+    this.#linkedRepositoryChangesShared = shared;
+  }
+
+  /** Runs the listeners; `local: false` reports a write another replica announced. */
+  linkedRepositoriesChanged(change: LinkedRepositoriesChange): void {
+    for (const listener of this.#linkedRepositoryListeners) {
+      try {
+        listener(change);
+      } catch (error) {
+        console.error('[factory] linked-repositories listener failed', error instanceof Error ? error.message : error);
+      }
+    }
   }
 
   /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
@@ -1036,6 +1114,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
   forIntegration(integrationId: string): SourceControlStorageHandle {
     if (!integrationId.trim()) throw new Error('[SourceControlStorage] integrationId must not be empty.');
     const db = (): FactoryStorageOps => this.ops;
+    const linkedRepositoriesChanged = (): void => this.linkedRepositoriesChanged({ integrationId, local: true });
 
     const getInstallation = async (args: { orgId: string; id: string }): Promise<SourceControlInstallation | null> => {
       const row = await db().findOne<InstallationDbRow>(INSTALLATIONS, {
@@ -1109,6 +1188,11 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     return {
       integrationId,
+      onLinkedRepositoriesChanged: listener =>
+        this.onLinkedRepositoriesChanged(change => {
+          if (change.integrationId === integrationId) listener();
+        }),
+      linkedRepositoryChangesShared: () => this.linkedRepositoryChangesShared,
       installations: {
         list: async ({ orgId }) =>
           (
@@ -1147,6 +1231,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           const installation = await getInstallation({ orgId, id });
           if (!installation) return false;
           await db().deleteMany(INSTALLATIONS, { id, integration_id: integrationId, org_id: orgId });
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1198,6 +1283,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               { installation_id: existing.installationId },
               { installation_id: newInstallationId },
             );
+            linkedRepositoriesChanged();
             // Return the updated repository
             const updated = await getRepository({ orgId, id });
             if (!updated) throw new Error('Repository disappeared after update');
@@ -1229,6 +1315,80 @@ export class SourceControlStorage extends FactoryStorageDomain {
             })
           ).map(toConnection);
         },
+        listWithRepositories: async ({ orgId, factoryProjectIds }) => {
+          if (factoryProjectIds.length === 0) return [];
+          const oldestFirst: CollectionListOptions = {
+            orderBy: [
+              ['created_at', 'asc'],
+              ['id', 'asc'],
+            ],
+          };
+          const orgInstallations = async (ids: string[]) =>
+            ids.length === 0
+              ? []
+              : (
+                  await db().findMany<InstallationDbRow>(INSTALLATIONS, {
+                    id: { in: ids },
+                    integration_id: integrationId,
+                    org_id: orgId,
+                  })
+                ).map(toInstallation);
+
+          const connectionRows = await db().findMany<ConnectionDbRow>(
+            CONNECTIONS,
+            { factory_project_id: { in: unique(factoryProjectIds) }, integration_id: integrationId },
+            oldestFirst,
+          );
+          if (connectionRows.length === 0) return [];
+          const [installationList, linkRows] = await Promise.all([
+            orgInstallations(unique(connectionRows.map(row => row.installation_id))),
+            db().findMany<ProjectRepositoryDbRow>(
+              PROJECT_REPOSITORIES,
+              { connection_id: { in: connectionRows.map(row => row.id) } },
+              oldestFirst,
+            ),
+          ]);
+          const installations = new Map(installationList.map(installation => [installation.id, installation]));
+          const repositoryRows =
+            linkRows.length === 0
+              ? []
+              : await db().findMany<RepositoryDbRow>(REPOSITORIES, {
+                  id: { in: unique(linkRows.map(row => row.repository_id)) },
+                });
+          // Like `getRepository`, a repository only counts when its installation is in the organization. That is
+          // nearly always the connection's own installation, already loaded; look up any other.
+          const orgInstallationIds = new Set(installations.keys());
+          const otherInstallations = await orgInstallations(
+            unique(repositoryRows.map(row => row.installation_id)).filter(id => !orgInstallationIds.has(id)),
+          );
+          for (const installation of otherInstallations) orgInstallationIds.add(installation.id);
+          const repositories = new Map(
+            repositoryRows
+              .filter(row => orgInstallationIds.has(row.installation_id))
+              .map(row => [row.id, toRepository(row)]),
+          );
+          const linksByConnection = new Map<string, ProjectRepositoryDbRow[]>();
+          for (const row of linkRows) {
+            const links = linksByConnection.get(row.connection_id) ?? [];
+            links.push(row);
+            linksByConnection.set(row.connection_id, links);
+          }
+
+          return connectionRows.flatMap(row => {
+            const installation = installations.get(row.installation_id);
+            if (!installation) return [];
+            return [
+              {
+                ...toConnection(row),
+                installation,
+                repositories: (linksByConnection.get(row.id) ?? []).map(link => ({
+                  ...toProjectRepository(link),
+                  repository: repositories.get(link.repository_id) ?? null,
+                })),
+              },
+            ];
+          });
+        },
         get: getConnection,
         create: async input => {
           const project = await db().findOne<Record<string, unknown>>(FACTORY_PROJECTS, {
@@ -1245,6 +1405,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_by_user_id: input.createdByUserId,
               created_at: new Date(),
             });
+            linkedRepositoriesChanged();
             return toConnection(row);
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
@@ -1275,6 +1436,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
           await db().deleteMany(PROJECT_REPOSITORIES, { connection_id: id });
           await db().deleteMany(CONNECTIONS, { id, integration_id: integrationId });
+          linkedRepositoriesChanged();
           return true;
         },
       },
@@ -1410,6 +1572,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
               created_at: now,
               updated_at: now,
             });
+            linkedRepositoriesChanged();
             return toProjectRepository(row);
           } catch (error) {
             // Match the in-memory handle: return the existing row unchanged on
@@ -1453,6 +1616,7 @@ export class SourceControlStorage extends FactoryStorageDomain {
           await db().deleteMany(SESSION_REPOSITORIES, { project_repository_id: id });
           await db().deleteMany(SESSIONS, { project_repository_id: id });
           await db().deleteMany(PROJECT_REPOSITORIES, { id });
+          linkedRepositoriesChanged();
           return true;
         },
       },

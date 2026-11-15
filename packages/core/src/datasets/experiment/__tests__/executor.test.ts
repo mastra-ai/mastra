@@ -457,6 +457,35 @@ describe('executeTarget', () => {
       );
     });
 
+    it('tags workflow start and resume spans with experimentId', async () => {
+      const mockWorkflow = createMockWorkflow(
+        { status: 'suspended', suspended: [['approval-step']], steps: {}, traceId: 'trace-1' },
+        [{ status: 'success', result: { approved: true }, steps: {}, traceId: 'trace-1' }],
+      );
+
+      const result = await executeTarget(
+        mockWorkflow,
+        'workflow',
+        { id: 'item-exp-1', input: { data: 'test' }, resumeData: { approved: true } },
+        { experimentId: 'experiment-1' },
+      );
+
+      expect(result.error).toBeNull();
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      const expectedTracing = { tracingOptions: { metadata: { experimentId: 'experiment-1' } } };
+      expect(run.start).toHaveBeenCalledWith(expect.objectContaining(expectedTracing));
+      expect(run.resume).toHaveBeenCalledWith(expect.objectContaining(expectedTracing));
+    });
+
+    it('does not set tracingOptions on workflow runs without an experimentId', async () => {
+      const mockWorkflow = createMockWorkflow({ status: 'success', result: { ok: true }, steps: {} });
+
+      await executeTarget(mockWorkflow, 'workflow', { id: 'item-exp-2', input: { data: 'test' } });
+
+      const run = await (mockWorkflow.createRun as ReturnType<typeof vi.fn>).mock.results[0].value;
+      expect(run.start.mock.calls[0][0]).not.toHaveProperty('tracingOptions');
+    });
+
     it('auto-resumes suspended workflow with flat resumeData', async () => {
       const mockWorkflow = createMockWorkflow(
         {

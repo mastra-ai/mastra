@@ -22,7 +22,7 @@ import type {
 
 import type { DuckDBConnection } from '../../db/index';
 import { timeToFirstChunkSupported, timeToFirstTokenSupported, traceQueryOutcomeFieldsSupported } from '../../features';
-import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
+import { apiPreview, parseJson, payloadColumnSql, previewFromPayload, timeRangeOf } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { needsPreview } from './preview-compat';
 
@@ -57,6 +57,9 @@ const TRACE_FIELDS = {
   sessionId: { sql: 'r.sessionId', parameterType: 'scalar' },
   userId: { sql: 'r.userId', parameterType: 'scalar' },
   organizationId: { sql: 'r.organizationId', parameterType: 'scalar' },
+  requestId: { sql: 'r.requestId', parameterType: 'scalar' },
+  serviceName: { sql: 'r.serviceName', parameterType: 'scalar' },
+  experimentId: { sql: 'r.experimentId', parameterType: 'scalar' },
   startedAt: { sql: 'r.startedAt', parameterType: 'timestamp' },
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
@@ -98,6 +101,9 @@ const SPAN_FIELDS = {
   sessionId: { sql: 's.sessionId', parameterType: 'scalar' },
   userId: { sql: 's.userId', parameterType: 'scalar' },
   organizationId: { sql: 's.organizationId', parameterType: 'scalar' },
+  requestId: { sql: 's.requestId', parameterType: 'scalar' },
+  serviceName: { sql: 's.serviceName', parameterType: 'scalar' },
+  experimentId: { sql: 's.experimentId', parameterType: 'scalar' },
 } satisfies FieldRegistry<TraceQuerySpanField>;
 
 // Direct querySpans policy is separate from trace-related span predicates.
@@ -108,9 +114,6 @@ const SPAN_QUERY_FIELDS = {
   parentSpanId: { sql: 's.parentSpanId', parameterType: 'scalar' },
   threadId: { sql: 's.threadId', parameterType: 'scalar' },
   resourceId: { sql: 's.resourceId', parameterType: 'scalar' },
-  requestId: { sql: 's.requestId', parameterType: 'scalar' },
-  serviceName: { sql: 's.serviceName', parameterType: 'scalar' },
-  experimentId: { sql: 's.experimentId', parameterType: 'scalar' },
   environment: { sql: 's.environment', parameterType: 'scalar' },
   executionSource: { sql: 's.executionSource', parameterType: 'scalar' },
   parentEntityType: { sql: 's.parentEntityType', parameterType: 'scalar' },
@@ -421,6 +424,9 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'sessionId',
   'userId',
   'organizationId',
+  'requestId',
+  'serviceName',
+  'experimentId',
   'endedAt',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
@@ -594,7 +600,10 @@ function compileDuckDBTraceScope(
         runId,
         sessionId,
         userId,
-        organizationId
+        organizationId,
+        requestId,
+        serviceName,
+        experimentId
       FROM current_span_rows
       WHERE currentRank = 1
     )`);
@@ -944,7 +953,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
   );
   if (flagged.length === 0) return;
 
-  const values: unknown[] = [];
+  const values: unknown[] = timeRangeOf(flagged.map(row => row.rootTimestamp as Date));
   const where = flagged
     .map(row => {
       values.push(row.traceId, row.rootSpanId, row.rootEventType, row.rootTimestamp, row.rootCursorId);
@@ -957,7 +966,7 @@ async function fillMissingTracePreviews(db: DuckDBConnection, rows: Record<strin
       ${payloadColumnSql('output')} AS output,
       error
     FROM span_events
-    WHERE parentSpanId IS NULL AND (${where})`,
+    WHERE parentSpanId IS NULL AND timestamp BETWEEN ? AND ? AND (${where})`,
     values,
   );
   const byTrace = new Map(payloads.map(payload => [String(payload.traceId), payload]));

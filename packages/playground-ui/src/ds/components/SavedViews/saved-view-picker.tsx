@@ -1,4 +1,3 @@
-import { CopyIcon, EllipsisIcon, LayersIcon, LayersPlusIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { FormEvent, ReactNode, RefObject } from 'react';
 import { MAX_SAVED_VIEW_NAME_CHARS } from './saved-view-schema';
@@ -20,6 +19,12 @@ import { Field, FieldError } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { Txt } from '@/ds/components/Txt';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconInputForm } from '@/ds/icons/central/IconInputForm';
+import { IconLayersThree } from '@/ds/icons/central/IconLayersThree';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconSquareBehindSquare1 } from '@/ds/icons/central/IconSquareBehindSquare1';
+import { TrashIcon } from '@/ds/icons/TrashIcon';
 import { cn } from '@/lib/utils';
 
 export type SavedViewPickerProps<TSettings> = {
@@ -31,6 +36,8 @@ export type SavedViewPickerProps<TSettings> = {
   describeView?: (view: SavedView<TSettings>) => ReactNode;
   /** Whether a view can be renamed, deleted or overwritten. Others can still be applied and duplicated. */
   canEdit?: (view: SavedView<TSettings>) => boolean;
+  /** Whether new views can be saved here (save as new view, duplicate). Defaults to true. */
+  canCreate?: boolean;
   'aria-label'?: string;
   className?: string;
 };
@@ -50,6 +57,7 @@ export function SavedViewPicker<TSettings>({
   newViewSettings,
   describeView,
   canEdit = () => true,
+  canCreate = true,
   'aria-label': ariaLabel = 'Views',
   className,
 }: SavedViewPickerProps<TSettings>) {
@@ -102,7 +110,7 @@ export function SavedViewPicker<TSettings>({
         >
           <ComboboxTrigger
             size="sm"
-            icon={<LayersIcon />}
+            icon={<IconLayersTwo />}
             aria-label={`View: ${selected?.label}${activeUnsaved ? ', unsaved changes' : ''}`}
             className="max-w-60"
           >
@@ -112,7 +120,7 @@ export function SavedViewPicker<TSettings>({
             )}
           </ComboboxTrigger>
           <ComboboxContent align="end">
-            <ComboboxSearch placeholder="Search views…" />
+            <ComboboxSearch placeholder="Search views" />
             <ComboboxEmpty>No views found.</ComboboxEmpty>
             <ComboboxList>
               {(item: PickerItem) => {
@@ -127,27 +135,29 @@ export function SavedViewPicker<TSettings>({
             </ComboboxList>
           </ComboboxContent>
         </ComboboxRoot>
-        {activeView && !creating && (
+        {activeView && !creating && (editable || canCreate) && (
           <DropdownMenu>
             <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip="View actions" className="shrink-0">
-              <EllipsisIcon />
+              <IconDotGrid1x3Horizontal />
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               {editable && (
                 <DropdownMenu.Item onClick={() => setRenaming(true)}>
-                  <TextCursorInputIcon aria-hidden />
+                  <IconInputForm aria-hidden />
                   Rename
                 </DropdownMenu.Item>
               )}
-              <DropdownMenu.Item onClick={() => views.duplicate(activeView.id)}>
-                <CopyIcon aria-hidden />
-                Duplicate
-              </DropdownMenu.Item>
+              {canCreate && (
+                <DropdownMenu.Item onClick={() => views.duplicate(activeView.id)}>
+                  <IconSquareBehindSquare1 aria-hidden />
+                  Duplicate
+                </DropdownMenu.Item>
+              )}
               {editable && (
                 <>
                   <DropdownMenu.Separator />
                   <DropdownMenu.Item variant="destructive" onClick={() => views.remove(activeView.id)}>
-                    <Trash2Icon aria-hidden />
+                    <TrashIcon aria-hidden />
                     Delete view
                   </DropdownMenu.Item>
                 </>
@@ -156,31 +166,33 @@ export function SavedViewPicker<TSettings>({
           </DropdownMenu>
         )}
       </div>
-      <Popover
-        open={creating}
-        onOpenChange={open => {
-          if (open) views.create(newViewSettings);
-          else views.discard();
-        }}
-      >
-        <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view" className="shrink-0">
-          <LayersPlusIcon />
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72">
-          {creating && (
-            <ViewNameForm
-              title="Save as new view"
-              initialName={draft.name}
-              submitLabel="Save view"
-              error={views.error}
-              pending={views.pending}
-              onNameChange={name => views.change({ name })}
-              onSubmit={() => views.save()}
-              onCancel={views.discard}
-            />
-          )}
-        </PopoverContent>
-      </Popover>
+      {canCreate && (
+        <Popover
+          open={creating}
+          onOpenChange={open => {
+            if (open) views.create(newViewSettings);
+            else views.discard();
+          }}
+        >
+          <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view" className="shrink-0">
+            <IconLayersThree />
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72">
+            {creating && (
+              <ViewNameForm
+                title="Save as new view"
+                initialName={draft.name}
+                submitLabel="Save view"
+                error={views.error}
+                pending={views.pending}
+                onNameChange={name => views.change({ name })}
+                onSubmit={() => views.save()}
+                onCancel={views.discard}
+              />
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
       {activeView && (
         <RenamePopover
           open={renaming}

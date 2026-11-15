@@ -47,7 +47,7 @@ export function PromptBlockEditMain({ form, formResetKey = 0 }: PromptBlockEditM
               onChange={field.onChange}
               language="markdown"
               showCopyButton
-              placeholder="Enter prompt block content..."
+              placeholder="Enter prompt block content"
               highlightVariables
               schema={schema}
               className="min-h-[200px] flex-1"

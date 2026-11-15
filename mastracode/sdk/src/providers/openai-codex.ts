@@ -77,7 +77,7 @@ export const THINKING_LEVEL_TO_REASONING_EFFORT: Record<ThinkingLevel, string | 
  */
 export function createCodexMiddleware(reasoningEffort?: string): LanguageModelMiddleware {
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       // Remove topP if temperature is set (OpenAI doesn't like both)
       if (params.temperature !== undefined && params.temperature !== null) {
@@ -129,7 +129,7 @@ export function getRequestThreadId(headers?: Record<string, string>): string | u
 export function createPromptCacheKeyMiddleware(promptCacheKey?: string): LanguageModelMiddleware | undefined {
   if (!promptCacheKey) return undefined;
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       params.providerOptions = {
         ...params.providerOptions,
@@ -160,7 +160,7 @@ export function createReasoningEffortMiddleware(
 ): LanguageModelMiddleware | undefined {
   if (!reasoningEffort) return undefined;
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       params.providerOptions = {
         ...params.providerOptions,

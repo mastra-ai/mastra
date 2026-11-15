@@ -280,14 +280,14 @@ The tool returns an object with:
 ```typescript oxfmt:false
 {
   id: string;         // Unique chunk/document identifier
-  metadata: any;      // All metadata fields (document ID, etc.)
-  vector: number[];   // Embedding vector (if available)
+  metadata?: any;     // All metadata fields (document ID, etc.)
+  vector: number[];   // Embedding vector, or [] when unavailable
   score: number;      // Similarity score for this retrieval
   document: string;   // Full chunk/document text (if available)
 }
 ```
 
-`document` is only populated by vector stores whose `query()` returns document content, such as Chroma, Elasticsearch, LanceDB, and MongoDB. For other stores, such as PgVector, it's an empty string. Read the chunk text from `sources[i].metadata.text` (or whichever metadata key you stored it under).
+`document` is only populated by vector stores whose `query()` returns document content, such as Chroma, Elasticsearch, LanceDB, and MongoDB. For other stores, such as PgVector, it's an empty string. Read the chunk text from `sources[i].metadata?.text` (or whichever metadata key you stored it under). `metadata` is `undefined` when the store returns no metadata for a result.
 
 ## Default tool description
 

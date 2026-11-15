@@ -470,80 +470,85 @@ describe('channels()', () => {
     expect(FakeChannelProvider.configureSpy).toHaveBeenCalledWith('discord', { botToken: DISCORD_BOT_TOKEN });
   });
 
-  it('yields a real DiscordProvider that reports isConfigured from the bot token alone (end to end)', async () => {
-    // Deliberately using the REAL @mastra/discord: this pins the UI-visible
-    // symptom — Studio showed Discord as "Not Configured" because the
-    // provider required applicationId + publicKey alongside the bot token,
-    // and the platform connection only delivers the token.
-    vi.doUnmock('@mastra/discord');
-    vi.stubEnv('DISCORD_BOT_TOKEN', undefined as unknown as string);
-    vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
-    vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
-    const fetchMock = platformFetch({
-      connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
-      // The token is the only credential material available.
-      credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
+  describe('real Discord provider', () => {
+    beforeEach(async () => {
+      vi.doUnmock('@mastra/discord');
+      vi.stubEnv('DISCORD_BOT_TOKEN', undefined as unknown as string);
+      vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
+      vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
+      // Loading the real provider's module graph can exceed the test's 5s
+      // timeout on a cold runner. Preload after the outer vi.resetModules(),
+      // before starting either behavior test's timer.
+      await import('@mastra/discord');
+    }, 30_000);
+
+    it('yields a real DiscordProvider that reports isConfigured from the bot token alone (end to end)', async () => {
+      // Deliberately using the REAL @mastra/discord: this pins the UI-visible
+      // symptom — Studio showed Discord as "Not Configured" because the
+      // provider required applicationId + publicKey alongside the bot token,
+      // and the platform connection only delivers the token.
+      const fetchMock = platformFetch({
+        connections: [makeConnection({ id: 'c_dc', integrationId: 'discord' })],
+        // The token is the only credential material available.
+        credentials: { c_dc: { type: 'api_key', apiKey: DISCORD_BOT_TOKEN } },
+      });
+      const channelsFn = await importChannels();
+      const resolver = await channelsFn(options(fetchMock));
+      const providers = await resolver();
+      const discord = providers['discord'] as unknown as { getInfo(): { isConfigured: boolean } };
+      expect(discord.getInfo().isConfigured).toBe(true);
     });
-    const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock));
-    const providers = await resolver();
-    const discord = providers['discord'] as unknown as { getInfo(): { isConfigured: boolean } };
-    expect(discord.getInfo().isConfigured).toBe(true);
-  });
 
-  it('discards the previous connection identity when the platform switches Discord connections (end to end)', async () => {
-    // REAL @mastra/discord: pins the security property that switching the
-    // active platform connection replaces the app config. If configure()
-    // merged instead, connection A's Ed25519 publicKey would keep verifying
-    // inbound webhooks while connection B's bot token is live — letting A's
-    // owner forge interactions against B.
-    vi.doUnmock('@mastra/discord');
-    vi.stubEnv('DISCORD_BOT_TOKEN', undefined as unknown as string);
-    vi.stubEnv('DISCORD_PUBLIC_KEY', undefined as unknown as string);
-    vi.stubEnv('DISCORD_APPLICATION_ID', undefined as unknown as string);
-    const state: PlatformState = {
-      connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
-      credentials: { c_a: { type: 'api_key', apiKey: 'discord-A' } },
-      contexts: {
-        c_a: {
-          connection_config: null,
-          metadata: { applicationId: 'A_app_id', publicKey: 'A_public_key' },
+    it('discards the previous connection identity when the platform switches Discord connections (end to end)', async () => {
+      // REAL @mastra/discord: pins the security property that switching the
+      // active platform connection replaces the app config. If configure()
+      // merged instead, connection A's Ed25519 publicKey would keep verifying
+      // inbound webhooks while connection B's bot token is live — letting A's
+      // owner forge interactions against B.
+      const state: PlatformState = {
+        connections: [makeConnection({ id: 'c_a', integrationId: 'discord' })],
+        credentials: { c_a: { type: 'api_key', apiKey: 'discord-A' } },
+        contexts: {
+          c_a: {
+            connection_config: null,
+            metadata: { applicationId: 'A_app_id', publicKey: 'A_public_key' },
+          },
         },
-      },
-    };
-    const fetchMock = platformFetch(state);
-    const channelsFn = await importChannels();
-    const resolver = await channelsFn(options(fetchMock, { ttlMs: 0 }));
-    const providers = await resolver();
-    const discord = providers['discord'] as unknown as {
-      connect(agentId: string): Promise<{ type: string; authorizationUrl: string }>;
-    };
+      };
+      const fetchMock = platformFetch(state);
+      const channelsFn = await importChannels();
+      const resolver = await channelsFn(options(fetchMock, { ttlMs: 0 }));
+      const providers = await resolver();
+      const discord = providers['discord'] as unknown as {
+        connect(agentId: string): Promise<{ type: string; authorizationUrl: string }>;
+      };
 
-    // The platform swaps connection A for connection B — token only.
-    state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
-    state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-B' } };
-    state.contexts = {};
-    await resolver.refresh();
+      // The platform swaps connection A for connection B — token only.
+      state.connections = [makeConnection({ id: 'c_b', integrationId: 'discord' })];
+      state.credentials = { c_b: { type: 'api_key', apiKey: 'discord-B' } };
+      state.contexts = {};
+      await resolver.refresh();
 
-    // B's identity must come from B's token via /applications/@me — never
-    // from A's leftover metadata.
-    const B = { id: 'B_app_id', verify_key: 'B_public_key' };
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url.includes('/applications/@me'))
-          return Response.json({ id: B.id, name: 'App B', verify_key: B.verify_key });
-        throw new Error(`unexpected fetch: ${url}`);
-      }),
-    );
-    try {
-      const result = await discord.connect('agent-1');
-      const url = new URL(result.authorizationUrl);
-      expect(url.searchParams.get('client_id')).toBe(B.id);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+      // B's identity must come from B's token via /applications/@me — never
+      // from A's leftover metadata.
+      const B = { id: 'B_app_id', verify_key: 'B_public_key' };
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (input: RequestInfo | URL) => {
+          const url = String(input);
+          if (url.includes('/applications/@me'))
+            return Response.json({ id: B.id, name: 'App B', verify_key: B.verify_key });
+          throw new Error(`unexpected fetch: ${url}`);
+        }),
+      );
+      try {
+        const result = await discord.connect('agent-1');
+        const url = new URL(result.authorizationUrl);
+        expect(url.searchParams.get('client_id')).toBe(B.id);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
   });
 
   it('derives a Teams install-store encryption key from the platform access token when MASTRA_ENCRYPTION_KEY is unset', async () => {

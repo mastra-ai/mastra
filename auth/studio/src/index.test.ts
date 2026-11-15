@@ -1182,6 +1182,54 @@ describe('MastraAuthStudio', () => {
     });
   });
 
+  describe('fetchAsRequestUser', () => {
+    it('sends the session cookie renewed while verifying the request', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        )
+        .mockResolvedValueOnce(Response.json({ apiKey: 'msk_1' }, { status: 201 }));
+      const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+
+      await auth.authenticateToken('', req);
+      await auth.fetchAsRequestUser(req, '/gateway/projects/provision', { method: 'POST' });
+
+      const sentCookies = fetchSpy.mock.calls.map(([, init]) =>
+        new Headers((init as RequestInit | undefined)?.headers).get('Cookie'),
+      );
+      expect(sentCookies).toEqual(['wos-session=sealed-v1', 'wos-session=sealed-v2']);
+    });
+
+    it('hands the browser a session cookie the platform call renewed, and sends it on the next call', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        )
+        .mockResolvedValueOnce(Response.json({ customer: null }));
+      const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+
+      await auth.fetchAsRequestUser(req, '/auth/me');
+      expect(auth.consumePendingResponseHeaders(req)?.['Set-Cookie']).toMatch(/^wos-session=sealed-v2;/);
+      await auth.fetchAsRequestUser(req, '/billing/customer');
+
+      const sentCookies = fetchSpy.mock.calls.map(([, init]) =>
+        new Headers((init as RequestInit | undefined)?.headers).get('Cookie'),
+      );
+      expect(sentCookies).toEqual(['wos-session=sealed-v1', 'wos-session=sealed-v2']);
+    });
+
+    it('makes no platform call for a request without a session', async () => {
+      expect(await auth.fetchAsRequestUser(mockRequest(), '/auth/me')).toBeNull();
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+  });
+
   describe('getUser', () => {
     it('should return null (not supported)', async () => {
       const user = await auth.getUser('user-1');

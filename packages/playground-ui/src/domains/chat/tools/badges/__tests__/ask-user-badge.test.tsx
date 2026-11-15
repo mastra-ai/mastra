@@ -136,7 +136,7 @@ describe('AskUserBadge', () => {
     it('submits the trimmed text on Enter', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: '  Ada  ' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -147,7 +147,7 @@ describe('AskUserBadge', () => {
     it('submits the trimmed text via the send button', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: 'Grace' } });
 
       fireEvent.click(within(badge()).getByRole<HTMLButtonElement>('button', { name: 'Submit answer' }));
@@ -158,7 +158,7 @@ describe('AskUserBadge', () => {
     it('does not submit whitespace-only input', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-3', suspendPayload, result: undefined });
 
-      const input = within(badge()).getByPlaceholderText('Type your answer...');
+      const input = within(badge()).getByPlaceholderText('Type your answer');
       fireEvent.change(input, { target: { value: '   ' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 

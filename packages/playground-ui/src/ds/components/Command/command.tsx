@@ -1,5 +1,4 @@
 import { Command as CommandPrimitive } from 'cmdk';
-import { Search } from 'lucide-react';
 import * as React from 'react';
 
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
@@ -7,6 +6,8 @@ import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { controlIconState } from '@/ds/primitives/control-icon';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -174,12 +175,12 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       data-slot="command-input-wrapper"
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
-      <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      <IconMagnifyingGlass className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
       {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
-          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-body-sm text-foreground',
+          'flex h-8 min-w-0 flex-1 rounded-md bg-transparent py-2 text-body-sm zoom-safe-text text-foreground',
           'placeholder:text-placeholder disabled:cursor-not-allowed disabled:opacity-50',
           'outline-none focus:outline-none focus-visible:outline-none',
           transitions.colors,
@@ -292,7 +293,10 @@ const CommandItem = React.forwardRef<
       // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
       'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground data-[selected=true]:[&>svg]:text-foreground',
+      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
+      controlIconState,
+      // A selected row brightens its icon with its label, like a highlighted menu row.
+      '[--control-icon-hover:var(--foreground)] data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
       className,
     )}
     {...props}

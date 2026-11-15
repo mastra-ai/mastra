@@ -11,6 +11,7 @@ import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '
 import { MastraError } from '../error';
 import { resolveModelConfig } from '../llm';
 import type { IMastraLogger } from '../logger';
+import { latestProcessedModelOutput } from '../loop/shared/steps/tool-result-commit-core';
 import type { MastraMemory } from '../memory/memory';
 import { parseMemoryRequestContext } from '../memory/types';
 import {
@@ -27,6 +28,7 @@ import { RequestContext } from '../request-context';
 import type { ChunkType } from '../stream';
 import type { MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
+import { residentStepResults } from '../workflows/run-journal';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
@@ -746,11 +748,13 @@ export class ProcessorRunner {
     if (result.status !== 'success') {
       // Collect error details from the workflow result and failed steps
       const details: string[] = [];
+      // A storage v2 result's `steps` is a loader; it holds the failed results without reading storage.
+      const steps = residentStepResults(result.steps) ?? result.steps;
       if (result.status === 'failed') {
         if (result.error) {
           details.push(result.error.message || JSON.stringify(result.error));
         }
-        for (const [stepId, step] of Object.entries(result.steps)) {
+        for (const [stepId, step] of Object.entries(steps)) {
           if (step.status === 'failed' && step.error?.message) {
             details.push(`step ${stepId}: ${step.error.message}`);
           }
@@ -761,7 +765,7 @@ export class ProcessorRunner {
       // flattened status text and lose the original error, stack and type.
       let failedStepError: Error | undefined;
       if (result.status === 'failed') {
-        for (const step of Object.values(result.steps)) {
+        for (const step of Object.values(steps)) {
           if (step.status === 'failed' && step.error) {
             failedStepError = step.error;
             break;
@@ -2624,6 +2628,7 @@ export class ProcessorRunner {
       toolCallId: string;
       toolArgs: unknown;
       result: unknown;
+      modelOutput?: unknown;
       providerExecuted?: boolean;
       requestContext?: RequestContext;
       retryCount?: number;
@@ -2639,6 +2644,7 @@ export class ProcessorRunner {
       toolCallId,
       toolArgs,
       result,
+      modelOutput,
       providerExecuted,
       requestContext,
       retryCount = 0,
@@ -2649,6 +2655,8 @@ export class ProcessorRunner {
 
     // Run through all output processors that have processToolResult
     for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      // Each processor sees the mapping an earlier processor committed, not the original.
+      const currentModelOutput = latestProcessedModelOutput(messageList, toolCallId, modelOutput);
       const processableMessages: MastraDBMessage[] = messageList.get.all.db();
       const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
       const check = messageList.makeMessageSourceChecker();
@@ -2669,6 +2677,7 @@ export class ProcessorRunner {
             // Carry the tool return value via toolResultValue to avoid colliding
             // with the OutputResult `result` field used by outputResult phase.
             toolResultValue: result,
+            modelOutput: currentModelOutput,
             providerExecuted,
             systemMessages: currentSystemMessages,
             steps,
@@ -2732,6 +2741,7 @@ export class ProcessorRunner {
           toolCallId,
           args: toolArgs,
           result,
+          modelOutput: currentModelOutput,
           providerExecuted,
           systemMessages: currentSystemMessages,
           steps,

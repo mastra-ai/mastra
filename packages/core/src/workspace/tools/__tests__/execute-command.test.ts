@@ -1,8 +1,12 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { MastraBrowser } from '../../../browser/browser';
 import { browserCliHandler } from '../../../browser/cli-handler';
 import type { ToolExecutionContext } from '../../../tools/types';
+import { LocalSandbox } from '../../sandbox/local-sandbox';
 import type { CommandResult, ExecuteCommandOptions } from '../../sandbox/types';
 import { Workspace } from '../../workspace';
 import { executeCommandTool } from '../execute-command';
@@ -262,6 +266,8 @@ describe('executeCommandTool data chunks', () => {
       expect(exitChunks).toHaveLength(1);
       expect(exitChunks[0].data.exitCode).toBe(-1);
       expect(exitChunks[0].data.success).toBe(false);
+      // -1 is no real exit code, so the exit says why the command never finished.
+      expect(exitChunks[0].data.error).toBe('sandbox disconnected');
       expect(exitChunks[0].data.executionTimeMs).toBeGreaterThanOrEqual(0);
       expect(exitChunks[0].data.executionTimeMs).toBeLessThanOrEqual(after - before + 10);
     });
@@ -704,45 +710,83 @@ describe('executeCommandTool data chunks', () => {
     });
   });
 
-  describe('tail pipe extraction', () => {
-    it('strips | tail -N from command and applies tail to result', async () => {
-      let receivedCommand = '';
-      const lines = Array.from({ length: 50 }, (_, i) => `line ${i + 1}`).join('\n') + '\n';
+  // Real child processes: bound each command and test so a stuck process fails fast
+  // instead of waiting out the suite's 120s test timeout.
+  describe.skipIf(process.platform === 'win32')('shell pipelines', { timeout: 20_000 }, () => {
+    const resources: { sandbox: LocalSandbox; directory: string }[] = [];
 
-      const { context } = createMockContext({
-        executeCommand: async (cmd, _args, opts) => {
-          receivedCommand = cmd;
-          opts?.onStdout?.(lines);
-          return { success: true, exitCode: 0, stdout: lines, stderr: '', executionTimeMs: 10 };
-        },
-      });
-
-      const result = await execute(
-        { command: 'cat big.log | tail -10', timeout: null, cwd: null, tail: null },
-        context,
-      );
-
-      // Command sent to sandbox should NOT have | tail -10
-      expect(receivedCommand).toBe('cat big.log');
-      // Result should be truncated to last 10 lines
-      expect(result).toContain('[showing last 10 of 50 lines]');
-      expect(result).toContain('line 50');
-      expect(result).not.toContain('line 1\n');
+    afterEach(async () => {
+      for (const { sandbox, directory } of resources.splice(0)) {
+        await sandbox.destroy();
+        await rm(directory, { recursive: true, force: true });
+      }
     });
 
-    it('strips | tail -n N from command', async () => {
-      let receivedCommand = '';
-
-      const { context } = createMockContext({
-        executeCommand: async cmd => {
-          receivedCommand = cmd;
-          return { success: true, exitCode: 0, stdout: 'ok\n', stderr: '', executionTimeMs: 1 };
+    async function runCommand(command: string, tail = 0) {
+      const directory = await mkdtemp(join(tmpdir(), 'mastra-command-'));
+      const sandbox = new LocalSandbox({ workingDirectory: directory, isolation: 'none' });
+      resources.push({ sandbox, directory });
+      const chunks: { type: string; data: any }[] = [];
+      const result = await execute(
+        { command, tail, timeout: 10 },
+        {
+          workspace: new Workspace({ sandbox }),
+          writer: {
+            custom: async (chunk: any) => {
+              chunks.push(chunk);
+            },
+          } as ToolExecutionContext['writer'],
         },
+      );
+      return {
+        result,
+        chunks,
+        stdout: chunks
+          .filter(chunk => chunk.type === 'data-sandbox-stdout')
+          .map(chunk => chunk.data.output)
+          .join(''),
+      };
+    }
+
+    it.each(['tail -10', 'tail -n 10'])('streams only the output of the actual %s pipeline', async tailCommand => {
+      const { result, stdout } = await runCommand(`seq 1 50 | ${tailCommand}`);
+      const expected = Array.from({ length: 10 }, (_, i) => `${i + 41}\n`).join('');
+      expect(stdout).toBe(expected);
+      expect(result).toBe(expected);
+    });
+
+    it('reports an upstream failure in a pipeline ending in tail', async () => {
+      const { result, stdout, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | tail -20`);
+      expect(stdout).toBe('kept\n');
+      expect(result).toContain('kept');
+      expect(result).toContain('Exit code: 7');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
+        exitCode: 7,
+        success: false,
       });
+    });
 
-      await execute({ command: 'npm test | tail -n 20', timeout: null, cwd: null, tail: null }, context);
+    it('keeps shell exit status for pipelines that do not end in tail', async () => {
+      const { result, chunks } = await runCommand(`sh -c 'printf "kept\\n"; exit 7' | cat`);
+      expect(result).toBe('kept\n');
+      expect(chunks.find(chunk => chunk.type === 'data-sandbox-exit')?.data).toMatchObject({
+        exitCode: 0,
+        success: true,
+      });
+    });
 
-      expect(receivedCommand).toBe('npm test');
+    it('preserves quoted pipe characters in a command', async () => {
+      const { result, stdout } = await runCommand(`printf '%s\\n' 'quoted | text' 'last | value' | tail -n 1`);
+      expect(result).toBe('last | value\n');
+      expect(stdout).toBe('last | value\n');
+    });
+
+    it('applies the schema tail to model output after the shell pipeline', async () => {
+      const { result, stdout } = await runCommand('seq 1 10 | tail -5', 2);
+      expect(stdout).toBe('6\n7\n8\n9\n10\n');
+      expect(result).toContain('[showing last 2 of 5 lines]');
+      expect(result).toContain('9\n10\n');
+      expect(result).not.toContain('8\n');
     });
 
     it('does not strip tail pipe for background commands', async () => {

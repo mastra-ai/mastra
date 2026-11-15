@@ -29,10 +29,9 @@ describe('sent attachment previews', () => {
       />,
     );
     fireEvent.error(screen.getByRole('img'));
-    expect(screen.getByText('PNG · Preview unavailable')).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Open diagram.png' }).getAttribute('href')).toBe(
-      'https://example.com/diagram.png',
-    );
+    const attachment = screen.getByRole('link', { name: 'Open diagram.png' });
+    expect(within(attachment).getByText('PNG (preview unavailable)')).toBeTruthy();
+    expect(attachment.getAttribute('href')).toBe('https://example.com/diagram.png');
     expect(screen.queryByRole('button')).toBeNull();
   });
 

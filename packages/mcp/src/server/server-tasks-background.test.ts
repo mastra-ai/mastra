@@ -16,7 +16,7 @@ import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { DefaultExporter, Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { TaskRequester } from '../client/tasks/requester';
 import { taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
@@ -31,7 +31,15 @@ import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
 vi.setConfig({ testTimeout: 60_000 });
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-const LEASE_MS = 3_000;
+// Below the manager's 3s minimum lease: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS (internal, test-only) lowers
+// the floor for this file and for the child servers it spawns, which inherit the env.
+const LEASE_MS = 600;
+beforeAll(() => {
+  vi.stubEnv('MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS', String(LEASE_MS));
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 const here = fileURLToPath(new URL('.', import.meta.url));
 
 class User {
@@ -40,6 +48,8 @@ class User {
 
 interface Probe {
   runs: Array<{ tool: string; resumeData: unknown }>;
+  /** When set, `waits` stays open until it settles, so a test controls when its tasks finish. */
+  hold?: Promise<void>;
 }
 
 /** A release: `prepare` (a side effect), then `ask` who approves. Records every step start in `probe`. */
@@ -177,6 +187,7 @@ function makeTools(probe: Probe, counterFile: string) {
       inputSchema: z.object({}),
       execute: async (_input, context) => {
         probe.runs.push({ tool: 'waits', resumeData: 'start' });
+        await probe.hold;
         const aborted = await new Promise<boolean>(resolve => {
           const timer = setTimeout(() => resolve(false), LEASE_MS * 1.5);
           context.abortSignal?.addEventListener('abort', () => {
@@ -224,12 +235,14 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     probe = { runs: [] };
   });
 
+  // 30 s: instances close one after another, and each one's shutdown can wait the 5 s background-task drain,
+  // which two instances already make as long as the default 10 s hook timeout.
   afterEach(async () => {
     for (const child of children.splice(0)) child.kill('SIGKILL');
     await Promise.all(clients.splice(0).map(client => client.close()));
     for (const instance of instances.splice(0)) await instance.close();
     rmSync(dir, { recursive: true, force: true });
-  });
+  }, 30_000);
 
   async function instance(
     tasks: MCPServerConfig['tasks'],
@@ -325,6 +338,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     slots = 'default',
     mode = 'always',
     traced = false,
+    env: NodeJS.ProcessEnv = {},
   ): Promise<{ url: URL; process: ChildProcess }> {
     // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
     const proc = spawn(
@@ -339,8 +353,9 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         slots,
         mode,
         traced ? 'traced' : 'untraced',
+        String(LEASE_MS),
       ],
-      { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
+      { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, ...env } },
     );
     children.push(proc);
     const url = await new Promise<URL>((resolve, reject) => {
@@ -444,6 +459,9 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
   it('caps open tasks per client across instances sharing storage', async () => {
     const tasks = { tools: { waits: 'always' as const }, maxOpenTasksPerClient: 2 };
+    // Keep alice's two tasks open until the limit has been checked; the lease-length wait alone can elapse first.
+    let release!: () => void;
+    probe.hold = new Promise(resolve => (release = resolve));
     const a = await instance(tasks);
     const b = await instance(tasks);
     const first = await call(a.url, 'waits');
@@ -469,6 +487,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await call(b.url, 'waits', {}, { 'x-test-user': 'bob' });
 
     // A finished task frees its slot, on whichever instance the next call lands.
+    release();
     await waitFor(await requester(b.url), first, 'completed');
     await call(b.url, 'waits');
   });
@@ -1226,6 +1245,20 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         },
       });
     const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
+    // The run a killed server held lapses sooner.
+    const shortLeases = { MASTRA_AGENT_THREAD_LEASE_TTL_MS: '3000' };
+    /** A short scan interval, for an instance whose loop must look again at a run that looked live at boot. */
+    const scanningSoon = ({ mastraExtra, ...options }: { mastraExtra?: Record<string, unknown> } = {}) => ({
+      ...options,
+      mastraExtra: { ...mastraExtra, recovery: { workflowScanIntervalMs: 2_000 } },
+    });
+
+    /** Starts the workers, and with them the recovery loop, and the boot-time restart, as a deployed server does. */
+    async function bootLikeServer(mastra: Mastra) {
+      await mastra.startWorkers();
+      // Not awaited, as the server's boot handler doesn't; the call logs its failures and never rejects.
+      void mastra.restartAllActiveWorkflowRuns();
+    }
 
     async function onlyRun(mastra: Mastra, key: string) {
       const workflow = mastra.getWorkflow(key);
@@ -1402,13 +1435,13 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     // tracing across a crash); the task's attempt that follows the run stays in the task's trace.
     it('keeps the attempt following a run that workflow recovery restarted in the task trace', async () => {
       const stepsFile = `${counterFile}.nightly`;
-      const dying = await child(false, 'default', 'always', true);
+      const dying = await child(false, 'default', 'always', true, shortLeases);
       const taskId = await call(dying.url, 'run_nightly', { day: 'tuesday' });
       await until(() => stepsIn(stepsFile).includes('crunch'));
       dying.process.kill('SIGKILL');
 
-      const survivor = await workflowInstance(traced());
-      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const survivor = await workflowInstance(scanningSoon(traced()));
+      await bootLikeServer(survivor.mastra);
       await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       const root = await spanNamed(survivor.mastra, 'tools/call run_nightly');
       const followed = await spanNamed(survivor.mastra, 'task attempt run_nightly #2');
@@ -1419,14 +1452,14 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
     it('completes a run whose server died mid-step once workflow recovery continues it, without running it twice', async () => {
       const stepsFile = `${counterFile}.nightly`;
-      const dying = await child(false);
+      const dying = await child(false, 'default', 'always', false, shortLeases);
       const taskId = await call(dying.url, 'run_nightly', { day: 'monday' });
       await until(() => stepsIn(stepsFile).includes('crunch'));
       dying.process.kill('SIGKILL');
 
       // The next instance boots like a deployed server: Mastra recovers the workflow runs it finds.
-      const survivor = await workflowInstance();
-      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const survivor = await workflowInstance(scanningSoon());
+      await bootLikeServer(survivor.mastra);
       const done = await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
       expect(done.result).toMatchObject({ isError: false });
       expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({

@@ -1,11 +1,9 @@
-import { X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import type { ActivityCallState } from '../model/activity-members';
 import { callsOutcome, liveWords, outcomeText, settledWords, stretchPose, wordsName } from '../model/activity-words';
-import { ActivityTimedTrigger } from './activity-timed-trigger';
 import { useFadingEdge } from './use-fading-edge';
 import { useRollingWords } from './use-rolling-words';
 import { AgentIndicator, agentGlyph } from '@/ds/components/AgentIndicator';
@@ -17,12 +15,14 @@ import {
   ActivityHeader,
   ActivityIcon,
   ActivityLabel,
+  ActivityTrigger,
   useRelativePaths,
 } from '@/ds/components/ai/activity';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { Unwatched } from '@/ds/components/Arrival';
 import { Shimmer } from '@/ds/components/Shimmer';
 import { Txt } from '@/ds/components/Txt';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 import { cn } from '@/lib/utils';
 
 export interface ActivityFoldProps {
@@ -101,7 +101,7 @@ export function ActivityFold({
       foldable={foldable}
       aria-label={wordsName({ ...words, detail: words.detail && relative(words.detail) })}
     >
-      <ActivityTimedTrigger at={calls[0]?.startedAt}>
+      <ActivityTrigger>
         <ActivityHeader>
           <ActivityIcon className={cn(pose && '[&_svg]:size-4')}>
             <FoldIcon pose={pose} animates={animates} live={live} fallback={words.icon} />
@@ -109,19 +109,22 @@ export function ActivityFold({
           <span ref={box} className="relative flex min-w-0">
             <Shimmer ref={said} active={live} className="-my-1 flex min-w-0 items-center gap-2 overflow-hidden py-1">
               <Unwatched>
-                <ActivityLabel className={cn(prominent && 'text-body font-medium', UNTRUNCATED)}>
-                  {words.label}
-                </ActivityLabel>
+                <ActivityLabel className={cn(prominent && 'text-subheading', UNTRUNCATED)}>{words.label}</ActivityLabel>
                 {words.detail && (
                   <ActivityDetail className={cn(prominent && 'text-body', UNTRUNCATED)}>{words.detail}</ActivityDetail>
                 )}
                 {words.duration && (
-                  <ActivityLabel className={cn(prominent && 'text-body font-medium', '-ml-1 tabular-nums')}>
-                    · {words.duration}
+                  <ActivityLabel className={cn(prominent && 'text-subheading', 'tabular-nums')}>
+                    {words.duration}
                   </ActivityLabel>
                 )}
                 {failed && (
-                  <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />
+                  <IconCrossMedium
+                    size={13}
+                    role="img"
+                    aria-label="Failed"
+                    className="shrink-0 text-destructive-foreground"
+                  />
                 )}
                 {outcomeLabel && (
                   <Txt
@@ -138,7 +141,7 @@ export function ActivityFold({
           </span>
           <ActivityDisclosure />
         </ActivityHeader>
-      </ActivityTimedTrigger>
+      </ActivityTrigger>
       {children}
     </Activity>
   );

@@ -403,7 +403,7 @@
       "groupName": "Chat adapter",
       "commitMessageTopic": "Chat adapter",
       "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
-      "matchPackageNames": ["@chat-adapter/slack", "chat"],
+      "matchPackageNames": ["@chat-adapter/*", "chat"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
@@ -432,6 +432,25 @@
       "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",
       "matchPackageNames": ["agent-browser"],
       "allowedVersions": "<0.20.0"
+    },
+    {
+      "description": "Keep the OTLP exporters in observability/* on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1, `import` fails with \"does not provide an export named 'SeverityNumber'\", and @mastra/otel-exporter silently exports nothing. Renovate reads 0.22x to 0.300 as a minor update, so the major approval gate does not catch it. Remove when observability/* moves to SDK 3 together.",
+      "matchFileNames": ["observability/**/package.json"],
+      "matchPackageNames": [
+        "@opentelemetry/exporter-logs-otlp-grpc",
+        "@opentelemetry/exporter-logs-otlp-http",
+        "@opentelemetry/exporter-logs-otlp-proto",
+        "@opentelemetry/exporter-trace-otlp-grpc",
+        "@opentelemetry/exporter-trace-otlp-http",
+        "@opentelemetry/exporter-trace-otlp-proto"
+      ],
+      "allowedVersions": "<0.300.0"
+    },
+    {
+      "description": "Keep the @opentelemetry/api ranges in observability/* as written and update only the lockfile. The OpenTelemetry SDK 2 packages need api below 1.10, so a range that starts at 1.10 makes npm install a second api copy, and that copy cannot see the tracer provider or the active span that the app registers. Remove with the OTLP exporter rule above when observability/* moves to SDK 3.",
+      "matchFileNames": ["observability/**/package.json"],
+      "matchPackageNames": ["@opentelemetry/api"],
+      "rangeStrategy": "update-lockfile"
     },
     {
       "groupName": "OpenCode",
@@ -479,7 +498,7 @@
       "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "@blaxel/core",
-        "@daytonaio/sdk",
+        "@daytona/sdk",
         "agentfs-sdk",
         "e2b",
         "files-sdk",

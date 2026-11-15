@@ -59,13 +59,9 @@ expect.extend({
 
 // TypeScript declarations for custom matchers
 declare module 'vitest' {
-  interface Assertion<T = any> {
-    toBeValidSpanId(): T;
-    toBeValidTraceId(): T;
-  }
-  interface AsymmetricMatchersContaining {
-    toBeValidSpanId(): any;
-    toBeValidTraceId(): any;
+  interface Matchers<R, T> {
+    toBeValidSpanId(): R;
+    toBeValidTraceId(): R;
   }
 }
 

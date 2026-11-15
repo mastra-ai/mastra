@@ -39,7 +39,7 @@
     "@mastra/mcp": "latest",
     "@mastra/memory": "latest",
     "@mastra/s3": "latest",
-    "fast-xml-parser": "5.11.1",
+    "fast-xml-parser": "5.12.0",
     "google-auth-library": "11.1.0",
     "pdfjs-dist": "6.3.289",
     "yauzl": "3.4.0",

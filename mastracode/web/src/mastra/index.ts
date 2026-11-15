@@ -36,6 +36,7 @@ import { parseAuthorizedBotsEnv } from '@mastra/factory/integrations/github/webh
 import { IncidentioIntegration } from '@mastra/factory/integrations/incidentio/integration';
 import { JiraIntegration } from '@mastra/factory/integrations/jira/integration';
 import { PlatformJiraIntegration } from '@mastra/factory/integrations/platform/jira/integration';
+import { PlatformVantaIntegration } from '@mastra/factory/integrations/platform/vanta/integration';
 import { LinearIntegration } from '@mastra/factory/integrations/linear/integration';
 import { SlackIntegration } from '@mastra/factory/integrations/slack/integration';
 import type { IMastraAuthProvider } from '@mastra/core/server';
@@ -267,6 +268,9 @@ const jira =
 const incidentioApiKey = process.env.INCIDENT_IO_API_KEY?.trim();
 const incidentio = incidentioApiKey ? new IncidentioIntegration({ apiKey: incidentioApiKey }) : undefined;
 
+// Vanta vulnerability intake through Platform-managed (MastraConnect) Vanta connections.
+const vanta = platformCredentialsConfigured ? new PlatformVantaIntegration() : undefined;
+
 // Host env exposed to local sandboxes: an allow-list only, so app secrets
 // (GITHUB_APP_PRIVATE_KEY, WORKOS_API_KEY, DATABASE_URL, …) never leak into
 // commands run against untrusted repo checkouts. PATH is always added by the
@@ -373,6 +377,7 @@ const integrations = [
   ...(linear ? [linear] : []),
   ...(jira ? [jira] : []),
   ...(incidentio ? [incidentio] : []),
+  ...(vanta ? [vanta] : []),
   ...(slack ? [slack] : []),
 ];
 
@@ -417,7 +422,8 @@ export const factory = new MastraFactory({
   integrations,
   configVersion: factoryConfigVersion,
   // Providers every signed-in account may run on this server's own credentials,
-  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION in the environment.
+  // e.g. `amazon-bedrock` with AWS credentials + AWS_REGION, or `google-vertex`
+  // with Application Default Credentials + GOOGLE_VERTEX_PROJECT and GOOGLE_VERTEX_LOCATION.
   deploymentModelProviders: process.env.FACTORY_DEPLOYMENT_MODEL_PROVIDERS?.split(','),
   sandbox,
   browser,

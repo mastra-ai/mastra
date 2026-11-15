@@ -1,6 +1,6 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
-import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import type { FeedbackOptions } from './feedback-options';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
@@ -8,6 +8,7 @@ import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-p
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { Button } from '@/ds/components/Button';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
 import { useLinkComponent } from '@/lib/framework';
 import type { LinkComponentPaths } from '@/lib/framework';
 
@@ -60,6 +61,7 @@ export interface TraceSpanPanelProps {
   withQueryTrace: boolean;
   /** Full-thread view: shows the per-trace Feedback tab. */
   withFeedback: boolean;
+  feedbackOptions?: FeedbackOptions;
   /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
   onOpenScore: (traceId: string, scoreId: string) => void;
   scoresTabBadge?: ReactNode;
@@ -115,6 +117,7 @@ export function TraceSpanPanel({
   onFullThreadOpenChange,
   withQueryTrace,
   withFeedback,
+  feedbackOptions,
   onOpenScore,
   scoresTabBadge,
   scoresTabSlot,
@@ -194,7 +197,7 @@ export function TraceSpanPanel({
             ? ({ compact }) => (
                 <Button
                   tooltip={compact ? 'Open full thread' : undefined}
-                  icon={<MessagesSquareIcon />}
+                  icon={<IconBubbleText />}
                   variant="ghost"
                   size="sm"
                   // At a side column of 500px or less, collapse to a round icon button; the label stays for screen readers.
@@ -232,6 +235,7 @@ export function TraceSpanPanel({
         onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
+        feedbackOptions={feedbackOptions}
         onClose={() => onFullThreadOpenChange?.(false)}
       />
     </>

@@ -61,7 +61,21 @@ export const backgroundTaskResponseSchema = z.object({
   maxRetries: z.number(),
   timeoutMs: z.number(),
   suspendPayload: z.unknown().optional(),
+  suspendedAt: z.date().optional(),
 });
+
+export const resumeBackgroundTaskBodySchema = z
+  .object({
+    // A background tool treats a missing `resumeData` as a fresh run, so an
+    // answer must carry one (any value, `null` included).
+    resumeData: z.unknown(),
+    // The `suspendedAt` of the suspension being answered (ISO string or epoch
+    // milliseconds, as read from the task). A task that has since resumed or
+    // suspended again is rejected with 409 instead of receiving a stale answer.
+    suspendedAt: z.union([z.string().datetime({ offset: true }), z.number().int().nonnegative()]).optional(),
+  })
+  // `z.unknown()` alone lets a missing key through on Zod 3 and Zod 4 before 4.4.
+  .refine(body => body.resumeData !== undefined, { message: 'resumeData is required', path: ['resumeData'] });
 
 export const listBackgroundTaskResponseSchema = z.object({
   tasks: z.array(backgroundTaskResponseSchema),

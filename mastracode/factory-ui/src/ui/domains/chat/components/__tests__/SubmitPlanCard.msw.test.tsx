@@ -91,7 +91,7 @@ function stubRenderedList(rootPath: string) {
 
 function renderCard(props: Partial<Parameters<typeof SubmitPlanCard>[0]> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/f-1/user/threads/thread-1']}>
+    <MemoryRouter initialEntries={[`/factories/f-1/user/threads/${WORKSPACE}`]}>
       <Routes>
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
@@ -196,6 +196,43 @@ describe('SubmitPlanCard', () => {
       expect(requests).toHaveLength(1);
       expect(requests[0].get('path')).toBe('.artifacts/plans/add-dark-mode.md');
       expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
+    });
+
+    it('reads a plan submitted from a repository checkout in a multi-repository workspace', async () => {
+      stubUserSession();
+      const roots: string[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          const root = params.get('root') ?? '';
+          roots.push(root);
+          return HttpResponse.json({
+            workspacePath: params.get('workspacePath') ?? '',
+            root,
+            rootPath: root === 'mastra/.artifacts' ? '/workspace/mastra/.artifacts' : '/workspace/.artifacts',
+            entries: [],
+          });
+        }),
+      );
+      const requests = stubPlanFile();
+      const onRespond = vi.fn();
+      const user = userEvent.setup();
+      const path = '/workspace/mastra/.artifacts/plans/issue-30361.md';
+      renderCard({ input: { toolId: 'submit_plan', path }, onRespond });
+
+      expect(await screen.findByText('Ship dark mode')).toBeInTheDocument();
+      expect(roots).toContain('mastra/.artifacts');
+      expect(requests).toHaveLength(1);
+      expect(requests[0].get('workspacePath')).toBe(WORKSPACE);
+      expect(requests[0].get('path')).toBe('mastra/.artifacts/plans/issue-30361.md');
+      expect(screen.getByRole('button', { name: 'Approve the plan and build it' })).toBeEnabled();
+      await user.click(screen.getByRole('button', { name: 'Reject the plan' }));
+      expect(onRespond).toHaveBeenCalledWith({
+        action: 'rejected',
+        path,
+        title: 'Ship dark mode',
+        plan: '## Steps\n\n1. Add the toggle',
+      });
     });
 
     it('does not fetch an absolute path outside the workspace artifacts root', async () => {

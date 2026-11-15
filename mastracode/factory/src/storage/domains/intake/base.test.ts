@@ -6,7 +6,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { FactoryProjectsStorage } from '../projects/base.js';
-import { DEFAULT_INTAKE_CONFIG, IntakeStorage, resolveIntakeLabelRoute } from './base.js';
+import { DEFAULT_INTAKE_CONFIG, IntakeStorage } from './base.js';
 
 async function makeStorage(
   url: string = ':memory:',
@@ -200,31 +200,11 @@ describe('IntakeStorage', () => {
           integrationId: 'linear',
           sourceId: 'src-a',
           factoryProjectId: 'proj-2',
-          board: null,
           labels: null,
           createdAt: expect.any(Date),
         },
       ]);
       expect(await storage.listBoundSourceIds({ ...binding, factoryProjectId: 'proj-1' })).toEqual([]);
-    });
-
-    it('persists the bound board and resets it when rebound without one', async () => {
-      const storage = await makeStorage(undefined, { org1: ['proj-1'] });
-      const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
-
-      await storage.setBinding({ ...binding, factoryProjectId: 'proj-1', board: 'release' });
-      expect(await storage.getBinding(binding)).toEqual({
-        integrationId: 'linear',
-        sourceId: 'src-a',
-        factoryProjectId: 'proj-1',
-        board: 'release',
-        labels: null,
-        createdAt: expect.any(Date),
-      });
-
-      await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
-      expect((await storage.getBinding(binding))?.board).toBeNull();
-      expect(await storage.getBinding({ ...binding, sourceId: 'missing' })).toBeNull();
     });
 
     it('clears a binding and returns its project', async () => {
@@ -236,7 +216,6 @@ describe('IntakeStorage', () => {
         integrationId: 'linear',
         sourceId: 'src-a',
         factoryProjectId: 'proj-1',
-        board: null,
         labels: null,
         createdAt: expect.any(Date),
       });
@@ -271,7 +250,6 @@ describe('IntakeStorage', () => {
           integrationId: 'gitlab',
           sourceId,
           factoryProjectId: 'proj-1',
-          board: 'work',
         });
       }
 
@@ -293,7 +271,6 @@ describe('IntakeStorage', () => {
           integrationId: 'gitlab',
           sourceId: 'canonical',
           factoryProjectId: 'proj-1',
-          board: 'work',
           labels: null,
           createdAt: expect.any(Date),
         },
@@ -309,14 +286,12 @@ describe('IntakeStorage', () => {
         integrationId: 'gitlab',
         sourceId: 'legacy',
         factoryProjectId: 'proj-1',
-        board: 'work',
       });
       await storage.setBinding({
         orgId: 'org1',
         integrationId: 'gitlab',
         sourceId: 'canonical',
         factoryProjectId: 'proj-2',
-        board: 'review',
       });
 
       await expect(
@@ -336,18 +311,15 @@ describe('IntakeStorage', () => {
 
     it('lets several factories share a source with disjoint label filters', async () => {
       const storage = await makeStorage(undefined, { org1: ['A', 'B', 'C'] });
-      await expect(
-        storage.setSharedBinding({ ...source, factoryProjectId: 'A', board: 'work', labels: null }),
-      ).resolves.toEqual({
+      await expect(storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null })).resolves.toEqual({
         conflicts: [],
       });
       await storage.setSharedBinding({
         ...source,
         factoryProjectId: 'B',
-        board: 'work',
         labels: [' Payments ', 'payments'],
       });
-      await storage.setSharedBinding({ ...source, factoryProjectId: 'C', board: 'work', labels: ['mobile', 'ios'] });
+      await storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['mobile', 'ios'] });
 
       expect(
         (await storage.listBindings({ orgId: 'org1', integrationId: 'jira' })).map(({ factoryProjectId, labels }) => ({
@@ -392,13 +364,12 @@ describe('IntakeStorage', () => {
       await storage.setSharedBinding({
         ...source,
         factoryProjectId: 'B',
-        board: 'release',
         labels: ['payments', 'refunds'],
       });
 
       const bindings = await storage.listBindings({ orgId: 'org1', integrationId: 'jira' });
       expect(bindings).toHaveLength(2);
-      expect(bindings[0]).toMatchObject({ factoryProjectId: 'B', board: 'release', labels: ['payments', 'refunds'] });
+      expect(bindings[0]).toMatchObject({ factoryProjectId: 'B', labels: ['payments', 'refunds'] });
       expect(bindings[0]!.createdAt).toEqual(created);
     });
 
@@ -492,7 +463,6 @@ describe('IntakeStorage', () => {
           integrationId: 'jira',
           sourceId: 'OPS',
           factoryProjectId: 'proj-1',
-          board: 'work',
           labels: null,
           createdAt: legacyCreatedAt,
         },
@@ -500,7 +470,6 @@ describe('IntakeStorage', () => {
           integrationId: 'linear',
           sourceId: 'team-1',
           factoryProjectId: 'proj-2',
-          board: null,
           labels: null,
           createdAt: legacyCreatedAt,
         },
@@ -546,55 +515,6 @@ describe('IntakeStorage', () => {
       ]);
       // The old collection is left exactly as the earlier build wrote it, for a rollback.
       expect(await legacyRows(url)).toEqual(before);
-    });
-  });
-
-  describe('label routes', () => {
-    const route = { orgId: 'org-1', factoryProjectId: 'proj-1', integrationId: 'github' };
-
-    it('scopes routes to one org and project and sorts them by label', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
-      await storage.setLabelRoute({ ...route, label: 'docs', board: 'docs' });
-      await storage.setLabelRoute({ ...route, factoryProjectId: 'proj-2', label: 'release', board: 'other' });
-      await storage.setLabelRoute({ ...route, orgId: 'org-2', label: 'release', board: 'other' });
-
-      expect(await storage.listLabelRoutes({ orgId: 'org-1', factoryProjectId: 'proj-1' })).toEqual([
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'docs', board: 'docs' },
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release' },
-      ]);
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toHaveLength(3);
-    });
-
-    it('treats labels case-insensitively and updates the board in place', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'Release', board: 'release' });
-      await storage.setLabelRoute({ ...route, label: 'RELEASE ', board: 'release-2' });
-
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toEqual([
-        { factoryProjectId: 'proj-1', integrationId: 'github', label: 'release', board: 'release-2' },
-      ]);
-      expect(resolveIntakeLabelRoute(await storage.listLabelRoutes({ orgId: 'org-1' }), ['Bug', 'Release'])).toEqual({
-        factoryProjectId: 'proj-1',
-        integrationId: 'github',
-        label: 'release',
-        board: 'release-2',
-      });
-      expect(resolveIntakeLabelRoute(await storage.listLabelRoutes({ orgId: 'org-1' }), ['bug'])).toBeUndefined();
-    });
-
-    it('clears a route and returns what was removed', async () => {
-      const storage = await makeStorage();
-      await storage.setLabelRoute({ ...route, label: 'release', board: 'release' });
-
-      expect(await storage.clearLabelRoute({ ...route, label: 'release' })).toEqual({
-        factoryProjectId: 'proj-1',
-        integrationId: 'github',
-        label: 'release',
-        board: 'release',
-      });
-      expect(await storage.clearLabelRoute({ ...route, label: 'release' })).toBeNull();
-      expect(await storage.listLabelRoutes({ orgId: 'org-1' })).toEqual([]);
     });
   });
 });

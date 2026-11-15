@@ -1,4 +1,3 @@
-import { Braces, ListTodo, MessageSquareReply, ScrollText } from 'lucide-react';
 import {
   compressionRatio,
   extractedValueEntries,
@@ -9,7 +8,12 @@ import { ObservationRenderer } from './observation-renderer';
 import { ActivityItem } from '@/ds/components/ai/activity';
 import { Code } from '@/ds/components/Code';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
+import { IconCodeBrackets } from '@/ds/icons/central/IconCodeBrackets';
+import { IconScript } from '@/ds/icons/central/IconScript';
+import { IconTodos } from '@/ds/icons/central/IconTodos';
 import { formatDuration } from '@/utils/duration';
 
 export interface ObservationStatsProps {
@@ -31,7 +35,11 @@ export const ObservationStats = ({ inputTokens, outputTokens, durationMs }: Obse
 
   return (
     <Txt as="p" variant="meta" tone="muted" className="tabular-nums">
-      {stats.join(' · ')}
+      <Metadata>
+        {stats.map(stat => (
+          <Metadata.Item key={stat}>{stat}</Metadata.Item>
+        ))}
+      </Metadata>
     </Txt>
   );
 };
@@ -58,19 +66,19 @@ export const ObservationSections = ({
     <>
       {observations &&
         (hasSideSections ? (
-          <ActivityItem icon={<ScrollText />} label={observationsLabel} aria-label={observationsLabel} defaultOpen>
+          <ActivityItem icon={<IconScript />} label={observationsLabel} aria-label={observationsLabel} defaultOpen>
             <ObservationRenderer observations={observations} maxHeight={maxHeight} />
           </ActivityItem>
         ) : (
           <ObservationRenderer observations={observations} maxHeight={maxHeight} />
         ))}
       {currentTask && (
-        <ActivityItem icon={<ListTodo />} label="Current task" aria-label="Current task">
+        <ActivityItem icon={<IconTodos />} label="Current task" aria-label="Current task">
           <MarkdownRenderer className="text-caption text-foreground">{currentTask}</MarkdownRenderer>
         </ActivityItem>
       )}
       {suggestedResponse && (
-        <ActivityItem icon={<MessageSquareReply />} label="Suggested response" aria-label="Suggested response">
+        <ActivityItem icon={<IconBubbleSparkle />} label="Suggested response" aria-label="Suggested response">
           <MarkdownRenderer className="text-caption text-foreground/80 italic">{suggestedResponse}</MarkdownRenderer>
         </ActivityItem>
       )}
@@ -92,10 +100,10 @@ export const Extractions = ({ extractedValues, extractionFailures = [] }: Extrac
     extractionFailures.length > 0 ? `${extractionFailures.length} failed` : undefined,
   ]
     .filter(Boolean)
-    .join(' · ');
+    .join(', ');
 
   return (
-    <ActivityItem icon={<Braces />} label="Extractions" detail={detail} aria-label="Extractions">
+    <ActivityItem icon={<IconCodeBrackets />} label="Extractions" detail={detail} aria-label="Extractions">
       {entries.map(([slug, value]) => (
         <div key={slug} className="rounded-md border border-border bg-fill-subtle p-2">
           <Txt as="p" variant="meta" tone="muted" className="uppercase">

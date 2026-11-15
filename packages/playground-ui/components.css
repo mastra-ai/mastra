@@ -25,10 +25,9 @@
  * element wearing the utility: a custom property that referenced it would be
  * substituted once on the root and inherited as a finished string.
  *
- * `--surface-tint` is the state layer of a surface that cannot carry a
- * pseudo-element — an `<input>`. An inset shadow paints over the element's own
- * fill and under its content, so a wash there behaves like `state-layer`'s
- * `::before` without needing a child, and it sits below the rim layer so the
+ * `--surface-tint` is the state layer of a bare control — an `<input>`, a
+ * `Button`. An inset shadow paints over the element's own fill and under its
+ * content, so a wash there behaves like `state-layer`, and it sits below the rim layer so the
  * boundary keeps its resting weight while the fill moves. Each utility resets
  * it, because a custom property would otherwise inherit into every raised
  * surface nested inside a hovered one. */
@@ -81,49 +80,28 @@
  * hover inverts across themes. Layered, the same rung is +9/-9 from whatever it
  * sits on, in both themes, whatever the resting rung.
  *
- * The layer is a pseudo-element rather than a `background-image` so it can still
- * transition, and it stops a pixel short of the edge to leave the inset rim of
- * `shadow-raised` visible. `isolation` is what keeps a negative z-index from
- * escaping to an ancestor's stacking context.
+ * The rung is a flat `background-image` over the element's own fill. The
+ * background is clipped to the element's own shape, so it follows any radius
+ * and stops at the inside of a border, and inset shadows (the rim of
+ * `shadow-raised`) paint over it. It switches instantly: a background image
+ * cannot transition.
  *
  * It does not touch the rim: `--surface-rim` inherits, so brightening it here
  * would repaint the rim of every raised surface nested inside the hovered one.
  *
- * This and `--surface-tint` are the same rung by two mechanisms, and both stay:
- * the pseudo-element transitions its colour and stops a pixel short of the rim,
- * which is what a surface with content inside it wants; the tint paints edge to
- * edge, cannot transition (a box-shadow list transitions as a whole, so the rim
- * and the drops would animate with it), and is the only option for an element
- * that cannot own a child — an `<input>`. Reach for this one unless the element
- * is a bare control. */
+ * `--surface-tint` is the same rung in the shadow slot, for a bare control whose
+ * states are all expressed there (an `<input>`, a `Button`). Reach for this one
+ * on anything else. A surface that paints its own `background-image` loses it
+ * while hovered, so it keeps its fill in `background-color` or `--surface-tint`. */
 @utility state-layer {
-  position: relative;
-  isolation: isolate;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 1px;
-    z-index: -1;
-    border-radius: inherit;
-    pointer-events: none;
-    transition: background-color var(--duration-fast) var(--ease-out-custom);
-  }
-
   &:not(:disabled, [aria-disabled='true']) {
-    &:hover::before,
-    &:focus-visible::before {
-      background-color: var(--fill-subtle);
+    &:hover,
+    &:focus-visible {
+      background-image: linear-gradient(var(--fill-subtle), var(--fill-subtle));
     }
 
-    &:active::before {
-      background-color: var(--fill);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    &::before {
-      transition: none;
+    &:active {
+      background-image: linear-gradient(var(--fill), var(--fill));
     }
   }
 }
@@ -231,6 +209,8 @@
   body {
     background-color: var(--sidebar);
     color: var(--foreground);
+    /* Text without a role inherits the regular weight instead of the browser's 400. */
+    font-weight: var(--font-weight-normal);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -262,6 +242,12 @@
 
 @utility wrap-break-word {
   overflow-wrap: break-word;
+}
+
+@utility zoom-safe-text {
+  @variant pointer-coarse {
+    font-size: 16px !important;
+  }
 }
 
 @utility time-input {

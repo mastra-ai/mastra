@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Check, Link2, MoreHorizontal, Pencil, Quote, SmilePlus } from 'lucide-react';
 import { useState } from 'react';
 
 import { Avatar } from '../Avatar';
@@ -20,6 +19,12 @@ import { CommentComposer, CommentComposerInput, CommentComposerSend } from './co
 import type { CommentVariant } from './comment-context';
 import { CommentEditor } from './comment-editor';
 import { CommentQuote } from './comment-quote';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCheckmark2Medium } from '@/ds/icons/central/IconCheckmark2Medium';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconEmojiAddReaction } from '@/ds/icons/central/IconEmojiAddReaction';
+import { IconOpenQuote1 } from '@/ds/icons/central/IconOpenQuote1';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
 
 const meta: Meta<typeof Comment> = {
   title: 'Elements/Comment',
@@ -59,13 +64,13 @@ const SimpleThread = ({ variant }: { variant: CommentVariant }) => (
             <CommentItemTimestamp dateTime={item.dateTime}>{item.time}</CommentItemTimestamp>
             <CommentItemActions>
               <Button size="icon-sm" variant="ghost" aria-label="React">
-                <SmilePlus />
+                <IconEmojiAddReaction />
               </Button>
               <Button size="icon-sm" variant="ghost" aria-label="Resolve">
-                <Check />
+                <IconCheckmark2Medium />
               </Button>
               <Button size="icon-sm" variant="ghost" aria-label="More actions">
-                <MoreHorizontal />
+                <IconDotGrid1x3Horizontal />
               </Button>
             </CommentItemActions>
           </CommentItemHeader>
@@ -74,7 +79,7 @@ const SimpleThread = ({ variant }: { variant: CommentVariant }) => (
       ))}
     </CommentList>
     <CommentComposer aria-label="Add a comment">
-      <CommentComposerInput aria-label="Comment" placeholder={variant === 'embed' ? 'Reply...' : 'Add a comment...'}>
+      <CommentComposerInput aria-label="Comment" placeholder={variant === 'embed' ? 'Reply' : 'Add a comment'}>
         <CommentComposerSend />
       </CommentComposerInput>
     </CommentComposer>
@@ -94,7 +99,7 @@ export const ComposerOnly: Story = {
   render: () => (
     <Comment className="max-w-2xl">
       <CommentComposer aria-label="Add a comment">
-        <CommentComposerInput aria-label="Comment" placeholder="Add a comment...">
+        <CommentComposerInput aria-label="Comment" placeholder="Add a comment">
           <CommentComposerSend disabled />
         </CommentComposerInput>
       </CommentComposer>
@@ -130,7 +135,7 @@ const InteractiveThread = () => {
       >
         <CommentComposerInput
           aria-label="Comment"
-          placeholder="Add a comment..."
+          placeholder="Add a comment"
           value={value}
           onChange={event => {
             setValue(event.target.value);
@@ -195,13 +200,13 @@ export const Thread: Story = {
           </CommentItemContent>
           <CommentItemActions>
             <Button size="icon-sm" variant="ghost" aria-label="Quote reply">
-              <Quote />
+              <IconOpenQuote1 />
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label="Copy link">
-              <Link2 />
+              <IconChainLink3 />
             </Button>
             <Button size="icon-sm" variant="ghost" aria-label="Edit comment">
-              <Pencil />
+              <IconPencil />
             </Button>
           </CommentItemActions>
         </CommentItem>
@@ -240,7 +245,7 @@ const EditableRow = () => {
         </CommentItemContent>
         <CommentItemActions>
           <Button size="icon-sm" variant="ghost" aria-label="Edit comment" onClick={() => setEditing(true)}>
-            <Pencil />
+            <IconPencil />
           </Button>
         </CommentItemActions>
       </CommentItem>

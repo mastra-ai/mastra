@@ -4,6 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
@@ -50,21 +51,16 @@ describe('User sessions deletion', () => {
 
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
         HttpResponse.json({
-          connections: [
+          projects: [
             {
-              id: 'conn-1',
-              installationId: 'inst-7',
+              id: 'fp-1',
+              name: 'Mastra',
               repositories: [
-                {
-                  id: projectRepositoryId,
+                listedRepository(projectRepositoryId, 'octo/hello', {
                   branch: 'main',
                   sandboxWorkdir: '/workspace/hello',
-                  repository: { slug: 'octo/hello', defaultBranch: 'main' },
-                },
+                }),
               ],
             },
           ],

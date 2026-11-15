@@ -17,13 +17,15 @@ export type StartupResumeIssue =
 export async function resumeThreadOnStartup(
   state: TUIState,
   requestedThreadId?: string,
+  isCurrent: () => boolean = () => true,
 ): Promise<StartupResumeIssue | undefined> {
   const local = state.local;
-  if (!local) return resumeFactoryThread(state);
+  if (!local) return resumeFactoryThread(state, isCurrent);
   const { session, controller } = local;
 
   const currentPath = state.projectInfo.rootPath;
   const allThreads = await session.thread.list(requestedThreadId ? { allResources: true } : undefined);
+  if (!isCurrent()) return;
   const activeThreadId = session.thread.getId();
 
   if (requestedThreadId) {
@@ -56,12 +58,14 @@ export async function resumeThreadOnStartup(
   const threads = allThreads.filter(thread => thread.metadata?.projectPath === currentPath);
 
   if (threads.length === 0) {
-    if (await cloneDriftedThread(state, local)) return;
+    if (await cloneDriftedThread(state, local, isCurrent)) return;
+    if (!isCurrent()) return;
     state.pendingNewThread = true;
     return;
   }
 
   for (const thread of [...threads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())) {
+    if (!isCurrent()) return;
     if (thread.id === session.thread.getId()) return;
     try {
       await session.thread.switch({ threadId: thread.id });
@@ -72,13 +76,15 @@ export async function resumeThreadOnStartup(
     }
   }
 
+  if (!isCurrent()) return;
   state.pendingNewThread = true;
 }
 
 /** Factory sessions own their threads, so local project-path tagging and resource IDs don't apply. */
-async function resumeFactoryThread(state: TUIState): Promise<undefined> {
+async function resumeFactoryThread(state: TUIState, isCurrent: () => boolean): Promise<undefined> {
   if (state.session.thread.getId()) return;
   const [latest] = (await state.session.thread.list()).sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime());
+  if (!isCurrent()) return;
   if (latest) await state.session.thread.switch({ threadId: latest.id });
   else state.pendingNewThread = true;
 }
@@ -94,7 +100,11 @@ async function startPendingNewThread(state: TUIState, { session }: LocalRuntime)
   state.pendingNewThread = true;
 }
 
-async function cloneDriftedThread(state: TUIState, { session }: LocalRuntime): Promise<boolean> {
+async function cloneDriftedThread(
+  state: TUIState,
+  { session }: LocalRuntime,
+  isCurrent: () => boolean,
+): Promise<boolean> {
   const currentPath = state.projectInfo.rootPath;
   const currentResourceId = session.identity.getResourceId();
   const driftCandidates = (
@@ -104,7 +114,7 @@ async function cloneDriftedThread(state: TUIState, { session }: LocalRuntime): P
     })
   ).filter(thread => thread.resourceId !== currentResourceId);
   const thread = [...driftCandidates].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
-  if (!thread) return false;
+  if (!thread || !isCurrent()) return false;
 
   const answer = await askModalQuestion(state.ui, {
     question: [
@@ -122,7 +132,7 @@ async function cloneDriftedThread(state: TUIState, { session }: LocalRuntime): P
     allowCustomResponse: false,
     overlay: { widthPercent: 80, maxHeight: '70%' },
   });
-  if (answer !== 'Clone and resume') return false;
+  if (answer !== 'Clone and resume' || !isCurrent()) return false;
 
   const progress = new SimpleProgressComponent({ showElapsed: false, showPercentage: false });
   progress.start('Cloning thread into the current resource...');
@@ -131,6 +141,7 @@ async function cloneDriftedThread(state: TUIState, { session }: LocalRuntime): P
 
   try {
     await new Promise(resolve => setTimeout(resolve, 50));
+    if (!isCurrent()) return false;
     progress.updateStatus('Loading cloned thread...');
     state.ui.requestRender();
     await session.thread.cloneToCurrentResource({

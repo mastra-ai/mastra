@@ -7,7 +7,7 @@ import { createWorkflow } from './create';
 import { createStep } from './workflow';
 
 // Regression coverage for https://github.com/mastra-ai/mastra/issues/17908
-describe('workflow sleep cancellation', () => {
+describe.each([1, 2] as const)('workflow sleep cancellation (storage v%s)', storageVersion => {
   const noopStep = (id: string, execute = vi.fn().mockResolvedValue({})) =>
     createStep({
       id,
@@ -50,7 +50,7 @@ describe('workflow sleep cancellation', () => {
         id: workflowId,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        options: { validateInputs: false },
+        options: { storageVersion, validateInputs: false },
       }).then(noopStep('before-sleep')),
     )
       .then(noopStep('after-sleep', afterSleep))
@@ -93,7 +93,7 @@ describe('workflow sleep cancellation', () => {
           id: workflowId,
           inputSchema: z.object({}),
           outputSchema: z.object({}),
-          options: { validateInputs: false },
+          options: { storageVersion, validateInputs: false },
         })
           .then(
             noopStep('blocked-step', async () => {
@@ -146,7 +146,7 @@ describe('workflow sleep cancellation', () => {
             id: workflowId,
             inputSchema: z.object({}),
             outputSchema: z.object({}),
-            options: { validateInputs: false },
+            options: { storageVersion, validateInputs: false },
           })
             .then(noopStep('first-step', firstStep))
             .then(noopStep('second-step', secondStep))
@@ -192,21 +192,26 @@ describe('workflow sleep cancellation', () => {
       cancel,
     }: { guarded: boolean; status: string; armed: () => boolean; cancel: () => Promise<void> },
   ) {
-    const persist = store.persistWorkflowSnapshot.bind(store);
+    const writes = store as unknown as Record<string, (args: any) => Promise<unknown>>;
     const state = { canceled: false };
-    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
-      if (guarded && !state.canceled && args.snapshot.status === status) {
-        state.canceled = true;
-        await cancel();
-        return persist(args);
-      }
-      const written = await persist(args);
-      if (!guarded && !state.canceled && armed() && args.snapshot.status === 'running') {
-        state.canceled = true;
-        await cancel();
-      }
-      return written;
-    });
+    // Storage v1 writes a whole snapshot; storage v2 writes the run's header with its entries.
+    for (const method of ['persistWorkflowSnapshot', 'writeWorkflowRunCheckpoint', 'appendWorkflowRunEntries']) {
+      const persist = writes[method]!.bind(store);
+      vi.spyOn(writes, method).mockImplementation(async args => {
+        const writtenStatus = (args.snapshot ?? args.header).status;
+        if (guarded && !state.canceled && writtenStatus === status) {
+          state.canceled = true;
+          await cancel();
+          return persist(args);
+        }
+        const written = await persist(args);
+        if (!guarded && !state.canceled && armed() && writtenStatus === 'running') {
+          state.canceled = true;
+          await cancel();
+        }
+        return written;
+      });
+    }
     return state;
   }
 
@@ -227,7 +232,7 @@ describe('workflow sleep cancellation', () => {
             id: workflowId,
             inputSchema: z.object({}),
             outputSchema: z.object({}),
-            options: { validateInputs: false },
+            options: { storageVersion, validateInputs: false },
           })
             .then(noopStep('only-step', onlyStep))
             .commit();
@@ -267,7 +272,7 @@ describe('workflow sleep cancellation', () => {
             id: workflowId,
             inputSchema: z.object({}),
             outputSchema: z.object({}),
-            options: { validateInputs: false },
+            options: { storageVersion, validateInputs: false },
           })
             .then(noopStep('first-step', firstStep))
             .then(noopStep('second-step'))
@@ -309,7 +314,7 @@ describe('workflow sleep cancellation', () => {
             id: workflowId,
             inputSchema: z.object({}),
             outputSchema: z.object({}),
-            options: { validateInputs: false },
+            options: { storageVersion, validateInputs: false },
           })
             .then(noopStep('first-step', firstStep))
             .then(noopStep('second-step', secondStep))
@@ -368,7 +373,7 @@ describe('workflow sleep cancellation', () => {
       outputSchema: z.object({}),
       // Without `running` snapshots time travel cannot claim the run, so its stored
       // status stays `canceled` while the engine replays it.
-      options: { validateInputs: false, shouldPersistSnapshot },
+      options: { storageVersion, validateInputs: false, shouldPersistSnapshot },
     })
       .then(
         noopStep('blocked-step', async () => {
@@ -409,7 +414,7 @@ describe('workflow sleep cancellation', () => {
         id: workflowId,
         inputSchema: z.object({}),
         outputSchema: z.object({}),
-        options: { validateInputs: false },
+        options: { storageVersion, validateInputs: false },
       })
         .then(
           noopStep('first-step', async () => {
@@ -465,6 +470,7 @@ describe('workflow sleep cancellation', () => {
       inputSchema: z.object({}),
       outputSchema: z.object({}),
       options: {
+        storageVersion,
         validateInputs: false,
         shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled',
       },
@@ -483,7 +489,9 @@ describe('workflow sleep cancellation', () => {
     // engine's abort branch is what records the cancellation.
     const statusRead = vi.spyOn(store, 'loadWorkflowRunStatus').mockImplementationOnce(async args => {
       const status = await loadStatus(args);
-      vi.spyOn(store, 'updateWorkflowState').mockRejectedValueOnce(new Error('unavailable'));
+      vi.spyOn(store, storageVersion === 2 ? 'updateWorkflowRunHeader' : 'updateWorkflowState').mockRejectedValueOnce(
+        new Error('unavailable'),
+      );
       await run.cancel();
       return status;
     });
@@ -548,7 +556,7 @@ describe('workflow sleep cancellation', () => {
             id: workflowId,
             inputSchema: z.any(),
             outputSchema: z.any(),
-            options: { validateInputs: false },
+            options: { storageVersion, validateInputs: false },
           }),
           createStep({ id: 'loop-body', inputSchema: z.any(), outputSchema: z.any(), execute: loopBody }),
         )
@@ -582,7 +590,7 @@ describe('workflow sleep cancellation', () => {
       id: 'normal-sleep-workflow',
       inputSchema: z.object({}),
       outputSchema: z.object({}),
-      options: { validateInputs: false },
+      options: { storageVersion, validateInputs: false },
     })
       .then(noopStep('before-sleep'))
       .sleep(10)

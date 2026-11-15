@@ -1,3 +1,5 @@
+import type { McpInputRequestPayload } from '../mcp-input-request';
+import { isDeferredCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
 import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
 import { useMcpTaskProgress } from './use-mcp-task-progress';
@@ -9,13 +11,13 @@ import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-appro
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import {
-  hasToolArguments,
   presentTool,
   stringifyToolValue,
-  stripSerializedAnsi,
-  ToolCallArguments,
+  ToolCallBody,
+  toolCallHasBody,
   ToolCallOutput,
 } from '@/ds/components/ai/tool-call';
+import type { ToolCallView } from '@/ds/components/ai/tool-call';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
@@ -41,6 +43,8 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   backgroundTaskId?: string;
   /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
   backgroundTaskStatus?: string;
+  /** The MCP task question the call is waiting on, if it is. */
+  mcpInputRequest?: McpInputRequestPayload;
 }
 
 export const ToolBadge = ({
@@ -58,11 +62,18 @@ export const ToolBadge = ({
   status = 'idle',
   backgroundTaskId,
   backgroundTaskStatus,
+  mcpInputRequest,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
-  const resultPretty =
-    result !== undefined && result !== null ? stripSerializedAnsi(stringifyToolValue(result)) : undefined;
+  const view: ToolCallView = {
+    toolName,
+    args: argsObject,
+    argsText: argsPretty,
+    hideArguments: withoutArgs,
+    status,
+    result,
+  };
 
   const routingDecision = metadata?.mode === 'network' ? metadata.routingDecision : undefined;
   const selectionReason =
@@ -71,17 +82,10 @@ export const ToolBadge = ({
 
   const toolCalled = toolCalledProp ?? (result || toolOutput.length > 0);
   const needsApproval = awaitsToolApproval({ toolApprovalMetadata, toolCalled });
-  const hasBody =
-    hasToolArguments({ toolName, args: argsObject, argsText: argsPretty, hideArguments: withoutArgs }) ||
-    Boolean(suspendPayload) ||
-    Boolean(resultPretty) ||
-    toolOutput.length > 0 ||
-    needsApproval;
+  const hasBody = toolCallHasBody(view) || Boolean(suspendPayload) || toolOutput.length > 0 || needsApproval;
 
-  // An awaited call's part also names its background task, but holds the call's final result.
-  const deferred =
-    backgroundTaskId !== undefined && backgroundTaskStatus !== 'completed' && backgroundTaskStatus !== 'failed';
-  const mcpTask = useMcpTaskProgress(result, status, { deferred });
+  const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
+  const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -126,14 +130,7 @@ export const ToolBadge = ({
     >
       {hasBody && (
         <>
-          <ToolCallArguments
-            toolName={toolName}
-            args={argsObject}
-            showFullContent={needsApproval}
-            argsText={argsPretty}
-            hideArguments={withoutArgs}
-            data-testid="tool-args"
-          />
+          <ToolCallBody {...view} showFullArguments={needsApproval} />
 
           {suspendPayload !== undefined && suspendPayload && (
             <div>
@@ -145,8 +142,6 @@ export const ToolBadge = ({
               )}
             </div>
           )}
-
-          {resultPretty && <ToolCallOutput text={resultPretty} error={status === 'error'} data-testid="tool-result" />}
 
           {toolOutput.length > 0 && (
             <div>

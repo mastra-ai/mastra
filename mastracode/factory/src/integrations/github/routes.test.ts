@@ -229,21 +229,21 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
+const issue12 = {
+  number: 12,
+  title: 'Fix flaky test',
+  url: 'https://github.com/octo/hello/issues/12',
+  author: 'ada',
+  assignee: 'grace',
+  labels: ['bug'],
+  comments: 3,
+  createdAt: '2026-07-01T00:00:00Z',
+  updatedAt: '2026-07-02T00:00:00Z',
+};
+
 const listRepoOpenIssues = vi.fn(
   async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
-    issues: [
-      {
-        number: 12,
-        title: 'Fix flaky test',
-        url: 'https://github.com/octo/hello/issues/12',
-        author: 'ada',
-        assignee: 'grace',
-        labels: ['bug'],
-        comments: 3,
-        createdAt: '2026-07-01T00:00:00Z',
-        updatedAt: '2026-07-02T00:00:00Z',
-      },
-    ],
+    issues: [issue12],
     nextPage: null as number | null,
   }),
 );
@@ -1656,36 +1656,19 @@ describe('prs route', () => {
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
   });
 
-  it('hands each listed pull request to Factory with its author and labels', async () => {
-    seedMaterializedProject();
-    listRepoOpenPullRequests.mockResolvedValueOnce({
-      pullRequests: [{ ...pullRequest34, labels: ['bug'] }],
-      nextPage: null,
-    });
-    const ingestFactoryEvent = vi.fn(async () => undefined);
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request('/web/github/projects/p1/prs');
-    expect(res.status).toBe(200);
-    const listedPullRequestPayload = expect.objectContaining({
-      user: { login: 'grace' },
-      labels: [{ name: 'bug' }],
-    });
-    expect(ingestFactoryEvent).toHaveBeenCalledWith(
-      expect.objectContaining({ payload: expect.objectContaining({ pull_request: listedPullRequestPayload }) }),
-    );
-  });
-
-  it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
-    seedMaterializedProject();
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    const ingestFactoryEvent = vi.fn().mockRejectedValue(new Error('rules db unavailable'));
-    const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
-      `/web/github/projects/p1/${resource}`,
-    );
-    expect(res.status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledWith('[Mastra Factory] Failed to ingest polled GitHub events', expect.anything());
-    warn.mockRestore();
-  });
+  // Every open board polls these pages; intake runs in the server-side sweeps, never on a read.
+  it.each(['issues', 'issues?label=status%3A%20auto-triaged', 'prs'])(
+    'lists %s without running Factory rules',
+    async resource => {
+      seedMaterializedProject();
+      const ingestFactoryEvent = vi.fn(async () => undefined);
+      const res = await buildApp({ workosId: 'u1' }, { ingestFactoryEvent }).request(
+        `/web/github/projects/p1/${resource}`,
+      );
+      expect(res.status).toBe(200);
+      expect(ingestFactoryEvent).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe('linked repository backlog import', () => {
@@ -1729,6 +1712,30 @@ describe('linked repository backlog import', () => {
       'poll:99:issue:12:2026-07-01T00:00:00Z',
       'poll:99:pull-request:34:2026-07-03T00:00:00Z',
     ]);
+  });
+
+  it('hands each backlog pull request to Factory with its author and labels', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({
+      pullRequests: [{ ...pullRequest34, labels: ['bug'] }],
+      nextPage: null,
+    });
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+
+    await ingestLinkedRepositoryBacklog({
+      github: githubStub as any,
+      orgId: 'org1',
+      projectRepositoryId: 'p1',
+      ingestFactoryEvent,
+    });
+
+    expect(ingestFactoryEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          pull_request: expect.objectContaining({ user: { login: 'grace' }, labels: [{ name: 'bug' }] }),
+        }),
+      }),
+    );
   });
 
   it('stops paging after five pages', async () => {

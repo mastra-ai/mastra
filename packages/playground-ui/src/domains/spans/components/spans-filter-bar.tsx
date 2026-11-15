@@ -1,17 +1,20 @@
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
-import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '../../traces/components/trace-time-range-chip';
 import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/traces-explorer-actions';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { SPAN_TIME_RANGE_PRESETS, useSpansFilterBar, useSpansFilterBarFields } from '../hooks/use-spans-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 // Items are rebuilt from tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
 // draft that id so the chip survives the round trip without remounting.
 const createItemId = (fieldId: string) => fieldId;
 
 export type SpansFilterBarProps = {
+  withTextSearch?: boolean;
+  textSearch?: string;
+  onTextSearchChange?: (value: string | undefined) => void;
   datePreset: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
@@ -32,8 +35,11 @@ export type SpansFilterBarProps = {
   disabled?: boolean;
 };
 
-/** The spans filter bar: a time range chip plus the fields `querySpans()` accepts. */
+/** The spans filter bar: the time range plus the fields `querySpans()` accepts. */
 export function SpansFilterBar({
+  withTextSearch = false,
+  textSearch,
+  onTextSearchChange,
   datePreset,
   dateFrom,
   dateTo,
@@ -49,8 +55,14 @@ export function SpansFilterBar({
   describeSuggestionsError,
   disabled,
 }: SpansFilterBarProps) {
-  const fields = useSpansFilterBarFields({ timeRange });
-  const { filterBarValue, onFilterBarChange } = useSpansFilterBar({ tokens, groups, onFiltersChange });
+  const fields = useSpansFilterBarFields({ timeRange, withTextSearch });
+  const { filterBarValue, onFilterBarChange } = useSpansFilterBar({
+    tokens,
+    groups,
+    onFiltersChange,
+    textSearch,
+    onTextSearchChange,
+  });
 
   return (
     <FilterBar
@@ -66,8 +78,8 @@ export function SpansFilterBar({
     >
       <FilterBar.Chips
         renderChip={item =>
-          item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-            <TraceTimeRangeChip
+          item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+            <FilterBar.TimeRange
               preset={datePreset}
               onPresetChange={onDatePresetChange}
               dateFrom={dateFrom}
@@ -85,7 +97,7 @@ export function SpansFilterBar({
           )
         }
       />
-      <FilterBar.Input placeholder="Filter spans…" />
+      <FilterBar.Input placeholder="Filter spans" />
     </FilterBar>
   );
 }

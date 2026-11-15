@@ -137,6 +137,7 @@ export interface TaskPayload {
   agentId: string;
   threadId?: string;
   resourceId?: string;
+  /** Task timeout in ms. Defaults to the manager's `defaultTimeoutMs`. `0` means no timeout. */
   timeoutMs?: number;
   maxRetries?: number;
   /** See `BackgroundTask.expiresAt`. */
@@ -192,6 +193,12 @@ export interface ResumeOptions {
    * `resume()` again.
    */
   onNoSlot?: 'throw' | 'queue';
+  /**
+   * The `suspendedAt` the caller read. When set, resume throws a
+   * `suspension has changed` error unless the task is still in that same
+   * suspension, so an answer to an earlier question can't resume a later one.
+   */
+  suspendedAt?: Date | number;
 }
 
 /**
@@ -294,7 +301,7 @@ export interface BackgroundTaskManagerConfig {
    * - 'fallback-sync': returns a signal to run the tool synchronously in the agentic loop
    */
   backpressure?: 'queue' | 'reject' | 'fallback-sync';
-  /** Default timeout for tasks in ms. Default: 300_000 (5 minutes) */
+  /** Default timeout for tasks in ms. `0` means no timeout. Default: 300_000 (5 minutes) */
   defaultTimeoutMs?: number;
   /** Default retry configuration */
   defaultRetries?: RetryConfig;
@@ -338,6 +345,24 @@ export interface BackgroundTaskManagerConfig {
    * `untilIdle: { maxIdleMs }` always takes precedence. Default: 300_000 (5 minutes).
    */
   untilIdleMaxIdleMs?: number;
+  /**
+   * Whether a deferred task that finishes with no `untilIdle` stream open for
+   * its thread sends the agent a `background-task` signal, so the agent reports
+   * the outcome (waking an idle thread). Set to `false` when the app delivers
+   * its own completion signal, for example from `onTaskComplete`. Default: `true`.
+   */
+  notifyAgentOnFinish?: boolean;
+  /**
+   * Whether a run that a signal starts on an idle thread ends after its own turn
+   * instead of staying open until the background tasks it dispatched finish. Its
+   * deferred tasks then report through the `background-task` signal (see
+   * `notifyAgentOnFinish`). A signal's own `ifIdle.streamOptions.untilIdle`
+   * takes precedence. Default: `false`.
+   *
+   * Temporary: in the next major, ending after the turn becomes the only behavior and this
+   * option is removed. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep a run open.
+   */
+  wokenRunsEndAfterTurn?: boolean;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
@@ -382,7 +407,7 @@ export interface ToolBackgroundConfig {
    *   opts in via `_background` — eligibility only grants the *option*.
    */
   defaultDisposition?: 'foreground' | 'deferred';
-  /** Override the manager's default timeout for this tool */
+  /** Override the manager's default timeout for this tool, in ms. `0` means no timeout. */
   timeoutMs?: number;
   /** Override retry config for this tool */
   maxRetries?: number;
@@ -510,6 +535,8 @@ export interface ToolExecutor {
       resumeData?: unknown;
       /** Framework-resolved delegated run ID recovered from persisted suspension state. */
       suspendedToolRunId?: string;
+      /** On resume, the payload the task suspended with. Undefined on the initial execution. */
+      suspendPayload?: unknown;
     },
   ): Promise<unknown>;
 }
@@ -545,6 +572,8 @@ export type ToolExecutionInjector = (params: {
   resourceId?: string;
   startedAt: Date;
   suspendedAt?: Date;
+  /** The payload the task suspended with; set together with `suspendedAt`. */
+  suspendPayload?: unknown;
 }) => void | Promise<void>;
 
 // --- Per-task context ---

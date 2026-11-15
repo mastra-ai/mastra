@@ -1,14 +1,21 @@
 import { parseTraceQueryRequest, planTraceQuery } from '@mastra/core/storage';
 import { expect, it, vi } from 'vitest';
 import type { DuckDBConnection } from '../../db/index';
-import { timingFeatures } from '../../features';
+import { contextFieldFeatures, timingFeatures } from '../../features';
 import { queryTraces } from './trace-query';
 
-// Older core versions support list delta polling but lack trace-query delta helpers and the timing fields.
+// Older core versions support list delta polling but lack trace-query delta helpers, the timing fields and the context fields.
 vi.mock('@mastra/core/features', () => ({ coreFeatures: new Set(['observability-delta-polling']) }));
 vi.mock('@mastra/core/storage', async importOriginal => {
   const core = await importOriginal<typeof import('@mastra/core/storage')>();
-  const { timeToFirstChunkMs: _chunk, timeToFirstTokenMs: _token, ...trace } = core.TRACE_QUERY_FIELD_REGISTRY.trace;
+  const {
+    timeToFirstChunkMs: _chunk,
+    timeToFirstTokenMs: _token,
+    requestId: _request,
+    serviceName: _service,
+    experimentId: _experiment,
+    ...trace
+  } = core.TRACE_QUERY_FIELD_REGISTRY.trace;
   return {
     ...core,
     encodeTraceQueryDeltaCursor: undefined,
@@ -31,6 +38,10 @@ it('returns numbered pages when core supports list polling but lacks the query c
     traces: [],
     pagination: { page: 0, perPage: 10, total: 0, hasMore: false },
   });
+});
+
+it('does not advertise request, service and experiment predicates when core predates them', () => {
+  expect(contextFieldFeatures).toEqual([]);
 });
 
 it('neither returns nor advertises the timing fields when core predates them', async () => {

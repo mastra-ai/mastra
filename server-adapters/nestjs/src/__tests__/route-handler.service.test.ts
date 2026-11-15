@@ -101,4 +101,22 @@ describe('RouteHandlerService', () => {
     expect(handlerParams.abortSignal).toBe(abortSignal);
     expect(handlerParams.routePrefix).toBe('/api');
   });
+
+  it('hands MCP transports the request context without exposing it if the result is serialized', async () => {
+    const context = await createDefaultTestContext();
+    const service = new RouteHandlerService(context.mastra, { mastra: context.mastra, prefix: '/api' });
+
+    const requestContext = new RequestContext();
+    requestContext.set('mastra__authToken', 'secret-token');
+    requestContext.set('mastra__user', { id: 'user-1' });
+
+    const result = await service.executeHandler(
+      { method: 'GET', path: '/test', responseType: 'stream' as const, handler: vi.fn(async () => ({ ok: true })) },
+      { pathParams: {}, queryParams: {}, body: undefined, requestContext, abortSignal: new AbortController().signal },
+    );
+
+    expect(result.requestContext).toBe(requestContext);
+    expect(JSON.stringify(result)).not.toContain('secret-token');
+    expect(Object.keys(result)).not.toContain('requestContext');
+  });
 });

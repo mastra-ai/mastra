@@ -1,4 +1,3 @@
-import { ArrowUp, Hammer, Map, Mic, Paperclip, Square, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -12,12 +11,19 @@ import {
 } from '@/ds/components/Composer';
 import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconHammer } from '@/ds/icons/central/IconHammer';
+import { IconMap } from '@/ds/icons/central/IconMap';
+import { IconMicrophone } from '@/ds/icons/central/IconMicrophone';
+import { IconPaperclip1 } from '@/ds/icons/central/IconPaperclip1';
+import { IconStop } from '@/ds/icons/central/IconStop';
+import { IconZap } from '@/ds/icons/central/IconZap';
 
 const modes = [
-  { id: 'build', label: 'Build', Icon: Hammer, tone: 'green' },
-  { id: 'plan', label: 'Plan', Icon: Map, tone: 'purple' },
-  { id: 'fast', label: 'Fast', Icon: Zap, tone: 'orange' },
-] satisfies { id: string; label: string; Icon: typeof Hammer; tone: ComposerTone }[];
+  { id: 'build', label: 'Build', Icon: IconHammer, tone: 'green' },
+  { id: 'plan', label: 'Plan', Icon: IconMap, tone: 'purple' },
+  { id: 'fast', label: 'Fast', Icon: IconZap, tone: 'orange' },
+] satisfies { id: string; label: string; Icon: typeof IconHammer; tone: ComposerTone }[];
 
 export interface ComposerPreviewProps {
   mode?: string;
@@ -61,7 +67,7 @@ export function ComposerPreview({
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
-            placeholder="Ask a question…"
+            placeholder="Ask a question"
             variant={variant}
             disabled={disabled}
             value={text}
@@ -93,10 +99,10 @@ export function ComposerPreview({
             ) : (
               <ButtonsGroup size="sm" aria-label="Input controls">
                 <Button type="button" size="icon-sm" aria-label="Attach file" disabled={disabled}>
-                  <Paperclip />
+                  <IconPaperclip1 />
                 </Button>
                 <Button type="button" size="icon-sm" aria-label="Voice input" disabled={disabled}>
-                  <Mic />
+                  <IconMicrophone />
                 </Button>
                 <Select defaultValue="default" disabled={disabled}>
                   <SelectTrigger aria-label="Model" className="w-auto">
@@ -120,11 +126,11 @@ export function ComposerPreview({
                     inputRef.current?.focus();
                   }}
                 >
-                  <Square />
+                  <IconStop />
                 </Button>
               ) : (
                 <Button type="submit" size="icon-sm" aria-label="Send message" disabled={disabled || !text.trim()}>
-                  <ArrowUp />
+                  <IconArrowUp />
                 </Button>
               )}
             </div>

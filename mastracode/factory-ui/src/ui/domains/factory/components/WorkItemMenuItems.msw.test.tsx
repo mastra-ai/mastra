@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
-import { builtinBoardCatalog, releaseBoard } from '../../../../../e2e/ui/board-catalog';
+import { builtinBoardCatalog, releaseBoard, shipBoard } from '../../../../../e2e/ui/board-catalog';
 import { server } from '../../../../../e2e/ui/msw-server';
 import { renderWithProviders, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import type { BoardCatalogResponse } from '../../../../api/types';
@@ -30,8 +30,7 @@ const item: WorkItem = {
   metadata: {},
   triageType: null,
   acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
+  description: null,
   revision: 4,
   createdAt: '2026-09-08T12:00:00Z',
   updatedAt: '2026-09-08T12:00:00Z',
@@ -79,6 +78,13 @@ describe('custom-board card menu', () => {
     expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
+  it("names the move into a board's completed phase a completion, on a board without a pull request loop", async () => {
+    // The server names the completed phase for every board, loop or not.
+    renderMenu('shipping', [{ ...releaseBoard, flow: { completed: 'shipped' } }]);
+    expect(await screen.findByRole('menuitem', { name: 'Mark shipped' })).toBeVisible();
+    expect(screen.queryByRole('menuitem', { name: 'Move to Shipped' })).toBeNull();
+  });
+
   it.each(['shipped', 'unknown'])('offers no fabricated destinations for %s', async stage => {
     const { client } = renderMenu(stage);
     await waitForMutationsIdle(client);
@@ -107,17 +113,42 @@ describe('custom-board card menu', () => {
   });
 });
 
+describe('a board running the pull request loop under its own phase names', () => {
+  it("asks for the triage decision on a card triage left resting, naming the board's own phases", async () => {
+    const held: WorkItem = {
+      ...item,
+      board: 'ship',
+      source: 'github-issue',
+      stages: ['inbox'],
+      sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+    };
+    const { onMove } = renderMenu('inbox', [shipBoard], { item: held });
+    const accept = await screen.findByRole('menuitem', { name: 'Accept and build' });
+    expect(screen.getByRole('menuitem', { name: 'Close' })).toBeTruthy();
+    // A card with no pull request never enters review, and Work's phases are nowhere.
+    expect(screen.queryByRole('menuitem', { name: 'Move to Pr' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: /Planning|Intake/ })).toBeNull();
+    fireEvent.click(accept);
+    expect(onMove).toHaveBeenCalledWith('make');
+  });
+});
+
 describe('held card menu', () => {
-  const held: WorkItem = { ...item, board: 'work', stages: ['triage'], triageType: 'feature request' };
+  const held: WorkItem = {
+    ...item,
+    board: 'work',
+    stages: ['intake'],
+    sessions: { triage: { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' } },
+  };
   const proposal = { id: 'd-1', role: 'plan' } as NonNullable<WorkItemMenuProps['proposal']>;
-  const choices = ['Accept and plan', 'Accept and build', 'Close', 'Dismiss suggested run', 'Remove'];
+  const choices = ['Accept and plan', 'Close', 'Dismiss suggested run', 'Remove'];
 
   it.each<[string, BoardCardOwner, boolean[]]>([
-    ['a parked session', { kind: 'session', status: 'ready' }, [true, true, false, false, false]],
-    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, true, false, false, false]],
-    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true, true]],
+    ['a parked session', { kind: 'session', status: 'ready' }, [true, false, false, false]],
+    ['an automatic retry', { kind: 'automation', progressLabel: 'Retrying…' }, [true, false, false, false]],
+    ['your own move', { kind: 'you', progressLabel: 'Moving…' }, [true, true, true, true]],
   ])('keeps Close, Dismiss and Remove open unless your own request is in flight: %s', async (_, owner, disabled) => {
-    const { client } = renderMenu('triage', builtinBoardCatalog.boards, { item: held, owner, proposal });
+    const { client } = renderMenu('intake', builtinBoardCatalog.boards, { item: held, owner, proposal });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(
       choices.map(name => screen.getByRole('menuitem', { name }).getAttribute('aria-disabled') === 'true'),

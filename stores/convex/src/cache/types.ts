@@ -22,6 +22,14 @@ export type CacheRequest =
       expiresAt: number | null;
     }
   | {
+      op: 'listPushIndexed';
+      key: string;
+      counterKey: string;
+      keyPrefix: string;
+      value: Record<string, unknown>;
+      expiresAt: number | null;
+    }
+  | {
       op: 'listFromTo';
       key: string;
       from: number;

@@ -13,12 +13,13 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ExternalLink, Loader2 } from 'lucide-react';
 import { useEffect, useEffectEvent, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../api/types';
 import { useCompleteProviderOAuth, usePollProviderOAuth } from '../../../../hooks/use-providers';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { IconLoadingCircle } from '@mastra/playground-ui/icons/central/IconLoadingCircle';
 
 interface ProviderOAuthDialogProps {
   provider: string;
@@ -70,7 +71,7 @@ function PasteCodeDialog({ provider, session, onClose, onComplete, scopeNotice }
             {session.instructions}
           </Txt>
           <Button onClick={() => openAuthorizationUrl(session.url)}>
-            <ExternalLink />
+            <IconSquareArrowTopRight />
             Open authorization page
           </Button>
           <Input
@@ -164,7 +165,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             </div>
           )}
           <Button className="w-full" onClick={() => openAuthorizationUrl(session.url)}>
-            <ExternalLink />
+            <IconSquareArrowTopRight />
             Open authorization page
           </Button>
         </DialogBody>
@@ -180,7 +181,7 @@ function DeviceCodeDialog({ provider, session, onClose, onComplete, scopeNotice 
             </Txt>
           ) : (
             <div className="text-muted-foreground mr-auto flex items-center gap-2" role="status">
-              <Loader2 size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
+              <IconLoadingCircle size={14} className="motion-safe:animate-spin motion-reduce:animate-none" />
               <Txt as="span" variant="caption">
                 Waiting for authorization…
               </Txt>

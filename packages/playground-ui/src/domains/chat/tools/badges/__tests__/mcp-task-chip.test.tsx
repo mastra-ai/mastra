@@ -66,13 +66,15 @@ describe('ToolBadge MCP task chip', () => {
     it('shows the task status and how long it has run', () => {
       render(badge({ result: [progress('working')], status: 'running' }));
 
-      expect(chip()?.textContent).toContain('task · working · 0:42');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task working')).toBeTruthy();
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('0:42')).toBeTruthy();
     });
 
     it('shows no elapsed time when the server sent a createdAt the browser cannot read', () => {
       render(badge({ result: [{ ...progress('working'), createdAt: '20261027T120000Z' }], status: 'running' }));
 
-      expect(chip()?.textContent).toContain('task · working · --:--');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task working')).toBeTruthy();
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('--:--')).toBeTruthy();
       expect(chip()?.textContent).not.toContain('NaN');
     });
 
@@ -99,7 +101,7 @@ describe('ToolBadge MCP task chip', () => {
     it('follows the latest status write', () => {
       render(badge({ result: [progress('working'), progress('input_required')], status: 'running' }));
 
-      expect(chip()?.textContent).toContain('task · input required');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task input required')).toBeTruthy();
     });
   });
 
@@ -110,7 +112,8 @@ describe('ToolBadge MCP task chip', () => {
       rerender(badge({ result: { content: [{ type: 'text', text: 'done' }] }, status: 'idle' }));
       act(() => vi.advanceTimersByTime(10_000));
 
-      expect(chip()?.textContent).toContain('task · completed · 0:42');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task completed')).toBeTruthy();
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('0:42')).toBeTruthy();
       expect(
         within(screen.getByTestId('mcp-task-chip')).getByRole('button', { name: 'Copy MCP task id' }),
       ).toBeTruthy();
@@ -123,7 +126,7 @@ describe('ToolBadge MCP task chip', () => {
 
       rerender(badge({ result: 'MCP task failed: tool exploded', status: 'error' }));
 
-      expect(chip()?.textContent).toContain('task · failed');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task failed')).toBeTruthy();
     });
   });
 
@@ -133,7 +136,7 @@ describe('ToolBadge MCP task chip', () => {
 
       rerender(badge({ result: 'MCP task was cancelled', status: 'error' }));
 
-      expect(chip()?.textContent).toContain('task · cancelled');
+      expect(within(screen.getByTestId('mcp-task-chip')).getByText('task cancelled')).toBeTruthy();
     });
   });
 

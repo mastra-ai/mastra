@@ -9,6 +9,7 @@ import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statu
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
+import type { RunJournal } from '../run-journal';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -168,6 +169,24 @@ export interface PersistStepUpdateParams {
    * Used when a resumed step starts, so its resume data survives a crash mid-step.
    */
   recordResumedStepStart?: boolean;
+  /**
+   * Storage v2: set by a step's start write, which can be in flight together with the start writes
+   * of other steps of a parallel or branch block. Only these steps' results are written, and no
+   * other write in flight may name them. Unset, the write sends every change.
+   */
+  stepIds?: string[];
+  /**
+   * Storage v2: set by a running foreach's progress write. The foreach's result differs from the
+   * one it last wrote only by these indices' `metadata.foreachProgress` entries, so the journal can
+   * send just those (see `RunJournal.write`).
+   */
+  foreachItems?: { stepId: string; indices: readonly number[] };
+  /**
+   * Storage v2: the journal of the execution this write belongs to, set by the engine's own writes,
+   * which aren't made from one of the execution's entries. Unset, the write uses the journal of the
+   * execution it is made from (see `getRunJournal`).
+   */
+  journal?: RunJournal;
 }
 
 // Every status but `canceled`, so only a persisted cancellation rejects the write.
@@ -208,6 +227,8 @@ export async function persistStepUpdate(
     tracingContext,
     phase,
     recordResumedStepStart,
+    stepIds,
+    foreachItems,
   } = params;
 
   const operationId = `workflow.${workflowId}.run.${runId}.path.${JSON.stringify(executionContext.executionPath)}.stepUpdate${phase ? `.${phase}` : ''}`;
@@ -265,26 +286,41 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    // A run canceled from another process must not be overwritten. Stores that
-    // support it reject the write atomically; others get a status read first.
+    // A run canceled from another process must not be overwritten. Storage v2 stores and v1 stores
+    // that support it reject the write atomically; other v1 stores get a status read first.
     const guardCancellation = workflowStatus !== 'canceled' && engine.honorsStoredCancellation(runId);
-    const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
-    if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
-      engine.setLastPersistedStatus(runId, 'canceled');
-      return;
-    }
+    const journal = params.journal ?? engine.getRunJournal(runId);
+    if (journal) {
+      const written = await journal.write({
+        resourceId,
+        snapshot,
+        stepIds,
+        foreachItems,
+        ...(guardCancellation ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+      });
+      if (!written) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
+    } else {
+      const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
+      const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
+      if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
 
-    const written = await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-      ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
-    });
-    if (atomicGuard && written === false) {
-      engine.setLastPersistedStatus(runId, 'canceled');
-      return;
+      const written = await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId,
+        snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+        ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+      });
+      if (atomicGuard && written === false) {
+        engine.setLastPersistedStatus(runId, 'canceled');
+        return;
+      }
     }
     engine.setLastPersistedStatus(runId, workflowStatus);
   };
@@ -473,6 +509,7 @@ async function executeEntryBody(
       executionContext: {
         workflowId,
         runId,
+        parentWorkflow: executionContext.parentWorkflow,
         executionPath: [...executionContext.executionPath, idx!],
         stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
         suspendedPaths: executionContext.suspendedPaths,
@@ -533,8 +570,9 @@ async function executeEntryBody(
 
     let branchResult: EntryExecutionResult;
 
-    if (branchStep.type !== 'step') {
-      // Recurse through executeEntry for nested block types (parallel, conditional, etc.)
+    if (branchStep.type !== 'step' || engine.getRunJournal(runId)) {
+      // Through executeEntry for nested block types (parallel, conditional, etc.). Storage v2 takes a
+      // plain step this way too, like a resumed parallel branch, so its result is written when it ends.
       branchResult = await executeEntry(engine, {
         workflowId,
         runId,
@@ -547,6 +585,7 @@ async function executeEntryBody(
         executionContext: {
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, idx!],
           stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,
@@ -586,6 +625,7 @@ async function executeEntryBody(
         executionContext: {
           workflowId,
           runId,
+          parentWorkflow: executionContext.parentWorkflow,
           executionPath: [...executionContext.executionPath, idx!],
           stepExecutionPath: executionContext.stepExecutionPath ? [...executionContext.stepExecutionPath] : undefined,
           suspendedPaths: executionContext.suspendedPaths,

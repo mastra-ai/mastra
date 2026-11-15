@@ -1,5 +1,6 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { RotatingText } from '@mastra/playground-ui/components/RotatingText';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
@@ -31,17 +32,12 @@ export function ExperimentRunProgress({ experiment }: ExperimentRunProgressProps
       descriptionSlot={
         <span className="flex flex-col items-center gap-1">
           <span>{isQueued ? QUEUED_MESSAGE : <RotatingText messages={RUNNING_MESSAGES} />}</span>
-          <span className="tabular-nums">
-            <span>
+          <Metadata className="justify-center tabular-nums">
+            <Metadata.Item>
               {finishedCount} / {totalItems} {noun} finished
-            </span>
-            {elapsed && (
-              <>
-                <span aria-hidden> · </span>
-                <span>{elapsed} elapsed</span>
-              </>
-            )}
-          </span>
+            </Metadata.Item>
+            {elapsed && <Metadata.Item>{elapsed} elapsed</Metadata.Item>}
+          </Metadata>
         </span>
       }
     />

@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
@@ -39,20 +40,14 @@ function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'user-1' } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-7',
-            repositories: repositoryIds.map(id => ({
-              id,
-              branch: 'main',
-              sandboxWorkdir: `/workspace/${id}`,
-              repository: { slug: `octo/${id}`, defaultBranch: 'main' },
-            })),
+            id: 'fp-1',
+            name: 'Mastra',
+            repositories: repositoryIds.map(id =>
+              listedRepository(id, `octo/${id}`, { branch: 'main', sandboxWorkdir: `/workspace/${id}` }),
+            ),
           },
         ],
       }),

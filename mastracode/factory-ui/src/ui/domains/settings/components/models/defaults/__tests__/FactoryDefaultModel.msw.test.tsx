@@ -38,8 +38,7 @@ const project = (defaultModelId: FactoryProjectPayload['defaultModelId']): Facto
 
 const applyResult: ApplyFactoryDefaultModelResult = {
   modelId: 'openai/gpt-5',
-  applied: ['thread-1', 'thread-2'],
-  skipped: [{ threadId: 'thread-3', reason: 'apply-failed' }],
+  status: 'started',
 };
 
 function stubFactory(defaultModelId: FactoryProjectPayload['defaultModelId']) {
@@ -91,7 +90,7 @@ describe('FactoryDefaultModel', () => {
     stubFactory(null);
     renderInField();
 
-    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
+    expect(await screen.findByPlaceholderText('GPT-5 (Built-in default)')).toBeInTheDocument();
   });
 
   it('saves the new default before asking whether to switch running sessions', async () => {
@@ -112,7 +111,7 @@ describe('FactoryDefaultModel', () => {
     expect(applyRequests).toEqual([]);
   });
 
-  it('keeps the dialog open while switching and reports the result', async () => {
+  it('keeps the dialog open until the background switch is accepted, then reports it started', async () => {
     let releaseApply = () => {};
     const applyGate = new Promise<void>(resolve => (releaseApply = resolve));
     const { applyRequests } = stubFactory('anthropic/claude-sonnet-4-5');
@@ -139,7 +138,9 @@ describe('FactoryDefaultModel', () => {
     await waitForMutationsIdle(client);
 
     expect(screen.queryByRole('dialog', { name: SWITCH_PROMPT })).not.toBeInTheDocument();
-    expect(screen.getByText(/Switched 2 sessions/)).toHaveTextContent('1 skipped: apply failed (1)');
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Switch started in the background. Running sessions will pick up the new model on their next step.',
+    );
   });
 
   it('does not save or ask when the picked model is already the default', async () => {

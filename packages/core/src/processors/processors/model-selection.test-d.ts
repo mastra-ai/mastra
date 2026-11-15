@@ -1,4 +1,4 @@
-import { expectTypeOf } from 'vitest';
+import { expectTypeOf, test } from 'vitest';
 
 import { Classifier } from '../../classifier';
 import type { BooleanAnswer, ChoiceAnswer, RefusalAnswer } from '../../classifier';
@@ -69,3 +69,6 @@ const registeredOptions: ModelSelectionRegisteredOptions<typeof triage.questions
 };
 new ModelSelectionProcessor(instanceOptions);
 new ModelSelectionProcessor(registeredOptions);
+
+// Vitest 5 fails typecheck files without a test; the assertions above are still checked file-wide.
+test('model-selection types', () => {});

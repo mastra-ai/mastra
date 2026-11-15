@@ -8,6 +8,7 @@ import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
+import { listedRepository } from '../../../../e2e/ui/factory-projects';
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
@@ -106,21 +107,13 @@ function openWardSessionAs(
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: viewerUserId } }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
-        connections: [
+        projects: [
           {
-            id: 'conn-1',
-            installationId: 'inst-1',
+            id: FACTORY_ID,
+            name: 'Acme Factory',
             repositories: [
-              {
-                id: REPO_ID,
-                branch: 'main',
-                sandboxWorkdir: '/local/acme/app',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
+              listedRepository(REPO_ID, 'acme/app', { branch: 'main', sandboxWorkdir: '/local/acme/app' }),
             ],
           },
         ],
@@ -195,6 +188,23 @@ describe("a teammate's Factory session", () => {
 
       expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
       expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+    });
+
+    // A card a webhook filed, or an automatic phase picked up, runs in a session no person owns.
+    it('says the session is the Factory’s, with no takeover, when automatic work owns it', async () => {
+      openWardSessionAs('user-caleb', {
+        session: {
+          ...wardSession,
+          userId: `factory-project:${FACTORY_ID}`,
+          owner: { id: `factory-project:${FACTORY_ID}`, name: 'Factory' },
+          branch: 'factory/issue-49',
+          capabilities: { ...wardSession.capabilities, takeOwnership: false },
+        },
+        path: BOARD_THREAD_PATH,
+      });
+
+      expect(await screen.findByText('You’re steering the Factory’s session')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
     });
 
     it('offers no takeover of a Slack thread, which the server keeps with its owner', async () => {

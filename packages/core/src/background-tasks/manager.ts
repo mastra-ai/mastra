@@ -42,6 +42,12 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
 /** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
 const PIN_SWEEP_PAGE_SIZE = 100;
 
+/** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
+function minLeaseOverride(): number | undefined {
+  const value = Number(process.env.MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS);
+  return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
+}
+
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -105,6 +111,8 @@ export class BackgroundTaskManager {
   // workers leave them alone until this manager claims them or dies.
   private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
+  // Shortest heartbeat / stale-recovery delay: 1s, unless a test lowered the lease minimum.
+  readonly #timingFloorMs: number;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
   // is still valid is left alone by a recovery scan, so if its owner died just
@@ -155,9 +163,15 @@ export class BackgroundTaskManager {
     // The heartbeat renews at `leaseDurationMs / 3`, floored to 1s. A lease
     // shorter than 3s therefore expires before it can be renewed, so reject it
     // rather than silently letting every task's lease lapse mid-run.
-    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 3_000) {
+    //
+    // Internal, for tests that prove lease expiry: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS
+    // lowers that 3s minimum, and the 1s timing floor scales down with it, so
+    // those tests wait milliseconds instead of seconds. Not a supported setting.
+    const minLeaseMs = minLeaseOverride() ?? 3_000;
+    this.#timingFloorMs = minLeaseMs / 3;
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < minLeaseMs) {
       throw new Error(
-        `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
+        `BackgroundTaskManager leaseDurationMs must be a finite number of at least ${minLeaseMs}ms (received: ${leaseDurationMs})`,
       );
     }
     for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
@@ -225,6 +239,14 @@ export class BackgroundTaskManager {
       if (event.type === 'task.completed' || event.type === 'task.failed') {
         try {
           await this.handleResult(event);
+        } finally {
+          await ack?.();
+        }
+        return;
+      }
+      if (event.type === 'task.cancelled') {
+        try {
+          await this.handleRemoteCancel(event.data.taskId);
         } finally {
           await ack?.();
         }
@@ -576,6 +598,9 @@ export class BackgroundTaskManager {
             ?.getLogger?.()
             ?.warn(`background-task cancellation callback failed for ${taskId}:`, error as any);
         }
+        // Cancelling answers nothing, but the open request on the tool call
+        // must go so a client doesn't offer to answer a dead task.
+        if (previousStatus === 'suspended') await this.runLocalExecutionHook(cancelledTask);
       }
       this.deregisterTaskContext(taskId);
 
@@ -618,6 +643,9 @@ export class BackgroundTaskManager {
     }
     if (task.status !== 'suspended') {
       throw new Error(`Cannot resume task in status '${task.status}' (expected 'suspended')`);
+    }
+    if (options?.suspendedAt !== undefined && new Date(options.suspendedAt).getTime() !== suspensionToken(task)) {
+      throw new Error(`Cannot resume task "${taskId}": its suspension has changed since it was read`);
     }
 
     const isProcessAffine = this.taskContexts.has(taskId);
@@ -1583,6 +1611,9 @@ export class BackgroundTaskManager {
     const resumedTask = await storage.getTask(taskId);
     if (resumedTask) {
       await this.publishLifecycleEvent('task.resumed', resumedTask);
+      // The suspension is answered: let the caller drop its open request from
+      // the tool call before the run can suspend again.
+      await this.runLocalExecutionHook(resumedTask);
     }
 
     if (!this.#mastra) {
@@ -1807,10 +1838,10 @@ export class BackgroundTaskManager {
   }
 
   /**
-   * Per-task suspend hooks. Fires `ctx.onResult({ status: 'suspended', ... })`
-   * so the message list / memory pick up the suspension as the tool's
-   * current invocation state. Does NOT deregister the task context — resume
-   * needs the executor closure intact.
+   * Per-task suspend hooks. Fires `ctx.onExecution({ suspendedAt, suspendPayload, ... })`
+   * so the message list / memory record the open suspension on the tool
+   * call. Does NOT deregister the task context — resume needs the executor
+   * closure intact.
    *
    * @internal — called by the workflow-engine step bodies in workflow.ts
    */
@@ -1827,6 +1858,7 @@ export class BackgroundTaskManager {
       resourceId: task.resourceId,
       startedAt: task.startedAt!,
       suspendedAt: task.suspendedAt,
+      suspendPayload: task.suspendPayload,
     });
   }
 
@@ -1849,6 +1881,19 @@ export class BackgroundTaskManager {
     } catch {
       //fail silently
     }
+  }
+
+  /**
+   * Another process cancelled a task this one dispatched. Run its execution
+   * hook, so the dispatcher drops an open request it recorded for the task,
+   * and release the task's context. A cancel made here has already done both.
+   */
+  private async handleRemoteCancel(taskId: string): Promise<void> {
+    if (!this.taskContexts.has(taskId)) return;
+    const task = await (await this.getStorage()).getTask(taskId);
+    if (task?.status !== 'cancelled') return;
+    await this.runLocalExecutionHook(task);
+    this.deregisterTaskContext(taskId);
   }
 
   private async handleResult(event: Event): Promise<void> {
@@ -2082,7 +2127,7 @@ export class BackgroundTaskManager {
 
   #startLeaseHeartbeat(): void {
     if (this.heartbeatInterval) return;
-    const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
+    const intervalMs = Math.max(this.#timingFloorMs, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
       // Storage-wide admission can be freed by another process, which never
@@ -2440,9 +2485,10 @@ export class BackgroundTaskManager {
 
     // Wait just past the lease expiry (clocks drift between workers), but bound
     // the delay so a stray far-future lease cannot park recovery indefinitely.
+    const floor = this.#timingFloorMs;
     const delay = Math.min(
-      Math.max(nextSweepAt - Date.now() + 1_000, 1_000),
-      Math.max(this.config.leaseDurationMs, 1_000),
+      Math.max(nextSweepAt - Date.now() + floor, floor),
+      Math.max(this.config.leaseDurationMs, floor),
     );
     this.staleRecoveryTimeout = setTimeout(() => {
       this.staleRecoveryTimeout = undefined;

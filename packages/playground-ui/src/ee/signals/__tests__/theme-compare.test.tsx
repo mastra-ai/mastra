@@ -191,8 +191,14 @@ describe('SankeySignals compare mode', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Compare' }));
 
       const comparison = await screen.findByRole('region', { name: 'Snapshot comparison' });
-      expect(await within(comparison).findByText('Jun 24 – Jul 1, 2026 · 50 traces · 10 themes')).not.toBeNull();
-      expect(within(comparison).getByText('Jul 1 – 8, 2026 · 50 traces · 9 themes')).not.toBeNull();
+      const earlier = await within(comparison).findByRole('group', { name: 'Earlier snapshot' });
+      const later = within(comparison).getByRole('group', { name: 'Later snapshot' });
+      expect(within(earlier).getByText('Jun 24 – Jul 1, 2026')).not.toBeNull();
+      expect(within(earlier).getByText('50 traces')).not.toBeNull();
+      expect(within(earlier).getByText('10 themes')).not.toBeNull();
+      expect(within(later).getByText('Jul 1 – 8, 2026')).not.toBeNull();
+      expect(within(later).getByText('50 traces')).not.toBeNull();
+      expect(within(later).getByText('9 themes')).not.toBeNull();
       expect(within(comparison).queryByText(/snapshot \d/)).toBeNull();
     });
 
@@ -243,7 +249,7 @@ describe('SankeySignals compare mode', () => {
       expect(within(track).queryByText('A')).toBeNull();
       expect(within(track).queryByText('B')).toBeNull();
       // Snapshot summaries stay visible as plain text, not buttons.
-      const summary = await within(comparison).findByText('Jun 24 – Jul 1, 2026 · 50 traces · 10 themes');
+      const summary = await within(comparison).findByRole('group', { name: 'Earlier snapshot' });
       expect(summary.closest('button')).toBeNull();
     });
 

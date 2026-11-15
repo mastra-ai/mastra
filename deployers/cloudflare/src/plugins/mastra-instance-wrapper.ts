@@ -3,10 +3,13 @@ import type { Plugin, SourceMapInput } from 'rollup';
 import { mastraInstanceWrapper as mastraInstanceWrapperBabel } from '../babel/mastra-instance-wrapper';
 
 export function mastraInstanceWrapper(mastraEntryFile: string): Plugin {
+  // On Windows `#mastra` resolves to a slash-normalized id, while `mastraEntryFile` is native
+  const normalizedEntry = mastraEntryFile.replaceAll('\\', '/');
+
   return {
     name: 'mastra-wrapper',
     transform(code, id) {
-      if (id !== mastraEntryFile) {
+      if (id.replaceAll('\\', '/') !== normalizedEntry) {
         return null;
       }
 

@@ -31,7 +31,7 @@ export function ChartPlot({
   // Recharts makes parts of the plot focusable for keyboard use; a mouse click shouldn't leave a
   // focus ring around the chart, keyboard focus still shows one.
   const surface = cn(
-    'w-full [&_.recharts-surface]:overflow-visible [&_.recharts-surface]:outline-none',
+    'chart-plot w-full [&_.recharts-surface]:overflow-visible [&_.recharts-surface]:outline-none',
     '[&_*:focus:not(:focus-visible)]:outline-none',
     clickable && '[&_.recharts-surface]:cursor-pointer',
     className,
@@ -55,9 +55,9 @@ export function ChartPlot({
 
 /**
  * Draws the chart at the box's size, and again only once the box has stopped resizing: a page of
- * charts can't redraw on every frame of a resize. React only sets the drawn size; `chart-plot.css`
- * scales the drawn chart to the box's live size meanwhile, so it moves with its card and its labels
- * keep their shape. JS writes nothing during a resize.
+ * charts can't redraw on every frame of a resize. React only sets the drawn size; the observer
+ * writes the box's live size, and `chart-plot.css` scales the drawn chart to it meanwhile, so it
+ * moves with its card and its labels keep their shape.
  */
 function StretchedPlot({
   onResize,
@@ -81,6 +81,8 @@ function StretchedPlot({
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
+      el.style.setProperty('--chart-box-w', String(width));
+      el.style.setProperty('--chart-box-h', String(height));
       clearTimeout(timer);
       if (width === drawn?.width && height === drawn?.height) return;
       const commit = () => {
@@ -116,9 +118,9 @@ function StretchedPlot({
   );
 }
 
-/** The drawn size as the CSS variables `chart-plot.css` scales from. */
+/** The drawn size as the CSS variables `chart-plot.css` scales from, in plain CSS pixels. */
 function drawnSizeVars({ width, height }: { width: number; height: number }): Record<string, string> {
-  return { '--chart-drawn-w': `${width}px`, '--chart-drawn-h': `${height}px` };
+  return { '--chart-drawn-w': String(width), '--chart-drawn-h': String(height) };
 }
 
 function isDrawable({ width, height }: { width: number; height: number }) {

@@ -8,6 +8,8 @@ export type {
   MCPClientProtocolVersion,
   MCPClientTasksOptions,
   MCPTaskProgress,
+  MCPInputRequestSuspendPayload,
+  MCPInputRequestResumeData,
   MCPInputRequest,
   MCPInputRequestHandler,
   MCPServerImplementation,

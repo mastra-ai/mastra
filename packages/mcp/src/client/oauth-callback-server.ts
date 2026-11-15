@@ -331,10 +331,6 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
 
     close() {
       settle({ error: new Error('OAuth callback server closed before receiving an authorization code') });
-      // Browsers keep the callback connection alive after the response, and
-      // server.close() waits for every socket to end — without this the port
-      // stays held until the keep-alive timeout expires.
-      server.closeIdleConnections();
       return new Promise<void>((resolve, reject) => {
         server.close(error => {
           // Closing twice is fine (e.g. an explicit cancel followed by the
@@ -345,6 +341,12 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
             resolve();
           }
         });
+        // server.close() waits for every socket to end. Browsers keep the
+        // callback connection alive after the response and also open spare
+        // connections that never send a request (which Node doesn't treat as
+        // idle), so drop them all: the server is one-shot and its only
+        // response was sent when the flow settled.
+        server.closeAllConnections();
       });
     },
   };

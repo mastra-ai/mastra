@@ -314,7 +314,7 @@ describe('experiment item sub-route', () => {
       const trigger = await screen.findByRole('combobox');
       expect(trigger.textContent).toContain('Add tag');
       fireEvent.click(trigger);
-      return screen.findByPlaceholderText('Search or create tag...');
+      return screen.findByPlaceholderText('Search or create tag');
     }
 
     function selectOption(option: HTMLElement) {
@@ -651,7 +651,7 @@ describe('experiment item sub-route', () => {
       const traceDialog = await screen.findByRole('dialog', { name: 'Trace experiment-trace-1' });
       expect(await within(traceDialog).findByText('Experiment model call')).toBeDefined();
 
-      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans...'), {
+      fireEvent.change(within(traceDialog).getByPlaceholderText('Search spans'), {
         target: { value: 'zanzibar-payload-term' },
       });
 

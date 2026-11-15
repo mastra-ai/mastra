@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import '@/test/english-locale';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { LogRecord } from '../types';
 import { LogDataPanel } from './log-data-panel';
+import { TooltipProvider } from '@/ds/components/Tooltip';
 
 afterEach(cleanup);
 
@@ -18,11 +19,30 @@ const log = {
 
 describe('LogDataPanel', () => {
   describe('when a log is open', () => {
-    it('shows the full timestamp at heading size, not as caption', () => {
+    it('shows the Log heading and the precise timestamp as metadata in the same header', () => {
       render(<LogDataPanel log={log} onClose={vi.fn()} />);
 
-      const heading = screen.getByRole('heading', { name: /Sep 24, 2026, 9:40:48\.289 AM/ });
-      expect(heading.querySelector('b')).toBeNull();
+      const panel = within(screen.getByRole('dialog', { name: 'Log Sep 24, 2026, 9:40:48.289 AM' }));
+      const heading = panel.getByRole('heading', { name: 'Log' });
+      const metadata = panel.getByRole('list');
+      expect(within(metadata).getByRole('listitem').textContent).toBe('Sep 24, 2026, 9:40:48.289 AM');
+      expect(metadata.parentElement).toBe(heading.parentElement);
+    });
+
+    it('makes the full timestamp available to keyboard users through a tooltip', async () => {
+      render(
+        <TooltipProvider delay={0}>
+          <LogDataPanel log={log} onClose={vi.fn()} />
+        </TooltipProvider>,
+      );
+
+      const metadata = within(screen.getByRole('list'));
+      const timestamp = metadata.getByLabelText('Sep 24, 2026, 9:40:48.289 AM');
+      expect(timestamp.tabIndex).toBe(0);
+
+      fireEvent.focus(timestamp);
+
+      expect((await screen.findByRole('tooltip')).textContent).toBe('Sep 24, 2026, 9:40:48.289 AM');
     });
 
     it('renders the message in a "Message" code section', () => {

@@ -1,16 +1,3 @@
-import {
-  ChartGanttIcon,
-  CircleGaugeIcon,
-  DownloadIcon,
-  Link2Icon,
-  ListTreeIcon,
-  Loader2Icon,
-  MessageSquareReplyIcon,
-  MessageSquareTextIcon,
-  SaveIcon,
-  SearchIcon,
-  XIcon,
-} from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Group, Panel, useGroupRef } from 'react-resizable-panels';
@@ -31,6 +18,17 @@ import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
+import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
+import { IconBubbleSparkle } from '@/ds/icons/central/IconBubbleSparkle';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconChainLink3 } from '@/ds/icons/central/IconChainLink3';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconFloppyDisk1 } from '@/ds/icons/central/IconFloppyDisk1';
+import { IconGanttChart } from '@/ds/icons/central/IconGanttChart';
+import { IconGauge } from '@/ds/icons/central/IconGauge';
+import { IconLoadingCircle } from '@/ds/icons/central/IconLoadingCircle';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { TraceIcon } from '@/ds/icons/TraceIcon';
@@ -195,7 +193,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <MessageSquareTextIcon />
+              <IconBubbleText />
             </Icon>
             <span className="@max-[501px]:sr-only">Messages</span>
           </>
@@ -209,7 +207,7 @@ export function TraceDataPanelView({
         label: (
           <>
             <Icon size="xs">
-              <MessageSquareReplyIcon />
+              <IconBubbleSparkle />
             </Icon>
             <span className="@max-[501px]:sr-only">
               Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
@@ -327,7 +325,7 @@ export function TraceDataPanelView({
     <>
       {!isOnTracePage && LinkComponent && traceHref && (
         <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={traceHref} />}>
-          <Link2Icon />
+          <IconChainLink3 />
         </Button>
       )}
       <Button
@@ -337,14 +335,14 @@ export function TraceDataPanelView({
         disabled={isDownloadingTrace}
         onClick={() => downloadTraceJson(traceId)}
       >
-        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+        {isDownloadingTrace ? <IconLoadingCircle className="animate-spin" /> : <IconArrowInbox />}
       </Button>
     </>
   );
 
   const scoreAction = onEvaluateTrace && (
     <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
-      <CircleGaugeIcon />
+      <IconGauge />
       Score trace
     </Button>
   );
@@ -449,7 +447,7 @@ export function TraceDataPanelView({
                       tooltip="Add the full trace to a dataset"
                       onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
                     >
-                      <SaveIcon />
+                      <IconFloppyDisk1 />
                       Add to dataset
                     </Button>
                   )}
@@ -508,11 +506,11 @@ export function TraceDataPanelView({
                   // bottom rule is its only edge, and keyboard focus lights that rule like a
                   // field's rim. The view switch stays as flat square icons.
                   <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
-                    <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                    <IconMagnifyingGlass aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
                     <input
                       type="search"
                       aria-label="Search spans"
-                      placeholder="Search spans..."
+                      placeholder="Search spans"
                       value={query}
                       onChange={event => setQuery(event.target.value)}
                       className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-label text-foreground outline-hidden placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
@@ -525,14 +523,14 @@ export function TraceDataPanelView({
                         className="rounded-md"
                         onClick={() => setQuery('')}
                       >
-                        <XIcon />
+                        <IconCrossMedium />
                       </Button>
                     )}
                     <div role="group" aria-label="Span view" className="flex shrink-0 items-center gap-0.5">
                       {(
                         [
-                          ['tree', 'Span tree', <ListTreeIcon key="tree" />],
-                          ['timeline', 'Timeline', <ChartGanttIcon key="timeline" />],
+                          ['tree', 'Span tree', <IconCodeTree key="tree" />],
+                          ['timeline', 'Timeline', <IconGanttChart key="timeline" />],
                         ] as const
                       ).map(([view, label, icon]) => (
                         <Button
@@ -739,10 +737,13 @@ function TracePanelColumns({
 
   // The library re-lays panels out on its own — when the drawer resizes, when a column mounts or
   // unmounts — so every layout it reports is brought back to the pixel widths, unless the user is
-  // dragging a separator. The layout it settles on after clamping to min sizes is left alone.
+  // dragging a separator. The layout it settles on after clamping to min sizes is left alone,
+  // including the one it reports from inside our own setLayout: when the columns can't fit, rounding
+  // makes each clamped layout differ from the last, and answering it would re-lay out forever.
   const settledLayout = useRef<Layout | undefined>(undefined);
+  const applyingLayout = useRef(false);
   const holdPixelWidths = (layout: Layout) => {
-    if (userResizing.current) return;
+    if (userResizing.current || applyingLayout.current) return;
     const group = groupRef.current;
     const ids = Object.keys(layout);
     // The library sizes panels against their summed width, separators excluded.
@@ -760,7 +761,12 @@ function TracePanelColumns({
       !!b && ids.every(id => Math.abs((a[id] ?? 0) - (b[id] ?? Infinity)) < tolerance);
     if (matches(layout, target) || matches(layout, settledLayout.current)) return;
     queueMicrotask(() => {
-      settledLayout.current = group.setLayout(target);
+      applyingLayout.current = true;
+      try {
+        settledLayout.current = group.setLayout(target);
+      } finally {
+        applyingLayout.current = false;
+      }
     });
   };
 

@@ -1,9 +1,10 @@
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { createSourceControlSessionLookup } from '../session/factory-session.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA } from '../storage/domains/work-items/work-item-schema.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { FACTORY_SESSIONS_MAX_AGE_MS, FactorySessionsStateProcessor } from './sessions-state-processor.js';
 
@@ -55,6 +56,7 @@ async function setup() {
 
   const notifications = new InMemoryNotificationsStorage();
   const running = new Set<string>();
+  const parked = new Set<string>();
   const threadMoved = new Map<string, number>();
   let now = Date.now();
   const processor = new FactorySessionsStateProcessor({
@@ -64,6 +66,7 @@ async function setup() {
     workItems: seed.workItems,
     boards: createBoardRegistry(),
     isRunning: async sessionId => running.has(sessionId),
+    isParked: sessionId => parked.has(sessionId),
     lastActivity: async threadId => (threadMoved.has(threadId) ? new Date(threadMoved.get(threadId)!) : null),
     notifications: async () => notifications,
     now: () => now,
@@ -75,7 +78,12 @@ async function setup() {
         orgId: 'org-1',
         userId: 'someone',
         factoryProjectId: project.id,
-        input: { title: `Item ${number}`, stages, metadata: { number } },
+        input: {
+          title: `Item ${number}`,
+          stages,
+          metadata: { number },
+          externalSource: { integrationId: 'github', type: 'issue', externalId: String(number) },
+        },
       })
     ).item;
   const follow = (workItemId: string, sessionId = 'parent', threadId = 'parent-thread') =>
@@ -147,6 +155,7 @@ async function setup() {
     bind,
     reportFrom,
     running,
+    parked,
     threadMoved,
     now: () => now,
     step,
@@ -201,6 +210,21 @@ describe('FactorySessionsStateProcessor', () => {
     expect((await env.step())!.contents).toContain('work session worker-7 idle');
     await env.reportFrom('worker-7', 'blocked', { 'work-item': '#7' });
     expect((await env.step())!.contents).toContain('work session worker-7 parked; last report blocked');
+  });
+
+  it('shows a run parked on a tool prompt as parked while it is still in flight, never quiet', async () => {
+    const env = await setup();
+    const item = await env.fileItem(7);
+    await env.follow(item.id);
+    await env.bind(item.id, 'worker-7');
+    env.running.add('worker-7');
+    env.parked.add('worker-7');
+    env.threadMoved.set('worker-7-thread', env.now());
+    env.advance(35 * 60_000);
+
+    const contents = (await env.step())!.contents;
+    expect(contents).toContain('work session worker-7 parked');
+    expect(contents).not.toContain('quiet since');
   });
 
   it('marks a running worker whose thread stopped moving as quiet, so stuck stands out from busy (#27742)', async () => {
@@ -296,6 +320,24 @@ describe('FactorySessionsStateProcessor', () => {
     await expect(env.step()).resolves.toBeUndefined();
   });
 
+  it('reads the same number of queries per step following one item as following many', async () => {
+    const queriesPerStep = async (followed: number) => {
+      const env = await setup();
+      for (let n = 1; n <= followed; n += 1) {
+        const item = await env.fileItem(n);
+        await env.follow(item.id);
+        await env.bind(item.id, `worker-${n}`);
+      }
+      const findMany = vi.spyOn(env.seed.storage.ops, 'findMany');
+      const findOne = vi.spyOn(env.seed.storage.ops, 'findOne');
+      const signal = await env.step();
+      expect(signal!.contents.match(/work session worker-\d+ idle/g)).toHaveLength(followed);
+      return findMany.mock.calls.length + findOne.mock.calls.length;
+    };
+
+    expect(await queriesPerStep(5)).toBe(await queriesPerStep(1));
+  });
+
   it('caps the rows at 20, active first, with "+N more"', async () => {
     const env = await setup();
     for (let n = 1; n <= 22; n += 1) {
@@ -361,6 +403,20 @@ describe('FactorySessionsStateProcessor', () => {
     const item = await env.fileItem(7);
     await env.bind(item.id, 'worker-7');
     await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+  });
+
+  it('does not read the work item card when nobody follows the worker item', async () => {
+    const env = await setup();
+    await env.createSession('worker-7');
+    const item = await env.fileItem(7);
+    await env.bind(item.id, 'worker-7');
+    const findOne = vi.spyOn(env.seed.storage.ops, 'findOne');
+    const findMany = vi.spyOn(env.seed.storage.ops, 'findMany');
+
+    await expect(env.step({ sessionId: 'worker-7', threadId: 'worker-7-thread' })).resolves.toBeUndefined();
+
+    const collections = [...findOne.mock.calls, ...findMany.mock.calls].map(([collection]) => collection);
+    expect(collections).not.toContain(FACTORY_BOARD_ITEMS_SCHEMA.name);
   });
 
   it('tells an item worker which item and role it works on and who follows it', async () => {

@@ -33,6 +33,7 @@ const SNAPSHOT_FIELDS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',

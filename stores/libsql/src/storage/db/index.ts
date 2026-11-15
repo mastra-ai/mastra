@@ -13,6 +13,7 @@ import type {
   TABLE_NAMES,
   TABLE_MEMORY_RUN_FENCES,
   TABLE_WORKFLOW_RUN_OWNERS,
+  TABLE_WORKFLOW_RUNS,
   StorageColumn,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
@@ -28,8 +29,12 @@ import {
 } from './utils';
 import { withClientWriteLock } from './write-lock';
 
-/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
-export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
+/** Tables retention can prune: the core tables plus the run fencing and storage v2 run tables, which aren't in TABLE_NAMES. */
+export type PrunableTable =
+  | TABLE_NAMES
+  | typeof TABLE_WORKFLOW_RUN_OWNERS
+  | typeof TABLE_WORKFLOW_RUNS
+  | typeof TABLE_MEMORY_RUN_FENCES;
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -118,6 +123,26 @@ function assertPositiveLimit(limit: number): void {
   if (!Number.isSafeInteger(limit) || limit <= 0) {
     throw new Error(`prune limit must be a positive integer; received ${limit}`);
   }
+}
+
+/**
+ * Parses JSON object/array text in the table's `jsonb` columns only. A `text` column, such as a
+ * span preview of `{}`, must read back as the stored string.
+ */
+function parseJsonColumns(tableName: TABLE_NAMES, row: Record<string, unknown>): Record<string, unknown> {
+  const schema = TABLE_SCHEMAS[tableName];
+  return Object.fromEntries(
+    Object.entries(row).map(([k, v]) => {
+      if (schema[k]?.type !== 'jsonb' || typeof v !== 'string' || !(v.startsWith('{') || v.startsWith('['))) {
+        return [k, v];
+      }
+      try {
+        return [k, JSON.parse(v)];
+      } catch {
+        return [k, v];
+      }
+    }),
+  );
 }
 
 export class LibSQLDB extends MastraBase {
@@ -564,7 +589,7 @@ export class LibSQLDB extends MastraBase {
   /**
    * Selects a single record from the specified table by key(s).
    * Returns the most recently created record if multiple matches exist.
-   * Automatically parses JSON string values back to objects/arrays.
+   * Parses `jsonb` column values back to objects/arrays.
    *
    * @typeParam R - The expected return type of the record
    * @param args - The select arguments
@@ -590,21 +615,7 @@ export class LibSQLDB extends MastraBase {
       return null;
     }
 
-    const row = result.rows[0];
-    // Checks whether the string looks like a JSON object ({}) or array ([])
-    // If the string starts with { or [, it assumes it's JSON and parses it
-    // Otherwise, it just returns, preventing unintended number conversions
-    const parsed = Object.fromEntries(
-      Object.entries(row || {}).map(([k, v]) => {
-        try {
-          return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-        } catch {
-          return [k, v];
-        }
-      }),
-    );
-
-    return parsed as R;
+    return parseJsonColumns(tableName, result.rows[0] ?? {}) as R;
   }
 
   /**
@@ -661,18 +672,7 @@ export class LibSQLDB extends MastraBase {
       args: [...(whereClause?.args ?? []), ...(args ?? [])],
     });
 
-    // Parse JSON columns (same as select())
-    return (result.rows ?? []).map(row => {
-      return Object.fromEntries(
-        Object.entries(row || {}).map(([k, v]) => {
-          try {
-            return [k, typeof v === 'string' ? (v.startsWith('{') || v.startsWith('[') ? JSON.parse(v) : v) : v];
-          } catch {
-            return [k, v];
-          }
-        }),
-      );
-    }) as R[];
+    return (result.rows ?? []).map(row => parseJsonColumns(tableName, row ?? {})) as R[];
   }
 
   /**

@@ -30,9 +30,16 @@ export type {
   MiddlewareHandler,
   DescribeRouteOptions,
   ServerConfig,
+  ServerConfigInput,
+  ApiRouteInput,
+  ServerMCPConfig,
+  ServerMCPPrimitiveFilter,
+  ServerMCPOAuthConfig,
+  MastraMCPToolset,
 } from './types';
 export {
   MastraAuthProvider,
+  normalizeMastraUser,
   isSSOProvider,
   isSessionProvider,
   isUserProvider,
@@ -43,6 +50,7 @@ export {
 } from './auth';
 export type {
   IMastraAuthProvider,
+  MastraAuthOAuthMetadata,
   MastraAuthProviderOptions,
   AuthInitContext,
   IAuthHttpHandler,

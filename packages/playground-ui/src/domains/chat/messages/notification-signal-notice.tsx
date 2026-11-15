@@ -23,8 +23,8 @@ const getNotificationTitle = (signal: SignalData) => {
 };
 
 const getMcpEventTitle = (info: McpEventSignalInfo) => {
-  const title = [info.server, info.event].filter(Boolean).join(' · ') || 'MCP event';
-  return info.kind === 'mcp-event-subscription-ended' ? `${title} · subscription ended` : title;
+  const title = [info.server, info.event].filter(Boolean).join(': ') || 'MCP event';
+  return info.kind === 'mcp-event-subscription-ended' ? `${title} (subscription ended)` : title;
 };
 
 const GapBadge = () => (

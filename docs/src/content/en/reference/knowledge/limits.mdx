@@ -1,0 +1,51 @@
+---
+title: 'Reference: Limits | Knowledge'
+description: 'Size limits for notes, pages, searches and pinned context in Knowledge.'
+packages:
+  - '@mastra/core'
+---
+
+# Limits
+
+Text limits are counted in tokens. Counts are estimates, so treat the numbers as approximate.
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+| Item | Limit |
+| - | - |
+| Note text | 250 tokens |
+| Page description | 100 tokens |
+| Page nesting | 10 levels |
+| Pages in one move, counting everything under the moved page | 500 |
+| `knowledge_search` results, and notes and child pages per `knowledge_read` | 10 by default, up to 50 |
+| Page body or `match` results per `knowledge_read` | 1,000 tokens by default, at least 100 |
+| Notes, and notes mentioning the page, kept in a whole `knowledge_read` | 1,000 tokens per list |
+| `knowledge_list` entries | 50 by default, up to 100, within about 1,000 tokens by default |
+| `knowledge_list` depth | 1 level by default, up to 3 |
+| Embedding chunks per page, for search by meaning | 100, of about 2,000 tokens each |
+| Pinned context per turn | 500 tokens by default, no maximum |
+| Pinned pages per turn | 20 by default |
+| Pinned listing depth | 1 level by default, up to 3 |
+| Pages per pinned listing | As many as its token share holds, up to 1,000 |
+
+A write over a limit fails, and the model gets the error as the tool result. Tool schemas don't show the token limits, because a schema can't count tokens.
+
+Page bodies have no token limit. `knowledge_read` returns a long body in parts, and an agent [edits it one part at a time](/reference/knowledge/knowledge-tools#knowledge_page) by line `range`. Pinned page bodies are cut to fit the pinned-context budget. See [what a run receives](/docs/knowledge/pinned-context#what-a-run-receives).
+
+A page too long for one embedding is embedded as overlapping chunks, cut between paragraphs and before headings. Each chunk starts with the page's name and description. Search returns the page once, ranked by its best chunk. Past 100 chunks, the rest of the body is found by keyword only. Rewriting a page replaces its chunks, and deleting it removes them.
+
+Pinned pages that don't fit the budget are handled this way:
+
+- Pages pinned in config are never dropped. When they alone exceed the budget, each gets an equal share and is cut.
+- A cut pinned page ends with `[truncated — knowledge_read for the rest]`.
+- Pages pinned by agents that don't fit are named on one line, up to ten, then counted: `Also pinned (open with knowledge_read): Refund Policy, …and 3 more`.
+
+A pinned listing counts as one pin and shares the token budget. One that doesn't fit fills a level at a time, and each page still prints under its parent. When pages are left out, it ends with `…and 4 more; knowledge_list from: "site:mastra"`, or `…and more` without a count when there are more pages than it fetched. Pinning a listing again sets its new depth, and a stored listing that repeats one from config is delivered once.
+
+Knowledge logs a warning at startup when a scope declares more `pinnedContext` pages than `maxPins`, or so many that each would get under 50 tokens.
+
+Change the read cap with `tools: { read: { maxTokens } }`. See [`tools`](/reference/knowledge/knowledge-class#constructor-options). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`.

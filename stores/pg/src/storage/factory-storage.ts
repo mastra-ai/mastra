@@ -426,18 +426,29 @@ class PgFactoryStorageOps implements FactoryStorageOps {
 
     const pool = this.#queryable as Pool;
     const client = await pool.connect();
+    let releaseError: Error | undefined;
     try {
-      await client.query('BEGIN');
+      try {
+        await client.query('BEGIN');
+      } catch (error) {
+        releaseError = error instanceof Error ? error : new Error(String(error));
+        throw error;
+      }
       try {
         const result = await run(client);
         await client.query('COMMIT');
         return result;
       } catch (error) {
-        await client.query('ROLLBACK');
+        try {
+          await client.query('ROLLBACK');
+        } catch (rollbackError) {
+          releaseError = rollbackError instanceof Error ? rollbackError : new Error(String(rollbackError));
+          throw new AggregateError([error, rollbackError], 'Factory transaction and rollback both failed');
+        }
         throw error;
       }
     } finally {
-      client.release();
+      client.release(releaseError);
     }
   }
 }
@@ -510,7 +521,14 @@ export class PgFactoryStorage extends FactoryStorage {
       let transactionOpen = false;
       let releaseError: Error | undefined;
       try {
-        await client.query(options?.isolationLevel === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN');
+        try {
+          await client.query(
+            options?.isolationLevel === 'serializable' ? 'BEGIN ISOLATION LEVEL SERIALIZABLE' : 'BEGIN',
+          );
+        } catch (error) {
+          releaseError = error instanceof Error ? error : new Error(String(error));
+          throw error;
+        }
         transactionOpen = true;
         const result = await fn(new PgFactoryStorageOps(client, this.#schemas, client));
         await client.query('COMMIT');

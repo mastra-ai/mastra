@@ -12,6 +12,7 @@ import { z } from 'zod';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { MastraDBMessage } from '../../message-list';
 import { DurableStepIds } from '../constants';
+import { storeRunsInV2 } from './storage-version';
 
 const threadId = 'refs-thread';
 const resourceId = 'refs-resource';
@@ -139,7 +140,12 @@ async function startProcess(
     },
   });
   const pubsub = engine === 'evented' ? new EventEmitterPubSub() : undefined;
-  const durableAgent = pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent });
+  // The tests read the transcript from the loop run's snapshot and capture checkpoints through v1's
+  // snapshot writes. v2 stores the transcript changes a nested run makes in the nested run.
+  const durableAgent = storeRunsInV2(
+    pubsub ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent }),
+    false,
+  );
   const mastra = new Mastra({
     agents: { durableAgent },
     storage,

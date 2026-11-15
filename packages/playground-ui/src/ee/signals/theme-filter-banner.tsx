@@ -1,15 +1,12 @@
-import type { SignalCatalogEntry } from '@mastra/client-js';
-import { X, Eye } from 'lucide-react';
 import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { Button } from '@/ds/components/Button';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
-
-function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
-  return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;
-}
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 function filterSummary({
   selections,
@@ -67,23 +64,28 @@ export function ThemeFilterBanner({
     >
       {selections.map((selection, index) => {
         const color = colors[index];
+        const signalTitle = signalLabel(signalCatalog, selection.signalName);
+        const selectionName = selection.kind === 'theme' ? selection.label : 'Noise';
         return (
           <button
             key={selection.signalName}
             aria-label={
               selections.length === 1
                 ? `Clear ${selection.kind} filter`
-                : `Clear filter ${selectionLabel(signalCatalog, selection)}`
+                : `Clear filter ${signalTitle}: ${selectionName}`
             }
             onClick={() => onRemove(selection.signalName)}
             type="button"
-            className="state-layer flex items-center gap-1.5 rounded-full border border-border bg-background py-1 pr-2 pl-2.5 text-foreground"
+            className="flex items-center gap-1.5 rounded-full border border-border bg-background state-layer py-1 pr-2 pl-2.5 text-foreground"
           >
             <span aria-hidden="true" style={{ backgroundColor: color }} className="rounded-0.5 size-2" />
             <Txt as="span" variant="column" className="block">
-              {selectionLabel(signalCatalog, selection)}
+              <Metadata>
+                <Metadata.Item>{signalTitle}</Metadata.Item>
+                <Metadata.Item>{selectionName}</Metadata.Item>
+              </Metadata>
             </Txt>
-            <X aria-hidden="true" className="size-3.5" />
+            <IconCrossMedium aria-hidden="true" className="size-3.5" />
           </button>
         );
       })}
@@ -92,7 +94,7 @@ export function ThemeFilterBanner({
       </Txt>
       {!isUnavailable && filteredTraceCount !== undefined && latestSelection ? (
         <Button
-          icon={<Eye />}
+          icon={<IconEyeOpen />}
           aria-label={
             latestSelection.kind === 'theme'
               ? `View theme details for ${latestSelection.label}`
@@ -107,7 +109,7 @@ export function ThemeFilterBanner({
         </Button>
       ) : null}
       {selections.length > 1 ? (
-        <Button icon={<X />} onClick={onClear} size="sm" type="button" variant="ghost">
+        <Button icon={<IconCrossMedium />} onClick={onClear} size="sm" type="button" variant="ghost">
           Clear all
         </Button>
       ) : null}

@@ -1,15 +1,16 @@
 import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 import { cn } from '@/lib/utils';
 
 export type KpiCardProps = {
   label: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   value: string;
   /** Change from the previous period, in percent. Omitted when there is nothing to compare. */
   change?: number;
   lowerIsBetter?: boolean;
-  detail: string;
+  detail?: ReactNode;
   /** The previous period's value, formatted. Shown only beside a `change`. */
   previous?: string;
   /** Names the window the change compares against, e.g. "vs previous 7d". */
@@ -25,7 +26,7 @@ export type KpiCardProps = {
 export function KpiCard({ label, icon: Icon, isError = false, ...reading }: KpiCardProps) {
   return (
     <MetricsKpiCard busy={!isError && (reading.isLoading || reading.isUpdating)}>
-      <MetricsKpiCard.Label icon={<Icon />}>{label}</MetricsKpiCard.Label>
+      <MetricsKpiCard.Label icon={Icon && <Icon />}>{label}</MetricsKpiCard.Label>
       {isError ? <KpiError /> : <KpiReading {...reading} />}
     </MetricsKpiCard>
   );
