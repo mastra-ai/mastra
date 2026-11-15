@@ -165,6 +165,71 @@ describe('experiments comparison table', () => {
     });
   });
 
+  describe('when reading comparisons as threads', () => {
+    const openThreads = async (response = playbackComparison, contenderIds = [CONTENDER_ID]) => {
+      server.use(http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(response)));
+      renderComparison(contenderIds);
+      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+      return within(await screen.findByRole('tabpanel', { name: 'Threads' }));
+    };
+
+    it('shows every saved turn in the main comparison without starting playback', async () => {
+      const threads = await openThreads();
+      const secondTurn = within(threads.getByRole('region', { name: 'Turn 2' }));
+      expect(within(secondTurn.getByRole('group', { name: 'Baseline' })).getByText('Your name is Ada.')).toBeTruthy();
+      expect(
+        within(secondTurn.getByRole('group', { name: 'Contender 1' })).getByText('Your name is Grace.'),
+      ).toBeTruthy();
+      expect(threads.getAllByText('I will remember your name, Ada.')).toHaveLength(2);
+      expect(threads.getByText('Order 42 is ready.')).toBeTruthy();
+      expect(threads.queryByRole('button', { name: 'Play' })).toBeNull();
+      expect(screen.queryByRole('dialog')).toBeNull();
+    });
+
+    it('keeps interruptions and unexecuted turns visible beside completed replies', async () => {
+      const threads = await openThreads();
+      expect(threads.getByText('Interrupted: Provider disconnected')).toBeTruthy();
+      const finalTurn = within(threads.getByRole('region', { name: 'Turn 3' }));
+      expect(finalTurn.getByText('This turn was not executed.')).toBeTruthy();
+      expect(finalTurn.getByText('Order 42 is ready.')).toBeTruthy();
+    });
+
+    it('expands recorded tool details without offering live chat controls', async () => {
+      const threads = await openThreads(conversationComparison);
+      fireEvent.click(threads.getAllByRole('button', { name: /lookupOrder/i })[0]);
+      expect(threads.getByText(/No recorded result/)).toBeTruthy();
+      expect(threads.queryByRole('textbox')).toBeNull();
+      expect(threads.queryByRole('button', { name: /send|approve|retry/i })).toBeNull();
+    });
+
+    it('switches back to the existing scores and diagnostics', async () => {
+      await openThreads();
+      fireEvent.click(screen.getByRole('tab', { name: 'Table' }));
+      expect(await findItemRow('conversation-item')).toBeTruthy();
+      expect(
+        within(sideOf('conversation-item', 'Baseline')).getByRole('link', { name: 'Open similarity' }),
+      ).toBeTruthy();
+    });
+
+    it('renders ordinary items and missing results without hiding them', async () => {
+      const threads = await openThreads(comparisonResponse);
+      const first = within(threads.getByRole('region', { name: 'Item item-a' }));
+      expect(first.getAllByText(/What is the capital of France/)).toHaveLength(2);
+      expect(first.getByText(/"Paris, France"/)).toBeTruthy();
+      expect(threads.getByText('Not present in this experiment')).toBeTruthy();
+      expect(threads.getByText('Interrupted: Agent run failed: rate limited')).toBeTruthy();
+    });
+
+    it('keeps all selected candidates in separate columns', async () => {
+      useThreeWayComparison();
+      const threads = await openThreads(threeWayComparisonResponse, [CONTENDER_ID, CHALLENGER_ID]);
+      const first = within(threads.getByRole('region', { name: 'Item item-a' }));
+      expect(first.getByRole('group', { name: 'Baseline' })).toBeTruthy();
+      expect(first.getByRole('group', { name: 'Contender 1' })).toBeTruthy();
+      expect(first.getByRole('group', { name: 'Contender 2' })).toBeTruthy();
+    });
+  });
+
   describe('when playing saved conversations side by side', () => {
     const openPlayback = async (response = playbackComparison, contenderIds = [CONTENDER_ID]) => {
       server.use(http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () => HttpResponse.json(response)));

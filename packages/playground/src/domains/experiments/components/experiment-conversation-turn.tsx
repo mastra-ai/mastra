@@ -6,7 +6,7 @@ import { conversationMessages } from '../utils/conversation-messages';
 import type { PlaybackTurn } from '../utils/conversation-playback';
 import { ComparisonPayload } from './comparison/comparison-payload';
 
-/** Shared by the individual result and side-by-side playback; never mounts a live chat provider. */
+/** Shared by individual results, comparison threads, and playback; never mounts a live chat provider. */
 export function ExperimentConversationTurn({ turn, fraction = 1 }: { turn: PlaybackTurn; fraction?: number }) {
   const id = useId();
   return (
