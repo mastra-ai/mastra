@@ -108,10 +108,6 @@ export function SidebarProvider({
 
   const scopeRef = React.useRef<HTMLDivElement | null>(null);
   const panelRef = React.useRef<HTMLDivElement | null>(null);
-  const [initialShownWidth] = React.useState(() =>
-    initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax),
-  );
-  const shownWidthRef = React.useRef(initialShownWidth);
 
   React.useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -137,13 +133,7 @@ export function SidebarProvider({
 
   // The live width goes on the panel, not the scope: a variable changed on the scope restyles the whole app.
   const writeCssVar = React.useCallback((px: number) => {
-    shownWidthRef.current = px;
     panelRef.current?.style.setProperty(SIDEBAR_WIDTH_VAR, `${px}px`);
-  }, []);
-
-  const attachPanel = React.useCallback((el: HTMLDivElement | null) => {
-    panelRef.current = el;
-    el?.style.setProperty(SIDEBAR_WIDTH_VAR, `${shownWidthRef.current}px`);
   }, []);
 
   // Bounds can change at runtime (a view that needs more room raises `minWidth`). Show the stored
@@ -250,7 +240,7 @@ export function SidebarProvider({
       commit,
       setGestureActive,
       scopeRef,
-      panelRef: attachPanel,
+      panelRef,
       LinkComponent,
     }),
     [
@@ -268,7 +258,6 @@ export function SidebarProvider({
       expand,
       commit,
       setGestureActive,
-      attachPanel,
       LinkComponent,
     ],
   );
@@ -279,7 +268,7 @@ export function SidebarProvider({
   );
 
   const scopeStyle: SidebarScopeStyle = {
-    [SIDEBAR_WIDTH_VAR]: `${initialShownWidth}px`,
+    [SIDEBAR_WIDTH_VAR]: `${initial.state === 'collapsed' ? safeCollapsed : clamp(initial.width, safeMin, safeMax)}px`,
     '--sidebar-width-mobile': `${mobileWidth}px`,
     display: 'contents',
   };

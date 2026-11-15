@@ -1,17 +1,4 @@
-import {
-  Equal,
-  EqualNot,
-  Text,
-  TextSearch,
-  ChevronRight,
-  ChevronLeft,
-  ChevronsRight,
-  ChevronsLeft,
-  List,
-  ListX,
-  Check,
-  Ban,
-} from 'lucide-react';
+import { EqualNot, TextSearch, ListX } from 'lucide-react';
 import * as React from 'react';
 
 import type { ConditionOperator } from '../types';
@@ -19,24 +6,33 @@ import type { RuleOperatorSelectProps } from './types';
 import { OPERATOR_LABELS, OPERATORS } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
 import { Icon } from '@/ds/icons';
+import { IconAlignmentLeft } from '@/ds/icons/central/IconAlignmentLeft';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChevronDoubleLeft } from '@/ds/icons/central/IconChevronDoubleLeft';
+import { IconChevronDoubleRight } from '@/ds/icons/central/IconChevronDoubleRight';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconMathEquals } from '@/ds/icons/central/IconMathEquals';
 import { cn } from '@/lib/utils';
 
 /**
  * Icons for each operator type
  */
 const OPERATOR_ICONS: Record<ConditionOperator, React.ReactNode> = {
-  equals: <Equal />,
+  equals: <IconMathEquals />,
   not_equals: <EqualNot />,
   contains: <TextSearch />,
-  not_contains: <Text />,
-  greater_than: <ChevronRight />,
-  less_than: <ChevronLeft />,
-  greater_than_or_equal: <ChevronsRight />,
-  less_than_or_equal: <ChevronsLeft />,
-  in: <List />,
+  not_contains: <IconAlignmentLeft />,
+  greater_than: <IconChevronRight />,
+  less_than: <IconChevronLeft />,
+  greater_than_or_equal: <IconChevronDoubleRight />,
+  less_than_or_equal: <IconChevronDoubleLeft />,
+  in: <IconListBullets />,
   not_in: <ListX />,
-  exists: <Check />,
-  not_exists: <Ban />,
+  exists: <IconCheckmark1 />,
+  not_exists: <IconCircleBanSign />,
 };
 
 /**

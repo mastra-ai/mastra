@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUpRight } from 'lucide-react';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
 import { cardLabels, sourceMetadata } from '../boardItems';
 import { workItemReferenceLabel } from '../services/relationships';
@@ -36,7 +36,7 @@ export function CardSourceRow({
               aria-label={`Open ${reference}`}
             >
               <span className="truncate">{reference}</span>
-              <ArrowUpRight aria-hidden />
+              <IconArrowUpRight aria-hidden />
             </Button>
           ) : null}
           <SourceStateBadge item={item} />

@@ -1,8 +1,8 @@
 import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
-import { Plus } from 'lucide-react';
 import { useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { useAgentColor } from '../../../contexts/agent-color-context';
@@ -60,7 +60,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
               textColor={avatarTextColor}
             />
             <span className="absolute inset-0 flex items-center justify-center rounded-full bg-muted opacity-0 transition-opacity">
-              <Plus className="h-5 w-5 text-foreground" />
+              <IconPlusLarge className="h-5 w-5 text-foreground" />
             </span>
           </button>
           <input

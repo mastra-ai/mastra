@@ -3,7 +3,9 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useClock } from '@mastra/playground-ui/hooks/use-clock';
-import { ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 import { useParams } from 'react-router';
 
 import type { InstalledBoardInfo, InstalledPhaseInfo } from '../../../../api/types';
@@ -134,7 +136,7 @@ export function CardStageBar({
                 {elapsed}
               </Txt>
             ) : null}
-            <ChevronDown aria-hidden />
+            <IconChevronBottom aria-hidden />
           </DropdownMenu.Trigger>
           <DropdownMenu.Content align="center" className="max-h-(--available-height) w-72">
             <DropdownMenu.RadioGroup
@@ -195,9 +197,9 @@ function NeighbourButton({
       disabled={disabled || held || step.blocked !== undefined}
       onClick={() => onMove(step.phase.id)}
     >
-      {direction === 'previous' ? <ChevronLeft aria-hidden /> : null}
+      {direction === 'previous' ? <IconChevronLeft aria-hidden /> : null}
       <span className="hidden @2xl:inline">{name}</span>
-      {direction === 'next' ? <ChevronRight aria-hidden /> : null}
+      {direction === 'next' ? <IconChevronRight aria-hidden /> : null}
     </Button>
   );
 }

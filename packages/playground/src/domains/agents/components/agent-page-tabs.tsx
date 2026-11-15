@@ -2,10 +2,11 @@ import { DisabledFeatureButton } from '@mastra/playground-ui/components/Disabled
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { TRACE_PROPERTY_FILTER_PARAM_BY_FIELD } from '@mastra/playground-ui/domains/traces/trace-filters';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { GitBranch, MessageSquare } from 'lucide-react';
 
 /** Tabs that render a pill in the bar. Routes without a pill pass `'none'`. */
 export type AgentPageTab = 'chat' | 'versions' | 'traces';
@@ -57,9 +58,9 @@ export function AgentPageTabs({
     <div className="flex min-w-0 items-center justify-between gap-2 p-1.5">
       <Tabs value={activeTab} defaultTab={activeTab} onValueChange={handleTabChange} className="min-w-0">
         <TabList variant="pill-ghost">
-          <AgentTab value="chat" icon={<MessageSquare />} label="Chat" />
+          <AgentTab value="chat" icon={<IconBubble2 />} label="Chat" />
           {showObservability && <AgentTab value="traces" icon={<TraceIcon />} label="Traces" />}
-          {showPlayground && <AgentTab value="versions" icon={<GitBranch />} label="Editor" />}
+          {showPlayground && <AgentTab value="versions" icon={<IconBranch />} label="Editor" />}
         </TabList>
       </Tabs>
       {(!showObservability || !showPlayground) && (
@@ -78,7 +79,7 @@ export function AgentPageTabs({
           )}
           {!showPlayground && (
             <DisabledFeatureButton
-              icon={<GitBranch />}
+              icon={<IconBranch />}
               label="Editor"
               tooltipContent="Add @mastra/editor to enable the Editor."
               docsHref="https://mastra.ai/docs/editor/overview"

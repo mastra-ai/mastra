@@ -1,4 +1,3 @@
-import { FolderIcon, FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { FilterBarChip } from './filter-bar-chip';
@@ -10,6 +9,10 @@ import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
 import { Button } from '@/ds/components/Button/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconFolderAddRight } from '@/ds/icons/central/IconFolderAddRight';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { cn } from '@/lib/utils';
 
 const connectorClass =
@@ -177,7 +180,7 @@ export function FilterBarGroupEditor({
             ref={addFilterRef}
             variant="ghost"
             size="sm"
-            icon={<PlusIcon />}
+            icon={<IconPlusLarge />}
             onClick={() => ctx.openGroupInput(group.id)}
           >
             Condition
@@ -186,7 +189,7 @@ export function FilterBarGroupEditor({
         <Button
           variant="ghost"
           size="sm"
-          icon={<FolderPlusIcon />}
+          icon={<IconFolderAddRight />}
           className="text-muted-foreground"
           tooltip={canNest ? undefined : `Groups can nest ${ctx.maxDepth} levels deep`}
           disabled={!canNest}
@@ -198,7 +201,7 @@ export function FilterBarGroupEditor({
           <Button
             variant="ghost"
             size="sm"
-            icon={<Trash2Icon />}
+            icon={<IconTrashCan />}
             className="ml-auto text-muted-foreground"
             aria-label={removeLabel}
             onClick={onRemove}
@@ -230,7 +233,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
       )}
     >
       <div className="flex items-center gap-2 border-b border-border px-2 py-1">
-        <FolderIcon className="size-3.5 text-muted-foreground" />
+        <IconFolder1 className="size-3.5 text-muted-foreground" />
         <Txt as="span" variant="label" tone="ink">
           Group
         </Txt>
@@ -246,7 +249,7 @@ function NestedGroupCard({ group, depth }: { group: FilterBarGroup; depth: numbe
             disabled={leaving}
             onClick={() => ctx.removeGroup(group.id)}
           >
-            <Trash2Icon />
+            <IconTrashCan />
           </Button>
         </div>
       </div>

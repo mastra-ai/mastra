@@ -1,5 +1,4 @@
 import { differenceInCalendarMonths, format, isValid, parse, startOfDay, subMonths } from 'date-fns';
-import { ArrowRight, Check, ChevronLeft } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { DateRange } from 'react-day-picker';
 import { Button } from '@/ds/components/Button/Button';
@@ -7,6 +6,9 @@ import { DatePicker } from '@/ds/components/DateTimePicker';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Input } from '@/ds/components/Input';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowRight } from '@/ds/icons/central/IconArrowRight';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
 
 function formatDays(ms: number): string {
   const days = Math.round(ms / (24 * 60 * 60 * 1000));
@@ -132,7 +134,7 @@ export function CustomRangeEditor({
             onTimeChange={setDraftTimeFrom}
             disabled={disabled}
           />
-          <ArrowRight aria-hidden className="col-start-2 row-start-2 size-4 self-center text-muted-foreground" />
+          <IconArrowRight aria-hidden className="col-start-2 row-start-2 size-4 self-center text-muted-foreground" />
           <RangeEnd label="End" date={range?.to} time={draftTimeTo} onTimeChange={setDraftTimeTo} disabled={disabled} />
         </div>
       </div>
@@ -142,10 +144,17 @@ export function CustomRangeEditor({
         </FieldError>
       </Field>
       <div className="flex items-center gap-2 border-t border-border px-3 py-2">
-        <Button icon={<ChevronLeft />} variant="ghost" size="sm" disabled={disabled} onClick={onShowPresets}>
+        <Button icon={<IconChevronLeft />} variant="ghost" size="sm" disabled={disabled} onClick={onShowPresets}>
           Presets
         </Button>
-        <Button className="ml-auto" icon={<Check />} variant="primary" size="sm" onClick={apply} disabled={disabled}>
+        <Button
+          className="ml-auto"
+          icon={<IconCheckmark1 />}
+          variant="primary"
+          size="sm"
+          onClick={apply}
+          disabled={disabled}
+        >
           Apply
         </Button>
       </div>

@@ -1,13 +1,13 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import { PanelRightIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { useWorkspacePanel } from '../context/useWorkspacePanel';
 import { cardRadiusClass, cardWidthStyle, popoverSizeClass } from '../layout';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkspaceFilesContent } from './WorkspaceFilesContent';
+import { IconSidebarSimpleRightWide } from '@mastra/playground-ui/icons/central/IconSidebarSimpleRightWide';
 
 export function WorkspaceFilesToggle() {
   const { open, setOpen, workspacePath, canDock } = useWorkspacePanel();
@@ -30,7 +30,7 @@ export function WorkspaceFilesToggle() {
         aria-pressed={open}
         onClick={() => setOpen(!open)}
       >
-        <PanelRightIcon />
+        <IconSidebarSimpleRightWide />
       </Button>
     );
   }
@@ -39,7 +39,7 @@ export function WorkspaceFilesToggle() {
     <Popover open={open} onOpenChange={setPopoverOpen}>
       <PopoverTrigger asChild>
         <Button size="icon-sm" variant={open ? 'default' : 'ghost'} aria-label="Session panel" aria-pressed={open}>
-          <PanelRightIcon />
+          <IconSidebarSimpleRightWide />
         </Button>
       </PopoverTrigger>
       <PopoverContent

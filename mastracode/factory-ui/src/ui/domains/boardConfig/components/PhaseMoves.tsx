@@ -2,11 +2,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, LockKeyhole, Plus } from 'lucide-react';
 import type { ReactNode } from 'react';
 
 import type { StoredPhaseInfo } from '../../../../api/types';
 import { BoardStageIcon, phaseIconKind } from '../../factory/components/BoardIcons';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconLock } from '@mastra/playground-ui/icons/central/IconLock';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 const TILE = 'inline-flex h-8 max-w-48 min-w-0 items-center gap-1.5 rounded-lg border px-2.5';
 
@@ -78,12 +80,12 @@ export function PhaseMoves({
             <Name>{other.name}</Name>
             <span className="text-muted-foreground grid size-3.5 shrink-0 place-items-center">
               {locked ? (
-                <LockKeyhole className="size-3.5" aria-hidden />
+                <IconLock className="size-3.5" aria-hidden />
               ) : allowed ? (
-                <Check className="size-3.5" aria-hidden />
+                <IconCheckmark1 className="size-3.5" aria-hidden />
               ) : (
                 !disabled && (
-                  <Plus
+                  <IconPlusLarge
                     className="invisible size-3.5 group-hover/move:visible group-focus-visible/move:visible"
                     aria-hidden
                   />

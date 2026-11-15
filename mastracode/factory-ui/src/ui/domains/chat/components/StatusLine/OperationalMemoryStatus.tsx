@@ -1,10 +1,10 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { formatCompactTokens, TokenBudget, TokenBudgetDetail } from '@mastra/playground-ui/components/TokenBudget';
-import { Brain, MessageSquare } from 'lucide-react';
-
 import { useChatRuntime } from '../../context/useChatRuntime';
 import type { OMWork } from '../../services/om';
 import { omWork } from '../../services/om';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconBubble2 } from '@mastra/playground-ui/icons/central/IconBubble2';
 
 const messageLabel: Record<OMWork, string> = {
   idle: 'Message window until next observation',
@@ -65,7 +65,7 @@ export function OperationalMemoryStatus() {
         {showMsg && (
           <TokenBudgetDetail
             description="Read into memory once full"
-            icon={<MessageSquare />}
+            icon={<IconBubble2 />}
             label="Messages"
             threshold={om.threshold}
             tokens={om.pendingTokens}
@@ -75,7 +75,7 @@ export function OperationalMemoryStatus() {
         {showMem && (
           <TokenBudgetDetail
             description="Consolidated into a reflection once full"
-            icon={<Brain />}
+            icon={<IconBrain />}
             label="Observations"
             threshold={om.reflectionThreshold}
             tokens={om.observationTokens}

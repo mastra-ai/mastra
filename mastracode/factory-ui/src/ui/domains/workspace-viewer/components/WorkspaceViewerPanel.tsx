@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronLeft } from 'lucide-react';
 import { memo, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -23,6 +22,7 @@ import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceSection } from './WorkspaceSection';
 import type { WorkspaceChangesSummary } from './WorkspaceSection';
 import { selectWorkspaceFilePreview } from './workspace-file-preview';
+import { IconChevronLeft } from '@mastra/playground-ui/icons/central/IconChevronLeft';
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
@@ -105,7 +105,7 @@ export const WorkspaceViewerPanel = memo(function WorkspaceViewerPanel({
       tooltip={parent.type === 'files' ? 'Back to files' : 'Back to overview'}
       onClick={() => show(parent)}
     >
-      <ChevronLeft />
+      <IconChevronLeft />
     </Button>
   ) : undefined;
   const workspace = (changeRequest?: ReactNode) => (

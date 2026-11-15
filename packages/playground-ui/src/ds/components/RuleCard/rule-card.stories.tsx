@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { MoreHorizontal, Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -16,6 +15,8 @@ import { Button } from '@/ds/components/Button';
 import { RuleAddButton, RuleLine, RuleLineContent, RuleLineKeyword, RuleLines } from '@/ds/components/RuleLines';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
 import { Switch } from '@/ds/components/Switch';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 const meta: Meta<typeof RuleCard> = {
   title: 'Elements/RuleCard',
@@ -52,7 +53,7 @@ function Route({ step, initialName }: { step: string; initialName: string }) {
         <RuleCardTitleInput aria-label="Route name" value={name} onChange={event => setName(event.target.value)} />
         <Switch aria-label={`Use ${name}`} checked={enabled} onCheckedChange={setEnabled} />
         <Button variant="ghost" size="icon-sm" aria-label={`${name} actions`}>
-          <MoreHorizontal />
+          <IconDotGrid1x3Horizontal />
         </Button>
       </RuleCardHeader>
       <RuleCardBody>
@@ -85,7 +86,7 @@ export const Default: Story = {
         <Route step="Else if" initialName="Features" />
       </li>
       <li className="pl-4">
-        <RuleAddButton icon={<Plus />}>Add route</RuleAddButton>
+        <RuleAddButton icon={<IconPlusLarge />}>Add route</RuleAddButton>
       </li>
     </ol>
   ),

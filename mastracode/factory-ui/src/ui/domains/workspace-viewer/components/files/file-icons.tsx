@@ -1,5 +1,11 @@
-import { File, FileCode, FileJson, FileText, Folder, FolderOpen, Image } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { IconFileBend } from '@mastra/playground-ui/icons/central/IconFileBend';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconFolder1 } from '@mastra/playground-ui/icons/central/IconFolder1';
+import { IconFolderOpen } from '@mastra/playground-ui/icons/central/IconFolderOpen';
+import { IconImages1 } from '@mastra/playground-ui/icons/central/IconImages1';
+import { IconJson } from '@mastra/playground-ui/icons/central/IconJson';
+import { IconScript } from '@mastra/playground-ui/icons/central/IconScript';
 
 export function getFileIcon(path: string): ReactNode {
   const ext = path.split('.').pop()?.toLowerCase();
@@ -8,28 +14,28 @@ export function getFileIcon(path: string): ReactNode {
     case 'tsx':
     case 'js':
     case 'jsx':
-      return <FileCode className="text-badge-blue-indicator" />;
+      return <IconScript className="text-badge-blue-indicator" />;
     case 'json':
-      return <FileJson className="text-badge-amber-indicator" />;
+      return <IconJson className="text-badge-amber-indicator" />;
     case 'md':
     case 'mdx':
-      return <FileText className="text-muted-foreground" />;
+      return <IconFileText className="text-muted-foreground" />;
     case 'png':
     case 'jpg':
     case 'jpeg':
     case 'gif':
     case 'svg':
     case 'webp':
-      return <Image className="text-muted-foreground" />;
+      return <IconImages1 className="text-muted-foreground" />;
     default:
-      return <File className="text-muted-foreground" />;
+      return <IconFileBend className="text-muted-foreground" />;
   }
 }
 
 export function getFolderIcon(isOpen: boolean): ReactNode {
   return isOpen ? (
-    <FolderOpen className="text-badge-amber-indicator" />
+    <IconFolderOpen className="text-badge-amber-indicator" />
   ) : (
-    <Folder className="text-badge-amber-indicator" />
+    <IconFolder1 className="text-badge-amber-indicator" />
   );
 }

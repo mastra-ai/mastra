@@ -389,7 +389,7 @@ describe('Agent signals: claimed thread ownership', () => {
 
     it('runs the woken turn with the caller tenant and saves the reply', async () => {
       const pubsub = new ControlledLeasePubSub();
-      const ownerRuntime = new AgentThreadStreamRuntime();
+      const ownerRuntime = agentThreadStreamRuntime;
       const senderRuntime = new AgentThreadStreamRuntime();
       const owner = createTenantOwner('tenant-owner', pubsub);
       const senderAgent = new Agent({
@@ -465,7 +465,7 @@ describe('Agent signals: claimed thread ownership', () => {
       expect(toolContext?.get('tenant')).toEqual({ name: 'acme' });
 
       const pubsub = new ControlledLeasePubSub();
-      const ownerRuntime = new AgentThreadStreamRuntime();
+      const ownerRuntime = agentThreadStreamRuntime;
       const senderRuntime = new AgentThreadStreamRuntime();
       const owner = createTenantOwner('transformed-tenant-owner', pubsub);
       const senderAgent = new Agent({
@@ -510,7 +510,7 @@ describe('Agent signals: claimed thread ownership', () => {
       // A wake without requireClaimedOwner (the background-task finish report) that lands while a
       // discovery is in flight is handed to the same remote owner.
       const pubsub = new ControlledLeasePubSub();
-      const ownerRuntime = new AgentThreadStreamRuntime();
+      const ownerRuntime = agentThreadStreamRuntime;
       const senderRuntime = new AgentThreadStreamRuntime();
       const owner = createTenantOwner('discovery-tenant-owner', pubsub);
       const senderAgent = new Agent({
@@ -625,7 +625,7 @@ describe('Agent signals: claimed thread ownership', () => {
       callerToken?: string;
     }) {
       const pubsub = new ControlledLeasePubSub();
-      const ownerRuntime = new AgentThreadStreamRuntime();
+      const ownerRuntime = agentThreadStreamRuntime;
       const senderRuntime = remote ? new AgentThreadStreamRuntime() : ownerRuntime;
       const owner = createOwner(remote ? 'remote-identity-owner' : 'local-identity-owner', pubsub);
       const senderAgent = new Agent({

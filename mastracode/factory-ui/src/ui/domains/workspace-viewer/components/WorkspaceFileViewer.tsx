@@ -6,9 +6,9 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { RefreshCw } from 'lucide-react';
 
 import type { WorkspaceFilePreview } from './workspace-file-preview';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
 
 function formatBytes(size: number) {
   if (size < 1024) return `${size} B`;
@@ -85,7 +85,7 @@ export function WorkspaceFileViewer({
                 disabled={isRefreshing}
                 aria-label={isRefreshing ? 'Refreshing file' : 'Refresh file'}
               >
-                {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+                {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
               </Button>
             }
           />

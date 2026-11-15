@@ -1,5 +1,5 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
-import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
+import { ClipboardCheck } from 'lucide-react';
 import { useState } from 'react';
 import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
 import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
@@ -23,6 +23,11 @@ import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowUp } from '@/ds/icons/central/IconArrowUp';
+import { IconChevronLeft } from '@/ds/icons/central/IconChevronLeft';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
+import { IconDotGrid1x3Horizontal } from '@/ds/icons/central/IconDotGrid1x3Horizontal';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { Icon } from '@/ds/icons/Icon';
 import { formatDate } from '@/utils/date-format';
 
@@ -98,7 +103,7 @@ function FeedbackItems({
           <DropdownMenu.Trigger
             render={
               <Button size="icon-sm" variant="ghost" aria-label="Feedback actions">
-                <EllipsisIcon />
+                <IconDotGrid1x3Horizontal />
               </Button>
             }
           />
@@ -117,7 +122,7 @@ function FeedbackItems({
             {canDelete && (
               <DropdownMenu.Item disabled={isDeleting} onSelect={() => onRequestDelete?.(feedbackId)}>
                 <Icon size="xs">
-                  <Trash2 />
+                  <IconTrashCan />
                 </Icon>
                 Delete feedback
               </DropdownMenu.Item>
@@ -229,7 +234,7 @@ export function FeedbackThread({
           />
           <InputGroupAddon align="inline-end">
             <InputGroupButton type="submit" aria-label="Send feedback" disabled={sendBlocked}>
-              <ArrowUp />
+              <IconArrowUp />
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -264,7 +269,7 @@ export function FeedbackThread({
       {(hasMore || currentPage > 0) && (
         <div className="flex items-center gap-2">
           <Button
-            icon={<ChevronLeft />}
+            icon={<IconChevronLeft />}
             size="sm"
             variant="ghost"
             disabled={currentPage === 0}
@@ -273,7 +278,7 @@ export function FeedbackThread({
             Previous
           </Button>
           <Button
-            icon={<ChevronRight />}
+            icon={<IconChevronRight />}
             size="sm"
             variant="ghost"
             disabled={!hasMore}
@@ -299,7 +304,7 @@ export function FeedbackThread({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel disabled={isDeleting}>Cancel</AlertDialog.Cancel>
-            <Button icon={<Trash2 />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
+            <Button icon={<IconTrashCan />} variant="primary" disabled={isDeleting} onClick={handleDeleteConfirm}>
               {isDeleting ? 'Deleting…' : 'Delete'}
             </Button>
           </AlertDialog.Footer>

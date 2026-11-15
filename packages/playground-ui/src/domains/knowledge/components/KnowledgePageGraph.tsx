@@ -13,7 +13,6 @@ import {
   useStore,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { ArrowUpToLine, Info, Layers, Maximize, Minus, Pin, Plus } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -61,6 +60,13 @@ import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 
 import './knowledge.css';
+import { IconArrowWallUp } from '@/ds/icons/central/IconArrowWallUp';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconFullscreen1 } from '@/ds/icons/central/IconFullscreen1';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
+import { IconPin } from '@/ds/icons/central/IconPin';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 const NO_PANE_INSETS: PaneInsets = { left: 0, right: 0 };
 type PaneStyle = CSSProperties & { '--knowledge-pane-left': string };
@@ -222,7 +228,7 @@ const TOOLTIP_PLACEMENT: Record<TooltipSide, { tip: string; transform: string; o
 
 /** The mark on a circle for a page that sits above others: layers for a scope, an up arrow for an ancestor page. */
 function LevelIcon({ level }: { level: GraphLevel }) {
-  const Icon = level === 'scope' ? Layers : ArrowUpToLine;
+  const Icon = level === 'scope' ? IconLayersTwo : IconArrowWallUp;
   return (
     <Icon
       aria-hidden
@@ -524,7 +530,7 @@ function PinBadge({ size }: { size: number }) {
       style={style}
       aria-label="Pinned"
     >
-      <Pin size={Math.round(badge * 0.6)} aria-hidden />
+      <IconPin size={Math.round(badge * 0.6)} aria-hidden />
     </span>
   );
 }
@@ -648,7 +654,7 @@ function GraphLegend({
       {collapsible ? (
         <Button
           size="sm"
-          icon={<Info />}
+          icon={<IconCircleInfo />}
           aria-expanded={open}
           className="shadow-overlay"
           onFocus={() => setPeeking(true)}
@@ -674,7 +680,7 @@ function GraphLegend({
         </li>
         {levels.includes('scope') ? (
           <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
-            <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <IconLayersTwo aria-hidden className="size-3 shrink-0 text-muted-foreground" />
             <Txt as="span" variant="meta" tone="muted">
               Scope, above its pages
             </Txt>
@@ -682,7 +688,7 @@ function GraphLegend({
         ) : null}
         {levels.includes('ancestor') ? (
           <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
-            <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+            <IconArrowWallUp aria-hidden className="size-3 shrink-0 text-muted-foreground" />
             <Txt as="span" variant="meta" tone="muted">
               Page above the focus
             </Txt>
@@ -859,7 +865,7 @@ function GraphLegend({
             className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
             aria-hidden
           >
-            <Pin size={8} />
+            <IconPin size={8} />
           </span>
           <Txt as="span" variant="meta" tone="muted">
             Pinned
@@ -1623,7 +1629,7 @@ function KnowledgePageGraphInner({
             aria-label="Zoom out"
             onClick={() => void reactFlow.zoomOut({ duration: fitDuration(prefersMotion()) })}
           >
-            <Minus />
+            <IconMinusLarge />
           </Button>
           <Button
             size="icon-sm"
@@ -1631,7 +1637,7 @@ function KnowledgePageGraphInner({
             aria-label="Zoom in"
             onClick={() => void reactFlow.zoomIn({ duration: fitDuration(prefersMotion()) })}
           >
-            <Plus />
+            <IconPlusLarge />
           </Button>
           <Button
             size="icon-sm"
@@ -1639,7 +1645,7 @@ function KnowledgePageGraphInner({
             aria-label="Fit view"
             onClick={() => fit(fitDuration(prefersMotion()))}
           >
-            <Maximize />
+            <IconFullscreen1 />
           </Button>
         </ButtonsGroup>
       </div>

@@ -210,6 +210,7 @@ export class MastraTUI {
   private cleanupKeyHandlers?: () => void;
   private cleanupPluginReloadListener?: () => void;
   private cleanupPluginUpdateListener?: () => void;
+  private cleanupPluginErrorListener?: () => void;
   private cleanupBackgroundCompletionListener?: () => void;
   private backgroundNoticeQueue = Promise.resolve();
   private lastStreamError: string | null = null;
@@ -729,6 +730,11 @@ export class MastraTUI {
       this.cleanupPluginUpdateListener = undefined;
     }
 
+    if (this.cleanupPluginErrorListener) {
+      this.cleanupPluginErrorListener();
+      this.cleanupPluginErrorListener = undefined;
+    }
+
     if (this.cleanupBackgroundCompletionListener) {
       this.cleanupBackgroundCompletionListener();
       this.cleanupBackgroundCompletionListener = undefined;
@@ -782,6 +788,12 @@ export class MastraTUI {
         if (pluginNames.length === 0) return;
         const label = pluginNames.length === 1 ? 'Plugin' : 'Plugins';
         showInfo(this.state, `${label} updated to the latest version: ${pluginNames.join(', ')}`);
+      });
+    }
+
+    if (this.state.pluginManager && !this.cleanupPluginErrorListener) {
+      this.cleanupPluginErrorListener = this.state.pluginManager.onPluginError(event => {
+        showError(this.state, event.message);
       });
     }
 

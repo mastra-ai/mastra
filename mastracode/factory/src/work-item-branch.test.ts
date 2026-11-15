@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { externalSourceForWorkItem, factoryRuleSourceForWorkItem, workItemSource } from './rules/types.js';
 import {
   mergeRequestNumberFromBranch,
   pullRequestNumberFromBranch,
@@ -16,6 +17,19 @@ describe('workItemBranchSource', () => {
     expect(workItemBranchSource({ integrationId: 'jira', type: 'issue', externalId: '4' })).toBe('jira-issue');
     expect(workItemBranchSource({ integrationId: 'gitlab', type: 'issue', externalId: '4' })).toBe('gitlab-issue');
     expect(workItemBranchSource({ integrationId: 'slack', type: 'slack-thread', externalId: '5' })).toBe('manual');
+  });
+
+  it('preserves Detail finding provenance through storage, rules, and branches', () => {
+    const source = externalSourceForWorkItem('detail-finding', 'repo-1:finding-2', 'https://example.com/finding');
+    expect(source).toEqual({
+      integrationId: 'detail',
+      type: 'finding',
+      externalId: 'repo-1:finding-2',
+      url: 'https://example.com/finding',
+    });
+    expect(workItemSource(source)).toBe('detail-finding');
+    expect(factoryRuleSourceForWorkItem('detail-finding')).toBe('detailFinding');
+    expect(workItemBranchSource(source)).toBe('detail-finding');
   });
 });
 

@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowUpRight } from 'lucide-react';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
 import { changeRequestSource } from '../changeRequestState';
 import { changeRequestLinkLabel } from '../sessionChangeRequests';
@@ -33,7 +33,7 @@ export function CardChangeRequestRow({
         <SourceIcon source={changeRequestSource(request.provider)} className="size-3.5" />
       )}
       <span className="truncate">{reference}</span>
-      <ArrowUpRight aria-hidden className="ml-auto" />
+      <IconArrowUpRight aria-hidden className="ml-auto" />
     </Button>
   );
 }

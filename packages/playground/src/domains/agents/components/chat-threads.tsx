@@ -14,13 +14,13 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { PanelEdgeIcon } from '@mastra/playground-ui/resize/panel-edge-icon';
 import { panelIconButtonClass } from '@mastra/playground-ui/resize/panel-icon-button';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { Plus } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useThreadsPanel } from '../context/use-threads-panel';
@@ -104,7 +104,7 @@ export const ChatThreads = ({
         <div className="flex items-center gap-1 pt-[3px]">
           <ThreadListNewItem render={<Link href={newThreadLink} />}>
             <Icon>
-              <Plus />
+              <IconPlusLarge />
             </Icon>
             New Thread
           </ThreadListNewItem>

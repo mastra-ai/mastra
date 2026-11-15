@@ -4,14 +4,16 @@ import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Entity, EntityContent, EntityDescription, EntityName } from '@mastra/playground-ui/components/Entity';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconMacbook } from '@mastra/playground-ui/icons/central/IconMacbook';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+
 import { hueFillClass, hueForName } from '@mastra/playground-ui/utils/colors';
-import { LaptopMinimal, PlusIcon, XIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
-
 import { MCPClientCreateContent } from '../mcp-client-create';
 import type { MCPClientFormValues } from '../mcp-client-create';
 import { useAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
@@ -133,10 +135,10 @@ export function MCPClientList() {
     <>
       <SubSectionRoot>
         <Section.Header>
-          <SubSectionHeader title="MCP Clients" icon={<LaptopMinimal />} />
+          <SubSectionHeader title="MCP Clients" icon={<IconMacbook />} />
 
           {!readOnly && (
-            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
+            <Button variant="ghost" size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusLarge />}>
               Add MCP client
             </Button>
           )}
@@ -149,7 +151,7 @@ export function MCPClientList() {
               titleSlot="No MCP clients configured yet."
               descriptionSlot="Add one to get started."
               actionSlot={
-                <Button size="sm" onClick={() => setIsCreateOpen(true)} icon={<PlusIcon />}>
+                <Button size="sm" onClick={() => setIsCreateOpen(true)} icon={<IconPlusLarge />}>
                   Add MCP client
                 </Button>
               }
@@ -193,7 +195,7 @@ export function MCPClientList() {
                         e.stopPropagation();
                         handleRemove(index);
                       }}
-                      icon={<XIcon />}
+                      icon={<IconCrossMedium />}
                     >
                       Remove
                     </Button>

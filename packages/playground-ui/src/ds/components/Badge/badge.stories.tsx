@@ -1,7 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Check, AlertCircle, FileText, Image as ImageIcon, Info as InfoIcon, TriangleAlert, Tag } from 'lucide-react';
 import { Badge } from './Badge';
 import type { BadgeProps } from './Badge';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCircleInfo } from '@/ds/icons/central/IconCircleInfo';
+import { IconExclamationCircle } from '@/ds/icons/central/IconExclamationCircle';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconFileText } from '@/ds/icons/central/IconFileText';
+import { IconImages1 } from '@/ds/icons/central/IconImages1';
+import { IconTag } from '@/ds/icons/central/IconTag';
 import { cn } from '@/lib/utils';
 
 const meta = {
@@ -38,9 +44,9 @@ const comparisonGroups = [
     label: 'With icons',
     surfaceClassName: '',
     badges: [
-      { variant: 'warning', children: 'Health & wellness', icon: <Tag /> },
-      { children: 'SKILL.md, +1', icon: <FileText /> },
-      { variant: 'orange', children: 'Image lab', icon: <ImageIcon /> },
+      { variant: 'warning', children: 'Health & wellness', icon: <IconTag /> },
+      { children: 'SKILL.md, +1', icon: <IconFileText /> },
+      { variant: 'orange', children: 'Image lab', icon: <IconImages1 /> },
     ],
   },
   {
@@ -93,22 +99,22 @@ export const Matrix: Story = {
         <Badge variant="pink">Pink</Badge>
       </div>
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="neutral" icon={<Tag />}>
+        <Badge variant="neutral" icon={<IconTag />}>
           Neutral
         </Badge>
-        <Badge variant="success" icon={<Check />}>
+        <Badge variant="success" icon={<IconCheckmark1 />}>
           Success
         </Badge>
-        <Badge variant="destructive" icon={<AlertCircle />}>
+        <Badge variant="destructive" icon={<IconExclamationCircle />}>
           Destructive
         </Badge>
-        <Badge variant="info" icon={<InfoIcon />}>
+        <Badge variant="info" icon={<IconCircleInfo />}>
           Info
         </Badge>
-        <Badge variant="warning" icon={<TriangleAlert />}>
+        <Badge variant="warning" icon={<IconExclamationTriangle />}>
           Warning
         </Badge>
-        <Badge variant="purple" icon={<Tag />}>
+        <Badge variant="purple" icon={<IconTag />}>
           Purple
         </Badge>
       </div>
@@ -145,21 +151,21 @@ export const Sizes: Story = {
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">md</span>
         <Badge size="md">Neutral</Badge>
-        <Badge size="md" icon={<Tag />}>
+        <Badge size="md" icon={<IconTag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">sm</span>
         <Badge size="sm">Neutral</Badge>
-        <Badge size="sm" icon={<Tag />}>
+        <Badge size="sm" icon={<IconTag />}>
           With icon
         </Badge>
       </div>
       <div className="flex items-center gap-2">
         <span className="w-8 text-caption text-muted-foreground">xs</span>
         <Badge size="xs">Neutral</Badge>
-        <Badge size="xs" icon={<Tag />}>
+        <Badge size="xs" icon={<IconTag />}>
           With icon
         </Badge>
       </div>

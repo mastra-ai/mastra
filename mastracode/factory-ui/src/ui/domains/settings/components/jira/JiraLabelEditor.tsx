@@ -1,10 +1,10 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { X } from 'lucide-react';
 import { useState } from 'react';
 
 import { RoutingNote } from './RoutingNote';
 import { newLabels, parseLabels } from './routing';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
 
 /** A labelled factory's labels as chips, plus a field adding more. */
 export function JiraLabelEditor({
@@ -44,7 +44,7 @@ export function JiraLabelEditor({
                 onClick={() => onChange(labels.filter(existing => existing !== label))}
                 className="disabled:opacity-40"
               >
-                <X className="size-3" aria-hidden />
+                <IconCrossMedium className="size-3" aria-hidden />
               </button>
             </span>
           </Badge>

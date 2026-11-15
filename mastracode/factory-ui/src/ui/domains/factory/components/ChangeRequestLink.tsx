@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowUpRight } from 'lucide-react';
+import { IconArrowUpRight } from '@mastra/playground-ui/icons/central/IconArrowUpRight';
 
 import { changeRequestSource } from '../changeRequestState';
 import {
@@ -45,7 +45,7 @@ export function ChangeRequestLink({
           {elsewhere.split('/').at(-1)}
         </Txt>
       ) : null}
-      <ArrowUpRight aria-hidden className={outboundArrowClass} />
+      <IconArrowUpRight aria-hidden className={outboundArrowClass} />
     </Button>
   );
 }

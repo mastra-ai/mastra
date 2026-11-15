@@ -2,11 +2,15 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
+import { IconChevronBottom } from '@mastra/playground-ui/icons/central/IconChevronBottom';
+import { IconChevronTop } from '@mastra/playground-ui/icons/central/IconChevronTop';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconExpand45 } from '@mastra/playground-ui/icons/central/IconExpand45';
+import { IconStudioDisplay } from '@mastra/playground-ui/icons/central/IconStudioDisplay';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useBrowserFrame, useBrowserSession } from '../../context/browser-session-context';
 import { BrowserToolCallItem } from './browser-tool-call-item';
@@ -110,7 +114,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
             <img ref={imgRef} alt="Browser preview" className="h-full w-full object-cover" />
           ) : (
             <div className="flex h-full w-full items-center justify-center">
-              <Monitor className="h-5 w-5 text-muted-foreground" />
+              <IconStudioDisplay className="h-5 w-5 text-muted-foreground" />
             </div>
           )}
           {/* Live indicator dot */}
@@ -134,7 +138,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
         {/* Expand/collapse indicator */}
         <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
-          {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+          {isExpanded ? <IconChevronBottom className="h-5 w-5" /> : <IconChevronTop className="h-5 w-5" />}
         </div>
       </button>
 
@@ -154,7 +158,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleOpenModal}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <IconExpand45 className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="default"
@@ -163,7 +167,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleClose}
                   className="bg-sidebar/80 backdrop-blur-sm"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <IconCrossMedium className="h-3.5 w-3.5" />
                 </Button>
               </div>
             </div>

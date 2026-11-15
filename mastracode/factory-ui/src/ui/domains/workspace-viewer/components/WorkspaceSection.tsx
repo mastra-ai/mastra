@@ -5,13 +5,15 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { pluralize } from '@mastra/playground-ui/utils/string';
-import { ChevronRight, FileDiff, GitBranch, GitMerge } from 'lucide-react';
+import { FileDiff, GitMerge } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
 
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { RepositoryProvider } from './changes/tree/change-tree';
 import { REPOSITORY_PROVIDER_ICONS } from './repositoryProviderIcons';
+import { IconBranch } from '@mastra/playground-ui/icons/central/IconBranch';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
 export interface WorkspaceBranch {
   branch: string;
@@ -68,7 +70,7 @@ export function WorkspaceSection({
   return (
     <section aria-label="Workspace" className="flex min-w-0 shrink-0 flex-col p-1.5">
       <div className={cn(rowClass, 'pl-2')}>
-        <GitBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
+        <IconBranch aria-hidden className="text-muted-foreground size-3.5 shrink-0" />
         {loading ? (
           <SkeletonRows label="Loading workspace details" rows={1} rowClassName="h-3 w-48" className="grow" />
         ) : workspace ? (
@@ -133,7 +135,7 @@ export function WorkspaceSection({
             <DiffStat additions={lines.additions} deletions={lines.deletions} />
           </Txt>
         ) : null}
-        <ChevronRight aria-hidden className="ml-auto" />
+        <IconChevronRight aria-hidden className="ml-auto" />
       </Button>
     </section>
   );

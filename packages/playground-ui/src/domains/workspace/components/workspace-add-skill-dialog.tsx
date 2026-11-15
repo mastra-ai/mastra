@@ -5,7 +5,7 @@ import {
   parseSkillSource,
 } from '@mastra/react/hooks/workspace';
 import type { SkillsShSkill } from '@mastra/react/hooks/workspace';
-import { Download, ExternalLink, Loader2, CircleSlashIcon, Package, Check, Folder } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useState, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
 import {
@@ -25,6 +25,12 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { SearchInput } from '@/ds/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
+import { IconArrowInbox } from '@/ds/icons/central/IconArrowInbox';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCircleBanSign } from '@/ds/icons/central/IconCircleBanSign';
+import { IconFolder1 } from '@/ds/icons/central/IconFolder1';
+import { IconPackage } from '@/ds/icons/central/IconPackage';
+import { IconSquareArrowTopRight } from '@/ds/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@/ds/icons/GithubIcon';
 import { SkillIcon } from '@/ds/icons/SkillIcon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -225,7 +231,7 @@ export function WorkspaceAddSkillDialog({
                     </div>
                   ) : displaySkills.length === 0 ? (
                     <div className="flex flex-1 flex-col items-center-safe justify-center-safe py-5 text-muted-foreground">
-                      <CircleSlashIcon className="mb-2 size-8" />
+                      <IconCircleBanSign className="mb-2 size-8" />
                       <Txt>{hasSearchResults ? 'No skills found' : 'No skills available'}</Txt>
                     </div>
                   ) : (
@@ -259,7 +265,7 @@ export function WorkspaceAddSkillDialog({
                                       variant="meta"
                                       className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                     >
-                                      <Check className="size-2.5" />
+                                      <IconCheckmark1 className="size-2.5" />
                                       Installed
                                     </Txt>
                                   )}
@@ -269,7 +275,7 @@ export function WorkspaceAddSkillDialog({
                                 </Txt>
                               </div>
                               <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                                <Download className="size-3" />
+                                <IconArrowInbox className="size-3" />
                                 <Txt as="span" variant="caption">
                                   {skill.installs.toLocaleString()}
                                 </Txt>
@@ -291,7 +297,7 @@ export function WorkspaceAddSkillDialog({
               <div className="flex flex-1 flex-col overflow-hidden rounded-lg border border-border">
                 {!selectedSkill ? (
                   <div className="flex h-full flex-col items-center justify-center text-muted-foreground">
-                    <Package className="mb-2 size-8" />
+                    <IconPackage className="mb-2 size-8" />
                     <Txt>Select a skill to preview</Txt>
                   </div>
                 ) : (
@@ -313,7 +319,7 @@ export function WorkspaceAddSkillDialog({
                               </Txt>
                             </span>
                             <span className="flex items-center gap-1">
-                              <Download className="size-3" />
+                              <IconArrowInbox className="size-3" />
                               <Txt as="span" variant="caption" className="block">
                                 {selectedSkill.installs.toLocaleString()} installs
                               </Txt>
@@ -328,7 +334,7 @@ export function WorkspaceAddSkillDialog({
                             className={cn(quietTextHover, controlStateColorTransition)}
                             title="View on GitHub"
                           >
-                            <ExternalLink className="size-4" />
+                            <IconSquareArrowTopRight className="size-4" />
                           </a>
                         )}
                       </div>
@@ -346,7 +352,7 @@ export function WorkspaceAddSkillDialog({
                       </ScrollArea>
                     ) : (
                       <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-                        <Package className="mb-2 size-8" />
+                        <IconPackage className="mb-2 size-8" />
                         <Txt>Preview unavailable</Txt>
                         {skillsUrl && (
                           <a
@@ -358,7 +364,7 @@ export function WorkspaceAddSkillDialog({
                             <Txt as="span" variant="caption" className="block">
                               View on skills.sh{' '}
                             </Txt>
-                            <ExternalLink className="size-3" />
+                            <IconSquareArrowTopRight className="size-3" />
                           </a>
                         )}
                       </div>
@@ -371,7 +377,7 @@ export function WorkspaceAddSkillDialog({
 
           {selectedSkill && writableMounts && writableMounts.length > 1 && (
             <Field orientation="horizontal" className={cn(raisedSurfaceStyle, 'gap-3 rounded-lg p-3')}>
-              <Folder className="size-4 shrink-0 text-muted-foreground" />
+              <IconFolder1 className="size-4 shrink-0 text-muted-foreground" />
               <FieldLabel className="whitespace-nowrap">Install to</FieldLabel>
               <Select value={installMount} onValueChange={setSelectedMount}>
                 <SelectTrigger className="flex-1">

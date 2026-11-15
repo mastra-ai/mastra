@@ -3,7 +3,6 @@ import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/Ho
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Pin, User } from 'lucide-react';
 import { useId, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
@@ -27,6 +26,8 @@ import type { CardChangeRequest } from '../../factory/changeRequestState';
 import { changeRequestNumberLabel, changeRequestReference } from '../../factory/sessionChangeRequests';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { isPullRequestSource } from '../../factory/services/workItems';
+import { IconPin } from '@mastra/playground-ui/icons/central/IconPin';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -186,7 +187,7 @@ export function SessionNavRow({
         {runByFactory ? <span className="text-muted-foreground ml-1.5">run by Factory</span> : null}
       </Sidebar.NavLabel>
       {pinned && !loading ? (
-        <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
+        <IconPin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
       {statusLabel ? (
         <span id={statusId} hidden>
@@ -360,7 +361,7 @@ function SessionSourceIcon({
   status: PullRequestStatus | undefined;
 }) {
   if (source === 'user') {
-    return <User data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
+    return <IconUser data-source="user" aria-hidden className="text-muted-foreground size-3.5 shrink-0" />;
   }
   if (status) {
     return <PullRequestStatusIcon status={status} provider={provider} decorative className="size-3.5" />;

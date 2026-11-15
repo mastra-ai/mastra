@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider, useSidebar } from '..';
 
 const mockMatchMedia = (matches: boolean) => {
@@ -21,6 +21,10 @@ const mockMatchMedia = (matches: boolean) => {
     })),
   });
 };
+
+beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
+});
 
 beforeEach(() => {
   window.localStorage.clear();
@@ -970,39 +974,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('Account navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('false');
   });
 
-  it('leaves Escape to the page while the phone sidebar is closed over an open view', async () => {
-    mockMatchMedia(true);
-    render(
-      <Sidebar.Provider storageKey="sidebar-hidden-view-escape-test">
-        <Sidebar.MobileTrigger />
-        <SidebarStackFixture />
-      </Sidebar.Provider>,
-    );
-    const backToMain = { name: 'Back to main navigation: Account settings' };
-    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
-    await screen.findByRole('button', backToMain);
-    fireEvent.click(screen.getByRole('button', { name: 'Close navigation menu' }));
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Navigation' })).toBeNull());
-
-    const escape = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
-    document.dispatchEvent(escape);
-
-    expect(escape.defaultPrevented).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Open navigation menu' }));
-    expect(screen.getByRole('button', backToMain)).toBeDefined();
-
-    fireEvent.keyDown(document, { key: 'Escape' });
-
-    await waitFor(() =>
-      expect(screen.getByText('Grouped navigation').closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe(
-        'false',
-      ),
-    );
-    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
-  });
-
-  it('shows group titles without the desktop toggle and returns focus to the same menu button after the takeover closes', async () => {
+  it('keeps group titles visible and hides the page trigger while the mobile drawer is present', async () => {
     mockMatchMedia(true);
     render(
       <Sidebar.Provider storageKey="sidebar-mobile-test">
@@ -1021,7 +993,7 @@ describe('Sidebar', () => {
     const mobileTrigger = screen.getByRole('button', { name: 'Open navigation menu' });
     fireEvent.click(mobileTrigger);
 
-    expect(screen.getByRole('dialog', { name: 'Navigation' })).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Navigation' }).getAttribute('data-mobile-mode')).toBe('takeover');
     expect(screen.getByText('Observability')).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).toBeNull();
     expect(document.querySelector('[data-sidebar-scope]')?.getAttribute('data-sidebar-mobile-present')).toBe('true');

@@ -1,6 +1,6 @@
 import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Link2 } from 'lucide-react';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -64,7 +64,7 @@ export function ConnectedAccountsSection() {
         {...slack}
         description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
       >
-        <Button size="sm" icon={<Link2 />} disabled={!canConnect} onClick={connectSlack}>
+        <Button size="sm" icon={<IconChainLink1 />} disabled={!canConnect} onClick={connectSlack}>
           Connect Slack
         </Button>
       </IntegrationItem>

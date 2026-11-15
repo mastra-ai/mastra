@@ -1,4 +1,3 @@
-import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { splitSpanName, TIMELINE_TICKS, TIMELINE_TRACK_PADDING } from '../utils/span-timeline';
 import { getSpanTimingLayout } from '../utils/span-timing';
@@ -10,6 +9,8 @@ import { Badge } from '@/ds/components/Badge';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { IconChevronBottom } from '@/ds/icons/central/IconChevronBottom';
+import { IconChevronRight } from '@/ds/icons/central/IconChevronRight';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
@@ -143,7 +144,7 @@ export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
                 focusRing,
               )}
             >
-              {isExpanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
+              {isExpanded ? <IconChevronBottom /> : <IconChevronRight />}
             </button>
           )}
         </div>

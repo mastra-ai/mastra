@@ -1,9 +1,9 @@
 import type { DatasetRecord } from '@mastra/client-js';
-import { Plus } from 'lucide-react';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
+import { IconPlusLarge } from '@/ds/icons/central/IconPlusLarge';
 
 const CREATE_DATASET_VALUE = '__create-dataset__';
 
@@ -50,7 +50,7 @@ export function DatasetPicker({
               <SelectItem value={CREATE_DATASET_VALUE}>
                 <span className="flex items-center gap-2">
                   <Icon size="sm">
-                    <Plus aria-hidden />
+                    <IconPlusLarge aria-hidden />
                   </Icon>
                   Create dataset
                 </span>

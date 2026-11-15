@@ -24,12 +24,12 @@
   --sidebar-reveal-width: calc(100vw - 3.5rem);
   --sidebar-reveal-radius: var(--studio-frame-radius, 1.5rem) 0 0 var(--studio-frame-radius, 1.5rem);
   --sidebar-reveal-rest: 0;
-  --sidebar-reveal-settle: var(--sidebar-reveal-settle-closed);
+  --sidebar-reveal-settle: 320ms;
 }
 
 [data-sidebar-reveal][data-sidebar-mobile-open='true'] {
   --sidebar-reveal-rest: 1;
-  --sidebar-reveal-settle: var(--sidebar-reveal-settle-open);
+  --sidebar-reveal-settle: 400ms;
 }
 
 [data-sidebar-reveal] [data-sidebar-reveal-layer] {

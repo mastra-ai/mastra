@@ -1,13 +1,16 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { Sidebar, SidebarProvider } from '..';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { AppShell } from '@/ds/new/layout/app-shell';
 
 const PANEL_WIDTH = 300;
 
 beforeAll(() => {
+  Element.prototype.getAnimations ??= () => [];
   Object.defineProperty(window, 'matchMedia', {
     configurable: true,
     value: vi.fn().mockImplementation((query: string) => ({
@@ -21,40 +24,35 @@ beforeAll(() => {
 
 afterEach(() => cleanup());
 
-function renderApp(page: ReactNode = <p>Agent overview</p>, banner?: ReactNode) {
-  render(
-    <>
-      {banner}
-      <SidebarProvider>
-        <AppShell
-          mobileHeader={<Sidebar.MobileTrigger />}
-          sidebar={
-            <Sidebar>
-              <Sidebar.Nav>
-                <Sidebar.NavList>
-                  <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
-                </Sidebar.NavList>
-              </Sidebar.Nav>
-            </Sidebar>
-          }
-        >
-          {page}
-        </AppShell>
-      </SidebarProvider>
-    </>,
+const navigationSidebar = (
+  <Sidebar>
+    <Sidebar.Nav>
+      <Sidebar.NavList>
+        <Sidebar.NavLink link={{ name: 'Agents', url: '/agents' }} />
+      </Sidebar.NavList>
+    </Sidebar.Nav>
+  </Sidebar>
+);
+
+function app(page: ReactNode, sidebar: ReactNode) {
+  return (
+    <SidebarProvider>
+      <AppShell mobileHeader={<Sidebar.MobileTrigger />} sidebar={sidebar}>
+        {page}
+      </AppShell>
+    </SidebarProvider>
   );
+}
+
+function renderApp(page: ReactNode = <p>Agent overview</p>) {
+  const view = render(app(page, navigationSidebar));
   const panel = document.querySelector('[data-sidebar-reveal-layer="panel"]');
   if (!panel) throw new Error('Sidebar reveal panel was not rendered');
   Object.defineProperty(panel, 'offsetWidth', { configurable: true, value: PANEL_WIDTH });
+  return view;
 }
 
-function touch(
-  type: 'touchstart' | 'touchmove' | 'touchend',
-  target: Element | Window,
-  x: number,
-  timeStamp: number,
-  y = 300,
-) {
+function touch(type: 'touchstart' | 'touchmove' | 'touchend', target: Element, x: number, timeStamp: number, y = 300) {
   const event = new Event(type, { bubbles: true, cancelable: true });
   const point = { identifier: 1, clientX: x, clientY: y };
   Object.defineProperties(event, {
@@ -76,8 +74,6 @@ function swipe(target: Element, moves: Array<[x: number, timeStamp: number]>, re
 const navigation = () => screen.queryByRole('dialog', { name: 'Navigation' });
 const trigger = () => screen.getByRole('button', { name: 'Open navigation menu' });
 const scrim = () => screen.getByRole('button', { name: 'Close navigation menu', hidden: true });
-// jsdom and user-event ignore `inert`, so Tab reachability is read from the attribute.
-const reachableByKeyboard = (element: Element) => element.closest('[inert]') === null;
 
 describe('Sidebar mobile reveal', () => {
   describe('when the page is dragged right past halfway and released', () => {
@@ -240,19 +236,43 @@ describe('Sidebar mobile reveal', () => {
     });
   });
 
-  describe('when navigation is open and a banner sits above the app shell', () => {
-    it('keeps the banner out of keyboard reach and returns focus to the menu button on close', async () => {
-      renderApp(undefined, <button type="button">Install app</button>);
-      const banner = screen.getByRole('button', { name: 'Install app' });
+  describe('when navigation is open and Escape is pressed in a menu opened from it', () => {
+    it('closes the menu and leaves navigation open', async () => {
+      render(
+        app(
+          <p>Agent overview</p>,
+          <Sidebar>
+            <DropdownMenu>
+              <DropdownMenu.Trigger>Workspace</DropdownMenu.Trigger>
+              <DropdownMenu.Content aria-label="Workspace">
+                <DropdownMenu.Item>Settings</DropdownMenu.Item>
+              </DropdownMenu.Content>
+            </DropdownMenu>
+          </Sidebar>,
+        ),
+      );
       fireEvent.click(trigger());
+      fireEvent.click(screen.getByRole('button', { name: 'Workspace' }));
 
-      expect(reachableByKeyboard(banner)).toBe(false);
-      expect(reachableByKeyboard(screen.getByRole('link', { name: 'Agents' }))).toBe(true);
+      fireEvent.keyDown(await screen.findByRole('menuitem', { name: 'Settings' }), { key: 'Escape' });
 
-      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      await waitFor(() => expect(screen.queryByRole('menu', { name: 'Workspace' })).toBeNull());
+      expect(navigation()).not.toBeNull();
+    });
+  });
 
-      await waitFor(() => expect(document.activeElement).toBe(trigger()));
-      expect(reachableByKeyboard(banner)).toBe(true);
+  describe('when navigation is open and Tab runs past either end', () => {
+    it('keeps focus cycling inside navigation', async () => {
+      const user = userEvent.setup();
+      renderApp();
+      fireEvent.click(trigger());
+      scrim().focus();
+
+      await user.tab();
+      expect(document.activeElement).toBe(screen.getByRole('link', { name: 'Agents' }));
+
+      await user.tab({ shift: true });
+      expect(document.activeElement).toBe(scrim());
     });
   });
 
@@ -265,56 +285,29 @@ describe('Sidebar mobile reveal', () => {
     });
   });
 
-  describe('when navigation is open and a toast region sits outside the app shell', () => {
-    it('keeps the toast and its action in reach while the rest of the page is not', () => {
-      renderApp(
-        undefined,
-        <div>
-          <button type="button">Install app</button>
-          <section aria-live="polite" aria-label="Notifications">
-            <button type="button">Undo archive</button>
-          </section>
-        </div>,
-      );
-      fireEvent.click(trigger());
+  describe('when navigation is open while a toast is showing outside the app', () => {
+    it('keeps the toast out of reach until navigation closes', () => {
+      render(<button type="button">Dismiss toast</button>);
+      renderApp();
+      const dismiss = screen.getByText('Dismiss toast');
 
-      expect(reachableByKeyboard(screen.getByRole('button', { name: 'Undo archive' }))).toBe(true);
-      expect(reachableByKeyboard(screen.getByRole('button', { name: 'Install app' }))).toBe(false);
-      expect(reachableByKeyboard(screen.getByText('Agent overview'))).toBe(false);
+      fireEvent.click(trigger());
+      expect(dismiss.closest('[inert]')).not.toBeNull();
+      expect(screen.getByRole('link', { name: 'Agents' }).closest('[inert]')).toBeNull();
+
+      fireEvent.click(scrim());
+      expect(dismiss.closest('[inert]')).toBeNull();
     });
   });
 
-  describe('when the message under the finger re-renders away mid-swipe', () => {
-    const renderStreamingReply = () => {
-      renderApp(
-        <div>
-          <p>Streaming reply</p>
-        </div>,
-      );
-      const reply = screen.getByText('Streaming reply');
-      touch('touchstart', reply, 20, 0);
-      touch('touchmove', reply, 30, 16);
-      touch('touchmove', reply, 100, 200);
-      reply.remove();
-      return reply;
-    };
+  describe('when the app drops the sidebar while navigation is open', () => {
+    it('leaves the page usable', () => {
+      const { rerender } = renderApp();
+      fireEvent.click(trigger());
 
-    it('still opens navigation when the finger lifts', () => {
-      const reply = renderStreamingReply();
+      rerender(app(<p>Agent overview</p>, undefined));
 
-      touch('touchmove', reply, 200, 400);
-      touch('touchend', reply, 200, 420);
-
-      expect(navigation()).not.toBeNull();
-    });
-
-    it('still settles when the release reaches only the window', () => {
-      renderStreamingReply();
-
-      touch('touchmove', window, 200, 400);
-      touch('touchend', window, 200, 420);
-
-      expect(navigation()).not.toBeNull();
+      expect(screen.getByText('Agent overview').closest('[inert]')).toBeNull();
     });
   });
 });

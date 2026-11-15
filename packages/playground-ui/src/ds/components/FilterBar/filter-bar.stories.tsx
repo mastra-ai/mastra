@@ -1,15 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import {
-  CircleIcon,
-  GlobeIcon,
-  HashIcon,
-  PlayIcon,
-  SearchIcon,
-  TagIcon,
-  TimerIcon,
-  TriangleAlertIcon,
-  UserIcon,
-} from 'lucide-react';
+import { CircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
@@ -17,6 +7,14 @@ import { FilterBar } from './filter-bar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
 import { Avatar } from '@/ds/components/Avatar/Avatar';
 import { Txt } from '@/ds/components/Txt';
+import { IconExclamationTriangle } from '@/ds/icons/central/IconExclamationTriangle';
+import { IconGlobe } from '@/ds/icons/central/IconGlobe';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconMagnifyingGlass } from '@/ds/icons/central/IconMagnifyingGlass';
+import { IconPlay } from '@/ds/icons/central/IconPlay';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconUser } from '@/ds/icons/central/IconUser';
 import { hueAccentColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
@@ -35,7 +33,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'environment',
     label: 'Environment',
-    icon: GlobeIcon,
+    icon: IconGlobe,
     color: hueAccentColor('green'),
     operators: ['is', 'is-not', 'in'],
     suggestions: [{ value: 'prod' }, { value: 'staging' }, { value: 'dev' }],
@@ -43,7 +41,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'tags',
     label: 'Tags',
-    icon: TagIcon,
+    icon: IconTag,
     color: hueAccentColor('purple'),
     operators: ['in'],
     strict: true,
@@ -52,15 +50,15 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'traceId',
     label: 'Trace ID',
-    icon: HashIcon,
+    icon: IconHashtag,
     color: hueAccentColor('blue'),
     operators: ['is', 'contains', 'starts-with'],
   },
-  { id: 'runId', label: 'Run ID', icon: PlayIcon, color: hueAccentColor('cyan'), operators: ['is', 'contains'] },
+  { id: 'runId', label: 'Run ID', icon: IconPlay, color: hueAccentColor('cyan'), operators: ['is', 'contains'] },
   {
     id: 'duration',
     label: 'Duration (ms)',
-    icon: TimerIcon,
+    icon: IconStopwatch,
     color: hueAccentColor('orange'),
     type: 'number',
     operators: ['gt', 'gte', 'lt', 'lte'],
@@ -68,7 +66,7 @@ const FIELDS: FilterBarField[] = [
   {
     id: 'hasError',
     label: 'Has error',
-    icon: TriangleAlertIcon,
+    icon: IconExclamationTriangle,
     color: hueAccentColor('pink'),
     type: 'boolean',
     operators: ['is'],
@@ -147,11 +145,11 @@ export const FreeText: Story = {
   name: 'Free text (search field) and option avatars',
   render: function FreeTextStory() {
     const fields: FilterBarField[] = [
-      { id: 'text', label: 'Text', icon: SearchIcon, search: true, operators: ['contains'] },
+      { id: 'text', label: 'Text', icon: IconMagnifyingGlass, search: true, operators: ['contains'] },
       {
         id: 'teammate',
         label: 'Teammate',
-        icon: UserIcon,
+        icon: IconUser,
         color: hueAccentColor('blue'),
         operators: ['is'],
         strict: true,

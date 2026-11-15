@@ -1,4 +1,4 @@
-import { User } from 'lucide-react';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
 
 import { PanelSubject } from '../../workspace-viewer/components/PanelSubject';
@@ -14,7 +14,7 @@ export function SessionPanelSubject({ lead }: { lead: ReactNode | undefined }) {
   return (
     <PanelSubject
       lead={lead}
-      icon={session.isUserThread ? <User aria-hidden className="text-muted-foreground size-4" /> : undefined}
+      icon={session.isUserThread ? <IconUser aria-hidden className="text-muted-foreground size-4" /> : undefined}
       title={session.title}
       loading={session.loading}
     />

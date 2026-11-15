@@ -1,5 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { ArrowRight } from 'lucide-react';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
@@ -82,7 +82,7 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
                 render={<Link to={cardSessionPath(factoryId, switchable.workingSession)} />}
               >
                 {switchable.workingSession.label}
-                <ArrowRight aria-hidden />
+                <IconArrowRight aria-hidden />
               </Button>
             ) : null}
           </>

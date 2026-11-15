@@ -5,7 +5,6 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Tree } from '@mastra/playground-ui/components/Tree';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Eye, EyeOff, FolderSymlink, RefreshCw } from 'lucide-react';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { hashKey, useIsFetching, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -23,6 +22,10 @@ import { getFileIcon, getFolderIcon } from './files/file-icons';
 import { FileFinderResults } from './files/FileFinderResults';
 import { foldersAbove } from './files/folders-above';
 import { useFileFinder } from './files/useFileFinder';
+import { IconArrowRotateClockwise } from '@mastra/playground-ui/icons/central/IconArrowRotateClockwise';
+import { IconEyeOpen } from '@mastra/playground-ui/icons/central/IconEyeOpen';
+import { IconEyeSlash } from '@mastra/playground-ui/icons/central/IconEyeSlash';
+import { IconFolderLink } from '@mastra/playground-ui/icons/central/IconFolderLink';
 
 function TreeMessage({ children, tone = 'muted' }: { children: ReactNode; tone?: 'muted' | 'error' }) {
   return (
@@ -96,7 +99,7 @@ function WorkspaceTreeItem({ entry, ...props }: TreeLevelProps & { entry: Worksp
     return (
       <Tree.File id={`${FOLDER_LINK_ID}${entry.linkedPath}`} className={treeRowContainmentClass}>
         <Tree.Icon>
-          <FolderSymlink className="text-badge-amber-indicator" />
+          <IconFolderLink className="text-badge-amber-indicator" />
         </Tree.Icon>
         <Tree.Label>
           {entry.name}
@@ -267,7 +270,7 @@ export function WorkspaceFileBrowser({
                 aria-pressed={showHidden}
                 aria-label={showHidden ? 'Hide hidden files' : 'Show hidden files'}
               >
-                {showHidden ? <Eye /> : <EyeOff />}
+                {showHidden ? <IconEyeOpen /> : <IconEyeSlash />}
               </Button>
             }
           />
@@ -283,7 +286,7 @@ export function WorkspaceFileBrowser({
                 disabled={isRefreshing}
                 aria-label={isRefreshing ? 'Refreshing workspace files' : 'Refresh workspace files'}
               >
-                {isRefreshing ? <Spinner size="sm" /> : <RefreshCw />}
+                {isRefreshing ? <Spinner size="sm" /> : <IconArrowRotateClockwise />}
               </Button>
             }
           />

@@ -3,13 +3,7 @@ import type { RefObject } from 'react';
 
 const EASE = [0.32, 0.72, 0, 1] as const;
 const EASE_START_SLOPE = EASE[1] / EASE[0];
-const SETTLE_MS = { open: 400, closed: 320 } as const;
-
-export const REVEAL_SCOPE_VARS = {
-  '--sidebar-reveal-ease': `cubic-bezier(${EASE.join(', ')})`,
-  '--sidebar-reveal-settle-open': `${SETTLE_MS.open}ms`,
-  '--sidebar-reveal-settle-closed': `${SETTLE_MS.closed}ms`,
-};
+export const REVEAL_EASE = `cubic-bezier(${EASE.join(', ')})`;
 
 const DRAG_VAR = '--sidebar-reveal-drag';
 const DURATION_VAR = '--sidebar-reveal-duration';
@@ -19,7 +13,7 @@ const TURN_DISTANCE_PX = 8;
 const COMMIT_DISTANCE_PX = 40;
 const VELOCITY_WINDOW_MS = 100;
 const MIN_SETTLE_MS = 120;
-const MAX_SETTLE_MS = Math.max(SETTLE_MS.open, SETTLE_MS.closed);
+const MAX_SETTLE_MS = 400;
 
 type Sample = { x: number; t: number };
 
@@ -59,9 +53,7 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
     if (!scope) return;
     const token = ++settleRef.current;
     requestAnimationFrame(() => {
-      const running = revealLayers(scope).flatMap(layer =>
-        typeof layer.getAnimations === 'function' ? layer.getAnimations() : [],
-      );
+      const running = revealLayers(scope).flatMap(layer => layer.getAnimations());
       void Promise.allSettled(running.map(animation => animation.finished)).then(() => {
         if (token !== settleRef.current) return;
         clearRevealVar(revealLayers(scope), DURATION_VAR);
@@ -77,32 +69,10 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
   useEffect(() => {
     const scope = scopeRef.current;
     if (!scope) return;
+    const settles = settleRef;
     let track: Track | undefined;
-    let handledEvent: Event | undefined;
-    const followed: GlobalEventHandlers[] = [];
-
-    // A touch keeps targeting the node it started on; once that node leaves the document its events stop reaching the scope.
-    const follow = (target: Element | undefined) => {
-      const nodes: GlobalEventHandlers[] =
-        target instanceof HTMLElement || target instanceof SVGElement ? [target, window] : [window];
-      for (const node of nodes) {
-        node.addEventListener('touchmove', onTouchMove, { passive: false });
-        node.addEventListener('touchend', onTouchEnd);
-        node.addEventListener('touchcancel', onTouchEnd);
-        followed.push(node);
-      }
-    };
-
-    const unfollow = () => {
-      for (const node of followed.splice(0)) {
-        node.removeEventListener('touchmove', onTouchMove);
-        node.removeEventListener('touchend', onTouchEnd);
-        node.removeEventListener('touchcancel', onTouchEnd);
-      }
-    };
 
     const release = (ended: Track, velocity: number) => {
-      unfollow();
       const committed = Math.abs(ended.offset - ended.origin) >= COMMIT_DISTANCE_PX;
       const endsOpen = committed ? ended.heading > 0 : ended.startedOpen;
       const distance = Math.abs((endsOpen ? ended.width : 0) - ended.offset);
@@ -163,8 +133,6 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
     };
 
     const onTouchMove = (event: TouchEvent) => {
-      if (event === handledEvent) return;
-      handledEvent = event;
       const current = track;
       const touch = current && Array.from(event.changedTouches).find(t => t.identifier === current.touchId);
       if (!current || !touch) return;
@@ -178,7 +146,6 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
         const state = lock(current, touch);
         if (state === 'ignored') track = undefined;
         if (state !== 'locked') return;
-        follow(current.target);
       }
 
       if (event.cancelable) event.preventDefault();
@@ -188,8 +155,6 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
     };
 
     const onTouchEnd = (event: TouchEvent) => {
-      if (event === handledEvent) return;
-      handledEvent = event;
       const ended = track;
       if (!ended || !Array.from(event.changedTouches).some(t => t.identifier === ended.touchId)) return;
       track = undefined;
@@ -206,11 +171,10 @@ export function useRevealGesture({ scopeRef, open, onGrab, onRelease, onSettled 
       scope.removeEventListener('touchmove', onTouchMove);
       scope.removeEventListener('touchend', onTouchEnd);
       scope.removeEventListener('touchcancel', onTouchEnd);
-      unfollow();
+      settles.current++;
       const layers = revealLayers(scope);
       clearRevealVar(layers, DRAG_VAR);
       clearRevealVar(layers, DURATION_VAR);
-      if (track?.locked) handleSettled();
     };
   }, [scopeRef]);
 }
@@ -261,7 +225,7 @@ function liveOffset(element: HTMLElement | undefined) {
 }
 
 function ownsHorizontalSwipe(target: Element | undefined, scope: Element, dx: number) {
-  for (let node = target; node && node !== scope; node = node.parentElement ?? undefined) {
+  for (let node: Element | null | undefined = target; node && node !== scope; node = node.parentElement) {
     if (node instanceof HTMLInputElement && node.type === 'range') return true;
 
     const style = getComputedStyle(node);

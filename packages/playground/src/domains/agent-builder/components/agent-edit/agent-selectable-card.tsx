@@ -1,6 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
 
@@ -93,7 +93,7 @@ export const AgentSelectableCard = ({
             !isSelected && 'border-border bg-transparent',
           )}
         >
-          {isSelected && <Check className="h-3 w-3" />}
+          {isSelected && <IconCheckmark1 className="h-3 w-3" />}
         </span>
       </button>
       {footer}

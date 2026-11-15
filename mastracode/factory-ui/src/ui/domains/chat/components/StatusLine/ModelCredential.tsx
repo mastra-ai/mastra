@@ -2,13 +2,16 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Building2, KeyRound, Server, User } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
 import { ProviderBrandIcon } from '../../../workspaces/components/ProviderBrandIcon';
 import { useChatModels } from '../../context/useChatModels';
 import { useModelCredential } from '../../hooks/useModelCredential';
 import type { CredentialHolder } from '../../hooks/useModelCredential';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconKey1 } from '@mastra/playground-ui/icons/central/IconKey1';
+import { IconServer } from '@mastra/playground-ui/icons/central/IconServer';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 
 const badgeShell = 'flex size-icon-sm items-center justify-center rounded-full border border-border bg-card';
 
@@ -21,9 +24,9 @@ function GlyphBadge({ icon: Icon }: { icon: LucideIcon }) {
 }
 
 export function HolderBadge({ holder }: { holder: CredentialHolder }) {
-  if (holder.kind === 'organization') return <GlyphBadge icon={Building2} />;
-  if (holder.kind === 'deployment') return <GlyphBadge icon={Server} />;
-  if (!holder.name) return <GlyphBadge icon={User} />;
+  if (holder.kind === 'organization') return <GlyphBadge icon={IconBuildings} />;
+  if (holder.kind === 'deployment') return <GlyphBadge icon={IconServer} />;
+  if (!holder.name) return <GlyphBadge icon={IconUser} />;
   return (
     <span className="[&>[data-slot=avatar]]:size-icon-sm flex">
       <Avatar name={holder.name} src={holder.avatarUrl} size="xs" />
@@ -51,7 +54,7 @@ export function ModelCredential() {
           />
         }
       >
-        <ProviderBrandIcon provider={provider} fallback={<KeyRound className="size-3.5" />} />
+        <ProviderBrandIcon provider={provider} fallback={<IconKey1 className="size-3.5" />} />
         <span className="absolute -right-1 -bottom-1">
           <HolderBadge holder={holder} />
         </span>

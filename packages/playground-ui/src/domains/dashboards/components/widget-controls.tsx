@@ -1,5 +1,5 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
-import { BellPlusIcon, Maximize2Icon } from 'lucide-react';
+import { BellPlusIcon } from 'lucide-react';
 import { useId } from 'react';
 import {
   OpenErrorsInLogsButton,
@@ -15,6 +15,7 @@ import { Button } from '@/ds/components/Button';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { MetricsCard, onCardHover } from '@/ds/components/MetricsCard';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { IconExpand45 } from '@/ds/icons/central/IconExpand45';
 import { cn } from '@/lib/utils';
 
 /**
@@ -142,7 +143,7 @@ export function ExpandAction({
 }) {
   return (
     <MetricsCard.Action label={`Expand ${title}`} className={onCardHover} render={<LinkComponent href={href} />}>
-      <Maximize2Icon />
+      <IconExpand45 />
     </MetricsCard.Action>
   );
 }

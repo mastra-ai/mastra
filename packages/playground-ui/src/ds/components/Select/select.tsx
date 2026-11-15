@@ -1,11 +1,11 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/select';
-import { Check } from 'lucide-react';
 import * as React from 'react';
 
 import { ButtonChevron, buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
@@ -248,7 +248,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
-      <Check />
+      <IconCheckmark1 />
     </SelectPrimitive.ItemIndicator>
   </SelectPrimitive.Item>
 ));

@@ -1,7 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Plus } from 'lucide-react';
-
 import type { BoardStageId } from '../stages';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 
 export function BoardStageCreateButton({
   stage,
@@ -26,7 +25,7 @@ export function BoardStageCreateButton({
       aria-controls={`new-work-item-${stage.id}`}
       onClick={onOpen}
     >
-      <Plus size={13} aria-hidden />
+      <IconPlusLarge size={13} aria-hidden />
     </Button>
   );
 }

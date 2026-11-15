@@ -2,10 +2,13 @@ import type { DatasetItem } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCircleBanSign } from '@mastra/playground-ui/icons/central/IconCircleBanSign';
+import { IconMathEquals } from '@mastra/playground-ui/icons/central/IconMathEquals';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { focusRing, transitions } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { BanIcon, EqualIcon, PenIcon, PlusIcon } from 'lucide-react';
 
 export interface DatasetCompareVersionsListProps {
   datasetId: string;
@@ -20,19 +23,19 @@ const versionInfoConfig = {
   added: {
     badgeVariant: 'info' as const,
     borderColor: 'border-info-edge',
-    icon: <PlusIcon />,
+    icon: <IconPlusLarge />,
     tooltip: 'Added in this version',
   },
   changed: {
     badgeVariant: 'warning' as const,
     borderColor: 'border-warning-edge',
-    icon: <PenIcon />,
+    icon: <IconPencil />,
     tooltip: 'Changed in this version',
   },
   same: {
     badgeVariant: 'success' as const,
     borderColor: 'border-success-edge',
-    icon: <EqualIcon />,
+    icon: <IconMathEquals />,
     tooltip: 'Same in both versions',
   },
 };
@@ -50,7 +53,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip: string })
         aria-label={tooltip}
         className={cn('rounded', focusRing)}
       >
-        <BanIcon
+        <IconCircleBanSign
           className={cn('h-5 w-5 text-muted-foreground/40', {
             'text-destructive-foreground': red,
           })}
