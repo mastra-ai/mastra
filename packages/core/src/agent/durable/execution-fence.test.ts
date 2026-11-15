@@ -10,6 +10,7 @@ import type { MemoryStorage, WorkflowsStorage } from '../../storage';
 import { InMemoryStore } from '../../storage/mock';
 import { Agent } from '../agent';
 import { AGENT_STREAM_TOPIC } from '../streams/constants';
+import { createEventedAgent } from './create-evented-agent';
 import {
   __resetExecutionFencesForTests,
   assertExecutionNotSuperseded,
@@ -48,6 +49,69 @@ afterEach(() => {
 });
 
 describe('execution publisher transport boundaries (COR-1560)', () => {
+  it.each([false, true])(
+    'resolves worker publishers without touching the native bus (inner registered=%s)',
+    async registerInner => {
+      const nativePubsub = new EventEmitterPubSub();
+      const sharedPubsub = new EventEmitterPubSub();
+      const inner = new Agent({
+        id: agentId,
+        name: agentId,
+        instructions: 'Answer.',
+        model: 'openai/gpt-4o-mini',
+        durable: { pubsub: nativePubsub },
+      });
+      const agent = createEventedAgent({ agent: inner });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({
+        agents: registerInner ? { inner, agent } : { agent },
+        pubsub: sharedPubsub,
+        storage,
+        logger: false,
+      });
+      await storage.init();
+      const runId = crypto.randomUUID();
+      const fence = await ExecutionFence.claim({
+        leaseProvider: sharedPubsub,
+        workflowsStore: await storage.getStore('workflows'),
+        agentId,
+        runId,
+        mode: 'acquire',
+      });
+      const nativeEvents: string[] = [];
+      const sharedEvents: string[] = [];
+      await nativePubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+        nativeEvents.push(event.type);
+      });
+      await sharedPubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+        sharedEvents.push(event.type);
+      });
+      const options = { runId, agentId, mastra, claim: fence.claim };
+      const lifecycle = getExecutionStreamPublisher({
+        ...options,
+        ...(registerInner ? { agent } : {}),
+        role: 'lifecycle',
+      })!;
+      const producer = getExecutionStreamPublisher({ ...options, role: 'producer' })!;
+      try {
+        await lifecycle.ready;
+        await producer.publishEvent({ type: 'iteration-start', runId, data: {} });
+        expect(sharedEvents).toEqual(['iteration-start']);
+        expect(nativeEvents).toEqual([]);
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'running', publisherId: fence.executionId });
+        expect(await inner.__getRunRecord(runId)).toBeUndefined();
+        await lifecycle.settle('finished');
+        expect(await agent.__getRunRecord(runId)).toMatchObject({ status: 'finished', publisherId: fence.executionId });
+        await lifecycle.cleanup();
+        expect(await agent.__getRunRecord(runId)).toBeUndefined();
+      } finally {
+        await producer.detach();
+        await lifecycle.detach();
+        deleteRunRegistryEntry(runId, mastra);
+      }
+    },
+  );
+
   it.each([false, true])('keeps the same step guard across publisher nesting (lost=%s)', async lost => {
     vi.useFakeTimers();
     const pubsub = new EventEmitterPubSub();

@@ -834,6 +834,8 @@ export class DurableAgent<
 > extends Agent<TAgentId, TTools, TOutput> {
   /** The wrapped agent */
   readonly #wrappedAgent: Agent<TAgentId, TTools, TOutput>;
+  readonly #streamConfig: AgentStreamsConfig;
+  #wrapperStreamBus?: AgentStreamBus;
 
   /** Registry for per-run non-serializable state */
   readonly #runRegistry: ExtendedRunRegistry;
@@ -916,9 +918,7 @@ export class DurableAgent<
     this.#wrappedAgent = agent;
     this.#runRegistry = new ExtendedRunRegistry();
     this.#maxSteps = maxSteps;
-    this.#wrappedAgent.__configureDurableStreams({ pubsub, cache, cleanupTimeoutMs, shouldCache }, () =>
-      this.__usesSharedRunLog(),
-    );
+    this.#streamConfig = { pubsub, cache, cleanupTimeoutMs, shouldCache };
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
 
     // Keep processor access on the wrapped agent, but dispatch through this wrapper.
@@ -975,7 +975,7 @@ export class DurableAgent<
    * Lazily initialized to allow inheriting from Mastra.
    */
   get cache(): MastraServerCache | null {
-    return this.__getStreamBus().cache;
+    return this.__getStreamBus().forRun(this.__usesSharedRunLog()).cache;
   }
 
   /**
@@ -983,7 +983,7 @@ export class DurableAgent<
    * Returns CachingPubSub if caching is enabled, otherwise the inner pubsub.
    */
   get pubsub(): PubSub {
-    return this.__getStreamBus().pubsub;
+    return this.__getStreamBus().forRun(this.__usesSharedRunLog()).pubsub;
   }
 
   /** Durable runs always publish on their stream topic. */
@@ -991,8 +991,8 @@ export class DurableAgent<
     return true;
   }
 
-  protected override __usesSharedRunLog(): boolean {
-    return this.resolveWorkflowEngine() === 'evented';
+  override __usesSharedRunLog(): boolean {
+    return !!this.#mastra && this.resolveWorkflowEngine() === 'evented';
   }
 
   /** Kept `false`, the value this getter has always reported for durable agents. */
@@ -1002,7 +1002,9 @@ export class DurableAgent<
 
   /** @internal */
   override __getStreamBus(): AgentStreamBus {
-    return this.#wrappedAgent.__getStreamBus()!;
+    const bus = this.#wrappedAgent.__getStreamBus(true)!;
+    if (!Object.values(this.#streamConfig).some(value => value !== undefined)) return bus;
+    return (this.#wrapperStreamBus ??= bus.withConfig(this.#streamConfig));
   }
 
   /**
@@ -1017,7 +1019,12 @@ export class DurableAgent<
 
   override async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
     const bus = this.__getStreamBus();
-    return readAgentRunRecord(bus.runRecordCache, this.id, runId, durableReplayOwnerKey(this.id, runId));
+    return readAgentRunRecord(
+      bus.getRunRecordCache(this.__usesSharedRunLog()),
+      this.id,
+      runId,
+      durableReplayOwnerKey(this.id, runId),
+    );
   }
 
   /**
@@ -1030,7 +1037,11 @@ export class DurableAgent<
   async __getReplayOwner(runId: string): Promise<{ resourceId?: string; threadId?: string } | undefined> {
     const local = this.__getRunOwner(runId);
     if (local) return local;
-    const shared = await readDurableReplayOwner(this.__getStreamBus().runRecordCache, this.id, runId);
+    const shared = await readDurableReplayOwner(
+      this.__getStreamBus().getRunRecordCache(this.__usesSharedRunLog()),
+      this.id,
+      runId,
+    );
     if (!shared) return undefined;
     return { resourceId: shared.resourceId, threadId: shared.threadId };
   }
@@ -2348,6 +2359,7 @@ export class DurableAgent<
 
     const fork = new Ctor({
       agent: innerFork,
+      ...this.#streamConfig,
       id: this.id,
       name: this.name,
       maxSteps: this.#maxSteps,
@@ -6487,5 +6499,6 @@ export class DurableAgent<
     this.#mastra = mastra;
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
+    this.#wrapperStreamBus?.registerMastra(mastra.pubsub);
   }
 }

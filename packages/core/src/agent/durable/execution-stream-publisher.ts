@@ -21,6 +21,8 @@ import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
 const publishersKey = createRunScopeKey<Map<string, AgentStreamPublisher>>('execution-stream-publishers');
+const streamOwnerKey =
+  createRunScopeKey<Pick<Agent, '__getStreamBus' | '__getRunOwner' | '__usesSharedRunLog'>>('execution-stream-owner');
 // Proxies must forward this transport while retaining their fences, without re-entering a publisher's queue.
 export const executionTransport = Symbol('execution-stream-publisher-transport');
 
@@ -37,7 +39,7 @@ export function getExecutionStreamPublisher({
   runId: string;
   agentId: string;
   mastra?: Mastra;
-  agent?: Pick<Agent, '__getStreamBus' | '__getRunOwner'>;
+  agent?: Pick<Agent, '__getStreamBus' | '__getRunOwner' | '__usesSharedRunLog'>;
   claim?: DurableExecutionClaim;
   role: 'producer' | 'lifecycle';
   entry?: RunRegistryEntry;
@@ -47,17 +49,20 @@ export function getExecutionStreamPublisher({
     entry = { isPlaceholder: true } as RunRegistryEntry;
     if (!setRunRegistryEntry(runId, entry, mastra)) return;
   }
-  const owner = agent ?? entry.agent ?? mastra?.getAgentById(agentId);
+  const scope = (entry.runScope ??= createRunScope());
+  if (agent) scope.set(streamOwnerKey, agent);
+  const owner = agent ?? scope.get(streamOwnerKey) ?? mastra?.getAgentById(agentId) ?? entry.agent;
   const bus = owner?.__getStreamBus();
-  if (!bus) return;
+  if (!owner || !bus) return;
+  const usesSharedRunLog = owner.__usesSharedRunLog();
+  const runBus = bus.forRun(usesSharedRunLog);
   claim ??= entry.executionFence?.claim;
   const executionClaim = claim;
   if (!executionClaim) return;
   const requestContext = new RequestContext();
   setExecutionClaim(requestContext, runId, executionClaim);
   const publisherId = executionClaim.executionId;
-  const memoryInfo = owner?.__getRunOwner(runId);
-  const scope = (entry.runScope ??= createRunScope());
+  const memoryInfo = owner.__getRunOwner(runId);
   let publishers = scope.get(publishersKey);
   if (!publishers) {
     publishers = new Map();
@@ -77,7 +82,7 @@ export function getExecutionStreamPublisher({
   if (existing) return existing;
   const fence = entry.executionFence;
   const publisher = createAgentStreamPublisher({
-    pubsub: bus.pubsub,
+    pubsub: runBus.pubsub,
     runId,
     role,
     publisherId,
@@ -110,7 +115,7 @@ export function getExecutionStreamPublisher({
       await assertExecutionNotSuperseded({ runId, agentId, mastra, requestContext });
     },
     record: {
-      cache: bus.runRecordCache,
+      cache: bus.getRunRecordCache(usesSharedRunLog),
       key: durableReplayOwnerKey(agentId, runId),
       agentId,
       resourceId: executionClaim.resourceId ?? memoryInfo?.resourceId,

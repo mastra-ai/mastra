@@ -251,7 +251,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         durable: true,
         pubsub: custom,
       });
-      // Construct the bus before wrapping, but resolve its transport after installing the engine hook.
+      // Construct the native bus before wrapping to verify that wrapping preserves it.
       const originalBus = inner.__getStreamBus();
       const agent =
         engine === 'plain'
@@ -288,6 +288,64 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
     },
   );
 
+  it.each(
+    (['stream', 'generate'] as const).flatMap(method =>
+      (['durable', 'evented', 'override'] as const).map(wrapper => ({ method, wrapper })),
+    ),
+  )('keeps direct native $method routing independent of an $wrapper wrapper', async ({ method, wrapper }) => {
+    getMock().on({ endpoint: 'chat' }, { content: 'Independent transport.' });
+    const nativePubsub = new EventEmitterPubSub();
+    const wrapperPubsub = new EventEmitterPubSub();
+    const sharedPubsub = new EventEmitterPubSub();
+    const inner = new Agent({
+      id: `isolated-${method}-${wrapper}`,
+      name: 'isolated',
+      instructions: 'Answer briefly.',
+      model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` })(SCENARIO_MODEL_ID),
+      durable: true,
+      pubsub: nativePubsub,
+    });
+    const agent =
+      wrapper === 'evented'
+        ? createEventedAgent({ agent: inner })
+        : createDurableAgent({ agent: inner, ...(wrapper === 'override' ? { pubsub: wrapperPubsub } : {}) });
+    new Mastra({ agents: { inner, agent }, pubsub: sharedPubsub, storage: new InMemoryStore(), logger: false });
+    const nativePublish = vi.spyOn(nativePubsub, 'publish');
+    const wrapperPublish = vi.spyOn(wrapperPubsub, 'publish');
+    const sharedPublish = vi.spyOn(sharedPubsub, 'publish');
+    for (const candidate of [inner, inner.__fork()]) {
+      const run = await candidate[method]('Say something.');
+      if ('consumeStream' in run) await run.consumeStream();
+      expect(await run.text).toBe('Independent transport.');
+      const topic = AGENT_STREAM_TOPIC(run.runId);
+      await vi.waitFor(() =>
+        expect(
+          nativePublish.mock.calls.some(
+            ([name, event]) => name === topic && event.type === AgentStreamEventTypes.FINISH,
+          ),
+        ).toBe(true),
+      );
+      expect(wrapperPublish.mock.calls.some(([name]) => name === topic)).toBe(false);
+      expect(sharedPublish.mock.calls.some(([name]) => name === topic)).toBe(false);
+      const replay = await candidate.observe(run.runId);
+      await replay.output.consumeStream();
+      expect(await replay.output.text).toBe('Independent transport.');
+    }
+    const run = await agent.stream('Say something.');
+    await run.output.consumeStream();
+    const selected = wrapper === 'evented' ? sharedPublish : wrapper === 'override' ? wrapperPublish : nativePublish;
+    await vi.waitFor(() =>
+      expect(
+        selected.mock.calls.some(
+          ([name, event]) => name === AGENT_STREAM_TOPIC(run.runId) && event.type === AgentStreamEventTypes.FINISH,
+        ),
+      ).toBe(true),
+    );
+    const replay = await agent.observe(run.runId);
+    await replay.output.consumeStream();
+    expect(await replay.output.text).toBe('Independent transport.');
+  });
+
   it('streams and replays an unregistered durable agent with streams disabled on the wrapped Agent', async () => {
     getMock().on({ endpoint: 'chat' }, { content: 'Standalone transport works.' });
     const inner = new Agent({
@@ -298,7 +356,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       durable: false,
     });
     const agent = createDurableAgent({ agent: inner });
-    expect(agent.__getStreamBus()).toBe(inner.__getStreamBus());
+    expect(agent.__getStreamBus()).toBe(inner.__getStreamBus(true));
     const run = await agent.stream('Say something.');
     await run.output.consumeStream();
     const observed = await agent.observe(run.runId);
@@ -359,7 +417,9 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
             })
           : inner.generate('Use the tool.', { runId }).then(output => output.text);
       await toolStarted;
-      const bus = inner.__getStreamBus();
+      const bus = inner.__getStreamBus()!;
+      const nativeCache = bus.cache;
+      const nativeCleanupTimeout = bus.cleanupTimeoutMs;
       const before = await inner.observe(runId);
       const beforeChunks = (async () => {
         const chunks = [];
@@ -372,7 +432,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         pubsub: newPubsub,
         cache: new InMemoryServerCache(),
         cleanupTimeoutMs: 0,
-        shouldCache: () => true,
+        shouldCache: vi.fn(() => true),
       };
       const wrapper = createDurableAgent({
         agent: inner,
@@ -380,7 +440,8 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       });
       try {
         sameBus = wrapper.__getStreamBus() === bus;
-        if (!override) {
+        expect(inner.__getStreamBus()).toBe(bus);
+        {
           const after = await inner.observe(runId);
           afterChunks = (async () => {
             const chunks = [];
@@ -403,8 +464,7 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
         ).toBe('Live wrapping works.');
       }
       expect(sameBus).toBe(!override);
-      expect(warn).toHaveBeenCalledTimes(override ? 1 : 0);
-      if (override) expect(warn).toHaveBeenCalledWith(expect.stringMatching(/live-wrap.*1.*new runs only/));
+      expect(warn).not.toHaveBeenCalled();
       expect(
         oldPublish.mock.calls.some(
           ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.FINISH,
@@ -425,6 +485,28 @@ describe('DurableAgent default engine on the shared Mastra bus', () => {
       const replay = await wrapper.observe(next.runId);
       await replay.output.consumeStream();
       expect(await replay.output.text).toBe('Live wrapping works.');
+      if (setting === 'cache') expect(wrapper.cache).toBe(settings.cache);
+      if (setting === 'cleanupTimeoutMs') expect(wrapper.cleanupTimeoutMs).toBe(0);
+      if (setting === 'shouldCache') expect(settings.shouldCache).toHaveBeenCalled();
+      const policyCalls = settings.shouldCache.mock.calls.length;
+      const native = await inner.stream('Use the tool.');
+      await native.consumeStream();
+      expect(await native.text).toBe('Live wrapping works.');
+      expect(bus.cache).toBe(nativeCache);
+      expect(bus.cleanupTimeoutMs).toBe(nativeCleanupTimeout);
+      expect(settings.shouldCache.mock.calls).toHaveLength(policyCalls);
+      await vi.waitFor(() =>
+        expect(
+          oldPublish.mock.calls.some(
+            ([topic, event]) =>
+              topic === AGENT_STREAM_TOPIC(native.runId) && event.type === AgentStreamEventTypes.FINISH,
+          ),
+        ).toBe(true),
+      );
+      expect(newPublish.mock.calls.some(([topic]) => topic === AGENT_STREAM_TOPIC(native.runId))).toBe(false);
+      const nativeReplay = await inner.observe(native.runId);
+      await nativeReplay.output.consumeStream();
+      expect(await nativeReplay.output.text).toBe('Live wrapping works.');
       warn.mockRestore();
     },
     15_000,
