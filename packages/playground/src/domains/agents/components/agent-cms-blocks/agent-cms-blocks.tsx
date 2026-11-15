@@ -1,11 +1,13 @@
 import { ContentBlocks } from '@mastra/playground-ui/components/ContentBlocks';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencilLine } from '@mastra/playground-ui/icons/central/IconPencilLine';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { FileText, PenLine, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { InstructionBlock } from '../agent-edit-page/utils/form-validation';
 import { createInstructionBlock, createRefInstructionBlock } from '../agent-edit-page/utils/form-validation';
@@ -42,20 +44,20 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
             )}
           >
             <Icon>
-              <PlusIcon />
+              <IconPlusLarge />
             </Icon>
           </button>
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" className="w-[240px]">
           <DropdownMenu.Item onSelect={onAddInline}>
             <Icon>
-              <PenLine />
+              <IconPencilLine />
             </Icon>
             Write inline block
           </DropdownMenu.Item>
           <DropdownMenu.Item onSelect={onPickRef}>
             <Icon>
-              <FileText />
+              <IconFileText />
             </Icon>
             Reference saved prompt block
           </DropdownMenu.Item>

@@ -7,7 +7,6 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { ChevronRight } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
 import { useApiConfig } from '../../api/config';
@@ -31,6 +30,7 @@ import { SettingsSubsection } from '../domains/settings/components/SettingsSubse
 import { connectSlackUrl } from '../domains/settings/services/channelAccounts';
 import type { ConnectedChannelAccount } from '../domains/settings/services/channelAccounts';
 import { SettingsPageLayout } from './SettingsPage';
+import { IconChevronRight } from '@mastra/playground-ui/icons/central/IconChevronRight';
 
 const linkedDateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: 'long',
@@ -153,7 +153,7 @@ export function SlackConnectionSettings() {
                   className="group-hover:text-foreground flex items-center gap-2"
                 >
                   Connect Slack
-                  <ChevronRight aria-hidden="true" />
+                  <IconChevronRight aria-hidden="true" />
                 </Txt>
               </SettingsRow>
             </button>

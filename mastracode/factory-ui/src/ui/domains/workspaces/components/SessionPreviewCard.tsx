@@ -2,7 +2,6 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import type { RefObject } from 'react';
 
@@ -17,6 +16,7 @@ import type { SessionOwnerDetails } from '../services/sessionPresentation';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import type { FactoryUserSession } from '../services/user-sessions';
 import { SessionTrack } from './SessionTrack';
+import { IconArrowRight } from '@mastra/playground-ui/icons/central/IconArrowRight';
 
 export interface SessionPreviewDetails {
   factoryId: string;
@@ -130,7 +130,7 @@ function SessionOwner({ owner, previousOwner }: { owner: SessionOwnerDetails; pr
             <span className="flex opacity-50">
               <Avatar src={previousOwner.avatarUrl} name={previousOwner.name} size="inline" />
             </span>
-            <ArrowRight className="text-placeholder size-2.5" />
+            <IconArrowRight className="text-placeholder size-2.5" />
           </span>
         </>
       )}

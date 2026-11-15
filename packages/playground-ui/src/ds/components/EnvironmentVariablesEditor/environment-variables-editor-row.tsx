@@ -1,10 +1,11 @@
-import { EyeIcon, EyeOffIcon, TrashIcon } from 'lucide-react';
-
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorRowProps } from './environment-variables-editor.types';
 import { Button } from '@/ds/components/Button';
 import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconEyeSlash } from '@/ds/icons/central/IconEyeSlash';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '@/lib/env-file';
 import { cn } from '@/lib/utils';
 
@@ -84,7 +85,7 @@ export function EnvironmentVariablesEditorRow({
               tooltip={revealValueLabel}
               onClick={() => editor.toggleValueVisibility(index)}
             >
-              {editor.isValueRevealed(index) ? <EyeOffIcon aria-hidden /> : <EyeIcon aria-hidden />}
+              {editor.isValueRevealed(index) ? <IconEyeSlash aria-hidden /> : <IconEyeOpen aria-hidden />}
             </InputGroupButton>
           </InputGroupAddon>
         </InputGroup>
@@ -102,7 +103,7 @@ export function EnvironmentVariablesEditorRow({
             tooltip="Remove variable"
             onClick={() => editor.removeRow(index)}
           >
-            <TrashIcon />
+            <IconTrashCan />
           </Button>
         </div>
       )}

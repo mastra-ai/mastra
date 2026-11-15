@@ -1,5 +1,4 @@
 import { useTraceSpans } from '@mastra/react/hooks/traces';
-import { ListTreeIcon } from 'lucide-react';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { ReadOnlyToolCallProvider } from './read-only-tool-call-provider';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
@@ -7,6 +6,7 @@ import { MessageRow } from '@/domains/chat/messages/message-row';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 import { cn } from '@/utils/cn';
 
 export interface TraceThreadItemViewProps {
@@ -60,7 +60,7 @@ export function TraceThreadItemView({ traceId, onHighlightSpans, className }: Tr
                   aria-label="Highlight spans"
                   onClick={() => onHighlightSpans(message.traceSpanIds)}
                 >
-                  <ListTreeIcon />
+                  <IconCodeTree />
                 </Button>
               ) : undefined;
 

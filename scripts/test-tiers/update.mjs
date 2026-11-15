@@ -313,26 +313,106 @@ export const gitDiffFiles = (base, head, cwd) => {
     .filter(Boolean);
 };
 
-/** Failing test files in a unit job's log, as repo paths (same parsing as the E4 crawl). */
-export function failingFilesFromLog(log) {
+/**
+ * Failing test files in a unit job's log, as repo paths (same parsing as the E4 crawl).
+ * Vitest prints a project name, which is not always the package directory
+ * (unit:packages/core-isolated runs files from packages/core), so each file is
+ * resolved against the tracked test files and dropped when it matches none.
+ */
+export function failingFilesFromLog(log, tracked = repoTestFiles(), roots = repoProjectRoots()) {
+  const { known, bySuffix } = trackedIndex(tracked);
   const files = new Set();
+  const resolved = new Map();
+  const keep = file => {
+    if (known.has(file)) files.add(file);
+  };
   for (const raw of log.split('\n')) {
     const line = raw.replace(/\x1b\[[0-9;]*m/g, '');
     if (!/^[0-9TZ:.-]+ +FAIL /.test(line)) continue;
     let m = /\[ ([^\]]+\.(?:test|spec)\.[a-z]+) \]/.exec(line);
     if (m) {
-      files.add(m[1]);
+      keep(m[1]);
       continue;
     }
     m = /FAIL +(\S+) +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
     if (m) {
-      files.add(`${m[1].split(':').slice(1).join(':') || m[1]}/${m[2]}`);
+      const pair = `${m[1]}\0${m[2]}`;
+      if (!resolved.has(pair)) resolved.set(pair, projectFile(m[1], m[2], known, bySuffix, roots));
+      const file = resolved.get(pair);
+      if (file) files.add(file);
       continue;
     }
     m = /FAIL +(\S+\.(?:test|spec)\.[a-z]+)/.exec(line);
-    if (m) files.add(m[1]);
+    if (m) keep(m[1]);
   }
   return [...files].filter(f => TEST_FILE.test(f)).sort();
+}
+
+// The tracked file a project-relative path belongs to: under the directory of the
+// vitest config that names the project (unit:mastracode-core → mastracode/sdk), else
+// under the project name read as a directory, else the longest package directory the
+// name starts with (packages/core-isolated → packages/core). Only a project with no
+// known location (no config names it, and its name is not a path) falls back to the
+// only tracked file with that relative path, so a deleted file is never pinned on
+// another package that happens to share its relative path.
+function projectFile(name, rel, known, bySuffix, roots) {
+  for (const root of roots.get(name) ?? []) {
+    if (known.has(`${root}/${rel}`)) return `${root}/${rel}`;
+  }
+  const project = name.split(':').slice(1).join(':') || name;
+  if (known.has(`${project}/${rel}`)) return `${project}/${rel}`;
+  const matches = bySuffix.get(rel) ?? [];
+  const prefixed = matches
+    .filter(f => project.startsWith(f.slice(0, -rel.length - 1)))
+    .sort((a, b) => b.length - a.length);
+  if (prefixed.length) return prefixed[0];
+  if (roots.has(name) || project.includes('/')) return undefined;
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+// The tracked files as a set, and by every path tail after a "/" (src/a.test.ts →
+// [packages/core/src/a.test.ts, …]), built once per file list so a log with many
+// FAIL lines costs a lookup per line rather than a scan of every tracked file.
+const trackedIndexes = new WeakMap();
+function trackedIndex(tracked) {
+  let index = trackedIndexes.get(tracked);
+  if (index) return index;
+  const known = new Set(tracked);
+  const bySuffix = new Map();
+  for (const file of known) {
+    for (let i = file.indexOf('/'); i !== -1; i = file.indexOf('/', i + 1)) {
+      const tail = file.slice(i + 1);
+      if (!bySuffix.has(tail)) bySuffix.set(tail, []);
+      bySuffix.get(tail).push(file);
+    }
+  }
+  index = { known, bySuffix };
+  trackedIndexes.set(tracked, index);
+  return index;
+}
+
+/** Vitest project name → directories of the tracked configs that declare it. */
+export function projectRootsFromConfigs(configs) {
+  const roots = new Map();
+  for (const [file, source] of configs) {
+    const dir = path.posix.dirname(file);
+    for (const [, name] of source.matchAll(/\bname:\s*['"`]([^'"`$]+)['"`]/g)) {
+      if (!roots.has(name)) roots.set(name, []);
+      if (!roots.get(name).includes(dir)) roots.get(name).push(dir);
+    }
+  }
+  return roots;
+}
+
+let projectRoots;
+function repoProjectRoots() {
+  projectRoots ??= projectRootsFromConfigs(
+    execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+      .split('\n')
+      .filter(f => /(^|\/)vitest[^/]*\.config\.[cm]?[jt]s$/.test(f) && !f.includes('node_modules/'))
+      .map(f => [f, fs.readFileSync(f, 'utf8')]),
+  );
+  return projectRoots;
 }
 
 const runJobs = runId =>
@@ -364,10 +444,12 @@ function packageDir(file) {
   return parts.slice(0, 2).join('/');
 }
 
+let trackedTestFiles;
 function repoTestFiles() {
-  return execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
+  trackedTestFiles ??= execFileSync('git', ['ls-files'], { encoding: 'utf8', maxBuffer: 1 << 28 })
     .split('\n')
     .filter(f => TEST_FILE.test(f) && !f.includes('node_modules/'));
+  return trackedTestFiles;
 }
 
 function versioningCommand(tiers, { runId, date }) {

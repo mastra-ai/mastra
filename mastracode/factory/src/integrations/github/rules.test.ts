@@ -11,6 +11,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_GITHUB_EVENTS } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleItemContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
+import type { ExternalWorkItemSource } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { workItemBranch, workItemBranchSource } from '../../work-item-branch.js';
 import { KeptCards } from '../kept-cards.js';
@@ -5963,19 +5964,23 @@ describe('pull request cards on the Work board', () => {
     return { ...harness, service, dispatch, cards, decisions };
   }
 
-  async function authoredPullRequest(harness: Awaited<ReturnType<typeof workBoardHarness>>) {
+  /** `externalSource` is the card's own source; omit it for a card with no source of its own. */
+  async function authoredPullRequest(
+    harness: Awaited<ReturnType<typeof workBoardHarness>>,
+    externalSource: ExternalWorkItemSource | null = {
+      integrationId: 'github',
+      type: 'issue',
+      externalId: 'github:10:issue:42',
+      url: 'https://github.com/acme/repo/issues/42',
+    },
+  ) {
     const work = await harness.workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: harness.project.id,
       input: {
         board: 'work',
-        externalSource: {
-          integrationId: 'github',
-          type: 'issue',
-          externalId: 'github:10:issue:42',
-          url: 'https://github.com/acme/repo/issues/42',
-        },
+        ...(externalSource ? { externalSource } : {}),
         title: 'Issue 42',
         stages: ['execute'],
         sessions: {},
@@ -5993,6 +5998,93 @@ describe('pull request cards on the Work board', () => {
     await harness.dispatch();
     return { workId: work.item.id };
   }
+
+  // A card whose issue lives in another integration (Jira, Linear, incident.io) has no repository
+  // of its own, so it must be taken as-is: the authored pull request joins it, exactly as it already
+  // does on GitLab. Regression guard for #30358.
+  const cardsOutsideGithub: Array<[string, ExternalWorkItemSource]> = [
+    [
+      'github',
+      {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: 'github-issue:42',
+        url: 'https://github.com/acme/repo/issues/42',
+      },
+    ],
+    [
+      'jira',
+      {
+        integrationId: 'jira',
+        type: 'issue',
+        externalId: 'jira-issue:10001',
+        url: 'https://acme.atlassian.net/browse/ENG-1',
+      },
+    ],
+    [
+      'linear',
+      {
+        integrationId: 'linear',
+        type: 'issue',
+        externalId: 'linear-issue:abc',
+        url: 'https://linear.app/acme/issue/ENG-1/title',
+      },
+    ],
+    [
+      'incidentio',
+      {
+        integrationId: 'incidentio',
+        type: 'issue',
+        externalId: 'incidentio:42',
+        url: 'https://app.incident.io/incidents/42',
+      },
+    ],
+  ];
+
+  it.each(cardsOutsideGithub)(
+    'files an authored pull request on a %s card, wherever its issue lives',
+    async (_name, externalSource) => {
+      const harness = await workBoardHarness('read');
+      const { workId } = await authoredPullRequest(harness, externalSource);
+
+      // No second card, and the authoring card carries the pull request and enters PR review
+      // instead of being refused for having no pull request attached.
+      const cards = await harness.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards.find(entry => entry.id === workId)).toMatchObject({ board: 'work', stages: ['pr-review'] });
+      expect(cards.find(entry => entry.id === workId)?.workItem.sources.map(source => source.sourceType)).toEqual([
+        'issue',
+        'pull-request',
+      ]);
+    },
+  );
+
+  it('gives an authored pull request its own card when the authoring card has no source of its own', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId } = await authoredPullRequest(harness, null);
+
+    // A card with no source would become the pull request's only source; it never takes one.
+    const cards = await harness.cards();
+    expect(cards).toHaveLength(2);
+    expect(cards.find(entry => entry.id === workId)?.workItem.sources).toEqual([]);
+  });
+
+  it('keeps a GitHub pull request off a GitLab card', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId } = await authoredPullRequest(harness, {
+      integrationId: 'gitlab',
+      type: 'issue',
+      externalId: 'gitlab-issue:42',
+      url: 'https://gitlab.com/acme/repo/-/issues/42',
+    });
+
+    // A GitLab card keeps only merge requests; this GitHub pull request gets its own card.
+    const cards = await harness.cards();
+    expect(cards).toHaveLength(2);
+    expect(cards.find(entry => entry.id === workId)?.workItem.sources.map(source => source.sourceType)).toEqual([
+      'issue',
+    ]);
+  });
 
   async function lonePullRequestCard(
     harness: Awaited<ReturnType<typeof workBoardHarness>>,

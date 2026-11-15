@@ -1,11 +1,17 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EyeIcon, FileInputIcon, HashIcon, ListTreeIcon, PencilIcon, TagIcon, Trash2Icon } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from '../../icons/Icon';
 import { Button } from '../Button';
 import { Section } from '../Section';
 import { TextAndIcon } from '../Text';
 import { SideDialog } from './side-dialog';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
+import { IconFileArrowRightIn } from '@/ds/icons/central/IconFileArrowRightIn';
+import { IconHashtag } from '@/ds/icons/central/IconHashtag';
+import { IconPencil } from '@/ds/icons/central/IconPencil';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 
 const meta: Meta<typeof SideDialog> = {
   title: 'Layout/SideDialog',
@@ -68,7 +74,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> {item.id}
+            <IconHashtag /> {item.id}
           </TextAndIcon>
           |
           <SideDialog.Nav
@@ -78,13 +84,13 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
           <div className="ml-auto flex items-center gap-2">
             <Button size="sm">
               <Icon>
-                <PencilIcon />
+                <IconPencil />
               </Icon>
               Edit
             </Button>
             <Button size="sm">
               <Icon>
-                <Trash2Icon />
+                <IconTrashCan />
               </Icon>
               Delete
             </Button>
@@ -94,17 +100,17 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <EyeIcon /> {item.name}
+              <IconEyeOpen /> {item.name}
             </SideDialog.Heading>
             <TextAndIcon>
-              <HashIcon /> {item.id}
+              <IconHashtag /> {item.id}
             </TextAndIcon>
           </SideDialog.Header>
 
           <Section>
             <Section.Header>
               <Section.Heading>
-                <FileInputIcon /> Overview
+                <IconFileArrowRightIn /> Overview
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -117,7 +123,7 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
           <Section>
             <Section.Header>
               <Section.Heading>
-                <TagIcon /> Metadata
+                <IconTag /> Metadata
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -191,7 +197,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> item_a1b2c3
+            <IconHashtag /> item_a1b2c3
           </TextAndIcon>
           <div className="ml-auto">
             <Button size="sm" onClick={() => setIsLevel2Open(true)}>
@@ -203,17 +209,17 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <EyeIcon /> Refund request
+              <IconEyeOpen /> Refund request
             </SideDialog.Heading>
             <TextAndIcon>
-              <HashIcon /> level 1
+              <IconHashtag /> level 1
             </TextAndIcon>
           </SideDialog.Header>
 
           <Section>
             <Section.Header>
               <Section.Heading>
-                <FileInputIcon /> Overview
+                <IconFileArrowRightIn /> Overview
               </Section.Heading>
             </Section.Header>
             <div className="grid gap-2">
@@ -226,12 +232,12 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
           <Section>
             <Section.Header>
               <Section.Heading>
-                <ListTreeIcon /> Linked trace
+                <IconCodeTree /> Linked trace
               </Section.Heading>
             </Section.Header>
             <div className="flex items-center justify-between gap-4">
               <TextAndIcon>
-                <HashIcon /> trace_72f19
+                <IconHashtag /> trace_72f19
               </TextAndIcon>
               <Button size="sm" onClick={() => setIsLevel2Open(true)}>
                 Open
@@ -248,7 +254,7 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
           >
             <SideDialog.Top>
               <TextAndIcon>
-                <HashIcon /> trace_72f19
+                <IconHashtag /> trace_72f19
               </TextAndIcon>
               {depth === 3 && (
                 <div className="ml-auto">
@@ -262,10 +268,10 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
             <SideDialog.Content>
               <SideDialog.Header>
                 <SideDialog.Heading>
-                  <ListTreeIcon /> Retrieval trace
+                  <IconCodeTree /> Retrieval trace
                 </SideDialog.Heading>
                 <TextAndIcon>
-                  <HashIcon /> level 2
+                  <IconHashtag /> level 2
                 </TextAndIcon>
               </SideDialog.Header>
 
@@ -284,12 +290,12 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                 <Section>
                   <Section.Header>
                     <Section.Heading>
-                      <TagIcon /> Span payload
+                      <IconTag /> Span payload
                     </Section.Heading>
                   </Section.Header>
                   <div className="flex items-center justify-between gap-4">
                     <TextAndIcon>
-                      <HashIcon /> span_embed_query
+                      <IconHashtag /> span_embed_query
                     </TextAndIcon>
                     <Button size="sm" onClick={() => setIsLevel3Open(true)}>
                       Open
@@ -308,17 +314,17 @@ const NestedLevelsDemo = ({ depth }: { depth: 2 | 3 }) => {
                 >
                   <SideDialog.Top>
                     <TextAndIcon>
-                      <HashIcon /> span_embed_query
+                      <IconHashtag /> span_embed_query
                     </TextAndIcon>
                   </SideDialog.Top>
 
                   <SideDialog.Content>
                     <SideDialog.Header>
                       <SideDialog.Heading>
-                        <TagIcon /> Embedding query payload
+                        <IconTag /> Embedding query payload
                       </SideDialog.Heading>
                       <TextAndIcon>
-                        <HashIcon /> level 3
+                        <IconHashtag /> level 3
                       </TextAndIcon>
                     </SideDialog.Header>
 
@@ -369,14 +375,14 @@ const SideDialogWithCodeDemo = () => {
       >
         <SideDialog.Top>
           <TextAndIcon>
-            <HashIcon /> customer-support
+            <IconHashtag /> customer-support
           </TextAndIcon>
         </SideDialog.Top>
 
         <SideDialog.Content>
           <SideDialog.Header>
             <SideDialog.Heading>
-              <ListTreeIcon /> Customer Support Agent
+              <IconCodeTree /> Customer Support Agent
             </SideDialog.Heading>
           </SideDialog.Header>
 

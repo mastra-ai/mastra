@@ -1,5 +1,4 @@
 import { useAgentPlan } from '@mastra/react/hooks/agents';
-import { Check, MessageSquareText, X } from 'lucide-react';
 import { useState } from 'react';
 import type { MessageMetadata } from '@/domains/chat';
 import { useToolCall } from '@/domains/chat/context/tool-call-context';
@@ -22,6 +21,9 @@ import { Button } from '@/ds/components/Button';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Textarea } from '@/ds/components/Textarea';
 import { Txt } from '@/ds/components/Txt';
+import { IconBubbleText } from '@/ds/icons/central/IconBubbleText';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
 
 export interface SubmitPlanToolProps {
   /** Omitted for read-only history (e.g. traces): submitted plans still render, pending ones can't be answered. */
@@ -206,7 +208,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
             {isRequestingChanges ? null : (
               <div data-slot="plan-decisions" className="ml-auto flex flex-wrap items-center justify-end gap-2">
                 <Button
-                  icon={<X />}
+                  icon={<IconCrossMedium />}
                   type="button"
                   size="sm"
                   variant="ghost"
@@ -218,7 +220,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                   Reject
                 </Button>
                 <Button
-                  icon={<MessageSquareText />}
+                  icon={<IconBubbleText />}
                   type="button"
                   size="sm"
                   variant="ghost"
@@ -230,7 +232,7 @@ function PendingPlanCard({ agentId, agentVersionId, requestContext, toolCallId, 
                   Request changes
                 </Button>
                 <Button
-                  icon={<Check />}
+                  icon={<IconCheckmark1 />}
                   type="button"
                   size="sm"
                   variant="primary"

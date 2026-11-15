@@ -1,19 +1,15 @@
-import {
-  CalendarClock,
-  Clock,
-  CornerDownRight,
-  GitBranch,
-  Layers,
-  List,
-  Network,
-  PlayCircle,
-  RefreshCw,
-  Repeat,
-  Repeat1,
-  Timer,
-  Workflow,
-} from 'lucide-react';
+import { Network, Repeat1, Workflow } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { IconArrowCornerDownRight } from '@/ds/icons/central/IconArrowCornerDownRight';
+import { IconArrowRotateClockwise } from '@/ds/icons/central/IconArrowRotateClockwise';
+import { IconArrowsRepeat } from '@/ds/icons/central/IconArrowsRepeat';
+import { IconBranch } from '@/ds/icons/central/IconBranch';
+import { IconCalendarClock } from '@/ds/icons/central/IconCalendarClock';
+import { IconClock } from '@/ds/icons/central/IconClock';
+import { IconLayersTwo } from '@/ds/icons/central/IconLayersTwo';
+import { IconListBullets } from '@/ds/icons/central/IconListBullets';
+import { IconPlayCircle } from '@/ds/icons/central/IconPlayCircle';
+import { IconStopwatch } from '@/ds/icons/central/IconStopwatch';
 
 export const BADGE_COLORS = {
   sleep: 'var(--badge-purple-indicator)',
@@ -33,21 +29,21 @@ export const BADGE_COLORS = {
 } as const;
 
 export const BADGE_ICONS = {
-  sleep: Timer,
-  sleepUntil: CalendarClock,
-  forEach: List,
-  map: List,
+  sleep: IconStopwatch,
+  sleepUntil: IconCalendarClock,
+  forEach: IconListBullets,
+  map: IconListBullets,
   parallel: Workflow,
-  suspend: PlayCircle,
-  after: Clock,
-  workflow: Layers,
+  suspend: IconPlayCircle,
+  after: IconClock,
+  workflow: IconLayersTwo,
   when: Network,
   dountil: Repeat1,
-  dowhile: Repeat,
-  until: Timer,
-  while: RefreshCw,
-  if: GitBranch,
-  else: CornerDownRight,
+  dowhile: IconArrowsRepeat,
+  until: IconStopwatch,
+  while: IconArrowRotateClockwise,
+  if: IconBranch,
+  else: IconArrowCornerDownRight,
 } as const;
 
 export interface ConditionIconConfig {

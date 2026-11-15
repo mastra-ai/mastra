@@ -1,13 +1,15 @@
-import { GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react';
+import { GitPullRequestDraft } from 'lucide-react';
 import type { ComponentProps } from 'react';
+import { IconPullRequest } from '@/ds/icons/central/IconPullRequest';
+import { IconPullRequestClosedSimple } from '@/ds/icons/central/IconPullRequestClosedSimple';
 import { cn } from '@/lib/utils';
 import './pull-request-icon.css';
 
 const statuses = {
   draft: { icon: GitPullRequestDraft, className: 'text-muted-foreground!' },
-  open: { icon: GitPullRequest, className: 'text-success-indicator!' },
-  closed: { icon: GitPullRequestClosed, className: 'text-destructive-foreground!' },
-  merged: { icon: GitPullRequest, className: 'pull-request-icon-merged' },
+  open: { icon: IconPullRequest, className: 'text-success-indicator!' },
+  closed: { icon: IconPullRequestClosedSimple, className: 'text-destructive-foreground!' },
+  merged: { icon: IconPullRequest, className: 'pull-request-icon-merged' },
 };
 
 export interface PullRequestIconProps extends ComponentProps<'svg'> {

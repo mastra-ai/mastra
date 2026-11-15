@@ -15,15 +15,19 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconArrowInbox } from '@mastra/playground-ui/icons/central/IconArrowInbox';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconPackage } from '@mastra/playground-ui/icons/central/IconPackage';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
+
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, Download, ExternalLink, Loader2, Package } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-
 import {
   useBuilderRegistryPreview,
   useInstallBuilderRegistrySkill,
@@ -201,7 +205,7 @@ export function BuilderAddSkillDialog({
                   </div>
                 ) : displaySkills.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-5 text-muted-foreground">
-                    <Package className="mb-2 h-8 w-8" />
+                    <IconPackage className="mb-2 h-8 w-8" />
                     <Txt>{hasSearchResults ? 'No skills found' : 'No skills available'}</Txt>
                   </div>
                 ) : (
@@ -232,7 +236,7 @@ export function BuilderAddSkillDialog({
                                     variant="meta"
                                     className="inline-flex items-center gap-1 rounded bg-info-subtle px-1.5 py-0.5 text-info-subtle-foreground"
                                   >
-                                    <Check className="h-2.5 w-2.5" />
+                                    <IconCheckmark1 className="h-2.5 w-2.5" />
                                     Installed
                                   </Txt>
                                 )}
@@ -242,7 +246,7 @@ export function BuilderAddSkillDialog({
                               </Txt>
                             </div>
                             <div className="flex shrink-0 items-center gap-1 text-muted-foreground">
-                              <Download className="h-3 w-3" />
+                              <IconArrowInbox className="h-3 w-3" />
                               <Txt as="span" variant="caption">
                                 {skill.installs.toLocaleString()}
                               </Txt>
@@ -259,7 +263,7 @@ export function BuilderAddSkillDialog({
             <div className="flex min-h-0 w-1/2 flex-col overflow-hidden rounded-lg border border-border">
               {!selectedSkill ? (
                 <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-                  <Package className="mb-2 h-8 w-8" />
+                  <IconPackage className="mb-2 h-8 w-8" />
                   <Txt>Select a skill to preview</Txt>
                 </div>
               ) : (
@@ -281,7 +285,7 @@ export function BuilderAddSkillDialog({
                             </Txt>
                           </span>
                           <span className="flex items-center gap-1">
-                            <Download className="h-3 w-3" />
+                            <IconArrowInbox className="h-3 w-3" />
                             <Txt as="span" variant="caption" className="block">
                               {selectedSkill.installs.toLocaleString()} installs
                             </Txt>
@@ -296,7 +300,7 @@ export function BuilderAddSkillDialog({
                           className={cn(quietTextHover, controlStateColorTransition)}
                           title="View on GitHub"
                         >
-                          <ExternalLink className="h-4 w-4" />
+                          <IconSquareArrowTopRight className="h-4 w-4" />
                         </a>
                       )}
                     </div>
@@ -314,7 +318,7 @@ export function BuilderAddSkillDialog({
                     </ScrollArea>
                   ) : (
                     <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-                      <Package className="mb-2 h-8 w-8" />
+                      <IconPackage className="mb-2 h-8 w-8" />
                       <Txt>Preview unavailable</Txt>
                     </div>
                   )}

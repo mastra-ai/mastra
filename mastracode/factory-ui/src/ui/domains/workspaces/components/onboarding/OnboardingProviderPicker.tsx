@@ -5,7 +5,9 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronsUpDown, Plug, Plus } from 'lucide-react';
+import { IconChevronGrabberVertical } from '@mastra/playground-ui/icons/central/IconChevronGrabberVertical';
+import { IconPlugin1 } from '@mastra/playground-ui/icons/central/IconPlugin1';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { useState } from 'react';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -94,7 +96,7 @@ export function OnboardingProviderPicker({
               connectedProvider ? (
                 <ProviderBrandIcon provider={connectedProvider.provider} />
               ) : (
-                <Plug aria-hidden="true" />
+                <IconPlugin1 aria-hidden="true" />
               )
             }
             title={connectedProvider ? providerDisplayName(connectedProvider.provider) : 'Choose a provider'}
@@ -110,7 +112,7 @@ export function OnboardingProviderPicker({
             }
           />
           <span className="text-muted-foreground flex h-5 shrink-0 items-center [&_svg]:size-4">
-            <ChevronsUpDown aria-hidden="true" />
+            <IconChevronGrabberVertical aria-hidden="true" />
           </span>
         </PopoverTrigger>
         <PopoverContent
@@ -150,7 +152,7 @@ export function OnboardingProviderPicker({
           />
           {shownTab === 'api_key' && (
             <OnboardingProviderOption
-              icon={<Plus aria-hidden="true" />}
+              icon={<IconPlusLarge aria-hidden="true" />}
               title="Add a custom provider"
               // A sign-in still starting would open its dialog over this one.
               disabled={connection.pending}

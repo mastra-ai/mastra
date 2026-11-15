@@ -1,8 +1,9 @@
 import { Checkbox as CheckboxPrimitive } from '@base-ui/react/checkbox';
-import { Check, Minus } from 'lucide-react';
 import * as React from 'react';
 
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconMinusLarge } from '@/ds/icons/central/IconMinusLarge';
 import { selectionControlStyle } from '@/ds/primitives/selection-control';
 import { cn } from '@/lib/utils';
 
@@ -74,7 +75,7 @@ Checkbox.displayName = 'Checkbox';
 function CheckboxIndicatorIcon() {
   return (
     <>
-      <Check
+      <IconCheckmark1
         className={cn(
           'stroke-3.25 size-3 scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
           // Lucide's check path is ~22.6 units long. Use a longer dash so the
@@ -85,7 +86,7 @@ function CheckboxIndicatorIcon() {
           'group-data-[indeterminate]/checkbox-indicator:hidden',
         )}
       />
-      <Minus
+      <IconMinusLarge
         className={cn(
           'stroke-3.25 hidden size-3 scale-95 transition-transform duration-200 ease-out-custom',
           'group-data-[indeterminate]/checkbox-indicator:block',

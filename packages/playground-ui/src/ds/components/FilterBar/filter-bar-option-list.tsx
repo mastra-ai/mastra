@@ -1,9 +1,9 @@
-import { CheckIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { cn } from '@/lib/utils';
 
@@ -88,10 +88,10 @@ export function FilterBarOptionList<T>({
                 <span className={comboboxStyles.itemRightSlot}>
                   <span className={comboboxStyles.checkContainer}>
                     {isSelected ? (
-                      selected && <CheckIcon className={comboboxStyles.checkIcon} />
+                      selected && <IconCheckmark1 className={comboboxStyles.checkIcon} />
                     ) : (
                       <ComboboxPrimitive.ItemIndicator>
-                        <CheckIcon className={comboboxStyles.checkIcon} />
+                        <IconCheckmark1 className={comboboxStyles.checkIcon} />
                       </ComboboxPrimitive.ItemIndicator>
                     )}
                   </span>

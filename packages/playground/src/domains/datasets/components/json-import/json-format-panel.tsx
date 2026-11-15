@@ -4,8 +4,10 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconSquareArrowTopRight } from '@mastra/playground-ui/icons/central/IconSquareArrowTopRight';
+import { IconSquareBehindSquare1 } from '@mastra/playground-ui/icons/central/IconSquareBehindSquare1';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { ExternalLinkIcon, Check, Copy } from 'lucide-react';
 
 const DOCS_URL = 'https://mastra.ai/docs/evals/datasets';
 
@@ -61,7 +63,12 @@ export function JSONFormatPanel() {
           <Txt as="span" variant="meta" tone="muted" font="mono">
             example.json
           </Txt>
-          <Button icon={isCopied ? <Check /> : <Copy />} variant="ghost" size="sm" onClick={handleCopy}>
+          <Button
+            icon={isCopied ? <IconCheckmark1 /> : <IconSquareBehindSquare1 />}
+            variant="ghost"
+            size="sm"
+            onClick={handleCopy}
+          >
             {isCopied ? 'Copied' : 'Copy'}
           </Button>
         </div>
@@ -81,7 +88,7 @@ export function JSONFormatPanel() {
         render={<a href={DOCS_URL} target="_blank" rel="noopener noreferrer" />}
 
         className="self-start"
-        icon={<ExternalLinkIcon />}
+        icon={<IconSquareArrowTopRight />}
       >
         Datasets documentation
       </Button>

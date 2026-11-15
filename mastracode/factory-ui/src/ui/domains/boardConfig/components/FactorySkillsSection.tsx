@@ -7,7 +7,6 @@ import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRende
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
-import { Code as CodeIcon, FileText, Pencil } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -15,6 +14,9 @@ import { useFactorySkillsQuery } from '../../../../hooks/useFactorySkills';
 import type { FactorySkillInfo, InstalledBoardInfo } from '../../../../api/types';
 import { orderedBoards } from '../../factory/boardCatalog';
 import { FactorySkillEditorDialog } from '../../settings/components/FactorySkillEditorDialog';
+import { IconCode } from '@mastra/playground-ui/icons/central/IconCode';
+import { IconFileText } from '@mastra/playground-ui/icons/central/IconFileText';
+import { IconPencil } from '@mastra/playground-ui/icons/central/IconPencil';
 
 /** Skills some board's settings already show: the ones its phases run. None while the boards are unknown. */
 function boardSkillNames(boards: InstalledBoardInfo[] | undefined): Set<string> {
@@ -41,7 +43,7 @@ function SkillContent({ content }: { content: string }) {
         onClick={() => setRaw(shown => !shown)}
         className="absolute top-1 right-4 opacity-0 transition-opacity group-hover/content:opacity-100 focus-visible:opacity-100"
       >
-        {raw ? <FileText /> : <CodeIcon />}
+        {raw ? <IconFileText /> : <IconCode />}
       </Button>
     </div>
   );
@@ -81,7 +83,7 @@ function SkillCard({ skill, factoryId, canEdit }: { skill: FactorySkillInfo; fac
           </CollapsibleTrigger>
           <Button
             size="sm"
-            icon={editable ? <Pencil /> : <FileText />}
+            icon={editable ? <IconPencil /> : <IconFileText />}
             aria-label={`${editable ? 'Edit' : 'View'} ${skill.name}`}
             onClick={() => setEditing(true)}
           >

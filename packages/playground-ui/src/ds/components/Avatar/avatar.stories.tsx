@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { CheckIcon } from 'lucide-react';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Avatar } from './Avatar';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
 import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -80,7 +80,7 @@ export const BadgeWithIcon: Story = {
       <Avatar.Image src={people.sam.src} alt={people.sam.name} />
       <Avatar.Fallback>{people.sam.initials}</Avatar.Fallback>
       <Avatar.Badge tone="success">
-        <CheckIcon />
+        <IconCheckmark1 />
       </Avatar.Badge>
     </Avatar>
   ),

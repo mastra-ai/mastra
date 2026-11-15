@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { EyeIcon, LogsIcon } from 'lucide-react';
+import { LogsIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { fn } from 'storybook/test';
@@ -18,6 +18,7 @@ import {
 import { MetricsLineChart } from './metrics-line-chart';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
+import { IconEyeOpen } from '@/ds/icons/central/IconEyeOpen';
 
 // Input and output tokens share a scale, so neither line is flattened against the axis.
 const data: Record<string, unknown>[] = [
@@ -104,7 +105,7 @@ function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
         />
         <MetricsCard.Actions>
           <Button variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
-            <EyeIcon />
+            <IconEyeOpen />
           </Button>
           <Button variant="ghost" size="icon-md" tooltip="View errors in logs" aria-label="View errors in logs">
             <LogsIcon />

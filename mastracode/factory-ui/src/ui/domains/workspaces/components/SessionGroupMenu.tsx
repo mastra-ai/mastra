@@ -3,12 +3,14 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { menuItemCheckClass, menuItemClass } from '@mastra/playground-ui/primitives/menu-item';
 import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check, GripVertical, LayoutGrid } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 
 import { SESSION_GROUP_BY_LABELS } from '../services/sessionGroups';
 import type { SessionGroupBy, SessionGroupHeading } from '../services/sessionGroups';
 import { SESSION_GROUP_MENU_OPTIONS } from './sessionPropertyOptions';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconDotGrid2x3 } from '@mastra/playground-ui/icons/central/IconDotGrid2x3';
+import { IconLayoutGrid1 } from '@mastra/playground-ui/icons/central/IconLayoutGrid1';
 
 const MOVE_STEP_BY_KEY: Record<string, -1 | 1> = { ArrowUp: -1, ArrowDown: 1 };
 
@@ -18,13 +20,13 @@ function GroupDragPreview({ label, visible }: { label: string; visible: boolean 
   return (
     <div className={cn(overlaySurfaceStyle, 'text-foreground/90 flex items-center rounded-lg')}>
       <span className={cn(DRAG_HANDLE_CLASS, 'cursor-grabbing')}>
-        <GripVertical size={14} aria-hidden />
+        <IconDotGrid2x3 size={14} aria-hidden />
       </span>
       <div className={cn(menuItemClass, 'flex-1')}>
         <span>{label}</span>
         {visible && (
           <span className={menuItemCheckClass}>
-            <Check aria-hidden />
+            <IconCheckmark1 aria-hidden />
           </span>
         )}
       </div>
@@ -64,13 +66,13 @@ export function SessionGroupMenu({
   return (
     <DropdownMenu.Sub>
       <DropdownMenu.SubTrigger hint={SESSION_GROUP_BY_LABELS[groupBy]}>
-        <LayoutGrid aria-hidden />
+        <IconLayoutGrid1 aria-hidden />
         <span>Group</span>
       </DropdownMenu.SubTrigger>
       <DropdownMenu.SubContent>
         <DropdownMenu.RadioSub
           label="Group by"
-          icon={<LayoutGrid aria-hidden />}
+          icon={<IconLayoutGrid1 aria-hidden />}
           options={SESSION_GROUP_MENU_OPTIONS}
           value={groupBy}
           onValueChange={onGroupByChange}
@@ -95,7 +97,7 @@ export function SessionGroupMenu({
                         onClick={event => event.stopPropagation()}
                         onPointerDown={event => event.stopPropagation()}
                       >
-                        <GripVertical size={14} aria-hidden />
+                        <IconDotGrid2x3 size={14} aria-hidden />
                       </span>
                       <DropdownMenu.CheckboxItem
                         className="flex-1"

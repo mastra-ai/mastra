@@ -207,6 +207,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
             className,
           )}
         >
+
           <VisuallyHidden asChild>
             <DrawerTitle>Navigation</DrawerTitle>
           </VisuallyHidden>

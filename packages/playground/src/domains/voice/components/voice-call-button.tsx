@@ -1,5 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Loader2, Phone, PhoneOff } from 'lucide-react';
+import { IconCall } from '@mastra/playground-ui/icons/central/IconCall';
+import { IconCallCancel } from '@mastra/playground-ui/icons/central/IconCallCancel';
+import { Loader2 } from 'lucide-react';
 import type { VoiceCallControls } from '../types';
 
 export interface VoiceCallButtonProps {
@@ -21,7 +23,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
         data-testid="voice-call-button"
         onClick={() => voiceCall.start()}
       >
-        <Phone />
+        <IconCall />
       </Button>
     );
   }
@@ -43,7 +45,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
       data-testid="voice-call-button"
       onClick={() => voiceCall.stop()}
     >
-      <PhoneOff />
+      <IconCallCancel />
     </Button>
   );
 };

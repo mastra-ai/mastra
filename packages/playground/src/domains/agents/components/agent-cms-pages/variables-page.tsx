@@ -1,11 +1,11 @@
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
-import { Plus, PlusIcon } from 'lucide-react';
 import { useCallback, useMemo } from 'react';
-import { useWatch } from 'react-hook-form';
 
+import { useWatch } from 'react-hook-form';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 
 function RecursiveFieldRenderer({
@@ -42,7 +42,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <PlusIcon className="mr-1 h-3 w-3" />
+            <IconPlusLarge className="mr-1 h-3 w-3" />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -79,7 +79,7 @@ export function VariablesPage() {
 
             <div className="p-2">
               <JSONSchemaForm.AddField>
-                <Plus />
+                <IconPlusLarge />
                 Add variable
               </JSONSchemaForm.AddField>
             </div>

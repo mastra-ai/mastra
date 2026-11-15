@@ -1,4 +1,3 @@
-import { Check, ShieldCheck, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Activity, ActivityContent, ActivityHeader, ActivityIcon, ActivityTrigger } from '../activity';
@@ -7,13 +6,16 @@ import { Badge } from '@/ds/components/Badge';
 import type { BadgeVariant } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
+import { IconCheckmark1 } from '@/ds/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconShieldCheck } from '@/ds/icons/central/IconShieldCheck';
 
 type ToolApprovalDecision = 'approved' | 'declined';
 
 const approvalStates = {
-  pending: { label: 'Approval required', variant: 'warning', icon: ShieldCheck },
-  approved: { label: 'Approved', variant: 'success', icon: Check },
-  declined: { label: 'Declined', variant: 'neutral', icon: X },
+  pending: { label: 'Approval required', variant: 'warning', icon: IconShieldCheck },
+  approved: { label: 'Approved', variant: 'success', icon: IconCheckmark1 },
+  declined: { label: 'Declined', variant: 'neutral', icon: IconCrossMedium },
 } satisfies Record<'pending' | ToolApprovalDecision, { label: string; variant: BadgeVariant; icon: LucideIcon }>;
 
 export interface ToolApprovalStatusProps {
@@ -52,7 +54,7 @@ export function ToolApprovalActions({
         type="button"
         variant="primary"
         size="sm"
-        icon={<Check aria-hidden />}
+        icon={<IconCheckmark1 aria-hidden />}
         aria-label={toolName ? `Approve ${toolName}` : undefined}
         autoFocus={autoFocus}
         disabled={disabled}
@@ -63,7 +65,7 @@ export function ToolApprovalActions({
       <Button
         type="button"
         size="sm"
-        icon={<X aria-hidden />}
+        icon={<IconCrossMedium aria-hidden />}
         aria-label={toolName ? `Decline ${toolName}` : undefined}
         disabled={disabled}
         onClick={onDecline}

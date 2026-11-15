@@ -1,7 +1,8 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsItem } from '@mastra/playground-ui/new/settings';
-import { Link2, Trash2 } from 'lucide-react';
+import { IconChainLink1 } from '@mastra/playground-ui/icons/central/IconChainLink1';
+import { IconTrashCan } from '@mastra/playground-ui/icons/central/IconTrashCan';
 
 import { useApiConfig } from '../../../../api/config';
 import { connectLinear } from '../../factory/services/linear';
@@ -46,13 +47,13 @@ export function DisconnectedLinearWorkspaces({
                 </span>
               }
             >
-              <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectLinear(baseUrl)}>
+              <Button size="sm" variant="ghost" icon={<IconChainLink1 />} onClick={() => connectLinear(baseUrl)}>
                 Reconnect
               </Button>
               <Button
                 size="sm"
                 variant="ghost"
-                icon={<Trash2 />}
+                icon={<IconTrashCan />}
                 aria-label={`Remove ${name}`}
                 onClick={() => onRemove(workspace.sourceIds)}
               >

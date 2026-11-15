@@ -1,12 +1,12 @@
 import { DisabledFeatureButton } from '@mastra/playground-ui/components/DisabledFeatureButton';
 import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCalendarClock } from '@mastra/playground-ui/icons/central/IconCalendarClock';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useSchedules } from '@mastra/react/hooks/schedules';
-import { CalendarClockIcon } from 'lucide-react';
 
 export type WorkflowPageTab = 'graph' | 'traces' | 'schedules';
 
@@ -56,7 +56,7 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
           {!schedulesDisabled && (
             <WorkflowTab
               value="schedules"
-              icon={<CalendarClockIcon />}
+              icon={<IconCalendarClock />}
               label={scheduleCount > 0 ? `Schedules (${scheduleCount})` : 'Schedules'}
             />
           )}
@@ -78,7 +78,7 @@ export function WorkflowPageTabs({ workflowId, activeTab, showObservability = fa
           )}
           {schedulesDisabled && (
             <DisabledFeatureButton
-              icon={<CalendarClockIcon />}
+              icon={<IconCalendarClock />}
               label="Schedules"
               tooltipContent="Configure a schedule on this workflow to enable Schedules."
               docsHref="https://mastra.ai/docs/workflows/scheduled-workflows"

@@ -1,6 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { BrainIcon, WorkflowIcon, UserIcon, TagIcon } from 'lucide-react';
+import { WorkflowIcon } from 'lucide-react';
 import { KeyValueList } from './key-value-list';
+import { IconBrain } from '@/ds/icons/central/IconBrain';
+import { IconTag } from '@/ds/icons/central/IconTag';
+import { IconUser } from '@/ds/icons/central/IconUser';
 
 const meta: Meta<typeof KeyValueList> = {
   title: 'Elements/KeyValueList',
@@ -26,13 +29,13 @@ const sampleData = [
     key: 'tools',
     label: 'Tools',
     value: '3 tools',
-    icon: <BrainIcon />,
+    icon: <IconBrain />,
   },
   {
     key: 'agents',
     label: 'Agents',
     value: '2 agents',
-    icon: <UserIcon />,
+    icon: <IconUser />,
   },
   {
     key: 'workflows',
@@ -44,7 +47,7 @@ const sampleData = [
     key: 'tags',
     label: 'Tags',
     value: 'AI, Automation, Productivity',
-    icon: <TagIcon />,
+    icon: <IconTag />,
   },
 ];
 
@@ -57,7 +60,7 @@ const complexData = [
       { id: '2', name: 'File System', path: '/tools/file-system' },
       { id: '3', name: 'Database', path: '/tools/database' },
     ],
-    icon: <BrainIcon />,
+    icon: <IconBrain />,
   },
   {
     key: 'agents',
@@ -66,7 +69,7 @@ const complexData = [
       { id: '1', name: 'Research Agent', path: '/agents/research' },
       { id: '2', name: 'Writing Agent', path: '/agents/writing' },
     ],
-    icon: <UserIcon />,
+    icon: <IconUser />,
   },
   {
     key: 'workflows',
@@ -94,7 +97,7 @@ const dataWithDescriptions = [
         description: 'Reads and writes files in the local workspace.',
       },
     ],
-    icon: <BrainIcon />,
+    icon: <IconBrain />,
   },
   {
     key: 'agents',
@@ -107,7 +110,7 @@ const dataWithDescriptions = [
         description: 'Gathers and summarizes information from multiple sources.',
       },
     ],
-    icon: <UserIcon />,
+    icon: <IconUser />,
   },
 ];
 
@@ -116,13 +119,13 @@ const emptyData = [
     key: 'tools',
     label: 'Tools',
     value: '',
-    icon: <BrainIcon />,
+    icon: <IconBrain />,
   },
   {
     key: 'agents',
     label: 'Agents',
     value: null,
-    icon: <UserIcon />,
+    icon: <IconUser />,
   },
 ];
 

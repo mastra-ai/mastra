@@ -3,7 +3,9 @@ import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { BrowserToolCallEntry } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
-import { Check, X, Loader2 } from 'lucide-react';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
@@ -147,8 +149,8 @@ function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
     case 'pending':
       return <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />;
     case 'complete':
-      return <Check className="h-3 w-3 shrink-0 text-success-indicator" />;
+      return <IconCheckmark1 className="h-3 w-3 shrink-0 text-success-indicator" />;
     case 'error':
-      return <X className="h-3 w-3 shrink-0 text-destructive-foreground" />;
+      return <IconCrossMedium className="h-3 w-3 shrink-0 text-destructive-foreground" />;
   }
 }

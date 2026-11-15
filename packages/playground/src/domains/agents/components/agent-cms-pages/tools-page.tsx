@@ -5,6 +5,8 @@ import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/c
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCrossMedium } from '@mastra/playground-ui/icons/central/IconCrossMedium';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
@@ -13,10 +15,9 @@ import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useTools } from '@mastra/react/hooks/tools';
-import { PlusIcon, XIcon } from 'lucide-react';
+
 import { useCallback, useMemo } from 'react';
 import { useWatch } from 'react-hook-form';
-
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { getEditorOwnership } from '../../utils/editor-ownership';
 import { DisplayConditionsDialog } from '@/domains/cms';
@@ -190,7 +191,7 @@ export function ToolsPage() {
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="xs">
-              <XIcon />
+              <IconCrossMedium />
             </Icon>
           </button>
         )}
@@ -224,7 +225,7 @@ export function ToolsPage() {
             {canEditToolMembership && unselectedOptions.length > 0 && (
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="ghost" size="sm" icon={<PlusIcon />}>
+                  <Button variant="ghost" size="sm" icon={<IconPlusLarge />}>
                     Add tools
                   </Button>
                 </PopoverTrigger>

@@ -1,6 +1,8 @@
 import { version } from '@mastra/core/package.json';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconTag } from '@mastra/playground-ui/icons/central/IconTag';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import {
   useTemplateRepo,
@@ -11,7 +13,7 @@ import {
   useGetTemplateInstallRun,
   useObserveStreamTemplateInstall,
 } from '@mastra/react/hooks/templates';
-import { BrainIcon, TagIcon, WorkflowIcon } from 'lucide-react';
+import { WorkflowIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -204,13 +206,13 @@ export default function Template() {
       key: 'providers',
       label: 'Providers',
       value: template?.supportedProviders?.length ? template.supportedProviders.join(', ') : 'n/a',
-      icon: <BrainIcon />,
+      icon: <IconBrain />,
     },
     {
       key: 'tags',
       label: 'Tags',
       value: template?.tags?.length ? template.tags.join(', ') : 'n/a',
-      icon: <TagIcon />,
+      icon: <IconTag />,
     },
   ];
 

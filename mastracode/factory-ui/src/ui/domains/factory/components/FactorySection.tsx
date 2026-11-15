@@ -1,6 +1,5 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Brain, Plus, Settings2, SquareKanban } from 'lucide-react';
 import type { ComponentType, ReactNode } from 'react';
 import { NavLink, useLocation, useParams, useResolvedPath } from 'react-router';
 
@@ -13,6 +12,10 @@ import { rememberedBoardPath } from '../services/boardViews';
 import { useOverlays } from '../../../lib/overlays';
 import { SidebarEmptyNote, SidebarLoadError } from '../../../ui/LoadErrorState';
 import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
+import { IconBrain } from '@mastra/playground-ui/icons/central/IconBrain';
+import { IconKanbanView } from '@mastra/playground-ui/icons/central/IconKanbanView';
+import { IconPlusLarge } from '@mastra/playground-ui/icons/central/IconPlusLarge';
+import { IconSettingsSliderHor } from '@mastra/playground-ui/icons/central/IconSettingsSliderHor';
 
 export function FactorySection() {
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -48,7 +51,7 @@ export function FactorySection() {
                   <NavLink to={boardConfigPath(factoryId, configured.id)} onClick={() => overlays.close('sidebar')} />
                 }
               >
-                <Settings2 aria-hidden />
+                <IconSettingsSliderHor aria-hidden />
               </Button>
             )
           }
@@ -75,7 +78,7 @@ export function FactorySection() {
               <FactoryLink
                 key={board.id}
                 to={rememberedBoardPath(factoryId, board.id)}
-                icon={SquareKanban}
+                icon={IconKanbanView}
                 label={board.title}
                 action={
                   <Button
@@ -88,18 +91,18 @@ export function FactorySection() {
                       <NavLink to={boardConfigPath(factoryId, board.id)} onClick={() => overlays.close('sidebar')} />
                     }
                   >
-                    <Settings2 aria-hidden />
+                    <IconSettingsSliderHor aria-hidden />
                   </Button>
                 }
               />
             ))
           )}
-          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={Plus} label="New board" />}
+          {canAddBoard && <FactoryLink to={newBoardPath(factoryId)} icon={IconPlusLarge} label="New board" />}
         </Sidebar.NavList>
       </section>
       {features.data?.knowledge ? (
         <Sidebar.NavList>
-          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={Brain} label="Knowledge" />
+          <FactoryLink to={`/factories/${factoryId}/knowledge`} icon={IconBrain} label="Knowledge" />
         </Sidebar.NavList>
       ) : null}
     </nav>

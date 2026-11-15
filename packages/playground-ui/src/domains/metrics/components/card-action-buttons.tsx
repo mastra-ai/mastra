@@ -1,6 +1,8 @@
-import { ListTreeIcon, LogsIcon, MessagesSquareIcon } from 'lucide-react';
+import { LogsIcon } from 'lucide-react';
 import { MetricsCard, onCardHover } from '../../../ds/components/MetricsCard';
 import { TraceIcon } from '../../../ds/icons/TraceIcon';
+import { IconChatBubbles } from '@/ds/icons/central/IconChatBubbles';
+import { IconCodeTree } from '@/ds/icons/central/IconCodeTree';
 
 type CardActionButtonProps = {
   onClick: () => void;
@@ -41,7 +43,7 @@ export function OpenInLogsButton({ onClick }: CardActionButtonProps) {
 export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
   return (
     <MetricsCard.Action label="View in spans" className={onCardHover} onClick={onClick}>
-      <ListTreeIcon />
+      <IconCodeTree />
     </MetricsCard.Action>
   );
 }
@@ -51,7 +53,7 @@ export function OpenInSpansButton({ onClick }: CardActionButtonProps) {
 export function OpenInThreadsButton({ onClick }: CardActionButtonProps) {
   return (
     <MetricsCard.Action label="View in threads" className={onCardHover} onClick={onClick}>
-      <MessagesSquareIcon />
+      <IconChatBubbles />
     </MetricsCard.Action>
   );
 }

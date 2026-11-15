@@ -1,9 +1,10 @@
-import { Trash2, X } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
+import { IconCrossMedium } from '@/ds/icons/central/IconCrossMedium';
+import { IconTrashCan } from '@/ds/icons/central/IconTrashCan';
 import { textStyle } from '@/ds/primitives/text';
 import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -105,7 +106,7 @@ export type RuleLineRemoveProps = Omit<ButtonProps, 'children' | 'variant' | 'si
 export function RuleLineRemove({ className, ...props }: RuleLineRemoveProps) {
   return (
     <Button variant="ghost" size="icon-sm" className={cn('ml-auto', className)} {...props}>
-      <X />
+      <IconCrossMedium />
     </Button>
   );
 }
@@ -118,7 +119,7 @@ export function RuleLineGroupRemove({
 }: Omit<ButtonProps, 'variant' | 'size'> & { children: ReactNode }) {
   return (
     <Button variant="ghost" size="sm" className={cn('ml-auto', className)} {...props}>
-      <Trash2 />
+      <IconTrashCan />
       {children}
     </Button>
   );

@@ -1,5 +1,7 @@
 import { RadioGroup } from '@mastra/playground-ui/components/RadioGroup';
-import { Building2, Split, UserRound } from 'lucide-react';
+import { Split } from 'lucide-react';
+import { IconBuildings } from '@mastra/playground-ui/icons/central/IconBuildings';
+import { IconUser } from '@mastra/playground-ui/icons/central/IconUser';
 import type { ReactNode } from 'react';
 
 import type { OnboardingModelScope } from '../../services/onboardingFlow';
@@ -9,13 +11,13 @@ import { OnboardingInset } from './OnboardingInset';
 
 /** Short enough for one line each; the account blocks below and the preview carry the detail. */
 const SCOPES: { value: OnboardingModelScope; icon: ReactNode; meta: string }[] = [
-  { value: 'factory', icon: <Building2 aria-hidden="true" />, meta: 'Pays for all Factory work and sessions.' },
+  { value: 'factory', icon: <IconBuildings aria-hidden="true" />, meta: 'Pays for all Factory work and sessions.' },
   {
     value: 'hybrid',
     icon: <Split aria-hidden="true" />,
     meta: 'Company pays for work, each person for their sessions.',
   },
-  { value: 'user', icon: <UserRound aria-hidden="true" />, meta: 'Each person pays for their own work and sessions.' },
+  { value: 'user', icon: <IconUser aria-hidden="true" />, meta: 'Each person pays for their own work and sessions.' },
 ];
 
 /** The choice everything below depends on, asked first and in terms of who pays. */

@@ -1,12 +1,12 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { IconCheckmark1 } from '@mastra/playground-ui/icons/central/IconCheckmark1';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Check } from 'lucide-react';
-import { useMemo } from 'react';
 
+import { useMemo } from 'react';
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { isActive } from './agent-cms-is-active';
 import { AGENT_CMS_SECTIONS, getCodeAgentOverrideSections } from './agent-cms-sections';
@@ -109,7 +109,7 @@ const SidebarLink = ({
       >
         {done ? (
           <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-success-subtle text-success-subtle-foreground">
-            <Check className="size-3.5" />
+            <IconCheckmark1 className="size-3.5" />
           </div>
         ) : (
           <Txt
