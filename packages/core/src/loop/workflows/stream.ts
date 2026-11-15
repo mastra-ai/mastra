@@ -57,7 +57,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   const loopSource = {
     start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       let totalTimeoutSignal: AbortSignal | undefined;
-      // Stamp chunks when the loop produces them; consumers may read them much later.
+      // Stamp and trace chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
           // The total deadline ends the run with a timeout error after the tool grace window.
@@ -71,6 +71,7 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
             return;
           }
           if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
+          rest.modelSpanTracker?.recordChunk?.(chunk);
           streamController.enqueue(chunk);
           streamPublisher?.publish(chunk, messageList);
         },
